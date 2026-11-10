@@ -653,6 +653,15 @@ Nothing starts until you click **Start online session**, so offline play and the
   and Reloading's d6 after each attack (a 1 unloads the weapon until you mark a Stress to reload). Channeling stores
   halved magic damage for the next Claws damage roll; Parry and Deflecting post their rolls from the sheet. Effects
   on targets (Scary, Deadly, Piercing, ...) remain with the GM.
+  **Armor features:** armor features are automated where the rules are mechanical. The damage dialog handles Lined, Bulky
+  (its Stress overflows into HP when Stress is full), Capacitor (stores its d8 for the next magic damage roll),
+  Thornmail, Glasslight, Flicker of Courage, Divine, Accursed and Vitreous (a -5 thresholds debuff until repaired
+  as a downtime move). Last Stand, Rattleclad, Stellar and Sharp/Punishing Weight (Melee only) are roll modifiers or
+  options; Trickster's Step, Brace Point, Terrifying, Fortune-Favored and Bloodthirsty appear on chat results. The
+  host adds Oathbound on equip, Last Bastion when the Armor track fills, Reinforced (+2 thresholds) while it stays
+  full and Beacon of Despair while at least half
+  is marked, and clears Armor for Last Light Engine when Hope drops to 0. Overflowing and Runesleep apply on Armor
+  clears and rests.
   Existing sheets refresh copied automation from the current host compendium when opened, without resetting
   resources or rebuilding creation/level-up choices. Full narrative effects, targeting and conditional outcomes
   still require player/GM adjudication. Patron's Fury and No Mercy have a feature button that pays the cost and

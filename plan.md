@@ -156,6 +156,7 @@ Desktop tool for tabletop dungeon masters that:
 - **Compatibility:** optional `domainCardAutomationV3` identifies hosts supporting the Grace/Codex targeted effects, linked tokens, atomic claims and borrowed cards in addition to audited nested reactions. Retain V1/V2 for older clients; current clients disable host-dependent domain actions on hosts without V3. LAN `RemoteCompatibility.VERSION` is unchanged because connection/snapshot contracts remain backward-compatible.
 
 - **Weapon feature automation audit:** every weapon entry was reviewed individually; the decisions are recorded in the weapon ledger below. Weapon-owned roll modifiers apply only to rolls made with that weapon (never to spell or non-weapon damage), unless a modifier explicitly targets the primary weapon (Trusty). Weapon-owned chat triggers appear only on their own weapon's attack/damage results unless they explicitly target primary-weapon attacks (Entangling); the host enforces the same rule. Effects that only change the target, nearby adversaries or GM state (Scary, Deadly, Destructive/Incendiary consequences, Burning, Eruptive, Freezing, Hooked, Tethered, Doubled Up, Venomous, Disturbing, Nonlethal, Poisonous, Piercing, Echo, Long, Sheltering) stay manual with their descriptions. Costed after-hit options (Concussive, Grappling, Restraining, Entangling, Deforming, Magnetic, Draining, Catalytic) are buttons on that weapon's attack result, not sheet buttons; Catalytic grants one ally an exclusive claim to a consumable +3 next-attack bonus and Draining clears your Stress. Quick/Ricochet/Bouncing/Volleyed/Aimed/Dueling/Omnipresent/Extending/Charged/Accelerator/Devastating are attack-roll options; Follow-Up/Greedy/Painful are damage options (Painful is preselected and required while payable; Greedy spends 10 coins, one handful, of the sheet's gold). Devastating's Stress-paid attack option carries a d20 damage die to that attack's Damage button. Lucky/Rebounding reroll failed attacks (Rebounding with disadvantage; rerolls are tagged `reroll`), Targeted and Locked On grant a preselected next-attack effect, Inverted gains Hope on a Fear attack, Invigorating/Lifestealing roll their host-side check dice, and Bolstering grants the attacker 1 Hope and every other player a once-per-player Hope claim on a critical attack. Versatile and Stockpiled add a second attack row with the alternate trait/range/damage; rolls keep the weapon name and carry a `weaponProfile:<label>` tag so chat Damage buttons and the host use the alternate profile. Otherworldly offers the physical/magic damage-type selector. Brutal (one extra die per maximum face), Recursive (repeating), Serrated (1 counts as 8) and Self-Correcting (1 counts as 6) are host-rolled damage rules gated by `hello.weaponAutomation`. Reloading is host-rolled after every non-reroll attack with that weapon; a 1 creates a manual "<Weapon>: Unloaded" debuff that blocks its attacks until its Reload action marks a Stress. Channeling's Stress-paid magic halving stores the halved-away amount in a rest-duration "Claws of Yifang: Channeling" effect, accumulating, preselected and consumed on the next Claws damage roll. Pompous blocks attacks while Presence is above 0. Parry rolls the weapon's Proficiency damage dice (no modifier) to chat; Deflecting marks an Armor Slot and posts Evasion plus the unmarked Armor Slots before marking (Armor Score for Eldritch Vambrace); Braced is a Stress-paid incoming-damage option. Ethereal, Watchful, Make Them Dance, Webslinger and Life-Linked use existing action/roll patterns. New fields are additive; the Online Play host advertises `weaponAutomation`, older hosts block only the new damage rules, and the LAN compatibility version and settings are unchanged.
+- **Armor feature automation audit:** every armor entry was reviewed individually; the decisions are recorded in the armor ledger below. Damage-dialog options may now `gainHope` (capped), post a `report` line, `markStress` (mandatory Stress that overflows into HP when Stress is full, Bulky), require `when.avoidsAll` (Armor was marked and no HP is marked) and `storeRoll` their reduction die as a consumable bonus on the next magic damage roll (Capacitor). Roll modifiers support `armorFull` (Last Stand). Armor automation adds `overflowHope` (Hope when clearing more Armor than is marked), `equipEffect` (added on equip, removed on unequip), and three host-enforced sheet rules applied whenever a sheet is saved: `armorFullEffect` (added once when the Armor track becomes full), `armorHalfEffect` (kept only while at least half the slots are marked) and `zeroHopeClearArmor` (clears Armor when Hope drops from above 0 to 0). Rest passives support the `noArmorMarked` condition. The web client is served by the host, so the LAN compatibility version and settings are unchanged.
 
 - **Grace chat follow-ups:** Enrapture's optional Stress payment and Hypnotic Shimmer's once-per-rest activation belong on their successful Spellcast results, not their cards. Casting remains available after those benefits are spent. Thought Delver exposes only its Hope payment on the card; the committed payment report offers an optional Spellcast roll. Shared `chatOnly` actions and `followUpAction` references keep that roll off the card and preserve ordinary roll cancellation, affordability and active-card checks. The host adds optional `actionFollowUp` report metadata; older clients ignore it and older hosts retain existing behavior. No settings or LAN compatibility-version change.
 
@@ -433,6 +434,48 @@ All 336 weapon entries were reviewed by feature. `Supported` names the implement
 | Parry (2), Deflecting (2), Braced (1) | Supported: Proficiency weapon dice roll, Evasion report using unmarked Armor Slots before marking (confirmed) or Armor Score, Stress-paid incoming-damage option. |
 | Startling (4), Swatter (1), Healing (1), Persuasive (1), Watchful (1), Ethereal (1), Make Them Dance (1), Webslinger (1), Life-Linked (1) | Supported: sheet actions, rest passive, roll options, scene effects and trait action rolls. |
 | Scary (3), Deadly (2), Destructive/Incendiary consequences (3), Burning (2), Eruptive (1), Freezing (2), Hooked (4), Tethered (1), Doubled Up (2), Venomous (1), Disturbing (1), Nonlethal (1), Poisonous (1), Piercing (6), Echo (1), Long (1), Sheltering (1), Returning (5), Retractable (2), Hot (1), Timebending (2), Incorporeal (1) | Manual (confirmed for target-only effects). |
+
+### Individual armor-feature disposition ledger
+
+All 110 armor entries were reviewed by feature. Armor features never keep a bare sheet button that only marks a resource when the rule can be resolved by the damage dialog, a roll option or a chat trigger.
+
+| Feature (armor) | Disposition |
+|---|---|
+| Flexible, Heavy, Very Heavy, Warded, Resilient, Gilded, Physical, Magic, Painful, Channeling, Fortified, Difficult, Conduit, Field Repairs, Bulwark Frame, Juggernaut, Practical, Hidden Notes, Enchanted, Cumbersome, Mnemonic, Wall-Crawling, Self-Healing, Magnificent, Vigilant, Aquatic, Attuned, Blessed, Shifting, Gravitic, Anchored | Supported unchanged. |
+| Reinforced | Fixed: the host keeps a "Reinforced" +2 damage thresholds buff while every Armor Slot is marked and removes it when one is cleared (confirmed). |
+| Quiet | Fixed: the +2 move-silently option is excluded from weapon attack rolls (confirmed). |
+| Impenetrable, Integrated Wards | Fixed: the redundant bare sheet button was removed (Impenetrable stays a last-HP damage option; Integrated Wards is ordinary Armor). |
+| Sharp, Punishing Weight | Fixed: damage options limited to Melee weapons. |
+| Timeslowing | Fixed: marks an Armor Slot and posts d4 + Evasion to chat. |
+| Capacitor | Fixed: once-per-scene magic damage option reducing by 1d8; the roll is stored as a consumable bonus on the next magic damage roll (confirmed). |
+| Trickster's Step, Brace Point | Fixed: Armor-paid rerolls offered on failed Agility (with advantage) or Strength/Agility/Finesse reaction results. |
+| Terrifying | Fixed: Stress-paid button on successful Melee weapon attacks posting the push-back report. |
+| Echoing Plate, Glasslight, Cataclysm Plate | Fixed: damage-dialog reports when Armor is marked (Glasslight only when no HP is marked; Cataclysm once per rest). |
+| Phasebound | Fixed: the negate option consumes its once-per-scene use; the bare button was removed. |
+| Mirrorwoven, Steelwoven | Fixed: Armor-paid Spellcast reflect action added. |
+| Last Stand | Fixed: +1 to action, reaction and damage rolls while all Armor Slots are marked (confirmed). |
+| Overflowing | Fixed: clearing Armor beyond the marked slots gains 1 Hope once per clear, client and host (confirmed). |
+| Rattleclad | Fixed: optional +2 threaten/intimidate and -2 stay hidden action-roll options. |
+| Runesleep | Fixed: rest passive clearing 1 Stress when no Armor Slot is marked. |
+| Oathbound | Fixed: equipping adds a manual "Oathbound" +2 Evasion buff; unequipping removes it (confirmed). A "Break vow" action ends the buff and marks every free Armor Slot. |
+| Thornmail | Fixed: Armor-paid physical damage option reporting 1 damage to the attacker. |
+| Last Bastion | Fixed: the host adds a scene "Last Bastion" resistance buff when the Armor becomes full, including manual marking (confirmed). |
+| Helper, Tempered Spirit | Fixed: once-per-scene +1 Evasion scene buff; +1 Armor Score and +1 Evasion scene buff. |
+| Flicker of Courage | Fixed: avoid-all damage option gaining 1 Hope and giving the GM 1 Fear. |
+| Steady the Line, Grim Confidence | Fixed: Armor-paid +1 Hope action; once-per-scene Hope gain when marking Armor. |
+| Last Light Engine | Fixed: the host clears 1 Armor Slot when Hope drops to 0 (confirmed). |
+| Beacon of Despair | Fixed: the host keeps a "Beacon of Despair" debuff while at least half the Armor Slots are marked (confirmed). |
+| Lined, Bulky | Fixed: Stress-paid minor-damage negation; Bulky marks a Stress when the final severity is Severe, never blocks damage, and marks HP instead when Stress is full. |
+| Absorbing, Resplendent | Fixed: once-per-scene actions clear 1 Armor Slot. |
+| Stellar | Fixed: Stress-paid Spellcast advantage roll option. |
+| Fortune-Favored | Fixed: once-per-scene chat trigger turning a Hope result into Fear. |
+| Bloodthirsty | Fixed: critical Melee weapon attack button clearing 1 HP. |
+| Ghostwalker | Fixed: missing Stress cost added. |
+| Divine | Fixed: gain 1 Hope whenever Armor is marked. |
+| Accursed | Fixed: HP-marking damage follow-up d4 for the attacker's Stress. |
+| Vitreous | Fixed: the negate option adds a manual -5 thresholds "Vitreous Cracked" debuff that the downtime repair action ends. |
+| Hungry Sigils | Supported: any-number magic Armor; the duality Fear check stays manual. |
+| Hopeful, Stress Sink, Shared Protection, Emberwoven/Burning, Crushing Weight, Truthseeking, Blinkstep, Spiked Interior, Silken Guard, Gliding, Quick-Striding | Manual (confirmed where asked). |
 
 ### Open automation decisions and alternatives
 

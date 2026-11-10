@@ -1,7 +1,7 @@
 // Daggerheart downtime: which moves a rest offers and what choosing them does to the sheet.
 import { CharacterSheet, TraitName, TRAIT_ORDER, tierOf } from './data';
 import {
-  ActionDef, Automation, DiceRoll, RestBenefit, RestKind, actionBlocker, addEffect, applyRest, evalValue, hasFeature, rollLocal, runAction, syncDerived,
+  ActionDef, Automation, DiceRoll, RestBenefit, RestKind, actionBlocker, addEffect, applyRest, armorOverflowHope, evalValue, hasFeature, rollLocal, runAction, syncDerived,
 } from './engine';
 import { formatRestReport } from './rest-summary';
 import type { CompendiumEntry } from './compendium';
@@ -192,6 +192,7 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
   const rolledDice: RestDie[] = [];
   const hpBefore = c.hp.on;
   const stressBefore = c.stress.on;
+  const armorBefore = c.armorTrack.on;
   const slots = restSlots(c, kind, o);
   if (picks.length > slots.length) throw new Error('Too many downtime moves chosen');
   picks.forEach((p, i) => {
@@ -275,7 +276,13 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
       case 'repair': {
         const r = dice(`1d4+${tier}`);
         if (p.ally) lines.push(`Repair Armor on an ally: clears ${r.value + bonus} Armor Slots (1d4+${tier} = ${r.text}${bonusText})`);
-        else lines.push(`Repair Armor: clears ${recovery(c.armorTrack, 'armor', r.value + bonus)} Armor Slots (1d4+${tier} = ${r.text}${bonusText})`);
+        else {
+          const requested = r.value + bonus;
+          const cleared = recovery(c.armorTrack, 'armor', requested);
+          lines.push(`Repair Armor: clears ${cleared} Armor Slots (1d4+${tier} = ${r.text}${bonusText})`);
+          const overflow = armorOverflowHope(c, requested, cleared);
+          if (overflow) lines.push(overflow);
+        }
         break;
       }
       case 'tend-all': lines.push(p.ally ? 'Tend to All Wounds on an ally' : `Tend to All Wounds: clears ${clear(c.hp, c.hp.on)} HP`); break;
@@ -336,6 +343,7 @@ function resolveRestOnSheet(c: CharacterSheet, kind: RestKind, picks: RestPick[]
   for (const { s, b } of selected.filter(({ b }) => !b.extraMoves && !b.move && !b.reroll && b.condition !== 'noRecovery')) {
     if (b.chooseAlly) continue; // The host pays and grants cross-character benefits atomically.
     if (b.condition === 'armorMarked' && c.armorTrack.on === 0) continue;
+    if (b.condition === 'noArmorMarked' && armorBefore > 0) continue;
     execute(s, b);
     if (b.consumeItem) consume(s);
   }

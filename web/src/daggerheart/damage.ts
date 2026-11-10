@@ -3,7 +3,7 @@
 
 import type { CharacterSheet, InventoryItem } from './data';
 import {
-  Automation, DiceRoll, EffectDef, ModValue, Resource, activeFeatures, activeWeapons, addEffect, costText, derivedStats, evalValue, loadoutDomainMatches, resourceDefinitions, rollLocal, syncEffectDependencies, syncResources, usesLeft, noUsesLeftText,
+  Automation, DiceRoll, EffectDef, ModValue, Resource, activeFeatures, activeWeapons, addEffect, armorOverflowHope, costText, derivedStats, evalValue, loadoutDomainMatches, resourceDefinitions, rollLocal, syncEffectDependencies, syncResources, usesLeft, noUsesLeftText,
 } from './engine';
 import { formatDamageReport } from './damage-summary';
 import { syncDeathState } from './death';
@@ -39,6 +39,8 @@ export interface MitigationWhen {
   min?: { value: ModValue; at: number };
   markingHp?: boolean;
   minMarkedHp?: number;
+  /** Only when Armor Slots are marked and the damage marks no Hit Points (Glasslight, Flicker of Courage). */
+  avoidsAll?: boolean;
 }
 
 export interface MitigationRoll {
@@ -110,6 +112,14 @@ export interface MitigationOption {
    * adding to an existing effect of the same name.
    */
   storeHalvedDamage?: EffectDef;
+  /** Capacitor: on apply, stores this option's rolled reduction as the `stored` roll option value of this effect. */
+  storeRoll?: EffectDef;
+  /** Hope gained on apply, capped at the Hope slots. */
+  gainHope?: number;
+  /** Text added to the damage report on apply (consequences for the attacker or nearby creatures). */
+  report?: string;
+  /** Mandatory Stress marked on apply; Stress that cannot be marked marks HP instead (Bulky). Never blocks damage. */
+  markStress?: number;
 }
 
 export interface AvailableMitigation {
@@ -353,6 +363,8 @@ export function computeDamage(c: CharacterSheet, options: AvailableMitigation[],
   drop(m => m.option.preserveEffect && hp <= 0 ? 'No HP will be marked; the effect is already maintained' : null);
   drop(m => m.option.patronDice === 'vengeance' && hp <= 0 ? 'Requires marking at least one HP' : null);
   drop(m => m.option.finalSevere && (negated || final < 3) ? 'Only when taking Severe damage' : null);
+  drop(m => m.option.when?.avoidsAll && !(armorUsed > 0 && !negated && hpBeforeReplace === 0 && hp === 0)
+    ? 'Only when Armor Slots avoid all damage' : null);
 
   // 5. Costs.
   const costs: Record<string, number> = {};
@@ -364,6 +376,12 @@ export function computeDamage(c: CharacterSheet, options: AvailableMitigation[],
   };
   for (const m of active) addCost(m.option.cost, qty(m));
   for (const m of active) addCost(m.option.armorCost, armorMarked);
+  for (const m of active.filter(x => (x.option.markStress ?? 0) > 0)) {
+    const n = m.option.markStress!;
+    const marked = Math.min(n, Math.max(0, c.stress.slots - c.stress.on - (costs.stress ?? 0)));
+    if (marked) costs.stress = (costs.stress ?? 0) + marked;
+    hp = Math.min(remaining, hp + n - marked);
+  }
   const quantities: Record<string, number> = {};
   for (const m of active) if (m.option.quantity) quantities[m.id] = qty(m);
   const result: DamageResult = {
@@ -447,6 +465,8 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
       const cleared = Math.min(reward.clearArmor, c.armorTrack.on);
       c.armorTrack.on -= cleared;
       notes.push(`${card.name}: cleared ${cleared} Armor Slot${cleared === 1 ? '' : 's'}.`);
+      const overflow = armorOverflowHope(c, reward.clearArmor, cleared);
+      if (overflow) notes.push(overflow);
     }
   }
   for (const m of r.applied) {
@@ -502,6 +522,22 @@ export function applyDamage(c: CharacterSheet, r: DamageResult, type: DamageType
         notes.push(`${definition.name}: stored ${stored} damage (${total} total) for the next damage roll with ${m.source}.`);
       }
     }
+    if (m.option.storeRoll && r.used[m.id]?.length) {
+      const stored = r.used[m.id].reduce((a, b) => a + b, 0);
+      const definition = m.option.storeRoll;
+      addEffect(c, {
+        ...structuredClone(definition),
+        text: `${definition.text ?? ''} Stored: +${stored}.`.trim(),
+        rollOptions: (definition.rollOptions ?? []).map(o => o.id === 'stored' ? { ...o, value: stored } : o),
+      }, m.source);
+      notes.push(`${definition.name}: stored +${stored} for your next magic damage roll.`);
+    }
+    if (m.option.gainHope) {
+      const gained = Math.min(m.option.gainHope, Math.max(0, c.hope.slots - c.hope.on));
+      c.hope.on += gained;
+      notes.push(`${m.option.label}: gained ${gained} Hope.`);
+    }
+    if (m.option.report) notes.push(`${m.option.label}: ${m.option.report}`);
     if (m.option.endEffect) c.effects = c.effects.filter(e => e.name !== m.option.endEffect);
     if (m.option.endEffectIfNoHp && expiringZeroHpEffects.includes(m.option.endEffectIfNoHp))
       c.effects = c.effects.filter(e => e.name !== m.option.endEffectIfNoHp);

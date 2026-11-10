@@ -39,6 +39,8 @@ export interface Modifier {
   /** Removed once it has been applied to a matching roll */
   consume?: boolean;
   requiresEffect?: string;
+  /** Only while every Armor Slot is marked (Last Stand). */
+  armorFull?: boolean;
   /** On a weapon: applies to rolls with the equipped weapon in this slot instead of the source weapon (Trusty). */
   weapon?: 'primary' | 'secondary';
 }
@@ -414,6 +416,18 @@ export interface Automation {
   requirement?: { trait: TraitName; min?: number; max?: number };
   /** Host rolls this die after every attack with the weapon; on `fail` the weapon becomes Unloaded (Reloading). */
   reloading?: { dice: string; fail: number };
+  /** Armor: Hope gained when an Armor clear requests more slots than are marked (Overflowing). */
+  overflowHope?: number;
+  /** Armor: effect added when the armor is equipped and removed when it is unequipped (Oathbound). */
+  equipEffect?: EffectDef;
+  /** Armor, host-enforced: effect added once whenever the Armor track becomes full (Last Bastion). */
+  armorFullEffect?: EffectDef;
+  /** Armor, host-enforced: effect kept only while at least half of the Armor Slots are marked (Beacon of Despair). */
+  armorHalfEffect?: EffectDef;
+  /** Armor, host-enforced: effect kept only while every Armor Slot is marked (Reinforced). */
+  armorFullHeldEffect?: EffectDef;
+  /** Armor, host-enforced: Armor Slots cleared when Hope drops from above 0 to 0 (Last Light Engine). */
+  zeroHopeClearArmor?: number;
 }
 
 export interface WeaponProfile {
@@ -469,7 +483,7 @@ export interface RestBenefit extends ActionDef {
   consumeItem?: boolean;
   move?: string;
   bonus?: number;
-  condition?: 'noRecovery' | 'armorMarked';
+  condition?: 'noRecovery' | 'armorMarked' | 'noArmorMarked';
 }
 
 export interface RestMoveModifier {
@@ -526,7 +540,17 @@ function modifierActive(c: CharacterSheet, modifier: Modifier): boolean {
   return (modifier.hopeMin === undefined || c.hope.on >= modifier.hopeMin)
     && (!modifier.requiresArmor || !!c.activeArmor)
     && loadoutDomainMatches(c, modifier.loadoutDomain)
+    && (!modifier.armorFull || c.armorTrack.slots > 0 && c.armorTrack.on >= c.armorTrack.slots)
     && (!modifier.requiresEffect || c.effects.some(e => e.name === modifier.requiresEffect));
+}
+
+/** Overflowing: clearing more Armor Slots than are marked gains Hope instead (once per clear). */
+export function armorOverflowHope(c: CharacterSheet, requested: number, cleared: number): string | null {
+  const gain = c.activeArmor?.automation?.overflowHope;
+  if (!gain || requested <= cleared) return null;
+  const gained = Math.min(gain, Math.max(0, c.hope.slots - c.hope.on));
+  c.hope.on += gained;
+  return `${c.activeArmor!.feature?.name ?? c.activeArmor!.name}: gained ${gained} Hope.`;
 }
 
 /** Automation of everything currently contributing passive modifiers. */
@@ -1488,6 +1512,10 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
       const detail = typeof step.amount === 'string' && step.amount !== 'all' && !/^[+-]?\d+$/.test(step.amount.trim())
         ? ` (${step.amount})` : '';
       log.push(`cleared ${cleared} ${step.resource === 'hp' ? 'HP' : step.resource === 'armor' ? 'Armor Slots' : 'Stress'}${detail}`);
+      if (step.resource === 'armor') {
+        const overflow = armorOverflowHope(c, Math.max(0, n), cleared);
+        if (overflow) log.push(overflow);
+      }
     } else if (step.op === 'gain' && t && step.resource) {
       const n = Math.max(0, amount(1));
       const before = t.on;

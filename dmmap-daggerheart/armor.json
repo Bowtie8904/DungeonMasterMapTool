@@ -240,17 +240,19 @@
     "text": "When you mark your last Armor Slot, increase your damage thresholds by +2 until you clear at least 1 Armor Slot."
    },
    "automation": {
-    "mitigation": [
-     {
-      "id": "reinforced",
-      "label": "Reinforced",
-      "passive": true,
-      "when": {
+    "armorFullHeldEffect": {
+     "name": "Reinforced",
+     "kind": "buff",
+     "until": "manual",
+     "text": "+2 damage thresholds until you clear at least 1 Armor Slot.",
+     "modifiers": [
+      {
+       "stat": "thresholds",
+       "value": 2,
        "armorFull": true
-      },
-      "thresholds": 2
-     }
-    ]
+      }
+     ]
+    }
    }
   },
   {
@@ -297,7 +299,10 @@
       "id": "quiet",
       "label": "Move silently",
       "roll": "action",
-      "value": 2
+      "value": 2,
+      "excludeRolls": [
+       "attack"
+      ]
      }
     ]
    }
@@ -436,12 +441,6 @@
      "max": 1,
      "per": "shortRest"
     },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Impenetrable"
-     }
-    ],
     "mitigation": [
      {
       "id": "impenetrable",
@@ -479,7 +478,8 @@
       "label": "Sharp",
       "roll": "damage",
       "dice": "1d4",
-      "description": "Successful attack against a target within Melee range."
+      "description": "Successful attack against a target within Melee range.",
+      "weaponRange": "Melee"
      }
     ]
    }
@@ -662,8 +662,14 @@
      {
       "id": "use",
       "label": "Timeslowing",
+      "hostOwned": true,
       "cost": {
        "armor": 1
+      },
+      "sendRoll": {
+       "dice": "1d4",
+       "base": "evasion",
+       "label": "Timeslowing - Evasion against this attack"
       }
      }
     ]
@@ -787,10 +793,35 @@
      "max": 1,
      "per": "scene"
     },
-    "actions": [
+    "mitigation": [
      {
-      "id": "use",
-      "label": "Capacitor"
+      "id": "capacitor",
+      "label": "Capacitor",
+      "description": "Reduce magic damage by 1d8 and store the result for your next magic damage roll.",
+      "when": {
+       "type": "magic"
+      },
+      "roll": {
+       "sides": 8
+      },
+      "uses": "source",
+      "storeRoll": {
+       "name": "Sparkleweave: Capacitor",
+       "kind": "buff",
+       "until": "manual",
+       "text": "Add the stored Capacitor result to the next magic damage you deal.",
+       "rollOptions": [
+        {
+         "id": "stored",
+         "label": "Capacitor: stored",
+         "roll": "damage",
+         "value": 0,
+         "magicOnly": true,
+         "defaultOn": true,
+         "endEffect": "Sparkleweave: Capacitor"
+        }
+       ]
+      }
      }
     ]
    }
@@ -835,13 +866,21 @@
     "text": "When you fail an Agility Reaction Roll you can mark an Armor Slot to reroll it with advantage."
    },
    "automation": {
-    "actions": [
+    "rollTriggers": [
      {
-      "id": "use",
-      "label": "Trickster's Step",
+      "id": "reroll",
+      "label": "Trickster's Step: reroll with advantage",
+      "on": "trait:Agility",
+      "excludeRolls": [
+       "action"
+      ],
+      "failedOnly": true,
       "cost": {
        "armor": 1
-      }
+      },
+      "reroll": "duality",
+      "advantage": true,
+      "description": "Use after failing an Agility Reaction Roll."
      }
     ]
    }
@@ -858,17 +897,6 @@
    "feature": {
     "name": "Integrated Wards",
     "text": "You can mark an armor slot to reduce direct damage."
-   },
-   "automation": {
-    "actions": [
-     {
-      "id": "use",
-      "label": "Integrated Wards",
-      "cost": {
-       "armor": 1
-      }
-     }
-    ]
    }
   },
   {
@@ -905,6 +933,24 @@
    "feature": {
     "name": "Terrifying",
     "text": "When you successfully make an attack in Melee Range, mark a stress to force the target to move up to Close distance directly away from you. If they cannot flee in this way at all, they must instead mark a stress."
+   },
+   "automation": {
+    "rollTriggers": [
+     {
+      "id": "terrifying",
+      "label": "Terrifying: drive the target back",
+      "on": "attack",
+      "weaponAttack": true,
+      "weaponRange": "Melee",
+      "successIfKnown": true,
+      "cost": {
+       "stress": 1
+      },
+      "report": {
+       "text": "The target must move up to Close range directly away; if it cannot flee at all, it marks a Stress instead."
+      }
+     }
+    ]
    }
   },
   {
@@ -944,6 +990,19 @@
    "feature": {
     "name": "Echoing Plate",
     "text": "When you mark an Armor Slot, choose another creature in Melee range. They mark a Stress."
+   },
+   "automation": {
+    "mitigation": [
+     {
+      "id": "echoing",
+      "label": "Echoing Plate",
+      "passive": true,
+      "when": {
+       "armor": true
+      },
+      "report": "choose another creature within Melee range; it marks a Stress."
+     }
+    ]
    }
   },
   {
@@ -964,12 +1023,6 @@
      "max": 1,
      "per": "scene"
     },
-    "actions": [
-     {
-      "id": "use",
-      "label": "Phasebound"
-     }
-    ],
     "mitigation": [
      {
       "id": "phase",
@@ -978,7 +1031,8 @@
       "negate": true,
       "cost": {
        "armor": 2
-      }
+      },
+      "uses": "source"
      }
     ]
    }
@@ -1032,6 +1086,19 @@
       },
       "armorSlots": "any"
      }
+    ],
+    "actions": [
+     {
+      "id": "reflect",
+      "label": "Mirrorwoven: Spellcast roll to reflect",
+      "cost": {
+       "armor": 1
+      },
+      "actionRoll": {
+       "trait": "spellcast"
+      },
+      "description": "After mitigating all damage of the attack, mark an additional Armor Slot to reflect it against the attacker’s Difficulty."
+     }
     ]
    }
   },
@@ -1075,6 +1142,25 @@
    "feature": {
     "name": "Last Stand",
     "text": "When all your Armor Slots are marked, gain +1 to all rolls until you clear at least one Armor Slot."
+   },
+   "automation": {
+    "modifiers": [
+     {
+      "roll": "action",
+      "value": 1,
+      "armorFull": true
+     },
+     {
+      "roll": "reaction",
+      "value": 1,
+      "armorFull": true
+     },
+     {
+      "roll": "damage",
+      "value": 1,
+      "armorFull": true
+     }
+    ]
    }
   },
   {
@@ -1089,6 +1175,9 @@
    "feature": {
     "name": "Overflowing",
     "text": "If you would clear Armor Slots beyond your maximum, gain 1 Hope instead."
+   },
+   "automation": {
+    "overflowHope": 1
    }
   },
   {
@@ -1125,7 +1214,8 @@
       "label": "Punishing Weight",
       "roll": "damage",
       "value": 2,
-      "description": "Successful Melee attack after marking Armor this scene."
+      "description": "Successful Melee attack after marking Armor this scene.",
+      "weaponRange": "Melee"
      }
     ]
    }
@@ -1142,6 +1232,22 @@
    "feature": {
     "name": "Rattleclad",
     "text": "Your movement is loud and intimidating. Gain +2 to rolls made to threaten or intimidate. -2 to rolls made to stay hidden or unnoticed."
+   },
+   "automation": {
+    "rollOptions": [
+     {
+      "id": "intimidate",
+      "label": "Rattleclad: threaten or intimidate",
+      "roll": "action",
+      "value": 2
+     },
+     {
+      "id": "hidden",
+      "label": "Rattleclad: stay hidden or unnoticed",
+      "roll": "action",
+      "value": -2
+     }
+    ]
    }
   },
   {
@@ -1156,6 +1262,25 @@
    "feature": {
     "name": "Runesleep",
     "text": "If you rest without any marked Armor Slots, clear 1 Stress."
+   },
+   "automation": {
+    "rest": {
+     "passives": [
+      {
+       "id": "runesleep",
+       "label": "Runesleep: clear 1 Stress (no Armor Slots marked)",
+       "defaultOn": true,
+       "condition": "noArmorMarked",
+       "steps": [
+        {
+         "op": "clear",
+         "resource": "stress",
+         "amount": 1
+        }
+       ]
+      }
+     ]
+    }
    }
   },
   {
@@ -1198,6 +1323,35 @@
    "feature": {
     "name": "Oathbound",
     "text": "Choose a vow when you don the armor. While pursuing it, gain +2 Evasion. Break it and immediately lose this bonus and mark all Armor Slots."
+   },
+   "automation": {
+    "equipEffect": {
+     "name": "Oathbound",
+     "kind": "buff",
+     "until": "manual",
+     "text": "+2 Evasion while pursuing your vow. Use Break vow when you break it.",
+     "modifiers": [
+      {
+       "stat": "evasion",
+       "value": 2
+      }
+     ]
+    },
+    "actions": [
+     {
+      "id": "break",
+      "label": "Break vow",
+      "requiresEffect": "Oathbound",
+      "endEffect": "Oathbound",
+      "steps": [
+       {
+        "op": "mark",
+        "resource": "armor",
+        "amount": "@armor_available"
+       }
+      ]
+     }
+    ]
    }
   },
   {
@@ -1226,6 +1380,20 @@
    "feature": {
     "name": "Glasslight",
     "text": "When you mark Armor Slots to reduce an attack to no damage, the attacker must mark a Stress."
+   },
+   "automation": {
+    "mitigation": [
+     {
+      "id": "glasslight",
+      "label": "Glasslight",
+      "passive": true,
+      "when": {
+       "armor": true,
+       "avoidsAll": true
+      },
+      "report": "the attacker marks a Stress."
+     }
+    ]
    }
   },
   {
@@ -1242,13 +1410,51 @@
     "text": "When you fail a Strength, Agility or Finesse Reaction Roll, you may mark an Armor Slot to reroll it."
    },
    "automation": {
-    "actions": [
+    "rollTriggers": [
      {
-      "id": "use",
-      "label": "Brace Point",
+      "id": "reroll-strength",
+      "label": "Brace Point: reroll",
+      "on": "trait:Strength",
+      "excludeRolls": [
+       "action"
+      ],
+      "exclusiveRollGroup": "brace",
+      "failedOnly": true,
       "cost": {
        "armor": 1
-      }
+      },
+      "reroll": "duality",
+      "description": "Use after failing a Strength Reaction Roll."
+     },
+     {
+      "id": "reroll-agility",
+      "label": "Brace Point: reroll",
+      "on": "trait:Agility",
+      "excludeRolls": [
+       "action"
+      ],
+      "exclusiveRollGroup": "brace",
+      "failedOnly": true,
+      "cost": {
+       "armor": 1
+      },
+      "reroll": "duality",
+      "description": "Use after failing a Agility Reaction Roll."
+     },
+     {
+      "id": "reroll-finesse",
+      "label": "Brace Point: reroll",
+      "on": "trait:Finesse",
+      "excludeRolls": [
+       "action"
+      ],
+      "exclusiveRollGroup": "brace",
+      "failedOnly": true,
+      "cost": {
+       "armor": 1
+      },
+      "reroll": "duality",
+      "description": "Use after failing a Finesse Reaction Roll."
      }
     ]
    }
@@ -1314,13 +1520,19 @@
     "text": "If you take physical damage from an attack in Melee Range, you may mark an Armor Slot to deal 1 damage to the attacker, instead of marking an Armor Slot to reduce the damage."
    },
    "automation": {
-    "actions": [
+    "mitigation": [
      {
-      "id": "use",
+      "id": "thornmail",
       "label": "Thornmail",
+      "description": "Physical Melee attack: mark an Armor Slot to deal 1 damage to the attacker instead of reducing the damage.",
+      "when": {
+       "type": "physical"
+      },
+      "insteadOfArmor": true,
       "cost": {
        "armor": 1
-      }
+      },
+      "report": "deal 1 damage to the attacker."
      }
     ]
    }
@@ -1396,14 +1608,20 @@
     "text": "When you mark your final Armor Slot, gain resistance to all damage until the end of the scene."
    },
    "automation": {
-    "mitigation": [
-     {
-      "id": "bastion",
-      "label": "Last Bastion",
-      "description": "After marking your final Armor Slot this scene, resistance to all damage.",
-      "halve": true
-     }
-    ]
+    "armorFullEffect": {
+     "name": "Last Bastion",
+     "kind": "buff",
+     "until": "scene",
+     "text": "Resistance to all damage until the end of the scene.",
+     "mitigation": [
+      {
+       "id": "bastion",
+       "label": "Last Bastion",
+       "passive": true,
+       "halve": true
+      }
+     ]
+    }
    }
   },
   {
@@ -1424,10 +1642,15 @@
      "max": 1,
      "per": "rest"
     },
-    "actions": [
+    "mitigation": [
      {
-      "id": "use",
-      "label": "Cataclysm Plate"
+      "id": "cataclysm",
+      "label": "Cataclysm Plate",
+      "when": {
+       "armor": true
+      },
+      "uses": "source",
+      "report": "all targets within Melee range mark a Stress."
      }
     ]
    }
@@ -1444,6 +1667,35 @@
    "feature": {
     "name": "Helper",
     "text": "The first time you spend Hope to help an ally in a scene, you and the ally gain +1 Evasion until the end of that scene."
+   },
+   "automation": {
+    "uses": {
+     "max": 1,
+     "per": "scene"
+    },
+    "actions": [
+     {
+      "id": "use",
+      "label": "Helper: spent Hope to help an ally",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Helper",
+         "kind": "buff",
+         "until": "scene",
+         "text": "+1 Evasion until the end of the scene; the helped ally also gains +1 Evasion.",
+         "modifiers": [
+          {
+           "stat": "evasion",
+           "value": 1
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
    }
   },
   {
@@ -1458,6 +1710,20 @@
    "feature": {
     "name": "Flicker of Courage",
     "text": "When you mark an Armor Slot to avoid all damage from an attack, you may gain 1 Hope. If you do, the GM gains 1 Fear."
+   },
+   "automation": {
+    "mitigation": [
+     {
+      "id": "flicker",
+      "label": "Flicker of Courage",
+      "when": {
+       "armor": true,
+       "avoidsAll": true
+      },
+      "gainHope": 1,
+      "giveFear": 1
+     }
+    ]
    }
   },
   {
@@ -1480,7 +1746,15 @@
       "label": "Steady the Line",
       "cost": {
        "armor": 1
-      }
+      },
+      "steps": [
+       {
+        "op": "gain",
+        "resource": "hope",
+        "amount": 1
+       }
+      ],
+      "description": "When an ally within Close range spends Hope."
      }
     ]
    }
@@ -1497,6 +1771,39 @@
    "feature": {
     "name": "Tempered Spirit",
     "text": "If you begin a scene with more Hope than the GM has Fear, gain +1 Armor Score and +1 Evasion for that scene."
+   },
+   "automation": {
+    "uses": {
+     "max": 1,
+     "per": "scene"
+    },
+    "actions": [
+     {
+      "id": "use",
+      "label": "Tempered Spirit: began the scene with more Hope than Fear",
+      "steps": [
+       {
+        "op": "effect",
+        "effect": {
+         "name": "Tempered Spirit",
+         "kind": "buff",
+         "until": "scene",
+         "text": "+1 Armor Score and +1 Evasion for this scene.",
+         "modifiers": [
+          {
+           "stat": "armorScore",
+           "value": 1
+          },
+          {
+           "stat": "evasion",
+           "value": 1
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
    }
   },
   {
@@ -1517,10 +1824,16 @@
      "max": 1,
      "per": "scene"
     },
-    "actions": [
+    "mitigation": [
      {
-      "id": "use",
-      "label": "Grim Confidence"
+      "id": "grim",
+      "label": "Grim Confidence",
+      "when": {
+       "armor": true
+      },
+      "uses": "source",
+      "gainHope": 1,
+      "report": "the next attack against you has advantage."
      }
     ]
    }
@@ -1537,6 +1850,9 @@
    "feature": {
     "name": "Last Light Engine",
     "text": "When you spend your final Hope, immediately clear 1 Armor Slot."
+   },
+   "automation": {
+    "zeroHopeClearArmor": 1
    }
   },
   {
@@ -1551,6 +1867,14 @@
    "feature": {
     "name": "Beacon of Despair",
     "text": "When you have marked at least half of your Armor Slots, all enemies gain advantage on their attacks against you."
+   },
+   "automation": {
+    "armorHalfEffect": {
+     "name": "Beacon of Despair",
+     "kind": "debuff",
+     "until": "manual",
+     "text": "All enemies have advantage on attacks against you while at least half your Armor Slots are marked."
+    }
    }
   },
   {
@@ -1621,6 +1945,19 @@
       },
       "armorSlots": "any"
      }
+    ],
+    "actions": [
+     {
+      "id": "reflect",
+      "label": "Steelwoven: Spellcast roll to reflect",
+      "cost": {
+       "armor": 1
+      },
+      "actionRoll": {
+       "trait": "spellcast"
+      },
+      "description": "After mitigating all damage of the attack, mark an additional Armor Slot to reflect it against the attacker’s Difficulty."
+     }
     ]
    }
   },
@@ -1660,10 +1997,17 @@
     "text": "Mark a Stress to negate Minor damage."
    },
    "automation": {
-    "actions": [
+    "mitigation": [
      {
-      "id": "use",
+      "id": "lined",
       "label": "Lined",
+      "description": "Mark a Stress to negate Minor damage.",
+      "when": {
+       "severity": [
+        "minor"
+       ]
+      },
+      "negate": true,
       "cost": {
        "stress": 1
       }
@@ -1712,6 +2056,15 @@
       "stat": "evasion",
       "value": -1
      }
+    ],
+    "mitigation": [
+     {
+      "id": "bulky",
+      "label": "Bulky",
+      "passive": true,
+      "finalSevere": true,
+      "markStress": 1
+     }
     ]
    }
   },
@@ -1751,10 +2104,17 @@
     "text": "Mark a Stress to negate Minor damage."
    },
    "automation": {
-    "actions": [
+    "mitigation": [
      {
-      "id": "use",
+      "id": "lined",
       "label": "Lined",
+      "description": "Mark a Stress to negate Minor damage.",
+      "when": {
+       "severity": [
+        "minor"
+       ]
+      },
+      "negate": true,
       "cost": {
        "stress": 1
       }
@@ -1802,6 +2162,15 @@
      {
       "stat": "evasion",
       "value": -1
+     }
+    ],
+    "mitigation": [
+     {
+      "id": "bulky",
+      "label": "Bulky",
+      "passive": true,
+      "finalSevere": true,
+      "markStress": 1
      }
     ]
    }
@@ -1889,7 +2258,15 @@
     "actions": [
      {
       "id": "use",
-      "label": "Absorbing"
+      "label": "Absorbing",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "armor",
+        "amount": 1
+       }
+      ],
+      "description": "When you take magic damage."
      }
     ]
    }
@@ -1961,7 +2338,15 @@
     "actions": [
      {
       "id": "use",
-      "label": "Resplendent"
+      "label": "Resplendent",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "armor",
+        "amount": 1
+       }
+      ],
+      "description": "When you spend Hope."
      }
     ]
    }
@@ -2002,10 +2387,17 @@
     "text": "Mark a Stress to negate Minor damage."
    },
    "automation": {
-    "actions": [
+    "mitigation": [
      {
-      "id": "use",
+      "id": "lined",
       "label": "Lined",
+      "description": "Mark a Stress to negate Minor damage.",
+      "when": {
+       "severity": [
+        "minor"
+       ]
+      },
+      "negate": true,
       "cost": {
        "stress": 1
       }
@@ -2054,6 +2446,15 @@
       "stat": "evasion",
       "value": -1
      }
+    ],
+    "mitigation": [
+     {
+      "id": "bulky",
+      "label": "Bulky",
+      "passive": true,
+      "finalSevere": true,
+      "markStress": 1
+     }
     ]
    }
   },
@@ -2093,10 +2494,12 @@
     "text": "Mark a Stress to gain advantage on a Spellcast roll."
    },
    "automation": {
-    "actions": [
+    "rollOptions": [
      {
-      "id": "use",
+      "id": "stellar",
       "label": "Stellar",
+      "roll": "spellcast",
+      "advantage": "advantage",
       "cost": {
        "stress": 1
       }
@@ -2122,10 +2525,17 @@
      "max": 1,
      "per": "scene"
     },
-    "actions": [
+    "rollTriggers": [
      {
-      "id": "use",
-      "label": "Fortune-Favored"
+      "id": "fortune",
+      "label": "Fortune-Favored: failure with Hope becomes success with Fear",
+      "on": "duality",
+      "when": "hope",
+      "failedOnly": true,
+      "outcome": "fear",
+      "report": {
+       "text": "The roll counts as a success with Fear."
+      }
      }
     ]
    }
@@ -2164,6 +2574,25 @@
    "feature": {
     "name": "Bloodthirsty",
     "text": "When you critically succeed on a weapon attack within Melee range, clear a Hit Point."
+   },
+   "automation": {
+    "rollTriggers": [
+     {
+      "id": "bloodthirsty",
+      "label": "Bloodthirsty: clear 1 HP",
+      "on": "attack",
+      "criticalOnly": true,
+      "weaponAttack": true,
+      "weaponRange": "Melee",
+      "steps": [
+       {
+        "op": "clear",
+        "resource": "hp",
+        "amount": 1
+       }
+      ]
+     }
+    ]
    }
   },
   {
@@ -2227,10 +2656,17 @@
     "text": "Mark a Stress to negate Minor damage."
    },
    "automation": {
-    "actions": [
+    "mitigation": [
      {
-      "id": "use",
+      "id": "lined",
       "label": "Lined",
+      "description": "Mark a Stress to negate Minor damage.",
+      "when": {
+       "severity": [
+        "minor"
+       ]
+      },
+      "negate": true,
       "cost": {
        "stress": 1
       }
@@ -2279,6 +2715,15 @@
       "stat": "evasion",
       "value": -1
      }
+    ],
+    "mitigation": [
+     {
+      "id": "bulky",
+      "label": "Bulky",
+      "passive": true,
+      "finalSevere": true,
+      "markStress": 1
+     }
     ]
    }
   },
@@ -2303,7 +2748,10 @@
     "actions": [
      {
       "id": "use",
-      "label": "Ghostwalker"
+      "label": "Ghostwalker",
+      "cost": {
+       "stress": 1
+      }
      }
     ]
    }
@@ -2320,6 +2768,19 @@
    "feature": {
     "name": "Divine",
     "text": "When you mark an Armor Slot, gain a Hope."
+   },
+   "automation": {
+    "mitigation": [
+     {
+      "id": "divine",
+      "label": "Divine",
+      "passive": true,
+      "when": {
+       "armor": true
+      },
+      "gainHope": 1
+     }
+    ]
    }
   },
   {
@@ -2334,6 +2795,22 @@
    "feature": {
     "name": "Accursed",
     "text": "When you mark any number of Hit Points from an attack, roll a d4. On a result of 4, the attacker must mark an equal number of Stress."
+   },
+   "automation": {
+    "mitigation": [
+     {
+      "id": "accursed",
+      "label": "Accursed",
+      "passive": true,
+      "when": {
+       "markingHp": true
+      },
+      "followUp": {
+       "dice": "1d4",
+       "text": "on a 4 the attacker marks Stress equal to the HP you marked"
+      }
+     }
+    ]
    }
   },
   {
@@ -2376,7 +2853,12 @@
     "text": "Once per long rest, you can spend any number of Hope before you make the Risk It All death move. You gain a bonus to the result of your Hope Die equal to the number of Hope spent."
    },
    "automation": {
-    "deathMove": { "kind": "hopeSpend", "moves": ["risk"] },
+    "deathMove": {
+     "kind": "hopeSpend",
+     "moves": [
+      "risk"
+     ]
+    },
     "uses": {
      "max": 1,
      "per": "longRest"
@@ -2406,16 +2888,11 @@
    "automation": {
     "actions": [
      {
-      "id": "use",
-      "label": "Vitreous",
-      "cost": {
-       "armor": 2
-      }
-     },
-     {
-      "id": "downtime-narrative",
-      "label": "Narrative downtime move",
-      "timing": "downtime"
+      "id": "repair",
+      "label": "Repair Vitreous armor",
+      "timing": "downtime",
+      "requiresEffect": "Vitreous Cracked",
+      "endEffect": "Vitreous Cracked"
      }
     ],
     "mitigation": [
@@ -2432,6 +2909,18 @@
       "negate": true,
       "cost": {
        "armor": 2
+      },
+      "effect": {
+       "name": "Vitreous Cracked",
+       "kind": "debuff",
+       "until": "manual",
+       "text": "-5 to your damage thresholds until you repair your armor as a downtime move.",
+       "modifiers": [
+        {
+         "stat": "thresholds",
+         "value": -5
+        }
+       ]
       }
      }
     ]

@@ -2882,6 +2882,7 @@ public final class OnlineSessionServer {
                 || armorUsed > before.path("armorTrack").path("slots").asInt() - before.path("armorTrack").path("on").asInt())
             throw new IllegalArgumentException("Invalid committed damage or Armor Slots.");
         int fearGrant = 0;
+        String fearSource = "Octarine Brace";
         boolean special = false;
         ObjectNode paidLimits = before.deepCopy();
         String report = request.path("report").asText();
@@ -2921,7 +2922,14 @@ public final class OnlineSessionServer {
             int quantity = option.path("quantity").asBoolean() ? input.path("quantities").path(key + "/" + id).asInt(1) : 1;
             if (quantity < 1) throw new IllegalArgumentException("Invalid mitigation quantity.");
             quantities.add(quantity);
-            if (option.has("giveFear")) { fearGrant += option.path("giveFear").asInt(); special = true; }
+            if (option.path("when").path("avoidsAll").asBoolean() && (armorUsed < 1 || hp != 0
+                    || result.path("hpBeforeReplace").asInt(hp) != 0 || result.path("negated").asBoolean()))
+                throw new IllegalArgumentException("This mitigation requires Armor Slots to reduce the damage to nothing.");
+            if (option.has("giveFear")) {
+                fearGrant += option.path("giveFear").asInt();
+                fearSource = option.path("label").asText(fearSource);
+                special = true;
+            }
             if (option.has("clearStress")) special = true;
             if (option.path("protectionZone").asBoolean()) special = true;
             if (option.path("hiddenRoll").asBoolean()) {
@@ -2961,6 +2969,7 @@ public final class OnlineSessionServer {
             hopeCost += mitigationAmount(option.path("cost").path("hope"), before, hp) * quantities.get(i)
                     + mitigationAmount(option.path("armorCost").path("hope"), before, hp) * armorMarked;
             if (hp > 0) clearStress += option.path("clearStress").asInt();
+            gainHope += Math.max(0, option.path("gainHope").asInt());
             if (option.path("recoveryChoice").asBoolean()) {
                 boolean recoverStress = "stress".equals(input.path("recovery").asText())
                         || !input.has("recovery") && before.path("hope").path("on").asInt() >= before.path("hope").path("slots").asInt();
@@ -2968,6 +2977,13 @@ public final class OnlineSessionServer {
                 else gainHope++;
             }
         }
+        int freeStress = before.path("stress").path("slots").asInt() - before.path("stress").path("on").asInt() - stressCost;
+        for (JsonNode option : mitigations) {
+            int marked = Math.min(Math.max(0, option.path("markStress").asInt()), Math.max(0, freeStress));
+            stressCost += marked;
+            freeStress -= marked;
+        }
+        int armorBeforeRewards = before.path("armorTrack").path("on").asInt() + armorMarked;
         for (JsonNode card : before.path("loadout")) {
             for (JsonNode reward : card.path("automation").path("conditionalDamageRewards")) {
                 if (hp < Math.max(1, reward.path("minHp").asInt())
@@ -2978,6 +2994,12 @@ public final class OnlineSessionServer {
                     if (gate.path("domain").asText().equalsIgnoreCase(active.path("domain").asText())) count++;
                 if (!gate.isMissingNode() && count < gate.path("min").asInt()) continue;
                 gainHope += reward.path("gainHope").asInt();
+                int clear = reward.path("clearArmor").asInt();
+                if (clear > 0) {
+                    int cleared = Math.min(armorBeforeRewards, clear);
+                    armorBeforeRewards -= cleared;
+                    if (clear > cleared) gainHope += Math.max(0, before.path("activeArmor").path("automation").path("overflowHope").asInt());
+                }
             }
         }
         if (stressCost > before.path("stress").path("slots").asInt() - before.path("stress").path("on").asInt()
@@ -3011,7 +3033,7 @@ public final class OnlineSessionServer {
             }
         }
         changed.put(actor.getId(), next);
-        if (fearGrant > 0) report += "\nOctarine Brace: gave the GM " + fearGrant + " Fear.";
+        if (fearGrant > 0) report += "\n" + fearSource + ": gave the GM " + fearGrant + " Fear.";
         ObjectNode message = chatMessage(actor.getOwnerId(), actor.getName(), null, report);
         message.put("actorId", actor.getId());
         message.put("incomingDamage", result.path("damage").asInt(input.path("damage").asInt()) > 0
@@ -3261,6 +3283,7 @@ public final class OnlineSessionServer {
                         int cleared = Math.min(marked, repair);
                         sheet.withObject("/armorTrack").put("on", marked - cleared);
                         report.add("Armorer: " + ally.getName() + " cleared " + cleared + " Armor Slot.");
+                        armorOverflowHope(sheet, repair, cleared, ally.getName() + ": ", report);
                     }
                 }
             }
@@ -4535,6 +4558,7 @@ public final class OnlineSessionServer {
                         before - Math.max(0, amount)));
                 else track.put("on", Math.min(track.path("slots").asInt(), before + Math.max(0, amount)));
                 int changed = Math.abs(before - track.path("on").asInt());
+                if ("clear".equals(operation) && "armor".equals(resource)) armorOverflowHope(sheet, amount, changed, "", report);
                 if ("clear".equals(operation) && "hp".equals(resource)) {
                     report.add(hpRecoveryReport(changed, step.path("amount"), amount));
                 }
@@ -4619,6 +4643,17 @@ public final class OnlineSessionServer {
             }
         }
         return null;
+    }
+
+    /** Overflowing: an Armor clear that requests more slots than are marked gains Hope instead. */
+    private static void armorOverflowHope(ObjectNode sheet, int requested, int cleared, String prefix, List<String> report) {
+        int gain = sheet.path("activeArmor").path("automation").path("overflowHope").asInt();
+        if (gain <= 0 || requested <= cleared) return;
+        ObjectNode hope = requireTrack(sheet, "hope");
+        int before = hope.path("on").asInt();
+        hope.put("on", Math.min(hope.path("slots").asInt(), before + gain));
+        String feature = sheet.path("activeArmor").path("feature").path("name").asText(sheet.path("activeArmor").path("name").asText());
+        report.add(prefix + feature + ": gained " + (hope.path("on").asInt() - before) + " Hope.");
     }
 
     private static ObjectNode requireTrack(ObjectNode sheet, String resource) {

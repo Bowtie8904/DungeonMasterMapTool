@@ -144,6 +144,10 @@ Reloading checks on new attacks (rerolls carry a `reroll` tag) and success-check
 `engine.ts` scopes weapon modifiers and triggers to their own weapon, resolves `weaponProfile:` alternate
 statistics (Versatile/Stockpiled) and `damageDie:` attack tags for chat Damage buttons, and blocks attacks
 with Pompous requirements or Unloaded weapons. Older hosts disable only the affected rolls and buttons.
+Armor features add damage-dialog fields (`gainHope`, `report`, `markStress`, `storeRoll`, `when.avoidsAll`),
+the `armorFull` modifier condition, the `noArmorMarked` rest condition and armor `overflowHope`/`equipEffect`.
+The host's `ArmorFeatureRules` normalizes saved sheets for `armorFullEffect`, `armorHalfEffect`, `armorFullHeldEffect`,
+`equipEffect` and `zeroHopeClearArmor`, and validates `avoidsAll`, `gainHope` and `markStress` on Bone/Valor damage.
 Blood Hunter rules use conditional current-HP costs/dice, effect-gated stats and success-gated Psychometry
 chat claims. The rest dialog provides a free restricted Mutagens brewing slot with trait/benefit selectors;
 feature upgrades unlock choices and +2/-2 automatically. Volatile Toxins locks marked HP until the next

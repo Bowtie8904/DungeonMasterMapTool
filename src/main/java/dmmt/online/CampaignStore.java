@@ -340,10 +340,16 @@ public final class CampaignStore {
         return json;
     }
 
+    private void normalizeSheet(String campaignId, String actorId, ObjectNode sheet) throws IOException {
+        String stored = loadSheet(campaignId, actorId);
+        ArmorFeatureRules.normalize(stored == null ? null : MAPPER.readTree(stored), sheet);
+        OnlineTokenConditions.normalizeFullStress(sheet);
+    }
+
     public synchronized void saveSheet(String campaignId, String actorId, String json) throws IOException {
         recoverSheetTransfer(campaignId);
         var sheet = MAPPER.readTree(json);
-        if (sheet instanceof ObjectNode object) OnlineTokenConditions.normalizeFullStress(object);
+        if (sheet instanceof ObjectNode object) normalizeSheet(campaignId, actorId, object);
         writeSheet(campaignId, actorId, sheet.toString());
     }
 
@@ -353,7 +359,7 @@ public final class CampaignStore {
         recoverSheetTransfer(campaign.getId());
         ObjectNode transaction = MAPPER.createObjectNode();
         if (sheet != null) {
-            OnlineTokenConditions.normalizeFullStress(sheet);
+            normalizeSheet(campaign.getId(), actor.getId(), sheet);
             transaction.set(actor.getId(), sheet);
         }
         transaction.putObject("$actorName").put("id", actor.getId()).put("name", name);
@@ -417,7 +423,7 @@ public final class CampaignStore {
     public synchronized void saveSpecialCardAction(String campaignId, String actorId, ObjectNode sheet,
                                                     ObjectNode message, int fear, List<Campaign.Countdown> countdowns) throws IOException {
         recoverSheetTransfer(campaignId);
-        OnlineTokenConditions.normalizeFullStress(sheet);
+        normalizeSheet(campaignId, actorId, sheet);
         ObjectNode transaction = MAPPER.createObjectNode();
         transaction.set(actorId, sheet);
         transaction.set("$message", message);
@@ -437,7 +443,7 @@ public final class CampaignStore {
         recoverSheetTransfer(campaignId);
         ObjectNode transaction = MAPPER.createObjectNode();
         for (var entry : sheets.entrySet()) {
-            OnlineTokenConditions.normalizeFullStress(entry.getValue());
+            normalizeSheet(campaignId, entry.getKey(), entry.getValue());
             transaction.set(entry.getKey(), entry.getValue());
         }
         if (replacement != null) transaction.set("$roll", replacement);

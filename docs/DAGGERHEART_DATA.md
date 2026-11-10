@@ -931,11 +931,11 @@ as complete automation.
 | Category | Entries | Rule sources | Executable | Plain gear |
 |---|---:|---:|---:|---:|
 | Domain cards | 236 | 236 | 223 | 13 |
-| Armor | 110 | 110 | 80 | 30 |
+| Armor | 110 | 110 | 95 | 15 |
 | Weapons | 336 | 336 | 210 | 126 |
 | Consumables | 182 | 182 | 62 | 120 |
 | Items | 174 | 174 | 84 | 90 |
-| **All categories** | **1,187** | **1,296** | **843** | **453** |
+| **All categories** | **1,187** | **1,296** | **858** | **438** |
 
 Classes, ancestries, communities and transformations are included in the total.
 
@@ -1191,7 +1191,8 @@ claims retain their prior per-player behavior.
     `excludesEffect` blocks activation while the named effect is already active (Wolf Form).
   - `when`: `type` (`physical`/`magic`), `severity` (list of `minor`/`major`/`severe`/`massive`, after reductions),
     `armor`, `lastArmor`, `armorFull`, `lastHp`, `hpUnmarkedMax`, `min: {value, at}` (e.g. `@cards_splendor` ≥ 4).
-    `markingHp` requires at least one HP actually marked after armor and other mitigation.
+    `markingHp` requires at least one HP actually marked after armor and other mitigation. `avoidsAll` requires
+    Armor Slots marked against this damage, no HP marked and no negation (Glasslight, Flicker of Courage).
   - `cost` (resource → value; `@hp` = HP the damage would mark), `uses` (`"source"` shares the source's `uses`,
     or its own `{max, per}`), `consumeItem`, `quantity` (player picks a count; cost and dice scale).
   - Effects: `thresholds` (bonus), `double`, `halve`, `reduce` (value), `negate`, `severity` (steps down), `hp` (+/- HP),
@@ -1200,6 +1201,15 @@ claims retain their prior per-player behavior.
     `"quantity"`; without `success` the total reduces damage), and `followUp: {dice, text}` rolled on apply.
     `effect` adds a standard active effect only when the damage is applied (Wolf Form), never on preview/cancel.
     `markedHpOnly` applies an HP adjustment after capping damage to remaining HP slots.
+    `gainHope` gains Hope (capped) and `report` adds a line to the damage report on apply. `markStress` marks
+    mandatory Stress that never blocks the damage: Stress that cannot be marked marks HP instead (Bulky).
+    `storeRoll: <EffectDef>` stores the rolled reduction total in the effect's `stored` roll option (Capacitor).
+  - Armor-level fields: `overflowHope` (Hope when an Armor clear requests more slots than are marked),
+    `equipEffect` (added on equip, removed on unequip), and the host-enforced `armorFullEffect` (added once when the
+    Armor track becomes full), `armorHalfEffect` (kept while at least half the slots are marked), `armorFullHeldEffect`
+    (kept while every slot is marked, removed when one is cleared; Reinforced) and
+    `zeroHopeClearArmor` (clears Armor Slots when Hope drops to 0). Modifiers may require `armorFull`; rest passives
+    may require `condition: "noArmorMarked"` (checked against the Armor marked when the rest starts).
   - Order: thresholds → double → halve (rounded up, resistance never stacks) → flat/rolled reductions → severity (massive = at least 2× Severe) →
     negate → Armor Slots → severity steps → HP adjustments → HP replacement. HP is capped at the unmarked slots.
     Values may use `@hp`, `@armorScore`, `@cards_<domain>` and the usual named values.
