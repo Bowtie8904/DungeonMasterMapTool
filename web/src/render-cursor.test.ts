@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GameState, Measurement, Overlay } from './protocol';
 import { MapView } from './render';
+import { Store } from './store';
 
 class CanvasStub {
   style = { cursor: '', touchAction: '' };
@@ -68,6 +69,53 @@ describe('map interaction cursors', () => {
     view.setMeasurements([{ ...measure }]);
   });
   afterEach(() => { view.destroy(); vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  it('keeps unsent pointer movement ahead of stale state and acknowledgements', () => {
+    const store = new Store();
+    store.applySnapshot(1, current);
+    view.setState(store.state);
+    view.onMove = move => store.beginMove('move', move, 'player');
+    canvas.pointer('pointerdown', 100, 100);
+    canvas.pointer('pointermove', 200, 100);
+    // Model a newer pointer position which has not passed the drag's send throttle yet.
+    const drag = Reflect.get(view, 'drag');
+    drag.token.x = 225;
+    store.applyDelta(2, [{ op: 'tokens', upsert: [{ ...current.tokens[0], x: 150 }] }]);
+    view.setState(store.state);
+    expect(store.state!.tokens[0].x).toBe(225);
+    store.acknowledgeMove('move', 2);
+    view.setState(store.state);
+    expect(store.state!.tokens[0].x).toBe(225);
+    expect(Reflect.get(view, 'drag').token).toBe(store.state!.tokens[0]);
+  });
+
+  it('keeps attached lights and fog vision at the token position after release', () => {
+    current.lights = [{ id: 'token-light-token', x: 0, y: 0, range: 200, on: true,
+      color: '#ffffff', brightness: 1, revealMode: 'WHILE_LIT' }];
+    view.onMove = vi.fn();
+    canvas.pointer('pointerdown', 100, 100);
+    canvas.pointer('pointermove', 200, 100);
+    canvas.pointer('pointerup', 200, 100);
+    const light = Reflect.get(view, 'liveLights').call(view, current)[0];
+    expect(light).toMatchObject({ x: current.tokens[0].x, y: current.tokens[0].y });
+    expect(current.lights[0]).toMatchObject({ x: 0, y: 0 });
+    const polygon = vi.fn(() => ({ xs: [], ys: [] }));
+    Reflect.set(view, 'lightPolygon', polygon);
+    current.dmFog = { originX: 0, originY: 0, cellSize: 25, cols: 40, rows: 40, revealed: '' };
+    Reflect.get(view, 'recomputeVision').call(view, current);
+    expect(polygon).toHaveBeenCalledWith(expect.objectContaining({ x: current.tokens[0].x, y: current.tokens[0].y }));
+  });
+
+  it('does not persist tentative vision before authoritative movement catches up', () => {
+    current.fogGrid = { originX: 0, originY: 0, cellSize: 25, cols: 40, rows: 40 };
+    view.setMovesInFlight(1);
+    Reflect.get(view, 'recomputeVision').call(view, current);
+    expect(view.fog.visible.some(cell => cell === 1)).toBe(true);
+    expect(view.fog.hasNewExplored).toBe(false);
+    view.setMovesInFlight(0);
+    Reflect.get(view, 'recomputeVision').call(view, current);
+    expect(view.fog.hasNewExplored).toBe(true);
+  });
 
   it('skips hidden-tab canvas and vision work but redraws the latest state on visibility', () => {
     const draw = vi.fn();

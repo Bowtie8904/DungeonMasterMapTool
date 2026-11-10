@@ -1003,13 +1003,16 @@ export class App {
       case 'delta': {
         const r = this.store.applyDelta(msg.seq, msg.ops);
         if (r === 'gap') this.conn.send({ type: 'resync', lastSeq: this.store.lastSeq });
-        else if (r === 'ok') this.afterState(false);
+        else if (r === 'ok') {
+          this.syncInFlight();
+          this.afterState(false);
+        }
         break;
       }
       case 'tokenMoved': {
         const s = this.store.state;
         const token = s && msg.mapKey === `${s.mapId}/${s.levelId}` ? s.tokens.find((t) => t.id === msg.id) : undefined;
-        if (token) this.view.tokenMoved(token, msg.x, msg.y);
+        if (token && !this.store.hasLocalMove(token.id)) this.view.tokenMoved(token, msg.x, msg.y);
         break;
       }
       case 'ack':
@@ -1021,8 +1024,11 @@ export class App {
           }
           this.pendingDrawings.delete(msg.cmdId);
         }
-        this.pendingMoves.delete(msg.cmdId);
-        this.syncInFlight();
+        if (this.pendingMoves.delete(msg.cmdId)) {
+          this.store.acknowledgeMove(msg.cmdId, msg.seq);
+          this.syncInFlight();
+          this.view.setState(this.store.state);
+        }
         break;
       case 'reject':
         this.onReject(msg);
@@ -1216,8 +1222,10 @@ export class App {
   private commitMove(m: MoveCommit): void {
     const cmdId = `${Date.now().toString(36)}-${++this.cmdCounter}`;
     this.pendingMoves.set(cmdId, m);
+    this.store.beginMove(cmdId, m, this.playerId);
     this.syncInFlight();
     if (!this.conn.send({ type: 'command', cmdId, kind: 'moveToken', tokenId: m.tokenId, x: m.x, y: m.y })) {
+      this.store.cancelMove(cmdId, m.tokenId, { x: m.prevX, y: m.prevY });
       this.restore(m.tokenId, m.prevX, m.prevY);
       this.pendingMoves.delete(cmdId);
       this.syncInFlight();
@@ -1226,7 +1234,7 @@ export class App {
 
   /** Vision from unconfirmed positions is only tentative and must not become explored fog memory. */
   private syncInFlight(): void {
-    this.view.setMovesInFlight(this.pendingMoves.size);
+    this.view.setMovesInFlight(this.pendingMoves.size + this.store.movesAwaitingState);
   }
 
   private restore(tokenId: string, x: number, y: number): void {
@@ -1251,9 +1259,10 @@ export class App {
     this.pendingDrawings.delete(msg.cmdId);
     const pending = this.pendingMoves.get(msg.cmdId);
     this.pendingMoves.delete(msg.cmdId);
+    const correction = msg.token ?? (pending ? { id: pending.tokenId, x: pending.prevX, y: pending.prevY } : undefined);
+    const applyCorrection = !pending || !!correction && this.store.cancelMove(msg.cmdId, pending.tokenId, correction);
     this.syncInFlight();
-    if (msg.token) this.restore(msg.token.id, msg.token.x, msg.token.y);
-    else if (pending) this.restore(pending.tokenId, pending.prevX, pending.prevY);
+    if (correction && applyCorrection) this.restore(correction.id, correction.x, correction.y);
     if (msg.cmdId.startsWith('portal-') && (msg.reason === 'locked' || msg.reason === 'paused'
       || msg.reason === 'Map changed or game paused')) return;
     this.toast(msg.reason === 'paused' ? 'The game is paused.' : `Edit rejected: ${msg.reason}`);

@@ -515,6 +515,12 @@ Arrow keys with the map focused move all selected controlled tokens by exactly h
 press/repeat, through the existing move command and rollback path. They do nothing during pointer
 gestures, while paused or in text controls. Door/window badges are always light gray; only their glyph
 changes on opening/closing, and the browser draws no portal segments. DM rendering is unchanged.
+Local moves stay at their latest position after release until acknowledged authoritative token state
+catches up. An acknowledgement alone may precede publication, so stale state cannot rewind token vision.
+Attached lights follow the reconciled token position, not lagging light coordinates. Superseded move
+rejections cannot undo newer moves; current rejections, host corrections, removal, loss of control and
+resync snapshots remain authoritative. Tentative vision is not committed to explored memory.
+This uses existing messages and sequence numbers, with no settings or compatibility-version changes.
 Drawing undo is browser-local,
 bounded to 100 acknowledged edits per map and uses the existing authoritative ownership-checked commands.
 Measurement delete crosses are drawn/picked at a constant screen size and shown only to the creator

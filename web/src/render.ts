@@ -870,17 +870,17 @@ export class MapView {
   }
 
   /**
-   * Lights attached to a token follow the locally dragged position instead of waiting for the host's next update;
-   * when drawing (`shown`), they also follow the token's interpolated position.
+   * Token lights follow reconciled token positions even after release while published light positions still lag.
+   * When drawing (`shown`), they also follow the token's interpolated position.
    */
   private liveLights(s: GameState, shown = false): GameState['lights'] {
     const d = this.drag;
     const dragged = d?.kind === 'token' && d.token ? d.token : null;
-    if (!dragged && !(shown && this.moving)) return s.lights;
+    const tokens = new Map(s.tokens.map(t => [t.id, t]));
     return s.lights.map((l) => {
       if (!l.id.startsWith('token-light-')) return l;
       const id = l.id.slice('token-light-'.length);
-      const p = dragged?.id === id ? dragged : shown ? this.shown.get(id) : undefined;
+      const p = dragged?.id === id ? dragged : (shown ? this.shown.get(id) : undefined) ?? tokens.get(id);
       return p && (p.x !== l.x || p.y !== l.y) ? { ...l, x: p.x, y: p.y } : l;
     });
   }

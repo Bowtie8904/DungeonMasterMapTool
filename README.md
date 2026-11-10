@@ -186,6 +186,8 @@ Nothing starts until you click **Start online session**, so offline play and the
   and removing a linked effect clears its token badge. Token menus suppress the native browser context menu.
   Restrained tokens cannot be moved by players, but the DM can still move them.
   Moving, rotating or resizing tokens preserves their conditions, including through undo/redo.
+  Releasing a moved token keeps its position, attached lights and fog vision stable while host updates
+  catch up; genuine host corrections and rejected moves still apply.
   Removing a linked effect saves the sheet before updating its token, avoiding competing saves and false version-conflict messages.
   Actor conditions persist on the character sheet across map switches and token deletion. Fresh actor
   tokens inherit those conditions, and revisiting a map refreshes existing actor tokens from the sheet.

@@ -33,6 +33,8 @@ Desktop tool for tabletop dungeon masters that:
 
 ## 3) Current Implementation Status
 
+- **Stable online movement vision:** Preserve each token's latest local move through release and acknowledgement until authoritative token state catches up. Older deltas, acknowledgements and rejections must not undo newer local moves; genuine corrections, token removal and snapshots remain authoritative. Keep attached lights at the same reconciled position during and after dragging, and do not commit tentative vision to explored memory. Cover delayed state, multiple moves, rejection and resync. Browser-only, backward-compatible fix with no new settings or compatibility-version changes.
+
 - **Loot row highlighting:** give inventory body rows a subtle blue-tinted background on hover and keyboard focus within the row, without changing expansion, controls or equipment styling. Presentation-only; no settings or compatibility changes.
 
 - **Structured Loot table:** use Item, Qty, Usage & actions and Tools columns. Keep the type badge beside the item name when space permits; stack usage counters above full-width, naturally wrapping action buttons. Descriptions start fully collapsed; click a row's non-interactive area or its accessible item-name disclosure button to reveal/hide the full description. Preserve expansion across sheet refreshes; quantity, action and tool controls never toggle it. Read-only viewers may expand descriptions. Keep link-in-chat, transfer and delete icons in a separate, top-aligned horizontal row at the far right. Preserve equipment layout, usage/resource behavior, permissions, transfers and deletion. Presentation-only; no settings or remote compatibility changes.
