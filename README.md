@@ -57,7 +57,11 @@ Nothing starts until you click **Start online session**, so offline play and the
   Costs, dice, passives, limits and ally claims use the class patterns; target fiction remains table-managed.
   Host-dependent audited actions require the optional `domainCardAutomationV3` capability.
 - **Grace and Codex workflows:** successful casts expose their payments and damage in chat; cast-time
-  limits remain attached to the roll. Tava's Armor and Parallela can target offline actor sheets,
+  limits remain attached to the roll.
+  Enrapture's optional Stress payment and Hypnotic Shimmer's rest-limited activation appear on their
+  successful Spellcast results, leaving only Spellcast on each card. Thought Delver has only its
+  Hope payment on the card; the payment's chat message opens the optional deeper-thought Spellcast.
+  Tava's Armor and Parallela can target offline actor sheets,
   with Parallela consumed through a preselected attack option. Invisibility spends the caster's
   tokens when its recipient acts. Inspirational Words refills on long rest without preparation
   controls, and recipient choices are reported in chat. Never Upstaged gains tokens through the

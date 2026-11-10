@@ -180,6 +180,8 @@ export interface ActionDef {
   id: string;
   label: string;
   timing?: 'action' | 'downtime' | 'rest';
+  chatOnly?: boolean;
+  followUpAction?: string;
   downtime?: {
     rest?: RestKind;
     additional?: boolean;
@@ -1263,7 +1265,7 @@ export function isRestOnlyAction(action: ActionDef): boolean {
 }
 
 export function sheetActions(a: Automation | undefined): ActionDef[] {
-  return [...(a?.actions ?? []), ...(a?.conditionalActions ?? [])].filter((action) => !isRestOnlyAction(action) || action.ancestryChoice);
+  return [...(a?.actions ?? []), ...(a?.conditionalActions ?? [])].filter((action) => !action.chatOnly && (!isRestOnlyAction(action) || action.ancestryChoice));
 }
 
 export function routeDeathAction(action: ActionDef, open: (move: string) => void): boolean {

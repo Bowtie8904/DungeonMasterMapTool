@@ -8,6 +8,7 @@ import { openDeathRecovery } from './death-view';
 import type { ChatMessage, RollMessage, RollSource } from '../protocol';
 import type { CharacterSheet } from './data';
 import { actionBlocker, automationSources, availableRollTriggers, costText, evalValue, resourceDefinitions, rollTriggerSection, runAction, usesLeft } from './engine';
+import { activeCardSources } from './copycat';
 import type { AvailableRollTrigger, RollActionSection, RollContext } from './engine';
 import type { RollRequest, SheetBus } from './view';
 import { criticalMeleeBonus } from './brawler';
@@ -263,6 +264,35 @@ function chatDamageButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | 
   refresh();
   return box;
 }
+
+function chatFollowUpButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | null {
+  const action = m.actionFollowUp;
+  if (!action || !m.actorId || m.fromId !== host.playerId || !host.supportsDomainCardAutomation?.()) return null;
+  const box = el('div', { class: 'roll-actions' });
+  const paint = async () => {
+    box.replaceChildren();
+    box.hidden = true;
+    if (host.isActorActive?.(m.actorId!) === false) return;
+    const sheet = await host.sheet(m.actorId!);
+    const source = sheet && activeCardSources(sheet.character).find(source => source.name === action.name);
+    const definition = source?.auto?.actions?.find(candidate => candidate.id === action.id && candidate.chatOnly && candidate.actionRoll);
+    if (!sheet || !source?.auto || !definition) return;
+    const button = el('button', { type: 'button', class: 'small primary' }, action.label);
+    const blocked = actionBlocker(sheet.character, source.key, source.auto, definition);
+    button.disabled = !!blocked;
+    button.title = blocked ?? '';
+    button.addEventListener('click', () => {
+      if (!sheet.bus.featureAction?.(action.name, action.id))
+        host.toast('This follow-up roll is no longer available.');
+    });
+    box.append(button);
+    box.hidden = false;
+  };
+  box.addEventListener('refresh-roll-actions', () => { void paint().catch((e: Error) => host.toast(e.message)); });
+  void paint().catch((e: Error) => host.toast(e.message));
+  return box;
+}
+
 function restButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | null {
   if (!m.restDice?.length || !m.actorId) return null;
   const box = el('div', { class: 'roll-actions' });
@@ -377,7 +407,7 @@ function incomingReactionButtons(m: ChatMessage, host: RollButtonHost): HTMLElem
 
 export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost): HTMLElement | null {
   if ('text' in m) {
-    const children = [benefitButtons(m, host), restButtons(m, host), chatDamageButtons(m, host), incomingReactionButtons(m, host)].filter((node): node is HTMLElement => !!node);
+    const children = [benefitButtons(m, host), restButtons(m, host), chatDamageButtons(m, host), chatFollowUpButtons(m, host), incomingReactionButtons(m, host)].filter((node): node is HTMLElement => !!node);
     return children.length === 1 ? children[0] : children.length ? el('div', {}, ...children) : null;
   }
   if (m.deathMove) return deathButtons(m, host);

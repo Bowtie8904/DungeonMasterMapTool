@@ -116,6 +116,36 @@ const original: RollMessage = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('cross-player roll buttons', () => {
+  it('opens a paid chat follow-up only for its owner while the card remains active', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Caster', undefined);
+    c.traits[0].spellcast = true;
+    c.loadout = [{ name: 'Thought Delver', domain: 'Grace', level: 5, type: 'Spell', recall: 2, text: '',
+      automation: { actions: [{ id: 'delve', label: 'Deeper thoughts', chatOnly: true, actionRoll: { trait: 'spellcast' } }] } }];
+    const featureAction = vi.fn(() => true);
+    const { host } = hostFor({});
+    const supported = { ...host, playerId: 'player-b', supportsDomainCardAutomation: () => true,
+      sheet: async () => ({ character: c, bus: { featureAction } as unknown as SheetBus, save: () => {} }) };
+    const message: ChatMessage = { id: 1, ts: 1, fromId: 'player-b', from: 'Caster', actorId: 'caster', text: 'Paid 1 Hope.',
+      actionFollowUp: { name: 'Thought Delver', id: 'delve', label: 'Deeper thoughts' } };
+    expect(rollButtons(message, { ...supported, playerId: 'other' })).toBeNull();
+    expect(rollButtons(message, { ...supported, supportsDomainCardAutomation: () => false })).toBeNull();
+    const box = rollButtons(message, supported) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.text).toBe('Deeper thoughts');
+    await box.queryAll('button')[0].click();
+    expect(featureAction).toHaveBeenCalledWith('Thought Delver', 'delve');
+    // Opening and canceling a roll must not consume the chat follow-up.
+    for (const refresh of box.listeners.get('refresh-roll-actions') ?? []) await refresh();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.queryAll('button')).toHaveLength(1);
+    c.vault.push(c.loadout.pop()!);
+    for (const refresh of box.listeners.get('refresh-roll-actions') ?? []) await refresh();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(box.hidden).toBe(true);
+    expect(box.queryAll('button')).toHaveLength(0);
+  });
+
   it('offers Hideous Retribution on allied incoming-damage reports and opens the card reaction', async () => {
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
     const catalog = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));

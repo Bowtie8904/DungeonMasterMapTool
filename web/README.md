@@ -1,5 +1,14 @@
 # Online Play web client
 
+Enrapture and Hypnotic Shimmer keep only Spellcast on their cards; successful results offer the
+once-per-rest Stress payment or activation. Target conditions remain table-resolved. Thought Delver
+keeps only its Hope payment on the card, with an optional deeper-thought Spellcast on the payment report.
+`chatOnly` hides an action from sheet controls; `followUpAction` references its ID on a host-owned
+payment action. The host includes optional `actionFollowUp` metadata on the committed report.
+The owner's browser resolves the action against the current active card and opens the standard roll
+dialog, without paying Hope again or consuming the follow-up on cancellation. Older clients ignore
+the additive report field; no settings or compatibility-version changes are required.
+
 Dread cards keep follow-ups on their matching chat results: Terrify Stress, Wall of Hunger payment,
 Dark Army summoning, Damnation's selected Stress damage, Siphon Essence's target-marked-HP healing,
 Dire Strike on weapon damage (including automatic Fear removal), and Jump Scare on magic damage.

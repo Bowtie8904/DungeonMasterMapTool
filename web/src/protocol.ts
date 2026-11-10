@@ -205,6 +205,7 @@ export interface ChatMessage {
   restDice?: import('./daggerheart/rest').RestDie[];
   actionBenefits?: { options: import('./daggerheart/engine').ChatBenefit[]; actorIds: string[]; claimedBy: string[]; sessionId: string; allowSourceOwner?: boolean; stressCapacity?: number; maxClaims?: number; excludeSourceActor?: boolean };
   actionDamage?: { label: string; damage: NonNullable<import('./daggerheart/engine').ActionDef['damage']> };
+  actionFollowUp?: { name: string; id: string; label: string };
   rollSource?: RollSource;
   /** Host announcement from the DM's End scene / New session buttons. */
   system?: 'sceneEnd' | 'newSession';

@@ -568,6 +568,13 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   `actionRoll: {trait?, attack?, difficulty?}` opens the standard Duality dialog (without a trait it rolls just
   Duality Dice). `damage: {dice, fixed?, type?: "physical"|"magic"}` opens damage using Proficiency unless fixed.
   Both pay action costs only when the roll is sent and validate combined action, Experience and option costs.
+  `chatOnly: true` hides an action from sheet controls without disabling its standard roll dialog.
+  A host-owned payment action can set `followUpAction` to the ID of a `chatOnly` action with `actionRoll`
+  in the same automation. Its committed chat report includes additive `actionFollowUp: {name, id, label}`
+  metadata; only the owner's browser offers the follow-up, resolving the current active card and costs.
+  Opening or canceling the follow-up does not consume it or repeat the original payment. Thought Delver
+  uses this for optional deeper-thought Spellcast after paying Hope for surface thoughts. Older browsers
+  ignore the report field; no compatibility-version change is required.
   `check: {dice, unless, mark: "stress"}` is a host-rolled conditional check: mark Stress unless the die equals
   the configured face (Unshakable). Its roll card includes the consequence.
   `target: "actor"` selects a campaign character and applies configured steps there, keeping costs and usage

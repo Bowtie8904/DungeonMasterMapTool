@@ -2259,6 +2259,17 @@ public final class OnlineSessionServer {
             boolean hasRoll = request.path("roll").isObject();
             JsonNode definition = featureDefinition(automation, actionId, hasRoll);
             if (definition == null) throw new IllegalArgumentException("This feature action is no longer available.");
+            JsonNode followUpAction = null;
+            if (definition.has("followUpAction")) {
+                for (JsonNode action : automation.path("actions"))
+                    if (definition.path("followUpAction").asText().equals(action.path("id").asText())
+                            && action.path("chatOnly").asBoolean() && action.path("actionRoll").isObject()) {
+                        followUpAction = action;
+                        break;
+                    }
+                if (followUpAction == null)
+                    throw new IllegalArgumentException("This feature's follow-up roll is not configured correctly. Update its catalog entry.");
+            }
             if (definition.has("specialAction")) {
                 resolveSpecialCardAction(request, sourceActor, sourceSheet, source, key, automation, definition);
                 actionResponse(ctx, playerId, sourceActor);
@@ -2775,6 +2786,11 @@ public final class OnlineSessionServer {
             if (benefitReport == null && banishRoll == null && (!definition.has("reroll") || definition.path("hostRollAction").asBoolean())) {
                 if (reportLines.isEmpty()) reportLines.add("Used " + actionLabel + ".");
                 benefitReport = actionReportMessage(sourceActor, source, actionReportTitle(sourceSheet, source, actionLabel), reportLines, originalRoll);
+            }
+            if (benefitReport != null && followUpAction != null) {
+                benefitReport.put("actorId", sourceActor.getId());
+                benefitReport.putObject("actionFollowUp").put("name", source.path("name").asText())
+                        .put("id", followUpAction.path("id").asText()).put("label", followUpAction.path("label").asText());
             }
             if (fearGrant > 0 || fearRemoval > 0) {
                 if (benefitReport == null)

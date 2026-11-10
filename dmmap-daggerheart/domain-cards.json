@@ -2190,13 +2190,16 @@
      "max": 1,
      "per": "rest"
     },
-    "actions": [
+    "conditionalRollTriggers": [
      {
       "id": "use",
-      "label": "Enrapture",
+      "label": "Successful Enrapture: mark Stress",
+      "on": "card:Enrapture",
+      "successIfKnown": true,
       "cost": {
        "stress": 1
-      }
+      },
+      "report": { "text": "The Enraptured target marks a Stress. Resolve its attention and interruptions at the table." }
      }
     ]
    }
@@ -3028,10 +3031,13 @@
      "max": 1,
      "per": "rest"
     },
-    "actions": [
+    "conditionalRollTriggers": [
      {
       "id": "use",
-      "label": "Hypnotic Shimmer"
+      "label": "Successful Hypnotic Shimmer",
+      "on": "card:Hypnotic Shimmer",
+      "successIfKnown": true,
+      "report": { "text": "Targets you succeeded against become temporarily Stunned and mark a Stress. Resolve targets and clearing Stunned at the table." }
      }
     ]
    }
@@ -5506,13 +5512,23 @@
    "recall": 2,
    "text": "You can peek into the minds of others. **Spend a Hope** to read the vague surface thoughts of a target within Far range. Make a**Spellcast Roll **against the target to delve for deeper, more hidden thoughts.\n\nOn a roll with Fear, the target might, at the GM’s discretion, become aware that you’re reading their thoughts.",
    "automation": {
+    "hideSpellcast": true,
     "actions": [
      {
       "id": "use",
-      "label": "Thought Delver",
+      "label": "Thought Delver: read surface thoughts",
+      "hostOwned": true,
+      "followUpAction": "delve",
       "cost": {
        "hope": 1
-      }
+      },
+      "report": { "text": "Read the target's vague surface thoughts. You may make a Spellcast Roll from this message to delve deeper." }
+     },
+     {
+      "id": "delve",
+      "label": "Thought Delver: deeper thoughts Spellcast",
+      "chatOnly": true,
+      "actionRoll": { "trait": "spellcast" }
      }
     ]
    }

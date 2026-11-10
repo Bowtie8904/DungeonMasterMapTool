@@ -5964,6 +5964,75 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void graceCastFollowUpsSpendRestUsesOnlyWhenActivatedFromChat() throws Exception {
+        ObjectNode base = communitySheet("Seaborne");
+        JsonNode catalog = MAPPER.readTree(compendiumDir.resolve("domain-cards.json").toFile()).path("entries");
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket socket = connect(cookie, inbox);
+        try {
+            for (String id : List.of("enrapture", "hypnotic-shimmer")) {
+                JsonNode card = java.util.stream.StreamSupport.stream(catalog.spliterator(), false)
+                        .filter(item -> id.equals(item.path("id").asText())).findFirst().orElseThrow();
+                String key = "card:" + card.path("name").asText();
+                ObjectNode caster = base.deepCopy();
+                caster.withObject("/stress").put("on", 0);
+                caster.putArray("loadout").add(card.deepCopy());
+                campaign.getActors().add(Campaign.Actor.builder().id(id).name("Caster").ownerId(playerId()).build());
+                store.saveSheet(campaign.getId(), id, caster.toString());
+                ObjectNode cast = MAPPER.createObjectNode().put("type", "roll").put("kind", "duality")
+                        .put("actorId", id).put("expression", "2d12+30").put("source", "action,spellcast," + key);
+                socket.sendText(cast.toString(), true).join();
+                JsonNode roll = inbox.next("roll");
+                JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+                assertEquals(0, saved.path("stress").path("on").asInt());
+                assertEquals(0, saved.path("usage").path(key).path("used").asInt());
+                ObjectNode request = MAPPER.createObjectNode().put("actorId", id).put("key", key).put("actionId", "use");
+                request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+                var activated = featureHttp(cookie, request);
+                assertEquals(200, activated.statusCode(), activated.body());
+                saved = MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+                assertEquals(id.equals("enrapture") ? 1 : 0, saved.path("stress").path("on").asInt());
+                assertEquals(1, saved.path("usage").path(key).path("used").asInt());
+                assertEquals(400, featureHttp(cookie, request).statusCode());
+                socket.sendText(cast.toString(), true).join();
+                assertEquals(id, inbox.next("roll").path("actorId").asText());
+            }
+        } finally { socket.abort(); }
+    }
+
+    @Test
+    void thoughtDelverPublishesSpellcastFollowUpOnlyAfterHopePayment() throws Exception {
+        ObjectNode caster = communitySheet("Seaborne");
+        caster.withObject("/hope").put("on", 1);
+        JsonNode card = java.util.stream.StreamSupport.stream(
+                MAPPER.readTree(compendiumDir.resolve("domain-cards.json").toFile()).path("entries").spliterator(), false)
+                .filter(item -> "thought-delver".equals(item.path("id").asText())).findFirst().orElseThrow();
+        caster.putArray("loadout").add(card.deepCopy());
+        campaign.getActors().add(Campaign.Actor.builder().id("delver").name("Delver").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "delver", caster.toString());
+        String cookie = cookie();
+        WebSocket socket = connect(cookie, new Inbox());
+        try {
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "delver").put("key", "card:Thought Delver").put("actionId", "use");
+            var paid = featureHttp(cookie, request);
+            assertEquals(200, paid.statusCode(), paid.body());
+            assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "delver")).path("hope").path("on").asInt());
+            JsonNode report = store.historyTail(campaign.getId(), 20).stream()
+                    .filter(message -> message.has("actionFollowUp")).findFirst().orElseThrow();
+            assertEquals("delver", report.path("actorId").asText());
+            assertEquals(playerId(), report.path("fromId").asText());
+            assertEquals("Thought Delver", report.path("actionFollowUp").path("name").asText());
+            assertEquals("delve", report.path("actionFollowUp").path("id").asText());
+            assertTrue(report.path("actionFollowUp").path("label").asText().contains("Spellcast"));
+            long reports = store.historyTail(campaign.getId(), 20).stream().filter(message -> message.has("actionFollowUp")).count();
+            var unpaid = featureHttp(cookie, request);
+            assertEquals(400, unpaid.statusCode(), unpaid.body());
+            assertEquals(reports, store.historyTail(campaign.getId(), 20).stream().filter(message -> message.has("actionFollowUp")).count());
+        } finally { socket.abort(); }
+    }
+
+    @Test
     void mendingTouchSharesUpgradeLimitButNotBaseHealing() throws Exception {
         ObjectNode caster = communitySheet("Seaborne");
         caster.withObject("/hope").put("on", 6);

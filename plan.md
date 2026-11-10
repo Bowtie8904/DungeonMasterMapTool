@@ -155,6 +155,8 @@ Desktop tool for tabletop dungeon masters that:
 - **Token preparation and current traits:** Flight replaces its previous tokens with current Agility, minimum one. Inspirational Words, Restoration, Strategic Approach and Fane regenerate on long rest, even in the vault; compute regeneration after rest-expiring effects are removed. Strategic Approach has a minimum of one. Existing explicit reset/preparation controls remain manual overrides, not additional automatic awards. The current-trait expressions are `@total_<trait>`, `@total_spellcast` and `@total_proficiency`; existing base-value expressions retain their meaning.
 - **Compatibility:** optional `domainCardAutomationV3` identifies hosts supporting the Grace/Codex targeted effects, linked tokens, atomic claims and borrowed cards in addition to audited nested reactions. Retain V1/V2 for older clients; current clients disable host-dependent domain actions on hosts without V3. LAN `RemoteCompatibility.VERSION` is unchanged because connection/snapshot contracts remain backward-compatible.
 
+- **Grace chat follow-ups:** Enrapture's optional Stress payment and Hypnotic Shimmer's once-per-rest activation belong on their successful Spellcast results, not their cards. Casting remains available after those benefits are spent. Thought Delver exposes only its Hope payment on the card; the committed payment report offers an optional Spellcast roll. Shared `chatOnly` actions and `followUpAction` references keep that roll off the card and preserve ordinary roll cancellation, affordability and active-card checks. The host adds optional `actionFollowUp` report metadata; older clients ignore it and older hosts retain existing behavior. No settings or LAN compatibility-version change.
+
 ### Individual domain-card disposition ledger
 
 `Supported` means the identifiable sheet-side mechanics have an implemented pattern; any stated table conditions remain manual. `Manual` means the card has no safely inferable sheet mutation, or its supported payment/roll intentionally leaves the outcome to the table. `Open` identifies further automation not implemented pending the specific decisions listed after this table. Books name every reviewed spell separately.
@@ -238,7 +240,7 @@ Desktop tool for tabletop dungeon masters that:
 | 75 | Eldritch Flesh | Supported: marked-Stress thresholds and explicit Fear-triggered armor action. |
 | 76 | Encore | Open: link ally damage to a new Spellcast and vault on Fear success. |
 | 77 | Endless Charisma | Manual: existing payment/recovery; social prerequisites table-confirmed. |
-| 78 | Enrapture | Manual: limited payment; attention and interruption manual. |
+| 78 | Enrapture | Supported: only Spellcast on the card; successful-cast chat offers the once-per-rest Stress payment. Target attention remains manual. |
 | 79 | Falling Sky | Supported: Stress quantity d20+2 per Stress; successful targets manual. |
 | 80 | Fane of the Wilds | Supported: loadout-plus-vault Sage tokens, long-rest regeneration, repeatable post-roll +1 payment. |
 | 81 | Ferocity | Manual: existing payment; adversary consequences table-resolved. |
@@ -268,7 +270,7 @@ Desktop tool for tabletop dungeon masters that:
 | 105 | Hideous Retribution | Supported: card/allied-damage Spellcast-trait reaction, then Stress-paid magic damage on its result. |
 | 106 | Hold the Line | Supported: paid manually removed stance buff; movement and narrative target restrictions manual. |
 | 107 | Hush | Supported: cast-success payment; target silencing/ending manual. |
-| 108 | Hypnotic Shimmer | Manual: limited payment; target attention manual. |
+| 108 | Hypnotic Shimmer | Supported: only Spellcast on the card; successful-cast chat consumes the rest use and reports target Stress/Stunned. Targets remain table-resolved. |
 | 109 | I Am Your Shield | Open: transfer the original incoming attack/damage to a different actor without duplicate application. |
 | 110 | I See It Coming | Supported: existing contextual Evasion roll/report. |
 | 111 | Inevitable | Supported: explicit failed-action preparation, consumed next-action advantage. |
@@ -364,7 +366,7 @@ Desktop tool for tabletop dungeon masters that:
 | 201 | Tempest | Supported: three named casts with distinct successful fixed magic damage; weather/conditions manual. |
 | 202 | Terrify | Supported: successful-cast chat action rolls target Stress; fleeing and Fear-success Vulnerable manual. |
 | 203 | Thorn Skin | Supported: limited cast, rest-cleared tokens and mitigation. |
-| 204 | Thought Delver | Manual: existing payment; information manual. |
+| 204 | Thought Delver | Supported: only Hope payment on the card; its chat report opens the optional deeper-thought Spellcast roll without paying again. Information and Fear awareness remain manual. |
 | 205 | Through Your Eyes | Manual: sensory link/switching/termination; no numerical sheet benefit. |
 | 206 | Towering Stalk | Supported: separate limited climbing use and Stress-paid attack cast/damage; see limit interpretation below. |
 | 207 | Transcendent Union | Open: Hope/use payment exists; merged actors, traits and consequences need shared ownership semantics. |

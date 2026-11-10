@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { CompendiumFile } from './compendium';
 import { emptyCharacter, type DomainCard } from './data';
-import { actionBlocker, applyRest, availableRollOptions, availableRollTriggers, commitRollOptions, derivedStats, damageRollFormula, maximizeDamageDie, maximizableDamageDice, rollBonus, rollOptionDice, runAction, selectedRollBonus, selectionBlocker, setGmFear, statBreakdown, statSources, suggestedAdvantage, traitTotal, type Automation } from './engine';
+import { actionBlocker, applyRest, availableRollOptions, availableRollTriggers, commitRollOptions, derivedStats, damageRollFormula, maximizeDamageDie, maximizableDamageDice, rollBonus, rollOptionDice, runAction, selectedRollBonus, selectionBlocker, setGmFear, sheetActions, statBreakdown, statSources, suggestedAdvantage, traitTotal, type Automation } from './engine';
 import { availableMitigations, mitigationBlocker } from './damage';
 
 const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
@@ -22,6 +22,48 @@ describe('domain-card cost and limit corrections', () => {
     c.loadout.push(card);
     return card.automation!;
   };
+
+  it.each(['enrapture', 'hypnotic-shimmer'])('moves %s activation to its successful cast without limiting casting', id => {
+    const c = emptyCharacter('Caster');
+    const a = load(c, id);
+    const name = c.loadout[0].name, key = `card:${name}`;
+    expect(sheetActions(a)).toHaveLength(0);
+    expect(a.hideSpellcast).not.toBe(true);
+    expect(a.automaticRestUse).not.toBe(true);
+    const ctx = { source: `action,spellcast,${key}`, hope: 5, fear: 3, total: 15, difficulty: 14 };
+    expect(availableRollTriggers(c, { ...ctx, source: 'action,spellcast,card:Other' })).toHaveLength(0);
+    expect(availableRollTriggers(c, { ...ctx, total: 13 })).toHaveLength(0);
+    expect(availableRollTriggers(c, { ...ctx, total: 10, hope: 5, fear: 5 })).toHaveLength(1);
+    expect(availableRollTriggers(c, { ...ctx, difficulty: undefined })).toHaveLength(1);
+    const trigger = availableRollTriggers(c, ctx)[0].trigger;
+    expect(c.usage[key]).toBeUndefined();
+    expect(actionBlocker(c, key, a, trigger)).toBeNull();
+    runAction(c, key, a, trigger, name);
+    expect(c.stress.on).toBe(id === 'enrapture' ? 1 : 0);
+    expect(c.usage[key].used).toBe(1);
+    expect(actionBlocker(c, key, a, trigger)).not.toBeNull();
+    applyRest(c, 'short');
+    expect(actionBlocker(c, key, a, trigger)).toBeNull();
+    c.vault.push(c.loadout.pop()!);
+    expect(availableRollTriggers(c, ctx)).toHaveLength(0);
+  });
+
+  it('keeps only Thought Delver payment on the card and makes the chat Spellcast free', () => {
+    const c = emptyCharacter('Caster');
+    c.hope.on = 2;
+    c.traits[0].spellcast = true;
+    const a = load(c, 'thought-delver');
+    expect(a.hideSpellcast).toBe(true);
+    const [payment] = sheetActions(a);
+    expect(sheetActions(a)).toHaveLength(1);
+    expect(payment).toMatchObject({ cost: { hope: 1 }, hostOwned: true, followUpAction: 'delve' });
+    const followUp = a.actions!.find(action => action.id === payment.followUpAction)!;
+    expect(followUp).toMatchObject({ chatOnly: true, actionRoll: { trait: 'spellcast' } });
+    runAction(c, 'card:Thought Delver', a, payment, 'Thought Delver');
+    expect(c.hope.on).toBe(1);
+    runAction(c, 'card:Thought Delver', a, followUp, 'Thought Delver');
+    expect(c.hope.on).toBe(1);
+  });
 
   it.each([[1, 9, 19], [2, 11, 24], [5, 13, 31], [8, 15, 38]])(
     'uses Bare Bones base thresholds at level %i without double counting level', (level, major, severe) => {
