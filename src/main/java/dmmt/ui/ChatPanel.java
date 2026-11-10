@@ -12,6 +12,7 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
@@ -68,6 +69,8 @@ public final class ChatPanel extends VBox {
     private final TextField input = new TextField();
     private final Label status = new Label();
     private final Button jump = new Button("Jump to latest");
+    private final ToggleButton secretRoll = Icons.toggle(MaterialDesignE.EYE_OFF,
+            "Secret rolls: when enabled, players see ? instead of the numbers");
     private final BooleanProperty unread = new SimpleBooleanProperty();
     private boolean stickToBottom = true;
     private boolean adjusting;
@@ -125,15 +128,14 @@ public final class ChatPanel extends VBox {
         recipient.setMaxWidth(Double.MAX_VALUE);
         recipient.setOnShowing(e -> refreshRecipients());
         refreshRecipients();
-        input.setPromptText("Message, /roll 2d6+3, /secret 1d20 or /gold 500");
+        input.setPromptText("Message, /r 2d6+3, /sr 1d20 or /gold 500");
         HBox.setHgrow(input, Priority.ALWAYS);
         input.setOnAction(e -> submit());
         Button send = Icons.button(MaterialDesignS.SEND, "Send message", this::submit);
-        Button roll = Icons.button(MaterialDesignD.DICE_MULTIPLE, "Roll the dice in the box (visible to the recipient)",
-                () -> rollFromInput(false));
-        Button secret = Icons.button(MaterialDesignE.EYE_OFF,
-                "Roll secretly: players see ? instead of the numbers", () -> rollFromInput(true));
-        HBox composer = new HBox(4, input, send, roll, secret);
+        Button roll = Icons.button(MaterialDesignD.DICE_MULTIPLE, "Roll the dice in the box (uses the secret-roll toggle)",
+                this::rollFromInput);
+        secretRoll.setFocusTraversable(true);
+        HBox composer = new HBox(4, input, send, roll, secretRoll);
         composer.setAlignment(Pos.CENTER_LEFT);
         status.getStyleClass().add("chat-status");
         status.setWrapText(true);
@@ -337,11 +339,13 @@ public final class ChatPanel extends VBox {
         showStatus(error);
     }
 
-    private void rollFromInput(boolean secret) {
+    private void rollFromInput() {
         String text = input.getText().trim();
+        boolean secret = false;
         for (String command : new String[]{"/secret", "/sr", "/roll", "/r"}) {
             if (text.toLowerCase(Locale.ROOT).startsWith(command + " ") || text.equalsIgnoreCase(command)) {
                 text = text.substring(command.length()).trim();
+                secret = command.equals("/secret") || command.equals("/sr");
                 break;
             }
         }
@@ -353,7 +357,7 @@ public final class ChatPanel extends VBox {
             showStatus("Enter dice such as 2d6+3 first.");
             return;
         }
-        String error = backend.roll(expression, target(), secret);
+        String error = backend.roll(expression, target(), secret || secretRoll.isSelected());
         if (error == null) {
             input.clear();
         }

@@ -4,14 +4,20 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dmmt.FxTestSupport;
 import javafx.application.Platform;
+import javafx.event.ActionEvent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.TextField;
+import javafx.scene.control.ToggleButton;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -32,6 +38,91 @@ class ChatPanelTest {
         assertEquals(7, ChatPanel.goldAmount(" 7 "));
         for (String invalid : new String[]{"", "0", "-5", "1.5", "abc", "1234567890"})
             assertNull(ChatPanel.goldAmount(invalid), invalid);
+    }
+
+    @Test
+    void secretToggleAppliesToAllComposerRollsButNotMessagesOrGold() throws Exception {
+        onFx(() -> {
+            RecordingBackend backend = new RecordingBackend();
+            ChatPanel panel = new ChatPanel(backend);
+            HBox composer = (HBox) panel.getChildren().get(2);
+            TextField input = (TextField) composer.getChildren().get(0);
+            Button send = (Button) composer.getChildren().get(1);
+            Button roll = (Button) composer.getChildren().get(2);
+            ToggleButton secret = (ToggleButton) composer.getChildren().get(3);
+            assertFalse(secret.isSelected());
+            assertTrue(secret.isFocusTraversable());
+            input.setText("2d6+3");
+            secret.fire();
+            assertTrue(secret.isSelected());
+            assertEquals("2d6+3", input.getText(), "Toggling does not submit or clear input");
+            assertTrue(backend.rolls.isEmpty());
+            roll.fire();
+            assertTrue(input.getText().isEmpty());
+            for (String command : List.of("/r", "/roll", "/sr", "/secret")) {
+                input.setText(command + " 2d6+3");
+                input.fireEvent(new ActionEvent());
+                assertTrue(secret.isSelected());
+            }
+            assertEquals(java.util.Collections.nCopies(5, "2d6+3:true"), backend.rolls);
+            input.setText("Hello everyone");
+            send.fire();
+            assertEquals(List.of("Hello everyone"), backend.messages);
+            input.setText("/gold 500");
+            input.fireEvent(new ActionEvent());
+            assertEquals(List.of(500), backend.gold);
+            assertTrue(secret.isSelected());
+            assertEquals(5, backend.rolls.size());
+            secret.fire();
+            input.setText("/r 1d20");
+            send.fire();
+            input.setText("1d20");
+            roll.fire();
+            assertEquals(List.of("1d20:false", "1d20:false"), backend.rolls.subList(5, 7));
+        });
+    }
+
+    @Test
+    void secretCommandsOverrideOffToggleForSendEnterAndRollAndKeepWhisperTarget() throws Exception {
+        onFx(() -> {
+            RecordingBackend backend = new RecordingBackend();
+            ChatPanel panel = new ChatPanel(backend);
+            HBox composer = (HBox) panel.getChildren().get(2);
+            TextField input = (TextField) composer.getChildren().get(0);
+            Button send = (Button) composer.getChildren().get(1);
+            Button roll = (Button) composer.getChildren().get(2);
+            ToggleButton secret = (ToggleButton) composer.getChildren().get(3);
+            ComboBox<?> recipients = (ComboBox<?>) panel.getChildren().get(1);
+            recipients.getSelectionModel().select(1);
+            for (String command : List.of("/sr", "/secret", "/SR")) {
+                for (Runnable submit : List.<Runnable>of(send::fire, roll::fire,
+                        () -> input.fireEvent(new ActionEvent()))) {
+                    input.setText(command + " 1d20+2");
+                    submit.run();
+                    assertEquals("1d20+2:true", backend.rolls.getLast());
+                    assertEquals("alice", backend.lastTarget);
+                    assertTrue(input.getText().isEmpty());
+                    assertFalse(secret.isSelected(), "An explicit secret command does not change the toggle");
+                }
+            }
+            input.setText("/sroll is a normal message");
+            send.fire();
+            assertEquals(List.of("/sroll is a normal message"), backend.messages);
+            assertEquals("alice", backend.lastTarget);
+            secret.fire();
+            backend.error = "Invalid dice expression";
+            input.setText("/r invalid");
+            send.fire();
+            assertEquals("invalid:true", backend.rolls.getLast());
+            assertEquals("/r invalid", input.getText());
+            assertEquals(backend.error, ((Label) panel.lookup(".chat-status")).getText());
+            assertTrue(secret.isSelected());
+            int calls = backend.rolls.size();
+            input.setText("/sr");
+            send.fire();
+            assertEquals(calls, backend.rolls.size(), "Missing dice must not reach the backend");
+            assertTrue(secret.isSelected());
+        });
     }
 
     @Test
@@ -108,6 +199,34 @@ class ChatPanelTest {
             var nonModerated = ChatCards.render(message);
             assertNull(nonModerated.lookup(".chat-delete"), "Rendering without host actions never adds delete controls");
         });
+    }
+
+    private static class RecordingBackend extends Backend {
+        final List<String> rolls = new ArrayList<>();
+        final List<String> messages = new ArrayList<>();
+        final List<Integer> gold = new ArrayList<>();
+        String lastTarget;
+        String error;
+
+        RecordingBackend() { super(null); }
+        @Override public List<JsonNode> history() { return List.of(); }
+        @Override public List<ChatPanel.Recipient> recipients() {
+            return List.of(new ChatPanel.Recipient("alice", "Alice"));
+        }
+        @Override public void send(String text, String toPlayerId) {
+            messages.add(text);
+            lastTarget = toPlayerId;
+        }
+        @Override public String roll(String expression, String toPlayerId, boolean secret) {
+            rolls.add(expression + ":" + secret);
+            lastTarget = toPlayerId;
+            return error;
+        }
+        @Override public String offerGold(int amount, String toPlayerId) {
+            gold.add(amount);
+            lastTarget = toPlayerId;
+            return null;
+        }
     }
 
     private static class Backend implements ChatPanel.Backend {

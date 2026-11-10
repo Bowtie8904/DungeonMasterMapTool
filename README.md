@@ -782,8 +782,10 @@ Nothing starts until you click **Start online session**, so offline play and the
   Midnight's **Stealth Expertise** reaction is offered on non-attack Fear action rolls only, for yourself
   or an ally; moving unnoticed and the ally's range still require player confirmation.
   The DM has the same chat in a **Chat** tab at the top of the DM controls (only while hosting; hideable via
-  `online.chat`), with an unread dot, recipient dropdown and `/roll`. The **secret roll** button (or `/secret 2d6`)
-  shows players only `?` instead of numbers while dice type and count stay visible; the DM sees the real result.
+  `online.chat`), with an unread dot, recipient dropdown and `/roll` (or `/r`). The **secret roll** toggle
+  starts off; when enabled, rolls from the Roll button and `/roll`/`/r` show players only `?` instead of numbers
+  while dice type and count stay visible; the DM sees the real result. Normal messages are unaffected.
+  `/sr 2d6` (or `/secret 2d6`) always rolls secretly, regardless of the toggle, without changing its state.
   The DM can type `/gold 500` to post a gold transfer offer (to the selected recipient) that players grab
   into their characters.
   Only the DM has a subtle trash icon on chat cards to delete messages and rolls for everyone, including
