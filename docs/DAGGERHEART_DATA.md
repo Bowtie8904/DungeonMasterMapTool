@@ -125,6 +125,25 @@ deliberately manual narrative consequences are distinguished from the complete o
 - `resourceRoll: {resource, sides, bonusPerDie?, type?}` opens a Hope-spend or Stress-mark quantity
   dialog. A damage `type` labels the result as physical/magic; omitting it produces a utility roll
   (Arcane Reflection/Invigoration). `hopeDice` remains supported for Arcane Barrage.
+- `splendorAction` selects host-authoritative Splendor workflows, gated by the additive
+  `splendorAutomation` hello capability. Supported workflows include Healing Hands, Second Wind,
+  Zone of Protection, Stunning Sunlight, Salvation Beam, Invigoration and Resurrection. Finished-roll
+  actions validate the original session roll and reject duplicate claims. Healing Hands installs a
+  long-rest debuff on its recipient; critical Spellcasts use successful healing. Life Ward selects an
+  ally without an extra confirmation and automatically reports its protection.
+  Second Wind sends `choiceId` (`hp`/`stress`) and an optional `targetActorId`; Hope/critical attack
+  results allow a target choice defaulting to self. Sunlight sends `amount` Hope and reports both
+  reaction-damage results. Salvation Beam sends `allocations: [{actorId, amount}]`, with total healing
+  bounded by unmarked caster Stress and actual recipient wounds. Invigoration sends `restoreActorId`
+  and `restoreKey`, restoring one spent use only after a six in its Hope-dice result.
+  `/api/splendor/{actorId}` supplies sanitized eligible allies and exhausted feature cards for these
+  pickers. Resurrection's result d6 handles permanent vault placement on 1-5. Zone of Protection's
+  action report lets the caster and other players join, sharing its advancing die-value tokens and
+  preselected damage mitigation until the die would exceed six. Restoration's tokens reset
+  automatically on a long rest; it has no manual clear/prepare actions. Reassurance reacts on other
+  players' action rolls (`otherPlayerOnly: true`); its `hostRollAction` prevents a second client-generated
+  reroll. Healing Strike heals a chosen ally from a damage result. The host-owned
+  `permanentlyVaulted` card flag prevents Resurrection recall through card/list controls, dragging or swaps.
 - Roll options can use `resourceMultiplier` for an all-token numerical bonus or `allResourceDice`
   for an all-dice pool. Their clear-all steps run only on successful sending. `advantageDie: 8` changes
   advantage, never disadvantage; `condition.markedHp` supplies Runic Adrenaline's minimum marked HP.
@@ -927,9 +946,8 @@ Classes, ancestries, communities and transformations are included in the total.
   The catalog-wide audit encodes "once per scene" limits as `per: "scene"` uses and also mapped Unbound, Stealth Expertise and Red Nose
   of Hope outcome conversion; simple situational community/gear advantages; Nature's Tongue, Goad Them On and
   Woven Net trait rolls; and Life Support, Healing Strike, Sparing Touch and Restoration target healing.
-  Range, willingness, attack success and narrative prerequisites remain player/GM decisions. Complex healing
-  choices such as Healing Hands (result-dependent amounts and per-target rest limits) and area/group healing
-  still need their own workflows rather than guessed targets.
+  Range, willingness, hidden-Difficulty attack success and narrative prerequisites remain player/GM decisions.
+  Healing Hands and Salvation Beam use explicit result-dependent and allocation workflows described above.
 - **Pools:** Favor, Slayer Dice, Tide, poison tokens, Spellcharge, Inspiration, Restoration, thorns, Dark Army
   fiends, Twilight Toll, chaos, Invisibility/Disguise tokens and Alconite charge. Explicit gain/spend/clear buttons
   track **numeric tokens** only. Follow descriptions for start/end-session and rest preparation/clearing; rest
@@ -1049,7 +1067,7 @@ claims retain their prior per-player behavior.
 
 - **Cross-actor/GM state:** range/line of sight, companion stats, GM Fear,
   target Difficulty/thresholds/HP/Stress, resistance, damage prevention/reflection and forced movement. Examples:
-  Healing Hands, Hex, Drain, unconfigured aura allies and target-dependent damage. Explicit `target` actions
+  Hex, Drain, unconfigured aura allies and target-dependent damage. Explicit `target` actions
   support character selection/healing and configured effects; this does not infer general target automation.
 - **Roll-result-dependent rules:** trigger validation, changing Hope/Fear die size or values, reroll selection,
   exploding dice (Brutal/Recursive), special face replacements (Serrated/Self-Correcting), doubling matching dice,
@@ -1066,7 +1084,8 @@ claims retain their prior per-player behavior.
   item features, unconfigured transformation statistics and replacing upgraded feature dice. Beastform choices
   are explicitly supported as above; no choice is guessed.
 - **Complex pools/multiple sub-abilities:** Prayer Dice keep distinct rolled face values;
-  Wild Surge, Moon phases and Zone of Protection keep stateful die faces; variable token expenditure, rolled-table
+  Wild Surge and Moon phases keep stateful die faces; Zone of Protection explicitly shares its advancing
+  die-value tokens with joined recipients. Other variable token expenditure, rolled-table
   outcomes and automatic rest/session hooks stay manual unless an explicit button/option is listed. Grimoires
     (`Book of ...`) have no card-level automation; each spell in `spells[]` is its own feature with its own
     parsed cost/usage button, Spellcast roll button and usage counter (key `card:<Book>/<Spell>`), so spells never

@@ -12,6 +12,23 @@ class BoneValorRulesTest {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     @Test
+    void deathrunUpdatesSeparatelyAttributedSmiteWithoutRerollingBonuses() throws Exception {
+        ObjectNode run = (ObjectNode) JSON.readTree("""
+                {"deathrunRemaining":[0,1,2],"deathrunRoll":{
+                  "expression":"(3d8+2+1d6)*2","total":44,"rolls":[3,4,8,5],
+                  "breakdown":[{"label":"Weapon","expression":"3d8","total":15,"rolls":[3,4,8]},
+                    {"label":"Weapon","expression":"2","total":2,"rolls":[]},
+                    {"label":"Bonus","expression":"1d6","total":5,"rolls":[5]},
+                    {"label":"Smite","expression":"22","total":22,"rolls":[]}]}}
+                """);
+        ObjectNode continued = BoneValorRules.continueDeathrun(run, JSON.getNodeFactory().numberNode(2));
+        assertEquals(28, continued.path("total").asInt());
+        assertEquals(7, continued.path("breakdown").path(0).path("total").asInt());
+        assertEquals(14, continued.path("breakdown").path(3).path("total").asInt());
+        assertEquals("[3,4,5]", continued.path("rolls").toString());
+    }
+
+    @Test
     void deathrunReusesFirstWeaponDiceAndKeepsFixedAndBonusDamage() throws Exception {
         ObjectNode run = (ObjectNode) JSON.readTree("""
                 {"deathrunRemaining":[0,1,2],"deathrunRoll":{

@@ -34,6 +34,398 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OnlineSessionServerTest {
+    private ObjectNode splendorActor(String id, String... cards) throws Exception {
+        compendiumDir = Path.of("dmmap-daggerheart");
+        campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId()).build());
+        ObjectNode sheet = sageArcanaSheet(cards);
+        sheet.withObject("/hp").put("on", 3);
+        sheet.withObject("/stress").put("on", 0);
+        sheet.withObject("/hope").put("on", 6);
+        store.saveSheet(campaign.getId(), id, sheet.toString());
+        return sheet;
+    }
+
+    private ObjectNode splendorRequest(String actor, String card, String action, JsonNode roll) {
+        ObjectNode request = MAPPER.createObjectNode().put("actorId", actor).put("key", "card:" + card).put("actionId", action);
+        if (roll != null) request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+        return request;
+    }
+
+    private JsonNode splendorRoll(WebSocket ws, Inbox inbox, String actor, String card, String expression) throws Exception {
+        ObjectNode input = MAPPER.createObjectNode().put("type", "roll").put("kind", "duality").put("actorId", actor)
+                .put("expression", expression).put("source", "action,spellcast,card:" + card).put("difficulty", 16);
+        ws.sendText(input.toString(), true).join();
+        return inbox.next("roll");
+    }
+
+    @Test
+    void splendorHealingHandsUsesActualSuccessAndTargetLongRestLock() throws Exception {
+        splendorActor("healer", "Healing Hands");
+        splendorActor("patient");
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            JsonNode roll = splendorRoll(ws, inbox, "healer", "Healing Hands", "2d12+30");
+            ObjectNode request = splendorRequest("healer", "Healing Hands", "hp", roll).put("choiceId", "hp")
+                    .put("targetActorId", "healer");
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            request.put("targetActorId", "patient");
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode patient = MAPPER.readTree(store.loadSheet(campaign.getId(), "patient"));
+            assertEquals(1, patient.path("hp").path("on").asInt());
+            assertEquals("longRest", patient.path("effects").path(0).path("until").asText());
+            assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "healer")).path("stress").path("on").asInt());
+            assertEquals(400, featureHttp(cookie, request).statusCode(), "A roll cannot be replayed.");
+            JsonNode second = splendorRoll(ws, inbox, "healer", "Healing Hands", "2d12+30");
+            request.set("roll", splendorRequest("healer", "Healing Hands", "hp", second).path("roll"));
+            assertEquals(400, featureHttp(cookie, request).statusCode(), "Another cast must respect the target lock.");
+            ObjectNode rested = (ObjectNode) patient.deepCopy();
+            rested.put("longRestRevision", 1);
+            store.saveSheet(campaign.getId(), "patient", rested.toString());
+            ObjectNode saved = rested.deepCopy();
+            saved.putArray("effects");
+            SplendorActions.preserveSave(saved, (ObjectNode) patient);
+            assertTrue(saved.path("effects").isEmpty(), "Only the target's long rest clears the restriction.");
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void splendorSalvationAllocationsAreAtomicAndBoundedByStressAndWounds() throws Exception {
+        splendorActor("beam", "Salvation Beam");
+        splendorActor("first");
+        splendorActor("second");
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            JsonNode roll = splendorRoll(ws, inbox, "beam", "Salvation Beam", "2d12+30");
+            ObjectNode request = splendorRequest("beam", "Salvation Beam", "heal", roll);
+            var allocations = request.putArray("allocations");
+            allocations.addObject().put("actorId", "first").put("amount", 2);
+            allocations.addObject().put("actorId", "second").put("amount", 4);
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "first")).path("hp").path("on").asInt());
+            assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "beam")).path("stress").path("on").asInt());
+            ((ObjectNode) allocations.path(1)).put("amount", 1);
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "first")).path("hp").path("on").asInt());
+            assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "second")).path("hp").path("on").asInt());
+            assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "beam")).path("stress").path("on").asInt());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void splendorInvigorationOffersSpentUsesAndRestoresExactlyOneFromHostDice() throws Exception {
+        ObjectNode source = splendorActor("invigorator", "Invigoration");
+        ObjectNode target = splendorActor("limited", "Second Wind");
+        target.withObject("/usage").withObject("/card:Second Wind").put("used", 2).put("per", "rest");
+        store.saveSheet(campaign.getId(), "limited", target.toString());
+        String cookie = cookie();
+        var choices = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/splendor/invigorator"))
+                .header("Cookie", cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, choices.statusCode(), choices.body());
+        JsonNode candidates = MAPPER.readTree(choices.body());
+        assertEquals(1, candidates.path("features").size());
+        assertEquals("card:Second Wind", candidates.path("features").path(0).path("key").asText());
+        assertEquals(1, candidates.path("allies").size());
+        assertFalse(candidates.toString().contains("traits"));
+        long seed = 0;
+        while (new java.util.Random(seed).nextInt(6) != 5) seed++;
+        diceSeed(seed);
+        var response = featureHttp(cookie, splendorRequest("invigorator", "Invigoration", "restore", null).put("amount", 1));
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode rolled = dmMessages.stream().filter(m -> m.path("source").asText().equals("featureAction:card:Invigoration:restore"))
+                .findFirst().orElseThrow();
+        assertEquals(6, rolled.path("rolls").path(0).asInt());
+        assertEquals(5, MAPPER.readTree(store.loadSheet(campaign.getId(), "invigorator")).path("hope").path("on").asInt());
+        ObjectNode request = splendorRequest("invigorator", "Invigoration", "restore-use", rolled)
+                .put("restoreActorId", "limited").put("restoreKey", "card:Second Wind");
+        response = featureHttp(cookie, request);
+        assertEquals(200, response.statusCode(), response.body());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "limited")).path("usage").path("card:Second Wind").path("used").asInt());
+        assertEquals(400, featureHttp(cookie, request).statusCode());
+        assertEquals(source.path("hp"), MAPPER.readTree(store.loadSheet(campaign.getId(), "invigorator")).path("hp"));
+    }
+
+    @Test
+    void splendorSunlightRollsBothDamageCasesAndResurrectionVaultsPermanently() throws Exception {
+        splendorActor("sun", "Stunning Sunlight", "Resurrection");
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            JsonNode roll = splendorRoll(ws, inbox, "sun", "Stunning Sunlight", "2d12+30");
+            var response = featureHttp(cookie, splendorRequest("sun", "Stunning Sunlight", "damage", roll).put("amount", 2));
+            assertEquals(200, response.statusCode(), response.body());
+            assertTrue(dmMessages.stream().anyMatch(m -> m.path("text").asText().contains("3d20+3")
+                    && m.path("text").asText().contains("4d20+5") && m.path("text").asText().contains("magic damage")));
+            roll = splendorRoll(ws, inbox, "sun", "Resurrection", "2d12+30");
+            diceSeed(0);
+            response = featureHttp(cookie, splendorRequest("sun", "Resurrection", "resurrect", roll));
+            assertEquals(200, response.statusCode(), response.body());
+            ObjectNode saved = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "sun"));
+            assertTrue(saved.path("resurrectionVaulted").asBoolean());
+            assertTrue(saved.path("vault").path(0).path("permanentlyVaulted").asBoolean());
+            ObjectNode attempted = saved.deepCopy();
+            attempted.withArray("loadout").add(attempted.withArray("vault").remove(0));
+            attempted.remove("resurrectionVaulted");
+            SplendorActions.preserveSave(attempted, saved);
+            assertEquals(1, attempted.path("loadout").size());
+            assertTrue(attempted.path("vault").path(0).path("permanentlyVaulted").asBoolean());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void splendorSecondWindSharesCardAndAttackLimitAndOnlyHopeCanTargetAllies() throws Exception {
+        splendorActor("wind", "Second Wind");
+        splendorActor("wind-ally");
+        String cookie = cookie();
+        ObjectNode card = splendorRequest("wind", "Second Wind", "use", null).put("choiceId", "hp");
+        var response = featureHttp(cookie, card);
+        assertEquals(200, response.statusCode(), response.body());
+        assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "wind")).path("hp").path("on").asInt());
+        assertEquals(400, featureHttp(cookie, card).statusCode());
+        ObjectNode reset = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "wind"));
+        reset.withObject("/usage").withObject("/card:Second Wind").put("used", 0);
+        store.saveSheet(campaign.getId(), "wind", reset.toString());
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            long seed = 0;
+            while (true) {
+                var random = new java.util.Random(seed);
+                if (random.nextInt(12) > random.nextInt(12)) break;
+                seed++;
+            }
+            diceSeed(seed);
+            ws.sendText("{\"type\":\"roll\",\"kind\":\"duality\",\"expression\":\"2d12+30\",\"difficulty\":16,\"source\":\"action,attack\",\"actorId\":\"wind\"}", true).join();
+            JsonNode roll = inbox.next("roll");
+            ObjectNode request = splendorRequest("wind", "Second Wind", "use", roll).put("choiceId", "hp").put("targetActorId", "wind-ally");
+            response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "wind-ally")).path("hp").path("on").asInt());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            assertEquals(400, featureHttp(cookie, card).statusCode());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void splendorSecondWindReportsAllyStressInTitleCase() throws Exception {
+        splendorActor("wind", "Second Wind");
+        ObjectNode ally = splendorActor("wind-ally");
+        ally.withObject("/stress").put("on", 4);
+        store.saveSheet(campaign.getId(), "wind-ally", ally.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            long seed = 0;
+            while (true) {
+                var random = new java.util.Random(seed);
+                if (random.nextInt(12) > random.nextInt(12)) break;
+                seed++;
+            }
+            diceSeed(seed);
+            ws.sendText("{\"type\":\"roll\",\"kind\":\"duality\",\"expression\":\"2d12+30\",\"difficulty\":16,\"source\":\"action,attack\",\"actorId\":\"wind\"}", true).join();
+            JsonNode roll = inbox.next("roll");
+            var response = featureHttp(cookie, splendorRequest("wind", "Second Wind", "use", roll)
+                    .put("choiceId", "stress").put("targetActorId", "wind-ally"));
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "wind-ally")).path("stress").path("on").asInt());
+            assertTrue(dmMessages.stream().anyMatch(message -> message.toString().contains("wind-ally: cleared 3 Stress.")));
+            assertFalse(dmMessages.stream().anyMatch(message -> message.toString().contains("STRESS")));
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void splendorSecondWindAcceptsHiddenDifficultyButRejectsKnownFailedAttack() throws Exception {
+        splendorActor("hidden-wind", "Second Wind");
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            long seed = 0;
+            while (true) {
+                var random = new java.util.Random(seed);
+                if (random.nextInt(12) != random.nextInt(12)) break;
+                seed++;
+            }
+            diceSeed(seed);
+            ws.sendText("{\"type\":\"roll\",\"kind\":\"duality\",\"expression\":\"2d12\",\"difficulty\":100,\"source\":\"action,attack\",\"actorId\":\"hidden-wind\"}", true).join();
+            JsonNode failed = inbox.next("roll");
+            ObjectNode request = splendorRequest("hidden-wind", "Second Wind", "use", failed).put("choiceId", "hp");
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "hidden-wind")).path("hp").path("on").asInt());
+            diceSeed(seed);
+            ws.sendText("{\"type\":\"roll\",\"kind\":\"duality\",\"expression\":\"2d12\",\"source\":\"action,attack\",\"actorId\":\"hidden-wind\"}", true).join();
+            JsonNode hidden = inbox.next("roll");
+            assertFalse(hidden.has("difficulty"));
+            request.set("roll", splendorRequest("hidden-wind", "Second Wind", "use", hidden).path("roll"));
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "hidden-wind")).path("hp").path("on").asInt());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void splendorReassuranceRerollsOtherPlayersDiceOnHostAndPreservesModifiers() throws Exception {
+        splendorActor("support", "Reassurance");
+        splendorActor("support-ally");
+        String ally = allyCookie("reassured-player");
+        campaign.actor("support-ally").setOwnerId("reassured-player");
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(ally, inbox);
+        try {
+            ws.sendText("{\"type\":\"roll\",\"kind\":\"duality\",\"expression\":\"2d12+7\",\"difficulty\":16,\"source\":\"action,attack\",\"actorId\":\"support-ally\"}", true).join();
+            JsonNode roll = inbox.next("roll");
+            ObjectNode request = splendorRequest("support", "Reassurance", "use", roll);
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode updated = dmMessages.stream().filter(m -> m.path("type").asText().equals("rollUpdate")).findFirst().orElseThrow();
+            assertEquals(7, updated.path("total").asInt() - updated.path("rolls").path(0).asInt() - updated.path("rolls").path(1).asInt());
+            JsonNode persisted = store.historyEntry(campaign.getId(), roll.path("id").asLong(), roll.path("ts").asLong());
+            assertEquals(16, persisted.path("difficulty").asInt());
+            assertEquals("support-ally", persisted.path("actorId").asText());
+            assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "support")).path("usage").path("card:Reassurance").path("used").asInt());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void splendorSmiteDoublesAllDamageIncludingHostBonusesAndAttributesExtraSeparately() throws Exception {
+        splendorActor("smiter", "Smite");
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            ObjectNode input = MAPPER.createObjectNode().put("type", "roll").put("actorId", "smiter")
+                    .put("expression", "(2d6+3+8+1d4+2)*2").put("source", "damage");
+            var parts = input.putArray("contributions");
+            parts.addObject().put("label", "Weapon").put("expression", "(2d6+3)*2")
+                    .putArray("notes").addObject().put("label", "Smite").put("impact", "Double the rolled damage total");
+            parts.addObject().put("label", "Critical").put("expression", "(8)*2");
+            parts.addObject().put("label", "Other bonus").put("expression", "(1d4+2)*2");
+            input.putObject("damageRules").put("comboDie", 4).put("matchingDice", true);
+            ws.sendText(input.toString(), true).join();
+            JsonNode roll = inbox.next("roll");
+            int base = 0;
+            JsonNode smite = null;
+            for (JsonNode part : roll.path("breakdown"))
+                if ("Smite".equals(part.path("label").asText())) smite = part;
+                else base += part.path("total").asInt();
+            assertNotNull(smite);
+            assertEquals(base, smite.path("total").asInt());
+            assertEquals(base * 2, roll.path("total").asInt());
+            assertEquals(8, roll.path("breakdown").path(1).path("total").asInt());
+            assertEquals(roll.path("rolls").path(0).asInt() + roll.path("rolls").path(1).asInt() + 3,
+                    roll.path("breakdown").path(0).path("total").asInt());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void splendorSmiteRecognizesBrowserLabelAndKeepsEachBonusUndoubled() throws Exception {
+        splendorActor("smiter", "Smite");
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            long seed = 0;
+            while (true) {
+                var random = new java.util.Random(seed);
+                if (random.nextInt(6) == random.nextInt(6)) break;
+                seed++;
+            }
+            diceSeed(seed);
+            ObjectNode input = MAPPER.createObjectNode().put("type", "roll").put("actorId", "smiter")
+                    .put("expression", "(2d6+3+8+1d4+2+0)*2").put("source", "damage,magicdamage");
+            var parts = input.putArray("contributions");
+            parts.addObject().put("label", "Cutlass damage (Proficiency 2)").put("expression", "(2d6)*2");
+            parts.addObject().put("label", "Cutlass damage bonus").put("expression", "(+3)*2");
+            parts.addObject().put("label", "Critical hit (maximum dice)").put("expression", "(8)*2");
+            parts.addObject().put("label", "Other bonus").put("expression", "(1d4+2)*2");
+            parts.addObject().put("label", "Smite: double weapon damage (magic)").put("expression", "(0)*2");
+            for (JsonNode part : parts)
+                ((ObjectNode) part).putArray("notes").addObject().put("label", "Smite: double weapon damage (magic)")
+                        .put("impact", "Double the rolled damage total");
+            input.putObject("damageRules").put("matchingDice", true);
+            ws.sendText(input.toString(), true).join();
+            JsonNode roll = inbox.next("roll");
+            JsonNode breakdown = roll.path("breakdown");
+            assertEquals(6, breakdown.size(), breakdown.toString());
+            assertEquals(roll.path("rolls").path(0).asInt() + roll.path("rolls").path(1).asInt(),
+                    breakdown.path(0).path("total").asInt());
+            assertEquals(3, breakdown.path(1).path("total").asInt());
+            assertEquals(8, breakdown.path(2).path("total").asInt());
+            assertEquals(roll.path("rolls").path(2).asInt() + 2, breakdown.path(3).path("total").asInt());
+            assertEquals("Sacred Resonance", breakdown.path(4).path("label").asText());
+            assertTrue(breakdown.path(4).path("total").asInt() > 0);
+            int base = 0;
+            for (int i = 0; i < breakdown.size() - 1; i++) {
+                JsonNode part = breakdown.path(i);
+                base += part.path("total").asInt();
+                assertFalse(part.path("expression").asText().contains("*2"));
+                assertTrue(part.path("notes").isMissingNode() || part.path("notes").findValuesAsText("label").stream()
+                        .noneMatch(label -> label.startsWith("Smite")));
+            }
+            assertEquals("Smite", breakdown.path(5).path("label").asText());
+            assertEquals(base, breakdown.path(5).path("total").asInt());
+            assertEquals(base * 2, roll.path("total").asInt());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void splendorZoneClaimsShareCounterAndExpireAfterSixDamageUses() throws Exception {
+        splendorActor("zoner", "Zone of Protection");
+        String ally = allyCookie("zone-player");
+        ObjectNode recipient = splendorActor("protected");
+        campaign.actor("protected").setOwnerId("zone-player");
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            JsonNode roll = splendorRoll(ws, inbox, "zoner", "Zone of Protection", "2d12+30");
+            var response = featureHttp(cookie, splendorRequest("zoner", "Zone of Protection", "activate", roll));
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode invitation = dmMessages.stream().filter(m -> m.path("actionBenefits").path("options").path(0).path("id").asText().equals("join"))
+                    .findFirst().orElseThrow();
+            response = featureHttp(cookie, benefitRequest("zoner", invitation, "join"));
+            assertEquals(200, response.statusCode(), response.body());
+            response = featureHttp(ally, benefitRequest("protected", invitation, "join"));
+            assertEquals(200, response.statusCode(), response.body());
+            for (int value = 1; value <= 6; value++) {
+                ObjectNode before = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "protected"));
+                JsonNode effect = before.path("effects").path(0);
+                assertEquals(value, effect.path("mitigation").path(0).path("reduce").asInt());
+                JsonNode casterBefore = MAPPER.readTree(store.loadSheet(campaign.getId(), "zoner"));
+                assertTrue(java.util.stream.StreamSupport.stream(casterBefore.path("effects").spliterator(), false)
+                        .anyMatch(buff -> buff.path("protectionZone").asBoolean()
+                                && buff.path("mitigation").path(0).path("reduce").asInt() == effect.path("mitigation").path(0).path("reduce").asInt()));
+                ObjectNode body = MAPPER.createObjectNode().put("actorId", "protected");
+                ObjectNode damage = body.putObject("incomingDamage").put("report", "Protected damage");
+                damage.set("sheet", before.deepCopy());
+                ObjectNode input = damage.putObject("input").put("damage", 12).put("type", "physical").put("armor", false);
+                String key = "effect:" + effect.path("id").asText();
+                input.putArray("selected").add(key + "/protection");
+                damage.putObject("result").put("armorUsed", 0).put("armorMarked", 0).put("hp", 0).put("final", 0)
+                        .putArray("applied").addObject().put("key", key).put("id", "protection");
+                response = featureHttp(ally, body);
+                assertEquals(200, response.statusCode(), response.body());
+                assertEquals(400, featureHttp(ally, body).statusCode(), "Stale shared damage cannot be replayed.");
+                if (value < 6) {
+                    JsonNode caster = MAPPER.readTree(store.loadSheet(campaign.getId(), "zoner"));
+                    assertEquals(value + 1, caster.path("resources").path("protection").asInt());
+                }
+            }
+            assertTrue(MAPPER.readTree(store.loadSheet(campaign.getId(), "protected")).path("effects").isEmpty());
+            assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "zoner")).path("resources").path("protection").asInt());
+            assertTrue(MAPPER.readTree(store.loadSheet(campaign.getId(), "zoner")).path("effects").isEmpty());
+        } finally { ws.abort(); }
+    }
+
     private ObjectNode performanceSheet() throws Exception {
         return (ObjectNode) MAPPER.readTree("""
                 {"name":"Hero","featureRevision":0,"notes":"Keep me","usage":{},"resources":{},
@@ -3255,8 +3647,6 @@ class OnlineSessionServerTest {
         String cookie = cookie();
         ObjectNode ward = MAPPER.createObjectNode().put("actorId", "caster").put("key", "card:Life Ward")
                 .put("actionId", "use").put("targetActorId", "ally");
-        assertEquals(400, featureHttp(cookie, ward).statusCode());
-        ward.put("confirmRange", true);
         var cast = featureHttp(cookie, ward);
         assertEquals(200, cast.statusCode(), cast.body());
         JsonNode protectedAlly = MAPPER.readTree(store.loadSheet(campaign.getId(), "ally"));

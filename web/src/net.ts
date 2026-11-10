@@ -35,6 +35,7 @@ export class Connection {
   boneValorAutomation = false;
   bloodAutomation = false;
   specialCardActions = false;
+  splendorAutomation = false;
   sessionId = '';
   deathMoves = false;
   deathMoveOptions = false;
@@ -97,6 +98,7 @@ export class Connection {
     this.warlockAutomation = false;
     this.witchAutomation = false;
     this.domainCardAutomation = false;
+    this.splendorAutomation = false;
     this.boneValorAutomation = false;
     this.bloodAutomation = false;
     this.deathMoves = false;
@@ -153,6 +155,7 @@ export class Connection {
         this.warlockAutomation = msg.warlockAutomation === true;
         this.witchAutomation = msg.witchAutomation === true;
         this.domainCardAutomation = msg.domainCardAutomationV3 === true;
+        this.splendorAutomation = msg.splendorAutomation === true;
         this.boneValorAutomation = msg.boneValorAutomation === true;
         this.bloodAutomation = msg.bloodAutomation === true;
         this.specialCardActions = msg.specialCardActions === true;

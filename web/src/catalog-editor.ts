@@ -477,5 +477,6 @@ function fieldChoices(key: string, path: string): string[] {
     until: ['manual', 'rest', 'shortRest', 'longRest', 'scene', 'session'],
     resetOn: ['shortRest', 'longRest', 'rest'], op: ['clear', 'gain', 'mark', 'effect'],
     timing: ['action', 'downtime', 'rest'], target: ['actor', 'anyActor', 'party', 'allActors'], audience: ['self', 'ally', 'any'],
+    splendorAction: ['healingHands', 'secondWind', 'zone', 'sunlight', 'salvation', 'invigoration', 'resurrection'],
   } as Record<string, string[]>)[key]?.slice() ?? [];
 }

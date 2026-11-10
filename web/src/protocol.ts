@@ -394,6 +394,7 @@ export interface Hello {
   boneValorAutomation?: boolean;
   bloodAutomation?: boolean;
   specialCardActions?: boolean;
+  splendorAutomation?: boolean;
   chatIdentity?: boolean;
   notes?: boolean;
   handouts?: boolean;

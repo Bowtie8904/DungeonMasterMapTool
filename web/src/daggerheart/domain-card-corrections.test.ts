@@ -105,6 +105,32 @@ describe('domain-card cost and limit corrections', () => {
     expect(c.effects.some(effect => effect.name === 'Smite')).toBe(false);
   });
 
+  it('charges Smite from weapon attacks, sharing the card cost and rest limit without changing the attack', () => {
+    const c = emptyCharacter('Test');
+    c.hope.on = 6;
+    const a = load(c, 'smite');
+    const option = availableRollOptions(c, ['action', 'attack'])[0];
+    expect(option.key).toBe('card:Smite');
+    expect(option.option.cost).toEqual({ hope: 3 });
+    expect(option.option.defaultOn).not.toBe(true);
+    expect(availableRollOptions(c, ['action', 'attack', 'spellcast'])).toHaveLength(0);
+    expect(selectionBlocker(c, [option])).toBeNull();
+    commitRollOptions(c, [option], false, ['action', 'attack']);
+    expect(c.hope.on).toBe(3);
+    expect(c.usage['card:Smite'].used).toBe(1);
+    expect(a.actions![0].steps).toContainEqual({ op: 'effect', effect: a.rollOptions![0].effect });
+    expect(c.effects.find(effect => effect.name === 'Smite')).toEqual(expect.objectContaining(a.rollOptions![0].effect!));
+    expect(availableRollOptions(c, ['action', 'attack'])).toHaveLength(0);
+    expect(actionBlocker(c, 'card:Smite', a, a.actions![0])).not.toBeNull();
+    const damage = availableRollOptions(c, ['damage'])[0];
+    expect(damage.option).toMatchObject({ multiplier: 2, magicDamage: true, defaultOn: true });
+    commitRollOptions(c, [damage], false, ['damage']);
+    expect(c.hope.on).toBe(3);
+    expect(c.effects.some(effect => effect.name === 'Smite')).toBe(false);
+    const spent = availableRollOptions(c, ['action', 'attack'])[0];
+    expect(selectionBlocker(c, [spent])).not.toBeNull();
+  });
+
   it('gates Runic Adrenaline advantage on marked HP and offers its paid die after the trait roll', () => {
     const c = emptyCharacter('Test');
     load(c, 'runic-adrenaline');

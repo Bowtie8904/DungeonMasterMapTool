@@ -14,6 +14,7 @@ import { criticalMeleeBonus } from './brawler';
 import { chooseRollModification, damageDieChoices } from './sorcerer-view';
 import { chooseWarlockAmount } from './warlock-view';
 import { chooseActionAmount } from './amount-view';
+import { openSplendorAction } from './splendor-view';
 import { pickActor } from '../actor-picker';
 import type { Actor } from '../protocol';
 
@@ -41,6 +42,7 @@ export interface RollButtonHost {
   supportsWarlockAutomation?: () => boolean;
   supportsWitchAutomation?: () => boolean;
   supportsDomainCardAutomation?: () => boolean;
+  supportsSplendorAutomation?: () => boolean;
   supportsBloodAutomation?: () => boolean;
   supportsGlancingBlowDamage?: () => boolean;
   supportsWarriorAutomation?: () => boolean;
@@ -56,7 +58,9 @@ export function rollContext(m: RollMessage): RollContext | null {
   if (m.kind !== 'duality' && m.source?.split(',').includes('damage')) {
     return { source: m.source, hope: 0, fear: 0, total: m.total, weapon: m.weapon, kind: 'damage', resourceOnes, dice: m.rolls as number[], deathrun: m.deathrun };
   }
-  if (m.kind !== 'duality' && m.source?.includes('featureAction:card:Redirect:use'))
+  if (m.kind !== 'duality' && (m.source?.includes('featureAction:card:Redirect:use')
+      || m.source?.split(',').some(tag => tag === 'card:Invigoration' || tag.endsWith('/Invigoration'))
+      || m.source?.split(',').some(tag => tag.startsWith('featureAction:') && tag.includes('Invigoration:'))))
     return { source: m.source, hope: 0, fear: 0, total: m.total, kind: 'damage', dice: m.rolls as number[] };
   const values = Array.isArray(m.rolls) ? m.rolls.filter((v): v is number => typeof v === 'number') : [];
   if (m.kind !== 'duality' || values.length < 2) return null;
@@ -488,6 +492,7 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         const actualOutcome = ctx ? (ctx.hope === ctx.fear ? 'crit' : ctx.outcome ?? (ctx.hope > ctx.fear ? 'hope' : 'fear')) : undefined;
         if (trigger.outcome && (actualOutcome === 'crit' || actualOutcome === trigger.outcome)) continue;
         const audience = trigger.audience ?? 'self';
+        if (t.trigger.otherPlayerOnly && m.fromId === host.playerId) continue;
         if (audience === 'self' && featureActorId !== actorId) continue;
         if (audience === 'ally' && featureActorId === actorId) continue;
         if (!t.trigger.repeatable && m.featureUses?.includes(`${featureActorId}:${t.key}:${t.trigger.id}`)) continue;
@@ -498,7 +503,9 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         const b = el('button', { class: 'small', type: 'button' },
           `${t.trigger.label}${cost ? ` (${cost})` : ''}${featureActorId !== actorId ? ` · ${c.name}` : ''}`);
         const blocked = actionBlocker(c, t.key, t.automation, t.trigger);
-        const unsupported = t.trigger.bloodAutomation && !host.supportsBloodAutomation?.()
+        const unsupported = t.trigger.splendorAction && !host.supportsSplendorAutomation?.()
+          ? 'Update the host to use Splendor automation.'
+          : t.trigger.bloodAutomation && !host.supportsBloodAutomation?.()
           ? 'Update the host to use Blood automation.'
           : t.trigger.halfProficiencyDamage && !host.supportsGlancingBlowDamage?.()
           ? 'Update the host to resolve paid Glancing Blow damage.'
@@ -525,6 +532,18 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         b.addEventListener('click', async () => {
           if (b.disabled) return;
           b.disabled = true;
+          if (t.trigger.splendorAction) {
+            try {
+              await sheet.save.flush?.();
+              await openSplendorAction(c, featureActorId, t.trigger, host.targetActors?.() ?? [], async choice => {
+                await sheet.save.flush?.();
+                await useSheetAction(sheet.save, { actorId: featureActorId, key: t.key, actionId: t.trigger.id,
+                  roll: { id: m.id, ts: m.ts }, ...choice });
+              }, ctx ?? undefined);
+            } catch (e) { host.toast((e as Error).message); }
+            finally { b.disabled = false; }
+            return;
+          }
           if (t.trigger.selectAmount || t.trigger.resourceRoll) {
             try {
               const amount = await chooseActionAmount(c, t.trigger);
@@ -606,7 +625,9 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
           try {
             let targetActorId: string | undefined;
             if (t.trigger.target === 'actor' || t.trigger.target === 'anyActor') {
-              const target = await pickActor(host.targetActors?.() ?? [], 'Choose a character', 'Apply spell', true);
+              const targets = (host.targetActors?.() ?? []).filter(actor => !actor.disabled
+                && (!t.trigger.excludeSourceActor || actor.id !== featureActorId));
+              const target = await pickActor(targets, 'Choose a character', 'Apply spell', true);
               if (!target) { b.disabled = false; return; }
               targetActorId = target.id;
             }
@@ -618,7 +639,7 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
               targetActorId,
               roll: { id: m.id, ts: m.ts },
             });
-            if (t.trigger.reroll) {
+            if (t.trigger.reroll && !t.trigger.hostRollAction) {
               const request = rerollRequest(m, t);
               if (!request) throw new Error('The original roll is no longer available to repeat.');
               if (!host.send(request)) throw new Error('Not connected. The reroll was not sent.');

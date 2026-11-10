@@ -96,6 +96,8 @@ export interface SheetViewOptions {
   supportsWarlockAutomation?: () => boolean;
   supportsWitchAutomation?: () => boolean;
   supportsDomainCardAutomation?: () => boolean;
+  supportsSplendorAutomation?: () => boolean;
+  onSplendor?: (key: string, action: ActionDef) => Promise<void>;
   supportsBloodAutomation?: () => boolean;
   supportsSeraphAutomation?: () => boolean;
   supportsDruidAutomation?: () => boolean;
@@ -513,7 +515,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       const trait = TRAIT_ORDER.reduce((best, name) => traitTotal(c, name) > traitTotal(c, best) ? name : best);
       b.textContent = `Attack ${signed(traitTotal(c, trait))} (${trait})`;
     }
-    const blocker = () => action.bloodAutomation && !opts.supportsBloodAutomation?.()
+    const blocker = () => action.splendorAction && !opts.supportsSplendorAutomation?.()
+      ? 'Update the host to use Splendor automation.' : action.bloodAutomation && !opts.supportsBloodAutomation?.()
       ? 'Update the host to use Blood automation.' : hooks.extraBlock?.() ?? actionBlocker(c, key, a, action);
     const block = blocker();
     if (block) { b.disabled = true; b.title = block; }
@@ -532,7 +535,15 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       let action = originalAction;
       const currentBlock = blocker();
       if (currentBlock) { b.title = currentBlock; return; }
-      if (action.castTokens || action.selectAmount) {
+      if (action.splendorAction) {
+        if (!opts.onSplendor) { opts.onLog?.('Update the host to use Splendor automation.'); return; }
+        setBusy(true);
+        try { await opts.onSplendor(key, action); hooks.after?.(); render(); }
+        catch (e) { opts.onLog?.(`Could not use ${label}: ${(e as Error).message}`); }
+        finally { setBusy(false); }
+        return;
+      }
+      if (action.castTokens || action.selectAmount || action.hostOwned && action.resourceRoll) {
         const amount = await chooseActionAmount(c, action);
         if (amount === undefined) return;
         action = { ...action, selectedAmount: amount, ...(action.castTokens
@@ -611,14 +622,14 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         const dialog = el('dialog', { class: 'dh dh-rolldlg dh-option-rolldlg', ariaLabel: action.label });
         const error = el('div', { class: 'error', role: 'alert' });
         const choices = el('div', { class: 'list dh-roll-options' });
-        for (const card of c.vault) {
+        for (const card of c.vault.filter(card => !card.permanentlyVaulted && !(card.name === 'Vitality' && c.vitalityBenefits?.length))) {
           const button = el('button', { type: 'button', class: 'small' }, card.name);
           button.addEventListener('click', () => {
             const sourceIndex = c.loadout.findIndex(item => key === `card:${item.name}`
               || item.name === 'Copycat' && item.borrowedCard && key === `card:Copycat/${item.borrowedCard.card.name}`);
             const targetIndex = c.vault.indexOf(card);
             const blocker = actionBlocker(c, key, a, action);
-            if (sourceIndex < 0 || targetIndex < 0 || blocker) {
+            if (sourceIndex < 0 || targetIndex < 0 || card.permanentlyVaulted || blocker) {
               error.textContent = blocker ?? 'The selected cards are no longer available.';
               return;
             }
@@ -765,7 +776,6 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         if (!opts.supportsPartyFeatures?.()) { opts.onLog?.('Update the host to use party feature actions.'); return; }
       }
       if (action.target || action.check || action.chatBenefits && !action.actionRoll) {
-        if (a.deathMove?.kind === 'lifeWard' && !await confirmDialog('Confirm the chosen ally is within Close range. Recasting ends your previous Life Ward. Spend 3 Hope?')) return;
         if (!opts.onFeature) { opts.onLog?.('This host does not support targeted feature actions. Update the host.'); return; }
         if (action.transferHope) {
           openHopeTransfer(root, c, (amount) => opts.onFeature!(key, action.id, amount).then(() => { hooks.after?.(); render(); }));
@@ -1812,19 +1822,20 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         el('span', { class: 'sn' }, d.name), ...(spells ? spells.map(s => spellBlock(d, s, loadout, cardKey)) : [rich(d.text)]), acts);
     }
     const move = () => {
-      if (c.testingCharacter) return;
+      if (c.testingCharacter || d.permanentlyVaulted) return;
       if (loadout) { c.loadout.splice(c.loadout.indexOf(d), 1); c.vault.push(d); }
       else if (!(d.name === 'Vitality' && c.vitalityBenefits?.length) && c.loadout.length < derivedStats(c).loadoutMax) { c.vault.splice(c.vault.indexOf(d), 1); c.loadout.push(d); }
       render();
     };
     let control: HTMLElement;
-    if (d.name === 'Vitality' && c.vitalityBenefits?.length) control = tag(c.testingCharacter ? 'Permanently used · fixed testing loadout' : 'Permanently vaulted');
+    if (d.permanentlyVaulted || d.name === 'Vitality' && c.vitalityBenefits?.length) control = tag(c.testingCharacter ? 'Permanently used · fixed testing loadout' : 'Permanently vaulted');
     else if (loadout) control = c.testingCharacter ? tag('Always active') : cardMenu('Move to vault', move);
     else {
       control = el('button', { class: 'small', type: 'button' }, `Recall to loadout (mark ${d.recall} Stress)`);
       control.addEventListener('click', move);
       acts.append(control);
     }
+    if (!loadout && d.permanentlyVaulted) acts.append(control);
     const pools = loadout ? (d.automation?.resources ?? []).map((r) => el('label', { class: 'card-resource' }, 'Tokens', poolInput({ ...r, label: 'Tokens' }))) : [];
     const hd = el('div', { class: 'hd' }, el('span', { class: 'lv' }, String(d.level)), el('span', { class: 'dm' }, d.domain), ...pools, el('span', { class: 'rc' }, `\u26A1 ${d.recall}`), ...(loadout ? [control] : []));
     const copied = d.name === 'Copycat' && d.borrowedCard ? [
@@ -1836,7 +1847,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   }
 
   function draggableCard(node: HTMLElement, d: DomainCard, loadout: boolean): HTMLElement {
-    node.draggable = !c.testingCharacter && !opts.readOnly?.();
+    node.draggable = !c.testingCharacter && !d.permanentlyVaulted && !opts.readOnly?.();
     node.classList.add('inventory-draggable');
     node.addEventListener('dragstart', (e) => {
       draggedCard = { card: d, fromLoadout: loadout };
@@ -1869,7 +1880,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
 
   /** Accepts dragged domain cards that currently live in the opposite zone and moves them into `toLoadout`. */
   function cardDropTarget(node: HTMLElement, toLoadout: boolean): HTMLElement {
-    const accepts = () => !c.testingCharacter && !!draggedCard && !(draggedCard.card.name === 'Vitality' && c.vitalityBenefits?.length)
+    const accepts = () => !c.testingCharacter && !!draggedCard && !draggedCard.card.permanentlyVaulted && !(draggedCard.card.name === 'Vitality' && c.vitalityBenefits?.length)
       && draggedCard.fromLoadout !== toLoadout && (!toLoadout || c.loadout.length < derivedStats(c).loadoutMax);
     node.addEventListener('dragover', (e) => {
       if (!accepts()) return;
@@ -1928,12 +1939,12 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   function cardListRow(d: DomainCard, loadout: boolean): HTMLElement {
     const details = el('details', { class: 'domain-list-row', open: expandedCards.has(d) });
     const move = () => {
-      if (c.testingCharacter || opts.readOnly?.()) return;
+      if (c.testingCharacter || d.permanentlyVaulted || opts.readOnly?.()) return;
       if (loadout) { c.loadout.splice(c.loadout.indexOf(d), 1); c.vault.push(d); }
       else if (!(d.name === 'Vitality' && c.vitalityBenefits?.length) && c.loadout.length < derivedStats(c).loadoutMax) { c.vault.splice(c.vault.indexOf(d), 1); c.loadout.push(d); }
       render();
     };
-    const menu = d.name === 'Vitality' && c.vitalityBenefits?.length ? tag(c.testingCharacter ? 'Permanently used' : 'Permanently vaulted')
+    const menu = d.permanentlyVaulted || d.name === 'Vitality' && c.vitalityBenefits?.length ? tag(c.testingCharacter ? 'Permanently used' : 'Permanently vaulted')
       : c.testingCharacter ? el('span', { class: 'list-menu' }) : cardMenu(
       loadout ? 'Move to vault' : `Recall to loadout (mark ${d.recall} Stress)`, move);
     const chat = el('span', { class: 'list-chat' });

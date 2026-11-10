@@ -86,6 +86,7 @@ export interface DomainCard {
   recall: number;
   spellcast?: TraitName;
   banishDifficulty?: number;
+  permanentlyVaulted?: boolean;
   borrowedCard?: { sourceActorId: string; sourceActorName: string; card: DomainCard };
   automation?: Automation;
   /** Grimoires only: the individual spells that make up `text` */

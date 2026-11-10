@@ -19,6 +19,7 @@ import { addToSheet } from './daggerheart/compendium';
 import { CompendiumPanel } from './compendium';
 import { pickActor } from './actor-picker';
 import { openCopycat } from './daggerheart/copycat-view';
+import { openSplendorAction } from './daggerheart/splendor-view';
 import { setDisabledCopycatSources } from './daggerheart/copycat';
 import type { CharacterSheet } from './daggerheart/data';
 import { MapTool } from './tools';
@@ -695,7 +696,7 @@ export class App {
       const ward = isLifeWard(character, key);
       if (ward && !this.conn.deathMoveOptions) throw new Error('This host does not support Life Ward. Update the host.');
       const candidates = (this.store.state?.actors ?? []).filter(a => !a.disabled && (ward ? a.id !== actorId : (target === 'anyActor' || this.connectedPlayers.has(a.ownerId)) && (amount === undefined || a.id !== actorId)));
-      const selected = await pickActor(candidates, 'Choose a character', 'Select target', target === 'anyActor');
+      const selected = await pickActor(candidates, ward ? 'Life Ward - choose an ally within Close range' : 'Choose a character', 'Select target', ward || target === 'anyActor');
       if (!selected) return;
       targetActorId = selected.id;
     }
@@ -1305,6 +1306,7 @@ export class App {
       supportsWarlockAutomation: () => this.conn.warlockAutomation,
       supportsWitchAutomation: () => this.conn.witchAutomation,
       supportsDomainCardAutomation: () => this.conn.domainCardAutomation,
+      supportsSplendorAutomation: () => this.conn.splendorAutomation,
       supportsBloodAutomation: () => this.conn.bloodAutomation,
       supportsGlancingBlowDamage: () => this.conn.glancingBlowDamage,
       supportsWarriorAutomation: () => this.conn.warriorAutomation,
@@ -1527,6 +1529,13 @@ export class App {
               await useSheetAction(changed, { actorId: a.id, key, actionId, ...choice });
             },
             onCopycat: (key, actionId) => openCopycat(character, a.id, key, actionId, changed),
+            onSplendor: async (key, action) => {
+              await changed.flush();
+              await openSplendorAction(character, a.id, action, this.store.state?.actors ?? [], async choice => {
+                await changed.flush();
+                await useSheetAction(changed, { actorId: a.id, key, actionId: action.id, ...choice });
+              });
+            },
             onDamageTaken: async (severity) => {
               await changed.flush();
               await damageTaken(a.id, severity);
@@ -1566,6 +1575,7 @@ export class App {
             supportsWarlockAutomation: () => this.conn.warlockAutomation,
             supportsWitchAutomation: () => this.conn.witchAutomation,
             supportsDomainCardAutomation: () => this.conn.domainCardAutomation,
+            supportsSplendorAutomation: () => this.conn.splendorAutomation,
             supportsBloodAutomation: () => this.conn.bloodAutomation,
             supportsRollMultipliers: () => this.conn.rollMultipliers,
             supportsPartyFeatures: () => this.conn.partyFeatures,

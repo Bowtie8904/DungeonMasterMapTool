@@ -116,6 +116,48 @@ const original: RollMessage = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('cross-player roll buttons', () => {
+  it('recognizes Invigoration Hope dice and gates its restoration on a rolled six', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Caster', undefined);
+    c.loadout = [{ name: 'Invigoration', domain: 'Splendor', level: 10, type: 'Spell', recall: 3, text: '',
+      automation: { conditionalRollTriggers: [{ id: 'renew', label: 'Restore one use', on: 'card:Invigoration',
+        containsDie: 6, splendorAction: 'invigoration' }] } }];
+    const { host } = hostFor({ 'actor-b': c });
+    const supported = { ...host, supportsSplendorAutomation: () => true, supportsDomainCardAutomation: () => true };
+    const message = { ...original, source: 'card:Invigoration', kind: 'dice' as const, rolls: [2, 6], total: 8 };
+    expect(rollContext(message)?.dice).toEqual([2, 6]);
+    const success = rollButtons(message, supported) as unknown as FakeElement;
+    const failure = rollButtons({ ...message, rolls: [2, 3], total: 5 }, supported) as unknown as FakeElement;
+    const old = rollButtons(message, { ...supported, supportsSplendorAutomation: () => false }) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(success.text).toContain('Restore one use');
+    expect(failure.text).not.toContain('Restore one use');
+    expect(old.queryAll('button').find(button => button.text === 'Restore one use')!.disabled).toBe(true);
+  });
+
+  it('offers Reassurance only on another player action and leaves rerolling to the host', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetch);
+    const c = character('Support', undefined);
+    c.loadout = [{ name: 'Reassurance', domain: 'Splendor', level: 1, type: 'Ability', recall: 0, text: '',
+      automation: { uses: { max: 1, per: 'rest' }, conditionalRollTriggers: [{
+        id: 'use', label: 'Reassurance', on: 'action', audience: 'ally', otherPlayerOnly: true, hostRollAction: true, reroll: 'duality',
+      }] } }];
+    const { host, sent } = hostFor({ 'actor-a': c });
+    const supported = { ...host, playerId: 'player-a', supportsDomainCardAutomation: () => true };
+    const ally = rollButtons(original, supported) as unknown as FakeElement;
+    const own = rollButtons({ ...original, fromId: 'player-a' }, supported) as unknown as FakeElement;
+    const reaction = rollButtons({ ...original, source: 'reaction' }, supported) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(ally.text).toContain('Reassurance');
+    expect(own.text).not.toContain('Reassurance');
+    expect(reaction.text).not.toContain('Reassurance');
+    await ally.queryAll('button').find(button => button.text.includes('Reassurance'))!.click();
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ actorId: 'actor-a', key: 'card:Reassurance', roll: { id: original.id, ts: original.ts } });
+    expect(sent).toHaveLength(0);
+  });
+
   it('offers the correct Blade chat actions and carries Rage Up only from the clicked attack', async () => {
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
     const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));

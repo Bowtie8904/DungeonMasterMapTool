@@ -61,8 +61,12 @@ Nothing starts until you click **Start online session**, so offline play and the
   Endless Charisma rerolls either the Hope or Fear die once per original non-attack trait roll, never both.
   Teleport spends its once-per-long-rest use on the Spellcast attempt even when it fails.
   Grace-Touched substitutions are intentionally manual.
-- **Prepared attacks and damage:** Boost pays Stress before the attack; Smite holds a charge for doubled
-  magic weapon damage. Signature Move uses a d20 Hope die and linked success recovery. Runic Adrenaline
+- **Prepared attacks and damage:** Boost pays Stress before the attack; Smite holds a charge that doubles
+  the next successful weapon attack's damage. Charge Smite from its card or the optional attack-roll
+  option for 3 Hope, sharing the same once-per-rest use. A missed attack retains the charge. Smite doubles
+  the entire weapon damage result, including bonuses. Each breakdown row shows its original result;
+  one Smite row shows the additional damage from doubling all of them.
+  Signature Move uses a d20 Hope die and linked success recovery. Runic Adrenaline
   offers a d8 advantage die with marked HP and its paid d8 after the trait roll. Never Upstaged and Sigil
   spend their complete pools; Not Good Enough rerolls damage 1s/2s from an action on the damage result.
 - **Blade and Midnight roll actions:** Whirlwind, Glancing Blow (half Proficiency rounded up),
@@ -102,6 +106,18 @@ Nothing starts until you click **Start online session**, so offline play and the
   replacements use the same gate. Their other benefits are not yet fully automated.
 - **Mending Touch:** heal 1 HP or Stress for 2 Hope without a use limit, or use its shared once-per-long-rest
   upgrade to heal 2. Choose a character in the target picker and confirm the narrative condition at the table.
+- **Splendor chat actions:** Reassurance reacts to allies' action rolls; Healing Hands offers result-based
+  healing and tracks target immunity until their long rest. Second Wind uses one benefit picker, with a
+  self-defaulting target choice on Hope/critical attacks. Life Ward picks an ally without a confirmation
+  and automatically protects them with a chat report. Healing Strike spends Hope and heals a chosen ally
+  from damage results. Zone of Protection invites everyone, including its caster, through chat; its
+  shared card counter advances as preselected damage mitigation is used, removing all zone buffs after six.
+  Restoration refills tokens on long rests without preparation buttons. Stunning Sunlight spends chosen
+  Hope from its Spellcast result and displays both reaction-damage rolls. Salvation Beam distributes healing
+  with ally sliders and a live Stress cost bounded by free slots. Invigoration restores one exhausted use
+  through a shared feature/character search when its Hope dice include a six. Resurrection rolls its d6
+  from a successful cast and permanently vaults the card on 1-5. Range and narrative requirements remain
+  table-managed.
 - **Dark Army and Thorn Skin:** their summon/cast use limits are tracked separately from token spending,
   and their unspent tokens clear on a rest. Confirm Dark Army's Spellcast success at the table.
 - **Arcane Barrage:** choose how much Hope to spend and roll that many d6 magic damage dice; canceling
@@ -134,7 +150,7 @@ Nothing starts until you click **Start online session**, so offline play and the
 - **Conjure Swarm:** conjure armored beetles for Stress; incoming damage consumes their automatic severity reduction unless Hope is spent to retain them.
 - **Weave the Flesh:** mark HP to offer allies a healing choice, with an optional Stress-paid upgrade to both benefits.
 - **Safe Haven and Specter of the Dark:** Safe Haven's extra rest move has no additional Hope cost; Specter grants physical immunity until its effect is manually ended.
-- **Spellcast difficulties:** Final Words, Forest Sprites, Resurrection, Rift Walker, Salvation Beam, and Veil of Night use their printed difficulties; subsequent effects remain manual.
+- **Spellcast difficulties:** Final Words, Forest Sprites, Resurrection, Rift Walker, Salvation Beam, and Veil of Night use their printed difficulties; subsequent narrative effects remain table-managed.
 - **Sorcerer automation:** select damage dice in chat for Volatile Magic rerolls or Manipulate Magic doubling;
   Manipulate Magic also offers reach, +2, and additional-target choices on eligible action rolls. Channel Raw
   Power selects and vaults a domain card for Hope or a one-use damage bonus. Elementalist saves a creation

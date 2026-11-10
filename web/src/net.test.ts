@@ -17,7 +17,7 @@ it('negotiates death option capability additively and clears it on reconnect to 
     send(): void {}
     close(): void {}
     hello(expanded?: boolean, domainV3 = expanded): void {
-      this.onmessage?.({ data: JSON.stringify({ type: 'hello', serverTime: 0, deathMoves: true, deathMoveOptions: expanded, brawlerRolls: expanded, druidAutomation: expanded, guardianRolls: expanded, warlockAutomation: expanded, witchAutomation: expanded, domainCardAutomation: expanded, domainCardAutomationV2: expanded, domainCardAutomationV3: domainV3, bloodAutomation: expanded }) });
+      this.onmessage?.({ data: JSON.stringify({ type: 'hello', serverTime: 0, deathMoves: true, deathMoveOptions: expanded, brawlerRolls: expanded, druidAutomation: expanded, guardianRolls: expanded, warlockAutomation: expanded, witchAutomation: expanded, domainCardAutomation: expanded, domainCardAutomationV2: expanded, domainCardAutomationV3: domainV3, bloodAutomation: expanded, splendorAutomation: expanded }) });
     }
   }
   vi.stubGlobal('WebSocket', FakeSocket);
@@ -32,6 +32,7 @@ it('negotiates death option capability additively and clears it on reconnect to 
   expect(conn.witchAutomation).toBe(false);
   expect(conn.domainCardAutomation).toBe(false);
   expect(conn.bloodAutomation).toBe(false);
+  expect(conn.splendorAutomation).toBe(false);
   sockets[0].hello(true);
   expect(conn.deathMoves).toBe(true);
   expect(conn.deathMoveOptions).toBe(true);
@@ -42,9 +43,11 @@ it('negotiates death option capability additively and clears it on reconnect to 
   expect(conn.witchAutomation).toBe(true);
   expect(conn.domainCardAutomation).toBe(true);
   expect(conn.bloodAutomation).toBe(true);
+  expect(conn.splendorAutomation).toBe(true);
   sockets[0].hello(true, false);
   expect(conn.domainCardAutomation).toBe(false);
   sockets[0].hello();
+  expect(conn.splendorAutomation).toBe(false);
   expect(conn.bloodAutomation).toBe(false);
   expect(conn.deathMoveOptions).toBe(false);
   expect(conn.brawlerRolls).toBe(false);
@@ -56,6 +59,7 @@ it('negotiates death option capability additively and clears it on reconnect to 
   sockets[0].hello(true);
   conn.stop();
   conn.start();
+  expect(conn.splendorAutomation).toBe(false);
   expect(conn.bloodAutomation).toBe(false);
   expect(conn.deathMoveOptions).toBe(false);
   expect(conn.brawlerRolls).toBe(false);

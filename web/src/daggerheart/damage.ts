@@ -52,6 +52,7 @@ export interface MitigationRoll {
 }
 
 export interface MitigationOption {
+  protectionZone?: boolean;
   destroyResourceOnMax?: string;
   reportRoll?: boolean;
   giveFear?: number;

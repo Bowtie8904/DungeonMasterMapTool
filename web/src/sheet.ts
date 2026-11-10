@@ -12,6 +12,7 @@ import { postCard, transferable } from './shared-cards';
 import { addToSheet, type CompendiumEntry } from './daggerheart/compendium';
 import { pickActor } from './actor-picker';
 import { openCopycat } from './daggerheart/copycat-view';
+import { openSplendorAction } from './daggerheart/splendor-view';
 import { setDisabledCopycatSources } from './daggerheart/copycat';
 import { cardPreferences } from './daggerheart/card-preferences';
 
@@ -109,13 +110,20 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
           const ward = isLifeWard(sheet, key);
           if (ward && !conn.deathMoveOptions) throw new Error('This host does not support Life Ward. Update the host.');
           const candidates = (store.state?.actors ?? []).filter(a => !a.disabled && (ward ? a.id !== actorId : (target === 'anyActor' || connectedPlayers.has(a.ownerId)) && (amount === undefined || a.id !== actorId)));
-          const selected = await pickActor(candidates, 'Choose a character', 'Select target', target === 'anyActor');
+          const selected = await pickActor(candidates, ward ? 'Life Ward - choose an ally within Close range' : 'Choose a character', 'Select target', ward || target === 'anyActor');
           if (!selected) return;
           targetActorId = selected.id;
         }
         await useSheetAction(changed!, { actorId, key, actionId, amount, ...(targetActorId ? { targetActorId } : {}), ...(isLifeWard(sheet, key) ? { confirmRange: true } : {}) });
       },
       onCopycat: (key, actionId) => openCopycat(sheet, actorId, key, actionId, changed!),
+      onSplendor: async (key, action) => {
+        await changed!.flush();
+        await openSplendorAction(sheet, actorId, action, store.state?.actors ?? [], async choice => {
+          await changed!.flush();
+          await useSheetAction(changed!, { actorId, key, actionId: action.id, ...choice });
+        });
+      },
       restActors: () => (store.state?.actors ?? []).filter(a => !a.disabled && a.id !== actorId && !!a.ownerId),
       onRest: async rest => {
         if (!conn.boneValorAutomation) throw new Error('Update the host to resolve Bone/Valor rest benefits.');
@@ -182,6 +190,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
       supportsWarlockAutomation: () => conn.warlockAutomation,
       supportsWitchAutomation: () => conn.witchAutomation,
       supportsDomainCardAutomation: () => conn.domainCardAutomation,
+      supportsSplendorAutomation: () => conn.splendorAutomation,
       supportsBloodAutomation: () => conn.bloodAutomation,
       supportsRollMultipliers: () => conn.rollMultipliers,
     });

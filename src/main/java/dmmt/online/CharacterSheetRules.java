@@ -12,6 +12,11 @@ final class CharacterSheetRules {
     }
 
     static String problem(JsonNode sheet, JsonNode previous, boolean testing, int fear) {
+        if (previous.path("resurrectionVaulted").asBoolean()) {
+            if (!sheet.path("resurrectionVaulted").asBoolean()) return "Resurrection is permanently vaulted.";
+            for (JsonNode card : sheet.path("loadout"))
+                if ("Resurrection".equals(card.path("name").asText())) return "Resurrection is permanently vaulted.";
+        }
         JsonNode marker = sheet.get("testingCharacter");
         if ((marker != null && !marker.isBoolean())
                 || sheet.path("testingCharacter").asBoolean(false) != testing

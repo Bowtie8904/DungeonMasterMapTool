@@ -102,6 +102,19 @@ Daggerheart ancestry automation is maintained in `dmmap-daggerheart` with the sc
 `docs/DAGGERHEART_DATA.md`. `engine.ts` exposes configured trait/attack/damage actions, suggested roll modes,
 effect-gated mitigation and explicit Hope/Fear outcome overrides; `view.ts` shares those dialogs with chat
 follow-ups. Target healing/buffs and cross-player reactions execute on the host against current sheets.
+Splendor's result actions use the additive `splendorAutomation` host capability. `splendor-view.ts`
+shares Second Wind's benefit/target picker, Stunning Sunlight's Hope selection, Salvation Beam's
+budgeted healing sliders and Invigoration's searchable character/feature cards across chat and sheet
+windows. `/api/splendor/{actorId}` returns sanitized eligible targets and spent feature uses rather than
+exposing other players' sheets. The host revalidates choices, resources, roll eligibility and repeat
+claims before committing. Zone of Protection shares one advancing card counter across all joined
+recipients; selecting its mitigation always commits incoming damage to the host, even without other
+host-only options, to advance the counter, update everyone and remove expired buffs. Smite recognizes
+both its short and descriptive browser labels, preserves undoubled contribution totals and adds one
+separate bonus row after host-generated damage bonuses.
+Smite's optional weapon-attack roll option spends 3 Hope and grants the same charge as its card action,
+sharing the card's once-per-rest limit. It is unavailable on Spellcast rolls or while already charged.
+No settings or DM Link compatibility changes are required.
 Blood Hunter rules use conditional current-HP costs/dice, effect-gated stats and success-gated Psychometry
 chat claims. The rest dialog provides a free restricted Mutagens brewing slot with trait/benefit selectors;
 feature upgrades unlock choices and +2/-2 automatically. Volatile Toxins locks marked HP until the next

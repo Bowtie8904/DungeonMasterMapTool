@@ -259,6 +259,8 @@ export const FIELD_HELP: Record<string, string> = {
   increaseDie: 'Raise the evolved form damage die by one supported step.',
   lastArmor: 'Require that the mitigation would mark the last usable Armor Slot.',
   lifeWard: 'Mark this effect as a host-validated Life Ward.',
+  splendorAction: 'Host-authoritative Splendor healing, protection, restoration or result workflow.',
+  otherPlayerOnly: 'Offer this chat reaction only on rolls made by a different player.',
   markedHpOnly: 'Limit recovery to the HP marked by the qualifying event.',
   markingHp: 'Require that this incoming damage will actually mark HP.',
   minMarkedHp: 'Minimum actual HP to mark after Armor and remaining-HP limits, before HP-replacement mitigation.',

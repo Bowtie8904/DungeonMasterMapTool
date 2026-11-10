@@ -222,9 +222,11 @@ describe('ancestry automation and matching catalog rules', () => {
     expect(find('communities', 'Unbound').rollTriggers![0]).toMatchObject({ outcome: 'hope', when: 'fear' });
     expect(find('domain-cards', 'Stealth Expertise').rollTriggers![0]).toMatchObject({ audience: 'any', outcome: 'hope', cost: { stress: 1 } });
     expect(find('items', 'Red Nose of Hope').rollTriggers![0]).toMatchObject({ outcome: 'hope', uses: { max: 1, per: 'longRest' } });
-    for (const [category, name] of [['classes', 'Life Support'], ['domain-cards', 'Healing Strike']]) {
-      expect(find(category, name).actions![0]).toMatchObject({ target: 'actor', steps: [{ op: 'clear', resource: 'hp', amount: 1 }] });
-    }
+    expect(find('classes', 'Life Support').actions![0]).toMatchObject({ target: 'actor', steps: [{ op: 'clear', resource: 'hp', amount: 1 }] });
+    const healingStrike = find('domain-cards', 'Healing Strike');
+    expect([...(healingStrike.rollTriggers ?? []), ...(healingStrike.conditionalRollTriggers ?? [])][0]).toMatchObject({
+      on: 'damage', target: 'actor', cost: { hope: 2 }, steps: [{ op: 'clear', resource: 'hp', amount: 1 }],
+    });
     expect(find('classes', 'Sparing Touch').actions!.map((a) => [a.target, a.steps![0].resource, a.steps![0].amount]))
       .toEqual([['actor', 'hp', 2], ['actor', 'stress', 2]]);
     for (const name of ['Privilege', 'Well-Read', 'Steady', 'Scoundrel', 'Low-Light Living', 'Lightfoot']) {

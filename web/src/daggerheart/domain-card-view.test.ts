@@ -60,6 +60,88 @@ class Element {
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
+it('sends the selected Invigoration Hope amount to the host without paying or rolling locally', async () => {
+  const body = new Element('body');
+  vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const c = emptyCharacter('Caster');
+  c.mancer = { done: true };
+  c.hope.on = 4;
+  c.loadout = [{ name: 'Invigoration', level: 10, domain: 'Splendor', type: 'Spell', recall: 3, text: '',
+    automation: { actions: [{ id: 'restore', label: 'Invigoration: roll Hope dice', hostOwned: true, resourceRoll: { resource: 'hope', sides: 6 } }] } }];
+  const use = vi.fn(async () => {});
+  const roll = vi.fn(() => true);
+  const root = renderSheetView({ character: c, onRoll: roll, onFeature: use, supportsDomainCardAutomation: () => true }) as unknown as Element;
+  await root.querySelectorAll('button').find(button => button.text() === 'Domain Cards')!.click();
+  const clicking = root.querySelectorAll('button').find(button => button.text() === 'Invigoration: roll Hope dice')!.click();
+  const dialog = body.querySelectorAll('dialog')[0];
+  dialog.querySelectorAll('input')[0].value = '3';
+  await dialog.querySelectorAll('button').find(button => button.text() === 'Continue')!.click();
+  await clicking;
+  expect(use).toHaveBeenCalledWith('card:Invigoration', 'restore', 3);
+  expect(roll).not.toHaveBeenCalled();
+  expect(c.hope.on).toBe(4);
+});
+
+it('uses Life Ward target selection without an extra confirmation dialog', async () => {
+  const body = new Element('body');
+  vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const c = emptyCharacter('Caster');
+  c.mancer = { done: true };
+  c.hope.on = 6;
+  c.loadout = [{ name: 'Life Ward', level: 4, domain: 'Splendor', type: 'Spell', recall: 1, text: '',
+    automation: { deathMove: { kind: 'lifeWard' }, actions: [{ id: 'use', label: 'Life Ward', target: 'actor', cost: { hope: 3 } }] } }];
+  const use = vi.fn(async () => {});
+  const root = renderSheetView({ character: c, onRoll: () => true, onFeature: use }) as unknown as Element;
+  await root.querySelectorAll('button').find(button => button.text() === 'Domain Cards')!.click();
+  await root.querySelectorAll('button').find(button => button.text().startsWith('Life Ward ('))!.click();
+  expect(use).toHaveBeenCalledWith('card:Life Ward', 'use');
+  expect(body.querySelectorAll('dialog')).toHaveLength(0);
+});
+
+it('routes the single Second Wind card action to its shared picker and disables it on older hosts', async () => {
+  vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const c = emptyCharacter('Caster');
+  c.mancer = { done: true };
+  const action = { id: 'use', label: 'Second Wind', splendorAction: 'secondWind' as const };
+  c.loadout = [{ name: 'Second Wind', level: 3, domain: 'Splendor', type: 'Ability', recall: 2, text: '',
+    automation: { uses: { max: 1, per: 'rest' }, actions: [action] } }];
+  const picker = vi.fn(async () => {});
+  const root = renderSheetView({ character: c, onRoll: () => true, onSplendor: picker, supportsSplendorAutomation: () => true }) as unknown as Element;
+  await root.querySelectorAll('button').find(button => button.text() === 'Domain Cards')!.click();
+  const buttons = root.querySelectorAll('button').filter(button => button.text() === 'Second Wind');
+  expect(buttons).toHaveLength(1);
+  await buttons[0].click();
+  expect(picker).toHaveBeenCalledWith('card:Second Wind', action);
+  const old = renderSheetView({ character: c, onRoll: () => true, onSplendor: picker }) as unknown as Element;
+  await old.querySelectorAll('button').find(button => button.text() === 'Domain Cards')!.click();
+  expect(old.querySelectorAll('button').find(button => button.text() === 'Second Wind')!.disabled).toBe(true);
+});
+
+it.each(['card', 'list'] as const)('does not offer recall for permanently vaulted Resurrection (%s view)', async view => {
+  vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const c = emptyCharacter('Caster');
+  c.mancer = { done: true };
+  c.vault = [{ name: 'Resurrection', level: 10, domain: 'Splendor', type: 'Spell', recall: 2, text: '', permanentlyVaulted: true }];
+  const root = renderSheetView({ character: c, onRoll: () => true }) as unknown as Element;
+  await root.querySelectorAll('button').find(button => button.text() === 'Domain Cards')!.click();
+  if (view === 'list') await root.querySelectorAll('button').find(button => button.ariaLabel === 'List view')!.click();
+  expect(root.text()).toContain('Permanently vaulted');
+  expect(root.querySelectorAll('button').some(button => button.text().includes('Recall to loadout'))).toBe(false);
+  expect(c.loadout).toHaveLength(0);
+});
+
 it('positions visible cards before the next animation frame on initial render and sheet notifications', async () => {
   vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
     createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });

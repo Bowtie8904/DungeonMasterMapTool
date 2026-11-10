@@ -195,6 +195,9 @@ export interface FeatureRequest {
   restDie?: number;
   benefitId?: string;
   choiceId?: string;
+  allocations?: Array<{ actorId: string; amount: number }>;
+  restoreActorId?: string;
+  restoreKey?: string;
   choices?: Array<'hp' | 'stress' | 'thresholds'>;
   dice?: number[];
   expectedDice?: number[];

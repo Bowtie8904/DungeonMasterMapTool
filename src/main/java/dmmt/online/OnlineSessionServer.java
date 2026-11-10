@@ -310,6 +310,7 @@ public final class OnlineSessionServer {
         javalin.put("/api/preferences", ctx -> handlePreferences(ctx, true));
         javalin.get("/api/sheet/{id}", ctx -> withSheetOperation(ctx, this::handleSheet));
         javalin.get("/api/copycat/{id}", ctx -> withSheetOperation(ctx, this::handleCopycatCandidates));
+        javalin.get("/api/splendor/{id}", ctx -> withSheetOperation(ctx, this::handleSplendorCandidates));
         javalin.put("/api/sheet/{id}", ctx -> withSheetOperation(ctx, this::handleSheetSave));
         javalin.post("/api/feature", ctx -> withSheetOperation(ctx, this::handleFeature));
         javalin.post("/api/death-move", ctx -> withSheetOperation(ctx, this::handleDeathMove));
@@ -1193,6 +1194,7 @@ public final class OnlineSessionServer {
                 if (path.equals("/api/preferences") || path.equals("/api/sheet/" + grant.actorId())
                         || path.equals("/api/actors/" + grant.actorId() + "/artwork")
                         || path.equals("/api/copycat/" + grant.actorId())
+                        || path.equals("/api/splendor/" + grant.actorId())
                         || path.equals("/api/death-move/" + grant.actorId())
                         || path.startsWith("/api/compendium") || path.startsWith("/a/") || path.startsWith("/t/"))
                     return grant.ownerId();
@@ -1543,6 +1545,7 @@ public final class OnlineSessionServer {
             }
             CopycatCards.preserveSave((ObjectNode) sheet, previous);
             SpecialCardActions.preserveSave((ObjectNode) sheet, previous, actor.isTestingCharacter(), expected != null);
+            SplendorActions.preserveSave((ObjectNode) sheet, previous);
             BoneValorRules.validateSave(previous, (ObjectNode) sheet);
             String problem = CharacterSheetRules.problem(sheet, previous, actor.isTestingCharacter(), c.getFear());
             if (problem != null) {
@@ -1982,6 +1985,213 @@ public final class OnlineSessionServer {
         deliver(report, null, false);
     }
 
+    private synchronized void handleSplendorCandidates(Context ctx) {
+        String player = requirePlayer(ctx);
+        if (player == null) return;
+        try {
+            Campaign.Actor caster = ownedActor(player, ctx.pathParam("id"));
+            if (caster.isDisabled()) throw new IllegalArgumentException("This character is disabled.");
+            ObjectNode response = MAPPER.createObjectNode();
+            ArrayNode allies = response.putArray("allies"), features = response.putArray("features");
+            for (Campaign.Actor actor : campaign.getActors()) {
+                if (actor.isDisabled() || !hasPlayerSheet(actor)) continue;
+                ObjectNode sheet = storedSheet(actor.getId());
+                if (!actor.getId().equals(caster.getId()))
+                    allies.addObject().put("actorId", actor.getId()).put("actorName", actor.getName())
+                            .put("hp", DeathMoves.recoverableHp(sheet));
+                var counters = sheet.path("usage").fields();
+                while (counters.hasNext()) {
+                    var counter = counters.next();
+                    ObjectNode feature = splendorLimitedFeature(sheet, counter.getKey());
+                    if (feature != null) {
+                        feature.put("actorId", actor.getId()).put("actorName", actor.getName());
+                        features.add(feature);
+                    }
+                }
+            }
+            ctx.header("Cache-Control", "no-store");
+            json(ctx, 200, response);
+        } catch (IllegalArgumentException e) {
+            json(ctx, 400, errorBody(e.getMessage()));
+        } catch (IOException e) {
+            json(ctx, 500, errorBody("Could not read Splendor choices."));
+        }
+    }
+
+    private ObjectNode splendorLimitedFeature(ObjectNode sheet, String key) {
+        JsonNode counter = sheet.path("usage").path(key);
+        if (counter.path("used").asInt() < 1
+                || !List.of("rest", "shortRest", "longRest", "scene", "session").contains(counter.path("per").asText())) return null;
+        try {
+            String sourceKey = key.contains(":mitigation:") ? key.substring(0, key.indexOf(":mitigation:")) : key;
+            JsonNode source = featureSource(sheet, sourceKey);
+            JsonNode automation = sourceKey.startsWith("effect:") ? source.path("automation")
+                    : catalogAutomation(sourceKey, source.path("name").asText(), source.path("automation"));
+            JsonNode uses = automation.path("uses");
+            if (key.contains(":mitigation:")) {
+                uses = MAPPER.nullNode();
+                String id = key.substring(key.indexOf(":mitigation:") + 12);
+                for (String field : List.of("mitigation", "conditionalMitigation"))
+                    for (JsonNode option : automation.path(field))
+                        if (id.equals(option.path("id").asText())) uses = option.path("uses");
+            } else if (!uses.isObject()) {
+                for (String field : List.of("actions", "rollTriggers", "conditionalRollTriggers"))
+                    for (JsonNode action : automation.path(field))
+                        if (action.path("uses").isObject()) uses = action.path("uses");
+            }
+            uses = effectiveFeatureUses(sheet, sourceKey, uses);
+            if (uses.path("max").asInt() < 1) return null;
+            return MAPPER.createObjectNode().put("key", key).put("name", source.path("name").asText())
+                    .put("text", source.path("text").asText()).put("used", counter.path("used").asInt())
+                    .put("max", uses.path("max").asInt()).put("per", counter.path("per").asText());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private Campaign.Actor splendorAlly(String id, Campaign.Actor caster, boolean self) throws IOException {
+        Campaign.Actor target = campaign.actor(id);
+        if (target == null || target.isDisabled() || !hasPlayerSheet(target) || !self && target.getId().equals(caster.getId()))
+            throw new IllegalArgumentException("Choose an eligible " + (self ? "character." : "ally other than yourself."));
+        return target;
+    }
+
+    private void resolveSplendorAction(JsonNode request, Campaign.Actor actor, ObjectNode sheet, JsonNode source,
+                                       String key, JsonNode automation, JsonNode definition, ObjectNode roll) throws IOException {
+        String kind = definition.path("splendorAction").asText();
+        String name = switch (kind) {
+            case "healingHands" -> "Healing Hands";
+            case "secondWind" -> "Second Wind";
+            case "zone" -> "Zone of Protection";
+            case "sunlight" -> "Stunning Sunlight";
+            case "salvation" -> "Salvation Beam";
+            case "invigoration" -> "Invigoration";
+            case "resurrection" -> "Resurrection";
+            default -> throw new IllegalArgumentException("Unknown Splendor action.");
+        };
+        if (!(key.equals("card:" + name) || key.equals("card:Copycat/" + name)) || !activeCardKey(sheet, key)
+                || roll == null && !kind.equals("secondWind"))
+            throw new IllegalArgumentException("Use this active card's qualifying roll.");
+        if (roll != null && !kind.equals("secondWind") && !kind.equals("invigoration")) {
+            List<String> tags = List.of(roll.path("source").asText().split(","));
+            if (!tags.contains("spellcast") || tags.contains("reaction") || !tags.contains(key))
+                throw new IllegalArgumentException("Use this card's Spellcast action roll.");
+        }
+        Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
+        changed.put(actor.getId(), sheet);
+        List<String> lines = new ArrayList<>();
+        JsonNode uses = definition.path("uses").isObject() ? definition.path("uses")
+                : definition.path("usesSource").asBoolean(true) ? automation.path("uses") : MAPPER.nullNode();
+        useFeatureLimit(sheet, key, effectiveFeatureUses(sheet, key, uses));
+        switch (kind) {
+            case "healingHands", "secondWind" -> {
+                String resource = kind.equals("healingHands") ? definition.path("steps").path(0).path("resource").asText()
+                        : request.path("choiceId").asText();
+                if (!List.of("hp", "stress").contains(resource)) throw new IllegalArgumentException("Choose HP or Stress.");
+                String targetId = request.path("targetActorId").asText(actor.getId());
+                boolean hands = kind.equals("healingHands");
+                Campaign.Actor target = splendorAlly(targetId, actor, !hands);
+                ObjectNode targetSheet = target.getId().equals(actor.getId()) ? sheet : storedSheet(target.getId());
+                changed.put(target.getId(), targetSheet);
+                if (!hands && !target.getId().equals(actor.getId()) && (roll == null || !SplendorActions.hopeful(roll)))
+                    throw new IllegalArgumentException("Only a successful attack with Hope or a critical can benefit an ally.");
+                int amount;
+                if (hands) {
+                    for (JsonNode effect : targetSheet.path("effects"))
+                        if (effect.path("healingHands").asBoolean())
+                            throw new IllegalArgumentException("Healing Hands cannot heal this target again until their long rest.");
+                    applyFeatureCost(sheet, MAPPER.createObjectNode().put("stress", 1));
+                    amount = SplendorActions.critical(roll) || roll.path("total").asInt() >= 13 ? 2 : 1;
+                    targetSheet.withArray("effects").addObject().put("id", "hands-" + java.util.UUID.randomUUID())
+                            .put("name", "Healing Hands recovery").put("kind", "debuff").put("until", "longRest")
+                            .put("healingHands", true).put("sourceActorId", actor.getId()).put("sourceKey", key)
+                            .put("text", "Cannot receive Healing Hands again until this character's long rest.");
+                } else amount = resource.equals("hp") ? 1 : 3;
+                int healed = SplendorActions.heal(targetSheet, resource, amount);
+                lines.add(target.getName() + ": cleared " + healed + " " + (resource.equals("hp") ? "HP" : "Stress") + ".");
+            }
+            case "salvation" -> {
+                Map<String, ObjectNode> eligible = new java.util.LinkedHashMap<>();
+                for (Campaign.Actor ally : campaign.getActors())
+                    if (!ally.isDisabled() && !ally.getId().equals(actor.getId()) && hasPlayerSheet(ally))
+                        eligible.put(ally.getId(), storedSheet(ally.getId()));
+                Map<String, Integer> allocations = SplendorActions.allocations(request.path("allocations"), actor.getId(),
+                        eligible, ArcanaSageRules.available(sheet, "stress"));
+                int total = allocations.values().stream().mapToInt(Integer::intValue).sum();
+                applyFeatureCost(sheet, MAPPER.createObjectNode().put("stress", total));
+                for (var entry : allocations.entrySet()) {
+                    if (entry.getValue() == 0) continue;
+                    ObjectNode target = eligible.get(entry.getKey());
+                    SplendorActions.heal(target, "hp", entry.getValue());
+                    changed.put(entry.getKey(), target);
+                    lines.add(campaign.actor(entry.getKey()).getName() + ": cleared " + entry.getValue() + " HP.");
+                }
+                lines.add("Marked " + total + " Stress.");
+            }
+            case "invigoration" -> {
+                Campaign.Actor target = splendorAlly(request.path("restoreActorId").asText(), actor, true);
+                ObjectNode targetSheet = target.getId().equals(actor.getId()) ? sheet : storedSheet(target.getId());
+                String restoreKey = request.path("restoreKey").asText();
+                ObjectNode feature = splendorLimitedFeature(targetSheet, restoreKey);
+                if (feature == null) throw new IllegalArgumentException("Choose a feature with a spent limited use.");
+                SplendorActions.restore(targetSheet, restoreKey);
+                changed.put(target.getId(), targetSheet);
+                lines.add(target.getName() + ": restored one use of " + feature.path("name").asText() + ".");
+            }
+            case "sunlight" -> {
+                JsonNode amount = request.path("amount");
+                if (!amount.isInt() || amount.asInt() < 1) throw new IllegalArgumentException("Choose a positive amount of Hope.");
+                applyFeatureCost(sheet, MAPPER.createObjectNode().put("hope", amount.asInt()));
+                lines.add("Spent " + amount.asInt() + " Hope: that many targets make a Reaction Roll (14).");
+                DiceRoller.Result success = DiceRoller.roll("3d20+3", config.maxDice(), diceRandom);
+                DiceRoller.Result failure = DiceRoller.roll("4d20+5", config.maxDice(), diceRandom);
+                lines.add("Successful reaction: 3d20+3 " + success.rolls() + " + 3 = " + success.total() + " magic damage.");
+                lines.add("Failed reaction: 4d20+5 " + failure.rolls() + " + 5 = " + failure.total() + " magic damage; temporarily Stunned.");
+            }
+            case "resurrection" -> {
+                if (sheet.path("resurrectionVaulted").asBoolean()) throw new IllegalArgumentException("Resurrection is permanently vaulted.");
+                int die = DiceRoller.roll("1d6", config.maxDice(), diceRandom).total();
+                lines.add("Resurrection d6: " + die + ".");
+                if (die <= 5) {
+                    SplendorActions.vaultResurrection(sheet, key);
+                    lines.add("Resurrection is permanently vaulted.");
+                } else lines.add("Resurrection remains available.");
+            }
+            case "zone" -> {
+                String activation = "zone-" + java.util.UUID.randomUUID();
+                sheet.withObject("/resources").put("protection", 1);
+                removeEffects(sheet, "Zone of Protection source", null, null);
+                sheet.withArray("effects").addObject().put("id", activation).put("name", "Zone of Protection source")
+                        .put("kind", "buff").put("until", "longRest").put("sourceKey", key)
+                        .put("protectionZoneSource", true);
+                lines.add("Zone of Protection activated with Protection 1. Allies in the zone can join below.");
+            }
+        }
+        if (roll != null) {
+            roll.withArray("featureUses").add(actor.getId() + ":" + key + ":" + definition.path("id").asText());
+            if (definition.has("exclusiveRollGroup"))
+                roll.withArray("featureUses").add(actor.getId() + ":" + key + ":group:" + definition.path("exclusiveRollGroup").asText());
+        }
+        ObjectNode report = actionReportMessage(actor, source, name, lines, roll);
+        report.put("actorId", actor.getId());
+        if (kind.equals("zone")) {
+            JsonNode marker = sheet.path("effects").path(sheet.path("effects").size() - 1);
+            ObjectNode action = MAPPER.createObjectNode().put("allowSourceOwner", true);
+            ArrayNode benefits = MAPPER.createArrayNode();
+            ObjectNode join = benefits.addObject().put("id", "join").put("label", "Join Zone of Protection");
+            join.putArray("steps").addObject().put("op", "effect")
+                    .set("effect", SplendorActions.zoneEffect(sheet, actor.getId(), marker.path("id").asText(), 1));
+            attachActionBenefits(report, actor, sheet, action, benefits);
+        }
+        List<String> deathReports = normalizeDeathChanges(changed);
+        if (!deathReports.isEmpty()) report.put("text", report.path("text").asText() + "\n" + String.join("\n", deathReports));
+        persistFeatureSheets(changed, roll == null ? report : roll, roll == null, roll == null ? null : report);
+        for (var entry : changed.entrySet()) sendFeatureState(campaign.actor(entry.getKey()), entry.getValue());
+        if (roll != null) broadcastRollUpdate(roll);
+        sessionRolls.add(rollKey(report.path("id").asLong(), report.path("ts").asLong()));
+        deliver(report, null, false);
+    }
+
     private synchronized void handleFeature(Context ctx) {
         String playerId = requirePlayer(ctx);
         if (playerId == null) return;
@@ -2104,6 +2314,11 @@ public final class OnlineSessionServer {
 
             ObjectNode originalRoll = hasRoll ? findSessionRoll(request.path("roll")) : null;
             if (hasRoll) validateTrigger(sourceActor, key, definition, originalRoll);
+            if (definition.has("splendorAction")) {
+                resolveSplendorAction(request, sourceActor, sourceSheet, source, key, automation, definition, originalRoll);
+                actionResponse(ctx, playerId, sourceActor);
+                return;
+            }
             if (hasRoll) ArcanaSageRules.validateDomain(sourceSheet, definition, originalRoll);
             definition = ArcanaSageRules.selectAmount(definition, request, sourceSheet);
             if (definition.has("spentTokenDamage")) {
@@ -2138,12 +2353,13 @@ public final class OnlineSessionServer {
                 if (target == null || target.isDisabled() || target.getOwnerId() == null || c.player(target.getOwnerId()) == null
                         || target.getId().equals(sourceActor.getId()))
                     throw new IllegalArgumentException("Choose an ally within Close range for Life Ward.");
-                if (!request.path("confirmRange").asBoolean())
-                    throw new IllegalArgumentException("Confirm that the ally is within Close range.");
                 targets = List.of(target);
             } else {
                 targets = resolveFeatureTargets(c, sourceActor, request.path("targetActorId").asText(""), targetMode);
             }
+            if (definition.path("excludeSourceActor").asBoolean()
+                    && targets.stream().anyMatch(target -> target.getId().equals(sourceActor.getId())))
+                throw new IllegalArgumentException("Choose another character.");
             if (definition.path("vaultSource").asBoolean()) {
                 ArrayNode loadout = sourceSheet.withArray("loadout");
                 int index = -1;
@@ -2168,6 +2384,10 @@ public final class OnlineSessionServer {
             DiceRoller.Result damageRoll = null;
             DiceRoller.Result banishRoll = null;
             DiceRoller.Result utilityRoll = null;
+            if ((key.equals("card:Invigoration") || key.equals("card:Copycat/Invigoration")) && definition.has("resourceRoll")) {
+                utilityRoll = DiceRoller.roll(definition.path("selectedAmount").asInt() + "d6", config.maxDice(), diceRandom);
+                ((ObjectNode) definition).remove("damage");
+            }
             if (definition.path("sendRoll").isObject()) {
                 String expression = definition.path("sendRoll").path("dice").asText()
                         .replace("@total_proficiency", String.valueOf(featureAmount(MAPPER.getNodeFactory().textNode("@total_proficiency"), sourceSheet)));
@@ -2381,6 +2601,10 @@ public final class OnlineSessionServer {
             }
             if (hasRoll && definition.has("rerollDualityDie"))
                 rerollFeatureDualityDie(originalRoll, definition.path("rerollDualityDie").asText(), reportLines);
+            if (hasRoll && (key.equals("card:Reassurance") || key.equals("card:Copycat/Reassurance")) && definition.path("hostRollAction").asBoolean()) {
+                rerollFeatureDualityDie(originalRoll, "hope", reportLines);
+                rerollFeatureDualityDie(originalRoll, "fear", reportLines);
+            }
             if (hasRoll && definition.has("advanceEffect")) {
                 String name = definition.path("advanceEffect").asText();
                 ObjectNode effect = null;
@@ -2540,7 +2764,7 @@ public final class OnlineSessionServer {
                     button.set("damage", definition.path("chatDamage"));
                 }
             }
-            if (benefitReport == null && banishRoll == null && !definition.has("reroll")) {
+            if (benefitReport == null && banishRoll == null && (!definition.has("reroll") || definition.path("hostRollAction").asBoolean())) {
                 if (reportLines.isEmpty()) reportLines.add("Used " + actionLabel + ".");
                 benefitReport = actionReportMessage(sourceActor, source, actionReportTitle(sourceSheet, source, actionLabel), reportLines, originalRoll);
             }
@@ -2616,6 +2840,9 @@ public final class OnlineSessionServer {
     private synchronized void resolveBoneValorDamage(Campaign.Actor actor, JsonNode request) throws IOException {
         ObjectNode before = storedSheet(actor.getId());
         if (!(request.path("sheet") instanceof ObjectNode next)) throw new IllegalArgumentException("Invalid damage result.");
+        if (next.path("longRestRevision").asLong() != before.path("longRestRevision").asLong())
+            throw new IllegalArgumentException("Incoming damage cannot advance a long rest.");
+        SplendorActions.preserveSave(next, before);
         if (next.path("featureRevision").asLong() != before.path("featureRevision").asLong())
             throw new IllegalArgumentException("The character changed. Reopen incoming damage.");
         JsonNode result = request.path("result");
@@ -2668,6 +2895,7 @@ public final class OnlineSessionServer {
             quantities.add(quantity);
             if (option.has("giveFear")) { fearGrant += option.path("giveFear").asInt(); special = true; }
             if (option.has("clearStress")) special = true;
+            if (option.path("protectionZone").asBoolean()) special = true;
             if (option.path("hiddenRoll").asBoolean()) {
                 int count = CharacterSheetRules.proficiencyTotal(before, campaign.getFear());
                 if (count < 1) throw new IllegalArgumentException("Unyielding Armor needs positive current Proficiency.");
@@ -2732,6 +2960,16 @@ public final class OnlineSessionServer {
                 before.path("hope").path("on").asInt() - hopeCost + gainHope));
         Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
         changed.put(actor.getId(), next);
+        for (JsonNode selected : result.path("applied")) {
+            if (!selected.path("key").asText().startsWith("effect:")) continue;
+            for (JsonNode effect : before.path("effects")) {
+                if (!selected.path("key").asText().equals("effect:" + effect.path("id").asText())
+                        || !effect.path("protectionZone").asBoolean()) continue;
+                advanceProtectionZone(effect, changed);
+                report += "\nZone of Protection: reduced damage by "
+                        + effect.path("mitigation").path(0).path("reduce").asInt() + "; increased the shared Protection value.";
+            }
+        }
         if (result.path("final").asInt() >= 3) {
             changed.putAll(removeSourceSevereEffects(actor));
             JsonNode ending = changed.get(actor.getId());
@@ -2932,8 +3170,10 @@ public final class OnlineSessionServer {
     }
 
     private boolean activeCardKey(ObjectNode sheet, String key) {
+        if (key.equals("card:Resurrection") && sheet.path("resurrectionVaulted").asBoolean()) return false;
         for (JsonNode card : sheet.path("loadout"))
-            if (key.equals("card:" + card.path("name").asText()) || key.startsWith("card:" + card.path("name").asText() + "/")) return true;
+            if (!card.path("permanentlyVaulted").asBoolean()
+                    && (key.equals("card:" + card.path("name").asText()) || key.startsWith("card:" + card.path("name").asText() + "/"))) return true;
         return false;
     }
 
@@ -2960,6 +3200,7 @@ public final class OnlineSessionServer {
     private synchronized void resolveBoneValorRest(Campaign.Actor actor, JsonNode request) throws IOException {
         ObjectNode before = storedSheet(actor.getId());
         if (!(request.path("sheet") instanceof ObjectNode next)) throw new IllegalArgumentException("Invalid rest sheet.");
+        SplendorActions.preserveSave(next, before);
         String kind = request.path("kind").asText();
         if (!List.of("short", "long").contains(kind)) throw new IllegalArgumentException("Choose a short or long rest.");
         if (next.path("featureRevision").asLong() != before.path("featureRevision").asLong())
@@ -3370,6 +3611,13 @@ public final class OnlineSessionServer {
             offset += values.size();
         }
         if (changed != selected.size()) throw new IllegalArgumentException("Some selected dice are no longer available.");
+        for (JsonNode raw : details)
+            if ("Smite".equals(raw.path("label").asText()) && raw.path("rolls").isEmpty() && raw instanceof ObjectNode smite) {
+                int bonus = Math.addExact(smite.path("total").asInt(), delta);
+                smite.put("total", bonus).put("expression", String.valueOf(bonus));
+                delta = Math.multiplyExact(delta, 2);
+                break;
+            }
         int previousTotal = roll.path("total").asInt();
         int updatedTotal = Math.addExact(previousTotal, delta);
         roll.put("total", updatedTotal);
@@ -3511,6 +3759,7 @@ public final class OnlineSessionServer {
         if (caster == null || caster.isDisabled())
             throw new IllegalArgumentException("The source actor is disabled or no longer available.");
         ObjectNode casterSheetForEffects = storedSheet(caster.getId());
+        benefit = benefit.deepCopy();
         for (JsonNode step : benefit.path("steps")) {
             JsonNode effect = step.path("effect");
             if (!effect.has("requiresSourceEffect")) continue;
@@ -3519,6 +3768,11 @@ public final class OnlineSessionServer {
                 if (effect.path("requiresSourceEffect").equals(marker.path("name"))
                         && effect.path("activationId").equals(marker.path("id"))) active = true;
             if (!active) throw new IllegalArgumentException("That circle has ended. Use the invitation from the current cast.");
+            if (effect.path("protectionZone").asBoolean()) {
+                int protection = casterSheetForEffects.path("resources").path("protection").asInt();
+                if (protection < 1 || protection > 6) throw new IllegalArgumentException("That protection zone has ended.");
+                ((ObjectNode) effect.path("mitigation").path(0)).put("reduce", protection);
+            }
         }
         if (benefit.has("cost") && DeathMoves.recoverableHp(sheet) <= 0
                 && java.util.stream.StreamSupport.stream(benefit.path("steps").spliterator(), false)
@@ -4024,6 +4278,8 @@ public final class OnlineSessionServer {
         if (rolledActor == null && !"any".equals(trigger.path("on").asText()))
             throw new IllegalArgumentException("This roll is not linked to a character.");
         String audience = trigger.path("audience").asText("self");
+        if (trigger.path("otherPlayerOnly").asBoolean() && sourceActor.getOwnerId().equals(roll.path("fromId").asText()))
+            throw new IllegalArgumentException("Reassurance applies only to another player's action roll.");
         if ("self".equals(audience) && !sourceActor.getId().equals(rolledActorId))
             throw new IllegalArgumentException("This feature only applies to your own character's roll.");
         if ("ally".equals(audience) && sourceActor.getId().equals(rolledActorId))
@@ -4044,7 +4300,8 @@ public final class OnlineSessionServer {
         if (trigger.path("failedOnly").asBoolean()
                 && (roll.path("rolls").path(0).asInt() > 0
                     && roll.path("rolls").path(0).asInt() == roll.path("rolls").path(1).asInt()
-                    || roll.has("difficulty") && roll.path("total").asDouble() >= roll.path("difficulty").asDouble()))
+                    || (trigger.has("difficulty") || roll.has("difficulty")) && roll.path("total").asDouble()
+                        >= (trigger.has("difficulty") ? trigger.path("difficulty") : roll.path("difficulty")).asDouble()))
             throw new IllegalArgumentException("This feature requires a failed roll.");
         if (trigger.has("rerollResourceDice") && (!(tags.contains("attack") || tags.contains("damage"))
                 || !WarriorAutomation.hasOnes(roll, trigger.path("rerollResourceDice").asText())))
@@ -4444,6 +4701,63 @@ public final class OnlineSessionServer {
         return false;
     }
 
+    private void advanceProtectionZone(JsonNode protection, Map<String, ObjectNode> changed) throws IOException {
+        String sourceId = protection.path("sourceActorId").asText();
+        Campaign.Actor caster = campaign.actor(sourceId);
+        if (caster == null || caster.isDisabled()) throw new IllegalArgumentException("The protection zone's caster is unavailable.");
+        ObjectNode source = changed.containsKey(sourceId) ? changed.get(sourceId) : storedSheet(sourceId);
+        int value = source.path("resources").path("protection").asInt();
+        boolean active = false;
+        for (JsonNode marker : source.path("effects"))
+            if (marker.path("protectionZoneSource").asBoolean()
+                    && marker.path("id").equals(protection.path("activationId"))) active = true;
+        if (!active || value < 1 || value > 6 || value != protection.path("mitigation").path(0).path("reduce").asInt())
+            throw new IllegalArgumentException("Protection changed. Reopen incoming damage.");
+        source.withObject("/resources").put("protection", value == 6 ? 0 : value + 1);
+        if (value == 6 && source.path("effects") instanceof ArrayNode effects)
+            for (int i = effects.size() - 1; i >= 0; i--)
+                if (effects.path(i).path("id").equals(protection.path("activationId"))) effects.remove(i);
+        changed.put(sourceId, source);
+    }
+
+    private void reconcileProtectionZones(Map<String, ObjectNode> changes, Map<String, ObjectNode> originals) throws IOException {
+        boolean relevant = false;
+        for (var entry : changes.entrySet()) {
+            ObjectNode previous = normalizationOriginal(originals, entry.getKey());
+            for (JsonNode state : List.of(entry.getValue(), previous))
+                for (JsonNode effect : state.path("effects"))
+                    relevant |= effect.path("protectionZone").asBoolean() || effect.path("protectionZoneSource").asBoolean();
+        }
+        if (!relevant) return;
+        for (Campaign.Actor actor : campaign.getActors()) {
+            if (actor.isDisabled() || !hasPlayerSheet(actor)) continue;
+            ObjectNode sheet = changes.containsKey(actor.getId()) ? changes.get(actor.getId())
+                    : normalizationOriginal(originals, actor.getId()).deepCopy();
+            if (!(sheet.path("effects") instanceof ArrayNode effects)) continue;
+            boolean updated = false;
+            for (int i = effects.size() - 1; i >= 0; i--) {
+                JsonNode effect = effects.path(i);
+                if (!effect.path("protectionZone").asBoolean()) continue;
+                String caster = effect.path("sourceActorId").asText();
+                ObjectNode source = campaign.actor(caster) == null ? MAPPER.createObjectNode()
+                        : changes.containsKey(caster) ? changes.get(caster) : normalizationOriginal(originals, caster);
+                boolean active = false;
+                for (JsonNode marker : source.path("effects"))
+                    if (marker.path("protectionZoneSource").asBoolean()
+                            && marker.path("id").equals(effect.path("activationId"))) active = true;
+                int value = source.path("resources").path("protection").asInt();
+                if (!active || value < 1 || value > 6) {
+                    effects.remove(i);
+                    updated = true;
+                } else if (effect.path("mitigation").path(0).path("reduce").asInt() != value) {
+                    ((ObjectNode) effect.path("mitigation").path(0)).put("reduce", value);
+                    updated = true;
+                }
+            }
+            if (updated) changes.put(actor.getId(), sheet);
+        }
+    }
+
     private List<String> normalizeDeathChanges(Map<String, ObjectNode> changes) throws IOException {
         if (sheetOperation.get() == null) {
             sheetOperation.set(new SheetOperation());
@@ -4460,10 +4774,15 @@ public final class OnlineSessionServer {
             ObjectNode sheet = changes.get(id);
             ObjectNode previous = normalizationOriginal(originals, id);
             if (sheet.path("longRestRevision").asLong() > previous.path("longRestRevision").asLong()) {
+                if (sheet.path("effects") instanceof ArrayNode effects)
+                    for (int i = effects.size() - 1; i >= 0; i--)
+                        if (effects.path(i).path("healingHands").asBoolean() || effects.path(i).path("protectionZoneSource").asBoolean())
+                            effects.remove(i);
                 if (removeLifeWards(changes, id, originals))
                     reports.add(campaign.actor(id).getName() + ": long rest ended all Life Wards cast by this character.");
             }
         }
+        reconcileProtectionZones(changes, originals);
         for (var entry : changes.entrySet()) {
             ObjectNode sheet = entry.getValue();
             ObjectNode previous = normalizationOriginal(originals, entry.getKey());
@@ -4637,7 +4956,7 @@ public final class OnlineSessionServer {
         ObjectNode message = MAPPER.createObjectNode().put("type", "sheetFeature").put("actorId", actor.getId())
                 .put("featureRevision", sheet.path("featureRevision").asLong(0));
         for (String field : List.of("hp", "stress", "hope", "scars", "armorTrack", "effects", "usage", "resources",
-                "permanentHp", "spectralBlocked", "deathNarrative", "longRestRevision", "vitalityBenefits", "vitalityEffectRemoved",
+                "permanentHp", "spectralBlocked", "deathNarrative", "longRestRevision", "vitalityBenefits", "vitalityEffectRemoved", "resurrectionVaulted",
                 "inventoryRevision", "compendiumRevision", "inventory", "loadout", "vault")) {
             if (sheet.has(field)) message.set(field, sheet.get(field));
         }
@@ -5477,6 +5796,7 @@ public final class OnlineSessionServer {
             hello.put("boneValorAutomation", true);
             hello.put("bloodAutomation", true);
             hello.put("specialCardActions", true);
+            hello.put("splendorAutomation", true);
             hello.put("deathMoves", true);
             hello.put("deathMoveOptions", true);
             hello.put("sheetSync", true);
@@ -5918,7 +6238,46 @@ public final class OnlineSessionServer {
         out.set("breakdown", details);
     }
 
+    private static boolean isSmiteLabel(String label) {
+        return "Smite".equals(label) || label.startsWith("Smite:");
+    }
+
     private ResolvedDice resolveDice(JsonNode msg) {
+        boolean smite = msg.path("expression").asText().matches("^\\(.*\\)\\*2$")
+                && msg.path("contributions").isArray()
+                && java.util.stream.StreamSupport.stream(msg.path("contributions").spliterator(), false)
+                .anyMatch(part -> java.util.stream.StreamSupport.stream(part.path("notes").spliterator(), false)
+                        .anyMatch(note -> isSmiteLabel(note.path("label").asText())));
+        if (smite) {
+            ObjectNode base = msg.deepCopy();
+            base.put("expression", msg.path("expression").asText().replaceFirst("^\\((.*)\\)\\*2$", "$1"));
+            ArrayNode contributions = (ArrayNode) base.path("contributions");
+            for (int i = contributions.size() - 1; i >= 0; i--) {
+                JsonNode part = contributions.get(i);
+                String expression = part.path("expression").asText();
+                if (!expression.matches("^\\(.*\\)\\*2$"))
+                    throw new IllegalArgumentException("Smite must double every damage contribution.");
+                String single = expression.replaceFirst("^\\((.*)\\)\\*2$", "$1");
+                if ("0".equals(single) && isSmiteLabel(part.path("label").asText())) {
+                    contributions.remove(i);
+                    continue;
+                }
+                ((ObjectNode) part).put("expression", single);
+                if (part.path("notes") instanceof ArrayNode notes)
+                    for (int j = notes.size() - 1; j >= 0; j--)
+                        if (isSmiteLabel(notes.get(j).path("label").asText())) notes.remove(j);
+            }
+            ResolvedDice resolved = resolveDice(base);
+            List<DiceRoller.Detail> details = resolved.breakdown() == null
+                    ? new ArrayList<>(List.of(new DiceRoller.Detail("Damage", resolved.result().expression(),
+                    resolved.result().rolls(), resolved.result().total()))) : new ArrayList<>(resolved.breakdown());
+            details.add(new DiceRoller.Detail("Smite", String.valueOf(resolved.result().total()), List.of(), resolved.result().total()));
+            List<ArrayNode> notes = new ArrayList<>(resolved.notes());
+            while (notes.size() < details.size()) notes.add(MAPPER.createArrayNode());
+            notes.getLast().addObject().put("label", "Smite").put("impact", "Doubled the entire damage total, including all bonuses.");
+            return new ResolvedDice(new DiceRoller.Result("(" + resolved.result().expression() + ")*2", resolved.result().rolls(),
+                    Math.multiplyExact(resolved.result().total(), 2)), details, notes);
+        }
         DiceRoller.Result result = DiceRoller.roll(msg.path("expression").asText(""), config.maxDice(), diceRandom);
         List<DiceRoller.Detail> breakdown = null;
         List<ArrayNode> breakdownNotes = new ArrayList<>();

@@ -76,8 +76,12 @@ final class BoneValorRules {
                 + (maximized.group(3) == null ? "" : "kh" + (Integer.parseInt(maximized.group(3)) + 1));
         base.put("expression", doubled ? "(" + dice + ")*2" : dice);
         List<String> parts = new java.util.ArrayList<>();
-        for (JsonNode part : snapshot.path("breakdown")) parts.add(part.path("expression").asText());
-        snapshot.put("expression", String.join("+", parts));
+        boolean smite = false;
+        for (JsonNode part : snapshot.path("breakdown")) {
+            if ("Smite".equals(part.path("label").asText()) && part.path("rolls").isEmpty()) smite = true;
+            else parts.add(part.path("expression").asText());
+        }
+        snapshot.put("expression", smite ? "(" + String.join("+", parts) + ")*2" : String.join("+", parts));
         return snapshot;
     }
 
@@ -110,6 +114,13 @@ final class BoneValorRules {
         detail.put("total", base.path("total").asInt() - lost);
         detail.put("expression", base.path("expression").asText().replaceFirst("\\d+d", remaining.size() + "d").replaceFirst("kh\\d+", ""));
         result.put("expression", original.path("expression").asText().replaceFirst("\\d+d", remaining.size() + "d").replaceFirst("kh\\d+", ""));
+        for (JsonNode part : result.path("breakdown")) {
+            if (!"Smite".equals(part.path("label").asText()) || !part.path("rolls").isEmpty()) continue;
+            ObjectNode smite = (ObjectNode) part;
+            int bonus = smite.path("total").asInt() - lost;
+            smite.put("total", bonus).put("expression", String.valueOf(bonus));
+            result.put("total", result.path("total").asInt() - lost);
+        }
         result.remove("deathrun");
         return result;
     }

@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
+import type { FeatureRequest } from '../api';
 import { mockCharacter } from './data';
 import { openDamageDialog } from './damage-view';
 
@@ -28,6 +29,42 @@ class Element {
 }
 
 afterEach(() => vi.unstubAllGlobals());
+
+it.each(['commit', 'missing', 'rejected'] as const)('commits Zone of Protection through the host without other special mitigation (%s)', async mode => {
+  vi.stubGlobal('document', { createElement: (tag: string) => new Element(tag),
+    addEventListener: () => {}, removeEventListener: () => {} });
+  const c = mockCharacter();
+  c.heritage = []; c.loadout = []; c.inventory = []; c.activeWeapons = []; c.features = [];
+  c.activeArmor = undefined;
+  c.resources = {};
+  c.effects = [{ id: 'zone', name: 'Zone of Protection', kind: 'buff', until: 'manual', mitigation: [
+    { id: 'protection', label: 'Zone of Protection', defaultOn: true, reduce: 2, protectionZone: true },
+  ] }];
+  const before = structuredClone(c);
+  const root = new Element('root');
+  const done = vi.fn();
+  const commit = vi.fn(async (_damage: NonNullable<FeatureRequest['incomingDamage']>) => {
+    if (mode === 'rejected') throw new Error('Zone changed. Reopen incoming damage.');
+  });
+  openDamageDialog(root as unknown as HTMLElement, c, done, { damage: 12, type: 'physical' },
+    mode === 'missing' ? undefined : commit);
+  const zone = root.all(e => e.className === 'dh-roll-option-row').find(row => row.text.includes('Zone of Protection'))!;
+  expect(zone.all(e => e.type === 'checkbox')[0].checked).toBe(true);
+  await root.all(e => e.tag === 'button' && e.text === 'Apply')[0].onclick!();
+  expect(done).not.toHaveBeenCalled();
+  expect(c).toEqual(before);
+  if (mode === 'missing') {
+    expect(commit).not.toHaveBeenCalled();
+    expect(root.text).toContain('Update the host to resolve Zone of Protection damage.');
+  } else {
+    expect(commit).toHaveBeenCalledOnce();
+    expect(commit.mock.calls[0][0]).toMatchObject({
+      input: { selected: ['effect:zone/protection'] },
+      result: { applied: [{ key: 'effect:zone', id: 'protection' }] },
+    });
+    if (mode === 'rejected') expect(root.text).toContain('Zone changed. Reopen incoming damage.');
+  }
+});
 
 it('groups mitigation and Armor Slot counts beside independent checkboxes, and aligns recovery dropdowns', () => {
   vi.stubGlobal('document', { createElement: (tag: string) => new Element(tag),

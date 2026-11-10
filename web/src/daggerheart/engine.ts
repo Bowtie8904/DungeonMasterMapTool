@@ -126,6 +126,8 @@ export interface Step {
 }
 
 export interface ActionDef {
+  splendorAction?: 'healingHands' | 'secondWind' | 'zone' | 'sunlight' | 'salvation' | 'invigoration' | 'resurrection';
+  otherPlayerOnly?: boolean;
   benefitsPerAmount?: boolean;
   excludeSourceActor?: boolean;
   selectAmount?: { resource: string; label: string; min?: number; store?: string; base?: number; addToRoll?: boolean };

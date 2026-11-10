@@ -164,10 +164,12 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
         const resolved = computeDamage(next, availableMitigations(next), input);
         const summary = applyDamage(next, resolved, input.type);
         if (!summary) throw new Error('Could not apply damage');
-        const hostDamage = resolved.applied.some(m => m.option.giveFear || m.option.hiddenRoll || m.option.clearStress);
+        const zoneDamage = resolved.applied.some(m => m.option.protectionZone);
+        const hostDamage = zoneDamage || resolved.applied.some(m => m.option.giveFear || m.option.hiddenRoll || m.option.clearStress);
         if (commit && hostDamage) await commit({ sheet: next, input: { ...input, selected: [...input.selected] },
           result: { armorUsed: resolved.armorUsed, armorMarked: resolved.armorMarked, hp: resolved.hp, hpBeforeReplace: resolved.hpBeforeReplace, final: resolved.final,
             applied: resolved.applied.map(m => ({ key: m.key, id: m.option.id })) }, report: summary });
+        else if (zoneDamage) throw new Error('Update the host to resolve Zone of Protection damage.');
         else if (resolved.applied.some(m => m.option.giveFear)) throw new Error('Update the host to grant GM Fear with this armor option.');
         else { Object.assign(c, next); onDone(summary, resolved.negated ? 0 : resolved.final); }
         for (const m of resolved.applied.filter(m => m.option.reportRoll))

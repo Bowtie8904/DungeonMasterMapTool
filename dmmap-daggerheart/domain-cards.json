@@ -2909,12 +2909,29 @@
   {
    "id": "healing-hands",
    "name": "Healing Hands",
-   "automation": { "spellcastDifficulty": 13 },
+   "automation": { "spellcastDifficulty": 13, "conditionalRollTriggers": [
+    { "id": "hp", "label": "Healing Hands: clear 2 HP", "on": "card:Healing Hands", "when": "success", "difficulty": 13,
+      "splendorAction": "healingHands", "hostOwned": true, "excludeSourceActor": true,
+      "exclusiveRollGroup": "healing", "target": "actor", "cost": { "stress": 1 },
+      "steps": [{ "op": "clear", "resource": "hp", "amount": 2 }] },
+    { "id": "stress", "label": "Healing Hands: clear 2 Stress", "on": "card:Healing Hands", "when": "success", "difficulty": 13,
+      "splendorAction": "healingHands", "hostOwned": true, "excludeSourceActor": true,
+      "exclusiveRollGroup": "healing", "target": "actor", "cost": { "stress": 1 },
+      "steps": [{ "op": "clear", "resource": "stress", "amount": 2 }] },
+    { "id": "failed-hp", "label": "Healing Hands: clear 1 HP", "on": "card:Healing Hands", "when": "always", "failedOnly": true, "difficulty": 13,
+      "splendorAction": "healingHands", "hostOwned": true, "excludeSourceActor": true,
+      "exclusiveRollGroup": "healing", "target": "actor", "cost": { "stress": 1 },
+      "steps": [{ "op": "clear", "resource": "hp", "amount": 1 }] },
+    { "id": "failed-stress", "label": "Healing Hands: clear 1 Stress", "on": "card:Healing Hands", "when": "always", "failedOnly": true, "difficulty": 13,
+      "splendorAction": "healingHands", "hostOwned": true, "excludeSourceActor": true,
+      "exclusiveRollGroup": "healing", "target": "actor", "cost": { "stress": 1 },
+      "steps": [{ "op": "clear", "resource": "stress", "amount": 1 }] }
+   ] },
    "cardType": "Spell",
    "domain": "Splendor",
    "level": 2,
    "recall": 1,
-   "text": "Make a **Spellcast Roll (13)** and target a creature other than yourself within Melee range. On a success, **mark a Stress** to clear 2 Hit Points or 2 Stress on the target. On a failure, **mark a Stress** to clear a Hit Point or a Stress on the target. You can’t heal the same target again until your next long rest."
+   "text": "Make a **Spellcast Roll (13)** and target a creature other than yourself within Melee range. On a success, **mark a Stress** to clear 2 Hit Points or 2 Stress on the target. On a failure, **mark a Stress** to clear a Hit Point or a Stress on the target. You can’t heal the same target again until that target’s next long rest."
   },
   {
    "id": "healing-strike",
@@ -2925,10 +2942,11 @@
    "recall": 1,
    "text": "When you deal damage to an adversary, you can **spend 2 Hope** to clear a Hit Point on an ally within Close range.",
    "automation": {
-    "actions": [
+    "rollTriggers": [
      {
       "id": "use",
       "label": "Healing Strike",
+      "on": "damage", "when": "always", "excludeSourceActor": true,
       "cost": {
        "hope": 2
       },
@@ -3116,7 +3134,11 @@
    "name": "Invigoration",
    "automation": { "actions": [
     { "id": "restore", "label": "Invigoration: roll Hope dice", "resourceRoll": { "resource": "hope", "sides": 6 },
-      "report": { "text": "If any die shows 6, the chosen nearby character manually restores the chosen feature's exhaustion use." } }
+      "hostOwned": true, "report": { "text": "If any die shows 6, restore one spent limited feature use." } }
+   ], "conditionalRollTriggers": [
+    { "id": "restore-use", "label": "Invigoration: restore one feature use",
+      "on": "featureAction:card:Invigoration:restore", "containsDie": 6, "when": "always",
+      "splendorAction": "invigoration", "hostOwned": true, "usesSource": false }
    ] },
    "cardType": "Spell",
    "domain": "Splendor",
@@ -3334,7 +3356,7 @@
      }
     ],
     "manual": [
-     "Confirm the target is an ally within Close range before casting; map coordinates do not establish range automatically."
+     "Choose an ally within Close range; map coordinates do not establish range automatically."
     ]
    }
   },
@@ -4119,10 +4141,10 @@
      "max": 1,
      "per": "rest"
     },
-    "actions": [
+    "rollTriggers": [
      {
       "id": "use",
-      "label": "Reassurance"
+      "label": "Reassurance", "on": "action", "audience": "ally", "when": "always", "reroll": "duality", "hostRollAction": true, "otherPlayerOnly": true
      }
     ]
    }
@@ -4284,29 +4306,6 @@
     ],
     "actions": [
      {
-      "id": "clear",
-      "label": "Long rest: clear old tokens",
-      "steps": [
-       {
-        "op": "clear",
-        "resource": "restoration",
-        "amount": "all"
-       }
-      ]
-     },
-     {
-      "id": "prepare",
-      "label": "After long rest: prepare tokens",
-      "steps": [
-       { "op": "clear", "resource": "restoration", "amount": "all" },
-       {
-        "op": "gain",
-        "resource": "restoration",
-        "amount": "@total_spellcast"
-       }
-      ]
-     },
-     {
       "id": "hp",
       "label": "Clear 2 HP",
       "steps": [
@@ -4338,7 +4337,7 @@
      },
      {
       "id": "other",
-      "label": "Touch creature: heal or clear condition",
+      "label": "Heal or clear condition",
       "cost": {
        "restoration": 1
       }
@@ -4354,7 +4353,10 @@
    "level": 10,
    "recall": 2,
    "text": "Make a **Spellcast Roll (20)**. On a success, restore one creature who has been dead no longer than 100 years to full strength. Then roll a **d6**. On a result of 5 or lower, place this card in your vault permanently.\n\nOn a failure, you can’t cast Resurrection again for a week.",
-   "automation": { "spellcastDifficulty": 20 }
+   "automation": { "spellcastDifficulty": 20, "conditionalRollTriggers": [
+    { "id": "resurrect", "label": "Resurrection: roll consequence", "on": "card:Resurrection",
+      "when": "success", "difficulty": 20, "splendorAction": "resurrection", "hostOwned": true }
+   ] }
   },
   {
    "id": "rift-walker",
@@ -4561,7 +4563,10 @@
    "level": 9,
    "recall": 2,
    "text": "Make a **Spellcast Roll (16)**. On a success, **mark any number of Stress** to target a line of allies within Far range. You can clear Hit Points on the targets equal to the number of Stress marked, divided among them however you’d like.",
-   "automation": { "spellcastDifficulty": 16 }
+   "automation": { "spellcastDifficulty": 16, "conditionalRollTriggers": [
+    { "id": "heal", "label": "Salvation Beam: allocate healing", "on": "card:Salvation Beam",
+      "when": "success", "difficulty": 16, "splendorAction": "salvation", "hostOwned": true }
+   ] }
   },
   {
    "id": "sanguine-feast",
@@ -4647,30 +4652,9 @@
      "max": 1,
      "per": "rest"
     },
-    "actions": [
-     {
-      "id": "stress",
-      "label": "Clear 3 Stress",
-      "steps": [
-       {
-        "op": "clear",
-        "resource": "stress",
-        "amount": 3
-       }
-      ]
-     },
-     {
-      "id": "hp",
-      "label": "Clear 1 HP",
-      "steps": [
-       {
-        "op": "clear",
-        "resource": "hp",
-        "amount": 1
-       }
-      ]
-     }
-    ]
+    "actions": [{ "id": "use", "label": "Second Wind", "hostOwned": true, "splendorAction": "secondWind" }],
+    "rollTriggers": [{ "id": "use", "label": "Second Wind", "on": "attack", "successIfKnown": true,
+      "hostOwned": true, "splendorAction": "secondWind" }]
    }
   },
   {
@@ -4938,6 +4922,15 @@
    "recall": 2,
    "text": "Once per rest, **spend 3 Hope** to charge your powerful smite. When you next successfully attack with a weapon, double the result of your damage roll. This attack deals magic damage regardless of the weapon’s damage type.",
    "automation": {
+    "rollOptions": [
+     { "id": "charge", "label": "Smite: charge next successful weapon attack", "roll": "attack",
+       "excludeRolls": ["spellcast"], "excludesEffect": "Smite", "cost": { "hope": 3 },
+       "effect": { "name": "Smite", "kind": "buff", "until": "manual",
+        "text": "Use on the damage roll of your next successful weapon attack.",
+        "rollOptions": [{ "id": "damage", "label": "Smite: double weapon damage (magic)", "roll": "damage",
+          "excludeRolls": ["spelldamage"], "multiplier": 2, "magicDamage": true, "endEffect": "Smite", "defaultOn": true }]
+       } }
+    ],
     "uses": {
      "max": 1,
      "per": "rest"
@@ -5214,12 +5207,9 @@
   {
    "id": "stunning-sunlight",
    "name": "Stunning Sunlight",
-   "automation": { "actions": [
-    { "id": "target", "label": "Successful Sunlight: pay for one target", "cost": { "hope": 1 },
-      "report": { "text": "One target you succeeded against makes Reaction (14). Repeat for each additional target." } },
-    { "id": "success", "label": "Target succeeded Reaction: damage", "damage": { "dice": "3d20+3", "fixed": true, "type": "magic" } },
-    { "id": "failure", "label": "Target failed Reaction: damage", "damage": { "dice": "4d20+5", "fixed": true, "type": "magic" },
-      "report": { "text": "The failed target is temporarily Stunned; the GM manages the condition." } }
+   "automation": { "conditionalRollTriggers": [
+    { "id": "damage", "label": "Stunning Sunlight: spend Hope and roll damage", "on": "card:Stunning Sunlight",
+      "successIfKnown": true, "splendorAction": "sunlight", "hostOwned": true }
    ] },
    "cardType": "Spell",
    "domain": "Splendor",
@@ -6415,10 +6405,12 @@
      "max": 1,
      "per": "longRest"
     },
-    "actions": [
+    "resources": [{ "id": "protection", "label": "Protection", "initial": 0, "max": 6,
+      "resetOn": "longRest", "resetValue": 0 }],
+    "conditionalRollTriggers": [
      {
-      "id": "use",
-      "label": "Zone of Protection"
+      "id": "activate", "label": "Zone of Protection: activate", "on": "card:Zone of Protection",
+      "when": "success", "difficulty": 16, "hostOwned": true, "splendorAction": "zone"
      }
     ]
    }
