@@ -28,11 +28,15 @@ final class ArcanaSageRules {
         String resource = spec.path("resource").asText();
         int minimum = spec.path("min").asInt(1);
         JsonNode input = request.path("amount");
-        int maximum = available(sheet, resource);
+        boolean heal = spec.path("heal").asBoolean();
+        int maximum = heal ? Integer.MAX_VALUE : available(sheet, resource);
         if (!input.isInt() || input.asInt() < minimum || input.asInt() > maximum)
             throw new IllegalArgumentException("Choose a whole number from " + minimum + " to " + maximum + " " + resource + ".");
         int amount = input.asInt();
-        resolved.withObject("/cost").put(resource, Math.addExact(amount, resolved.path("cost").path(resource).asInt()));
+        if (heal) {
+            if (!"hp".equals(resource)) throw new IllegalArgumentException("Only marked Hit Points can be healed.");
+            resolved.withArray("steps").addObject().put("op", "clear").put("resource", "hp").put("amount", amount);
+        } else resolved.withObject("/cost").put(resource, Math.addExact(amount, resolved.path("cost").path(resource).asInt()));
         resolved.put("selectedAmount", amount);
         if (definition.path("benefitsPerAmount").asBoolean()) resolved.put("chatBenefitLimit", Math.max(0, amount - 1));
         if (spec.has("store")) {
@@ -70,7 +74,8 @@ final class ArcanaSageRules {
         if (!(sheet.path("effects") instanceof ArrayNode effects)) return lines;
         for (int i = effects.size() - 1; i >= 0; i--) {
             JsonNode effect = effects.path(i);
-            boolean end = tags.contains("attack") && effect.path("endOnAttack").asBoolean();
+            boolean end = tags.contains("attack") && effect.path("endOnAttack").asBoolean()
+                    || tags.contains("action") && effect.path("endOnAction").asBoolean();
             if (tags.contains("action") && effect.has("maintainOnAction")
                     && !tags.contains("option:effect:" + effect.path("id").asText() + ":" + effect.path("maintainOnAction").asText()))
                 end = true;

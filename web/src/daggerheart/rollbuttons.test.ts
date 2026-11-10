@@ -116,6 +116,32 @@ const original: RollMessage = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('cross-player roll buttons', () => {
+  it('offers Hideous Retribution on allied incoming-damage reports and opens the card reaction', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const catalog = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+    const c = character('Caster', undefined);
+    c.loadout = [{ name: 'Hideous Retribution', domain: 'Dread', level: 2, type: 'Spell', recall: 2, text: '',
+      automation: catalog.entries.find((card: { id: string }) => card.id === 'hideous-retribution').automation }];
+    const reaction = vi.fn(() => true);
+    const { host } = hostFor({});
+    const supported = { ...host, actorIds: () => ['caster'], sheet: async () => ({
+      character: c, bus: { featureAction: reaction } as unknown as SheetBus, save: () => {},
+    }) };
+    const message: ChatMessage = { id: 1, ts: 1, fromId: 'ally-player', from: 'Ally', actorId: 'ally', text: 'Damage taken.', incomingDamage: true };
+    const ally = rollButtons(message, supported) as unknown as FakeElement;
+    const own = rollButtons({ ...message, actorId: 'caster' }, supported) as unknown as FakeElement;
+    const ordinary = rollButtons({ ...message, incomingDamage: undefined }, supported);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(ally.text).toContain('Hideous Retribution reaction');
+    expect(own.text).not.toContain('Hideous Retribution');
+    expect(ordinary).toBeNull();
+    await ally.queryAll('button')[0].click();
+    expect(reaction).toHaveBeenCalledWith('Hideous Retribution', 'reaction');
+    const inactive = rollButtons(message, { ...supported, isActorActive: () => false }) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(inactive.text).toBe('');
+  });
+
   it('recognizes Invigoration Hope dice and gates its restoration on a rolled six', async () => {
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
     const c = character('Caster', undefined);

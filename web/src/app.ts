@@ -1560,8 +1560,8 @@ export class App {
             actorId: a.id,
             onShare: (entry, quantity) => { void this.shareEntry(a.id, entry, quantity).catch((e: Error) => this.toast(e.message)); },
             onPrepareShare: () => changed.flush(),
-            onLog: (text, rollSource, restDice) => {
-              const send = () => { if (!this.conn.send({ type: 'chat', text, rollSource, restDice, actorId: a.id, whisper: false })) this.toast('Not connected. The report was not posted.'); };
+            onLog: (text, rollSource, restDice, incomingDamage) => {
+              const send = () => { if (!this.conn.send({ type: 'chat', text, rollSource, restDice, incomingDamage, actorId: a.id, whisper: false })) this.toast('Not connected. The report was not posted.'); };
               if (restDice) { changed(); void changed.flush().then(send).catch((e: Error) => this.toast(e.message)); }
               else send();
             },

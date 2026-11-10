@@ -42,6 +42,7 @@ export interface Modifier {
 }
 
 export interface EffectDef {
+  endOnAction?: boolean;
   surgeResource?: string;
   maintainOnAction?: string;
   endOnAttack?: boolean;
@@ -130,7 +131,7 @@ export interface ActionDef {
   otherPlayerOnly?: boolean;
   benefitsPerAmount?: boolean;
   excludeSourceActor?: boolean;
-  selectAmount?: { resource: string; label: string; min?: number; store?: string; base?: number; addToRoll?: boolean };
+  selectAmount?: { resource: string; label: string; min?: number; store?: string; base?: number; addToRoll?: boolean; heal?: boolean };
   castTokens?: { resource: string; sides: number };
   selectedAmount?: number;
   spentTokenDamage?: { sides: number };
@@ -280,6 +281,7 @@ export interface RollOption extends ActionDef {
 
 /** A button a feature offers on a finished roll in the chat. */
 export interface RollTrigger extends ActionDef {
+  damageSource?: string;
   rerollAnyDie?: boolean;
   spellDomain?: string;
   weaponDamage?: boolean;
@@ -943,7 +945,8 @@ export function rollOptionDice(c: CharacterSheet, option: RollOption): string | 
     if (condition.dice) dice = condition.dice;
     if (condition.dieSize) dice = dice?.replace(/d\d+/g, `d${condition.dieSize}`);
   }
-  return dice?.replace(/@tier/g, String(tierOf(c.level)));
+  if (dice?.includes('@fear') && evalValue('@fear', c) <= 0) return undefined;
+  return dice?.replace(/@tier/g, String(tierOf(c.level))).replace(/@fear/g, String(Math.max(0, evalValue('@fear', c))));
 }
 
 export function damageRollFormula(expression: string, contributions: RollContribution[], selected: AvailableRollOption[]): { expression: string; contributions: RollContribution[] } {
@@ -1460,6 +1463,7 @@ export function isTrait(name: string): name is TraitName {
 }
 
 export interface RollContext {
+  damageSource?: string;
   dice?: number[];
   deathrun?: { effectId: string; count: number };
   resourceOnes?: string[];
@@ -1488,6 +1492,7 @@ export function effectCounterText(c: CharacterSheet, name: string): string {
 }
 
 function triggerApplies(c: CharacterSheet, t: RollTrigger, ctx: RollContext): boolean {
+  if (t.damageSource && (ctx.kind !== 'damage' || ctx.damageSource !== t.damageSource)) return false;
   if (t.spellDomain && !activeCards(c).some(card => card.domain === t.spellDomain
     && ctx.source.split(',').includes(`card:${card.name}`))) return false;
   if (t.containsDie !== undefined && !ctx.dice?.includes(t.containsDie)) return false;

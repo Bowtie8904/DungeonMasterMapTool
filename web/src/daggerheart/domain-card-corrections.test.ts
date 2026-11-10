@@ -641,13 +641,13 @@ describe('domain-card cost and limit corrections', () => {
     const automation = rules(id);
     c.loadout = [{ name, domain, level: 8, type: 'Spell', recall: 0, text: '', automation }];
     c.hope.on = 6;
-    const cast = automation.actions![0];
+    const cast = (automation.actions ?? automation.conditionalRollTriggers)![0];
     const key = `card:${name}`;
     expect(runAction(c, key, automation, cast, name)).not.toBeNull();
     expect(actionBlocker(c, key, automation, cast)).toBeTruthy();
-    const manualClear = automation.actions!.find(action => action.id === 'clear');
+    const manualClear = automation.actions?.find(action => action.id === 'clear');
     if (manualClear) expect(actionBlocker(c, key, automation, manualClear)).toBeNull();
-    else expect(automation.actions).toHaveLength(1);
+    else expect(automation.actions ?? automation.conditionalRollTriggers).toHaveLength(1);
     c.resources![resource] = 2;
     applyRest(c, 'short');
     expect(c.resources![resource]).toBe(0);

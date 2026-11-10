@@ -60,6 +60,62 @@ class Element {
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
+it.each([['umbral-veil', 'Umbral Veil', 'rest'], ['dark-army', 'Dark Army', 'long rest']])(
+  'shows and refreshes the host-owned use counter for %s', async (id, name, per) => {
+    const body = new Element('body');
+    vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag),
+      createElementNS: (_namespace: string, tag: string) => new Element(tag),
+      addEventListener: () => {}, removeEventListener: () => {} });
+    vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+    vi.stubGlobal('requestAnimationFrame', () => {});
+    const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+    const c = emptyCharacter('Caster');
+    c.mancer = { done: true };
+    c.loadout = [{ name, level: 8, domain: 'Dread', type: 'Spell', recall: 1, text: '',
+      automation: catalog.entries.find(card => card.id === id)!.automation }];
+    const bus = new SheetBus();
+    const root = renderSheetView({ character: c, bus, onRoll: () => true }) as unknown as Element;
+    await root.querySelectorAll('button').find(b => b.text() === 'Domain Cards')!.click();
+    expect(root.text()).toContain(`1/1 per ${per}`);
+    c.usage[`card:${name}`] = { used: 1, per: id === 'dark-army' ? 'longRest' : 'rest' };
+    bus.notify(false);
+    await Promise.resolve();
+    expect(root.text()).toContain(`0/1 per ${per}`);
+    expect(root.text()).not.toContain(`1/1 per ${per}`);
+  });
+
+it('opens the same Spellcast-trait Hideous Retribution reaction from its card and chat bus', async () => {
+  const body = new Element('body');
+  vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag),
+    addEventListener: () => {}, removeEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+  const c = emptyCharacter('Caster');
+  c.mancer = { done: true };
+  c.traits.find(t => t.name === 'Instinct')!.spellcast = true;
+  c.traits.find(t => t.name === 'Instinct')!.mod = 3;
+  c.loadout = [{ name: 'Hideous Retribution', level: 2, domain: 'Dread', type: 'Spell', recall: 2, text: '',
+    automation: catalog.entries.find(card => card.id === 'hideous-retribution')!.automation }];
+  const bus = new SheetBus();
+  const roll = vi.fn((_request: RollRequest) => true);
+  const root = renderSheetView({ character: c, bus, onRoll: roll }) as unknown as Element;
+  await root.querySelectorAll('button').find(b => b.text() === 'Domain Cards')!.click();
+  expect(root.querySelectorAll('button').some(b => b.text().includes('Successful reaction'))).toBe(false);
+  await root.querySelectorAll('button').find(b => b.text() === 'Hideous Retribution reaction')!.click();
+  const submit = async () => {
+    await body.querySelectorAll('button').filter(b => b.text() === 'Roll to chat').at(-1)!.click();
+    const request = roll.mock.calls.at(-1)![0] as unknown as RollRequest;
+    expect(request.source?.split(',')).toEqual(expect.arrayContaining(['reaction', 'spellcast', 'trait:Instinct', 'featureAction:card:Hideous Retribution:reaction']));
+    expect(request.source?.split(',')).not.toContain('action');
+    expect(request.contributions).toContainEqual({ label: 'Instinct trait', expression: '3' });
+  };
+  await submit();
+  expect(bus.featureAction?.('Hideous Retribution', 'reaction')).toBe(true);
+  await submit();
+});
+
 it('sends the selected Invigoration Hope amount to the host without paying or rolling locally', async () => {
   const body = new Element('body');
   vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag),

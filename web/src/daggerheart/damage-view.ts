@@ -8,7 +8,7 @@ import {
 } from './damage';
 
 /** Incoming-damage dialog: enter damage, pick mitigation, preview the HP to mark, then apply. */
-export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (summary: string, severity: number) => void, initial?: { damage: number; type: DamageType; excludeCompanionIntercept?: boolean; guard?: () => string | null },
+export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (summary: string, severity: number, incomingDamage: boolean) => void, initial?: { damage: number; type: DamageType; excludeCompanionIntercept?: boolean; guard?: () => string | null },
   commit?: (damage: NonNullable<FeatureRequest['incomingDamage']>) => Promise<void>,
   reportRoll?: (label: string, value: number) => void): void {
   const options = availableMitigations(c).filter(m => !initial?.excludeCompanionIntercept || !m.option.companionIntercept);
@@ -171,7 +171,7 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
             applied: resolved.applied.map(m => ({ key: m.key, id: m.option.id })) }, report: summary });
         else if (zoneDamage) throw new Error('Update the host to resolve Zone of Protection damage.');
         else if (resolved.applied.some(m => m.option.giveFear)) throw new Error('Update the host to grant GM Fear with this armor option.');
-        else { Object.assign(c, next); onDone(summary, resolved.negated ? 0 : resolved.final); }
+        else { Object.assign(c, next); onDone(summary, resolved.negated ? 0 : resolved.final, resolved.damage > 0 && !resolved.negated); }
         for (const m of resolved.applied.filter(m => m.option.reportRoll))
           reportRoll?.(m.option.label, (resolved.used[m.id] ?? []).reduce((sum, value) => sum + value, 0));
         close();

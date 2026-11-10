@@ -30,6 +30,23 @@ class Element {
 
 afterEach(() => vi.unstubAllGlobals());
 
+it.each([false, true])('marks ordinary damage reports for ally reactions, excluding negated damage (%s)', async negated => {
+  vi.stubGlobal('document', { createElement: (tag: string) => new Element(tag),
+    addEventListener: () => {}, removeEventListener: () => {} });
+  const c = mockCharacter();
+  c.heritage = []; c.loadout = []; c.inventory = []; c.activeWeapons = []; c.features = [];
+  c.activeArmor = undefined;
+  c.effects = negated ? [{ id: 'mist', name: 'Mist', kind: 'buff', mitigation: [
+    { id: 'immune', label: 'Physical immunity', passive: true, negate: true },
+  ] }] : [];
+  const root = new Element('root');
+  const done = vi.fn();
+  openDamageDialog(root as unknown as HTMLElement, c, done, { damage: 12, type: 'physical' });
+  await root.all(e => e.tag === 'button' && e.text === 'Apply')[0].onclick!();
+  expect(done).toHaveBeenCalledOnce();
+  expect(done.mock.calls[0][2]).toBe(!negated);
+});
+
 it.each(['commit', 'missing', 'rejected'] as const)('commits Zone of Protection through the host without other special mitigation (%s)', async mode => {
   vi.stubGlobal('document', { createElement: (tag: string) => new Element(tag),
     addEventListener: () => {}, removeEventListener: () => {} });

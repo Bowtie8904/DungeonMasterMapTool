@@ -2399,8 +2399,15 @@ public final class OnlineSessionServer {
                 if (!damage.path("fixed").asBoolean()) {
                     if (!definition.path("hostOwned").asBoolean())
                         throw new IllegalArgumentException("Use the feature damage dialog for this reaction.");
-                    int proficiency = CharacterSheetRules.proficiencyTotal(sourceSheet, c.getFear());
-                    expression = expression.replaceAll("\\d*d(\\d+)", proficiency + "d$1");
+                    boolean spellcast = "spellcast".equals(damage.path("count").asText());
+                    int count = Math.max(0, spellcast ? CharacterSheetRules.spellcastTotal(sourceSheet, c.getFear())
+                            : CharacterSheetRules.proficiencyTotal(sourceSheet, c.getFear()));
+                    var matcher = java.util.regex.Pattern.compile("(\\d*)d(\\d+)").matcher(expression);
+                    expression = matcher.replaceAll(match -> {
+                        int dice = spellcast && !match.group(1).isEmpty()
+                                ? Math.multiplyExact(count, Integer.parseInt(match.group(1))) : count;
+                        return dice == 0 ? "0" : dice + "d" + match.group(2);
+                    });
                 }
                 damageRoll = DiceRoller.roll(expression, config.maxDice(), diceRandom);
             }
@@ -2745,7 +2752,8 @@ public final class OnlineSessionServer {
             if (damageRoll != null) {
                 benefitReport = featureRollMessage(sourceActor, source, actionLabel, damageRoll);
                 String damageType = definition.path("damage").path("type").asText("physical");
-                benefitReport.put("source", "magic".equals(damageType) ? "damage,magicdamage" : "damage");
+                benefitReport.put("source", ("magic".equals(damageType) ? "damage,magicdamage" : "damage")
+                        + ",featureAction:" + key + ":" + actionId);
                 benefitReport.putObject("featureRoll").put("name", reportSource).put("result", damageRoll.total())
                         .put("consequence", damageType + " damage. " + definition.path("description").asText(""));
             }
@@ -2986,6 +2994,8 @@ public final class OnlineSessionServer {
         if (fearGrant > 0) report += "\nOctarine Brace: gave the GM " + fearGrant + " Fear.";
         ObjectNode message = chatMessage(actor.getOwnerId(), actor.getName(), null, report);
         message.put("actorId", actor.getId());
+        message.put("incomingDamage", result.path("damage").asInt(input.path("damage").asInt()) > 0
+                && !result.path("negated").asBoolean());
         int fear = campaign.getFear() + fearGrant;
         normalizeDeathChanges(changed);
         for (ObjectNode sheet : changed.values()) sheet.put("featureRevision", sheet.path("featureRevision").asLong() + 1);
@@ -4286,6 +4296,9 @@ public final class OnlineSessionServer {
             throw new IllegalArgumentException("This feature only applies to another character's roll.");
         String source = roll.path("source").asText("");
         List<String> tags = List.of(source.split(","));
+        if (trigger.has("damageSource") && (!tags.contains("damage")
+                || !trigger.path("damageSource").asText().equals(roll.path("rollSource").path("name").asText())))
+            throw new IllegalArgumentException("This feature requires its own damage result.");
         if (trigger.has("containsDie") && !containsNumber(roll.path("rolls"), trigger.path("containsDie").asInt()))
             throw new IllegalArgumentException("This roll has no qualifying die.");
         if (trigger.path("deathrunResult").asBoolean() && !roll.path("deathrun").isObject())
@@ -4596,6 +4609,7 @@ public final class OnlineSessionServer {
             if (text.matches("\\d*d\\d+(?:[+-]\\d+)?"))
                 return DiceRoller.roll(text, config.maxDice(), diceRandom).total();
             if ("@level".equals(text)) return Math.max(1, sheet.path("level").asInt(1));
+            if ("@fear".equals(text)) return campaign.getFear();
             if ("@proficiency".equals(text)) return Math.max(0, sheet.path("proficiency").path("on").asInt());
             if ("@total_proficiency".equals(text)) return CharacterSheetRules.proficiencyTotal(sheet, campaign.getFear());
             if (text.startsWith("@total_")) {
@@ -6101,6 +6115,11 @@ public final class OnlineSessionServer {
             ObjectNode out = chatMessage(client.playerId, client.playerName, to, text);
             ObjectNode rollSource = rollSource(msg);
             if (rollSource != null) out.set("rollSource", rollSource);
+            if (msg.path("incomingDamage").asBoolean()) {
+                Campaign.Actor actor = ownedActor(client.playerId, msg.path("actorId").asText());
+                out.put("actorId", actor.getId());
+                out.put("incomingDamage", true);
+            }
             if (msg.has("restDice")) {
                 Campaign.Actor actor = ownedActor(client.playerId, msg.path("actorId").asText());
                 if (to != null || !text.startsWith("SHORT REST\n") || !msg.path("restDice").isArray() || msg.path("restDice").size() > 100)
@@ -6238,17 +6257,22 @@ public final class OnlineSessionServer {
         out.set("breakdown", details);
     }
 
-    private static boolean isSmiteLabel(String label) {
-        return "Smite".equals(label) || label.startsWith("Smite:");
+    private static boolean isDoublingLabel(String label) {
+        return "Smite".equals(label) || label.startsWith("Smite:")
+                || "Invoke Torment".equals(label) || label.startsWith("Invoke Torment:");
     }
 
     private ResolvedDice resolveDice(JsonNode msg) {
-        boolean smite = msg.path("expression").asText().matches("^\\(.*\\)\\*2$")
+        boolean doubled = msg.path("expression").asText().matches("^\\(.*\\)\\*2$")
                 && msg.path("contributions").isArray()
                 && java.util.stream.StreamSupport.stream(msg.path("contributions").spliterator(), false)
                 .anyMatch(part -> java.util.stream.StreamSupport.stream(part.path("notes").spliterator(), false)
-                        .anyMatch(note -> isSmiteLabel(note.path("label").asText())));
-        if (smite) {
+                        .anyMatch(note -> isDoublingLabel(note.path("label").asText())));
+        if (doubled) {
+            String label = java.util.stream.StreamSupport.stream(msg.path("contributions").spliterator(), false)
+                    .flatMap(part -> java.util.stream.StreamSupport.stream(part.path("notes").spliterator(), false))
+                    .map(note -> note.path("label").asText()).filter(OnlineSessionServer::isDoublingLabel)
+                    .findFirst().orElseThrow().startsWith("Invoke Torment") ? "Invoke Torment" : "Smite";
             ObjectNode base = msg.deepCopy();
             base.put("expression", msg.path("expression").asText().replaceFirst("^\\((.*)\\)\\*2$", "$1"));
             ArrayNode contributions = (ArrayNode) base.path("contributions");
@@ -6256,25 +6280,25 @@ public final class OnlineSessionServer {
                 JsonNode part = contributions.get(i);
                 String expression = part.path("expression").asText();
                 if (!expression.matches("^\\(.*\\)\\*2$"))
-                    throw new IllegalArgumentException("Smite must double every damage contribution.");
+                    throw new IllegalArgumentException(label + " must double every damage contribution.");
                 String single = expression.replaceFirst("^\\((.*)\\)\\*2$", "$1");
-                if ("0".equals(single) && isSmiteLabel(part.path("label").asText())) {
+                if ("0".equals(single) && isDoublingLabel(part.path("label").asText())) {
                     contributions.remove(i);
                     continue;
                 }
                 ((ObjectNode) part).put("expression", single);
                 if (part.path("notes") instanceof ArrayNode notes)
                     for (int j = notes.size() - 1; j >= 0; j--)
-                        if (isSmiteLabel(notes.get(j).path("label").asText())) notes.remove(j);
+                        if (isDoublingLabel(notes.get(j).path("label").asText())) notes.remove(j);
             }
             ResolvedDice resolved = resolveDice(base);
             List<DiceRoller.Detail> details = resolved.breakdown() == null
                     ? new ArrayList<>(List.of(new DiceRoller.Detail("Damage", resolved.result().expression(),
                     resolved.result().rolls(), resolved.result().total()))) : new ArrayList<>(resolved.breakdown());
-            details.add(new DiceRoller.Detail("Smite", String.valueOf(resolved.result().total()), List.of(), resolved.result().total()));
+            details.add(new DiceRoller.Detail(label, String.valueOf(resolved.result().total()), List.of(), resolved.result().total()));
             List<ArrayNode> notes = new ArrayList<>(resolved.notes());
             while (notes.size() < details.size()) notes.add(MAPPER.createArrayNode());
-            notes.getLast().addObject().put("label", "Smite").put("impact", "Doubled the entire damage total, including all bonuses.");
+            notes.getLast().addObject().put("label", label).put("impact", "Doubled the entire damage total, including all bonuses.");
             return new ResolvedDice(new DiceRoller.Result("(" + resolved.result().expression() + ")*2", resolved.result().rolls(),
                     Math.multiplyExact(resolved.result().total(), 2)), details, notes);
         }

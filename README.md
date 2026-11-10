@@ -16,6 +16,14 @@ The **Online Play** tab (next to DM Link) lets you host an optional, DM-controll
 who join from a browser. **It is not DM control** (that is DM Link below); players get restricted access.
 Nothing starts until you click **Start online session**, so offline play and the second-screen view are unchanged.
 
+- **Dread automation:** Follow-up payments, damage and healing appear on the relevant chat results instead
+  of cluttering spell cards. Hideous Retribution offers Spellcast-trait reactions on its card and allied
+  damage reports. Spectral Mist shares a physical-immunity buff; it expires on an action roll or scene end.
+  Umbral Veil expires with the scene, Dark Army ends at zero fiends, and Avatar of Terror preselects
+  Fear-scaled damage and Hope-paid action maintenance. Target HP, range and spotlight Hope remain table-confirmed.
+  Umbral Veil and Dark Army show their remaining rest/long-rest activations independently of token spending;
+  Hideous Retribution reactions also appear on ordinary allied damage reports without special mitigation.
+
 - **Sheet responsiveness:** Online Play reuses unchanged catalog/sheet data and coalesces resource
   refreshes instead of repeatedly parsing the same data for each update. Optimizations preserve
   host validation, cross-character effects, stale-edit conflicts and transaction recovery.

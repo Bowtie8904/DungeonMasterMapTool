@@ -746,9 +746,26 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   are refreshed from the catalog without overwriting existing customized option ids.
   Gifted applies to action/reaction/damage, and empty Feed tokens impose disadvantage on action/reaction;
   Feed's Fear d20 remains action-only. Other reaction-related content (Mucin of Slipperiness restraint resistance,
-  Wraith Trap's stored spirits/psychic condition, Repudiate, Counterspell, Hideous Retribution and Attack of Opportunity)
+  Wraith Trap's stored spirits/psychic condition, Repudiate, Counterspell and Attack of Opportunity)
   remains manual where no roll automation is declared; use the relevant trait's Reaction mode.
   No new required message field or compatibility-version change; old rolls without `reaction` retain their behavior.
+  Hideous Retribution declares an `actionRoll` with `trait: "spellcast", reaction: true`.
+  Its `incomingDamage`/ally trigger opens that same card action on host-tagged incoming-damage chat reports;
+  its Stress-paid damage is offered only on the matching `featureAction` reaction result.
+  Ordinary damage reports also send `incomingDamage: true` and `actorId`; the host validates actor ownership
+  before forwarding the marker. Negated damage is not marked. Umbral Veil and Dark Army use card-level
+  `uses` matching the host's persisted usage keys, with `usesSource: false` on token-spending controls.
+- **Dread follow-ups and effects:** `selectAmount` with `resource: "hp", heal: true, min: 0`
+  selects adversary-marked HP without charging a resource and clears that many caster HP (respecting healing
+  floors). A `damageSource` trigger must match the damage result's `rollSource.name`; `usesSource: false`
+  allows Siphon Essence healing after the long-rest damage use. `endOnAction: true` removes an effect
+  after a committed action, not reactions or damage; combine with `until: "scene"` for Spectral Mist.
+  Its passive physical `negate` mitigation applies equally to the caster and chat-benefit recipients.
+  `whileEffect` binds Umbral Veil tokens to its scene buff; `tokenResource` removes Dark Army at zero fiends.
+  Host-owned damage with `count: "spellcast"` uses current total Spellcast instead of Proficiency, preserving
+  the flat bonus once. Damage roll options can use `@fear` in their dice count (Avatar of Terror);
+  zero Fear adds no dice. Invoke Torment uses the same no-reroll, separately attributed doubled-total
+  breakdown as Smite. These are additive catalog/Online Play fields; no settings or DM Link version change.
 - **rollOptions**: optional array of `{id, label, roll, value?, dice?, diceByLevel?, cost?, steps?, description?,
   uses?, consumeItem?, weapon?, effect?}`. `effect` (`{name, kind, until}`) is started by the first roll that ticks
   the option (paying its cost); while that effect is active the option is pre-ticked and free. Entries that support

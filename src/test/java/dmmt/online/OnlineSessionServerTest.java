@@ -34,6 +34,209 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OnlineSessionServerTest {
+    @Test
+    void dreadOrdinaryDamageChatRetainsOwnedActorMarkerAndRejectsOtherActors() throws Exception {
+        splendorActor("damaged");
+        splendorActor("other");
+        allyCookie("other-player");
+        campaign.actor("other").setOwnerId("other-player");
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            ObjectNode report = MAPPER.createObjectNode().put("type", "chat").put("actorId", "damaged")
+                    .put("text", "Took physical damage.").put("incomingDamage", true);
+            ws.sendText(report.toString(), true).join();
+            JsonNode delivered = inbox.next("chat");
+            assertEquals("damaged", delivered.path("actorId").asText());
+            assertTrue(delivered.path("incomingDamage").asBoolean());
+            report.put("actorId", "other");
+            ws.sendText(report.toString(), true).join();
+            assertFalse(inbox.next("error").path("message").asText().isBlank());
+            report.put("actorId", "damaged").remove("incomingDamage");
+            ws.sendText(report.toString(), true).join();
+            assertFalse(inbox.next("chat").has("incomingDamage"));
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void dreadDarkArmyRequiresASuccessAndDireStrikeRemovesFearOnlyFromWeaponDamage() throws Exception {
+        ObjectNode sheet = splendorActor("caster", "Dark Army", "Dire Strike");
+        sheet.putArray("activeWeapons").addObject().put("name", "Sword").put("slot", "Primary")
+                .put("damage", "d8").put("trait", "Strength").put("damageType", "phys");
+        store.saveSheet(campaign.getId(), "caster", sheet.toString());
+        campaign.setFear(3);
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            long seed = 0;
+            while (true) {
+                var random = new java.util.Random(seed);
+                if (random.nextInt(12) != random.nextInt(12)) break;
+                seed++;
+            }
+            diceSeed(seed);
+            JsonNode failed = splendorRoll(ws, inbox, "caster", "Dark Army", "2d12-30");
+            assertEquals(400, featureHttp(cookie, splendorRequest("caster", "Dark Army", "summon", failed)).statusCode());
+            JsonNode cast = splendorRoll(ws, inbox, "caster", "Dark Army", "2d12+30");
+            var response = featureHttp(cookie, splendorRequest("caster", "Dark Army", "summon", cast));
+            assertEquals(200, response.statusCode(), response.body());
+            ObjectNode summoned = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "caster"));
+            assertEquals(8, summoned.path("resources").path("fiends").asInt());
+            assertEquals("Dark Army", summoned.path("effects").path(0).path("name").asText());
+            assertEquals(1, summoned.path("usage").path("card:Dark Army").path("used").asInt());
+            assertEquals(400, featureHttp(cookie, splendorRequest("caster", "Dark Army", "summon", cast)).statusCode());
+            summoned.withObject("/resources").put("fiends", 0);
+            WitchEffects.normalize(summoned, null);
+            assertTrue(summoned.path("effects").isEmpty());
+            ObjectNode damage = MAPPER.createObjectNode().put("type", "roll").put("actorId", "caster")
+                    .put("source", "damage").put("expression", "2d8").put("weapon", "Sword");
+            ws.sendText(damage.toString(), true).join();
+            JsonNode rolled = inbox.next("roll");
+            response = featureHttp(cookie, splendorRequest("caster", "Dire Strike", "use", rolled));
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals(2, campaign.getFear());
+            assertEquals(5, MAPPER.readTree(store.loadSheet(campaign.getId(), "caster")).path("hope").path("on").asInt());
+            assertEquals(400, featureHttp(cookie, splendorRequest("caster", "Dire Strike", "use", rolled)).statusCode());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void dreadImmediateDamageUsesSpellcastAndDarkfireChargesTheSelectedPositiveHope() throws Exception {
+        ObjectNode sheet = splendorActor("dread", "Summon Horror", "Darkfire");
+        String cookie = cookie();
+        var response = featureHttp(cookie, splendorRequest("dread", "Summon Horror", "use", null));
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode horror = dmMessages.stream().filter(m -> m.path("source").asText().contains("featureAction:card:Summon Horror:use"))
+                .findFirst().orElseThrow();
+        int count = CharacterSheetRules.spellcastTotal(sheet, campaign.getFear());
+        assertEquals(count + "d8+1", horror.path("expression").asText());
+        assertEquals(count, horror.path("rolls").size());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "dread")).path("stress").path("on").asInt());
+        assertEquals(400, featureHttp(cookie, splendorRequest("dread", "Summon Horror", "use", null)).statusCode());
+        ObjectNode fire = splendorRequest("dread", "Darkfire", "use", null).put("amount", 0);
+        assertEquals(400, featureHttp(cookie, fire).statusCode());
+        assertEquals(6, MAPPER.readTree(store.loadSheet(campaign.getId(), "dread")).path("hope").path("on").asInt());
+        fire.put("amount", 3);
+        response = featureHttp(cookie, fire);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode darkfire = dmMessages.stream().filter(m -> m.path("source").asText().contains("featureAction:card:Darkfire:use"))
+                .findFirst().orElseThrow();
+        assertEquals(count + "d8+6", darkfire.path("expression").asText());
+        assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "dread")).path("hope").path("on").asInt());
+    }
+
+    @Test
+    void dreadSiphonHealingIsBoundToDamageAndRemainsAvailableAfterItsLongRestUse() throws Exception {
+        ObjectNode sheet = splendorActor("siphon", "Siphon Essence");
+        sheet.withObject("/usage").putObject("card:Siphon Essence").put("used", 1).put("per", "longRest");
+        store.saveSheet(campaign.getId(), "siphon", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            ObjectNode input = MAPPER.createObjectNode().put("type", "roll").put("actorId", "siphon")
+                    .put("expression", "2d12+4").put("source", "damage,magicdamage,spelldamage");
+            input.putObject("rollSource").put("name", "Siphon Essence").put("text", "").put("source", "Dread");
+            ws.sendText(input.toString(), true).join();
+            JsonNode roll = inbox.next("roll");
+            ObjectNode heal = splendorRequest("siphon", "Siphon Essence", "heal", roll).put("amount", 2);
+            var response = featureHttp(cookie, heal);
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "siphon")).path("hp").path("on").asInt());
+            assertEquals(400, featureHttp(cookie, heal).statusCode());
+            input.withObject("/rollSource").put("name", "Another Spell");
+            ws.sendText(input.toString(), true).join();
+            heal.set("roll", splendorRequest("siphon", "Siphon Essence", "heal", inbox.next("roll")).path("roll"));
+            assertEquals(400, featureHttp(cookie, heal).statusCode());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void dreadHideousRetributionPaysStressOnlyAfterItsReactionAndDamnationRollsSelectedStress() throws Exception {
+        ObjectNode sheet = splendorActor("caster", "Hideous Retribution", "Damnation");
+        sheet.putObject("proficiency").put("on", 2);
+        store.saveSheet(campaign.getId(), "caster", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            ObjectNode input = MAPPER.createObjectNode().put("type", "roll").put("kind", "duality").put("actorId", "caster")
+                    .put("expression", "2d12+30").put("source", "reaction,spellcast,card:Hideous Retribution,featureAction:card:Hideous Retribution:reaction");
+            ws.sendText(input.toString(), true).join();
+            JsonNode reaction = inbox.next("roll");
+            assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "caster")).path("stress").path("on").asInt());
+            var response = featureHttp(cookie, splendorRequest("caster", "Hideous Retribution", "damage", reaction));
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "caster")).path("stress").path("on").asInt());
+            JsonNode damage = dmMessages.stream().filter(m -> m.path("source").asText().contains("featureAction:card:Hideous Retribution:damage"))
+                    .findFirst().orElseThrow();
+            assertEquals("2d6", damage.path("expression").asText());
+            inbox.next("roll");
+            JsonNode cast = splendorRoll(ws, inbox, "caster", "Damnation", "2d12+30");
+            response = featureHttp(cookie, splendorRequest("caster", "Damnation", "damage", cast).put("amount", 3));
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "caster")).path("stress").path("on").asInt());
+            assertTrue(dmMessages.stream().anyMatch(m -> m.path("expression").asText().equals("3d20")));
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void dreadVeilAndMistEndWithSceneAndMistAlsoEndsOnAnAction() throws Exception {
+        splendorActor("caster", "Umbral Veil", "Spectral Mist");
+        splendorActor("ally");
+        String ally = allyCookie("mist-player");
+        campaign.actor("ally").setOwnerId("mist-player");
+        campaign.setFear(4);
+        String cookie = cookie();
+        var response = featureHttp(cookie, splendorRequest("caster", "Umbral Veil", "cast", null));
+        assertEquals(200, response.statusCode(), response.body());
+        assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "caster")).path("resources").path("veil").asInt());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "caster")).path("usage").path("card:Umbral Veil").path("used").asInt());
+        assertEquals(400, featureHttp(cookie, splendorRequest("caster", "Umbral Veil", "cast", null)).statusCode());
+        response = featureHttp(cookie, splendorRequest("caster", "Spectral Mist", "use", null));
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode message = dmMessages.stream().filter(m -> m.path("actionBenefits").isObject()).findFirst().orElseThrow();
+        ObjectNode claim = splendorRequest("ally", "Spectral Mist", "claim", message).put("benefitId", "mist");
+        var claimed = featureHttp(ally, claim);
+        assertEquals(200, claimed.statusCode(), claimed.body());
+        assertTrue(MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")).path("effects").path(0).path("endOnAction").asBoolean());
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(ally, inbox);
+        try {
+            splendorRoll(ws, inbox, "ally", "Spectral Mist", "2d12");
+            assertTrue(MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")).path("effects").isEmpty());
+            assertNull(server.endScene());
+            JsonNode ended = MAPPER.readTree(store.loadSheet(campaign.getId(), "caster"));
+            assertEquals(0, ended.path("resources").path("veil").asInt());
+            assertTrue(ended.path("effects").isEmpty());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void dreadInvokeTormentAttributesTheAddedTotalWithoutRerollingDice() throws Exception {
+        splendorActor("torment", "Invoke Torment");
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            ObjectNode input = MAPPER.createObjectNode().put("type", "roll").put("actorId", "torment")
+                    .put("source", "damage").put("expression", "(2d6+3+0)*2");
+            var parts = input.putArray("contributions");
+            parts.addObject().put("label", "Weapon").put("expression", "(2d6+3)*2");
+            parts.addObject().put("label", "Invoke Torment: target has full Stress").put("expression", "(0)*2");
+            for (JsonNode part : parts) ((ObjectNode) part).putArray("notes").addObject()
+                    .put("label", "Invoke Torment: target has full Stress").put("impact", "Double the rolled damage total");
+            ws.sendText(input.toString(), true).join();
+            JsonNode roll = inbox.next("roll");
+            assertEquals(2, roll.path("rolls").size());
+            assertEquals(2, roll.path("breakdown").size());
+            int base = roll.path("breakdown").path(0).path("total").asInt();
+            assertEquals("Invoke Torment", roll.path("breakdown").path(1).path("label").asText());
+            assertEquals(base, roll.path("breakdown").path(1).path("total").asInt());
+            assertEquals(base * 2, roll.path("total").asInt());
+        } finally { ws.abort(); }
+    }
+
     private ObjectNode splendorActor(String id, String... cards) throws Exception {
         compendiumDir = Path.of("dmmap-daggerheart");
         campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId()).build());
@@ -1700,6 +1903,7 @@ class OnlineSessionServerTest {
         var response = featureHttp(cookie, body);
         assertEquals(200, response.statusCode(), response.body());
         assertEquals(fear + 1, campaign.getFear());
+        assertTrue(dmMessages.stream().anyMatch(m -> m.path("actorId").asText().equals("braced") && m.path("incomingDamage").asBoolean()));
         assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "braced")).path("stress").path("on").asInt());
         assertEquals(400, featureHttp(cookie, body).statusCode());
         assertEquals(fear + 1, campaign.getFear());

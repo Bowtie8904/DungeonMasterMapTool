@@ -14,6 +14,30 @@ class ArcanaSageRulesTest {
     private ObjectNode object(String json) throws Exception { return (ObjectNode) JSON.readTree(json); }
 
     @Test
+    void healingUsesTargetMarkedHpWithoutSpendingHpOrLimitingSelectionToOwnWounds() throws Exception {
+        ObjectNode sheet = object("{\"hp\":{\"on\":1,\"slots\":6}}");
+        ObjectNode definition = object("{\"selectAmount\":{\"resource\":\"hp\",\"min\":0,\"heal\":true}}");
+        ObjectNode chosen = ArcanaSageRules.selectAmount(definition, object("{\"amount\":4}"), sheet);
+        assertFalse(chosen.has("cost"));
+        assertEquals(4, chosen.path("steps").path(0).path("amount").asInt());
+        assertEquals("clear", chosen.path("steps").path(0).path("op").asText());
+        assertEquals(0, ArcanaSageRules.selectAmount(definition, object("{\"amount\":0}"), sheet).path("selectedAmount").asInt());
+        for (String invalid : List.of("-1", "1.5", "\"2\"", "null", "2147483648"))
+            assertThrows(IllegalArgumentException.class, () -> ArcanaSageRules.selectAmount(definition, object("{\"amount\":" + invalid + "}"), sheet));
+        assertEquals(1, sheet.path("hp").path("on").asInt());
+    }
+
+    @Test
+    void mistEndsOnAnActionButNotReactionOrDamage() throws Exception {
+        ObjectNode sheet = object("{\"effects\":[{\"id\":\"mist\",\"name\":\"Spectral Mist\",\"endOnAction\":true}]}");
+        for (String source : List.of("reaction,spellcast", "damage,magicdamage"))
+            assertTrue(ArcanaSageRules.finishForms(sheet, object("{\"source\":\"" + source + "\"}")).isEmpty());
+        assertEquals(List.of("Spectral Mist ended."),
+                ArcanaSageRules.finishForms(sheet, object("{\"source\":\"action,trait:Agility\"}")));
+        assertTrue(sheet.path("effects").isEmpty());
+    }
+
+    @Test
     void amountsAreBoundedWholeNumbersAndDoNotMutateTheCatalogOrSheet() throws Exception {
         ObjectNode sheet = object("""
                 {"hope":{"on":4,"slots":6},"stress":{"on":2,"slots":6},"resources":{"fane":3}}

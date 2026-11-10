@@ -33,6 +33,10 @@ Desktop tool for tabletop dungeon masters that:
 
 ## 3) Current Implementation Status
 
+- **Dread usage and ally-reaction corrections:** Refresh usage labels with sheet resource updates. Track Umbral Veil activation and Dark Army summoning at the card level, matching existing host usage keys; token spending never consumes those limits, and unsuccessful Spellcast attempts do not consume Dark Army. Tag ordinary incoming-damage chat reports with owned actor metadata so allied Hideous Retribution reactions appear without requiring special mitigation. Preserve the existing local damage and host-owned special-mitigation paths.
+
+- **Dread online automation feedback:** Blighting Strike criticals use Hope damage. Umbral Veil tokens expire with the scene, without a clear control. Hideous Retribution offers Spellcast-trait reactions on its card and allied incoming-damage reports, then Stress-paid damage on the reaction result. Siphon Essence damage offers explicit target-marked-HP healing. Terrify, Wall of Hunger, Dark Army and Damnation keep only Spellcast on their cards and put follow-up actions on the appropriate results. Dire Strike is a weapon-damage Hope payment removing GM Fear; Jump Scare is a magic-damage action. Summon Horror and positive-Hope-quantity Darkfire roll damage directly. Spectral Mist grants physical immunity to the caster and claiming allies, expiring on an action roll or scene end (solid-object traversal remains manually ended). Dark Army grants a fiend-token buff ending at zero. Avatar of Terror mirrors Force of Nature's maintained form with preselected Fear-scaled damage and Hope-paid action options; spotlight Hope remains manual. Invoke Torment exposes its added damage in the breakdown. Use additive automation metadata and existing feature/roll paths, retaining existing remote clients/hosts without settings or compatibility-version changes.
+
 - **Visible sheet layout stability:** Position visible feature/domain cards synchronously after a sheet rebuild and before restoring scroll, so edits and chat-producing actions cannot briefly display overlapping, full-width feature text. Keep resize/layout notifications coalesced and hidden/minimized sheets deferred. Browser-only regression fix; no settings or compatibility-version changes.
 
 - **Online Play sheet performance:** Reuse revision-aware parsed catalogs and stored-sheet data without sharing mutable transaction copies. Avoid repeated catalog hydration and party reconciliation within one action; preserve all linked/offline/disabled actor rules, migration-on-read behavior, revision conflicts and crash recovery. Keep campaign mutations serialized until cross-actor transactions can safely use narrower locking. Make routine history appends and message lookup independent of total history size; replacements retain the original message position and identity, never become a second message at the end. Preserve legacy history files, deletions, whispers and idempotent journal recovery.
@@ -161,14 +165,14 @@ Desktop tool for tabletop dungeon masters that:
 | 4 | Arcane Reflection | Supported: Hope quantity d6 roll; reflection and redirected damage are GM-resolved. |
 | 5 | Armorer | Supported: equipped-armor modifier and rest recovery. |
 | 6 | Astral Projection | Supported: Stress payment/rest use; projection and return are manual. |
-| 7 | Avatar of Terror | Open: transformation, mandatory per-action Hope, live Fear-based damage and spotlight rewards. |
+| 7 | Avatar of Terror | Supported: maintained transformation buff, preselected Hope-paid actions and live Fear d6 damage; spotlight Hope manual. |
 | 8 | Banish | Supported: cast, host d20 pool and stored maximum; reductions/rest are manual as requested. |
 | 9 | Bare Bones | Supported: tier-specific unarmored base thresholds and current Strength Armor Score. |
 | 10 | Battle Cry | Supported: Bard-style ally Hope/Stress claims; no advantage-condition tracker. |
 | 11 | Battle Monster | Manual: existing payment; creature conditions are table-resolved. |
 | 12 | Battle-Hardened | Supported: existing death-move/use pattern. |
 | 13 | Blade-Touched | Supported: loadout-gated damage and Severe threshold modifiers. |
-| 14 | Blighting Strike | Supported: outcome-gated damage and exclusive failed-cast payment choices. |
+| 14 | Blighting Strike | Supported: Hope/critical d6+1 and Fear d10+1 damage, exclusive failed-cast payment choices. |
 | 15 | Blink Out | Supported: Difficulty 12, successful-result Hope dialog and host payment. |
 | 16 | Blood Bind | Supported: successful-cast payment and explicit later damage; spotlight duration is manual. |
 | 17 | Blood Puppet | Supported: separate control/attack casts, successful-control Hope payment, puppet damage. |
@@ -213,17 +217,17 @@ Desktop tool for tabletop dungeon masters that:
 | 56 | Crimson Adamance | Supported: existing incoming-damage mitigation. |
 | 57 | Critical Inspiration | Supported: limited Bard-style exclusive ally benefit. |
 | 58 | Cruel Precision | Supported: one preselected weapon-damage option with a current Agility/Finesse dropdown, highest selected by default. |
-| 59 | Damnation | Supported: chosen Stress d20 damage; successful target/defeat consequences manual. |
-| 60 | Dark Army | Supported: cast difficulty, summon/rest pools, quantity damage and defense. |
+| 59 | Damnation | Supported: successful-cast chat action selects Stress and rolls d20 damage; defeat consequences manual. |
+| 60 | Dark Army | Supported: success-only summoning, rest-cleared fiends, quantity damage/defense and token-bound buff. |
 | 61 | Dark Whispers | Supported: Stress-paid Spellcast; GM information manual. |
-| 62 | Darkfire | Manual: existing use/payment; target effects table-resolved. |
+| 62 | Darkfire | Supported: positive Hope quantity/scene payment and automatic Spellcast-count damage; reactions/half damage manual. |
 | 63 | Deadly Focus | Supported: limited Proficiency effect ending with the scene or manual removal. |
 | 64 | Death Grip | Supported: explicit vines damage; target Reaction (13) and restraint manual. |
 | 65 | Deathrun | Supported: paid attack option/card action, tracked first-roll weapon dice with +1 Proficiency, subsequent chosen-die removal without rerolling, exhaustion and End Run actions; movement/targets manual. |
 | 66 | Deft Deceiver | Supported: Stress-paid situational advantage selected with the roll. |
 | 67 | Deft Maneuvers | Supported: Stress/rest use; situational maneuver manual. |
 | 68 | Delerium Grasp | Supported: successful Spellcast magic damage; condition manual. |
-| 69 | Dire Strike | Manual: existing payment; target damage consequence manual. |
+| 69 | Dire Strike | Supported: weapon-damage Hope payment removes GM Fear; target-marked HP table-confirmed. |
 | 70 | Disintegration Wave | Supported: printed difficulty/use; eligible objects and targets manual. |
 | 71 | Divination | Supported: Hope/rest payment; prophecy content manual. |
 | 72 | Dread-Touched | Supported: active gate, limited Fear-pool bonus and successful Fear-prevention payment. |
@@ -259,7 +263,7 @@ Desktop tool for tabletop dungeon masters that:
 | 102 | Healing Field | Supported: shared long-rest healing choices and party claims. |
 | 103 | Healing Hands | Open: fixed cast difficulty exists; independent target long-rest limits and healing ownership. |
 | 104 | Healing Strike | Supported: Hope-paid targeted ally healing; prior adversary damage and proximity table-confirmed. |
-| 105 | Hideous Retribution | Supported: explicitly confirmed reaction, Stress-paid magic damage. |
+| 105 | Hideous Retribution | Supported: card/allied-damage Spellcast-trait reaction, then Stress-paid magic damage on its result. |
 | 106 | Hold the Line | Supported: paid manually removed stance buff; movement and narrative target restrictions manual. |
 | 107 | Hush | Supported: cast-success payment; target silencing/ending manual. |
 | 108 | Hypnotic Shimmer | Manual: limited payment; target attention manual. |
@@ -269,8 +273,8 @@ Desktop tool for tabletop dungeon masters that:
 | 112 | Inspirational Words | Supported: current-Presence long-rest pool and exclusive ally HP/Stress/Hope claims. |
 | 113 | Invigoration | Open: Hope quantity dice exist; recipient's chosen exhausted feature needs an authoritative reset selector. |
 | 114 | Invisibility | Supported: successful-cast target effect; recipient action option spends caster tokens and ends at zero. |
-| 115 | Invoke Torment | Supported: confirmed full-Stress target doubles damage; explicit qualifying-defeat Hope reward. |
-| 116 | Jump Scare | Manual: existing payment; target proximity and condition manual. |
+| 115 | Invoke Torment | Supported: confirmed full-Stress target doubles damage with separately attributed bonus; qualifying-defeat Hope manual. |
+| 116 | Jump Scare | Supported: magic-damage Stress payment; target proximity and condition manual. |
 | 117 | Know Thy Enemy | Supported: Instinct-result information Hope payment and optional Stress payment automatically removing GM Fear. |
 | 118 | Lead by Example | Supported: damage-result Stress payment and exclusive next-ally Hope/Stress claim; eligible adversary table-confirmed. |
 | 119 | Lean on Me | Supported: shared-rest self clear and one matching ally claim. |
@@ -337,18 +341,18 @@ Desktop tool for tabletop dungeon masters that:
 | 180 | Shrug It Off | Supported: existing payment and mitigation. |
 | 181 | Sigil of Retribution | Supported: level-capped d8 pool, explicit target-event award and all-dice damage spending; target identity manual. |
 | 182 | Signature Move | Supported: shared-rest Hope d20 selection and option-linked successful recovery. |
-| 183 | Siphon Essence | Supported: shared long-rest outcome-gated damage; Fear adds one die. |
+| 183 | Siphon Essence | Supported: long-rest outcome-gated damage, extra Fear die and target-marked-HP healing on its damage result. |
 | 184 | Smite | Supported: limited Hope-paid charge, doubled magic weapon damage, consumed on use. |
 | 185 | Soothing Speech | Supported: existing rest-recovery modifier. |
 | 186 | Specter of the Dark | Supported: physical immunity effect; qualifying targeting action ends it manually. |
-| 187 | Spectral Mist | Manual: existing payment; visibility/target consequences manual. |
+| 187 | Spectral Mist | Supported: caster/ally-claim physical immunity, action/scene expiry; solid-object passage ends manually. |
 | 188 | Spellcharge | Supported: automatic tokens from committed magic HP, capped at current Spellcast and reported in damage chat; quantity damage spending. |
 | 189 | Splendor-Touched | Supported: active gate, passive benefit and shared limited damage substitutions. |
 | 190 | Splintering Strike | Open: secondary-target damage sequence and shared use/result consumption. |
 | 191 | Stealth Expertise | Supported: existing stealth preparation/result pattern. |
 | 192 | Strategic Approach | Supported: current-Knowledge long-rest tokens, minimum one, existing spending options. |
 | 193 | Stunning Sunlight | Supported: per-target Hope payment and two fixed reaction-outcome damage buttons; target Reaction/condition manual. |
-| 194 | Summon Horror | Manual: Stress/scene payment; horror actions/targets manual. |
+| 194 | Summon Horror | Supported: Stress/scene payment rolls Spellcast-count d8+1 magic damage; target reaction/Stress manual. |
 | 195 | Support Tank | Supported: two ally-result actions pay the feature owner's 2 Hope and reroll the selected Duality die; range/failure table-confirmed. |
 | 196 | Swift Step | Manual: existing payment; movement manual. |
 | 197 | Tactician | Supported: Tag Team Hope d20 option; ally Experience contribution manual. |
@@ -356,7 +360,7 @@ Desktop tool for tabletop dungeon masters that:
 | 199 | Teleport | Supported: fixed difficulty and exclusive familiarity modifiers; travel manual. |
 | 200 | Tell No Lies | Manual: ordinary Spellcast; truthful speech/refusal Stress managed by GM. |
 | 201 | Tempest | Supported: three named casts with distinct successful fixed magic damage; weather/conditions manual. |
-| 202 | Terrify | Supported: target Stress die roll/report; fleeing and Fear-success Vulnerable manual. |
+| 202 | Terrify | Supported: successful-cast chat action rolls target Stress; fleeing and Fear-success Vulnerable manual. |
 | 203 | Thorn Skin | Supported: limited cast, rest-cleared tokens and mitigation. |
 | 204 | Thought Delver | Manual: existing payment; information manual. |
 | 205 | Through Your Eyes | Manual: sensory link/switching/termination; no numerical sheet benefit. |
@@ -364,7 +368,7 @@ Desktop tool for tabletop dungeon masters that:
 | 207 | Transcendent Union | Open: Hope/use payment exists; merged actors, traits and consequences need shared ownership semantics. |
 | 208 | Troublemaker | Manual: limited payment; affected target condition manual. |
 | 209 | Twilight Toll | Supported: rest-cleared token pool and quantity damage spending. |
-| 210 | Umbral Veil | Supported: existing editable resource/actions; visibility/manual duration. |
+| 210 | Umbral Veil | Supported: Fear-count tokens bound to a scene-expiring buff, with no manual clear action. |
 | 211 | Unbreakable | Supported: existing death-move action. |
 | 212 | Uncanny Disguise | Supported: single Stress-paid replacement-token disguise buff; preselected action-only token spending, ending at zero. |
 | 213 | Uncanny Focus | Supported: limited Proficiency effect; additional target HP/GM Fear manual. |
@@ -382,7 +386,7 @@ Desktop tool for tabletop dungeon masters that:
 | 225 | Vitality Manipulation | Supported: ally-cast advantage, success-result Stress payment and outcome-dependent target Stress report. |
 | 226 | Voice of Dread | Manual: ordinary Spellcast; target Stress/restraint handled by GM. |
 | 227 | Voice of Reason | Supported: situational social advantage and full-Stress extra damage die. |
-| 228 | Wall of Hunger | Supported: fixed difficulty/payment; wall geometry and targets manual. |
+| 228 | Wall of Hunger | Supported: fixed difficulty with success-only chat payment; wall geometry and targets manual. |
 | 229 | Wall Walk | Manual: existing payment; movement manual. |
 | 230 | Weave the Flesh | Supported: shared-rest HP payment and exclusive ally recovery/paid upgrade. |
 | 231 | Whirlwind | Supported: paid attack chat action; multi-target consequences manual. |

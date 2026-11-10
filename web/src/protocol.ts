@@ -191,6 +191,7 @@ export interface Actor {
 }
 
 export interface ChatMessage {
+  incomingDamage?: boolean;
   id: string | number;
   ts: number;
   fromId: string;

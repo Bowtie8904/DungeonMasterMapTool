@@ -111,7 +111,7 @@ export interface SheetViewOptions {
   onRest?: (rest: NonNullable<import('../api').FeatureRequest['rest']>) => Promise<void>;
   restActors?: () => import('../protocol').Actor[];
   /** Posts a short message (action results) to the shared chat. */
-  onLog?: (text: string, rollSource?: RollSource, restDice?: import('./rest').RestDie[]) => void;
+  onLog?: (text: string, rollSource?: RollSource, restDice?: import('./rest').RestDie[], incomingDamage?: boolean) => void;
   onFeature?: (key: string, actionId: string, amount?: number) => Promise<void>;
   onCopycat?: (key: string, actionId: string) => Promise<void>;
   onDamageTaken?: (severity: number) => Promise<void>;
@@ -446,6 +446,12 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     });
   });
   if (opts.bus) opts.bus.featureAction = (name, id) => {
+    const card = activeCardSources(c).find(source => source.name === name);
+    const cardAction = card?.auto?.actions?.find(a => a.id === id);
+    if (card && cardAction && card.auto) {
+      actionButton(card.key, card.auto, cardAction, card.name, {}).click();
+      return true;
+    }
     const feature = activeFeatures(c).find(f => f.name === name);
     const action = feature?.automation?.actions?.find(a => a.id === id);
     if (!feature || !action || !feature.automation) return false;
@@ -463,6 +469,15 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   /** Re-evaluates rendered action buttons after a resource changes without re-rendering the sheet. */
   let actionRefreshers: Array<() => void> = [];
   const refreshActions = () => actionRefreshers.forEach((fn) => fn());
+  function usageCounter(key: string, a: Automation): HTMLElement {
+    const counter = el('span', { class: 'muted', style: 'font-size:11.5px' });
+    const refresh = () => {
+      counter.textContent = `${usesLeft(c, key, a)}/${usesMax(c, key, a)} per ${a.uses!.per.replace(/([A-Z])/g, ' $1').toLowerCase()}`;
+    };
+    refresh();
+    actionRefreshers.push(refresh);
+    return counter;
+  }
   function actionRow(key: string, a: Automation | undefined, label: string, hooks: { extraBlock?: () => string | null; after?: () => void } = {}): HTMLElement | null {
     const actions = sheetActions(a);
     if (!actions.length && (!a?.resources?.length || a.classResourceOnly) && !a?.effectCounters?.length && !a?.dicePool && !a?.uses) return null;
@@ -475,13 +490,12 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       ? el('span', { class: 'row actions', ariaLabel: `${label} limited actions` }) : row;
     for (const action of actions.filter(action => !action.requiresFeature || c.features.some(f => f.name === action.requiresFeature))) {
       const button = actionButton(key, a!, action, label, hooks);
-      const remaining = action.uses ? usesLeft(c, `${key}:action:${action.id}`, { uses: action.uses }) : null;
       (action.usesSource === false ? row : sharedUses).append(action.uses
-        ? el('span', { class: 'row' }, button, el('span', { class: 'muted', style: 'font-size:11.5px' }, `${remaining}/${action.uses.max} per ${action.uses.per.replace(/([A-Z])/g, ' $1').toLowerCase()}`))
+        ? el('span', { class: 'row' }, button, usageCounter(`${key}:action:${action.id}`, { uses: action.uses }))
         : button);
     }
     const left = a ? usesLeft(c, key, a) : null;
-    if (left !== null && a?.uses) sharedUses.append(el('span', { class: 'muted', style: 'font-size:11.5px' }, `${left}/${usesMax(c, key, a)} per ${a.uses.per.replace(/([A-Z])/g, ' $1').toLowerCase()}`));
+    if (left !== null && a?.uses) sharedUses.append(usageCounter(key, a));
     if (sharedUses !== row) row.append(sharedUses);
     return row;
   }
@@ -1256,8 +1270,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     };
     const thresholds = vital('Thresholds', el('div', { class: 'thresholds' }, thr(`< ${th.major}`, 'Minor'), sep(), thr(String(th.major), 'Major'), sep(), thr(String(th.severe), 'Severe')), 'v-th');
     const damageButton = iconButton('shield', 'Take damage: calculate HP to mark and mitigation', () => {
-      openDamageDialog(root, c, (summary, severity) => {
-        opts.onLog?.(summary);
+      openDamageDialog(root, c, (summary, severity, incomingDamage) => {
+        opts.onLog?.(summary, undefined, undefined, incomingDamage);
         opts.onChange?.();
         render();
         if (severity >= 3 && opts.onDamageTaken) {

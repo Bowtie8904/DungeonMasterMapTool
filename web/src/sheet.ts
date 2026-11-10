@@ -165,8 +165,8 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
         };
         void share().catch((e: Error) => report(e.message));
       },
-      onLog: (text, rollSource, restDice) => {
-        const send = () => { if (!conn.send({ type: 'chat', text, rollSource, restDice, actorId, whisper: false })) report('Not connected. The report was not posted.'); };
+      onLog: (text, rollSource, restDice, incomingDamage) => {
+        const send = () => { if (!conn.send({ type: 'chat', text, rollSource, restDice, incomingDamage, actorId, whisper: false })) report('Not connected. The report was not posted.'); };
         if (restDice) { changed!(); void changed!.flush().then(send).catch((e: Error) => report(e.message)); }
         else send();
       },

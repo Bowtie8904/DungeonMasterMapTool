@@ -1,5 +1,19 @@
 # Online Play web client
 
+Dread cards keep follow-ups on their matching chat results: Terrify Stress, Wall of Hunger payment,
+Dark Army summoning, Damnation's selected Stress damage, Siphon Essence's target-marked-HP healing,
+Dire Strike on weapon damage (including automatic Fear removal), and Jump Scare on magic damage.
+Blighting Strike criticals use Hope damage. Hideous Retribution has a Spellcast-trait reaction on
+the card and allied incoming-damage reports, followed by Stress-paid damage on its own reaction.
+Summon Horror rolls Spellcast-count damage directly; Darkfire first selects at least 1 Hope.
+Spectral Mist applies physical immunity to the caster and offers allies the same buff in chat,
+expiring on an action roll or scene end; remove it manually after passing through a solid object.
+Umbral Veil tokens expire with their scene buff, Dark Army's buff ends at zero fiends, and
+Avatar of Terror mirrors Force of Nature's preselected damage/maintenance options with live Fear d6s.
+Spotlight Hope is manual. Invoke Torment's doubled portion is a separate breakdown entry without rerolling.
+Umbral Veil's rest counter and Dark Army's long-rest counter track activation, not token spending.
+Ordinary damage reports carry actor metadata for allied Hideous Retribution reactions in both browser sheet views.
+
 Sheet catalogs share in-flight downloads and parsed data across owned actors, rules and compendium tools.
 Reconnects and catalog edits invalidate that cache; custom fetchers and actor-scoped DM authorization stay isolated.
 Hidden/minimized sheets retain live data, effects and chat damage handlers without building their full sheet DOM.

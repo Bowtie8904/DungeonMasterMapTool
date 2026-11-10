@@ -56,7 +56,7 @@ export function rollContext(m: RollMessage): RollContext | null {
   const resourceOnes = (m.breakdown ?? []).filter(detail => detail.rolls.includes(1))
     .flatMap(detail => (detail.notes ?? []).filter(note => note.label === 'Dice resource').map(note => note.impact));
   if (m.kind !== 'duality' && m.source?.split(',').includes('damage')) {
-    return { source: m.source, hope: 0, fear: 0, total: m.total, weapon: m.weapon, kind: 'damage', resourceOnes, dice: m.rolls as number[], deathrun: m.deathrun };
+    return { source: m.source, hope: 0, fear: 0, total: m.total, weapon: m.weapon, kind: 'damage', resourceOnes, dice: m.rolls as number[], deathrun: m.deathrun, damageSource: m.rollSource?.name };
   }
   if (m.kind !== 'duality' && (m.source?.includes('featureAction:card:Redirect:use')
       || m.source?.split(',').some(tag => tag === 'card:Invigoration' || tag.endsWith('/Invigoration'))
@@ -343,9 +343,38 @@ function deathButtons(m: RollMessage, host: RollButtonHost): HTMLElement | null 
   return box;
 }
 
+function incomingReactionButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | null {
+  if (!m.incomingDamage || !m.actorId) return null;
+  const box = el('div', { class: 'roll-actions' });
+  const paint = async () => {
+    const buttons: HTMLElement[] = [];
+    if (host.isActorActive?.(m.actorId!) !== false) for (const id of host.actorIds?.() ?? []) {
+      if (id === m.actorId) continue;
+      const sheet = await host.sheet(id);
+      if (!sheet) continue;
+      for (const t of availableRollTriggers(sheet.character, { source: 'incomingDamage', hope: 0, fear: 0, total: 0, kind: 'damage' })) {
+        if (t.trigger.audience !== 'ally' || !t.trigger.actionRoll) continue;
+        const button = el('button', { type: 'button', class: 'small' }, `${t.trigger.label} · ${sheet.character.name}`);
+        const blocked = actionBlocker(sheet.character, t.key, t.automation, t.trigger);
+        button.disabled = !!blocked;
+        button.title = blocked ?? 'Use when this ally is within Close range and you can see the attacker.';
+        button.addEventListener('click', () => {
+          if (!sheet.bus.featureAction?.(t.source, t.trigger.id)) host.toast('This reaction is no longer available.');
+        });
+        buttons.push(button);
+      }
+    }
+    box.replaceChildren(...buttons);
+    box.hidden = !buttons.length;
+  };
+  box.addEventListener('refresh-roll-actions', () => { void paint().catch((e: Error) => host.toast(e.message)); });
+  void paint().catch((e: Error) => host.toast(e.message));
+  return box;
+}
+
 export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost): HTMLElement | null {
   if ('text' in m) {
-    const children = [benefitButtons(m, host), restButtons(m, host), chatDamageButtons(m, host)].filter((node): node is HTMLElement => !!node);
+    const children = [benefitButtons(m, host), restButtons(m, host), chatDamageButtons(m, host), incomingReactionButtons(m, host)].filter((node): node is HTMLElement => !!node);
     return children.length === 1 ? children[0] : children.length ? el('div', {}, ...children) : null;
   }
   if (m.deathMove) return deathButtons(m, host);
