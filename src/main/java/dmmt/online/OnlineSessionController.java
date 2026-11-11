@@ -138,9 +138,16 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         server = new OnlineSessionServer(config, campaign, store, assets, this);
         server.start();
         publishNow();
-        timer = new Timeline(new KeyFrame(Duration.millis(250), e -> {
+        skipTicks = 0;
+        timer = new Timeline(new KeyFrame(Duration.millis(TICK_MS), e -> {
+            if (skipTicks > 0) {
+                skipTicks--;
+                return;
+            }
+            long started = System.nanoTime();
             publishNow();
             publishAudio();
+            skipTicks = backoffTicks((System.nanoTime() - started) / 1_000_000L);
         }));
         timer.setCycleCount(Timeline.INDEFINITE);
         timer.play();
@@ -373,6 +380,15 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         }
     }
 
+    private static final int TICK_MS = 250;
+    private int skipTicks;
+
+    /** Ticks to skip so the periodic rebuild uses at most ~20% of the UI thread, capped at a 1 s interval. */
+    static int backoffTicks(long tickMillis) {
+        long idle = tickMillis * 5 - TICK_MS;
+        return (int) Math.max(0, Math.min(3, (idle + TICK_MS - 1) / TICK_MS));
+    }
+
     private void publishNow() {
         OnlineSessionServer current = server;
         DmProject project = app.project();
@@ -575,10 +591,18 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
                 DmProject project = app.project();
                 DmProject.TokenInstance token = project == null ? null : project.getTokens().stream()
                         .filter(t -> tokenId.equals(t.getId())).findFirst().orElse(null);
-                if (token != null) inheritActorConditions(campaign, token);
-                String problem = project == null ? "No map open" : movementBlockReason(token);
+                // One sheet read serves condition inheritance, the movement block check and phase movement.
+                JsonNode sheet = null;
+                if (token != null && campaign != null) {
+                    Campaign.Actor actor = OnlineStateBuilder.actorOf(token, campaign);
+                    if (actor != null) {
+                        sheet = sheetSnapshot(campaign.getId(), actor.getId());
+                        if (sheet != null) token.setConditions(OnlineTokenConditions.actorConditions(sheet));
+                    }
+                }
+                String problem = project == null ? "No map open" : movementBlockReason(sheet);
                 if (problem == null)
-                    problem = MoveValidator.check(project, campaign, app.mapId(), playerId, token, x, y, phaseMovement(token));
+                    problem = MoveValidator.check(project, campaign, app.mapId(), playerId, token, x, y, phaseMovement(sheet));
                 if (problem != null) {
                     result.complete(token == null ? OnlineSessionServer.MoveResult.rejected(problem)
                             : OnlineSessionServer.MoveResult.rejected(problem, token.getX(), token.getY()));
@@ -712,30 +736,18 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         }
     }
 
-    private String movementBlockReason(DmProject.TokenInstance token) {
-        if (token == null || campaign == null) return null;
-        Campaign.Actor actor = OnlineStateBuilder.actorOf(token, campaign);
-        if (actor == null) return null;
-        try {
-            JsonNode saved = sheetSnapshot(campaign.getId(), actor.getId());
-            if (saved == null) return null;
-            JsonNode effects = saved.path("effects");
-            if (effects.isArray()) {
-                for (JsonNode effect : effects)
-                    if (effect.path("blocksMovement").asBoolean())
-                        return "This character cannot move while a movement-blocking effect is active.";
-            }
-        } catch (IOException ignored) {
-            return "Could not verify this character's movement effects.";
+    private String movementBlockReason(JsonNode saved) {
+        if (saved == null) return null;
+        JsonNode effects = saved.path("effects");
+        if (effects.isArray()) {
+            for (JsonNode effect : effects)
+                if (effect.path("blocksMovement").asBoolean())
+                    return "This character cannot move while a movement-blocking effect is active.";
         }
         return null;
     }
 
-    private boolean phaseMovement(DmProject.TokenInstance token) throws IOException {
-        if (token == null || campaign == null) return false;
-        Campaign.Actor actor = OnlineStateBuilder.actorOf(token, campaign);
-        if (actor == null) return false;
-        JsonNode saved = sheetSnapshot(campaign.getId(), actor.getId());
+    private boolean phaseMovement(JsonNode saved) {
         if (saved == null) return false;
         ObjectNode sheet = ((ObjectNode) saved).deepCopy();
         DeathMoves.sync(sheet);
