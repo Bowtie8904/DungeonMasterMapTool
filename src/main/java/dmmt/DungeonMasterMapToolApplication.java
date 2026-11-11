@@ -3402,15 +3402,10 @@ public class DungeonMasterMapToolApplication extends Application {
             selectedMeasurementId = hit == null ? null : hit.id();
             if (hit == null) return;
             dmCanvas.requestFocus();
-            if (event.getButton() == javafx.scene.input.MouseButton.SECONDARY) {
-                MenuItem remove = new MenuItem("Delete measurement");
-                remove.setOnAction(e -> onlineController.server().dmMeasurement(hit, true));
-                new ContextMenu(remove).show(dmCanvas, event.getScreenX(), event.getScreenY());
-            } else if (event.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
-                measurementDrag = hit;
-                measurementStartX = point.x(); measurementStartY = point.y();
-                measurementMapKey = onlineController.mapKey();
-            } else return;
+            if (event.getButton() != javafx.scene.input.MouseButton.PRIMARY) return;
+            measurementDrag = hit;
+            measurementStartX = point.x(); measurementStartY = point.y();
+            measurementMapKey = onlineController.mapKey();
             event.consume();
             renderDm();
         });
