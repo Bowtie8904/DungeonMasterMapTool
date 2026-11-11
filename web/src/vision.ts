@@ -177,29 +177,46 @@ export interface VisionInput {
 /** Cells whose centre lies inside any of the polygons. */
 export function cellsInPolygons(grid: Grid, polygons: Polygon[]): Uint8Array {
   const out = new Uint8Array(grid.cols * grid.rows);
-  for (const p of polygons) {
-    const b = polygonBounds(p);
-    if (!Number.isFinite(b.minX)) continue;
-    const c0 = Math.max(0, Math.floor((b.minX - grid.originX) / grid.cellSize));
-    const c1 = Math.min(grid.cols - 1, Math.floor((b.maxX - grid.originX) / grid.cellSize));
-    const r0 = Math.max(0, Math.floor((b.minY - grid.originY) / grid.cellSize));
-    const r1 = Math.min(grid.rows - 1, Math.floor((b.maxY - grid.originY) / grid.cellSize));
-    for (let r = r0; r <= r1; r++) {
-      const cy = grid.originY + (r + 0.5) * grid.cellSize;
-      for (let c = c0; c <= c1; c++) {
-        const idx = r * grid.cols + c;
-        if (!out[idx] && pointInPolygon(grid.originX + (c + 0.5) * grid.cellSize, cy, p)) out[idx] = 1;
-      }
+  for (const p of polygons) fillPolygonCells(grid, p, out);
+  return out;
+}
+
+/** Scanline fill: sets `out` for every cell whose centre lies inside the polygon (same result as pointInPolygon). */
+export function fillPolygonCells(grid: Grid, p: Polygon, out: Uint8Array): void {
+  const n = p.xs.length;
+  if (n < 3) return;
+  const b = polygonBounds(p);
+  if (!Number.isFinite(b.minX)) return;
+  const r0 = Math.max(0, Math.floor((b.minY - grid.originY) / grid.cellSize - 0.5));
+  const r1 = Math.min(grid.rows - 1, Math.ceil((b.maxY - grid.originY) / grid.cellSize - 0.5));
+  const crossings: number[] = [];
+  for (let r = r0; r <= r1; r++) {
+    const y = grid.originY + (r + 0.5) * grid.cellSize;
+    crossings.length = 0;
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const yi = p.ys[i];
+      const yj = p.ys[j];
+      if (yi > y !== yj > y) crossings.push(p.xs[i] + ((y - yi) * (p.xs[j] - p.xs[i])) / (yj - yi));
+    }
+    crossings.sort((a, c) => a - c);
+    for (let k = 0; k + 1 < crossings.length; k += 2) {
+      // Centres with crossings[k] <= x < crossings[k + 1].
+      const left = Math.max(0, Math.ceil((crossings[k] - grid.originX) / grid.cellSize - 0.5));
+      const right = Math.min(grid.cols - 1, Math.ceil((crossings[k + 1] - grid.originX) / grid.cellSize - 0.5) - 1);
+      const base = r * grid.cols;
+      for (let c = left; c <= right; c++) out[base + c] = 1;
     }
   }
-  return out;
 }
 
 export function computeVisibleCells(input: VisionInput): Uint8Array {
   const { grid } = input;
   const visible = new Uint8Array(grid.cols * grid.rows);
-  const lights = input.lightPolygons.map((p) => ({ p, b: polygonBounds(p) }));
+  const lightMask = input.darkVisionRadius === null ? null : cellsInPolygons(grid, input.lightPolygons);
+  const sightMask = new Uint8Array(grid.cols * grid.rows);
   for (const src of input.sources) {
+    sightMask.fill(0);
+    fillPolygonCells(grid, src.sight, sightMask);
     const b = polygonBounds(src.sight);
     if (!Number.isFinite(b.minX)) {
       continue;
@@ -216,7 +233,7 @@ export function computeVisibleCells(input: VisionInput): Uint8Array {
           continue;
         }
         const cx = grid.originX + (c + 0.5) * grid.cellSize;
-        if (!pointInPolygon(cx, cy, src.sight)) {
+        if (!sightMask[idx]) {
           continue;
         }
         if (input.darkVisionRadius === null) {
@@ -229,11 +246,8 @@ export function computeVisibleCells(input: VisionInput): Uint8Array {
           visible[idx] = 1;
           continue;
         }
-        for (const l of lights) {
-          if (cx >= l.b.minX && cx <= l.b.maxX && cy >= l.b.minY && cy <= l.b.maxY && pointInPolygon(cx, cy, l.p)) {
-            visible[idx] = 1;
-            break;
-          }
+        if (lightMask![idx]) {
+          visible[idx] = 1;
         }
       }
     }

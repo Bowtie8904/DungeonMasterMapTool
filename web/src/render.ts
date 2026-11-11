@@ -2,7 +2,7 @@ import { base64ToBytes, bitsToFlags } from './bitset';
 import { flickerAmount } from './flicker';
 import { FogState } from './fogstate';
 import { TokenMotion } from './motion';
-import { lightActive, rasterLightTint, TintEnvironment } from './lighting';
+import { lightActive, rasterLightTint, TintEnvironment, TintScratch } from './lighting';
 import { Door, GameState, IndoorData, Measurement, Overlay, TextBoxState, Token } from './protocol';
 import { DrawMode, DrawingStyle, MapTool, drawingBounds, drawingHit, drawingId, measurementBounds, measurementHit, measurementLabel, measurementPath, ownsDrawing, resizeDrawing, translateDrawing } from './tools';
 import { chooseLevel, PyramidInfo, tileUrl, visibleTiles } from './pyramid';
@@ -20,6 +20,8 @@ import { drawTokenResources, type TokenResources } from './token-resources';
 
 const AMBIENT_SIGHT_TILES = 40;
 const MIN_FRAME_MS = 33;
+/** While a token moves, shadows, fog visibility and light tint are refreshed at most this often. */
+const HEAVY_MOVE_INTERVAL_MS = 66;
 const MOVE_TICK_MS = 50;
 
 export interface MoveCommit {
@@ -125,6 +127,11 @@ export class MapView {
   private lastTick = 0;
   private inFlight = 0;
   private lastFrame = 0;
+  private lastVision = 0;
+  private movingPolys = new Map<string, { time: number; range: number; poly: Polygon }>();
+  private tintScratch: TintScratch = { size: 0, total: new Float32Array(0), red: new Float32Array(0), green: new Float32Array(0), blue: new Float32Array(0) };
+  private tintKey = '';
+  private tintTime = 0;
   private images = new Map<string, HTMLImageElement>();
   private tiles = new Map<string, HTMLImageElement>();
   private static readonly MAX_TILES = 128;
@@ -247,6 +254,8 @@ export class MapView {
       }
     }
     this.lightPolys.clear();
+    this.movingPolys.clear();
+    this.tintKey = '';
     this.invalidateVision();
   }
 
@@ -932,11 +941,21 @@ export class MapView {
     const key = `${l.id}:${l.x},${l.y},${l.range}`;
     let p = this.lightPolys.get(key);
     if (!p) {
+      // A token light changes position every frame while it moves; recompute its shadows only at a reduced rate.
+      const recent = l.id.startsWith('token-light-') && this.motionActive() ? this.movingPolys.get(l.id) : undefined;
+      const now = performance.now();
+      if (recent && recent.range === l.range && now - recent.time < HEAVY_MOVE_INTERVAL_MS) return recent.poly;
       if (this.lightPolys.size > 400) this.lightPolys.clear();
       p = computeVisibility(l.x, l.y, l.range, this.segmentsCache);
       this.lightPolys.set(key, p);
+      this.movingPolys.set(l.id, { time: now, range: l.range, poly: p });
     }
     return p;
+  }
+
+  /** True while a token is being dragged, gliding or awaiting its move acknowledgement. */
+  private motionActive(): boolean {
+    return this.moving || this.tentative();
   }
 
   /** Recomputes sight polygons, visible cells and queues explored cells. */
@@ -989,11 +1008,14 @@ export class MapView {
       && !this.moving) return;
     if (time - this.lastFrame < MIN_FRAME_MS) return;
     this.lastFrame = time;
-    if (this.visionDirty) {
+    const deferVision = this.visionDirty && this.motionActive() && time - this.lastVision < HEAVY_MOVE_INTERVAL_MS;
+    if (this.visionDirty && !deferVision) {
       this.visionDirty = false;
+      this.lastVision = time;
       this.recomputeVision(s);
     }
-    this.dirty = false;
+    // A deferred vision update needs another frame even if nothing else changes.
+    this.dirty = deferVision;
     this.draw(s);
   }
 
@@ -1917,32 +1939,41 @@ export class MapView {
     if (!showLights || tintStrength <= 0) return;
     let scale = 4;
     while (Math.ceil(this.light.width / scale) * Math.ceil(this.light.height / scale) > 20000) scale++;
-    const grid: Grid = {
-      originX: -this.cam.x / this.cam.scale,
-      originY: -this.cam.y / this.cam.scale,
-      cellSize: scale / (this.cam.scale * this.dpr),
-      cols: Math.max(1, Math.ceil(this.light.width / scale)),
-      rows: Math.max(1, Math.ceil(this.light.height / scale)),
-    };
-    this.lightTint.width = grid.cols;
-    this.lightTint.height = grid.rows;
-    const tg = this.lightTint.getContext('2d')!;
-    const image = tg.createImageData(grid.cols, grid.rows);
-    image.data.set(rasterLightTint(grid, lights.map((l) => {
-      const f = this.flickerOf(s, l);
-      return {
-        x: l.x, y: l.y, range: l.range * (1 - 0.25 * f),
-        strength: (0.35 + 0.65 * Math.min(1, Math.max(0, l.brightness))) * (1 - 0.6 * f),
-        color: parseCssColor(l.color ?? '#FFD9A0'),
-        polygon: this.lightPolygon(l),
+    const cols = Math.max(1, Math.ceil(this.light.width / scale));
+    const rows = Math.max(1, Math.ceil(this.light.height / scale));
+    const now = performance.now();
+    const tintKey = `${this.cam.x},${this.cam.y},${this.cam.scale},${this.dpr},${scale},${cols},${rows}`;
+    const reuse = this.motionActive() && this.tintKey === tintKey && now - this.tintTime < HEAVY_MOVE_INTERVAL_MS;
+    if (!reuse) {
+      const grid: Grid = {
+        originX: -this.cam.x / this.cam.scale,
+        originY: -this.cam.y / this.cam.scale,
+        cellSize: scale / (this.cam.scale * this.dpr),
+        cols,
+        rows,
       };
-    }), environment, tintStrength, s.lighting.tintDarknessFactor ?? 1));
-    tg.putImageData(image, 0, 0);
+      this.lightTint.width = cols;
+      this.lightTint.height = rows;
+      const tg = this.lightTint.getContext('2d')!;
+      const image = tg.createImageData(cols, rows);
+      image.data.set(rasterLightTint(grid, lights.map((l) => {
+        const f = this.flickerOf(s, l);
+        return {
+          x: l.x, y: l.y, range: l.range * (1 - 0.25 * f),
+          strength: (0.35 + 0.65 * Math.min(1, Math.max(0, l.brightness))) * (1 - 0.6 * f),
+          color: parseCssColor(l.color ?? '#FFD9A0'),
+          polygon: this.lightPolygon(l),
+        };
+      }), environment, tintStrength, s.lighting.tintDarknessFactor ?? 1, this.tintScratch));
+      tg.putImageData(image, 0, 0);
+      this.tintKey = tintKey;
+      this.tintTime = now;
+    }
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(this.lightTint, 0, 0, grid.cols * scale, grid.rows * scale);
+    ctx.drawImage(this.lightTint, 0, 0, cols * scale, rows * scale);
     ctx.restore();
   }
 

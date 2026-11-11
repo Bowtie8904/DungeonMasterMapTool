@@ -37,14 +37,30 @@ export function lightFalloff(distance: number): number {
   return window * window / (1 + 8 * u * u);
 }
 
-/** One alpha-blended highlight, never one translucent overlay per light. */
+export interface TintScratch {
+  size: number;
+  total: Float32Array;
+  red: Float32Array;
+  green: Float32Array;
+  blue: Float32Array;
+}
+
+/** One alpha-blended highlight, never one translucent overlay per light. Pass a scratch object to reuse buffers across frames. */
 export function rasterLightTint(grid: Grid, lights: TintLight[], env: TintEnvironment,
-  tint: number, darknessFactor: number): Uint8ClampedArray {
+  tint: number, darknessFactor: number, scratch?: TintScratch): Uint8ClampedArray {
   const size = grid.cols * grid.rows;
-  const total = new Float32Array(size);
-  const red = new Float32Array(size);
-  const green = new Float32Array(size);
-  const blue = new Float32Array(size);
+  let buffers: TintScratch;
+  if (scratch && scratch.size === size) {
+    buffers = scratch;
+    buffers.total.fill(0);
+    buffers.red.fill(0);
+    buffers.green.fill(0);
+    buffers.blue.fill(0);
+  } else {
+    buffers = { size, total: new Float32Array(size), red: new Float32Array(size), green: new Float32Array(size), blue: new Float32Array(size) };
+    if (scratch) Object.assign(scratch, buffers);
+  }
+  const { total, red, green, blue } = buffers;
   const out = new Uint8ClampedArray(size * 4);
   for (const l of lights) {
     if (l.range <= 0 || !lightActive(env, l.x, l.y)) continue;
@@ -65,7 +81,9 @@ export function rasterLightTint(grid: Grid, lights: TintLight[], env: TintEnviro
         const right = Math.min(grid.cols - 1, Math.floor((Math.min(crossings[c + 1], l.x + l.range) - grid.originX) / grid.cellSize - 0.5));
         for (let col = left; col <= right; col++) {
           const x = grid.originX + (col + 0.5) * grid.cellSize;
-          const value = l.strength * lightFalloff(Math.hypot(x - l.x, y - l.y) / l.range);
+          const dx = x - l.x;
+          const dy = y - l.y;
+          const value = l.strength * lightFalloff(Math.sqrt(dx * dx + dy * dy) / l.range);
           const i = row * grid.cols + col;
           total[i] += value;
           red[i] += value * l.color[0];

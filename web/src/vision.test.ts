@@ -4,9 +4,24 @@ import {
   circlePolygon,
   computeVisibility,
   computeVisibleCells,
+  cellsInPolygons,
   mergeExplored,
   pointInPolygon,
 } from './vision';
+
+describe('scanline cell fill', () => {
+  it('matches per-cell point-in-polygon tests, including walled polygons', () => {
+    const poly = computeVisibility(437, 391, 380, [600, 0, 600, 700, 200, 200, 500, 250]);
+    const grid = { originX: -13.3, originY: 7.7, cellSize: 17.3, cols: 60, rows: 50 };
+    const cells = cellsInPolygons(grid, [poly]);
+    for (let r = 0; r < grid.rows; r++) {
+      for (let c = 0; c < grid.cols; c++) {
+        const inside = pointInPolygon(grid.originX + (c + 0.5) * grid.cellSize, grid.originY + (r + 0.5) * grid.cellSize, poly);
+        expect(cells[r * grid.cols + c] === 1).toBe(inside);
+      }
+    }
+  });
+});
 
 // Room 0..1000 square walls, one vertical wall at x=600 from y=0..700 (gap at the bottom).
 const room = [0, 0, 1000, 0, 1000, 0, 1000, 1000, 1000, 1000, 0, 1000, 0, 1000, 0, 0];
