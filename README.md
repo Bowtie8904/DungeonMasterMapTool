@@ -35,6 +35,8 @@ Nothing starts until you click **Start online session**, so offline play and the
   Older browser/host combinations retain the full-sheet synchronization fallback.
   On slower devices, **Settings > Smooth token movement** can already be turned off to reduce
   decorative redraws without changing movement or visibility rules.
+- **DM chat responsiveness:** Chat history virtualizes its message cards, rendering only rows in view
+  so opening the chat stays responsive even when the session has a long history.
 
 - **Full Stress:** Marking every Stress slot automatically applies Vulnerable and its token badge.
   Clearing any Stress removes it only if full Stress applied it. Vulnerable from another source is preserved,

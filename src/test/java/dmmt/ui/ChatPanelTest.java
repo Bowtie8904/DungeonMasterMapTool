@@ -4,15 +4,23 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dmmt.FxTestSupport;
 import javafx.application.Platform;
+import javafx.animation.PauseTransition;
 import javafx.event.ActionEvent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.ListView;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
+import javafx.stage.Stage;
+import javafx.util.Duration;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignC;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -38,6 +46,145 @@ class ChatPanelTest {
         assertEquals(7, ChatPanel.goldAmount(" 7 "));
         for (String invalid : new String[]{"", "0", "-5", "1.5", "abc", "1234567890"})
             assertNull(ChatPanel.goldAmount(invalid), invalid);
+    }
+
+    @Test
+    void chatRendersOnlyVisibleCardsAndMarkReadScrollsToTheLatestMessage() throws Exception {
+        List<JsonNode> history = new ArrayList<>();
+        for (int i = 0; i < 100; i++) {
+            history.add(MAPPER.createObjectNode().put("type", "chat").put("from", "Alice")
+                    .put("text", ("Message " + i + " with enough text to wrap across the chat card. ").repeat(8)));
+        }
+        ChatPanel[] panel = new ChatPanel[1];
+        Stage[] stage = new Stage[1];
+        onFx(() -> {
+            panel[0] = new ChatPanel(new Backend(null) {
+                @Override public List<JsonNode> history() { return history; }
+            });
+            stage[0] = new Stage();
+            Scene scene = new Scene(new StackPane(panel[0]), 320, 240);
+            scene.getStylesheets().add(Icons.STYLESHEET);
+            stage[0].setScene(scene);
+            stage[0].show();
+            scene.getRoot().applyCss();
+            scene.getRoot().layout();
+            ListView<?> list = (ListView<?>) panel[0].lookup(".chat-scroll");
+            assertNotNull(list);
+            assertEquals(history.size(), list.getItems().size());
+            long renderedCards = panel[0].lookupAll(".chat-entry").size();
+            assertTrue(renderedCards > 0, "The visible list cells render their messages");
+            assertTrue(renderedCards < history.size(), "Offscreen messages must not build chat-card UI");
+            list.scrollTo(0);
+            list.layout();
+            panel[0].markRead();
+            assertEquals(0, visibleCellIndexes(list).stream().mapToInt(Integer::intValue).min().orElse(-1),
+                    "Mark-read scrolling must be deferred past the current event");
+        });
+
+        CountDownLatch deferredScroll = new CountDownLatch(1);
+        Platform.runLater(() -> {
+            PauseTransition pause = new PauseTransition(Duration.millis(100));
+            pause.setOnFinished(event -> deferredScroll.countDown());
+            pause.play();
+        });
+        assertTrue(deferredScroll.await(5, TimeUnit.SECONDS));
+        onFx(() -> {
+            ListView<?> list = (ListView<?>) panel[0].lookup(".chat-scroll");
+            list.applyCss();
+            list.layout();
+            assertTrue(visibleCellIndexes(list).contains(history.size() - 1),
+                    "Latest message should be visible after mark-read, visible indexes: " + visibleCellIndexes(list));
+            stage[0].close();
+        });
+    }
+
+    @Test
+    void liveMessageAtBottomScrollsFullyToLatestCard() throws Exception {
+        List<JsonNode> history = new ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            history.add(MAPPER.createObjectNode().put("type", "chat").put("from", "Alice")
+                    .put("text", ("Message " + i + " ").repeat(12)));
+        }
+        ChatPanel[] panel = new ChatPanel[1];
+        Stage[] stage = new Stage[1];
+        onFx(() -> {
+            panel[0] = new ChatPanel(new Backend(null) {
+                @Override public List<JsonNode> history() { return history; }
+            });
+            stage[0] = new Stage();
+            Scene scene = new Scene(new StackPane(panel[0]), 320, 240);
+            scene.getStylesheets().add(Icons.STYLESHEET);
+            stage[0].setScene(scene);
+            stage[0].show();
+            scene.getRoot().applyCss();
+            scene.getRoot().layout();
+            ListView<?> list = (ListView<?>) panel[0].lookup(".chat-scroll");
+            list.scrollTo(history.size() - 1);
+            list.layout();
+        });
+        waitForFxPulse();
+
+        JsonNode latest = MAPPER.createObjectNode().put("type", "chat").put("from", "Alice")
+                .put("text", "Latest message with extra content ".repeat(20));
+        onFx(() -> panel[0].onMessage(latest));
+        waitForFxPulse();
+        onFx(() -> {
+            ListView<?> list = (ListView<?>) panel[0].lookup(".chat-scroll");
+            assertTrue(visibleCellIndexes(list).contains(history.size()),
+                    "The live message should be fully visible at the bottom");
+            javafx.scene.control.ScrollBar bar = (javafx.scene.control.ScrollBar) list.lookup(".scroll-bar:vertical");
+            assertEquals(bar.getMax(), bar.getValue(), 0.01, "The vertical scrollbar should reach its maximum");
+            stage[0].close();
+        });
+    }
+
+    @Test
+    void chatUsesAvailableSectionHeightAndSeparatesMessageCards() throws Exception {
+        onFx(() -> {
+            JsonNode message = MAPPER.createObjectNode().put("type", "chat").put("from", "Alice").put("text", "Hello");
+            ChatPanel panel = new ChatPanel(new Backend(message));
+            VBox.setVgrow(panel, Priority.ALWAYS);
+            ControlSection section = new ControlSection("Chat", MaterialDesignC.CHAT_OUTLINE, "chat", panel);
+            Stage stage = new Stage();
+            StackPane root = new StackPane(section);
+            Scene scene = new Scene(root, 320, 640);
+            scene.getStylesheets().add(Icons.STYLESHEET);
+            stage.setScene(scene);
+            stage.show();
+            root.applyCss();
+            root.layout();
+
+            ListView<?> list = (ListView<?>) panel.lookup(".chat-scroll");
+            assertTrue(list.getHeight() > 400, "Chat history should use the available section height");
+            ListCell<?> cell = visibleCellIndexes(list).stream().findFirst()
+                    .flatMap(index -> list.lookupAll(".list-cell").stream()
+                            .filter(node -> node instanceof ListCell<?> candidate
+                                    && !candidate.isEmpty() && candidate.getIndex() == index)
+                            .map(node -> (ListCell<?>) node).findFirst())
+                    .orElseThrow();
+            assertEquals(8, cell.getPadding().getBottom(), "Message cards should have visible separation");
+            stage.close();
+        });
+    }
+
+    private static List<Integer> visibleCellIndexes(ListView<?> list) {
+        List<Integer> indexes = new ArrayList<>();
+        for (javafx.scene.Node node : list.lookupAll(".list-cell")) {
+            if (node instanceof ListCell<?> cell && !cell.isEmpty()) {
+                indexes.add(cell.getIndex());
+            }
+        }
+        return indexes;
+    }
+
+    private static void waitForFxPulse() throws Exception {
+        CountDownLatch pulse = new CountDownLatch(1);
+        Platform.runLater(() -> {
+            PauseTransition pause = new PauseTransition(Duration.millis(100));
+            pause.setOnFinished(event -> pulse.countDown());
+            pause.play();
+        });
+        assertTrue(pulse.await(5, TimeUnit.SECONDS));
     }
 
     @Test
@@ -174,10 +321,7 @@ class ChatPanelTest {
                 """);
         onFx(() -> {
             ChatPanel panel = new ChatPanel(new Backend(roll));
-            panel.onMessage(chat);
-            Scene scene = new Scene(new StackPane(panel));
-            scene.getStylesheets().add(Icons.STYLESHEET);
-            panel.applyCss();
+            Stage stage = showPanel(panel, 320, 900);
             var breakdown = (javafx.scene.layout.VBox) panel.lookup(".chat-roll-breakdown");
             var source = (javafx.scene.layout.VBox) panel.lookup(".chat-roll-source");
             ((Label) breakdown.getChildren().get(0)).getOnMouseClicked().handle(null);
@@ -194,18 +338,21 @@ class ChatPanelTest {
             ((Label) nextBreakdown.getChildren().get(0)).getOnMouseClicked().handle(null);
             panel.onMessage(MAPPER.createObjectNode().put("type", "rollUpdate").put("id", 9).put("ts", 10).put("total", 8));
             assertFalse(((javafx.scene.layout.VBox) panel.lookup(".chat-roll-breakdown")).getChildren().get(1).isVisible());
+            stage.close();
 
-            var chatCard = panel.lookupAll(".chat-entry").stream()
-                    .filter(card -> card.getUserData() == chat).findFirst().orElseThrow();
+            ChatPanel chatPanel = new ChatPanel(new Backend(chat));
+            Stage chatStage = showPanel(chatPanel, 320, 900);
+            var chatCard = chatPanel.lookup(".chat-entry");
             var chatSource = (javafx.scene.layout.VBox) chatCard.lookup(".chat-roll-source");
             ((Label) chatSource.getChildren().get(0)).getOnMouseClicked().handle(null);
             var updated = ((com.fasterxml.jackson.databind.node.ObjectNode) chat.deepCopy()).put("text", "Updated");
-            panel.onMessage(MAPPER.createObjectNode().put("type", "chatUpdate").set("message", updated));
-            var updatedCard = panel.lookupAll(".chat-entry").stream()
-                    .filter(card -> card.getUserData() == updated).findFirst().orElseThrow();
+            chatPanel.onMessage(MAPPER.createObjectNode().put("type", "chatUpdate").set("message", updated));
+            var updatedCard = chatPanel.lookup(".chat-entry");
+            assertEquals(updated, updatedCard.getUserData());
             var updatedSource = (javafx.scene.layout.VBox) updatedCard.lookup(".chat-roll-source");
             assertTrue(updatedSource.getChildren().get(1).isVisible());
             assertEquals("Updated", ((Label) updatedCard.lookup(".chat-text")).getText());
+            chatStage.close();
         });
     }
 
@@ -226,10 +373,14 @@ class ChatPanelTest {
         }
         onFx(() -> {
             ChatPanel panel = new ChatPanel(new Backend(message));
+            Stage stage = new Stage();
             StackPane root = new StackPane(panel);
             Scene scene = new Scene(root, 260, 900);
             scene.getStylesheets().add(Icons.STYLESHEET);
-            panel.applyCss();
+            stage.setScene(scene);
+            stage.show();
+            root.applyCss();
+            root.layout();
             var card = panel.lookup(".chat-entry");
             panel.markRead();
             panel.onMessage(event);
@@ -243,7 +394,9 @@ class ChatPanelTest {
                 root.resize(width, 900);
                 root.layout();
                 assertTrue(footer.getHeight() < 60, "Collapsed action summary stays bounded even with 90 actions");
-                assertTrue(card.getBoundsInParent().getMaxX() <= width + 1);
+                assertTrue(card.localToScene(card.getBoundsInLocal()).getMaxX() <= width + 1,
+                        "Card right edge should fit at width " + width + " but was "
+                                + card.localToScene(card.getBoundsInLocal()).getMaxX());
             }
             Label toggle = (Label) footer.getChildren().get(0);
             assertTrue(toggle.isFocusTraversable());
@@ -259,6 +412,7 @@ class ChatPanelTest {
             assertFalse(footer.isManaged());
             assertFalse(footer.isVisible());
             assertEquals(1, panel.lookupAll(".chat-entry").size());
+            stage.close();
         });
     }
 
@@ -267,6 +421,7 @@ class ChatPanelTest {
         JsonNode message = MAPPER.readTree("{\"type\":\"chat\",\"id\":1,\"ts\":10,\"from\":\"Alice\",\"text\":\"Hello\"}");
         CountDownLatch called = new CountDownLatch(1);
         ChatPanel[] panel = new ChatPanel[1];
+        Stage[] stage = new Stage[1];
         onFx(() -> {
             panel[0] = new ChatPanel(new Backend(message) {
                 @Override public String delete(long id, long timestamp) {
@@ -276,9 +431,7 @@ class ChatPanelTest {
                     return "Could not delete chat message.";
                 }
             });
-            Scene scene = new Scene(new StackPane(panel[0]));
-            scene.getStylesheets().add(Icons.STYLESHEET);
-            panel[0].applyCss();
+            stage[0] = showPanel(panel[0], 320, 400);
             ((Label) panel[0].lookup(".chat-status")).textProperty().addListener((o, a, b) -> called.countDown());
             Button delete = (Button) panel[0].lookup(".chat-delete");
             assertNotNull(delete);
@@ -298,6 +451,7 @@ class ChatPanelTest {
             assertFalse(panel[0].unreadProperty().get());
             var nonModerated = ChatCards.render(message);
             assertNull(nonModerated.lookup(".chat-delete"), "Rendering without host actions never adds delete controls");
+            stage[0].close();
         });
     }
 
@@ -344,5 +498,17 @@ class ChatPanelTest {
         FutureTask<Void> task = new FutureTask<>(action, null);
         Platform.runLater(task);
         task.get(10, TimeUnit.SECONDS);
+    }
+
+    private static Stage showPanel(ChatPanel panel, double width, double height) {
+        Stage stage = new Stage();
+        StackPane root = new StackPane(panel);
+        Scene scene = new Scene(root, width, height);
+        scene.getStylesheets().add(Icons.STYLESHEET);
+        stage.setScene(scene);
+        stage.show();
+        root.applyCss();
+        root.layout();
+        return stage;
     }
 }

@@ -1538,8 +1538,11 @@
 }
 
 /* DM chat window (flyout of the DM controls): DM palette, browser-identical card content. */
-.dm-chat .chat-scroll, .dm-chat .chat-scroll > .viewport { -fx-background-color: transparent; }
+.dm-chat .chat-scroll, .dm-chat .chat-scroll > .viewport,
+.dm-chat .chat-scroll .virtual-flow, .dm-chat .chat-scroll .clipped-container,
+.dm-chat .chat-scroll .sheet { -fx-background-color: transparent; }
 .dm-chat .chat-scroll { -fx-background-insets: 0; -fx-padding: 0; }
+.dm-chat .chat-scroll .list-cell { -fx-background-color: transparent; -fx-padding: 0 0 8 0; }
 .chat-unread-dot { -fx-fill: #e8a33d; -fx-stroke: #1a1c21; -fx-stroke-width: 1; }
 .chat-jump { -fx-font-size: 11px; -fx-background-color: #2b3646; -fx-text-fill: -dm-text; -fx-background-radius: 14; -fx-border-color: #52667d; -fx-border-radius: 14; -fx-padding: 4 12; -fx-cursor: hand; }
 .chat-status { -fx-text-fill: -dm-danger; -fx-font-size: 11px; }

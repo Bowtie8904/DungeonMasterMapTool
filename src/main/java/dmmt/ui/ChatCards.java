@@ -65,6 +65,9 @@ public final class ChatCards {
     public record ActionReport(String title, String character, List<String> lines) {
     }
 
+    record DisclosureState(boolean breakdownOpen, boolean sourceOpen, boolean actionsOpen) {
+    }
+
     private ChatCards() {
     }
 
@@ -890,17 +893,34 @@ public final class ChatCards {
     }
 
     static void copyDisclosureState(Node previous, Node replacement) {
-        for (String selector : List.of(".chat-roll-breakdown", ".chat-roll-source")) {
-            Node oldNode = previous.lookup(selector);
-            Node newNode = replacement.lookup(selector);
-            if (oldNode instanceof VBox oldBox && newNode instanceof VBox newBox) {
-                newBox.getChildren().get(1).setVisible(oldBox.getChildren().get(1).isVisible());
-            }
-            if (previous.getProperties().get("dmActions") instanceof VBox oldFooter
-                    && replacement.getProperties().get("dmActions") instanceof VBox newFooter
-                    && oldFooter.getChildren().size() == 3 && newFooter.getChildren().size() == 3) {
-                newFooter.getChildren().get(2).setVisible(oldFooter.getChildren().get(2).isVisible());
-            }
+        applyDisclosureState(replacement, disclosureState(previous));
+    }
+
+    static DisclosureState disclosureState(Node card) {
+        return new DisclosureState(disclosureOpen(card, ".chat-roll-breakdown"),
+                disclosureOpen(card, ".chat-roll-source"),
+                card.getProperties().get("dmActions") instanceof VBox footer
+                        && footer.getChildren().size() == 3 && footer.getChildren().get(2).isVisible());
+    }
+
+    static void applyDisclosureState(Node card, DisclosureState state) {
+        setDisclosureOpen(card, ".chat-roll-breakdown", state.breakdownOpen());
+        setDisclosureOpen(card, ".chat-roll-source", state.sourceOpen());
+        if (card.getProperties().get("dmActions") instanceof VBox footer
+                && footer.getChildren().size() == 3) {
+            footer.getChildren().get(2).setVisible(state.actionsOpen());
+        }
+    }
+
+    private static boolean disclosureOpen(Node card, String selector) {
+        Node node = card.lookup(selector);
+        return node instanceof VBox box && box.getChildren().size() > 1 && box.getChildren().get(1).isVisible();
+    }
+
+    private static void setDisclosureOpen(Node card, String selector, boolean open) {
+        Node node = card.lookup(selector);
+        if (node instanceof VBox box && box.getChildren().size() > 1) {
+            box.getChildren().get(1).setVisible(open);
         }
     }
 }

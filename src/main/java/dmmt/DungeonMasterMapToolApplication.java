@@ -1781,6 +1781,7 @@ public class DungeonMasterMapToolApplication extends Application {
                         .map(r -> new dmmt.ui.ChatPanel.Recipient(r.playerId(), r.playerName())).toList();
             }
         });
+        VBox.setVgrow(chatPanel, Priority.ALWAYS);
         chatSection = new ControlSection("Chat", MaterialDesignC.CHAT_OUTLINE, "chat", chatPanel);
         var chatIcon = Icons.icon(MaterialDesignC.CHAT_OUTLINE);
         var unreadDot = new javafx.scene.shape.Circle(4);
