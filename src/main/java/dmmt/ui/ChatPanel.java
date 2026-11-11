@@ -168,6 +168,17 @@ public final class ChatPanel extends VBox {
 
     /** A live message; marks the chat unread unless it is currently on screen. */
     public void onMessage(JsonNode message) {
+        if ("chatActions".equals(message.path("type").asText())) {
+            for (javafx.scene.Node card : messages.getChildren()) {
+                if (card.getUserData() instanceof ObjectNode previous
+                        && previous.path("id").equals(message.path("id")) && previous.path("ts").equals(message.path("ts"))) {
+                    previous.set("dmActions", message.path("players").deepCopy());
+                    ChatCards.updateActionSummary(card, message.path("players"));
+                    break;
+                }
+            }
+            return;
+        }
         if ("chatDeleted".equals(message.path("type").asText())) {
             messages.getChildren().removeIf(card -> card.getUserData() instanceof JsonNode m
                     && m.path("id").asLong() == message.path("id").asLong()
@@ -180,7 +191,12 @@ public final class ChatPanel extends VBox {
                 javafx.scene.Node card = messages.getChildren().get(i);
                 if (!(card.getUserData() instanceof JsonNode previous)
                         || !previous.path("id").equals(updated.path("id")) || !previous.path("ts").equals(updated.path("ts"))) continue;
-                javafx.scene.Node replacement = ChatCards.render(updated, backend::remaining, () -> deleteMessage(updated), backend::artwork);
+                if (updated instanceof ObjectNode && previous.has("dmActions")) {
+                    updated = updated.deepCopy();
+                    ((ObjectNode) updated).set("dmActions", previous.path("dmActions").deepCopy());
+                }
+                JsonNode replacementMessage = updated;
+                javafx.scene.Node replacement = ChatCards.render(updated, backend::remaining, () -> deleteMessage(replacementMessage), backend::artwork);
                 ChatCards.copyDisclosureState(card, replacement);
                 replacement.setUserData(updated);
                 messages.getChildren().set(i, replacement);

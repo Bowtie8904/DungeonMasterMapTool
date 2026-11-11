@@ -1582,6 +1582,13 @@
 .chat-outcome-crit, .chat-outcome-success { -fx-background-color: #2b4a36; -fx-text-fill: #a6ddb2; }
 .chat-outcome-failure { -fx-background-color: #5a2f2f; -fx-text-fill: #f2a4a4; }
 .chat-disclosure { -fx-border-color: #ffffff12 transparent transparent transparent; -fx-padding: 8 0 0 0; }
+.chat-player-actions { -fx-padding: 5 14 9 14; -fx-border-color: #ffffff0b transparent transparent transparent; }
+.chat-player-actions-toggle { -fx-font-size: 10px; -fx-text-fill: #8c9aaa; -fx-cursor: hand; }
+.chat-player-actions-toggle:hover, .chat-player-actions-toggle:focused { -fx-text-fill: #b4c8df; -fx-underline: true; }
+.chat-player-actions-preview { -fx-font-size: 10px; -fx-text-fill: #8995a5; }
+.chat-player-action-owner { -fx-font-size: 10px; -fx-text-fill: #9cacc1; }
+.chat-player-action-label { -fx-font-size: 10px; -fx-text-fill: #a4b4c8; -fx-background-color: #829bc00c; -fx-background-radius: 3; -fx-padding: 1 4; }
+.chat-player-action-label.unavailable { -fx-text-fill: #798391; }
 .chat-roll-breakdown { -fx-padding: 8 14 12 14; }
 .chat-summary { -fx-text-fill: #a6b2c3; -fx-font-size: 11px; -fx-padding: 2 0 4 0; -fx-cursor: hand; }
 .chat-summary:hover { -fx-text-fill: #d0ad66; }

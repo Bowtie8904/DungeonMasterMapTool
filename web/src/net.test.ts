@@ -24,6 +24,9 @@ it('negotiates death option capability additively and clears it on reconnect to 
   vi.stubGlobal('location', { protocol: 'http:', host: 'localhost' });
   const conn = new Connection({ onOpen: () => {}, onStatus: () => {}, onMessage: () => {} }, () => 0);
   conn.start();
+  expect(conn.chatActionReports).toBe(false);
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'hello', serverTime: 0, chatActionReports: true }) });
+  expect(conn.chatActionReports).toBe(true);
   expect(conn.deathMoveOptions).toBe(false);
   expect(conn.brawlerRolls).toBe(false);
   expect(conn.druidAutomation).toBe(false);
@@ -47,6 +50,7 @@ it('negotiates death option capability additively and clears it on reconnect to 
   sockets[0].hello(true, false);
   expect(conn.domainCardAutomation).toBe(false);
   sockets[0].hello();
+  expect(conn.chatActionReports).toBe(false);
   expect(conn.splendorAutomation).toBe(false);
   expect(conn.bloodAutomation).toBe(false);
   expect(conn.deathMoveOptions).toBe(false);
@@ -57,8 +61,10 @@ it('negotiates death option capability additively and clears it on reconnect to 
   expect(conn.witchAutomation).toBe(false);
   expect(conn.domainCardAutomation).toBe(false);
   sockets[0].hello(true);
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'hello', serverTime: 0, chatActionReports: true }) });
   conn.stop();
   conn.start();
+  expect(conn.chatActionReports).toBe(false);
   expect(conn.splendorAutomation).toBe(false);
   expect(conn.bloodAutomation).toBe(false);
   expect(conn.deathMoveOptions).toBe(false);

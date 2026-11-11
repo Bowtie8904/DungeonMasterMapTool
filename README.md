@@ -406,6 +406,12 @@ Nothing starts until you click **Start online session**, so offline play and the
   **Gain 1 Hope / Clear 1 Stress**. Outcome conversions no longer grant Hope automatically; claim it on the
   converted roll. Claims are saved on the host and stay consumed after reloads. At maximum Hope the button
   is disabled, except a critical can still clear marked Stress; capped rewards are not consumed.
+  **DM chat action awareness:** messages have a subtle **Player actions** summary of the controls connected
+  players actually see, including Hope rewards, ally rerolls and claims. The compact preview stays one line;
+  expand it to see all labels grouped by player, with unavailable actions muted and explanations on hover.
+  These are read-only labels, not actions the DM can execute. They update with player controls and disappear
+  when that player disconnects. Older player clients do not report labels; private player-to-player whispers
+  remain private. Summaries are live presentation hints, not saved history or authoritative eligibility.
   **Seraph:** Roll Prayer Dice once per session without a confirmation; the feature shows its remaining session use.
   Manage individual values only in the compact class-resource group: the face, a highlighted yellow **+** to gain Hope, and **x** to remove
   a manually used die. Each die uses an independent random sample; d4 repeats are normal, especially with Devout.

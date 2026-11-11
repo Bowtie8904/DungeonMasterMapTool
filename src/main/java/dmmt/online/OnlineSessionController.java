@@ -774,6 +774,10 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
     @Override
     public void dmMessage(JsonNode message) {
         Platform.runLater(() -> {
+            if ("chatActions".equals(message.path("type").asText())) {
+                for (var listener : java.util.List.copyOf(chatListeners)) listener.accept(message);
+                return;
+            }
             if ("chatDeleted".equals(message.path("type").asText())) {
                 chatTail.removeIf(m -> m.path("id").asLong() == message.path("id").asLong()
                         && m.path("ts").asLong() == message.path("ts").asLong());

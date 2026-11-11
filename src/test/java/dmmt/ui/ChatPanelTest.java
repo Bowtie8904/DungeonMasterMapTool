@@ -210,6 +210,59 @@ class ChatPanelTest {
     }
 
     @Test
+    void playerActionLabelsStayCompactReadOnlyAndRefreshWithoutReplacingTheMessage() throws Exception {
+        var message = MAPPER.createObjectNode().put("type", "roll").put("id", 1).put("ts", 10)
+                .put("from", "Alice").put("expression", "1d6").put("total", 4);
+        message.putArray("rolls").add(4);
+        var event = MAPPER.createObjectNode().put("type", "chatActions").put("id", 1).put("ts", 10);
+        var players = event.putArray("players");
+        for (String name : List.of("Alice", "Bob", "Carol")) {
+            var player = players.addObject().put("name", name);
+            var actions = player.putArray("actions");
+            for (int i = 0; i < 30; i++) actions.addObject()
+                    .put("label", i == 0 ? name.equals("Alice") ? "Gain 1 Hope" : name.equals("Bob") ? "Reroll" : "Claim"
+                            : "A longer feature action label " + i)
+                    .put("disabled", i == 1).put("detail", i == 1 ? "Not enough Hope" : "");
+        }
+        onFx(() -> {
+            ChatPanel panel = new ChatPanel(new Backend(message));
+            StackPane root = new StackPane(panel);
+            Scene scene = new Scene(root, 260, 900);
+            scene.getStylesheets().add(Icons.STYLESHEET);
+            panel.applyCss();
+            var card = panel.lookup(".chat-entry");
+            panel.markRead();
+            panel.onMessage(event);
+            assertSame(card, panel.lookup(".chat-entry"));
+            assertFalse(panel.unreadProperty().get(), "Presentation updates are not new messages");
+            var footer = (javafx.scene.layout.VBox) panel.lookup(".chat-player-actions");
+            assertTrue(footer.lookupAll(".button").isEmpty(), "No executable player actions");
+            assertEquals(90, footer.lookupAll(".chat-player-action-label").size());
+            assertEquals(3, footer.lookupAll(".unavailable").size());
+            for (double width : new double[]{260, 340}) {
+                root.resize(width, 900);
+                root.layout();
+                assertTrue(footer.getHeight() < 60, "Collapsed action summary stays bounded even with 90 actions");
+                assertTrue(card.getBoundsInParent().getMaxX() <= width + 1);
+            }
+            Label toggle = (Label) footer.getChildren().get(0);
+            assertTrue(toggle.isFocusTraversable());
+            toggle.fireEvent(new javafx.scene.input.KeyEvent(javafx.scene.input.KeyEvent.KEY_PRESSED,
+                    "", "", javafx.scene.input.KeyCode.ENTER, false, false, false, false));
+            assertTrue(footer.getChildren().get(2).isVisible());
+            panel.onMessage(MAPPER.createObjectNode().put("type", "rollUpdate").put("id", 1).put("ts", 10).put("total", 5));
+            footer = (javafx.scene.layout.VBox) panel.lookup(".chat-player-actions");
+            assertTrue(footer.getChildren().get(2).isVisible(), "Roll updates preserve expanded action list");
+            assertEquals(90, footer.lookupAll(".chat-player-action-label").size());
+            event.set("players", MAPPER.createArrayNode());
+            panel.onMessage(event);
+            assertFalse(footer.isManaged());
+            assertFalse(footer.isVisible());
+            assertEquals(1, panel.lookupAll(".chat-entry").size());
+        });
+    }
+
+    @Test
     void dmDeleteIsAccessibleAndWaitsForHostEventWithoutMarkingUnread() throws Exception {
         JsonNode message = MAPPER.readTree("{\"type\":\"chat\",\"id\":1,\"ts\":10,\"from\":\"Alice\",\"text\":\"Hello\"}");
         CountDownLatch called = new CountDownLatch(1);

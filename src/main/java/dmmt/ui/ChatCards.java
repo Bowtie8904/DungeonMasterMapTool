@@ -7,6 +7,9 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.Tooltip;
+import javafx.scene.AccessibleRole;
+import javafx.scene.input.KeyCode;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -215,6 +218,81 @@ public final class ChatCards {
     }
 
     public static Node render(JsonNode m, ToIntFunction<JsonNode> stock, Runnable delete, Function<String, String> artwork) {
+        VBox card = renderBody(m, stock, delete, artwork);
+        VBox actions = new VBox(3);
+        actions.getStyleClass().add("chat-player-actions");
+        card.getProperties().put("dmActions", actions);
+        card.getChildren().add(actions);
+        updateActionSummary(card, m.path("dmActions"));
+        return card;
+    }
+
+    static void updateActionSummary(Node card, JsonNode players) {
+        VBox footer = (VBox) card.getProperties().get("dmActions");
+        if (footer == null) return;
+        boolean expanded = footer.getChildren().size() == 3 && footer.getChildren().get(2).isVisible();
+        footer.getChildren().clear();
+        VBox groups = new VBox(5);
+        List<String> preview = new ArrayList<>();
+        int count = 0;
+        for (JsonNode player : players) {
+            FlowPane labels = new FlowPane(5, 3);
+            labels.setMinWidth(0);
+            for (JsonNode action : player.path("actions")) {
+                String text = action.path("label").asText();
+                boolean disabled = action.path("disabled").asBoolean();
+                Label label = wrapped(text, "chat-player-action-label");
+                label.setMinWidth(0);
+                label.maxWidthProperty().bind(labels.widthProperty());
+                if (disabled) label.getStyleClass().add("unavailable");
+                String detail = action.path("detail").asText();
+                label.setAccessibleText(text + (disabled ? " (unavailable)" : "") + (detail.isBlank() ? "" : ". " + detail));
+                Tooltip.install(label, new Tooltip(player.path("name").asText() + ": " + text
+                        + (disabled ? " (unavailable)" : "") + (detail.isBlank() ? "" : "\n" + detail)));
+                labels.getChildren().add(label);
+                preview.add(player.path("name").asText() + ": " + text + (disabled ? " (unavailable)" : ""));
+                count++;
+            }
+            if (!labels.getChildren().isEmpty()) {
+                Label name = wrapped(player.path("name").asText(), "chat-player-action-owner");
+                name.setMinWidth(0);
+                groups.getChildren().add(new VBox(2, name, labels));
+            }
+        }
+        footer.setVisible(count > 0);
+        footer.setManaged(count > 0);
+        if (count == 0) return;
+        String title = "Player actions (" + count + ")";
+        Label summary = new Label();
+        summary.getStyleClass().add("chat-player-actions-toggle");
+        summary.setFocusTraversable(true);
+        summary.setAccessibleRole(AccessibleRole.BUTTON);
+        Label line = new Label(String.join("  \u00B7  ", preview));
+        line.getStyleClass().add("chat-player-actions-preview");
+        line.setMinWidth(0);
+        line.setMaxWidth(Double.MAX_VALUE);
+        Runnable sync = () -> {
+            boolean open = groups.isVisible();
+            groups.setManaged(open);
+            line.setVisible(!open);
+            line.setManaged(!open);
+            summary.setText((open ? "\u25BE " : "\u25B8 ") + title);
+            summary.setAccessibleText((open ? "Collapse " : "Expand ") + title);
+        };
+        groups.setVisible(expanded);
+        groups.visibleProperty().addListener((o, a, b) -> sync.run());
+        summary.setOnMouseClicked(e -> groups.setVisible(!groups.isVisible()));
+        summary.setOnKeyPressed(e -> {
+            if (e.getCode() == KeyCode.ENTER || e.getCode() == KeyCode.SPACE) {
+                groups.setVisible(!groups.isVisible());
+                e.consume();
+            }
+        });
+        sync.run();
+        footer.getChildren().addAll(summary, line, groups);
+    }
+
+    private static VBox renderBody(JsonNode m, ToIntFunction<JsonNode> stock, Runnable delete, Function<String, String> artwork) {
         boolean roll = "roll".equals(m.path("type").asText());
         String text = m.path("text").asText("");
         boolean whisper = !m.path("toId").asText("").isEmpty();
@@ -817,6 +895,11 @@ public final class ChatCards {
             Node newNode = replacement.lookup(selector);
             if (oldNode instanceof VBox oldBox && newNode instanceof VBox newBox) {
                 newBox.getChildren().get(1).setVisible(oldBox.getChildren().get(1).isVisible());
+            }
+            if (previous.getProperties().get("dmActions") instanceof VBox oldFooter
+                    && replacement.getProperties().get("dmActions") instanceof VBox newFooter
+                    && oldFooter.getChildren().size() == 3 && newFooter.getChildren().size() == 3) {
+                newFooter.getChildren().get(2).setVisible(oldFooter.getChildren().get(2).isVisible());
             }
         }
     }

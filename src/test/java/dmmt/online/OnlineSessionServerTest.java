@@ -35,6 +35,79 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OnlineSessionServerTest {
     @Test
+    void chatActionReportsAreNegotiatedAttributedTransientAndNeverRevealPrivateWhispers() throws Exception {
+        String alice = cookie(), bob = allyCookie("bob");
+        Inbox first = new Inbox(), second = new Inbox();
+        WebSocket a = connect(alice, first), b = connect(bob, second);
+        try {
+            assertTrue(first.next("hello").path("chatActionReports").asBoolean());
+            assertTrue(second.next("hello").path("chatActionReports").asBoolean());
+            a.sendText("{\"type\":\"roll\",\"expression\":\"2d12\"}", true).join();
+            JsonNode roll = first.next("roll");
+            second.next("roll");
+            ObjectNode report = MAPPER.createObjectNode().put("type", "chatActions")
+                    .put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+            report.putArray("actions").addObject().put("label", "Gain 1 Hope").put("disabled", false).put("detail", "");
+            report.put("playerId", "forged").put("name", "Forged");
+            a.sendText(report.toString(), true).join();
+            a.sendText("{\"type\":\"clockSync\",\"id\":1,\"clientSent\":0}", true).join();
+            first.next("clockSync");
+            ((ObjectNode) report.path("actions").get(0)).put("label", "Reroll");
+            b.sendText(report.toString(), true).join();
+            b.sendText("{\"type\":\"clockSync\",\"id\":2,\"clientSent\":0}", true).join();
+            second.next("clockSync");
+            var summary = server.dmHistory(10).getLast().path("dmActions");
+            assertEquals(2, summary.size());
+            assertEquals(playerId(), summary.get(0).path("playerId").asText());
+            assertEquals("Alice", summary.get(0).path("name").asText());
+            assertEquals("Reroll", summary.get(1).path("actions").get(0).path("label").asText());
+            assertFalse(store.historyEntry(campaign.getId(), roll.path("id").asLong(), roll.path("ts").asLong()).has("dmActions"));
+            assertFalse(first.messages.stream().anyMatch(m -> m.path("type").asText().equals("chatActions")));
+            assertFalse(second.messages.stream().anyMatch(m -> m.path("type").asText().equals("chatActions")));
+
+            a.sendText("{\"type\":\"chat\",\"text\":\"Private\",\"toId\":\"bob\"}", true).join();
+            JsonNode whisper = first.next("chat");
+            second.next("chat");
+            int before = dmMessages.size();
+            report.put("id", whisper.path("id").asLong()).put("ts", whisper.path("ts").asLong());
+            a.sendText(report.toString(), true).join();
+            a.sendText("{\"type\":\"clockSync\",\"id\":3,\"clientSent\":0}", true).join();
+            first.next("clockSync");
+            assertEquals(before, dmMessages.size(), "Player-to-player whispers and their controls stay private");
+            server.dmChat("Only Alice", playerId());
+            JsonNode dmWhisper = first.next("chat");
+            report.put("id", dmWhisper.path("id").asLong()).put("ts", dmWhisper.path("ts").asLong());
+            b.sendText(report.toString(), true).join();
+            assertTrue(second.next("error").path("message").asText().contains("not visible"));
+            report.put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+            ((ObjectNode) report.path("actions").get(0)).put("label", "x".repeat(201));
+            a.sendText(report.toString(), true).join();
+            assertTrue(first.next("error").path("message").asText().contains("Invalid"));
+            assertEquals(2, server.dmHistory(10).getFirst().path("dmActions").size());
+            assertNull(server.dmDeleteMessage(roll.path("id").asLong(), roll.path("ts").asLong()));
+            report.putArray("actions");
+            a.sendText(report.toString(), true).join();
+            a.sendText("{\"type\":\"clockSync\",\"id\":4,\"clientSent\":0}", true).join();
+            first.next("clockSync");
+            assertTrue(server.dmHistory(10).stream().noneMatch(m -> m.path("id").equals(roll.path("id"))));
+            // A new connection starts with no stale controls from the disconnected browser.
+            report.put("id", dmWhisper.path("id").asLong()).put("ts", dmWhisper.path("ts").asLong());
+            report.putArray("actions").addObject().put("label", "Claim").put("disabled", false).put("detail", "");
+            a.sendText(report.toString(), true).join();
+            a.sendText("{\"type\":\"clockSync\",\"id\":5,\"clientSent\":0}", true).join();
+            first.next("clockSync");
+            assertEquals(1, server.dmHistory(10).getLast().path("dmActions").size());
+            a.sendClose(WebSocket.NORMAL_CLOSURE, "done").join();
+            b.sendClose(WebSocket.NORMAL_CLOSURE, "done").join();
+            awaitConnections(0);
+            Inbox reconnected = new Inbox();
+            a = connect(alice, reconnected);
+            reconnected.next("hello");
+            assertTrue(server.dmHistory(10).getLast().path("dmActions").isEmpty());
+        } finally { a.abort(); b.abort(); }
+    }
+
+    @Test
     void dreadOrdinaryDamageChatRetainsOwnedActorMarkerAndRejectsOtherActors() throws Exception {
         splendorActor("damaged");
         splendorActor("other");

@@ -382,6 +382,8 @@ export interface Hello {
   druidAutomation?: boolean;
   rollMultipliers?: boolean;
   rollRewards?: boolean;
+  /** Transient, DM-only summaries of the controls rendered in player chat. */
+  chatActionReports?: boolean;
   partyFeatures?: boolean;
   warriorAutomation?: boolean;
   guardianRolls?: boolean;

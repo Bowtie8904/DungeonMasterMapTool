@@ -174,6 +174,7 @@ public final class OnlineSessionServer {
     private final Random diceRandom = new Random();
     private final Map<String, String> sessions = new ConcurrentHashMap<>();
     private final Map<String, Client> clients = new ConcurrentHashMap<>();
+    private final ChatActionReports chatActions = new ChatActionReports();
     private final Map<String, LoginClaim> loginClaims = new java.util.HashMap<>();
     private final Set<String> sessionRolls = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private final Map<String, ObjectNode> invisibilityRolls = new java.util.LinkedHashMap<>() {
@@ -933,7 +934,9 @@ public final class OnlineSessionServer {
         for (JsonNode entry : store.historyTail(c.getId(), limit)) {
             String to = entry.path("toId").asText("");
             if (to.isEmpty() || "dm".equals(to) || "dm".equals(entry.path("fromId").asText())) {
-                result.add(entry);
+                ObjectNode copy = ((ObjectNode) entry).deepCopy();
+                copy.set("dmActions", chatActions.summary(new ChatActionReports.Ref(entry.path("id").asLong(), entry.path("ts").asLong())));
+                result.add(copy);
             }
         }
         return result;
@@ -975,6 +978,7 @@ public final class OnlineSessionServer {
             }
         }
         host.dmMessage(deleted);
+        chatActions.delete(new ChatActionReports.Ref(id, timestamp));
         return null;
     }
 
@@ -1083,6 +1087,7 @@ public final class OnlineSessionServer {
         Client removed = clients.remove(sessionId);
         if (removed != null) {
             if (removed.dmActorId != null) return;
+            chatActions.disconnect(sessionId).forEach(host::dmMessage);
             if (clients.values().stream().noneMatch(client -> client.dmActorId == null && client.playerId.equals(removed.playerId))) {
                 loginClaims.remove(removed.playerId);
             }
@@ -5911,6 +5916,7 @@ public final class OnlineSessionServer {
             hello.put("druidAutomation", true);
             hello.put("rollMultipliers", true);
             hello.put("rollRewards", true);
+            hello.put("chatActionReports", client.dmActorId == null);
             hello.put("partyFeatures", true);
             hello.put("warriorAutomation", true);
             hello.put("guardianRolls", true);
@@ -5993,11 +5999,35 @@ public final class OnlineSessionServer {
             case "command" -> onCommand(client, msg);
             case "measurement" -> onMeasurement(client, msg);
             case "chat" -> onChat(client, msg);
+            case "chatActions" -> onChatActions(client, msg);
             case "chatIdentity" -> sendTo(ctx, error("Chat names are chosen automatically from your first enabled actor."));
             case "roll" -> onRoll(client, msg);
             case "fogExplored" -> onFogExplored(client, msg);
             case "resync" -> onResync(client, msg.path("lastSeq").asLong(0));
             default -> sendTo(ctx, error("Unknown message"));
+        }
+    }
+
+    private synchronized void onChatActions(Client client, JsonNode msg) throws IOException {
+        if (clients.get(client.ctx.sessionId()) != client) return;
+        try {
+            if (!msg.path("id").isIntegralNumber() || !msg.path("id").canConvertToLong()
+                    || !msg.path("ts").isIntegralNumber() || !msg.path("ts").canConvertToLong())
+                throw new IllegalArgumentException("Invalid chat message reference.");
+            ArrayNode actions = ChatActionReports.validate(msg.path("actions"));
+            long id = msg.path("id").asLong(), ts = msg.path("ts").asLong();
+            JsonNode entry = store.historyEntry(campaign.getId(), id, ts);
+            // Delayed reports for deleted messages are harmless; they must never resurrect the card.
+            if (entry == null) return;
+            String to = entry.path("toId").asText("");
+            String from = entry.path("fromId").asText("");
+            if (!to.isEmpty() && !to.equals(client.playerId) && !from.equals(client.playerId))
+                throw new IllegalArgumentException("This chat message is not visible to you.");
+            if (!to.isEmpty() && !"dm".equals(to) && !"dm".equals(from)) return;
+            chatActions.update(client.ctx.sessionId(), client.playerId, client.playerName,
+                    new ChatActionReports.Ref(id, ts), actions).forEach(host::dmMessage);
+        } catch (IllegalArgumentException e) {
+            sendTo(client.ctx, error(e.getMessage()));
         }
     }
 

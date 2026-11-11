@@ -513,6 +513,14 @@ Use `/roll 2d6+3` or `/r 2d6+3` in chat (no separate dice composer). Optional `t
 legacy `whisper:true` remains DM-only. Recipient names are included as additive `to` fields by the host.
 Player recipients require `hello.playerWhispers:true`; older hosts offer only Everyone/Gamemaster, with the
 legacy whisper flag retained for DM chat and rolls so private rolls cannot accidentally become public.
+With `hello.chatActionReports:true`, browsers coalesce changes to their rendered chat controls and send
+`chatActions {id,ts,actions:[{label,disabled,detail}]}` over the authenticated socket. The host attributes
+reports to the connected player and forwards them only to native DM chat for DM-visible messages; it never
+broadcasts or persists them or uses them to authorize actions. Reports are bounded to 128 labels (200
+characters each for label/detail) and the latest 300 reported messages per connection. Disconnect removes
+that connection's reports; reconnect republishes controls. DM chat shows a single-line preview and an
+accessible expandable, player-grouped list of passive labels. Unsupported clients/hosts keep working
+without summaries; no settings or Online/DM Link compatibility-version changes.
 Drawing commands carry map/level identity; the host assigns and enforces campaign/player ownership and publishes
 the normal map overlays, including generated effect textures. Texture choices/defaults come from the host rather
 than a separate browser list. Measurements are shared session-only annotations, replayed to late joiners and cleared

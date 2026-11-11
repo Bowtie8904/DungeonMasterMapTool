@@ -23,6 +23,7 @@ export class Connection {
   glancingBlowDamage = false;
   rollMultipliers = false;
   rollRewards = false;
+  chatActionReports = false;
   partyFeatures = false;
   warriorAutomation = false;
   guardianRolls = false;
@@ -90,6 +91,7 @@ export class Connection {
     this.druidAutomation = false;
     this.rollMultipliers = false;
     this.rollRewards = false;
+    this.chatActionReports = false;
     this.partyFeatures = false;
     this.warriorAutomation = false;
     this.guardianRolls = false;
@@ -148,6 +150,7 @@ export class Connection {
         this.druidAutomation = msg.druidAutomation === true;
         this.rollMultipliers = msg.rollMultipliers === true;
         this.rollRewards = msg.rollRewards === true;
+        this.chatActionReports = msg.chatActionReports === true;
         this.partyFeatures = msg.partyFeatures === true;
         this.warriorAutomation = msg.warriorAutomation === true;
         this.guardianRolls = msg.guardianRolls === true;

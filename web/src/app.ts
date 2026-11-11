@@ -15,6 +15,7 @@ import { renderCountdowns } from './countdowns';
 import { rosterPlayerName } from './roster';
 import { setGmFear } from './daggerheart/engine';
 import { rollButtons } from './daggerheart/rollbuttons';
+import { ChatActionReports } from './chat-action-reports';
 import { addToSheet } from './daggerheart/compendium';
 import { CompendiumPanel } from './compendium';
 import { pickActor } from './actor-picker';
@@ -934,6 +935,7 @@ export class App {
   private handle(msg: ServerMessage): void {
     switch (msg.type) {
       case 'hello':
+        this.actionReports?.reset();
         void this.compendium.revalidate().catch((error: Error) => this.toast(error.message));
         this.playerId = msg.playerId;
         this.setAccountColor(msg.campaignId ?? '', msg.playerId, msg.accountColor);
@@ -1310,6 +1312,7 @@ export class App {
   }
 
   private logCards = new WeakMap<LogEntry, HTMLElement>();
+  private actionReports?: ChatActionReports;
 
   private rollActions(m: RollMessage | import('./protocol').ChatMessage): HTMLElement | null {
     return rollButtons(m, {
@@ -1346,6 +1349,8 @@ export class App {
   }
 
   private renderLog(updatedEntry?: LogEntry): void {
+    this.actionReports ??= new ChatActionReports(this.logContent,
+      report => this.conn.chatActionReports && this.conn.send(report));
     this.captureChatScroll();
     const anchor = Array.from(this.logContent.children).find(child =>
       child.getBoundingClientRect().bottom > this.logEl.getBoundingClientRect().top);
@@ -1363,6 +1368,8 @@ export class App {
           }
         }
         this.logCards.set(e, card);
+        card.dataset.messageId = String(e.m.id);
+        card.dataset.messageTs = String(e.m.ts);
         card.querySelector('.shared-card')?.dispatchEvent(new Event('refresh-stock'));
       }
       return card;
