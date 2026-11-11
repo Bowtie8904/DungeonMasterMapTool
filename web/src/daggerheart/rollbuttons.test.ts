@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { rerollRequest, rollButtons, rollContext, type RollButtonSheet } from './rollbuttons';
+import { rerollRequest, rollButtons, rollContext, type RollButtonHost, type RollButtonSheet } from './rollbuttons';
 import { emptyCharacter, type CharacterSheet } from './data';
 import type { ChatMessage, RollMessage } from '../protocol';
 import { applyRest, rollTriggerSection } from './engine';
@@ -71,7 +71,7 @@ function character(name: string, feature: { name: string; automation: object } |
   } as unknown as CharacterSheet;
 }
 
-function hostFor(sheets: Record<string, CharacterSheet>) {
+function hostFor(sheets: Record<string, CharacterSheet>): { sent: unknown[]; logged: string[]; host: RollButtonHost } {
   const sent: unknown[] = [];
   const logged: string[] = [];
   return {
@@ -83,10 +83,11 @@ function hostFor(sheets: Record<string, CharacterSheet>) {
         const character = sheets[id];
         return character ? {
           character,
-          bus: { send: () => false, log: () => undefined, toast: () => undefined, notify: () => undefined } as never,
+          bus: new SheetBus(),
           save: Object.assign(() => undefined, { flush: async () => undefined }),
         } : undefined;
       },
+      targetActors: () => [],
       send: (roll: unknown) => { sent.push(roll); return true; },
       log: (text: string) => logged.push(text),
       toast: vi.fn(),
@@ -1243,5 +1244,30 @@ describe('cross-player roll buttons', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(box.queryAll('button')).toHaveLength(0);
     }
+  });
+
+  it('offers a player reaction button that opens the character reaction roll without a Difficulty', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Bob', undefined);
+    const reactionRoll = vi.fn(() => true);
+    const { host } = hostFor({ 'actor-b': c });
+    host.targetActors = () => [{ id: 'actor-b', name: 'Bob', ownerId: 'player-b' }];
+    const bus = new SheetBus();
+    bus.reactionRoll = reactionRoll;
+    host.sheet = async () => ({
+      character: c,
+      bus,
+      save: Object.assign(() => undefined, { flush: async () => undefined }),
+    });
+    const prompt: ChatMessage = {
+      id: 45, ts: 2000, fromId: 'dm', from: 'DM', text: 'Acid Burrower · Agility Reaction',
+      reactionPrompt: { trait: 'Agility' },
+    };
+    const box = rollButtons(prompt, host as never) as unknown as FakeElement;
+    const button = box.queryAll('button')[0];
+    expect(button.text).toBe('Roll Agility Reaction');
+    await button.click();
+    expect(reactionRoll).toHaveBeenCalledWith(prompt.text, 'Agility');
+    expect(prompt).not.toHaveProperty('difficulty');
   });
 });

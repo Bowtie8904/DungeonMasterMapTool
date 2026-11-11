@@ -19,13 +19,21 @@ public final class DiceRoller {
     public record Detail(String label, String expression, List<Integer> rolls, int total) {
     }
 
-    private record Keep(int offset, int count, int kept) {
+    private record Keep(int offset, int count, int kept, boolean low) {
+        /** Indices of the dice dropped by this keep term. */
+        List<Integer> dropped(List<Integer> rolls) {
+            List<Integer> indices = new ArrayList<>();
+            for (int i = offset; i < offset + count; i++) indices.add(i);
+            Comparator<Integer> byValue = Comparator.comparingInt(i -> Math.abs(rolls.get(i)));
+            indices.sort(low ? byValue.reversed() : byValue);
+            return indices.subList(0, count - kept);
+        }
     }
 
     private record Terms(List<Integer> dice, int modifier, List<Keep> keeps, int multiplier) {
     }
 
-    private static final Pattern TERM = Pattern.compile("([+-]?)(?:(\\d*)d(\\d+)(?:kh(\\d+))?|(\\d+))");
+    private static final Pattern TERM = Pattern.compile("([+-]?)(?:(\\d*)d(\\d+)(?:k[hl](\\d+))?|(\\d+))");
     private static final int MAX_SIDES = 1000;
 
     private DiceRoller() {
@@ -64,7 +72,7 @@ public final class DiceRoller {
             }
 
             for (Keep keep : part.keeps()) {
-                keeps.add(new Keep(index + keep.offset(), keep.count(), keep.kept()));
+                keeps.add(new Keep(index + keep.offset(), keep.count(), keep.kept(), keep.low()));
             }
             dice.addAll(part.dice());
             modifier += part.modifier();
@@ -109,10 +117,7 @@ public final class DiceRoller {
         boolean[] kept = new boolean[parsed.dice().size()];
         java.util.Arrays.fill(kept, true);
         for (Keep keep : parsed.keeps()) {
-            List<Integer> indices = new ArrayList<>();
-            for (int i = keep.offset(); i < keep.offset() + keep.count(); i++) indices.add(i);
-            indices.sort(Comparator.comparingInt(i -> Math.abs(result.rolls().get(i))));
-            for (int i = 0; i < keep.count() - keep.kept(); i++) kept[indices.get(i)] = false;
+            for (int i : keep.dropped(result.rolls())) kept[i] = false;
         }
         int count = 0;
         for (int i = 0; i < kept.length; i++)
@@ -149,10 +154,7 @@ public final class DiceRoller {
         boolean[] kept = new boolean[result.rolls().size()];
         java.util.Arrays.fill(kept, true);
         for (Keep keep : parsed.keeps()) {
-            List<Integer> indices = new ArrayList<>();
-            for (int i = keep.offset(); i < keep.offset() + keep.count(); i++) indices.add(i);
-            indices.sort(Comparator.comparingInt(i -> Math.abs(result.rolls().get(i))));
-            for (int i = 0; i < keep.count() - keep.kept(); i++) kept[indices.get(i)] = false;
+            for (int i : keep.dropped(result.rolls())) kept[i] = false;
         }
         java.util.Map<Integer, Integer> counts = new java.util.HashMap<>();
         for (int i = 0; i < kept.length; i++) {
@@ -230,8 +232,7 @@ public final class DiceRoller {
         for (Keep keep : terms.keeps()) {
             List<Integer> values = rolls.subList(keep.offset(), keep.offset() + keep.count());
             int sign = Integer.signum(values.getFirst());
-            int discarded = values.stream().mapToInt(Math::abs).sorted()
-                    .limit(keep.count() - keep.kept()).sum();
+            int discarded = keep.dropped(rolls).stream().mapToInt(i -> Math.abs(rolls.get(i))).sum();
             total -= sign * discarded;
         }
         return total * terms.multiplier();
@@ -275,7 +276,7 @@ public final class DiceRoller {
                     throw new IllegalArgumentException("At most " + maxDice + " dice per roll");
                 }
                 if (kept < count) {
-                    keeps.add(new Keep(sidesList.size(), count, kept));
+                    keeps.add(new Keep(sidesList.size(), count, kept, matcher.group(0).contains("kl")));
                 }
                 for (int i = 0; i < count; i++) {
                     sidesList.add(factor * sides);

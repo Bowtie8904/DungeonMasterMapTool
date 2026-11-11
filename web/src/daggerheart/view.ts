@@ -76,6 +76,7 @@ export interface RollRequest {
 export class SheetBus {
   artwork?: string;
   featureAction?: (name: string, id: string) => boolean;
+  reactionRoll?: (label: string, trait: TraitName) => boolean;
   private listeners: Array<(save?: boolean) => void> = [];
   /** Recently sent rolls by ref, so chat buttons can repeat them. */
   readonly sent = new Map<string, RollRequest>();
@@ -480,6 +481,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const bonus = rollBonus(c, allTargets, weapon, false);
     const send = sendRoll(allTargets.join(','), weapon?.name, rollSource ?? (targets.includes('companion') ? rollSourceFor(c, 'companion') : weapon ? rollSourceFor(c, `weapon:${weapon.name}`) : undefined));
     openRollDialog(root, c, label, trait ? traitContributions(c, trait) : [], bonus, request => send({ ...request, ...(difficulty === undefined ? {} : { difficulty }) }), () => { consumeBonus(c, bonus); render(); }, allTargets, undefined, undefined, weapon, false, undefined, undefined, undefined, undefined, 0, undefined, undefined, opts.supportsDomainCardAutomation);
+  };
+  if (opts.bus) opts.bus.reactionRoll = (label, trait) => {
+    rollDuality(label, trait, ['reaction']);
+    return true;
   };
   const rollDamage = (label: string, expression: string, rollSource?: RollSource) => opts.onRoll({ label, expression, rollSource });
   const openWeaponDamage = (w: Weapon, critical = false, targets = ['damage'], after?: () => void, rollSource?: RollSource, pendingAction?: PendingAction, attackFear?: number, proficiencyBonus = 0, linkedBonus = 0, action?: WeaponDamageAction, outcome?: 'hope' | 'fear' | 'critical') => {

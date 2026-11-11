@@ -35,6 +35,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OnlineSessionServerTest {
     @Test
+    void adversaryReactionPromptsAreClickableAndDoNotPublishDifficultyOrOutcome() throws Exception {
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            inbox.next("hello");
+            server.dmReactionPrompt("Acid Burrower · Agility Reaction", "Agility");
+            JsonNode prompt = inbox.next("chat");
+            assertEquals("Agility", prompt.path("reactionPrompt").path("trait").asText());
+            assertFalse(prompt.has("difficulty"));
+            assertFalse(prompt.has("outcome"));
+            assertThrows(IllegalArgumentException.class, () -> server.dmReactionPrompt("Invalid", "Luck"));
+        } finally {
+            ws.abort();
+        }
+    }
+
+    @Test
     void chatActionReportsAreNegotiatedAttributedTransientAndNeverRevealPrivateWhispers() throws Exception {
         String alice = cookie(), bob = allyCookie("bob");
         Inbox first = new Inbox(), second = new Inbox();

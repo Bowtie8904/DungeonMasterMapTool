@@ -10,6 +10,10 @@ A desktop application for tabletop game masters who run in-person sessions with 
 
 ![DM view overview](docs/images/dm-view-overview.png)
 
+## Daggerheart adversaries
+
+Copy a `daggerheart-companion/adversary` JSON export from Daggerheart Companion, then press **Ctrl+V** over the map to add a hidden adversary token. Double-click the token to open its combat statblock (pasting does not open it); its right-click menu has **HP** and **Stress** rows with -/+ buttons to mark or clear marks without opening the sheet; on the DM map it also shows a small DM-only HUD with a shield for its Difficulty plus HP and Stress bars. HP, Stress and adversary tokens are tracked per token (conditions use the token's right-click controls) and saved with the map; copying the token starts a fresh encounter state but keeps its appearance (color, shape, border, artwork) as an independent copy. Use the token's regular right-click controls to reveal it to players, or choose **Edit token appearance...** to change its color, shape, border and artwork like a standard token (adversary tokens always start red; the export's color is ignored; artwork is cropped, not stretched). The attack roll's Advantage/Disadvantage rolls 2d20 keeping the highest/lowest. Dice in the statblock roll straight to chat using the current secret-roll setting; the attack roll opens a dialog with Advantage/Disadvantage and Experience. Clicking a feature's reaction instruction posts a styled player chat prompt with a character-specific roll button; the prompt does not reveal the Difficulty or success/failure. Each feature card has a chat icon that links the feature to players as a plain-text card (name, type and description, without roll buttons) while an online session runs (markdown links in feature text become clickable links in the statblock and open in your default browser, http/https only; in chat they are reduced to their label).
+
 ## Online play (players in browsers)
 
 The **Online Play** tab (next to DM Link) lets you host an optional, DM-controlled web session for players
@@ -36,6 +40,7 @@ Nothing starts until you click **Start online session**, so offline play and the
   On slower devices, **Settings > Smooth token movement** can already be turned off to reduce
   decorative redraws without changing movement or visibility rules.
 - **DM chat responsiveness:** Chat history virtualizes its message cards, rendering only rows in view
+- **DM chat pop-out:** The pop-out button in the chat header moves the chat into its own movable window; closing it (or "Bring it back") docks it again.
   so opening the chat stays responsive even when the session has a long history.
 
 - **Full Stress:** Marking every Stress slot automatically applies Vulnerable and its token badge.

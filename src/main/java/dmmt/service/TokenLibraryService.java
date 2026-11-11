@@ -1,6 +1,7 @@
 package dmmt.service;
 
 import dmmt.log.Log;
+import dmmt.model.DaggerheartAdversary;
 import dmmt.model.DmProject;
 import dmmt.model.DmProject.TokenDefinition;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,6 +22,7 @@ import java.util.UUID;
 public final class TokenLibraryService
 {
     private static final Log LOG = Log.of(TokenLibraryService.class);
+    private static final ObjectMapper COPY_MAPPER = JsonMappers.create();
 
     @Data
     public static class Entry
@@ -256,7 +258,10 @@ public final class TokenLibraryService
         return TokenDefinition.builder().id(token.getId()).name(token.getName()).color(token.getColor())
                               .shape(token.getShape()).border(token.isBorder())
                               .sizeTiles(token.getSizeTiles()).sourceImage(token.getSourceImage()).image(token.getImage())
-                              .zoom(token.getZoom()).centerX(token.getCenterX()).centerY(token.getCenterY()).build();
+                              .zoom(token.getZoom()).centerX(token.getCenterX()).centerY(token.getCenterY())
+                              .adversary(token.getAdversary() == null ? null
+                                      : COPY_MAPPER.convertValue(token.getAdversary(), DaggerheartAdversary.class))
+                              .build();
     }
 
     public static TokenDefinition duplicate(TokenDefinition token)

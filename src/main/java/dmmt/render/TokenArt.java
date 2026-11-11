@@ -163,6 +163,23 @@ public final class TokenArt
                      (y - top) * size / side, width * size / side, height * size / side);
     }
 
+    /**
+     * Uses {@code source} (stored under {@code reference}) as the token's artwork with a centered square crop, so
+     * non-square images are never stretched and the editor can pan and zoom them. Must run on the FX thread.
+     */
+    public static void applySource(TokenDefinition token, Image source, String reference) throws IOException
+    {
+        token.setSourceImage(reference);
+        token.setCenterX(.5);
+        token.setCenterY(.5);
+        token.setZoom(1);
+        javafx.scene.canvas.Canvas crop = new javafx.scene.canvas.Canvas(256, 256);
+        drawCrop(crop.getGraphicsContext2D(), source, token, 256);
+        javafx.scene.SnapshotParameters parameters = new javafx.scene.SnapshotParameters();
+        parameters.setFill(Color.TRANSPARENT);
+        token.setImage(storeImage(crop.snapshot(parameters, null)));
+    }
+
     public static void draw(GraphicsContext gc, TokenDefinition token, double x, double y, double diameter)
     {
         double radius = diameter / 2;

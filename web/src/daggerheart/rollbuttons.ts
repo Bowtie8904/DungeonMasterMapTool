@@ -419,7 +419,7 @@ function incomingReactionButtons(m: ChatMessage, host: RollButtonHost): HTMLElem
 
 export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost): HTMLElement | null {
   if ('text' in m) {
-    const children = [benefitButtons(m, host), restButtons(m, host), chatDamageButtons(m, host), chatFollowUpButtons(m, host), incomingReactionButtons(m, host)].filter((node): node is HTMLElement => !!node);
+    const children = [reactionPromptButtons(m, host), benefitButtons(m, host), restButtons(m, host), chatDamageButtons(m, host), chatFollowUpButtons(m, host), incomingReactionButtons(m, host)].filter((node): node is HTMLElement => !!node);
     return children.length === 1 ? children[0] : children.length ? el('div', {}, ...children) : null;
   }
   if (m.deathMove) return deathButtons(m, host);
@@ -753,4 +753,34 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
   void paintFor().catch((error: Error) => host.toast(error.message));
   const benefits = benefitButtons(m, host);
   return benefits ? el('div', {}, box, benefits) : box;
+}
+
+function reactionPromptButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | null {
+  const trait = m.reactionPrompt?.trait;
+  if (!trait) return null;
+  const actorIds = host.actorIds?.() ?? [];
+  if (!actorIds.length) return null;
+  const actors = host.targetActors?.() ?? [];
+  const box = el('div', { class: 'roll-actions reaction-prompt-actions' });
+  for (const actorId of actorIds) {
+    const actor = actors.find(value => value.id === actorId);
+    const label = `${actor?.name ?? actorId} · ${trait} Reaction`;
+    const button = el('button', { class: 'small primary', type: 'button' },
+      actorIds.length === 1 ? `Roll ${trait} Reaction` : label);
+    button.title = actorIds.length === 1 ? `Roll a ${trait} Reaction for ${actor?.name ?? actorId}` : label;
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        const sheet = await host.sheet(actorId);
+        if (!sheet?.bus.reactionRoll) throw new Error('Open a Daggerheart character sheet to make this reaction roll.');
+        if (!sheet.bus.reactionRoll(m.text, trait)) throw new Error('The reaction roll could not be opened.');
+        button.disabled = false;
+      } catch (error) {
+        host.toast((error as Error).message);
+        button.disabled = false;
+      }
+    });
+    box.append(button);
+  }
+  return box;
 }

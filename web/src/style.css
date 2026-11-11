@@ -144,6 +144,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, canvas:focus-vi
 .entry.action-report { border-color: #4a5f86; border-left: 4px solid #6c9cf0; background: radial-gradient(ellipse at top right, #4a78d426, transparent 70%), linear-gradient(145deg, #1f2735, #181d27 70%); }
 .action-banner { padding: 8px 12px 0; text-transform: uppercase; letter-spacing: .06em; font-size: 12px; color: #9fc0f7; }
 .action-title { padding: 2px 12px 0; font-weight: 600; color: #e8ecf2; }
+.entry.reaction-report { border-color: #7a6a3a; border-left: 4px solid #e0b64a; background: radial-gradient(ellipse at top right, #e0b64a22, transparent 70%), linear-gradient(145deg, #2a2619, #1c1a14 70%); }
+.reaction-banner { display: flex; align-items: center; gap: 8px; padding: 8px 12px 0; text-transform: uppercase; letter-spacing: .06em; font-size: 12px; color: #e6c46a; }
+.reaction-trait { padding: 1px 8px; border-radius: 999px; border: 1px solid #e0b64a66; background: #e0b64a22; font-size: 11px; font-weight: 600; }
+.reaction-source { padding: 2px 12px 0; font-weight: 600; color: #e8ecf2; }
+.reaction-text { padding: 2px 12px 10px; color: #cfd5de; }
 .action-lines { margin: 0; padding: 6px 12px 12px 30px; display: flex; flex-direction: column; gap: 3px; color: #cfd5de; }
 .entry.system-report { border-color: #6b4fa3; border-left: 4px solid #b79cf0; background: radial-gradient(ellipse at top right, #8e5cf026, transparent 70%), linear-gradient(145deg, #262036, #1b1a24 70%); }
 .system-banner { padding: 8px 12px 0; text-transform: uppercase; letter-spacing: .06em; font-size: 12px; color: #d3bfff; }

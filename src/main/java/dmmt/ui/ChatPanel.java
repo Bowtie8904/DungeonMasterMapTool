@@ -197,6 +197,7 @@ public final class ChatPanel extends VBox {
                 if (cell != null && cell.getGraphic() != null) {
                     ChatCards.updateActionSummary(cell.getGraphic(), message.path("players"));
                 }
+
             }
             return;
         }
@@ -247,6 +248,13 @@ public final class ChatPanel extends VBox {
         if (!isShowing()) {
             unread.set(true);
         }
+    }
+
+    public String rollFromAdversary(String expression) {
+        if (expression == null || expression.isBlank()) return "Enter dice to roll.";
+        String error = backend.roll(expression, null, secretRoll.isSelected());
+        showStatus(error);
+        return error;
     }
 
     public boolean isShowing() {

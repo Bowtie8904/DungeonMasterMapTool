@@ -342,8 +342,45 @@ public class DungeonMasterMapToolApplication extends Application {
     private dmmt.ui.ConnectedPlayersOverlay connectedPlayersOverlay;
     private dmmt.ui.CountdownOverlay countdownOverlay;
     private dmmt.ui.ChatPanel chatPanel;
+    private final Map<String, dmmt.ui.AdversaryStatblockWindow> adversaryWindows = new java.util.HashMap<>();
     private Runnable flyoutRelayout;
     private ControlSection chatSection;
+    private Stage chatStage;
+
+    /** Moves the chat out of the DM controls into a separate window; closing that window docks it again. */
+    private void popOutChat() {
+        if (chatStage != null) {
+            chatStage.toFront();
+            return;
+        }
+        Label placeholder = new Label("The chat is open in its own window.");
+        placeholder.setWrapText(true);
+        placeholder.setPadding(new Insets(8));
+        Button dock = new Button("Bring it back");
+        dock.setOnAction(event -> chatStage.close());
+        chatSection.body().getChildren().setAll(new VBox(8, placeholder, dock));
+
+        chatStage = new Stage();
+        chatStage.initOwner(primaryStage);
+        chatStage.setTitle("Chat");
+        chatStage.getIcons().setAll(appIcons());
+        VBox.setVgrow(chatPanel, Priority.ALWAYS);
+        Scene scene = new Scene(chatPanel, 380, 640);
+        scene.getStylesheets().add(Icons.STYLESHEET);
+        chatStage.setScene(scene);
+        chatStage.setMinWidth(300);
+        chatStage.setMinHeight(300);
+        chatStage.setOnHidden(event -> {
+            chatStage = null;
+            scene.setRoot(new javafx.scene.layout.Region());
+            chatSection.body().getChildren().setAll(chatPanel);
+        });
+        chatStage.focusedProperty().addListener((observable, was, focused) -> {
+            if (focused) chatPanel.markRead();
+        });
+        chatStage.show();
+        chatPanel.markRead();
+    }
     private ToggleButton compendiumButton;
     private ControlSection filesSection;
     private dmmt.ui.HandoutsPanel handoutsPanel;
@@ -628,6 +665,7 @@ public class DungeonMasterMapToolApplication extends Application {
     @Override
     public void start(Stage stage) {
         this.primaryStage = stage;
+        dmmt.ui.LinkOpener.install(getHostServices());
         FogService.setCellsPerGrid(preferences.getInt(PREF_FOG_CELLS_PER_GRID, FogService.DEFAULT_CELLS_PER_GRID));
         CanvasMapRenderer.setFogSoftness(preferences.getDouble(PREF_FOG_SOFTNESS, CanvasMapRenderer.DEFAULT_FOG_SOFTNESS));
         CanvasMapRenderer.setFogFadeEnabled(preferences.getBoolean(PREF_FOG_FADE, true));
@@ -909,8 +947,9 @@ public class DungeonMasterMapToolApplication extends Application {
                 return;
             }
             if (event.isControlDown() && event.getCode() == KeyCode.V) {
-                pasteSelection();
-                event.consume();
+                if (pasteSelection()) {
+                    event.consume();
+                }
                 return;
             }
             if (event.getCode() == KeyCode.P) {
@@ -1783,6 +1822,8 @@ public class DungeonMasterMapToolApplication extends Application {
         });
         VBox.setVgrow(chatPanel, Priority.ALWAYS);
         chatSection = new ControlSection("Chat", MaterialDesignC.CHAT_OUTLINE, "chat", chatPanel);
+        chatSection.addHeaderAction(Icons.button(org.kordamp.ikonli.materialdesign2.MaterialDesignO.OPEN_IN_NEW,
+                "Pop the chat out into its own window", this::popOutChat));
         var chatIcon = Icons.icon(MaterialDesignC.CHAT_OUTLINE);
         var unreadDot = new javafx.scene.shape.Circle(4);
         unreadDot.getStyleClass().add("chat-unread-dot");
@@ -3784,6 +3825,14 @@ public class DungeonMasterMapToolApplication extends Application {
             boolean rotationHandle = onTokenRotationHandle(tokenHandle, world.x(), world.y(), camera.getZoom());
             DmProject.TokenInstance token = handle || rotationHandle ? tokenHandle : pickToken(world.x(), world.y());
             if (token != null) {
+                if (activeTool == EditorTool.SELECT && !handle && !rotationHandle
+                        && event.getClickCount() == 2 && isAdversary(token)) {
+                    clearSingleSelection();
+                    selectedTokenId = token.getId();
+                    openAdversaryStatblock(token.getId());
+                    event.consume();
+                    return;
+                }
                 if (activeTool == EditorTool.SELECT && !handle && !rotationHandle
                         && event.getClickCount() == 2 && token.getActorId() != null) {
                     var campaign = onlineController == null ? null : onlineController.campaign();
@@ -9075,7 +9124,13 @@ public class DungeonMasterMapToolApplication extends Application {
             String id = keyId(key);
             if (key.startsWith("token:")) {
                 DmProject.TokenInstance token = findToken(id);
-                content.tokens.add(cloneToken(token));
+                DmProject.TokenInstance copy = cloneToken(token);
+                if (isAdversary(token)) {
+                    copy.setPlayerVisible(false);
+                    copy.setConditions(new java.util.ArrayList<>());
+                    copy.setAdversaryState(new dmmt.model.DaggerheartAdversary.CombatState(0, 0, 0, false));
+                }
+                content.tokens.add(copy);
                 content.definitions.put(token.getDefinitionId(),
                         dmmt.service.TokenLibraryService.copy(project.getTokenDefinitions().get(token.getDefinitionId())));
             } else if (key.startsWith("light:")) {
@@ -9096,17 +9151,23 @@ public class DungeonMasterMapToolApplication extends Application {
         content.centerX = (minX + maxX) / 2.0;
         content.centerY = (minY + maxY) / 2.0;
         CopiedItems = content;
+        // A leftover adversary export on the system clipboard would otherwise win over the copied tokens when pasting.
+        javafx.scene.input.Clipboard.getSystemClipboard().clear();
         status("Copied " + keys.size() + (keys.size() == 1 ? " item" : " items")
                 + ". Paste with Ctrl+V, also on another map.");
         return true;
     }
 
     /** Pastes the copied items centered on the cursor as one undo step. */
-    private void pasteSelection() {
+    private boolean pasteSelection() {
+        String systemText = javafx.scene.input.Clipboard.getSystemClipboard().getString();
+        if (systemText != null && systemText.contains(dmmt.service.DaggerheartAdversaryClipboard.FORMAT)) {
+            pasteAdversary(systemText);
+            return true;
+        }
         CopiedItems content = CopiedItems;
         if (content == null || content.isEmpty()) {
-            status("Nothing copied yet.");
-            return;
+            return false;
         }
         commitTextEdit();
         if (!content.texts.isEmpty() && !project.isTextLayerVisible()) {
@@ -9144,9 +9205,21 @@ public class DungeonMasterMapToolApplication extends Application {
         }
 
         java.util.List<DmProject.TokenInstance> tokens = new java.util.ArrayList<>();
+        Map<String, DmProject.TokenDefinition> adversaryDefinitions = new java.util.LinkedHashMap<>();
         for (DmProject.TokenInstance source : content.tokens) {
             var copy = cloneToken(source);
             copy.setId(UUID.randomUUID().toString());
+            DmProject.TokenDefinition sourceDefinition = content.definitions.get(source.getDefinitionId());
+            if (sourceDefinition != null && sourceDefinition.getAdversary() != null) {
+                // Each adversary token owns its definition; the copy keeps the original's color, shape and artwork.
+                DmProject.TokenDefinition own = dmmt.service.TokenLibraryService.copy(sourceDefinition);
+                own.setId("adversary:" + UUID.randomUUID());
+                adversaryDefinitions.put(own.getId(), own);
+                copy.setDefinitionId(own.getId());
+                copy.setPlayerVisible(false);
+                copy.setConditions(new java.util.ArrayList<>());
+                copy.setAdversaryState(new dmmt.model.DaggerheartAdversary.CombatState(0, 0, 0, false));
+            }
             if (copy.getLight() != null) {
                 copy.getLight().setId(DmProject.tokenLightId(copy.getId()));
             }
@@ -9156,7 +9229,11 @@ public class DungeonMasterMapToolApplication extends Application {
         }
 
         Runnable redo = () -> {
-            content.definitions.forEach((id, definition) -> project.getTokenDefinitions().putIfAbsent(id,
+            content.definitions.forEach((id, definition) -> {
+                if (definition.getAdversary() == null) project.getTokenDefinitions().putIfAbsent(id,
+                        dmmt.service.TokenLibraryService.copy(definition));
+            });
+            adversaryDefinitions.forEach((id, definition) -> project.getTokenDefinitions().put(id,
                     dmmt.service.TokenLibraryService.copy(definition)));
             tokens.forEach(token -> applyTokenState(token.getId(), token));
             for (DmProject.LightSource light : lights) {
@@ -9199,6 +9276,81 @@ public class DungeonMasterMapToolApplication extends Application {
             groupKeys.addAll(pasted);
         }
         status("Pasted " + pasted.size() + (pasted.size() == 1 ? " item." : " items."));
+        return true;
+    }
+
+    private void pasteAdversary(String json) {
+        final dmmt.service.DaggerheartAdversaryClipboard.Import imported;
+        try {
+            imported = new dmmt.service.DaggerheartAdversaryClipboard().parse(json);
+        } catch (IllegalArgumentException exception) {
+            status("Could not paste adversary: " + exception.getMessage());
+            return;
+        }
+        commitTextEdit();
+        DmProject.CameraState camera = project.getViews().getDmCamera();
+        double x = snapToken(hoverInsideCanvas ? hoverWorldX : camera.getX(), false);
+        double y = snapToken(hoverInsideCanvas ? hoverWorldY : camera.getY(), false);
+        String definitionId = "adversary:" + UUID.randomUUID();
+        DmProject.TokenDefinition definition = DmProject.TokenDefinition.builder()
+                .id(definitionId)
+                .name(imported.tokenName())
+                .color(ADVERSARY_TOKEN_COLOR)
+                .adversary(imported.adversary())
+                .build();
+        DmProject.TokenInstance token = DmProject.TokenInstance.builder()
+                .id(UUID.randomUUID().toString())
+                .definitionId(definitionId)
+                .x(x)
+                .y(y)
+                .sizeTiles(1)
+                .playerVisible(false)
+                .adversaryState(new dmmt.model.DaggerheartAdversary.CombatState(0, 0, 0, false))
+                .conditions(new java.util.ArrayList<>())
+                .build();
+        executeWithHistory("Paste adversary", () -> {
+            project.getTokenDefinitions().put(definitionId, dmmt.service.TokenLibraryService.copy(definition));
+            applyTokenState(token.getId(), token);
+        }, () -> {
+            applyTokenState(token.getId(), null);
+            project.getTokenDefinitions().remove(definitionId);
+            parkedAdversaryDefinitions.remove(definitionId);
+        });
+        selectedTokenId = token.getId();
+        clearGroup();
+        status("Pasted " + imported.adversary().getName() + ".");
+        if (imported.imageUrl() != null && !imported.imageUrl().isBlank()) {
+            Thread.startVirtualThread(() -> {
+                final String image;
+                try {
+                    image = dmmt.service.DaggerheartAdversaryClipboard.downloadLocalImage(imported.imageUrl());
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    LOG.warn("Adversary artwork import was interrupted", exception);
+                    return;
+                } catch (java.io.IOException | IllegalArgumentException exception) {
+                    LOG.warn("Could not import adversary token artwork", exception);
+                    Platform.runLater(() -> {
+                        if (findToken(token.getId()) != null) status("Could not load adversary artwork; see the application log.");
+                    });
+                    return;
+                }
+                Platform.runLater(() -> {
+                    DmProject.TokenInstance current = findToken(token.getId());
+                    DmProject.TokenDefinition currentDefinition = current == null ? null
+                            : project.getTokenDefinitions().get(current.getDefinitionId());
+                    if (currentDefinition == null || !definitionId.equals(currentDefinition.getId())) return;
+                    try {
+                        dmmt.render.TokenArt.applySource(currentDefinition, dmmt.render.TokenArt.decode(image), image);
+                    } catch (java.io.IOException | IllegalArgumentException exception) {
+                        LOG.warn("Could not prepare adversary token artwork", exception);
+                        status("Could not load adversary artwork; see the application log.");
+                        return;
+                    }
+                    tokenDefinitionChanged(currentDefinition);
+                });
+            });
+        }
     }
 
     /** Copied items in the coordinates of the map they came from; survives map switches. */
@@ -9367,6 +9519,9 @@ public class DungeonMasterMapToolApplication extends Application {
                 (int) Math.round(color.getOpacity() * 255));
     }
 
+    /** Imported adversaries always start red; the export's token color is ignored. */
+    private static final String ADVERSARY_TOKEN_COLOR = "#D64545";
+
     private void tokenDefinitionChanged(DmProject.TokenDefinition definition) {
         if (project.getTokenDefinitions().containsKey(definition.getId())) {
             project.getTokenDefinitions().put(definition.getId(), dmmt.service.TokenLibraryService.copy(definition));
@@ -9384,6 +9539,62 @@ public class DungeonMasterMapToolApplication extends Application {
         return id == null ? null : project.getTokens().stream().filter(t -> id.equals(t.getId())).findFirst().orElse(null);
     }
 
+    private boolean isAdversary(DmProject.TokenInstance token) {
+        DmProject.TokenDefinition definition = token == null ? null
+                : project.getTokenDefinitions().get(token.getDefinitionId());
+        return definition != null && definition.getAdversary() != null;
+    }
+
+    private void openAdversaryStatblock(String id) {
+        DmProject.TokenInstance token = findToken(id);
+        DmProject.TokenDefinition definition = token == null ? null
+                : project.getTokenDefinitions().get(token.getDefinitionId());
+        if (definition == null || definition.getAdversary() == null) return;
+        dmmt.ui.AdversaryStatblockWindow existing = adversaryWindows.get(id);
+        if (existing != null && existing.isShowing()) {
+            existing.refresh();
+            existing.focus();
+            return;
+        }
+        var window = new dmmt.ui.AdversaryStatblockWindow(primaryStage, () -> findToken(id),
+                () -> {
+                    DmProject.TokenInstance current = findToken(id);
+                    return current == null ? null : project.getTokenDefinitions().get(current.getDefinitionId());
+                },
+                (label, mutation) -> changeToken(id, label, mutation),
+                (label, expression, attack, experiences) -> {
+                    if (chatPanel == null) {
+                        status("The DM chat is not available for this roll.");
+                        return;
+                    }
+                    java.util.Optional<String> roll = attack
+                            ? dmmt.ui.AdversaryRollWindow.show(primaryStage, label, expression, experiences)
+                            : java.util.Optional.of(expression);
+                    roll.ifPresent(value -> {
+                        String error = chatPanel.rollFromAdversary(value);
+                        if (error != null) status(error);
+                    });
+                },
+                (label, trait) -> {
+                    if (onlineController == null || !onlineController.running()) {
+                        status("Start an online session to send player reaction prompts.");
+                    } else {
+                        String article = "AEIOU".contains(trait.substring(0, 1)) ? "an" : "a";
+                        onlineController.sendReactionPrompt(label + " - make " + article + " "
+                                + trait + " Reaction Roll.", trait);
+                    }
+                },
+                (adversaryName, name, classification, text) -> {
+                    if (onlineController == null || !onlineController.running()) {
+                        status("Start an online session to link features in the chat.");
+                        return;
+                    }
+                    String error = onlineController.shareAdversaryFeature(adversaryName, name, classification, text);
+                    status(error != null ? error : name + " linked in chat.");
+                });
+        adversaryWindows.put(id, window);
+    }
+
     private static DmProject.TokenInstance cloneToken(DmProject.TokenInstance token) {
         return DmProject.TokenInstance.builder().id(token.getId()).definitionId(token.getDefinitionId())
                 .x(token.getX()).y(token.getY()).sizeTiles(token.getSizeTiles())
@@ -9395,6 +9606,10 @@ public class DungeonMasterMapToolApplication extends Application {
                         : new DmProject.TokenCondition(condition.getId(), condition.getType(),
                         condition.getName(), condition.getIconId()))
                         .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new)))
+                .adversaryState(token.getAdversaryState() == null ? null
+                        : new dmmt.model.DaggerheartAdversary.CombatState(token.getAdversaryState().getMarkedHp(),
+                        token.getAdversaryState().getMarkedStress(), token.getAdversaryState().getTokens(),
+                        token.getAdversaryState().isDead()))
                 .light(token.getLight() == null ? null : cloneLight(token.getLight())).build();
     }
 
@@ -9404,13 +9619,28 @@ public class DungeonMasterMapToolApplication extends Application {
             if (id.equals(project.getTokens().get(i).getId())) { index = i; break; }
         }
         if (state == null) {
-            if (index >= 0) project.getTokens().remove(index);
-            if (id.equals(selectedTokenId)) selectedTokenId = null;
-        } else if (index >= 0) {
-            project.getTokens().set(index, cloneToken(state));
-        } else {
-            project.getTokens().add(cloneToken(state));
-        }
+           if (index >= 0) {
+               String definitionId = project.getTokens().remove(index).getDefinitionId();
+               dropUnusedAdversaryDefinition(definitionId);
+           }
+           if (id.equals(selectedTokenId)) selectedTokenId = null;
+       } else {
+           DmProject.TokenDefinition parked = parkedAdversaryDefinitions.remove(state.getDefinitionId());
+           if (parked != null) project.getTokenDefinitions().putIfAbsent(parked.getId(), parked);
+           if (index >= 0) project.getTokens().set(index, cloneToken(state));
+           else project.getTokens().add(cloneToken(state));
+       }
+    }
+
+    /** Definitions of removed adversary tokens, kept only so undo can restore them. */
+    private final Map<String, DmProject.TokenDefinition> parkedAdversaryDefinitions = new java.util.HashMap<>();
+
+    /** Adversary definitions belong to a single token, so they are dropped from the project with it. */
+    private void dropUnusedAdversaryDefinition(String definitionId) {
+       DmProject.TokenDefinition definition = project.getTokenDefinitions().get(definitionId);
+       if (definition == null || definition.getAdversary() == null
+               || project.getTokens().stream().anyMatch(t -> definitionId.equals(t.getDefinitionId()))) return;
+       parkedAdversaryDefinitions.put(definitionId, project.getTokenDefinitions().remove(definitionId));
     }
 
     private double snapToken(double value, boolean free) {
@@ -9559,6 +9789,13 @@ public class DungeonMasterMapToolApplication extends Application {
         MenuItem remove = new MenuItem("Remove token from map");
         remove.setOnAction(e -> removeToken(id));
         java.util.List<MenuItem> items = new java.util.ArrayList<>(java.util.List.of(visible, name, size));
+        if (isAdversary(token)) {
+            items.add(adversaryTrackMenu(token, true));
+            items.add(adversaryTrackMenu(token, false));
+            MenuItem edit = new MenuItem("Edit token appearance...");
+            edit.setOnAction(e -> editAdversaryToken(token));
+            items.add(edit);
+        }
         if (onlinePanel != null) {
             items.add(tokenConditionsMenu(token));
         }
@@ -9581,6 +9818,73 @@ public class DungeonMasterMapToolApplication extends Application {
         hideLightMenu();
         activeLightMenu = new ContextMenu(items.toArray(new MenuItem[0]));
         activeLightMenu.show(dmCanvas, screenX, screenY);
+    }
+
+    /** Quick HP / Stress marking for an adversary token, so the statblock does not need to be open. */
+    private MenuItem adversaryTrackMenu(DmProject.TokenInstance token, boolean hp) {
+        String id = token.getId();
+        var adversary = project.getTokenDefinitions().get(token.getDefinitionId()).getAdversary();
+        int max = Math.max(0, hp ? adversary.getMaxHp() : adversary.getMaxStress());
+        var state = token.getAdversaryState();
+        int[] marked = {state == null ? 0 : hp ? state.getMarkedHp() : state.getMarkedStress()};
+        Label name = new Label(hp ? "HP" : "Stress");
+        name.setMinWidth(46);
+        Label value = new Label();
+        value.setMinWidth(40);
+        value.setAlignment(javafx.geometry.Pos.CENTER);
+        Button less = new Button("-");
+        Button more = new Button("+");
+        Runnable update = () -> {
+            value.setText(marked[0] + " / " + max);
+            less.setDisable(marked[0] <= 0);
+            more.setDisable(marked[0] >= max);
+        };
+        less.setOnAction(e -> {
+            marked[0] = Math.max(0, marked[0] - 1);
+            setAdversaryMarks(id, hp, marked[0]);
+            update.run();
+        });
+        more.setOnAction(e -> {
+            marked[0] = Math.min(max, marked[0] + 1);
+            setAdversaryMarks(id, hp, marked[0]);
+            update.run();
+        });
+        update.run();
+        HBox row = new HBox(6, name, less, value, more);
+        row.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+        javafx.scene.control.CustomMenuItem item = new javafx.scene.control.CustomMenuItem(row, false);
+        return item;
+    }
+
+    private void setAdversaryMarks(String id, boolean hp, int value) {
+        changeToken(id, hp ? "Change adversary HP" : "Change adversary Stress", t -> {
+            var state = t.getAdversaryState() == null
+                    ? new dmmt.model.DaggerheartAdversary.CombatState(0, 0, 0, false) : t.getAdversaryState();
+            if (hp) state.setMarkedHp(value);
+            else state.setMarkedStress(value);
+            t.setAdversaryState(state);
+        });
+        var window = adversaryWindows.get(id);
+        if (window != null && window.isShowing()) window.refresh();
+    }
+
+    private void editAdversaryToken(DmProject.TokenInstance token) {
+        DmProject.TokenDefinition current = project.getTokenDefinitions().get(token.getDefinitionId());
+        if (current == null) return;
+        dmmt.ui.TokenEditor.show(primaryStage, current, null).ifPresent(edited -> {
+            DmProject.TokenDefinition before = dmmt.service.TokenLibraryService.copy(current);
+            DmProject.TokenDefinition after = dmmt.service.TokenLibraryService.copy(edited);
+            after.setId(before.getId());
+            after.setAdversary(before.getAdversary());
+            String definitionId = before.getId();
+            executeWithHistory("Edit adversary token", () -> {
+                project.getTokenDefinitions().put(definitionId, dmmt.service.TokenLibraryService.copy(after));
+                tokenDefinitionChanged(after);
+            }, () -> {
+                project.getTokenDefinitions().put(definitionId, dmmt.service.TokenLibraryService.copy(before));
+                tokenDefinitionChanged(before);
+            });
+        });
     }
 
     private Menu tokenConditionsMenu(DmProject.TokenInstance token) {

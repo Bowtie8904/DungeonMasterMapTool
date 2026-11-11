@@ -855,6 +855,18 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         }
     }
 
+    public void sendReactionPrompt(String text, String trait) {
+        OnlineSessionServer current = server;
+        if (current != null) current.dmReactionPrompt(text, trait);
+    }
+
+    /** Links an adversary feature in the chat; returns an error message or {@code null}. */
+    public String shareAdversaryFeature(String adversary, String name, String classification, String text) {
+        OnlineSessionServer current = server;
+        return current == null ? "Start an online session to link features in the chat."
+                : current.dmShareAdversaryFeature(adversary, name, classification, text);
+    }
+
     /** Posts a DM gold transfer offer; returns an error message or {@code null}. */
     public String offerGold(int amount, String toPlayerId) {
         OnlineSessionServer current = server;

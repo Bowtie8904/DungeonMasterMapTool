@@ -42,8 +42,8 @@ import java.util.regex.Pattern;
  */
 public final class ChatCards {
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
-    private static final Pattern KEEP = Pattern.compile("(\\d*)d\\d+(?:kh(\\d+))?", Pattern.CASE_INSENSITIVE);
-    private static final Pattern TERM = Pattern.compile("([+-]?)(?:(\\d*)d(\\d+)(?:kh(\\d+))?|(\\d+))",
+    private static final Pattern KEEP = Pattern.compile("(\\d*)d\\d+(?:k([hl])(\\d+))?", Pattern.CASE_INSENSITIVE);
+    private static final Pattern TERM = Pattern.compile("([+-]?)(?:(\\d*)d(\\d+)(?:k[hl](\\d+))?|(\\d+))",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern REST_HEAD = Pattern.compile("^(?:\uD83C\uDFD5\uFE0F )?(SHORT|LONG) REST$");
     private static final Pattern DAMAGE_STATS = Pattern.compile(
@@ -94,15 +94,17 @@ public final class ChatCards {
         while (matcher.find()) {
             int count = matcher.group(1).isEmpty() ? 1 : Integer.parseInt(matcher.group(1));
             if (matcher.group(2) != null) {
+                boolean low = matcher.group(2).equalsIgnoreCase("l");
                 List<Integer> indices = new ArrayList<>();
                 for (int n = index; n < Math.min(index + count, rolls.size()); n++) {
                     indices.add(n);
                 }
                 indices.sort((a, b) -> {
                     int byValue = Integer.compare(Math.abs(rolls.get(b)), Math.abs(rolls.get(a)));
+                    if (low) byValue = -byValue;
                     return byValue != 0 ? byValue : Integer.compare(a, b);
                 });
-                int keep = Integer.parseInt(matcher.group(2));
+                int keep = Integer.parseInt(matcher.group(3));
                 for (int n = keep; n < indices.size(); n++) {
                     kept[indices.get(n)] = false;
                 }
@@ -306,8 +308,12 @@ public final class ChatCards {
         DamageReport damage = plain && system.isEmpty() && rest == null ? parseDamageReport(text) : null;
         ActionReport action = plain && system.isEmpty() && rest == null && damage == null ? parseActionReport(text) : null;
 
+        String reactionTrait = plain && system.isEmpty() && rest == null && damage == null && action == null
+                ? m.path("reactionPrompt").path("trait").asText("") : "";
+
         VBox card = new VBox();
         card.getStyleClass().add("chat-entry");
+        if (!reactionTrait.isEmpty()) card.getStyleClass().add("chat-reaction");
         if (roll) card.getStyleClass().add("chat-roll");
         if (!system.isEmpty()) card.getStyleClass().add("chat-system");
         if (rest != null) card.getStyleClass().add("chat-rest");
@@ -338,6 +344,10 @@ public final class ChatCards {
         if (action != null) {
             card.getChildren().add(actionBody(action));
             appendRollSource(card, m);
+            return card;
+        }
+        if (!reactionTrait.isEmpty()) {
+            card.getChildren().add(reactionBody(reactionTrait, text));
             return card;
         }
         if (roll) {
@@ -386,6 +396,22 @@ public final class ChatCards {
         Label banner = new Label(report.title().startsWith("Death move - ") ? "DEATH MOVE" : "ACTION USED");
         banner.getStyleClass().add("chat-action-banner");
         return new VBox(banner, wrapped(report.title(), "chat-action-title"), bullets(report.lines()));
+    }
+
+    private static Node reactionBody(String trait, String text) {
+        Label title = new Label("REACTION ROLL");
+        title.getStyleClass().add("chat-reaction-banner");
+        Label tag = new Label(trait);
+        tag.getStyleClass().add("chat-reaction-trait");
+        HBox banner = new HBox(8, title, tag);
+        banner.setAlignment(Pos.CENTER_LEFT);
+        banner.setPadding(new Insets(8, 12, 0, 12));
+        VBox box = new VBox(banner);
+        Matcher source = Pattern.compile("^(.*?) \u00B7 \\w+ Reaction - ").matcher(text);
+        if (source.find()) box.getChildren().add(wrapped(source.group(1), "chat-reaction-source"));
+        String article = "AEIOU".contains(trait.substring(0, 1)) ? "an" : "a";
+        box.getChildren().add(wrapped("Make " + article + " " + trait + " Reaction Roll.", "chat-reaction-text"));
+        return box;
     }
 
     private static Node header(JsonNode m, Runnable delete, Function<String, String> artwork) {
@@ -767,8 +793,7 @@ public final class ChatCards {
         String title = m.has("label") ? m.path("label").asText()
                 : hidden || secretToPlayers ? "Secret roll" : duality ? "Duality roll" : "Dice roll";
         if (List.of(m.path("source").asText("").split(",")).contains("reaction")) title += " - Reaction roll";
-        Label titleLabel = new Label(title);
-        titleLabel.getStyleClass().add("chat-roll-title");
+        Label titleLabel = wrapped(title, "chat-roll-title");
         VBox body = new VBox(12, titleLabel, equation);
         body.setPadding(new Insets(12));
         if (secretToPlayers) {

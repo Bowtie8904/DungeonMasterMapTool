@@ -1628,6 +1628,11 @@
 .chat-entry.chat-action { -fx-background-color: radial-gradient(focus-angle 0deg, focus-distance 0%, center 0% 0%, radius 70%, #4a78d426, transparent), linear-gradient(to bottom right, #1f2735, #181d27); -fx-border-color: #4a5f86 #4a5f86 #4a5f86 #6c9cf0; -fx-border-width: 1 1 1 4; }
 .chat-action-banner { -fx-text-fill: #9fc0f7; -fx-font-weight: bold; -fx-padding: 8 12 0 12; }
 .chat-action-title { -fx-font-weight: bold; -fx-padding: 2 12 0 12; }
+.chat-entry.chat-reaction { -fx-background-color: radial-gradient(focus-angle 0deg, focus-distance 0%, center 0% 0%, radius 70%, #e0b64a22, transparent), linear-gradient(to bottom right, #2a2619, #1c1a14); -fx-border-color: #7a6a3a #7a6a3a #7a6a3a #e0b64a; -fx-border-width: 1 1 1 4; }
+.chat-reaction-banner { -fx-text-fill: #e6c46a; -fx-font-weight: bold; }
+.chat-reaction-trait { -fx-text-fill: #e6c46a; -fx-font-size: 11px; -fx-padding: 1 8; -fx-background-color: #e0b64a22; -fx-border-color: #e0b64a66; -fx-border-radius: 10; -fx-background-radius: 10; }
+.chat-reaction-source { -fx-font-weight: bold; -fx-padding: 2 12 0 12; }
+.chat-reaction-text { -fx-padding: 2 12 10 12; }
 .chat-entry.chat-system { -fx-background-color: radial-gradient(focus-angle 0deg, focus-distance 0%, center 0% 0%, radius 70%, #8e5cf026, transparent), linear-gradient(to bottom right, #262036, #1b1a24); -fx-border-color: #6b4fa3 #6b4fa3 #6b4fa3 #b79cf0; -fx-border-width: 1 1 1 4; }
 .chat-system-banner { -fx-text-fill: #d3bfff; -fx-font-weight: bold; -fx-padding: 8 12 0 12; }
 .chat-rest-subtitle { -fx-font-weight: bold; -fx-padding: 2 12 0 12; }
@@ -1646,3 +1651,36 @@
     -fx-border-width: 1;
     -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.4), 24, 0, 0, 8);
 }
+.adversary-scroll,
+.adversary-scroll > .viewport,
+.adversary-scroll > .corner {
+    -fx-background-color: #171b21;
+}
+.adversary-heading { -fx-font-size: 22px; -fx-font-weight: bold; }
+.adversary-subtitle { -fx-text-fill: #9da9b9; -fx-font-size: 12px; }
+.adversary-description { -fx-text-fill: #c4ccd8; }
+.adversary-caption { -fx-text-fill: #8a96a8; -fx-font-size: 10px; -fx-font-weight: bold; }
+.adversary-section { -fx-text-fill: #9fc0f7; -fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 8 0 0 0; }
+.adversary-content .separator .line { -fx-border-color: #2a313b; -fx-border-width: 1 0 0 0; }
+.adversary-card { -fx-background-color: #1d222b; -fx-border-color: #2a313b; -fx-border-radius: 7; -fx-background-radius: 7; -fx-padding: 10 12; -fx-spacing: 6; }
+.adversary-feature-name { -fx-font-weight: bold; -fx-font-size: 13px; }
+.adversary-chip { -fx-text-fill: #9fc0f7; -fx-font-size: 10px; -fx-padding: 1 8; -fx-background-color: #4a78d422; -fx-border-color: #4a78d455; -fx-border-radius: 10; -fx-background-radius: 10; }
+.adversary-text { -fx-fill: #c4ccd8; }
+.adversary-link { -fx-text-fill: #7fb7ff; -fx-underline: true; -fx-border-color: transparent; }
+.adversary-link:hover { -fx-text-fill: #a9d0ff; }
+.adversary-stat { -fx-background-color: #252b34; -fx-background-radius: 7; -fx-padding: 7 8; }
+.adversary-stat-value { -fx-font-size: 18px; -fx-font-weight: bold; }
+.adversary-resource-label { -fx-font-weight: bold; }
+.adversary-resource { -fx-padding: 0; -fx-background-color: transparent; -fx-border-color: #596372; -fx-border-radius: 4; -fx-background-radius: 4; }
+.adversary-resource:selected.hp { -fx-border-color: #d66b73; -fx-background-color: #d66b73; }
+.adversary-resource:selected.stress { -fx-border-color: #d49a3b; -fx-background-color: #d49a3b; }
+.adversary-step { -fx-padding: 0; -fx-font-weight: bold; }
+.adversary-defeated:selected { -fx-text-fill: #f29a9f; -fx-border-color: #d66b73; -fx-background-color: #6e3b3f55; }
+.adversary-roll { -fx-padding: 0 7; -fx-font-size: 11px; -fx-text-fill: #f0cf8f; -fx-background-color: #d49a3b22; -fx-border-color: #d49a3b66; -fx-border-radius: 5; -fx-background-radius: 5; }
+.adversary-roll:hover { -fx-background-color: #d49a3b44; }
+.adversary-roll.reaction { -fx-text-fill: #9fc0f7; -fx-background-color: #4a78d422; -fx-border-color: #4a78d466; }
+.adversary-roll.reaction:hover { -fx-background-color: #4a78d444; }
+.adversary-adv-btn { -fx-padding: 6 10; }
+.adversary-adv-btn:selected.adv { -fx-text-fill: #9fe0b0; -fx-border-color: #4fae6a; -fx-background-color: #4fae6a33; }
+.adversary-adv-btn:selected.norm { -fx-text-fill: #9fc0f7; -fx-border-color: #4a78d4; -fx-background-color: #4a78d433; }
+.adversary-adv-btn:selected.dis { -fx-text-fill: #f29a9f; -fx-border-color: #d66b73; -fx-background-color: #d66b7333; }

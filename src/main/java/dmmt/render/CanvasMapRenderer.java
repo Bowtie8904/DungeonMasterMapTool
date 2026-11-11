@@ -67,6 +67,14 @@ public class CanvasMapRenderer {
                 ? actorResources.get(token.getActorId()) : null;
     }
 
+    /** HUD data for the DM canvas: player actor resources, or the adversary's marked HP/Stress and Difficulty. */
+    private dmmt.online.ActorTokenResources hudOf(DmProject project, DmProject.TokenInstance token) {
+        var resources = resourcesOf(token);
+        if (resources != null) return resources;
+        DmProject.TokenDefinition definition = project.getTokenDefinitions().get(token.getDefinitionId());
+        return definition == null ? null : adversaryResources(definition, token);
+    }
+
     /** Light map is computed at 1/scale of screen resolution and smoothed when scaled up (lighting.lightMapScale). */
     private int activeLightMapScale = 4;
 
@@ -600,12 +608,12 @@ public class CanvasMapRenderer {
                 .map(box -> new DmTextState(TextState.of(box), box.isPlayerVisible(), box.isRoomLabel())).toList()
                 : List.of();
         List<TokenDecorationState> tokens = project == null ? List.of() : project.getTokens().stream()
-                .filter(token -> !token.isPlayerVisible() || token.isNameVisible() || resourcesOf(token) != null)
+                .filter(token -> !token.isPlayerVisible() || token.isNameVisible() || hudOf(project, token) != null)
                 .filter(token -> project.getTokenDefinitions().get(token.getDefinitionId()) != null)
                 .map(token -> new TokenDecorationState(token.getX(), token.getY(), token.getSizeTiles(),
                         token.getRotationDeg(), project.getTokenDefinitions().get(token.getDefinitionId()).getShape(),
                         token.isPlayerVisible(), token.isNameVisible(),
-                        project.getTokenDefinitions().get(token.getDefinitionId()).getName(), resourcesOf(token))).toList();
+                        project.getTokenDefinitions().get(token.getDefinitionId()).getName(), hudOf(project, token))).toList();
         List<SegmentState> walls = project != null && wallLayerVisible ? project.getWalls().stream()
                 .map(wall -> new SegmentState(wall.getX1(), wall.getY1(), wall.getX2(), wall.getY2())).toList() : List.of();
         List<PortalState> portals = project != null && wallLayerVisible ? project.getInteractables().stream()
@@ -740,7 +748,7 @@ public class CanvasMapRenderer {
             if (!decorations) drawTokenConditionBadges(gc, token, x, y, radius);
             if (decorations) {
                 gc.save();
-                var resources = resourcesOf(token);
+                var resources = hudOf(project, token);
                 double labelY = y + radius + 3;
                 if (resources != null) {
                     double scale = Math.min(1, diameter / 64);
@@ -771,6 +779,20 @@ public class CanvasMapRenderer {
                 gc.restore();
             }
         }
+    }
+
+    /** DM-only HUD data for adversary tokens: marked HP/Stress slots and Difficulty in the shield. */
+    private static dmmt.online.ActorTokenResources adversaryResources(DmProject.TokenDefinition definition,
+                                                                      DmProject.TokenInstance token) {
+        var adversary = definition.getAdversary();
+        if (adversary == null) return null;
+        var state = token.getAdversaryState();
+        int hp = Math.max(0, adversary.getMaxHp());
+        int stress = Math.max(0, adversary.getMaxStress());
+        return new dmmt.online.ActorTokenResources(
+                state == null ? 0 : Math.min(hp, Math.max(0, state.getMarkedHp())), hp,
+                state == null ? 0 : Math.min(stress, Math.max(0, state.getMarkedStress())), stress,
+                adversary.getDifficulty(), null);
     }
 
     private void drawResourceCounter(GraphicsContext gc, double x, double y, double scale, int value, boolean hope) {

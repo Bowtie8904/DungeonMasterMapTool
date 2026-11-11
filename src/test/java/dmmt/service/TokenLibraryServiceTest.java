@@ -1,5 +1,6 @@
 package dmmt.service;
 
+import dmmt.model.DaggerheartAdversary;
 import dmmt.model.DmProject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -13,6 +14,32 @@ import static org.junit.jupiter.api.Assertions.*;
 class TokenLibraryServiceTest
 {
     @TempDir Path temp;
+
+    @Test
+    void copyingTokenDefinitionPreservesAdversaryDataWithoutSharingMutableState() throws Exception
+    {
+        var feature = DaggerheartAdversary.Feature.builder()
+                .name("Spit Acid").classification("Action").description("Deal 2d6 physical damage.")
+                .build();
+        var adversary = DaggerheartAdversary.builder()
+                .name("Acid Burrower").difficulty(14).maxHp(8).maxStress(3)
+                .experiences(List.of("Tremor Sense +2")).features(List.of(feature)).build();
+        var definition = DmProject.TokenDefinition.builder()
+                .id("adversary").name("Acid Burrower").adversary(adversary).build();
+
+        var copy = TokenLibraryService.copy(definition);
+
+        assertEquals(adversary, copy.getAdversary());
+        assertNotSame(adversary, copy.getAdversary());
+        assertNotSame(adversary.getFeatures(), copy.getAdversary().getFeatures());
+        assertNotSame(feature, copy.getAdversary().getFeatures().getFirst());
+        copy.getAdversary().getFeatures().getFirst().setName("Changed");
+        assertEquals("Spit Acid", adversary.getFeatures().getFirst().getName());
+
+        TokenLibraryService service = new TokenLibraryService(temp);
+        service.put(definition, "");
+        assertEquals(adversary, service.load().getEntries().getFirst().getToken().getAdversary());
+    }
 
     @Test
     void mutationRevisionTracksTheCommonServiceWithoutMakingReadsIntoMutations() throws Exception

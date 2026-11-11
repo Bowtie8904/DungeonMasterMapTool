@@ -12,12 +12,13 @@ export type LogEntry = { kind: 'chat'; m: ChatMessage } | { kind: 'roll'; m: Rol
 export function keptRolls(expression: string, rolls: number[]): boolean[] {
   const kept = rolls.map(() => true);
   let index = 0;
-  for (const match of expression.matchAll(/(\d*)d\d+(?:kh(\d+))?/gi)) {
+  for (const match of expression.matchAll(/(\d*)d\d+(?:k([hl])(\d+))?/gi)) {
     const count = Number(match[1] || 1);
     if (match[2]) {
+      const low = match[2].toLowerCase() === 'l';
       const indices = Array.from({ length: Math.min(count, rolls.length - index) }, (_, n) => index + n);
-      indices.sort((a, b) => Math.abs(rolls[b]) - Math.abs(rolls[a]) || a - b);
-      for (const n of indices.slice(Number(match[2]))) kept[n] = false;
+      indices.sort((a, b) => (low ? Math.abs(rolls[a]) - Math.abs(rolls[b]) : Math.abs(rolls[b]) - Math.abs(rolls[a])) || a - b);
+      for (const n of indices.slice(Number(match[3]))) kept[n] = false;
     }
     index += count;
   }
@@ -32,7 +33,7 @@ export function rollDetails(m: RollMessage): RollDetail[] {
   const details: RollDetail[] = [];
   const doubled = m.expression.startsWith('(') && m.expression.endsWith(')*2');
   const formula = doubled ? m.expression.slice(1, -3) : m.expression;
-  for (const match of formula.matchAll(/([+-]?)(?:(\d*)d(\d+)(?:kh(\d+))?|(\d+))/gi)) {
+  for (const match of formula.matchAll(/([+-]?)(?:(\d*)d(\d+)(?:k[hl](\d+))?|(\d+))/gi)) {
     const expression = match[0];
     if (match[3]) {
       const count = Number(match[2] || 1);
@@ -142,7 +143,8 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
   const report = plainChat ? parseRestReport(e.m.text) : null;
   const damage = plainChat && !report ? parseDamageReport(e.m.text) : null;
   const action = plainChat && !report && !damage ? parseActionReport(e.m.text) : null;
-  const card = el('article', { class: `entry${e.kind === 'roll' ? ' roll' : ''}${report ? ' rest-report' : ''}${damage ? ' damage-report' : ''}${action ? ' action-report' : ''}${system ? ' system-report' : ''}${m.toId ? ' whisper' : ''}` }, header);
+  const reaction = e.kind === 'chat' && plainChat && !report && !damage && !action && e.m.reactionPrompt ? e.m.reactionPrompt : null;
+  const card = el('article', { class: `entry${e.kind === 'roll' ? ' roll' : ''}${report ? ' rest-report' : ''}${damage ? ' damage-report' : ''}${action ? ' action-report' : ''}${reaction ? ' reaction-report' : ''}${system ? ' system-report' : ''}${m.toId ? ' whisper' : ''}` }, header);
   if (m.toId) {
     card.append(el('div', { class: 'message-recipient' }, el('span', { class: 'whisper-label' },
       `Whisper to ${m.toId === 'dm' ? 'Gamemaster' : m.to ?? (m.toId === playerId ? 'you' : m.toId)}`)));
@@ -196,6 +198,18 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
     }
     return card;
   }
+  if (reaction && e.kind === 'chat') {
+    const source = /^(.*?) · \w+ Reaction - /.exec(e.m.text)?.[1];
+    card.append(el('div', { class: 'reaction-banner' }, el('strong', {}, 'Reaction roll'),
+        el('span', { class: 'reaction-trait' }, reaction.trait)),
+      ...(source ? [el('div', { class: 'reaction-source' }, source)] : []),
+      el('div', { class: 'reaction-text' }, `Make ${/^[AEIOU]/.test(reaction.trait) ? 'an' : 'a'} ${reaction.trait} Reaction Roll.`));
+    if (rollActions) {
+      const actions = rollActions(e.m);
+      if (actions) card.append(actions);
+    }
+    return card;
+  }
   card.append(e.kind === 'roll' ? rollContent(e.m) : e.m.sharedCard
     ? renderSharedCard(e.m.sharedCard, onGrab, onError) : el('div', { class: 'message-text' }, e.m.text));
   if (m.rollSource) {
@@ -205,7 +219,7 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
         el('div', { class: 'shared-source' }, m.rollSource.source),
         el('strong', {}, m.rollSource.name), rich(m.rollSource.text))));
   }
-  if (rollActions && (e.kind === 'roll' || e.m.actionBenefits)) {
+  if (rollActions && (e.kind === 'roll' || e.m.actionBenefits || e.m.reactionPrompt)) {
     const actions = rollActions(e.m);
     if (actions) card.append(actions);
   }

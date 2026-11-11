@@ -192,6 +192,7 @@ export interface Actor {
 
 export interface ChatMessage {
   incomingDamage?: boolean;
+  reactionPrompt?: { trait: 'Strength' | 'Agility' | 'Finesse' | 'Instinct' | 'Presence' | 'Knowledge' };
   id: string | number;
   ts: number;
   fromId: string;

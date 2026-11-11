@@ -75,6 +75,7 @@ public class DmProject {
     public static class TokenDefinition {
         private String id;
         private String name;
+        private DaggerheartAdversary adversary;
         @Builder.Default
         private String color = "#5599CC";
         @Builder.Default
@@ -120,6 +121,7 @@ public class DmProject {
         /** Conditions applied to this token during Online Play. */
         @Builder.Default
         private List<TokenCondition> conditions = new ArrayList<>();
+        private DaggerheartAdversary.CombatState adversaryState;
 
         /** The attached light always sits at the token center, so it follows every move, rotation and undo. */
         public LightSource getLight() {

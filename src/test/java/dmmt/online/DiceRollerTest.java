@@ -132,6 +132,12 @@ class DiceRollerTest {
     }
 
     @Test
+    void keepsTheLowestDiceForKl() {
+        assertEquals(5, DiceRoller.roll("2d20kl1+2", 2, faces(15, 3)).total());
+        assertEquals(17, DiceRoller.roll("2d20kh1+2", 2, faces(15, 3)).total());
+    }
+
+    @Test
     void discardsExactlyTheRequiredNumberOfTiedMinima() {
         var result = DiceRoller.roll("4d6kh2", 4, faces(2, 6, 2, 2));
         assertEquals(List.of(2, 6, 2, 2), result.rolls());
@@ -181,7 +187,7 @@ class DiceRollerTest {
     @Test
     void rejectsInvalidKeepCountsAndCountsDiscardedDiceAgainstLimit() {
         for (String expression : List.of("4d6kh5", "4d6kh", "4d6kh-1", "4d6kh1.5",
-                "0d6kh0", "4d6kh1000000", "4d6kl3", "4d6kh3kh2", "1kh1", "d6kh2",
+                "0d6kh0", "4d6kh1000000", "4d6kl5", "4d6kh3kh2", "1kh1", "d6kh2",
                 "4d6kh1+1d4", "5d6kh1", "999999d6kh1")) {
             assertThrows(IllegalArgumentException.class, () -> DiceRoller.roll(expression, 4, faces()), expression);
         }

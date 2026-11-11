@@ -951,6 +951,38 @@ public final class OnlineSessionServer {
         deliver(message, toPlayerId);
     }
 
+    /** Sends a public, clickable reaction-roll prompt without publishing a target Difficulty. */
+    public void dmReactionPrompt(String text, String trait) {
+        if (text == null || text.isBlank()) return;
+        if (!List.of("Strength", "Agility", "Finesse", "Instinct", "Presence", "Knowledge").contains(trait)) {
+            throw new IllegalArgumentException("Unsupported reaction trait.");
+        }
+        ObjectNode message = chatMessage("dm", "DM", null, clip(text));
+        message.set("reactionPrompt", MAPPER.createObjectNode().put("trait", trait));
+        deliver(message, null);
+    }
+
+    /** Links an adversary feature in the public chat as a plain-text card; returns an error message or {@code null}. */
+    public synchronized String dmShareAdversaryFeature(String adversary, String name, String classification, String text) {
+        if (campaign == null) return "No online session is running.";
+        if (name == null || name.isBlank()) return "The feature has no name.";
+        String plain = text == null ? "" : text.replaceAll("\\[([^\\]]+)]\\([^)\\s]*\\)", "$1")
+                .replace("**", "").replace("__", "")
+                .replaceAll("[ \\t\\u00A0]+", " ").replaceAll("\\s*\\n\\s*", "\n").strip();
+        ObjectNode item = MAPPER.createObjectNode().put("name", name.strip())
+                .put("source", "Adversary - " + adversary).put("text", plain);
+        ArrayNode badges = item.putArray("badges");
+        if (classification != null && !classification.isBlank()) badges.add(classification.strip());
+        ArrayNode sections = item.putArray("sections");
+        if (!plain.isEmpty()) sections.addObject().put("text", plain);
+        try {
+            publishSharedCard("dm", "DM", "", "Adversary - " + adversary, "feature", item, 0, "", true);
+            return null;
+        } catch (IOException e) {
+            return "Could not post the feature to the chat: " + e.getMessage();
+        }
+    }
+
     /** Host-only moderation; deliberately not exposed through any player HTTP or socket command. */
     public synchronized String dmDeleteMessage(long id, long timestamp) {
         Campaign c = campaign;
