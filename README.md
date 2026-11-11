@@ -752,7 +752,8 @@ Nothing starts until you click **Start online session**, so offline play and the
   prominent total; expand **Roll breakdown** for individual dice and each applied trait, Experience,
   advantage/disadvantage, weapon feature and automated buff/debuff with its actual impact.
   Damage details separate the weapon's fixed bonus and explain changes to its Proficiency dice pool.
-  Hope/Fear, criticals and difficulty outcomes have distinct badges. Details stay open as messages arrive.
+  Hope/Fear, criticals and difficulty outcomes have distinct badges. Breakdown and source sections stay open
+  when messages arrive or the displayed message is updated, independently for each viewer.
   Historical rolls and older hosts show the formula and dice without inventing missing source names;
   conditional features without automation are not claimed as applied bonuses.
   **Guardian automation:** Unstoppable creates a scene buff with a tracked d4 (d6 from level 5), starting at 1.

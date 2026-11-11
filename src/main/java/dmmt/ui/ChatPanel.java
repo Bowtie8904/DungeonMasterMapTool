@@ -181,6 +181,7 @@ public final class ChatPanel extends VBox {
                 if (!(card.getUserData() instanceof JsonNode previous)
                         || !previous.path("id").equals(updated.path("id")) || !previous.path("ts").equals(updated.path("ts"))) continue;
                 javafx.scene.Node replacement = ChatCards.render(updated, backend::remaining, () -> deleteMessage(updated), backend::artwork);
+                ChatCards.copyDisclosureState(card, replacement);
                 replacement.setUserData(updated);
                 messages.getChildren().set(i, replacement);
                 break;
@@ -206,6 +207,7 @@ public final class ChatPanel extends VBox {
                 if (message.has("rolls")) updated.set("rolls", message.get("rolls"));
                 if (message.has("breakdown")) updated.set("breakdown", message.get("breakdown"));
                 javafx.scene.Node replacement = ChatCards.render(updated, backend::remaining, () -> deleteMessage(updated), backend::artwork);
+                ChatCards.copyDisclosureState(card, replacement);
                 replacement.setUserData(updated);
                 messages.getChildren().set(i, replacement);
                 return;

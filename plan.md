@@ -33,6 +33,8 @@ Desktop tool for tabletop dungeon masters that:
 
 ## 3) Current Implementation Status
 
+- **Stable roll disclosures:** Preserve each viewer's open or closed roll breakdown and source when an existing roll or action message is updated, in both the browser and DM chat. Render updated results and actions normally; new messages start collapsed. This is local presentation state, with no network, settings or compatibility-version changes.
+
 - **Stable online movement vision:** Preserve each token's latest local move through release and acknowledgement until authoritative token state catches up. Older deltas, acknowledgements and rejections must not undo newer local moves; genuine corrections, token removal and snapshots remain authoritative. Keep attached lights at the same reconciled position during and after dragging, and do not commit tentative vision to explored memory. Cover delayed state, multiple moves, rejection and resync. Browser-only, backward-compatible fix with no new settings or compatibility-version changes.
 
 - **Loot row highlighting:** give inventory body rows a subtle blue-tinted background on hover and keyboard focus within the row, without changing expansion, controls or equipment styling. Presentation-only; no settings or compatibility changes.

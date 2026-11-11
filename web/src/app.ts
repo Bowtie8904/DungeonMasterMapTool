@@ -1055,16 +1055,15 @@ export class App {
         break;
       case 'chatUpdate': {
         const index = this.log.findIndex(e => e.kind === 'chat' && e.m.id === msg.message.id && e.m.ts === msg.message.ts);
-        if (index >= 0) {
-          const entry = this.log[index];
+        const entry = index >= 0 ? this.log[index] : undefined;
+        if (entry) {
           entry.m = msg.message;
-          this.logCards.delete(entry);
         }
         if (this.store.state?.chatTail) {
           const tail = this.store.state.chatTail.findIndex(m => m.id === msg.message.id && m.ts === msg.message.ts);
           if (tail >= 0) this.store.state.chatTail[tail] = { type: 'chat', ...msg.message };
         }
-        this.renderLog();
+        this.renderLog(entry);
         break;
       }
       case 'chatDeleted':
@@ -1109,8 +1108,7 @@ export class App {
         if (entry?.kind === 'roll') {
           const { type: _type, ...update } = msg;
           entry.m = { ...entry.m, ...update };
-          this.logCards.delete(entry);
-          this.renderLog();
+          this.renderLog(entry);
         }
         break;
       }
@@ -1347,15 +1345,23 @@ export class App {
     });
   }
 
-  private renderLog(): void {
+  private renderLog(updatedEntry?: LogEntry): void {
     this.captureChatScroll();
     const anchor = Array.from(this.logContent.children).find(child =>
       child.getBoundingClientRect().bottom > this.logEl.getBoundingClientRect().top);
     const anchorTop = anchor?.getBoundingClientRect().top;
     const cards = this.log.map((e) => {
       let card = this.logCards.get(e);
-      if (!card) {
+      if (!card || e === updatedEntry) {
+        const previous = card;
         card = renderLogEntry(e, this.playerId, (card, quantity) => this.grabCard(card, quantity), (message) => this.toast(message), (m) => this.rollActions(m));
+        if (previous) {
+          for (const selector of ['details.roll-breakdown', 'details.roll-source']) {
+            const oldDetails = previous.querySelector<HTMLDetailsElement>(selector);
+            const newDetails = card.querySelector<HTMLDetailsElement>(selector);
+            if (oldDetails && newDetails) newDetails.open = oldDetails.open;
+          }
+        }
         this.logCards.set(e, card);
         card.querySelector('.shared-card')?.dispatchEvent(new Event('refresh-stock'));
       }

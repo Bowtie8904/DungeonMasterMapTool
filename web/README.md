@@ -436,7 +436,8 @@ Contributions can include bounded `notes: [{label, impact}]` to explain dice-poo
 Proficiency buffs; these are context, not additional terms in the total. Weapon damage dice and fixed bonuses
 are separate breakdown rows.
 These fields are additive; compatibility versions are unchanged. Older hosts/history fall back to formula
-and dice details. Expanded cards and the reader's scroll position survive new messages.
+and dice details. Open breakdown and source sections survive new messages and updates to their own message,
+independently for each viewer. The reader's scroll position survives new messages.
 Action buttons under a roll are grouped into subtly separated sections: **roll results** (primary blue: Hope rewards,
 weapon damage and damage caused by the rolling feature, such as a successful spell's damage), **feature effects**
 (the standard secondary buttons for other effects of the feature that made the roll, such as marking Stress or clearing

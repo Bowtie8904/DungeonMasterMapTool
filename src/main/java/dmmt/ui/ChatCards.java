@@ -801,14 +801,23 @@ public final class ChatCards {
         summary.setMaxWidth(Double.MAX_VALUE);
         content.setVisible(false);
         content.setManaged(false);
-        summary.setOnMouseClicked(e -> {
-            boolean open = !content.isVisible();
-            content.setVisible(open);
+        content.visibleProperty().addListener((o, previous, open) -> {
             content.setManaged(open);
             summary.setText((open ? "\u25BE " : "\u25B8 ") + title);
         });
+        summary.setOnMouseClicked(e -> content.setVisible(!content.isVisible()));
         VBox box = new VBox(summary, content);
         box.getStyleClass().addAll("chat-disclosure", styleClass);
         return box;
+    }
+
+    static void copyDisclosureState(Node previous, Node replacement) {
+        for (String selector : List.of(".chat-roll-breakdown", ".chat-roll-source")) {
+            Node oldNode = previous.lookup(selector);
+            Node newNode = replacement.lookup(selector);
+            if (oldNode instanceof VBox oldBox && newNode instanceof VBox newBox) {
+                newBox.getChildren().get(1).setVisible(oldBox.getChildren().get(1).isVisible());
+            }
+        }
     }
 }

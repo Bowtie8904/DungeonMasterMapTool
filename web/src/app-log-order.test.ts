@@ -6,10 +6,11 @@ vi.mock('./chat', () => ({ renderLogEntry: vi.fn() }));
 
 class Card {
   parentElement?: Container;
+  details: Record<string, { open: boolean }> = {};
   constructor(readonly label: string) {}
   get isConnected() { return !!this.parentElement; }
   getBoundingClientRect() { return { top: 0, bottom: 30 }; }
-  querySelector() { return null; }
+  querySelector(selector: string) { return this.details[selector] ?? null; }
   remove() {
     if (this.parentElement) this.parentElement.children.splice(this.parentElement.children.indexOf(this), 1);
     this.parentElement = undefined;
@@ -41,7 +42,7 @@ it.each(['rollUpdate', 'chatUpdate'] as const)('keeps %s in its original DOM pos
     logEl: { scrollTop: 17, getBoundingClientRect: () => ({ top: 0 }) },
     store: { applyRollUpdate: vi.fn() }, followChat: false, section: 'chat', chatScrollTop: 17,
     captureChatScroll: vi.fn(), restoreChatScroll: vi.fn(),
-    renderLog() { Reflect.get(App.prototype, 'renderLog').call(context); },
+    renderLog(entry?: object) { Reflect.get(App.prototype, 'renderLog').call(context, entry); },
   };
   Reflect.get(App.prototype, 'handle').call(context, type === 'rollUpdate'
     ? { type, id: 2, ts: 2, total: 99 }
@@ -52,4 +53,38 @@ it.each(['rollUpdate', 'chatUpdate'] as const)('keeps %s in its original DOM pos
   expect(content.children.map(card => card.label)).toEqual(['1', 'updated 2', '3']);
   expect(context.chatScrollTop).toBe(17);
   expect(context.restoreChatScroll).toHaveBeenCalledOnce();
+});
+
+it.each(['rollUpdate', 'chatUpdate'] as const)('preserves independent disclosure states across repeated %s messages', type => {
+  const kind = type === 'rollUpdate' ? 'roll' : 'chat';
+  const entry = { kind, m: { id: 2, ts: 2, total: 1 } };
+  const original = new Card('original');
+  original.details = { 'details.roll-breakdown': { open: true }, 'details.roll-source': { open: false } };
+  const content = new Container();
+  content.insertBefore(original, null);
+  const cache = new WeakMap<object, Card>([[entry, original]]);
+  const replacement = () => {
+    const card = new Card('updated');
+    card.details = { 'details.roll-breakdown': { open: false }, 'details.roll-source': { open: false } };
+    return card;
+  };
+  vi.mocked(renderLogEntry).mockImplementation(() => replacement() as unknown as HTMLElement);
+  const context = {
+    log: [entry], logCards: cache, logContent: content, playerId: 'player',
+    logEl: { scrollTop: 0, getBoundingClientRect: () => ({ top: 0 }) },
+    store: { applyRollUpdate: vi.fn() }, followChat: false, section: 'chat', chatScrollTop: 0,
+    captureChatScroll: vi.fn(), restoreChatScroll: vi.fn(),
+    renderLog(updated?: object) { Reflect.get(App.prototype, 'renderLog').call(context, updated); },
+  };
+  const update = () => Reflect.get(App.prototype, 'handle').call(context, type === 'rollUpdate'
+    ? { type, id: 2, ts: 2, total: 99 }
+    : { type, message: { id: 2, ts: 2, text: 'Updated' } });
+  update();
+  expect(content.children[0].details['details.roll-breakdown'].open).toBe(true);
+  expect(content.children[0].details['details.roll-source'].open).toBe(false);
+  content.children[0].details['details.roll-breakdown'].open = false;
+  content.children[0].details['details.roll-source'].open = true;
+  update();
+  expect(content.children[0].details['details.roll-breakdown'].open).toBe(false);
+  expect(content.children[0].details['details.roll-source'].open).toBe(true);
 });

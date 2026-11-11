@@ -163,6 +163,53 @@ class ChatPanelTest {
     }
 
     @Test
+    void rollAndChatUpdatesPreserveDisclosureStateWhileRenderingNewContent() throws Exception {
+        JsonNode roll = MAPPER.readTree("""
+                {"type":"roll","id":9,"ts":10,"from":"Alice","expression":"1d6","rolls":[4],"total":4,
+                 "rollSource":{"name":"Spell","source":"Codex","text":"Original"}}
+                """);
+        JsonNode chat = MAPPER.readTree("""
+                {"type":"chat","id":11,"ts":12,"from":"Alice","text":"Hello",
+                 "rollSource":{"name":"Feature","source":"Class","text":"Original"}}
+                """);
+        onFx(() -> {
+            ChatPanel panel = new ChatPanel(new Backend(roll));
+            panel.onMessage(chat);
+            Scene scene = new Scene(new StackPane(panel));
+            scene.getStylesheets().add(Icons.STYLESHEET);
+            panel.applyCss();
+            var breakdown = (javafx.scene.layout.VBox) panel.lookup(".chat-roll-breakdown");
+            var source = (javafx.scene.layout.VBox) panel.lookup(".chat-roll-source");
+            ((Label) breakdown.getChildren().get(0)).getOnMouseClicked().handle(null);
+            ((Label) source.getChildren().get(0)).getOnMouseClicked().handle(null);
+            panel.onMessage(MAPPER.createObjectNode().put("type", "rollUpdate").put("id", 9).put("ts", 10).put("total", 7));
+            var nextBreakdown = (javafx.scene.layout.VBox) panel.lookup(".chat-roll-breakdown");
+            var nextSource = (javafx.scene.layout.VBox) panel.lookup(".chat-roll-source");
+            assertNotSame(breakdown, nextBreakdown);
+            assertTrue(nextBreakdown.getChildren().get(1).isVisible());
+            assertTrue(nextBreakdown.getChildren().get(1).isManaged());
+            assertTrue(((Label) nextBreakdown.getChildren().get(0)).getText().startsWith("\u25BE"));
+            assertTrue(nextSource.getChildren().get(1).isVisible());
+            assertEquals("7", ((Label) panel.lookup(".chat-total-value")).getText());
+            ((Label) nextBreakdown.getChildren().get(0)).getOnMouseClicked().handle(null);
+            panel.onMessage(MAPPER.createObjectNode().put("type", "rollUpdate").put("id", 9).put("ts", 10).put("total", 8));
+            assertFalse(((javafx.scene.layout.VBox) panel.lookup(".chat-roll-breakdown")).getChildren().get(1).isVisible());
+
+            var chatCard = panel.lookupAll(".chat-entry").stream()
+                    .filter(card -> card.getUserData() == chat).findFirst().orElseThrow();
+            var chatSource = (javafx.scene.layout.VBox) chatCard.lookup(".chat-roll-source");
+            ((Label) chatSource.getChildren().get(0)).getOnMouseClicked().handle(null);
+            var updated = ((com.fasterxml.jackson.databind.node.ObjectNode) chat.deepCopy()).put("text", "Updated");
+            panel.onMessage(MAPPER.createObjectNode().put("type", "chatUpdate").set("message", updated));
+            var updatedCard = panel.lookupAll(".chat-entry").stream()
+                    .filter(card -> card.getUserData() == updated).findFirst().orElseThrow();
+            var updatedSource = (javafx.scene.layout.VBox) updatedCard.lookup(".chat-roll-source");
+            assertTrue(updatedSource.getChildren().get(1).isVisible());
+            assertEquals("Updated", ((Label) updatedCard.lookup(".chat-text")).getText());
+        });
+    }
+
+    @Test
     void dmDeleteIsAccessibleAndWaitsForHostEventWithoutMarkingUnread() throws Exception {
         JsonNode message = MAPPER.readTree("{\"type\":\"chat\",\"id\":1,\"ts\":10,\"from\":\"Alice\",\"text\":\"Hello\"}");
         CountDownLatch called = new CountDownLatch(1);
