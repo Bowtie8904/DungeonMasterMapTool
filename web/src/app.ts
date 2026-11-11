@@ -28,6 +28,7 @@ import { MapView, MoveCommit } from './render';
 import { el } from './login';
 import { OnlineAudio } from './audio';
 import { markAudioGesture, settings } from './settings';
+import { tokenResourcesOf, type TokenResources } from './token-resources';
 import { Store } from './store';
 import { NotesPanel } from './notes';
 import { HandoutsPanel } from './handouts';
@@ -171,8 +172,9 @@ export class App {
   private quickAccessButton = iconButton('star', 'Quick Access', () => this.toggleQuickAccess());
   private stageEl = el('div', { class: 'stage' });
   private soundBtn = el('button', { class: 'primary hidden' }, 'Click to enable sound');
-  private muteBtn = el('button', { class: 'icon hidden' });
-  private volumeBox = el('span', { class: 'volumes hidden' });
+  private soundToggle = el('input', { type: 'checkbox', checked: !settings.muted });
+  private audioSection = el('section', { class: 'settings-group hidden' });
+  private volumeBox = el('span', { class: 'volumes' });
   private audio = new OnlineAudio(
     () => ({ master: settings.volume, music: settings.musicVolume, effects: settings.effectsVolume, muted: settings.muted }),
     () => this.conn.clock.serverNow(performance.now()),
@@ -188,7 +190,7 @@ export class App {
       this.compendiumWindow.element, this.banner, this.toastEl, this.conditionMenu);
     root.replaceChildren(el('div', { class: 'app' }, this.stageEl, this.overlay));
     this.view = new MapView(canvas);
-    this.view.maxParticles = settings.maxParticles;
+    this.applyEffectSettings();
     this.view.smoothMovement = settings.smoothTokens;
     this.updateDrawingMode('pen');
     this.view.onSelectTool = () => this.selectTool();
@@ -270,23 +272,20 @@ export class App {
     };
     const volume = slider('Master volume', () => settings.volume, (v) => (settings.volume = v));
     const musicVol = slider('Music volume', () => settings.musicVolume, (v) => (settings.musicVolume = v));
-    const effectsVol = slider('Sound effects volume', () => settings.effectsVolume, (v) => (settings.effectsVolume = v));
+    const effectsVol = slider('Ambient volume', () => settings.effectsVolume, (v) => (settings.effectsVolume = v));
+    for (const input of [volume, musicVol, effectsVol]) input.setAttribute('aria-label', input.title);
     this.volumeBox.replaceChildren(
-      el('label', { class: 'vol' }, 'Master ', volume),
-      el('label', { class: 'vol' }, 'Music ', musicVol),
-      el('label', { class: 'vol' }, 'Effects ', effectsVol),
+      el('label', { class: 'vol' }, 'Master volume', volume),
+      el('label', { class: 'vol' }, 'Music volume', musicVol),
+      el('label', { class: 'vol' }, 'Ambient volume', effectsVol),
     );
     this.soundBtn.addEventListener('click', () => {
       markAudioGesture();
       this.audio.enable();
       this.updateSoundUi();
     });
-    this.muteBtn.title = 'Mute: stops music and effects and uses no audio resources';
-    const showMute = () => (this.muteBtn.textContent = settings.muted ? 'Sound off' : 'Sound on');
-    showMute();
-    this.muteBtn.addEventListener('click', () => {
-      settings.muted = !settings.muted;
-      showMute();
+    this.soundToggle.addEventListener('change', () => {
+      settings.muted = !this.soundToggle.checked;
       markAudioGesture();
       this.audio.volumesChanged();
       this.updateSoundUi();
@@ -296,7 +295,7 @@ export class App {
     document.addEventListener('pointerdown', this.audioGesture, { capture: true });
     document.addEventListener('keydown', this.audioGesture, { capture: true });
     this.updateSoundUi();
-    const out = el('button', { class: 'icon' }, 'Log out');
+    const out = el('button', { class: 'icon logout' }, 'Log out');
     out.addEventListener('click', async () => {
       if (!await this.notes.confirmLeave()) return;
       out.disabled = true;
@@ -315,19 +314,75 @@ export class App {
       this.view.smoothMovement = smooth.checked;
       this.view.invalidate();
     });
-    return el('div', { class: 'settings-section' }, el('h3', {}, 'Your audio'), this.soundBtn, this.muteBtn, this.volumeBox,
-      el('p', { class: 'tool-hint' }, 'Your volume is independent of the DM.'),
-      el('h3', {}, 'Display'),
-      el('label', { class: 'vol', title: 'Glide moving tokens between updates. Turn off on slow devices to redraw less.' },
-        smooth, ' Smooth token movement'),
+    const resources = el('input', { type: 'checkbox', checked: settings.tokenResources });
+    resources.addEventListener('change', () => {
+      settings.tokenResources = resources.checked;
+      this.refreshTokenResources();
+    });
+    this.audioSection.append(el('h3', {}, 'Audio'),
+      el('label', { class: 'setting-check', title: 'Turn off to stop all music and effects and free audio resources.' },
+        this.soundToggle, ' Enable sound'),
+      this.soundBtn, this.volumeBox,
+      el('p', { class: 'tool-hint' }, 'Your volume is independent of the DM.'));
+    const perfToggle = (label: string, title: string, get: () => boolean, set: (on: boolean) => void) => {
+      const box = el('input', { type: 'checkbox', checked: get() });
+      box.addEventListener('change', () => {
+        set(box.checked);
+        this.applyEffectSettings();
+      });
+      return el('label', { class: 'setting-check', title }, box, ` ${label}`);
+    };
+    return el('div', { class: 'settings-section' }, this.audioSection,
+      el('section', { class: 'settings-group' }, el('h3', {}, 'Display'),
+        el('label', { class: 'setting-check', title: 'Glide moving tokens between updates. Turn off on slow devices to redraw less.' },
+          smooth, ' Smooth token movement'),
+        el('label', { class: 'setting-check', title: 'Show HP, Stress, Armor and Hope on your own tokens, like the DM sees them.' },
+          resources, ' Show resources on my tokens')),
+      el('section', { class: 'settings-group' }, el('h3', {}, 'Performance'),
+        perfToggle('Show weather', 'Turn off to hide rain, snow, fog and other weather on your screen only.',
+          () => settings.showWeather, (on) => (settings.showWeather = on)),
+        perfToggle('Reduce weather particles', 'Draw at most 300 weather particles instead of the full amount.',
+          () => settings.reduceParticles, (on) => (settings.reduceParticles = on)),
+        perfToggle('Lightning flashes', 'Turn off to skip the lightning flashes of thunderstorms.',
+          () => settings.lightningFlashes, (on) => (settings.lightningFlashes = on)),
+        perfToggle('Light flicker', 'Turn off to keep torches and other flickering lights steady.',
+          () => settings.lightFlicker, (on) => (settings.lightFlicker = on)),
+        perfToggle('Simplified lighting', 'Draw light-emitting effects without soft glow edges. Much cheaper on slow devices.',
+          () => settings.simpleLighting, (on) => (settings.simpleLighting = on)),
+        perfToggle('Animated effect textures', 'Turn off to freeze scrolling and pulsing effect textures (fire, water, smoke).',
+          () => settings.animatedTextures, (on) => (settings.animatedTextures = on))),
       out);
+  }
+
+  private applyEffectSettings(): void {
+    this.view.maxParticles = settings.effectiveMaxParticles;
+    this.view.weatherEnabled = settings.showWeather;
+    this.view.lightningEnabled = settings.lightningFlashes;
+    this.view.simpleLighting = settings.simpleLighting;
+    this.view.flickerEnabled = settings.lightFlicker;
+    this.view.animatedTextures = settings.animatedTextures;
+    this.view.invalidate();
+  }
+  /** Feeds the map the player's own HP, Stress, Armor and Hope from their loaded sheets; nothing comes from the host snapshot. */
+  private refreshTokenResources(): void {
+    const values = new Map<string, TokenResources>();
+    if (settings.tokenResources) {
+      for (const actor of this.myActors) {
+        const handle = actor.disabled ? undefined : this.sheetHandles.get(actor.id);
+        const resources = handle && tokenResourcesOf(handle.character);
+        if (resources) values.set(actor.id, resources);
+      }
+    }
+    this.view.setTokenResources(settings.tokenResources, values);
   }
 
   private updateSoundUi(): void {
     const needsClick = this.audioAvailable && !settings.muted && !this.audio.running;
+    this.audioSection.classList.toggle('hidden', !this.audioAvailable);
     this.soundBtn.classList.toggle('hidden', !needsClick);
-    this.volumeBox.classList.toggle('hidden', !this.audioAvailable || settings.muted);
-    this.muteBtn.classList.toggle('hidden', !this.audioAvailable);
+    this.volumeBox.classList.toggle('disabled', settings.muted);
+    for (const input of this.volumeBox.querySelectorAll('input')) input.disabled = settings.muted;
+    this.soundToggle.checked = !settings.muted;
   }
 
   private buildChat(): HTMLElement {
@@ -623,9 +678,9 @@ export class App {
     this.deleteButton.disabled = true;
     this.drawingOptions.append(field('Drawing tool', modes), field('Effect texture', this.textureSelect),
       field('Color', this.colorInput), field('Size / thickness', this.sizeInput), sizeValue,
-      field('Opacity', this.alphaInput), el('label', { class: 'check' }, this.borderInput, ' Border'),
-      el('label', { class: 'check' }, this.emitsInput, ' Emits light'),
-      el('label', { class: 'check' }, this.aboveInput, ' Above tokens'));
+      field('Opacity', this.alphaInput), el('label', { class: 'setting-check' }, this.borderInput, ' Border'),
+      el('label', { class: 'setting-check' }, this.emitsInput, ' Emits light'),
+      el('label', { class: 'setting-check' }, this.aboveInput, ' Above tokens'));
     const measureModes = el('div', { class: 'mode-buttons' });
     const measureHint = el('p', { class: 'tool-hint' }, 'Drag to measure a distance in grid tiles.');
     for (const [id, icon, label] of [['distance', 'measure', 'Distance ruler'], ['radius', 'radius', 'Circle radius'],
@@ -671,6 +726,7 @@ export class App {
   }
 
   private renderEffectsOverlay(): void {
+    this.refreshTokenResources();
     const groups = this.myActors.filter(a => !a.disabled).flatMap((a) => {
       const handle = this.sheetHandles.get(a.id);
       return handle ? [{ actorId: a.id, name: a.name, character: handle.character }] : [];

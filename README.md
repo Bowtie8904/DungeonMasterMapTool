@@ -825,12 +825,17 @@ Nothing starts until you click **Start online session**, so offline play and the
   tool options fly out over the map. The right vertical icon rail switches   between Chat, My actors and
     Settings (at the bottom); the Compendium button opens a floating window instead. Open character sheets from My actors, not a separate navigation shortcut.
   Click the selected section again to collapse it to just its icons. Settings contains your audio
-  controls and logout. Future chat messages, rolls and shared cards use the name of the first enabled actor
+  controls, display options and logout, grouped into **Audio** (enable sound, master/music/ambient volume,
+  all 50% by default) and **Display** sections with **Log out** at the bottom. Future chat messages, rolls and shared cards use the name of the first enabled actor
   assigned to the player, or the account name if there is none. The bottom-left roster shows the account
   name alongside the actor name. Chat and roll cards show that actor's portrait when available.
   Settings also has **Smooth token movement** (on by default, remembered per browser): tokens moved by
   other players or the DM glide between updates instead of jumping. Other players' drags reach you as soon
   as the host accepts each step (about 20 updates per second). Turn it off on slow devices to redraw less.
+  **Show resources on my tokens** (off by default) draws HP, Stress, Armor and Hope on your own tokens like
+  the DM's view does, using your character sheet; other players' sheets are never revealed.
+  **Performance** holds individual browser-only switches for slow devices: **Show weather**, **Reduce weather
+  particles**, **Lightning flashes**, **Light flicker**, **Simplified lighting** (no soft glow on light-emitting effects) and **Animated effect textures**.
   A small dot on the Chat icon marks new messages received while Chat is closed; opening Chat clears it.
   New messages scroll to the bottom, including your own roll's action buttons as they load, unless you are
   reading older messages. **Jump to latest** returns to the bottom.

@@ -73,6 +73,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, canvas:focus-vi
 .settings-section { display: flex; flex-direction: column; gap: 18px; }
 .settings-section h3 { margin: 0; font-size: 13px; color: var(--muted); }
 .volumes { display: flex; flex-direction: column; gap: 18px; }
+.volumes.disabled { opacity: .45; }
+.settings-group { display: flex; flex-direction: column; gap: 14px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+.settings-section .logout { margin-top: auto; }
+.setting-check { display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer; }
+.setting-check input { margin: 0; }
 .vol { display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
 .players-overlay { position: absolute; left: 25px; bottom: 24px; width: max-content; min-width: min(195px, calc(100vw - 50px)); max-width: calc(100vw - 50px); padding: 9px 10px; background: #0b0d101c; border-radius: 6px; text-shadow: 0 1px 4px #000, 0 0 8px #000; pointer-events: none; }
 .players-overlay:empty { display: none; }
@@ -452,4 +457,4 @@ button.share-icon:disabled { opacity: .25; }
 .app-message-dialog::backdrop { background: #0008; }
 .app-message-dialog h3 { margin: 0 0 12px; }
 .app-message-dialog p { line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
-.app-message-dialog .acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.app-message-dialog .acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }.settings-section { flex: 1; }

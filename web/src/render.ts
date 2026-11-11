@@ -16,6 +16,7 @@ import {
 } from './vision';
 import { applyWeatherConfig, drawWeather, flashStyle, lightningFlash, weatherIndoors, weatherKind } from './weather';
 import { conditionIconId, conditionIconUrl } from './conditions';
+import { drawTokenResources, type TokenResources } from './token-resources';
 
 const AMBIENT_SIGHT_TILES = 40;
 const MIN_FRAME_MS = 33;
@@ -68,8 +69,22 @@ export class MapView {
   paused = false;
   readonly fog = new FogState();
   maxParticles = 1500;
+  /** Browser-local effect switches (Settings); the DM's own settings still decide what exists. */
+  weatherEnabled = true;
+  lightningEnabled = true;
+  simpleLighting = false;
+  flickerEnabled = true;
+  animatedTextures = true;
   /** Glide other tokens between position updates instead of jumping; off saves redraws on slow devices. */
   smoothMovement = true;
+  /** Own-token HUD (HP, Stress, Armor, Hope) keyed by actor id; empty or hidden when the player turned it off. */
+  private resources = new Map<string, TokenResources>();
+  private showResources = false;
+  setTokenResources(show: boolean, values: Map<string, TokenResources>): void {
+    this.showResources = show;
+    this.resources = values;
+    this.invalidate();
+  }
   private readonly motion = new TokenMotion();
   /** Positions tokens are drawn at this frame (interpolated); hit-testing and vision use the real positions. */
   private shown = new Map<string, { x: number; y: number }>();
@@ -967,8 +982,8 @@ export class MapView {
     }
     const s = this.state;
     if (!s) return;
-    const weatherActive = weatherKind(s.weather.type) !== 'none';
-    const flickering = s.lighting.flicker !== false && (s.lights.some((l) => l.on && l.flicker)
+    const weatherActive = this.weatherEnabled && weatherKind(s.weather.type) !== 'none';
+        const flickering = this.flickerEnabled && s.lighting.flicker !== false && (s.lights.some((l) => l.on && l.flicker)
       || (s.overlays ?? []).some((o) => o.emits && (o.flicker ?? 0) > 0));
     if (!this.dirty && !weatherActive && !flickering && !this.textureActive && !this.pingActive && !this.fog.animating
       && !this.moving) return;
@@ -1025,7 +1040,7 @@ export class MapView {
       ctx.restore();
     }
 
-    this.textureActive = (s.overlays ?? []).some((o) => o.tile && (o.layers ?? []).some((l) => l[0] !== 0 || l[1] !== 0 || l[4] > 0));
+    this.textureActive = this.animatedTextures && (s.overlays ?? []).some((o) => o.tile && (o.layers ?? []).some((l) => l[0] !== 0 || l[1] !== 0 || l[4] > 0));
     if (s.view?.showGrid === true) this.drawGrid(ctx, ppc, s.view?.gridOpacity ?? 0.08);
     this.drawDoors(ctx, s);
     this.drawFloorOverlays(ctx, s);
@@ -1033,7 +1048,7 @@ export class MapView {
     this.drawLighting(ctx, s, () => this.drawOverlays(ctx, s, false));
     this.drawOverlays(ctx, s, true);
     // Lightning is drawn below fog so it cannot reveal unexplored walls and windows.
-    if (weatherKind(s.weather.type) === 'thunderstorm') {
+    if (this.weatherEnabled && this.lightningEnabled && weatherKind(s.weather.type) === 'thunderstorm') {
       const flash = lightningFlash(this.serverNow() / 1000 + (s.weather.seed || 0), s.weather.lightningIntervalSeconds);
       if (flash > 0 && flashStyle.opacity > 0) {
         this.fillExposure(ctx, s, flash * flashStyle.opacity, flashStyle.color);
@@ -1048,7 +1063,7 @@ export class MapView {
     const seconds = this.serverNow() / 1000 + (s.weather.seed || 0);
     const kind = weatherKind(s.weather.type);
     ctx.save();
-    if (kind !== 'none' && !weatherIndoors(s.weather)) {
+    if (this.weatherEnabled && kind !== 'none' && !weatherIndoors(s.weather)) {
       const zones = s.indoor ? this.indoorZones(s.indoor) : null;
       if (zones) {
         this.world(ctx);
@@ -1057,8 +1072,22 @@ export class MapView {
       }
 
     }
-    drawWeather(ctx, s.weather.type, s.weather.intensity, this.width, this.height, seconds, this.maxParticles);
+    if (this.weatherEnabled) drawWeather(ctx, s.weather.type, s.weather.intensity, this.width, this.height, seconds, this.maxParticles);
     ctx.restore();
+  }
+
+  private drawOwnTokenResources(ctx: CanvasRenderingContext2D, s: GameState): void {
+    if (!this.showResources || this.resources.size === 0) return;
+    for (const t of s.tokens) {
+      const values = t.actorId ? this.resources.get(t.actorId) : undefined;
+      if (!values || !this.isMine(t)) continue;
+      const pos = this.shown.get(t.id) ?? t;
+      ctx.save();
+      ctx.translate(pos.x, pos.y);
+      ctx.scale(1 / this.cam.scale, 1 / this.cam.scale);
+      drawTokenResources(ctx, values, t.sizeTiles * s.grid.pixelsPerCell * this.cam.scale);
+      ctx.restore();
+    }
   }
 
   private drawToolAnnotations(ctx: CanvasRenderingContext2D, s: GameState): void {
@@ -1084,6 +1113,7 @@ export class MapView {
         this.drawTokenSelection(ctx, t, s.grid.pixelsPerCell, this.canRotateTokens && !this.paused);
       }
     }
+    this.drawOwnTokenResources(ctx, s);
     if (this.marquee) {
       const { start, end } = this.marquee;
       ctx.fillStyle = '#80d8ff18'; ctx.fillRect(start.x, start.y, end.x - start.x, end.y - start.y);
@@ -1363,7 +1393,7 @@ export class MapView {
     }
   }
   private flickerOf(s: GameState, l: { id: string; flicker?: { strength: number; speed: number } }): number {
-    if (!l.flicker || s.lighting.flicker === false) return 0;
+    if (!l.flicker || s.lighting.flicker === false || !this.flickerEnabled) return 0;
     const step = 1000 / 30;
     const now = Math.floor(this.serverNow() / step) * step;
     return flickerAmount(l.id, l.flicker.strength, l.flicker.speed, now);
@@ -1422,7 +1452,7 @@ export class MapView {
   private paintLayers(c: CanvasRenderingContext2D, o: Overlay, ppc: number): void {
     const img = this.getImage(o.tile!);
     if (!img.complete || img.naturalWidth === 0) return;
-    const seconds = this.serverNow() / 1000;
+    const seconds = this.animatedTextures ? this.serverNow() / 1000 : 0;
     const base = Math.max(0.05, Math.min(1, o.alpha));
     const tileWorld = ppc * (o.tileCells || 4);
     for (const [vx, vy, scale, layerAlpha, pulse, pulseHz] of o.layers!) {
@@ -1794,7 +1824,7 @@ export class MapView {
       const ppc = s.grid.pixelsPerCell;
       const seconds = Math.floor(this.serverNow() / MIN_FRAME_MS) * MIN_FRAME_MS;
       for (const o of emitters) {
-        const f = s.lighting.flicker !== false && (o.flicker ?? 0) > 0
+        const f = this.flickerEnabled && s.lighting.flicker !== false && (o.flicker ?? 0) > 0
           ? flickerAmount(o.id, o.flicker ?? 0, o.flickerSpeed ?? 1, seconds)
           : 0;
         const strength = Math.min(1, (o.lightStrength ?? 0) * (1 - 0.6) * (1 - 0.6 * f));
@@ -1803,7 +1833,8 @@ export class MapView {
         c.fillStyle = `rgba(0,0,0,${strength})`;
         c.strokeStyle = `rgba(0,0,0,${strength})`;
         c.shadowColor = `rgba(0,0,0,${strength})`;
-        c.shadowBlur = range * scale;
+        // Canvas shadow blur is the costliest part of effect lighting; simplified lighting keeps only the flat shape.
+        c.shadowBlur = this.simpleLighting ? 0 : range * scale;
         this.paintShape(c, o);
         c.restore();
       }
@@ -1833,7 +1864,7 @@ export class MapView {
     g.globalCompositeOperation = 'source-over';
 
     // Lightning lifts the ambient darkness where it is exposed (outdoors, and indoors through open apertures).
-    if (weatherKind(s.weather.type) === 'thunderstorm' && flashStyle.brightness > 0) {
+    if (this.weatherEnabled && this.lightningEnabled && weatherKind(s.weather.type) === 'thunderstorm' && flashStyle.brightness > 0) {
       const lift = lightningFlash(this.serverNow() / 1000 + (s.weather.seed || 0), s.weather.lightningIntervalSeconds)
         * flashStyle.brightness;
       if (lift > 0) {

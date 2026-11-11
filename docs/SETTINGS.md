@@ -22,6 +22,20 @@ name when no enabled actor is assigned. The bottom-left overlay shows the accoun
 between position updates instead of jumping; the map redraws only while a token is gliding. Turn it off on
 slow devices to show positions immediately with fewer redraws. Movement updates arrive equally fast either way.
 
+**Settings > Show resources on my tokens** (default off, `dmmt.tokenResources`) is also browser-local. It draws
+HP, Stress, Armor and Hope on the player's own tokens, read from that player's own character sheet.
+**Settings > Audio** keeps *Enable sound* (`dmmt.muted`, default sound on) and the Master, Music and Ambient
+sliders (`dmmt.volume`, `dmmt.musicVolume`, `dmmt.effectsVolume`, default 50%) in local storage as well.
+
+**Settings > Performance** is browser-local and only affects that player's screen. Each switch is independent:
+*Show weather* (`dmmt.showWeather`, default on; off hides all weather and lightning), *Reduce weather particles*
+(`dmmt.reduceParticles`, default off; caps particles at 300), *Lightning flashes* (`dmmt.lightningFlashes`,
+default on), *Light flicker* (`dmmt.lightFlicker`, default on), *Simplified lighting*
+(`dmmt.simpleLighting`, default off; light-emitting effects lose their soft glow, which removes the costly canvas
+shadow blur) and *Animated effect textures*
+(`dmmt.animatedTextures`, default on; off freezes scrolling/pulsing textures).
+With nothing animating the map redraws only when something changes.
+
 ## Remote-session settings ownership
 
 Open the **Session** tab in the left sidebar to explicitly host or connect; neither opening setup nor
@@ -251,7 +265,7 @@ Maximum number of simultaneously connected players; further logins are refused.
 
 **Default:** `true`. **Applies:** Live (there is no button for it in the DM view; players opt out with their own mute button).
 
-Syncs the DM's ambient music and sound effects to online players. The host sends only playback state (track, position, loudness-matching gain in dB); browsers download the original hashed audio files from the host and play them locally. Players get their own master, music and effects sliders and a mute button in the right-side **Settings** section (alongside logout). These remain browser-local preferences, independent of the DM's volume. Only original files are served, never the large `files/playback` copies.
+Syncs the DM's ambient music and sound effects to online players. The host sends only playback state (track, position, loudness-matching gain in dB); browsers download the original hashed audio files from the host and play them locally. Players get an *Enable sound* checkbox and their own master, music and ambient sliders (default 50%) in the **Audio** group of the right-side **Settings** section (logout sits at its bottom). These remain browser-local preferences, independent of the DM's volume. Only original files are served, never the large `files/playback` copies.
 
 **Keywords:** online, audio, music, sound effects, volume.
 

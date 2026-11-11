@@ -3493,7 +3493,7 @@
     "actions": [
      {
       "id": "hp",
-      "label": "Mending Touch: clear 1 HP",
+      "label": "Clear 1 HP",
       "usesSource": false,
       "target": "actor",
       "cost": { "hope": 2 },
@@ -3501,7 +3501,7 @@
      },
      {
       "id": "stress",
-      "label": "Mending Touch: clear 1 Stress",
+      "label": "Clear 1 Stress",
       "usesSource": false,
       "target": "actor",
       "cost": { "hope": 2 },
@@ -3509,14 +3509,14 @@
      },
      {
       "id": "greater-hp",
-      "label": "Mending Touch: clear 2 HP (once per long rest)",
+      "label": "Clear 2 HP (once per long rest)",
       "target": "actor",
       "cost": { "hope": 2 },
       "steps": [{ "op": "clear", "resource": "hp", "amount": 2 }]
      },
      {
       "id": "greater-stress",
-      "label": "Mending Touch: clear 2 Stress (once per long rest)",
+      "label": "Clear 2 Stress (once per long rest)",
       "target": "actor",
       "cost": { "hope": 2 },
       "steps": [{ "op": "clear", "resource": "stress", "amount": 2 }]
