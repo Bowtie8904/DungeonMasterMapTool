@@ -206,7 +206,10 @@ public final class OnlineSessionServer {
         }
     };
     private final Map<String, OnlineMeasurement> measurements = new java.util.LinkedHashMap<>();
-
+    private static final int OUTBOX_MAX_MESSAGES = 512;
+    private static final long OUTBOX_MAX_BYTES = 8L * 1024 * 1024;
+    private final Map<String, OnlineOutbox> outboxes = new java.util.concurrent.ConcurrentHashMap<>();
+    private volatile java.util.concurrent.ExecutorService sendExecutor;
     private static final class Client {
         final WsContext ctx;
         final String playerId;
@@ -243,7 +246,7 @@ public final class OnlineSessionServer {
         DmSheetGrant grant = dmSheetGrants.remove(token);
         if (grant == null) return;
         for (Client client : new ArrayList<>(clients.values()))
-            if (token.equals(client.dmToken)) client.ctx.closeSession(1001, "DM sheet closed");
+            if (token.equals(client.dmToken)) closeAfterFlush(client.ctx, 1001, "DM sheet closed");
     }
 
     private DmSheetGrant dmSheetGrant(String address, String token) {
@@ -356,6 +359,12 @@ public final class OnlineSessionServer {
         });
         javalin.start(config.port());
         app = javalin;
+        java.util.concurrent.atomic.AtomicInteger senderIds = new java.util.concurrent.atomic.AtomicInteger();
+        sendExecutor = java.util.concurrent.Executors.newCachedThreadPool(r -> {
+            Thread thread = new Thread(r, "online-send-" + senderIds.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        });
         pinger = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
             Thread thread = new Thread(r, "online-ping");
             thread.setDaemon(true);
@@ -395,12 +404,24 @@ public final class OnlineSessionServer {
         broadcast("{\"type\":\"kicked\",\"reason\":\"Session ended\"}");
         for (Client client : new ArrayList<>(clients.values())) {
             try {
-                client.ctx.closeSession(1001, "Session ended");
+                closeAfterFlush(client.ctx, 1001, "Session ended");
             } catch (RuntimeException ignored) {
                 // already closed
             }
         }
         clients.clear();
+        java.util.concurrent.ExecutorService sender = sendExecutor;
+        sendExecutor = null;
+        if (sender != null) {
+            sender.shutdown();
+            try {
+                // Lets the session-ended notice and close frames reach the browsers before the listener stops.
+                sender.awaitTermination(1, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        outboxes.clear();
         dmSheetGrants.clear();
         sessions.clear();
         loginClaims.clear();
@@ -917,7 +938,7 @@ public final class OnlineSessionServer {
             if (client.dmActorId == null && client.playerId.equals(playerId)) {
                 sendTo(client.ctx, "{\"type\":\"kicked\",\"reason\":" + MAPPER.valueToTree(reason) + "}");
                 clients.remove(client.ctx.sessionId());
-                client.ctx.closeSession(1008, reason);
+                closeAfterFlush(client.ctx, 1008, reason);
             }
         }
         host.rosterChanged();
@@ -1116,6 +1137,8 @@ public final class OnlineSessionServer {
     }
 
     private synchronized void onDisconnect(String sessionId) {
+        OnlineOutbox outbox = outboxes.remove(sessionId);
+        if (outbox != null) outbox.discard();
         Client removed = clients.remove(sessionId);
         if (removed != null) {
             if (removed.dmActorId != null) return;
@@ -7068,9 +7091,53 @@ public final class OnlineSessionServer {
     }
 
     private void sendTo(WsContext ctx, String json) {
-        try {
-            ctx.send(json);
-        } catch (Exception ignored) {
+        OnlineOutbox outbox = outbox(ctx);
+        if (outbox == null) {
+            try {
+                ctx.send(json);
+            } catch (Exception ignored) {
+            }
+            return;
+        }
+        outbox.send(json);
+    }
+
+    /** Closes after everything already queued for this connection has been written. */
+    private void closeAfterFlush(WsContext ctx, int code, String reason) {
+        OnlineOutbox outbox = outbox(ctx);
+        if (outbox == null) {
+            ctx.closeSession(code, reason);
+            return;
+        }
+        outbox.close(code, reason);
+    }
+
+    /** Null while the server is not running; sends then fall back to direct writes. */
+    private OnlineOutbox outbox(WsContext ctx) {
+        java.util.concurrent.ExecutorService executor = sendExecutor;
+        if (executor == null || !ctx.session.isOpen()) return null;
+        String id = ctx.sessionId();
+        return outboxes.computeIfAbsent(id, key -> new OnlineOutbox(new OnlineOutbox.Sink() {
+            @Override
+            public void send(String message) {
+                ctx.send(message);
+            }
+
+            @Override
+            public void close(int code, String reason) {
+                try {
+                    ctx.closeSession(code, reason);
+                } catch (RuntimeException ignored) {
+                    // already closed
+                }
+            }
+        }, executor, OUTBOX_MAX_MESSAGES, OUTBOX_MAX_BYTES, () -> resyncSnapshot(id)));
+    }
+
+    private String resyncSnapshot(String sessionId) {
+        synchronized (this) {
+            Client client = clients.get(sessionId);
+            return client == null || current == null ? null : snapshotJson(client);
         }
     }
 
