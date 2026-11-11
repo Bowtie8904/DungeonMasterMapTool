@@ -2429,7 +2429,7 @@ public final class OnlineSessionServer {
             } else {
                 targets = resolveFeatureTargets(c, sourceActor, request.path("targetActorId").asText(""), targetMode);
             }
-            if (definition.path("excludeSourceActor").asBoolean()
+            if (definition.path("excludeSourceActor").asBoolean() && !targetMode.isEmpty()
                     && targets.stream().anyMatch(target -> target.getId().equals(sourceActor.getId())))
                 throw new IllegalArgumentException("Choose another character.");
             if (definition.path("vaultSource").asBoolean()) {

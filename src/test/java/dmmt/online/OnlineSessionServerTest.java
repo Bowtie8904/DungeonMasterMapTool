@@ -6613,7 +6613,7 @@ class OnlineSessionServerTest {
                 var response = http.send(request, HttpResponse.BodyHandlers.ofString());
                 assertEquals(200, response.statusCode(), response.body());
                 JsonNode damage = inbox.next("roll");
-                assertEquals("damage", damage.path("source").asText());
+                assertEquals(List.of("damage", "featureAction:feat:Charge:charge"), List.of(damage.path("source").asText().split(",")));
                 assertEquals(ancestry, damage.path("actorId").asText());
                 assertEquals("1d12", damage.path("expression").asText());
                 assertEquals(1, damage.path("rolls").size(), "Charge must not scale with Proficiency");
@@ -6623,7 +6623,7 @@ class OnlineSessionServerTest {
                 assertEquals(400, http.send(request, HttpResponse.BodyHandlers.ofString()).statusCode());
                 assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), ancestry)).path("stress").path("on").asInt());
                 List<JsonNode> history = store.historyTail(campaign.getId(), 50);
-                assertEquals(1, history.stream().filter(entry -> "damage".equals(entry.path("source").asText())
+                assertEquals(1, history.stream().filter(entry -> entry.path("source").asText().startsWith("damage")
                         && ancestry.equals(entry.path("actorId").asText())).count());
                 JsonNode savedOriginal = history.stream().filter(entry -> entry.path("id").equals(original.path("id"))
                         && entry.path("ts").equals(original.path("ts"))).findFirst().orElseThrow();
@@ -6879,7 +6879,7 @@ class OnlineSessionServerTest {
             String error = server.dmDeleteMessage(id, ts);
             assertNotNull(error);
             assertTrue(error.startsWith("Could not delete chat message:"));
-            assertTrue(server.dmHistory(100).contains(message));
+            assertTrue(server.dmHistory(100).stream().anyMatch(entry -> ((ObjectNode) entry.deepCopy()).without("dmActions").equals(message)));
             assertEquals("chat", dmMessages.getLast().path("type").asText(), "No deletion notification on failure");
             assertEquals(200, cardHttp(cookie, "/" + cardId, null).statusCode());
             java.nio.file.Files.writeString(history, message + "\n");
@@ -7201,7 +7201,7 @@ class OnlineSessionServerTest {
             JsonNode message = inbox.next("chat");
             assertEquals(card, message.path("sharedCard"));
             assertTrue(message.path("text").asText().contains("Clear **HP**."));
-            assertTrue(server.dmHistory(100).contains(message));
+            assertTrue(server.dmHistory(100).stream().anyMatch(entry -> ((ObjectNode) entry.deepCopy()).without("dmActions").equals(message)));
             request.put("offerQuantity", 1);
             assertEquals(400, cardHttp(cookie, "", request).statusCode());
             request.remove("offerQuantity");
