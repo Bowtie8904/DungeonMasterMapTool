@@ -289,6 +289,48 @@ The existing binary image PUT remains supported. Both routes enforce ownership a
 actor-scoped DM grants remain supported. Older hosts show an update-required error rather than accepting a raw
 upload in place of token customization. These additions do not change LAN remote compatibility.
 
+The Character Mancer loads the Items catalog for its starting Torch, 50 feet of rope, Basic supplies and
+standard class-guide keepsakes. These are normal compendium-backed inventory entries with catalog
+descriptions and automation; the selected potion and starting gold are unchanged. Custom class-item text
+remains plain inventory. Missing or duplicate basic-supply entries show a creation error asking the DM to
+restore the catalog, rather than silently granting incomplete gear. Existing characters are not re-granted supplies.
+
+An uncreated actor offers **Create Character** or **Import from Demiplane**. Import opens a themed
+link-entry dialog, with inline loading/failure messages and a separate result popup after the sheet is
+successfully saved. The concise popup shows only unmatched feature/domain-card names, the item quantity
+warning and an unverified active loadout. Unmatched loot and technical diagnostics are not listed.
+Use a public `https://app.demiplane.com/nexus/daggerheart/character-sheet/<uuid>` link that opens without
+signing in. The DM host needs internet access; neither Demiplane credentials nor cookies are used.
+
+The importer reads saved creation traits, class/subclass, ancestry/community, Experiences, equipment and
+per-level advancement records (including trait/Experience increases, HP/Stress, Evasion, Proficiency,
+subclass upgrades, extra domain cards and supported multiclass selections). Demiplane's suggested-trait
+toggle uses verified starting allocations for the standard SRD classes and Brawler; manual allocations
+are still validated when that toggle is off. Martial Artist starting forms are matched to local stances.
+Local catalogs supply
+feature/card/item mechanics and automation; ambiguous names are never guessed. Custom or unmatched
+equipment stays plain inventory without invented mechanics. Item quantities default to one, and where
+the active loadout cannot be verified the first five acquired matched cards are active, with the rest in
+the vault; both are reported for review. Portraits, active effects, usage counters, scars, manual overrides
+and unsupported background fields are not transferred. Missing required creation data, including
+unreadable companion/stance/element or starting Experience-bonus choices, blocks import rather than
+inventing a character. Unknown progression records remain in internal reconstruction diagnostics; historical card
+swaps/removals are not inferred from final cards.
+
+Demiplane's `50ft of Rope` matches the `50 feet of rope` item when no exact catalog name exists.
+Both official Brawler keepsakes (hand wraps from a mentor and a book about your secret hobby) are
+included in Items. Absent saved gold fields preserve the normal starting handful (10 coins); explicit
+saved amounts, including zero, replace that default.
+
+`POST /api/sheet/{id}/demiplane` accepts `{ "url": "https://app.demiplane.com/..." }` for an owned,
+enabled, uncreated actor, including actor-scoped DM sheet grants. It returns only the public character's
+build selections, not the surrounding account data, and does not mutate the actor. Fetches use a fixed
+official HTTPS host, no redirects, time/size limits and a bounded concurrent download count. Reconstruction
+uses the local catalogs and then the existing version-checked sheet save. Import conflicts retain the
+newer sheet; other failed saves restore the empty local sheet and never announce success. Older hosts
+return an update-required message. This additive route changes no settings, saved sheet contract or
+LAN compatibility version.
+
 Daggerheart testing actors are created only by the desktop DM (Actors tree context menu) and may be used freely
 by their assigned player. `GET /api/sheet/{id}` supplies the authoritative `testingCharacter` marker separately
 from saved sheet data; players cannot promote ordinary actors through PUT. Marked sheets show a testing badge

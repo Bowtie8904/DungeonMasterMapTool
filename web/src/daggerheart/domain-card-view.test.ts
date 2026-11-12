@@ -60,6 +60,21 @@ class Element {
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
+it('offers Create Character or Import from Demiplane only on an uncreated sheet and disables read-only import', () => {
+  vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  vi.stubGlobal('HTMLInputElement', Element);
+  vi.stubGlobal('HTMLTextAreaElement', Element);
+  const c = emptyCharacter('New actor');
+  const root = renderSheetView({ character: c, actorId: 'new', onRoll: () => false, onImport: vi.fn() }) as unknown as Element;
+  expect(root.querySelectorAll('button').find(button => button.text() === 'Create Character')).toBeDefined();
+  expect(root.querySelectorAll('button').find(button => button.text() === 'Import from Demiplane')?.disabled).toBe(false);
+  const readOnly = renderSheetView({ character: c, actorId: 'new', onRoll: () => false, onImport: vi.fn(), readOnly: () => true }) as unknown as Element;
+  expect(readOnly.querySelectorAll('button').find(button => button.text() === 'Import from Demiplane')?.disabled).toBe(true);
+});
+
 it('separates loot tools from limited actions while preserving sharing, usage and deletion', async () => {
   const createElement = (tag: string) => {
     const node = new Element(tag);

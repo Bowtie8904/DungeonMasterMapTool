@@ -8,7 +8,7 @@ import { emptyCharacter } from './data';
 afterEach(() => { configureDmSheet(''); invalidateCompendium(); vi.unstubAllGlobals(); });
 
 it('shares downloads across actors, rules and tools without sharing mutable automation', async () => {
-  const categories = ['classes', 'ancestries', 'communities', 'weapons', 'armor', 'consumables', 'domain-cards', 'transformations'];
+  const categories = ['classes', 'ancestries', 'communities', 'weapons', 'armor', 'consumables', 'domain-cards', 'transformations', 'items'];
   const fetch = vi.fn(async (url: string) => new Response(JSON.stringify(url === '/api/compendium'
     ? { categories: categories.map(category => ({ category, revision: '1' })) }
     : { category: url.split('/').pop(), entries: [] })));
@@ -16,6 +16,7 @@ it('shares downloads across actors, rules and tools without sharing mutable auto
   await Promise.all([refreshCharacterAutomation(emptyCharacter('A')), refreshCharacterAutomation(emptyCharacter('B')), loadRulesData(), fetchCompendiumIndex()]);
   expect(fetch.mock.calls.filter(([url]) => url === '/api/compendium')).toHaveLength(1);
   expect(fetch.mock.calls.filter(([url]) => url === '/api/compendium/classes')).toHaveLength(1);
+  expect(fetch.mock.calls.filter(([url]) => url === '/api/compendium/items')).toHaveLength(1);
   const first = await fetchCompendiumCategory('classes');
   first.entries.push({ id: 'local', name: 'Local edit' });
   expect((await fetchCompendiumCategory('classes')).entries).toEqual([]);

@@ -29,6 +29,7 @@ import { weaponAttackBlocker, weaponDamageRules, weaponProfiles, weaponWithProfi
 import { useConsumableUnit, withSelectedAmount } from './engine';
 import { attachmentDef, attachItem, attachTargets, detachItem } from './attachments';
 import { isVitalityEffect, removeVitality } from './vitality';
+import { openDemiplaneImport } from './demiplane-view';
 
 import { openCompanionMancer, openLevelUp, openMancer, openTransformation } from './mancer';
 import { companionAvailable, companionFeatures, companionRules, companionWeapon, hasCompanionTraining, markCompanionDamage, resolveBonded } from './companion';
@@ -132,6 +133,7 @@ export interface SheetViewOptions {
   bus?: SheetBus;
   /** Called after anything on the sheet may have changed (the host debounces and saves). */
   onChange?: () => void;
+  onImport?: (character: CharacterSheet) => Promise<void>;
   supportsKeptDice?: () => boolean;
   supportsZeroKeptDice?: () => boolean;
   supportsRollMultipliers?: () => boolean;
@@ -1089,13 +1091,21 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   }
 
   function startBanner(): HTMLElement {
-    const go = el('button', { class: 'primary', type: 'button' }, 'Start the Character Mancer');
+    const go = el('button', { class: 'primary', type: 'button' }, 'Create Character');
     go.addEventListener('click', launchMancer);
+    const importButton = el('button', { type: 'button', disabled: !opts.actorId || !opts.onImport || opts.readOnly?.() === true }, 'Import from Demiplane');
+    importButton.addEventListener('click', () => {
+      if (!opts.actorId || !opts.onImport || opts.readOnly?.()) return;
+      openDemiplaneImport(opts.actorId, () => !opts.readOnly?.() && c.mancer?.done === false && !c.className, async imported => {
+        try { await opts.onImport!(imported); }
+        finally { render(false); }
+      });
+    });
     return el(
       'div', { class: 'dh-start' },
       el('h2', {}, 'Create your character'),
       el('p', {}, 'This sheet is empty. The Character Mancer guides you step by step through class, heritage, traits, gear and more - it only takes a few minutes.'),
-      go,
+      el('div', { class: 'acts' }, go, el('span', { class: 'muted' }, 'or'), importButton),
     );
   }
 

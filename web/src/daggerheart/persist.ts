@@ -290,6 +290,33 @@ export type SheetSave = (() => void) & {
   action: (request: FeatureRequest) => Promise<void>;
 };
 
+/** Replaces only an uncreated sheet and never rolls a conflict's newer representation back. */
+export async function saveImportedCharacter(c: CharacterSheet, imported: CharacterSheet, save: SheetSave,
+                                            canWrite: () => boolean = () => true): Promise<void> {
+  if (!canWrite()) throw new Error('The actor is read-only. Nothing was imported.');
+  await save.flush();
+  if (!canWrite()) throw new Error('The actor is read-only. Nothing was imported.');
+  if (c.mancer?.done !== false || c.className) throw new Error('This actor already has a character. Nothing was imported.');
+  const before = structuredClone(c);
+  const replacement = { ...before, ...imported };
+  for (const field of ['testingCharacter', 'inventoryRevision', 'compendiumRevision', 'featureRevision'] as const) {
+    if (field in before) Reflect.set(replacement, field, Reflect.get(before, field));
+  }
+  Object.keys(c).forEach(key => Reflect.deleteProperty(c, key));
+  Object.assign(c, replacement);
+  const pending = JSON.stringify(c);
+  try {
+    await save.flush();
+    if (!canWrite()) throw new Error('Import save could not be confirmed because the actor became read-only. Reload the sheet before retrying.');
+  } catch (error) {
+    if (JSON.stringify(c) === pending) {
+      Object.keys(c).forEach(key => Reflect.deleteProperty(c, key));
+      Object.assign(c, before);
+    }
+    throw error;
+  }
+}
+
 /** All feature callers use the synchronizer; legacy sheet handles/hosts retain their GET fallback. */
 export async function useSheetAction(save: { action?: SheetSave['action']; refresh?: () => Promise<void> }, request: FeatureRequest): Promise<void> {
   if (save.action) return save.action(request);

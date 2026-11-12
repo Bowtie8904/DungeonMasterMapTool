@@ -26,7 +26,8 @@ function ranger(create = true): CharacterSheet {
   return c;
 }
 function rulesData(): RulesData {
-  return { classes: catalog.entries, ancestries: [], communities: [], weapons: [], armor: [], consumables: [], cards: [], transformations: [] };
+  return { classes: catalog.entries, ancestries: [], communities: [], weapons: [], armor: [], consumables: [], cards: [], transformations: [],
+    items: JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/items.json', import.meta.url), 'utf8')).entries };
 }
 const train = (c: CharacterSheet, picks: CompanionTraining[]) => applyCompanionTraining(c, picks, picks.length);
 const level = (n: number, advancements: LevelUpRecord['advancements'] = [{ type: 'hp' }, { type: 'hp' }]): LevelUpRecord =>

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { CompendiumEntry, describeAutomation } from './compendium';
 import { emptyCharacter, normalizeSheet } from './data';
 import { syncDerived } from './engine';
@@ -9,6 +10,7 @@ const feature = (name: string, creation: NonNullable<NonNullable<CompendiumEntry
   name, text: '', automation: { creation },
 });
 const data = (): RulesData => ({
+  items: JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/items.json', import.meta.url), 'utf8')).entries,
   classes: [
     { id: 'class', name: 'Scholar', kind: 'class', domains: ['Arcana'], startingHp: 6, startingEvasion: 10,
       features: [feature('Unfamiliar class name', { hp: 1 })] },

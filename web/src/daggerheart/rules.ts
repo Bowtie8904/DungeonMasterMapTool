@@ -18,6 +18,7 @@ export interface RulesData {
   weapons: CompendiumEntry[];
   armor: CompendiumEntry[];
   consumables: CompendiumEntry[];
+  items: CompendiumEntry[];
   cards: CompendiumEntry[];
   /** Optional Hope & Fear transformations; empty when the data folder has none. */
   transformations: CompendiumEntry[];
@@ -25,11 +26,11 @@ export interface RulesData {
 
 export async function loadRulesData(): Promise<RulesData> {
   const get = async (name: string) => (await fetchCompendiumCategory(name)).entries;
-  const [classes, ancestries, communities, weapons, armor, consumables, cards] = await Promise.all(
-    ['classes', 'ancestries', 'communities', 'weapons', 'armor', 'consumables', 'domain-cards'].map(get),
+  const [classes, ancestries, communities, weapons, armor, consumables, cards, items] = await Promise.all(
+    ['classes', 'ancestries', 'communities', 'weapons', 'armor', 'consumables', 'domain-cards', 'items'].map(get),
   );
   const transformations = await get('transformations').catch(() => [] as CompendiumEntry[]);
-  return { classes, ancestries, communities, weapons, armor, consumables, cards, transformations };
+  return { classes, ancestries, communities, weapons, armor, consumables, cards, items, transformations };
 }
 
 const TRANSFORMATION_SOURCE = 'Transformation - ';
@@ -211,6 +212,17 @@ export function emptyChoices(): CreationChoices {
   };
 }
 
+const STARTING_ITEMS = ['Torch', '50 feet of rope', 'Basic supplies'];
+
+function creationItemProblems(d: RulesData, ch: CreationChoices): string[] {
+  const problems = STARTING_ITEMS.filter(name => d.items.filter(e => e.name === name).length !== 1)
+    .map(name => `Starting item "${name}" must have exactly one entry in the Items compendium. Ask the DM to restore it.`);
+  const name = ch.classItem.trim();
+  if (name && d.items.filter(e => e.name.toLowerCase() === name.toLowerCase()).length > 1)
+    problems.push(`Class item "${name}" matches multiple Items compendium entries. Ask the DM to resolve the duplicate names.`);
+  return problems;
+}
+
 /** Why the choices cannot be turned into a character yet, or an empty list. */
 export function creationProblems(d: RulesData, ch: CreationChoices): string[] {
   const p: string[] = [];
@@ -231,6 +243,7 @@ export function creationProblems(d: RulesData, ch: CreationChoices): string[] {
   if (!d.armor.some((e) => e.name === ch.armor)) p.push('Choose armor.');
   p.push(...creationExperienceProblems(d, ch));
   p.push(...creationCardProblems(d, ch));
+  p.push(...creationItemProblems(d, ch));
   return p;
 }
 
@@ -252,6 +265,8 @@ function markSpellcast(c: CharacterSheet, trait?: string): void {
 
 /** Builds the level 1 sheet from the Mancer choices (the SRD creation steps). Keeps free-form data of an earlier build. */
 export function buildCharacter(d: RulesData, ch: CreationChoices, prev?: CharacterSheet): CharacterSheet {
+  const itemProblems = creationItemProblems(d, ch);
+  if (itemProblems.length) throw new Error(itemProblems.join(' '));
   if (ch.transformation === 'Shapeshifter' && !ancestryFeatures(d, ch).length) throw new Error('Choose the ancestry feature to retain.');
   const cardProblems = creationCardProblems(d, ch);
   if (!prev?.testingCharacter && cardProblems.length) throw new Error(cardProblems.join(' '));
@@ -323,14 +338,17 @@ export function buildCharacter(d: RulesData, ch: CreationChoices, prev?: Charact
   if (armor?.armor) c.activeArmor = armorFrom(armor);
 
   c.gold = 10;
-  c.inventory.push(
-    { name: 'Torch', type: 'gear', qty: 1 },
-    { name: '50 feet of rope', type: 'gear', qty: 1 },
-    { name: 'Basic supplies', type: 'gear', qty: 1 },
-  );
+  for (const name of STARTING_ITEMS) {
+    addToSheet(c, 'items', structuredClone(d.items.find(e => e.name === name)!));
+  }
   const potion = d.consumables.find((e) => e.name === (ch.potion === 'stamina' ? 'Minor Stamina Potion' : 'Minor Health Potion'));
   if (potion) addToSheet(c, 'consumables', potion);
-  if (ch.classItem.trim()) c.inventory.push({ name: ch.classItem.trim(), type: 'class item', qty: 1 });
+  if (ch.classItem.trim()) {
+    const name = ch.classItem.trim();
+    const matches = d.items.filter(e => e.name.toLowerCase() === name.toLowerCase());
+    if (matches.length === 1) addToSheet(c, 'items', structuredClone(matches[0]));
+    else c.inventory.push({ name, type: 'class item', qty: 1 });
+  }
 
   c.experiences = ch.experiences.map((n, i) => ({
     name: n.trim(), mod: 2 + (i === ch.experienceBonusIndex ? grants.experienceBonus : 0),

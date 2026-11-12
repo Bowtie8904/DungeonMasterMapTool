@@ -75,6 +75,17 @@ export async function logout(): Promise<void> {
   if (!res.ok) throw await readError(res);
 }
 
+export async function getDemiplaneCharacter(actorId: string, url: string): Promise<import('./daggerheart/demiplane').DemiplaneCharacter> {
+  const res = await hostFetch(`/api/sheet/${encodeURIComponent(actorId)}/demiplane`, {
+    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  if (res.status === 404 || res.status === 405)
+    throw new ApiError('This host does not support Demiplane import. Ask the DM to update the host.', res.status);
+  if (!res.ok) throw await readError(res);
+  return res.json();
+}
+
 export type DomainCardView = 'card' | 'list';
 export interface DomainCardPreference { userId: string; domainCardView: DomainCardView }
 

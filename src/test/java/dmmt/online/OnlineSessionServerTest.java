@@ -35,6 +35,77 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OnlineSessionServerTest {
     @Test
+    void demiplaneImportRequiresAnOwnedEnabledUncreatedActorAndRejectsArbitraryUrls() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("new").name("New").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("other").name("Other").ownerId("someone-else").build());
+        String cookie = cookie();
+        assertEquals(401, demiplaneRequest(null, "new", "{\"url\":\"https://localhost/\"}").statusCode());
+        assertEquals(403, demiplaneRequest(cookie, "other", "{\"url\":\"https://localhost/\"}").statusCode());
+        assertEquals(403, demiplaneRequest(cookie, "missing", "{\"url\":\"https://localhost/\"}").statusCode());
+        campaign.actor("new").setDisabled(true);
+        assertEquals(403, demiplaneRequest(cookie, "new", "{\"url\":\"https://localhost/\"}").statusCode());
+        campaign.actor("new").setDisabled(false);
+        store.saveSheet(campaign.getId(), "new", "{\"className\":\"Bard\",\"mancer\":{\"done\":true}}");
+        assertEquals(409, demiplaneRequest(cookie, "new", "{\"url\":\"https://localhost/\"}").statusCode());
+        store.saveSheet(campaign.getId(), "new", "{\"className\":\"\",\"mancer\":{\"done\":false}}");
+        HttpResponse<String> rejected = demiplaneRequest(cookie, "new", "{\"url\":\"https://localhost/\"}");
+        assertEquals(400, rejected.statusCode(), rejected.body());
+        assertTrue(rejected.body().contains("app.demiplane.com"));
+        assertEquals("no-store", rejected.headers().firstValue("Cache-Control").orElseThrow());
+        assertEquals(400, demiplaneRequest(cookie, "new", "{}").statusCode());
+        assertEquals(400, demiplaneRequest(cookie, "new", "{").statusCode());
+        assertEquals(413, demiplaneRequest(cookie, "new", "{\"url\":\"" + "x".repeat(4096) + "\"}").statusCode());
+        assertFalse(MAPPER.readTree(store.loadSheet(campaign.getId(), "new")).path("mancer").path("done").asBoolean());
+        String grant = URI.create(server.dmSheetUrl("new")).getFragment();
+        for (String id : List.of("new", "other")) {
+            var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/sheet/" + id + "/demiplane"))
+                    .header("Authorization", "Bearer " + grant).header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"url\":\"https://localhost/\"}"));
+            assertEquals(id.equals("new") ? 400 : 403,
+                    http.send(request.build(), HttpResponse.BodyHandlers.ofString()).statusCode());
+        }
+    }
+
+    @Test
+    void demiplaneRecreatedSheetsPersistThroughNormalVersionChecksAndRenameTheActor() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("new").name("New actor").ownerId(playerId()).build());
+        store.save(campaign);
+        String cookie = cookie();
+        String version = MAPPER.readTree(sheetRead(cookie, "new").body()).path("version").asText();
+        ObjectNode imported = (ObjectNode) MAPPER.readTree("""
+                {"name":"Imported hero","className":"Bard","subclass":"Wordsmith","ancestry":"Elf","community":"Slyborne",
+                 "level":3,"mancer":{"done":true},"features":[],"heritage":[],"effects":[],"usage":{},
+                 "loadout":[],"vault":[],"activeWeapons":[],"carriedWeapons":[],"carriedArmor":[],"inventory":[],
+                 "hp":{"slots":8,"total":12,"on":2},"stress":{"slots":6,"total":12,"on":1},
+                 "hope":{"slots":6,"total":6,"on":3},"armorTrack":{"slots":0,"total":12,"on":0},
+                 "levelUps":[{"level":2,"advancements":[{"type":"traits","traits":["Presence","Instinct"]},
+                  {"type":"card","card":"Book of Sitil"}],"card":"Book of Ava","experience":"Traveler"},
+                  {"level":3,"advancements":[{"type":"hp"},{"type":"hp"}],"card":"Book of Norai"}]}
+                """);
+        var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/new"))
+                .header("Cookie", cookie).header("Content-Type", "application/json").header("If-Match", version);
+        HttpResponse<String> saved = http.send(request.PUT(HttpRequest.BodyPublishers.ofString(imported.toString())).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, saved.statusCode(), saved.body());
+        assertEquals("Imported hero", campaign.actor("new").getName());
+        JsonNode reopened = MAPPER.readTree(sheetRead(cookie, "new").body()).path("sheet");
+        assertTrue(reopened.path("mancer").path("done").asBoolean());
+        assertEquals(3, reopened.path("level").asInt());
+        assertEquals(2, reopened.path("levelUps").size());
+        assertEquals(8, reopened.path("hp").path("slots").asInt());
+        assertEquals(409, http.send(request.PUT(HttpRequest.BodyPublishers.ofString(imported.toString())).build(),
+                HttpResponse.BodyHandlers.ofString()).statusCode());
+        assertEquals("Imported hero", MAPPER.readTree(store.loadSheet(campaign.getId(), "new")).path("name").asText());
+    }
+
+    private HttpResponse<String> demiplaneRequest(String cookie, String actorId, String body) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/" + actorId + "/demiplane"))
+                .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body));
+        if (cookie != null) request.header("Cookie", cookie);
+        return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    @Test
     void adversaryReactionPromptsAreClickableAndDoNotPublishDifficultyOrOutcome() throws Exception {
         Inbox inbox = new Inbox();
         WebSocket ws = connect(cookie(), inbox);

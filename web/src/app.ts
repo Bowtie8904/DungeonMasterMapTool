@@ -4,7 +4,7 @@ import { Connection } from './net';
 import { ChatMessage, Actor, GameState, Overlay, RollMessage, ServerMessage } from './protocol';
 import { iconButton } from './icons';
 import { LogEntry, renderLogEntry } from './chat';
-import { applyFeatureState, applyInventory, autosave, featureTarget, isLifeWard, loadCharacter, useSheetAction, type SheetSave } from './daggerheart/persist';
+import { applyFeatureState, applyInventory, autosave, featureTarget, isLifeWard, loadCharacter, saveImportedCharacter, useSheetAction, type SheetSave } from './daggerheart/persist';
 import { basicDeathOptions } from './daggerheart/death';
 import { INVENTORY_DRAG, postCard, postCompendiumCard, transferable, waitForInventoryDrag, type GrabQuantity, type SharedCard, type SharedEntry } from './shared-cards';
 import { SheetWindow, ToolWindow } from './daggerheart/window';
@@ -1601,6 +1601,11 @@ export class App {
               this.actorRowUpdates.get(a.id)?.();
               void this.sendMissingConditionEffects(a.id, character);
               this.scheduleEffects();
+              this.scheduleRollActions();
+            },
+            onImport: async imported => {
+              await saveImportedCharacter(character, imported, changed, () => !readOnly());
+              bus.notify(false);
               this.scheduleRollActions();
             },
             onFeature: (key, actionId, amount) => this.useSheetFeature(a.id, character, changed, key, actionId, amount),

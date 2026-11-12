@@ -14,6 +14,7 @@ const data: RulesData = {
   classes: load('classes').entries, ancestries: load('ancestries').entries, communities: load('communities').entries,
   weapons: load('weapons').entries, armor: load('armor').entries, consumables: load('consumables').entries,
   cards: load('domain-cards').entries, transformations: load('transformations').entries,
+  items: load('items').entries,
 };
 const catalogIndex = { categories: ['classes', 'ancestries', 'communities', 'weapons', 'armor', 'consumables', 'domain-cards', 'transformations']
   .map(category => ({ category })) };

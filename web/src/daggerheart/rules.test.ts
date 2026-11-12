@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { emptyCharacter, LevelUpRecord, multiclassesOf, normalizeSheet, TRAIT_ORDER } from './data';
 import { plain } from './rich';
 import { derivedStats, statBreakdown } from './engine';
-import { CLASS_GUIDES } from './guide';
+import { CLASS_GUIDES, GENERIC_GUIDE } from './guide';
 import {
   advancementLeft, applyLevelUp, buildCharacter, classEntries, creationProblems, emptyChoices, levelUpCards, levelUpProblems, RulesData,
   startingCards, subclassesOf, suggestedTraits, setTransformation, starterGear, tier1, creationAllowances,
@@ -15,6 +15,7 @@ const load = (f: string) => JSON.parse(readFileSync(resolve(__dirname, '../../..
 const data: RulesData = {
   classes: load('classes.json'), ancestries: load('ancestries.json'), communities: load('communities.json'), weapons: load('weapons.json'),
   armor: load('armor.json'), consumables: load('consumables.json'), cards: load('domain-cards.json'), transformations: load('transformations.json'),
+  items: load('items.json'),
 };
 
 function choicesFor(className: string) {
@@ -37,6 +38,43 @@ function choicesFor(className: string) {
 }
 
 describe('character mancer rules', () => {
+  it('grants compendium-backed supplies and every standard class keepsake', () => {
+    for (const [className, guide] of Object.entries(CLASS_GUIDES)) {
+      for (const classItem of guide.classItems) {
+        const ch = { ...choicesFor(className), classItem };
+        const c = buildCharacter(data, ch);
+        for (const name of ['Torch', '50 feet of rope', 'Basic supplies', classItem]) {
+          const entry = data.items.find(e => e.name === name)!;
+          expect(entry, name).toBeDefined();
+          expect(c.inventory.find(i => i.name === name)).toMatchObject({ name, qty: 1, type: 'gear', note: entry.text });
+        }
+        expect(c.gold).toBe(10);
+        expect(c.inventory.filter(i => i.type === 'consumable')).toHaveLength(1);
+      }
+    }
+    expect(data.items.some(e => e.name === GENERIC_GUIDE.classItems[0])).toBe(true);
+  });
+
+  it('uses edited catalog descriptions and isolated automation, but preserves custom keepsakes', () => {
+    const items = structuredClone(data.items);
+    const torch = items.find(e => e.name === 'Torch')!;
+    torch.text = 'Host-customized torch';
+    torch.automation = { uses: { max: 2, per: 'session' } };
+    const ch = { ...choicesFor('Bard'), classItem: 'My handmade keepsake' };
+    const first = buildCharacter({ ...data, items }, ch);
+    const second = buildCharacter({ ...data, items }, ch);
+    const granted = first.inventory.find(i => i.name === 'Torch')!;
+    expect(granted.note).toBe(torch.text);
+    expect(granted.automation).toEqual(torch.automation);
+    granted.automation!.uses!.max = 9;
+    expect(torch.automation.uses!.max).toBe(2);
+    expect(second.inventory.find(i => i.name === 'Torch')!.automation!.uses!.max).toBe(2);
+    expect(first.inventory.find(i => i.name === ch.classItem)).toEqual({ name: ch.classItem, type: 'class item', qty: 1 });
+    expect(() => buildCharacter({ ...data, items: items.filter(e => e.name !== 'Torch') }, ch)).toThrow('Ask the DM to restore it');
+    expect(creationProblems({ ...data, items: items.filter(e => e.name !== 'Torch') }, ch).join(' ')).toContain('Ask the DM to restore it');
+    expect(() => buildCharacter({ ...data, items: [...items, torch] }, ch)).toThrow('exactly one entry');
+  });
+
   it('builds valid level 1 characters for the SRD classes', () => {
     for (const name of Object.keys(CLASS_GUIDES)) {
       const ch = choicesFor(name);

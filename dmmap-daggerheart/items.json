@@ -5,6 +5,126 @@
  "label": "Items",
  "entries": [
   {
+   "id": "torch",
+   "name": "Torch",
+   "text": "An ordinary torch for lighting your way."
+  },
+  {
+   "id": "50-feet-of-rope",
+   "name": "50 feet of rope",
+   "text": "A 50-foot length of rope for climbing, securing gear, and other adventuring tasks."
+  },
+  {
+   "id": "basic-supplies",
+   "name": "Basic supplies",
+   "text": "Everyday provisions and small necessities for adventuring."
+  },
+  {
+   "id": "mentor-hand-wraps",
+   "name": "hand wraps from a mentor",
+   "text": "Training wraps given to you by a mentor, kept as a reminder of their lessons."
+  },
+  {
+   "id": "secret-hobby-book",
+   "name": "a book about your secret hobby",
+   "text": "A book devoted to a pastime you prefer to keep to yourself."
+  },
+  {
+   "id": "romance-novel",
+   "name": "A romance novel",
+   "text": "A well-read tale of romance, carried as a Bard's keepsake."
+  },
+  {
+   "id": "unopened-letter",
+   "name": "a letter never opened",
+   "text": "A sealed letter whose contents remain a mystery to its bearer."
+  },
+  {
+   "id": "bag-of-rocks-and-bones",
+   "name": "A small bag of rocks and bones",
+   "text": "A Druid's collection of small natural curiosities."
+  },
+  {
+   "id": "pendant-from-the-dirt",
+   "name": "a strange pendant found in the dirt",
+   "text": "An unusual pendant unearthed during your travels."
+  },
+  {
+   "id": "mentor-totem",
+   "name": "A totem from your mentor",
+   "text": "A token of your mentor's guidance."
+  },
+  {
+   "id": "secret-key",
+   "name": "a secret key",
+   "text": "A key kept close, with a purpose known to its bearer."
+  },
+  {
+   "id": "first-kill-trophy",
+   "name": "A trophy from your first kill",
+   "text": "A memento of your first successful hunt."
+  },
+  {
+   "id": "broken-compass",
+   "name": "a seemingly broken compass",
+   "text": "A compass that does not seem to point where it should."
+  },
+  {
+   "id": "forgery-tools",
+   "name": "A set of forgery tools",
+   "text": "Tools for preparing convincing copies of documents and signatures."
+  },
+  {
+   "id": "grappling-hook",
+   "name": "a grappling hook",
+   "text": "A hook that can be secured to a rope to catch a ledge or other anchor."
+  },
+  {
+   "id": "bundle-of-offerings",
+   "name": "A bundle of offerings",
+   "text": "Small offerings prepared for religious observances."
+  },
+  {
+   "id": "divine-sigil",
+   "name": "a sigil of your god",
+   "text": "A symbol of the deity to whom you have sworn yourself."
+  },
+  {
+   "id": "whispering-orb",
+   "name": "A whispering orb",
+   "text": "A curious orb that murmurs quietly."
+  },
+  {
+   "id": "family-heirloom",
+   "name": "a family heirloom",
+   "text": "An object handed down through your family."
+  },
+  {
+   "id": "lover-drawing",
+   "name": "The drawing of a lover",
+   "text": "A treasured likeness of someone dear to you."
+  },
+  {
+   "id": "sharpening-stone",
+   "name": "a sharpening stone",
+   "text": "A stone used to maintain the edge of a blade."
+  },
+  {
+   "id": "untranslated-book",
+   "name": "A book you’re trying to translate",
+   "text": "A book in a language you are still working to understand."
+  },
+  {
+   "id": "harmless-elemental-pet",
+   "name": "a tiny, harmless elemental pet",
+   "text": "A small elemental companion with no combat abilities."
+  },
+  {
+   "id": "personal-keepsake",
+   "name": "A keepsake from your past",
+   "text": "A personal reminder of the life you led before adventuring."
+  },
+  {
    "id": "premium-bedroll",
    "name": "Premium Bedroll",
    "rarity": "Common",

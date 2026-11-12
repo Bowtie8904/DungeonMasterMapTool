@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InventoryConflict, getSheet, saveSheet } from '../api';
-import { applyFeatureState, applyInventory, autosave, featureTarget, loadCharacter, updateCharacterAutomation } from './persist';
-import { mockCharacter } from './data';
+import { applyFeatureState, applyInventory, autosave, featureTarget, loadCharacter, saveImportedCharacter, updateCharacterAutomation } from './persist';
+import { emptyCharacter, mockCharacter } from './data';
 import type { CompendiumFile } from './compendium';
 
 vi.mock('../api', async () => {
@@ -12,6 +12,53 @@ vi.mock('../api', async () => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 describe('chat inventory synchronization', () => {
+  it('saves imports with current host revisions and restores the blank sheet on persistence failure', async () => {
+    vi.stubGlobal('window', globalThis);
+    vi.stubGlobal('document', { addEventListener: vi.fn(), dispatchEvent: vi.fn() });
+    const c = emptyCharacter('Actor');
+    c.inventoryRevision = 3;
+    c.compendiumRevision = 4;
+    const save = autosave('imported', c, vi.fn());
+    const imported = mockCharacter();
+    imported.mancer = { done: true };
+    vi.mocked(saveSheet).mockResolvedValue(undefined);
+    await saveImportedCharacter(c, imported, save);
+    expect(c.name).toBe(imported.name);
+    expect(c.inventoryRevision).toBe(3);
+    expect(c.compendiumRevision).toBe(4);
+    expect(saveSheet).toHaveBeenCalledTimes(2);
+    await expect(saveImportedCharacter(c, imported, save)).rejects.toThrow('already has a character');
+
+    const blank = emptyCharacter('Uncreated');
+    const failing = autosave('failed-import', blank, vi.fn());
+    await failing.flush();
+    vi.mocked(saveSheet).mockRejectedValue(new Error('Disk full'));
+    await expect(saveImportedCharacter(blank, imported, failing)).rejects.toThrow('Disk full');
+    expect(blank.mancer?.done).toBe(false);
+    expect(blank.className).toBe('');
+    expect(blank.name).toBe('Uncreated');
+    vi.mocked(saveSheet).mockReset();
+  });
+
+  it('does not overwrite a newer sheet loaded by an import save conflict or import while read-only', async () => {
+    vi.stubGlobal('window', globalThis);
+    vi.stubGlobal('document', { addEventListener: vi.fn(), dispatchEvent: vi.fn() });
+    vi.stubGlobal('CustomEvent', class { constructor(public type: string, public options: unknown) {} });
+    const c = emptyCharacter('Actor');
+    const save = autosave('import-conflict', c, vi.fn());
+    vi.mocked(saveSheet).mockResolvedValue(undefined);
+    await save.flush();
+    const imported = mockCharacter();
+    const newer = { ...mockCharacter(), name: 'Created elsewhere' };
+    vi.mocked(saveSheet).mockRejectedValue(new InventoryConflict(newer, '"conflict"'));
+    await expect(saveImportedCharacter(c, imported, save)).rejects.toThrow('changed in another window');
+    expect(c.name).toBe('Created elsewhere');
+    vi.mocked(saveSheet).mockClear();
+    await expect(saveImportedCharacter(emptyCharacter('Disabled'), imported, save, () => false)).rejects.toThrow('read-only');
+    expect(saveSheet).not.toHaveBeenCalled();
+    vi.mocked(saveSheet).mockReset();
+  });
+
   it('preserves saved testing-sheet manual edits and removed cards instead of rebuilding on every load', async () => {
     const saved = mockCharacter();
     saved.mancer = { done: true };

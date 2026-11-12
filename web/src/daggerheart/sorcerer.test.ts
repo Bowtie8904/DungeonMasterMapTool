@@ -160,7 +160,8 @@ describe('Sorcerer catalog automation', () => {
   });
 
   it('validates, saves and reloads the creation element and charges the optional bonuses separately', () => {
-    const d: RulesData = { classes: catalog.entries, ancestries: [], communities: [], transformations: [], cards: [], weapons: [], armor: [], consumables: [] };
+    const d: RulesData = { classes: catalog.entries, ancestries: [], communities: [], transformations: [], cards: [], weapons: [], armor: [], consumables: [],
+      items: JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/items.json', import.meta.url), 'utf8')).entries };
     const choices = { ...emptyChoices(), className: 'Sorcerer', subclass: 'Sorcerer: Elemental Origin' };
     expect(creationProblems(d, choices)).toContain('Choose your Elementalist element.');
     choices.element = 'Lightning';

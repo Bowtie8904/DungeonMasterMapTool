@@ -322,7 +322,7 @@ describe('Brawler automation', () => {
 
   it('requires two tier-1 creation stances and one eligible new stance per level', () => {
     const data: RulesData = { classes: catalog.entries, ancestries: [{ id: 'human', name: 'Human' }], communities: [{ id: 'town', name: 'Town' }],
-      weapons: [], armor: [], consumables: [], transformations: [], cards: [
+      weapons: [], armor: [], consumables: [], items: JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/items.json', import.meta.url), 'utf8')).entries, transformations: [], cards: [
         { id: 'one', name: 'One', level: 1, domain: 'Valor', cardType: 'Ability' },
         { id: 'two', name: 'Two', level: 1, domain: 'Bone', cardType: 'Ability' },
       ] };

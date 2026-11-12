@@ -20,6 +20,20 @@ The **Online Play** tab (next to DM Link) lets you host an optional, DM-controll
 who join from a browser. **It is not DM control** (that is DM Link below); players get restricted access.
 Nothing starts until you click **Start online session**, so offline play and the second-screen view are unchanged.
 
+- **Starting gear:** Torch, 50 feet of rope, Basic supplies and standard class keepsakes are available in the
+  Items compendium. The Character Mancer grants those catalog entries, including their descriptions and
+  host-defined automation, alongside the usual starting potion and gold. Custom keepsakes remain supported.
+  Brawler's mentor hand wraps and secret-hobby book are also in Items. Demiplane import recognizes
+  `50ft of Rope` and preserves starting gold when no saved gold amount is provided (saved zero stays zero).
+
+- **Demiplane character import:** Open a freshly created actor and choose **Create Character** or
+  **Import from Demiplane**. Import accepts a publicly shared Daggerheart character link and recreates
+  supported saved creation/level-up choices with this host's name-matched features, domain cards and equipment.
+  Suggested traits are supported for the standard classes and Brawler, including saved Martial Artist starting forms.
+  A concise popup after saving lists only unmatched feature/card names, item quantity warnings and an unverified active loadout.
+  Custom items remain plain inventory; quantities and active loadout may need review. Private characters
+  cannot be imported. Builds with unreadable essential creation choices fail without replacing the empty sheet.
+
 - **Dread automation:** Follow-up payments, damage and healing appear on the relevant chat results instead
   of cluttering spell cards. Hideous Retribution offers Spellcast-trait reactions on its card and allied
   damage reports. Spectral Mist shares a physical-immunity buff; it expires on an action roll or scene end.

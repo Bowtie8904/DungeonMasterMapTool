@@ -5418,7 +5418,8 @@
       "description": "Also target another creature within range with this attack."
      }
     ]
-   }
+   },
+   "starter": true
   },
   {
    "id": "brass-knuckles",
@@ -5434,7 +5435,8 @@
      "type": "physical"
     },
     "burden": "One-Handed"
-   }
+   },
+   "starter": true
   },
   {
    "id": "scimitar",
@@ -5450,7 +5452,8 @@
      "type": "physical"
     },
     "burden": "One-Handed"
-   }
+   },
+   "starter": true
   },
   {
    "id": "twisted-dagger",
@@ -5470,7 +5473,8 @@
    "feature": {
     "name": "Piercing",
     "text": "Damage dealt with this weapon treats the target’s Major threshold as having a −2 penalty."
-   }
+   },
+   "starter": true
   },
   {
    "id": "whipsword",
@@ -5500,7 +5504,8 @@
       "damage": "1d10"
      }
     ]
-   }
+   },
+   "starter": true
   },
   {
    "id": "rope-dart",
@@ -5516,7 +5521,8 @@
      "type": "physical"
     },
     "burden": "Two-Handed"
-   }
+   },
+   "starter": true
   },
   {
    "id": "brightsword",
@@ -5532,7 +5538,8 @@
      "type": "magic"
     },
     "burden": "Two-Handed"
-   }
+   },
+   "starter": true
   },
   {
    "id": "shadowblade",
@@ -5555,7 +5562,8 @@
    },
    "automation": {
     "damageTypeChoice": true
-   }
+   },
+   "starter": true
   },
   {
    "id": "enchanted-chakram",
@@ -5588,7 +5596,8 @@
       "description": "Also target another creature within Very Close range of the first target."
      }
     ]
-   }
+   },
+   "starter": true
   },
   {
    "id": "casting-dagger",
@@ -5618,7 +5627,8 @@
       "damage": "1d8"
      }
     ]
-   }
+   },
+   "starter": true
   },
   {
    "id": "runelock-pistol",
@@ -5644,7 +5654,8 @@
      "dice": "1d6",
      "fail": 1
     }
-   }
+   },
+   "starter": true
   },
   {
    "id": "arcane-rifle",
@@ -5686,7 +5697,8 @@
       "description": "Select instead of the penalty to mark a Stress and attack without disadvantage."
      }
     ]
-   }
+   },
+   "starter": true
   },
   {
    "id": "improved-katana",
@@ -7734,7 +7746,8 @@
       "description": "Successful primary weapon attack within Melee range."
      }
     ]
-   }
+   },
+   "starter": true
   },
   {
    "id": "offhand-brass-knuckles",
@@ -7766,7 +7779,8 @@
       "weapon": "primary"
      }
     ]
-   }
+   },
+   "starter": true
   },
   {
    "id": "throwing-knives",
@@ -7796,7 +7810,8 @@
       "damage": "1d8"
      }
     ]
-   }
+   },
+   "starter": true
   },
   {
    "id": "fighting-cloak",
@@ -7824,7 +7839,8 @@
       "value": 2
      }
     ]
-   }
+   },
+   "starter": true
   },
   {
    "id": "rune-shield",
@@ -7852,7 +7868,8 @@
       "value": 1
      }
     ]
-   }
+   },
+   "starter": true
   },
   {
    "id": "focus-runes",
@@ -7884,7 +7901,8 @@
       "weapon": "primary"
      }
     ]
-   }
+   },
+   "starter": true
   },
   {
    "id": "improved-hatchet",

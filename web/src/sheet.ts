@@ -3,7 +3,7 @@ import { Connection } from './net';
 import { el, showLogin } from './login';
 import { Store } from './store';
 import { CharacterSheet, emptyCharacter, normalizeSheet } from './daggerheart/data';
-import { applyFeatureState, applyInventory, autosave, featureTarget, isLifeWard, rememberLoadedCharacter, useSheetAction, type SheetSave } from './daggerheart/persist';
+import { applyFeatureState, applyInventory, autosave, featureTarget, isLifeWard, rememberLoadedCharacter, saveImportedCharacter, useSheetAction, type SheetSave } from './daggerheart/persist';
 import { basicDeathOptions } from './daggerheart/death';
 import { refreshCharacterAutomation } from './daggerheart/persist';
 import { renderSheetView, SheetBus } from './daggerheart/view';
@@ -101,6 +101,11 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
       onChange: () => {
         document.title = `${sheet.name} - Daggerheart`;
         changed?.();
+      },
+      onImport: async imported => {
+        await saveImportedCharacter(sheet, imported, changed!, () => !readOnly() && allowed && !unauthorized);
+        document.title = `${sheet.name} - Daggerheart`;
+        bus.notify(false);
       },
       onFeature: async (key, actionId, amount) => {
         await changed!.flush();

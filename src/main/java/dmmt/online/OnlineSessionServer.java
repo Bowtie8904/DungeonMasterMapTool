@@ -316,6 +316,7 @@ public final class OnlineSessionServer {
         javalin.get("/api/copycat/{id}", ctx -> withSheetOperation(ctx, this::handleCopycatCandidates));
         javalin.get("/api/splendor/{id}", ctx -> withSheetOperation(ctx, this::handleSplendorCandidates));
         javalin.put("/api/sheet/{id}", ctx -> withSheetOperation(ctx, this::handleSheetSave));
+        javalin.post("/api/sheet/{id}/demiplane", this::handleDemiplaneImport);
         javalin.post("/api/feature", ctx -> withSheetOperation(ctx, this::handleFeature));
         javalin.post("/api/death-move", ctx -> withSheetOperation(ctx, this::handleDeathMove));
         javalin.get("/api/death-move/{id}", ctx -> withSheetOperation(ctx, this::handleDeathOptions));
@@ -1252,6 +1253,7 @@ public final class OnlineSessionServer {
             if (grant != null) {
                 String path = ctx.path();
                 if (path.equals("/api/preferences") || path.equals("/api/sheet/" + grant.actorId())
+                        || path.equals("/api/sheet/" + grant.actorId() + "/demiplane")
                         || path.equals("/api/actors/" + grant.actorId() + "/artwork")
                         || path.equals("/api/copycat/" + grant.actorId())
                         || path.equals("/api/splendor/" + grant.actorId())
@@ -1542,6 +1544,51 @@ public final class OnlineSessionServer {
     }
 
     static final int MAX_SHEET_BYTES = 512 * 1024;
+    private final java.util.concurrent.Semaphore demiplaneDownloads = new java.util.concurrent.Semaphore(2);
+
+    private void handleDemiplaneImport(Context ctx) {
+        ctx.header("Cache-Control", "no-store");
+        synchronized (this) {
+            String playerId = requirePlayer(ctx);
+            if (playerId == null) return;
+            Campaign.Actor actor = campaign == null ? null : campaign.actor(ctx.pathParam("id"));
+            if (actor == null || !playerId.equals(actor.getOwnerId()) || actor.isDisabled()) {
+                json(ctx, 403, errorBody("Only an enabled actor's owner can import its character."));
+                return;
+            }
+            try {
+                String stored = store.loadSheet(campaign.getId(), actor.getId());
+                JsonNode sheet = stored == null ? MAPPER.createObjectNode() : MAPPER.readTree(stored);
+                if (!sheet.path("className").asText("").isBlank()
+                        || sheet.path("mancer").path("done").asBoolean(false)) {
+                    json(ctx, 409, errorBody("Import is only available before creating this character."));
+                    return;
+                }
+            } catch (IOException e) {
+                json(ctx, 500, errorBody("Could not check the actor's current sheet."));
+                return;
+            }
+        }
+        if (ctx.bodyAsBytes().length > 4096) {
+            json(ctx, 413, errorBody("The import link is too long."));
+            return;
+        }
+        try {
+            JsonNode request = MAPPER.readTree(ctx.body());
+            if (request == null || !request.path("url").isTextual())
+                throw new IllegalArgumentException("Enter a Demiplane character link.");
+            if (!demiplaneDownloads.tryAcquire()) {
+                json(ctx, 429, errorBody("Other character imports are in progress. Try again shortly."));
+                return;
+            }
+            try { json(ctx, 200, DemiplaneImport.fetch(request.path("url").textValue())); }
+            finally { demiplaneDownloads.release(); }
+        } catch (IllegalArgumentException | com.fasterxml.jackson.core.JsonProcessingException e) {
+            json(ctx, 400, errorBody("Invalid import request: " + e.getMessage()));
+        } catch (IOException e) {
+            json(ctx, 502, errorBody("Could not import from Demiplane: " + e.getMessage()));
+        }
+    }
 
     private synchronized void handleSheetSave(Context ctx) {
         String playerId = requirePlayer(ctx);
