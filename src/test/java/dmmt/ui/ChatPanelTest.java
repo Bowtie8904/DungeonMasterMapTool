@@ -41,6 +41,135 @@ class ChatPanelTest {
     }
 
     @Test
+    void breakdownSourcePreviewOpensOnKeyboardFocusAndEscapeClosesIt() throws Exception {
+        assertSourcePreview("Combo feature rules", false);
+    }
+
+    @Test
+    void comboStrikePreviewFitsItsFullDescriptionWithoutScrolling() throws Exception {
+        JsonNode classes = MAPPER.readTree(java.nio.file.Path.of("dmmap-daggerheart", "classes.json").toFile());
+        List<JsonNode> features = classes.findParents("name").stream()
+                .filter(feature -> "Combo Strike".equals(feature.path("name").asText())
+                        && feature.has("text")).toList();
+        assertEquals(1, features.size());
+        assertSourcePreview(features.getFirst().path("text").asText(), false);
+    }
+
+    @Test
+    void exceptionallyLongSourcePreviewScrollsWithoutCoveringItsRow() throws Exception {
+        assertSourcePreview("A lengthy feature description with **important rules** and extra damage.\n".repeat(120),
+                true);
+    }
+
+    private void assertSourcePreview(String text, boolean scrolling) throws Exception {
+        JsonNode message = MAPPER.readTree("""
+                {"type":"roll","from":"Alice","expression":"2d4","rolls":[4,1],"total":5,
+                 "breakdown":[{"label":"Combo Strike rolls","expression":"2d4","rolls":[4,1],"total":5,
+                 "rollSource":{"name":"Combo Strike","text":"Combo feature rules","source":"Brawler"}}]}
+                """);
+        ((com.fasterxml.jackson.databind.node.ObjectNode) message.path("breakdown").get(0).path("rollSource"))
+                .put("text", text);
+        Stage[] stage = new Stage[1];
+        javafx.scene.Node[] row = new javafx.scene.Node[1];
+        javafx.stage.Window[] popup = new javafx.stage.Window[1];
+        try {
+            onFx(() -> {
+                VBox card = (VBox) ChatCards.render(message);
+                VBox breakdown = (VBox) card.lookup(".chat-roll-breakdown");
+                breakdown.getChildren().get(1).setVisible(true);
+                row[0] = card.lookup(".chat-detail");
+                assertTrue(row[0].isFocusTraversable());
+                assertEquals("Combo Strike rolls. Source: Combo Strike", row[0].getAccessibleText());
+                stage[0] = new Stage();
+                Scene scene = new Scene(new StackPane(card), 600, 500);
+                scene.getStylesheets().add(Icons.STYLESHEET);
+                stage[0].setScene(scene);
+                stage[0].show();
+                scene.getRoot().applyCss();
+                scene.getRoot().layout();
+                stage[0].requestFocus();
+            });
+            onFx(() -> {
+                row[0].requestFocus();
+                var previewWindow = javafx.stage.Window.getWindows().stream()
+                        .filter(window -> window.isShowing() && window.getScene() != null
+                                && window.getScene().getRoot().lookup(".chat-source-preview") != null)
+                        .findFirst().orElseThrow();
+                var preview = (VBox) previewWindow.getScene().getRoot().lookup(".chat-source-preview");
+                assertEquals("Combo Strike", ((Label) preview.getChildren().get(1)).getText());
+                popup[0] = previewWindow;
+            });
+            onFx(() -> {
+                var root = popup[0].getScene().getRoot();
+                root.applyCss();
+                root.layout();
+                var preview = (VBox) root.lookup(".chat-source-preview");
+                assertTrue(popup[0].getWidth() >= 490, "Preview must have a comfortable reading width");
+                assertEquals(scrolling, root.lookup(".scroll-pane") != null);
+                if (!scrolling)
+                    assertTrue(preview.getHeight() >= preview.prefHeight(preview.getWidth()) - 1,
+                            "Styled text must fit without clipping");
+                var bounds = row[0].localToScreen(row[0].getBoundsInLocal());
+                var popupBounds = new javafx.geometry.BoundingBox(popup[0].getX(), popup[0].getY(),
+                        popup[0].getWidth(), popup[0].getHeight());
+                assertFalse(popupBounds.intersects(bounds),
+                        "Popup must not intercept the hovered row: " + popupBounds + " row: " + bounds);
+                var screen = javafx.stage.Screen.getScreensForRectangle(bounds.getMinX(), bounds.getMinY(), 1, 1)
+                        .getFirst().getVisualBounds();
+                assertTrue(popupBounds.getMinX() >= screen.getMinX());
+                assertTrue(popupBounds.getMaxX() <= screen.getMaxX());
+                assertTrue(popupBounds.getMinY() >= screen.getMinY());
+                assertTrue(popupBounds.getMaxY() <= screen.getMaxY(),
+                        "Popup exceeds screen: " + popupBounds + " screen: " + screen);
+                row[0].fireEvent(mouseEvent(javafx.scene.input.MouseEvent.MOUSE_EXITED));
+                root.fireEvent(mouseEvent(javafx.scene.input.MouseEvent.MOUSE_ENTERED));
+            });
+            CountDownLatch settled = new CountDownLatch(1);
+            onFx(() -> {
+                PauseTransition delay = new PauseTransition(Duration.millis(220));
+                delay.setOnFinished(event -> settled.countDown());
+                delay.play();
+            });
+            assertTrue(settled.await(5, TimeUnit.SECONDS));
+            onFx(() -> {
+                assertTrue(popup[0].isShowing(), "Moving into the preview must not hide it");
+                row[0].fireEvent(new javafx.scene.input.KeyEvent(javafx.scene.input.KeyEvent.KEY_PRESSED,
+                        "", "", javafx.scene.input.KeyCode.ESCAPE, false, false, false, false));
+                assertFalse(popup[0].isShowing());
+            });
+            if (!scrolling && "Combo feature rules".equals(text)) {
+                CountDownLatch hovered = new CountDownLatch(1);
+                onFx(() -> {
+                    row[0].fireEvent(mouseEvent(javafx.scene.input.MouseEvent.MOUSE_ENTERED));
+                    PauseTransition delay = new PauseTransition(
+                            Duration.millis(dmmt.service.Tuning.TOOLTIP_DELAY_MS.get() + 100));
+                    delay.setOnFinished(event -> hovered.countDown());
+                    delay.play();
+                });
+                assertTrue(hovered.await(5, TimeUnit.SECONDS));
+                onFx(() -> {
+                    assertTrue(popup[0].isShowing(), "Hover must open the source preview after its delay");
+                    double x = popup[0].getX();
+                    double y = popup[0].getY();
+                    row[0].fireEvent(mouseEvent(javafx.scene.input.MouseEvent.MOUSE_MOVED));
+                    assertEquals(x, popup[0].getX());
+                    assertEquals(y, popup[0].getY());
+                    row[0].fireEvent(new javafx.scene.input.KeyEvent(javafx.scene.input.KeyEvent.KEY_PRESSED,
+                            "", "", javafx.scene.input.KeyCode.ESCAPE, false, false, false, false));
+                    assertFalse(popup[0].isShowing());
+                });
+            }
+        } finally {
+            onFx(() -> { if (stage[0] != null) stage[0].close(); });
+        }
+    }
+
+    private static javafx.scene.input.MouseEvent mouseEvent(javafx.event.EventType<javafx.scene.input.MouseEvent> type) {
+        return new javafx.scene.input.MouseEvent(type, 0, 0, 0, 0, javafx.scene.input.MouseButton.NONE, 0,
+                false, false, false, false, false, false, false, false, false, false, null);
+    }
+
+    @Test
     void goldCommandAcceptsOnlyPositiveWholeAmounts() {
         assertEquals(500, ChatPanel.goldAmount("500"));
         assertEquals(7, ChatPanel.goldAmount(" 7 "));

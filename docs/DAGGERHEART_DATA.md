@@ -408,8 +408,16 @@ Rules reference: [official SRD](https://www.daggerheart.com/srd/), Ranger/compan
   `quantity.resource: "hope"` uses the current Hope track, initially selects a quantity of 1, and scales costs.
   Selecting Combo Strike does not add ordinary dice: the optional `damageRules.comboDie` request asks
   the host to roll an unmodified nondecreasing chain, including the final lower face, after normal damage.
-  This extra damage is neither maximized for a critical nor multiplied. Excessive chains explicitly fail
+  This extra damage is not maximized for a critical; whole-damage doubling includes it without changing
+  the Combo Die faces. Its selection placeholder becomes one actual-damage row. Excessive chains explicitly fail
   at the host's dice limit instead of returning a partial result.
+- Roll contributions optionally carry a description-only `rollSource: {name, text, source}` snapshot.
+  The host validates the same bounds as the main roll source (240 characters for name/source, 16,000 for text)
+  and persists it on the breakdown detail. Browser and desktop rows preview these sources on hover/focus.
+  Snapshots contain no automation and do not authorize mechanics. Combo Strike and whole-roll multipliers
+  retain the selected feature's snapshot when replacing placeholders; weapon dice and fixed bonuses remain
+  separate, and Proficiency remains an explanation of the weapon pool. Additive extra-die effects are
+  separately attributed; keep/discard transformations remain pool explanations.
 - `stances: [{name, tier, chooseTrait?, effect}]` declares the known-stance choices. Creation persists
   `stances` in its choices and `knownStances` on the sheet; level history records newly learned `stances`.
   Two distinct tier-1 choices are required at foundation (including multiclass acquisition), then one

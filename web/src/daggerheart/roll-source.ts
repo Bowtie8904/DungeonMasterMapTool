@@ -6,6 +6,12 @@ import { activeCards } from './copycat';
 
 /** Resolve action keys, including individual grimoire spells, without copying automation. */
 export function rollSourceFor(c: CharacterSheet, key: string): RollSource | undefined {
+  const effect = c.effects.find(e => key === `effect:${e.id}` || key.startsWith(`effect:${e.id}:`));
+  if (effect) {
+    const original = effect.sourceKey && !effect.sourceKey.startsWith('effect:')
+      ? rollSourceFor(c, effect.sourceKey) : undefined;
+    return original ?? { name: effect.name, text: effect.text ?? '', source: 'Active effect' };
+  }
   const companion = companionWeapon(c);
   if (companion && (key === 'companion' || key === `weapon:${companion.name}`)) return {
     name: companion.name, source: `Companion - ${companion.trait} - ${companion.range} - ${companion.damage} ${companion.damageType}`,

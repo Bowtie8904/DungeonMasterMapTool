@@ -10,12 +10,14 @@ import javafx.geometry.Insets;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Cursor;
 import javafx.scene.ImageCursor;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.SnapshotParameters;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
 import javafx.scene.control.Control;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.Tooltip;
 import javafx.scene.effect.BlurType;
@@ -27,6 +29,8 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.scene.input.MouseEvent;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.stage.Screen;
 import javafx.util.Duration;
 import org.kordamp.ikonli.Ikon;
@@ -163,6 +167,116 @@ public final class Icons {
         return tooltip;
     }
 
+    static void sourcePreview(Node row, Region preview, Tooltip tooltip) {
+        tooltip.setAutoFix(false);
+        tooltip.setAnchorLocation(javafx.stage.PopupWindow.AnchorLocation.WINDOW_TOP_LEFT);
+        tooltip.setMinHeight(Region.USE_PREF_SIZE);
+        tooltip.setMaxHeight(Region.USE_PREF_SIZE);
+        PauseTransition showDelay = new PauseTransition(tooltip.getShowDelay());
+        PauseTransition hideDelay = new PauseTransition(Duration.millis(150));
+        hideDelay.setOnFinished(event -> tooltip.hide());
+        Runnable hide = () -> {
+            showDelay.stop();
+            hideDelay.stop();
+            tooltip.hide();
+        };
+        Runnable show = () -> {
+            Bounds bounds = row.localToScreen(row.getBoundsInLocal());
+            if (bounds == null || row.getScene() == null) return;
+            Rectangle2D area = sourcePreviewArea(bounds);
+            // Reserve room for both the tooltip padding and its window's drop shadow.
+            double width = area.getWidth() - 48;
+            preview.setPrefWidth(width);
+            preview.setMaxWidth(Double.MAX_VALUE);
+            tooltip.setPrefWidth(area.getWidth() - 24);
+            tooltip.setPrefHeight(100);
+            tooltip.setGraphic(preview);
+            tooltip.show(row, area.getMinX(), area.getMinY());
+            // Measuring before the popup has a scene and CSS underestimates wrapped text height.
+            preview.applyCss();
+            double height = preview.prefHeight(width);
+            if (height > area.getHeight() - 48) {
+                tooltip.setGraphic(null);
+                ScrollPane scroll = new ScrollPane(preview);
+                scroll.setFitToWidth(true);
+                scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+                scroll.setPrefSize(width, area.getHeight() - 48);
+                scroll.setMinHeight(Region.USE_PREF_SIZE);
+                scroll.setMaxHeight(Region.USE_PREF_SIZE);
+                tooltip.setGraphic(scroll);
+                height = area.getHeight() - 48;
+            }
+            tooltip.setPrefWidth(area.getWidth() - 24);
+            tooltip.setPrefHeight(height + 24);
+            tooltip.getScene().getRoot().applyCss();
+            tooltip.getScene().getRoot().autosize();
+            tooltip.getScene().getRoot().layout();
+            double y = area.getMinY();
+            if (area.getMaxX() <= bounds.getMinX() || area.getMinX() >= bounds.getMaxX())
+                y = Math.max(area.getMinY(), Math.min(bounds.getMinY(), area.getMaxY() - height - 48));
+            else if (area.getMaxY() <= bounds.getMinY()) y = area.getMaxY() - height - 48;
+            tooltip.setAnchorX(area.getMinX());
+            tooltip.setAnchorY(y);
+        };
+        showDelay.setOnFinished(event -> {
+            if (row.isHover()) show.run();
+        });
+        row.addEventHandler(MouseEvent.MOUSE_ENTERED, event -> {
+            hideDelay.stop();
+            if (!tooltip.isShowing()) showDelay.playFromStart();
+        });
+        row.addEventHandler(MouseEvent.MOUSE_EXITED, event -> {
+            showDelay.stop();
+            hideDelay.playFromStart();
+        });
+        row.addEventHandler(MouseEvent.MOUSE_PRESSED, event -> hide.run());
+        tooltip.getScene().getRoot().addEventHandler(MouseEvent.MOUSE_ENTERED, event -> hideDelay.stop());
+        tooltip.getScene().getRoot().addEventHandler(MouseEvent.MOUSE_EXITED, event -> hideDelay.playFromStart());
+        row.focusedProperty().addListener((observable, previous, focused) -> {
+            if (focused) {
+                showDelay.stop();
+                hideDelay.stop();
+                show.run();
+            } else if (!row.isHover()) hideDelay.playFromStart();
+        });
+        row.sceneProperty().addListener((observable, previous, scene) -> {
+            if (scene == null) hide.run();
+        });
+        javafx.event.EventHandler<KeyEvent> dismiss = event -> {
+            if (event.getCode() == KeyCode.ESCAPE) {
+                hide.run();
+                event.consume();
+            }
+        };
+        row.addEventHandler(KeyEvent.KEY_PRESSED, dismiss);
+        tooltip.getScene().getRoot().addEventHandler(KeyEvent.KEY_PRESSED, dismiss);
+    }
+
+    private static Rectangle2D sourcePreviewArea(Bounds bounds) {
+        Rectangle2D visual = tooltipScreen(bounds);
+        double gap = 8;
+        double margin = 12;
+        double width = Math.min(520, visual.getWidth() - 2 * margin);
+        double top = visual.getMinY() + margin;
+        double height = visual.getHeight() - 2 * margin;
+        if (bounds.getMaxX() + gap + width <= visual.getMaxX() - margin)
+            return new Rectangle2D(bounds.getMaxX() + gap, top, width, height);
+        if (bounds.getMinX() - gap - width >= visual.getMinX() + margin)
+            return new Rectangle2D(bounds.getMinX() - gap - width, top, width, height);
+        double x = Math.max(visual.getMinX() + margin,
+                Math.min(bounds.getMinX(), visual.getMaxX() - margin - width));
+        double below = visual.getMaxY() - margin - bounds.getMaxY() - gap;
+        double above = bounds.getMinY() - gap - top;
+        return below >= above
+                ? new Rectangle2D(x, bounds.getMaxY() + gap, width, Math.max(49, below))
+                : new Rectangle2D(x, top, width, Math.max(49, above));
+    }
+
+    private static Rectangle2D tooltipScreen(Bounds bounds) {
+        return Screen.getScreensForRectangle(bounds.getMinX(), bounds.getMinY(), 1, 1).stream()
+                .findFirst().orElse(Screen.getPrimary()).getVisualBounds();
+    }
+
     /**
      * The tooltip is positioned relative to the control's bounds (never relative to the cursor) so it can not end up
      * under the cursor, which would trigger MOUSE_EXITED and cause a show/hide flicker. It is placed below the control,
@@ -172,10 +286,7 @@ public final class Icons {
         if (!tooltip.isShowing()) {
             return;
         }
-        Rectangle2D visual = Screen.getScreensForRectangle(bounds.getMinX(), bounds.getMinY(), 1, 1).stream()
-                .findFirst()
-                .orElse(Screen.getPrimary())
-                .getVisualBounds();
+        Rectangle2D visual = tooltipScreen(bounds);
         double width = tooltip.getWidth();
         double height = tooltip.getHeight();
         double x = Math.max(visual.getMinX(), Math.min(bounds.getMinX(), visual.getMaxX() - width));

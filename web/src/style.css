@@ -246,6 +246,11 @@ button.share-icon:disabled { opacity: .25; }
 .roll-formula { margin: 10px 0 6px; padding: 6px 8px; border-radius: 5px; background: #0003; color: #b8c5d6; font: 11px/1.5 ui-monospace, monospace; overflow-wrap: anywhere; }
 .roll-detail { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 7px 0; border-bottom: 1px solid #ffffff08; color: #c5cfdd; font-size: 11px; }
 .roll-detail-source { min-width: 0; }
+.has-source-preview:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.roll-source-preview { display: none; position: fixed; z-index: 10000; box-sizing: border-box; max-height: min(380px, calc(100vh - 24px)); overflow: auto; padding: 14px; border: 1px solid #d0ad6655; border-radius: 8px; background: #18202d; color: #c5cfdd; box-shadow: 0 8px 28px #0008; font-size: 12px; line-height: 1.6; }
+.has-source-preview:not(.source-preview-dismissed):hover > .roll-source-preview,
+.has-source-preview:not(.source-preview-dismissed):focus-within > .roll-source-preview { display: block; }
+.roll-source-preview > strong { display: block; color: #f5d490; margin: 4px 0 8px; }
 .roll-detail-source small { display: block; color: #929fb1; font-size: 10px; margin-top: 2px; font-variant-numeric: tabular-nums; }
 .roll-detail > strong { flex-shrink: 0; font-size: 12px; font-variant-numeric: tabular-nums; color: #d8e6d9; }
 .roll-detail-total { margin-top: 3px; border-bottom: 0; color: #f5d490; font-weight: 650; }

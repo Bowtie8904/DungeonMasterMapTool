@@ -3,6 +3,7 @@ package dmmt.online;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -5126,6 +5127,108 @@ class OnlineSessionServerTest {
                     assertEquals(400, featureHttp(cookie, request).statusCode());
                 }
             }
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void comboAndFirstStrikeEachHaveOneDamageRowWithTheirOwnSource() throws Exception {
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            for (String name : List.of("Combo Strike", "Combo Strike - Flow State: Combo Strike", "First Strike (double damage)")) {
+                boolean doubled = name.startsWith("First Strike");
+                ObjectNode msg = MAPPER.createObjectNode().put("type", "roll").put("source", "damage")
+                        .put("expression", doubled ? "(1d8+3+0)*2" : "1d8+3+0");
+                ArrayNode parts = msg.putArray("contributions");
+                parts.addObject().put("label", "Sword damage").put("expression", doubled ? "(1d8)*2" : "1d8");
+                parts.addObject().put("label", "Sword damage bonus").put("expression", doubled ? "(3)*2" : "3");
+                ObjectNode selected = parts.addObject().put("label", name).put("expression", doubled ? "(0)*2" : "0");
+                selected.putObject("rollSource").put("name", doubled ? "First Strike" : "Combo Strike")
+                        .put("text", "Original feature rules").put("source", "Class");
+                if (doubled) {
+                    for (JsonNode part : parts) ((ObjectNode) part).putArray("notes").addObject()
+                            .put("label", name).put("impact", "Double the rolled damage total");
+                } else msg.putObject("damageRules").put("comboDie", 4);
+                ws.sendText(msg.toString(), true).join();
+                JsonNode result = inbox.next("roll");
+                assertEquals(3, result.path("breakdown").size(), result.toString());
+                JsonNode feature = result.path("breakdown").path(2);
+                assertEquals(doubled ? "First Strike" : "Combo Strike rolls", feature.path("label").asText());
+                assertEquals(doubled ? "First Strike" : "Combo Strike", feature.path("rollSource").path("name").asText());
+                assertEquals("Original feature rules", feature.path("rollSource").path("text").asText());
+                assertTrue(feature.path("total").asInt() > 0);
+                assertEquals(3, result.path("breakdown").path(1).path("total").asInt());
+                int total = 0;
+                for (JsonNode part : result.path("breakdown")) total += part.path("total").asInt();
+                assertEquals(result.path("total").asInt(), total);
+                if (doubled) assertEquals(result.path("breakdown").path(0).path("total").asInt() + 3, feature.path("total").asInt());
+            }
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void extraWeaponRuleDiceRetainTheFeatureSourceRatherThanTheWeapon() throws Exception {
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            ObjectNode msg = MAPPER.createObjectNode().put("type", "roll").put("source", "damage").put("expression", "1d1");
+            msg.putArray("contributions").addObject().put("label", "Weapon").put("expression", "1d1");
+            ObjectNode rule = msg.putObject("damageRules").putObject("weaponRules").put("onesBonus", 10).put("label", "Rampage");
+            rule.putObject("rollSource").put("name", "Rampage").put("text", "Rampage rules").put("source", "Beastform");
+            ws.sendText(msg.toString(), true).join();
+            JsonNode result = inbox.next("roll");
+            JsonNode extra = result.path("breakdown").path(1);
+            assertEquals("Rampage: extra dice", extra.path("label").asText());
+            assertEquals("Rampage", extra.path("rollSource").path("name").asText());
+            assertTrue(extra.path("total").asInt() > 0);
+            assertEquals(1 + extra.path("total").asInt(), result.path("total").asInt());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void comboSourceKeepsHostDiceOrderWhenAnotherBonusFollowsItsSelection() throws Exception {
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            ObjectNode msg = MAPPER.createObjectNode().put("type", "roll").put("source", "damage").put("expression", "1d8+0+1d6");
+            msg.putObject("damageRules").put("comboDie", 4);
+            ArrayNode parts = msg.putArray("contributions");
+            parts.addObject().put("label", "Sword").put("expression", "1d8");
+            parts.addObject().put("label", "Combo Strike").put("expression", "0")
+                    .putObject("rollSource").put("name", "Combo Strike").put("text", "Combo rules").put("source", "Brawler");
+            parts.addObject().put("label", "Sneak Attack").put("expression", "1d6");
+            ws.sendText(msg.toString(), true).join();
+            JsonNode result = inbox.next("roll");
+            assertEquals("Sneak Attack", result.path("breakdown").path(1).path("label").asText());
+            assertEquals("Combo Strike rolls", result.path("breakdown").path(2).path("label").asText());
+            ArrayNode faces = MAPPER.createArrayNode();
+            for (JsonNode detail : result.path("breakdown")) for (JsonNode face : detail.path("rolls")) faces.add(face);
+            assertEquals(result.path("rolls"), faces);
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void damageRowsMergeRepeatedSourcesAndRejectInvalidSourceDescriptions() throws Exception {
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            ObjectNode msg = MAPPER.createObjectNode().put("type", "roll").put("source", "damage").put("expression", "1d8+1d6+2");
+            ArrayNode parts = msg.putArray("contributions");
+            parts.addObject().put("label", "Sword").put("expression", "1d8");
+            for (String expression : List.of("1d6", "2")) {
+                parts.addObject().put("label", "Feature").put("expression", expression)
+                        .putObject("rollSource").put("name", "Feature").put("text", "Rules").put("source", "Class");
+            }
+            ws.sendText(msg.toString(), true).join();
+            JsonNode result = inbox.next("roll");
+            assertEquals(2, result.path("breakdown").size());
+            JsonNode feature = result.path("breakdown").path(1);
+            assertEquals("1d6+2", feature.path("expression").asText());
+            assertEquals(feature.path("rolls").path(0).asInt() + 2, feature.path("total").asInt());
+            assertEquals("Rules", feature.path("rollSource").path("text").asText());
+            ((ObjectNode) parts.get(1).path("rollSource")).put("name", "");
+            ws.sendText(msg.toString(), true).join();
+            assertTrue(inbox.next("error").path("message").asText().contains("roll source"));
         } finally { ws.abort(); }
     }
 

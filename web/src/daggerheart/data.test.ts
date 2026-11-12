@@ -68,16 +68,20 @@ describe('daggerheart data', () => {
     addEffect(c, { name: 'Blessing', kind: 'buff', modifiers: [{ roll: 'attack', value: 2, dice: 'd4' }] });
     const bonus = rollBonus(c, ['attack', 'trait:Agility'], c.activeWeapons[0]);
     expect(bonus.contributions).toEqual([
-      { label: 'Blessing', expression: '2+1d4' },
-      { label: 'Shortbow - Accurate', expression: '1' },
+      { label: 'Blessing', expression: '2+1d4', rollSource: { name: 'Blessing', text: '', source: 'Active effect' } },
+      { label: 'Shortbow - Accurate', expression: '1', rollSource: {
+        name: 'Shortbow', text: 'Accurate\n\n', source: 'Agility - Far - 2d6+3 phys',
+      } },
     ]);
-    expect(rollBonus(c, ['attack', 'trait:Agility']).contributions).toEqual([{ label: 'Blessing', expression: '2+1d4' }]);
+    expect(rollBonus(c, ['attack', 'trait:Agility']).contributions).toEqual([{ label: 'Blessing', expression: '2+1d4',
+      rollSource: { name: 'Blessing', text: '', source: 'Active effect' } }]);
     const trait = traitContributions(c, 'Agility');
     expect(trait.map(s => Number(s.expression))).toEqual([2, -1]);
     expect(trait.reduce((n, s) => n + Number(s.expression), 0)).toBe(traitTotal(c, 'Agility'));
     const damage = damageContributions(c, c.activeWeapons[0], rollBonus(c, ['damage']));
-    expect(damage[0]).toEqual({ label: 'Shortbow damage (Proficiency 2)', expression: '2d6', notes: [{ label: 'Base Proficiency', impact: '2 dice' }] });
-    expect(damage[1]).toEqual({ label: 'Shortbow damage bonus', expression: '+3' });
+    expect(damage[0]).toMatchObject({ label: 'Shortbow damage (Proficiency 2)', expression: '2d6', notes: [{ label: 'Base Proficiency', impact: '2 dice' }] });
+    expect(damage[1]).toMatchObject({ label: 'Shortbow damage bonus', expression: '+3' });
+    expect(damage[0].rollSource).toEqual(damage[1].rollSource);
     addEffect(c, { name: 'Proficiency Potion', kind: 'buff', modifiers: [{ stat: 'proficiency', value: 1 }] });
     const boosted = damageContributions(c, c.activeWeapons[0], rollBonus(c, ['damage']));
     expect(boosted[0].expression).toBe('3d6');

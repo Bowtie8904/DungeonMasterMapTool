@@ -1,5 +1,5 @@
 import { el } from './login';
-import type { ChatMessage, RollDetail, RollMessage } from './protocol';
+import type { ChatMessage, RollDetail, RollMessage, RollSource } from './protocol';
 import { OUTCOME_LABEL, dualityResult, dualitySucceeds, signed } from './daggerheart/data';
 import { renderSharedCard, type GrabQuantity, type SharedCard } from './shared-cards';
 import { parseRestReport } from './daggerheart/rest-summary';
@@ -8,6 +8,35 @@ import { parseActionReport } from './daggerheart/action-summary';
 import { rich } from './daggerheart/rich';
 
 export type LogEntry = { kind: 'chat'; m: ChatMessage } | { kind: 'roll'; m: RollMessage };
+let previewId = 0;
+
+function sourcePreview(row: HTMLElement, source: RollSource | undefined): HTMLElement {
+  if (!source) return row;
+  const panel = el('div', { class: 'roll-source-preview', role: 'tooltip' },
+    el('div', { class: 'shared-source' }, source.source),
+    el('strong', {}, source.name), rich(source.text));
+  row.tabIndex = 0;
+  panel.id = `roll-source-preview-${++previewId}`;
+  row.setAttribute('aria-describedby', panel.id);
+  row.setAttribute('aria-label', `${row.textContent}. Source: ${source.name}`);
+  row.classList.add('has-source-preview');
+  const position = () => {
+    row.classList.remove('source-preview-dismissed');
+    const bounds = row.getBoundingClientRect();
+    const width = Math.min(400, window.innerWidth - 24);
+    panel.style.width = `${width}px`;
+    panel.style.left = `${Math.max(12, Math.min(bounds.left, window.innerWidth - width - 12))}px`;
+    const height = panel.getBoundingClientRect().height;
+    panel.style.top = `${Math.max(12, bounds.bottom + height + 12 <= window.innerHeight ? bounds.bottom + 4 : bounds.top - height - 4)}px`;
+  };
+  row.addEventListener('mouseenter', position);
+  row.addEventListener('focus', position);
+  row.addEventListener('keydown', event => {
+    if (event.key === 'Escape') row.classList.add('source-preview-dismissed');
+  });
+  row.append(panel);
+  return row;
+}
 
 export function keptRolls(expression: string, rolls: number[]): boolean[] {
   const kept = rolls.map(() => true);
@@ -116,11 +145,15 @@ function rollContent(m: RollMessage): HTMLElement {
     el('summary', {}, 'Roll breakdown'),
     el('div', { class: 'roll-formula' }, m.expression),
     ...details.flatMap((d) => [
-      el('div', { class: 'roll-detail' },
+      sourcePreview(el('div', { class: 'roll-detail' },
         el('div', { class: 'roll-detail-source' }, el('span', {}, d.label),
-          ...(d.rolls.length ? [el('small', {}, `${d.expression.replace(/^\+/, '')}: [${d.rolls.join(', ')}]`)] : [])),
-        el('strong', { class: d.total < 0 ? 'negative' : '' }, signed(d.total))),
-      ...(d.notes ?? []).map((note) => el('div', { class: 'roll-detail roll-note' },
+          ...(d.rolls.length ? [el('small', {}, `${d.expression.replace(/^\+/, '')}: [${d.rolls.join(', ')}]`)] : []),
+          ...(d.notes ?? []).filter(note => d.label === note.label || d.label.startsWith(`${note.label}:`))
+            .map(note => el('small', {}, note.impact))),
+        el('strong', { class: d.total < 0 ? 'negative' : '' }, signed(d.total))), d.rollSource ?? (
+          m.rollSource && (d.label === m.rollSource.name || d.label.startsWith(`${m.rollSource.name} damage`)) ? m.rollSource : undefined)),
+      ...(d.notes ?? []).filter(note => d.label !== note.label && !d.label.startsWith(`${note.label}:`))
+        .map((note) => el('div', { class: 'roll-detail roll-note' },
         el('span', {}, note.label), el('span', {}, note.impact))),
     ]),
     el('div', { class: 'roll-detail roll-detail-total' }, el('span', {}, 'Result'), el('strong', {}, String(m.total))));

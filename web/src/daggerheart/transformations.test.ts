@@ -100,6 +100,10 @@ describe('transformation automation', () => {
     expect(rollBonus(c, ['action', 'attack']).dice).toEqual(['1d10']);
     expect(rollBonus(c, ['damage']).dice).toEqual(['1d10']);
     expect(rollBonus(c, ['spelldamage']).dice).toEqual(['1d10']);
+    expect(rollBonus(c, ['damage', 'magicdamage', 'spelldamage']).contributions).toHaveLength(1);
+    expect(rollBonus(c, ['damage', 'magicdamage', 'spelldamage']).dice).toEqual(['1d10']);
+    c.effects[0].modifiers!.push({ roll: 'spelldamage', dice: '1d10' });
+    expect(rollBonus(c, ['damage', 'magicdamage', 'spelldamage']).dice).toEqual(['1d10']);
     expect(rollBonus(c, ['action', 'trait:Agility']).dice).toEqual([]);
     expect(availableRollTriggers(c, { source: 'action', hope: 9, fear: 4, total: 13 })[0].trigger.cost).toEqual({ stress: 1 });
     expect(availableRollTriggers(c, { source: 'action', hope: 4, fear: 9, total: 13 })).toHaveLength(0);

@@ -6,6 +6,14 @@ import type { AvailableRollTrigger } from './engine';
 import type { RollMessage } from '../protocol';
 
 describe('roll source snapshots', () => {
+  it('resolves active effect descriptions and their original feature without automation', () => {
+    const c = emptyCharacter('Roller');
+    c.features.push({ name: 'Combo Strike', text: 'Combo rules', source: 'Brawler' });
+    c.effects.push({ id: 'linked', name: 'Prepared Combo', kind: 'buff', text: 'Prepared rules', sourceKey: 'feat:Combo Strike' });
+    expect(rollSourceFor(c, 'effect:linked')).toEqual({ name: 'Combo Strike', text: 'Combo rules', source: 'Brawler' });
+    c.effects[0].sourceKey = undefined;
+    expect(rollSourceFor(c, 'effect:linked')).toEqual({ name: 'Prepared Combo', text: 'Prepared rules', source: 'Active effect' });
+  });
   it('copies only descriptions and does not follow subsequent sheet edits', () => {
     const c = emptyCharacter('Roller');
     c.features.push({ name: 'Feature', text: '**Rules**', source: 'Class', automation: { actions: [{ id: 'use', label: 'Use' }] } });

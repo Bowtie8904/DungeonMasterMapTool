@@ -10,6 +10,7 @@ import { clearCompanionStress, companionAvailable, companionFeatures, companionW
 import type { CompanionRules } from './companion';
 import { activeCards, activeCardSources, actorAutomationAvailable, clearBorrowedCard } from './copycat';
 import { migrateVitality } from './vitality';
+import { rollSourceFor } from './roll-source';
 
 export type Resource = string;
 export type Until = 'manual' | 'rest' | 'shortRest' | 'longRest' | 'scene' | 'session';
@@ -749,15 +750,15 @@ function unarmoredBase(c: CharacterSheet): { name: string; score: number; thresh
 export interface StatSource { label: string; value: number }
 
 /** Named sources of passive modifiers (equipped gear, features, loadout cards and active effects). */
-function namedSources(c: CharacterSheet): Array<{ name: string; auto?: Automation; mods?: Modifier[]; weapon?: CharacterSheet['activeWeapons'][number] }> {
+function namedSources(c: CharacterSheet): Array<{ key: string; name: string; auto?: Automation; mods?: Modifier[]; weapon?: CharacterSheet['activeWeapons'][number] }> {
   return [
-    ...(c.activeArmor ? [{ name: c.activeArmor.name, auto: c.activeArmor.automation }] : []),
-    ...activeWeapons(c).map((w) => ({ name: w.feature ? `${w.name} - ${w.feature.name}` : w.name, auto: w.automation, weapon: w })),
-    ...activeFeatures(c).map((f) => ({ name: f.name, auto: f.automation })),
-    ...c.heritage.map((f) => ({ name: f.name, auto: f.automation })),
-    ...activeCards(c).map((d) => ({ name: d.name, auto: d.automation })),
-    ...c.inventory.filter((i) => i.qty > 0).map((i) => ({ name: i.name, auto: i.automation })),
-    ...c.effects.map((e) => ({ name: e.name, mods: e.modifiers })),
+    ...(c.activeArmor ? [{ key: `armor:${c.activeArmor.name}`, name: c.activeArmor.name, auto: c.activeArmor.automation }] : []),
+    ...activeWeapons(c).map((w) => ({ key: `weapon:${w.name}`, name: w.feature ? `${w.name} - ${w.feature.name}` : w.name, auto: w.automation, weapon: w })),
+    ...activeFeatures(c).map((f) => ({ key: `feat:${f.name}`, name: f.name, auto: f.automation })),
+    ...c.heritage.map((f) => ({ key: `feat:${f.name}`, name: f.name, auto: f.automation })),
+    ...activeCards(c).map((d) => ({ key: c.loadout.some(card => card.borrowedCard?.card === d) ? `card:Copycat/${d.name}` : `card:${d.name}`, name: d.name, auto: d.automation })),
+    ...c.inventory.filter((i) => i.qty > 0).map((i) => ({ key: `item:${i.name}`, name: i.name, auto: i.automation })),
+    ...c.effects.map((e) => ({ key: `effect:${e.id}`, name: e.name, mods: e.modifiers })),
   ];
 }
 
@@ -903,9 +904,9 @@ export function rollTargets(targets: string[], reaction: boolean): string[] {
 /** Collects roll modifiers matching any of the targets (for example ['attack', 'trait:Finesse']). */
 export function rollBonus(c: CharacterSheet, targets: string[], weapon?: CharacterSheet['activeWeapons'][number], withConsumables = true): RollBonus {
   const out: RollBonus = { value: 0, dice: [], applied: [], names: [], contributions: [] };
-  const take = (m: Modifier, name: string, effect?: ActiveEffect) => {
+  const take = (m: Modifier, name: string, effect?: ActiveEffect, sourceKey?: string) => {
     if (!modifierActive(c, m)) return;
-    if (!m.roll || !targets.includes(m.roll)) return;
+    if (!m.roll || !(targets.includes(m.roll) || m.roll === 'damage' && targets.includes('spelldamage'))) return;
     if (m.consume && !withConsumables) return;
     const v = m.traitValue ? traitTotal(c, m.traitValue) : modifierValue(m, c);
     out.value += v;
@@ -913,14 +914,27 @@ export function rollBonus(c: CharacterSheet, targets: string[], weapon?: Charact
     const dice = level === undefined ? m.dice : m.diceByLevel![String(level)];
     if (dice) out.dice.push(dice);
     out.names.push(`${name} ${dice ? `+${dice}` : v >= 0 ? `+${v}` : v}`);
-    out.contributions.push({ label: name.slice(0, 120), expression: `${v}${dice ? `+${dice.startsWith('d') ? `1${dice}` : dice}` : ''}` });
+    out.contributions.push({ label: name.slice(0, 120), expression: `${v}${dice ? `+${dice.startsWith('d') ? `1${dice}` : dice}` : ''}`,
+      rollSource: rollSourceFor(c, effect ? `effect:${effect.id}` : sourceKey ?? `feat:${name}`) });
     if (effect && m.consume) out.applied.push({ effect, modifier: m });
   };
-  for (const e of c.effects) for (const m of e.modifiers ?? []) take(m, e.name, e);
+  const damageModifiers = (modifiers: Modifier[]) => {
+    const seen = new Map<string, string>();
+    return modifiers.filter(m => {
+      if (!m.roll || !['damage', 'spelldamage', 'magicdamage', 'physicaldamage'].includes(m.roll)
+          || !(targets.includes(m.roll) || m.roll === 'damage' && targets.includes('spelldamage'))) return true;
+      const { roll: _roll, ...rule } = m;
+      const signature = JSON.stringify(rule);
+      if (seen.has(signature) && seen.get(signature) !== m.roll) return false;
+      seen.set(signature, m.roll);
+      return true;
+    });
+  };
+  for (const e of c.effects) for (const m of damageModifiers(e.modifiers ?? [])) take(m, e.name, e);
   for (const s of namedSources(c)) {
-    for (const m of [...(s.auto?.modifiers ?? []), ...(s.auto?.conditionalModifiers ?? [])]) {
+    for (const m of damageModifiers([...(s.auto?.modifiers ?? []), ...(s.auto?.conditionalModifiers ?? [])])) {
       if (s.weapon && m.roll && !weaponModifierApplies(c, s.weapon, m, weapon)) continue;
-      take(m, s.name);
+      take(m, s.name, undefined, s.key);
     }
   }
   return out;
@@ -1157,6 +1171,7 @@ export function selectedRollBonus(c: CharacterSheet, base: RollBonus, selected: 
     if (dice) out.dice.push(dice);
     out.names.push(label);
     out.contributions.push({ label, expression: `${value}${dice ? `+${dice.startsWith('d') ? `1${dice}` : dice}` : ''}`,
+      rollSource: rollSourceFor(c, selection.key.replace(/:roll:[^:]+$/, '')),
       ...(option.diceResource ? { notes: [{ label: 'Dice resource', impact: option.diceResource }] } : {}) });
   }
   return out;
@@ -1262,8 +1277,18 @@ export function traitContributions(c: CharacterSheet, name: TraitName): RollCont
 export function damageContributions(c: CharacterSheet, weapon: CharacterSheet['activeWeapons'][number], bonus: RollBonus, proficiencyBonus = 0): RollContribution[] {
   const proficiency = derivedStats(c).proficiency + proficiencyBonus;
   const pool = damagePool(c, weapon);
-  const base = damageExpression(weapon.damage, proficiency, { ...bonus, value: 0, dice: [] }, pool, weapon.fixedDice);
-  const parts = /^(\d+d\d+(?:kh\d+)?)([+-]\d+)?$/i.exec(base);
+  const additions = !pool?.dropLowest && /^(?:\d*d\d+\+)*\d*d\d+(?:[+-]\d+)?$/i.test(weapon.damage.replace(/\s/g, '')) ? [
+    ...(weapon.automation?.damage?.extraDice ? [{
+      label: weapon.feature?.name ?? weapon.name, count: weapon.automation.damage.extraDice,
+      rollSource: rollSourceFor(c, `weapon:${weapon.name}`),
+    }] : []),
+    ...c.effects.filter(e => e.damage?.extraDice && (!e.damage.proficiencyOnly || !weapon.fixedDice)).map(e => ({
+      label: e.name, count: e.damage!.extraDice!, rollSource: rollSourceFor(c, `effect:${e.id}`),
+    })),
+  ] : [];
+  const base = damageExpression(weapon.damage, proficiency, { ...bonus, value: 0, dice: [] },
+    additions.length ? { ...pool!, extraDice: 0 } : pool, weapon.fixedDice);
+  const parts = /^((?:\d+d\d+(?:kh\d+)?\+)*\d+d\d+(?:kh\d+)?)([+-]\d+)?$/i.exec(base);
   const sources = statSources(c, 'proficiency');
   const raw = c.proficiency.on + sources.reduce((n, s) => n + s.value, 0);
   const diceCount = (n: number) => `${n >= 0 ? '+' : ''}${n} ${Math.abs(n) === 1 ? 'die' : 'dice'}`;
@@ -1271,18 +1296,23 @@ export function damageContributions(c: CharacterSheet, weapon: CharacterSheet['a
     { label: 'Base Proficiency', impact: `${c.proficiency.on} dice` },
     ...(proficiencyBonus ? [{ label: 'Attack-linked Proficiency', impact: diceCount(proficiencyBonus) }] : []),
     ...sources.map((s) => ({ label: s.label.slice(0, 120), impact: diceCount(s.value) })),
-    ...c.effects.filter(e => e.damage && (!e.damage.proficiencyOnly || !weapon.fixedDice) && (e.damage.extraDice || e.damage.dropLowest)).map(e => ({
+    ...c.effects.filter(e => !additions.length && e.damage && (!e.damage.proficiencyOnly || !weapon.fixedDice) && (e.damage.extraDice || e.damage.dropLowest)).map(e => ({
       label: e.name, impact: `Each pool: roll ${e.damage!.extraDice} extra; discard ${e.damage!.dropLowest} lowest`,
     })),
     ...(raw < 1 ? [{ label: 'Minimum Proficiency', impact: diceCount(1 - raw) }] : []),
-    ...(weapon.automation?.damage && (weapon.automation.damage.extraDice || weapon.automation.damage.dropLowest)
+    ...(!additions.length && weapon.automation?.damage && (weapon.automation.damage.extraDice || weapon.automation.damage.dropLowest)
       ? [{ label: weapon.feature?.name ?? weapon.name, impact: `Roll ${weapon.automation.damage.extraDice} extra; discard ${weapon.automation.damage.dropLowest} lowest` }] : []),
     ...(weapon.profile ? [{ label: weapon.profile, impact: `Alternate statistics: ${weapon.trait}, ${weapon.range}, ${weapon.damage}`.slice(0, 120) }] : []),
     ...(weapon.dieOverride ? [{ label: 'Attack option', impact: `d${weapon.dieOverride} damage dice for this attack` }] : []),
   ];
   return [
-    { label: `${weapon.name} damage (Proficiency ${proficiency})`.slice(0, 120), expression: parts?.[1] ?? base, ...(parts ? { notes } : {}) },
-    ...(parts?.[2] ? [{ label: `${weapon.name} damage bonus`.slice(0, 120), expression: parts[2] }] : []),
+    { label: `${weapon.name} damage (Proficiency ${proficiency})`.slice(0, 120), expression: parts?.[1] ?? base, rollSource: rollSourceFor(c, `weapon:${weapon.name}`), notes },
+    ...(parts?.[2] ? [{ label: `${weapon.name} damage bonus`.slice(0, 120), expression: parts[2], rollSource: rollSourceFor(c, `weapon:${weapon.name}`) }] : []),
+    ...additions.map(addition => ({
+      label: addition.label.slice(0, 120),
+      expression: [...weapon.damage.matchAll(/\d*d(\d+)/gi)].map(match => `${addition.count}d${match[1]}`).join('+'),
+      rollSource: addition.rollSource,
+    })),
     ...bonus.contributions,
   ];
 }

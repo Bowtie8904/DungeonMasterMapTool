@@ -3816,7 +3816,8 @@ public final class OnlineSessionServer {
         }
         if (changed != selected.size()) throw new IllegalArgumentException("Some selected dice are no longer available.");
         for (JsonNode raw : details)
-            if ("Smite".equals(raw.path("label").asText()) && raw.path("rolls").isEmpty() && raw instanceof ObjectNode smite) {
+            if (List.of("Smite", "Invoke Torment", "First Strike").contains(raw.path("label").asText())
+                    && raw.path("rolls").isEmpty() && raw instanceof ObjectNode smite) {
                 int bonus = Math.addExact(smite.path("total").asInt(), delta);
                 smite.put("total", bonus).put("expression", String.valueOf(bonus));
                 delta = Math.multiplyExact(delta, 2);
@@ -5273,6 +5274,7 @@ public final class OnlineSessionServer {
         out.set("rollSource", featureSourceDescription(source));
         ArrayNode breakdown = out.putArray("breakdown");
         ObjectNode detail = breakdown.addObject().put("label", sourceName).put("expression", result.expression()).put("total", result.total());
+        detail.set("rollSource", featureSourceDescription(source));
         detail.set("rolls", rolls.deepCopy());
         return out;
     }
@@ -6507,7 +6509,8 @@ public final class OnlineSessionServer {
 
     private static boolean isDoublingLabel(String label) {
         return "Smite".equals(label) || label.startsWith("Smite:")
-                || "Invoke Torment".equals(label) || label.startsWith("Invoke Torment:");
+                || "Invoke Torment".equals(label) || label.startsWith("Invoke Torment:")
+                || "First Strike".equals(label) || label.contains("First Strike (double damage)");
     }
 
     private ResolvedDice resolveDice(JsonNode msg) {
@@ -6520,7 +6523,13 @@ public final class OnlineSessionServer {
             String label = java.util.stream.StreamSupport.stream(msg.path("contributions").spliterator(), false)
                     .flatMap(part -> java.util.stream.StreamSupport.stream(part.path("notes").spliterator(), false))
                     .map(note -> note.path("label").asText()).filter(OnlineSessionServer::isDoublingLabel)
-                    .findFirst().orElseThrow().startsWith("Invoke Torment") ? "Invoke Torment" : "Smite";
+                    .findFirst().orElseThrow();
+            label = label.startsWith("Invoke Torment") ? "Invoke Torment"
+                    : label.contains("First Strike") ? "First Strike" : "Smite";
+            JsonNode doublingSource = null;
+            for (JsonNode part : msg.path("contributions"))
+                if (isDoublingLabel(part.path("label").asText()) && part.hasNonNull("rollSource"))
+                    doublingSource = rollSource(part);
             ObjectNode base = msg.deepCopy();
             base.put("expression", msg.path("expression").asText().replaceFirst("^\\((.*)\\)\\*2$", "$1"));
             ArrayNode contributions = (ArrayNode) base.path("contributions");
@@ -6543,7 +6552,7 @@ public final class OnlineSessionServer {
             List<DiceRoller.Detail> details = resolved.breakdown() == null
                     ? new ArrayList<>(List.of(new DiceRoller.Detail("Damage", resolved.result().expression(),
                     resolved.result().rolls(), resolved.result().total()))) : new ArrayList<>(resolved.breakdown());
-            details.add(new DiceRoller.Detail(label, String.valueOf(resolved.result().total()), List.of(), resolved.result().total()));
+            details.add(new DiceRoller.Detail(label, String.valueOf(resolved.result().total()), List.of(), resolved.result().total(), doublingSource));
             List<ArrayNode> notes = new ArrayList<>(resolved.notes());
             while (notes.size() < details.size()) notes.add(MAPPER.createArrayNode());
             notes.getLast().addObject().put("label", label).put("impact", "Doubled the entire damage total, including all bonuses.");
@@ -6571,6 +6580,7 @@ public final class OnlineSessionServer {
                         || weaponRules.has("explode") && !List.of("once", "repeat").contains(weaponRules.path("explode").asText())
                         || weaponRules.path("label").asText().length() > 60))
                     throw new IllegalArgumentException("Invalid weapon damage rules.");
+                rollSource(weaponRules);
                 if (weaponRules.has("onesAs")) result = DiceRoller.onesAs(result, weaponRules.path("onesAs").asInt(), config.maxDice());
             }
             if (msg.has("contributions")) {
@@ -6586,6 +6596,7 @@ public final class OnlineSessionServer {
                         throw new IllegalArgumentException("Invalid roll contribution");
                     }
                     contributions.add(new DiceRoller.Contribution(name, expression));
+                    rollSource(source);
                     ArrayNode notes = MAPPER.createArrayNode();
                     if (source.has("notes")) {
                         if (!source.path("notes").isArray() || source.path("notes").size() > 64) {
@@ -6603,6 +6614,11 @@ public final class OnlineSessionServer {
                     breakdownNotes.add(notes);
                 }
                 breakdown = DiceRoller.breakdown(result, contributions, config.maxDice());
+                for (int i = 0; i < breakdown.size(); i++) {
+                    DiceRoller.Detail detail = breakdown.get(i);
+                    breakdown.set(i, new DiceRoller.Detail(detail.label(), detail.expression(), detail.rolls(),
+                            detail.total(), rollSource(sources.get(i))));
+                }
                 if (msg.path("damageRules").path("maximumOnes").asBoolean() && !breakdownNotes.isEmpty())
                     breakdownNotes.getFirst().addObject().put("label", "Exacting").put("impact", "Damage dice showing 1 count as maximum; Combo Dice remain unmodified.");
                 if (msg.path("damageRules").has("rerollBelow") && !breakdownNotes.isEmpty())
@@ -6631,7 +6647,8 @@ public final class OnlineSessionServer {
                         expression.append(expression.isEmpty() ? "" : "+").append(run).append("d").append(sides);
                     }
                     List<Integer> faces = extraDice.stream().map(die -> die[1]).toList();
-                    breakdown.add(new DiceRoller.Detail(label + ": extra dice", expression.toString(), faces, extra));
+                    breakdown.add(new DiceRoller.Detail(label + ": extra dice", expression.toString(), faces, extra,
+                            explodeRule.hasNonNull("rollSource") ? rollSource(explodeRule) : breakdown.getFirst().rollSource()));
                     while (breakdownNotes.size() < breakdown.size()) breakdownNotes.add(MAPPER.createArrayNode());
                     breakdownNotes.get(breakdown.size() - 1).addObject().put("label", label)
                             .put("impact", repeat ? "Each maximum damage die rolled another die, repeatedly." : "Each maximum damage die rolled one additional die.");
@@ -6649,7 +6666,8 @@ public final class OnlineSessionServer {
                 int extra = faces.stream().mapToInt(Integer::intValue).sum();
                 String label = onesBonusRule.path("label").asText("").isBlank() ? "Weapon feature" : onesBonusRule.path("label").asText();
                 if (breakdown == null) breakdown = new ArrayList<>(List.of(new DiceRoller.Detail("Damage", result.expression(), result.rolls(), result.total())));
-                breakdown.add(new DiceRoller.Detail(label + ": extra dice", onesBonusDice + "d" + sides, faces, extra));
+                breakdown.add(new DiceRoller.Detail(label + ": extra dice", onesBonusDice + "d" + sides, faces, extra,
+                        onesBonusRule.hasNonNull("rollSource") ? rollSource(onesBonusRule) : breakdown.getFirst().rollSource()));
                 while (breakdownNotes.size() < breakdown.size()) breakdownNotes.add(MAPPER.createArrayNode());
                 breakdownNotes.get(breakdown.size() - 1).addObject().put("label", label)
                         .put("impact", "Each damage die showing 1 added a d" + sides + ".");
@@ -6663,7 +6681,26 @@ public final class OnlineSessionServer {
                 List<Integer> combo = DiceRoller.combo(die.asInt(), config.maxDice() - result.rolls().size(), diceRandom);
                 int extra = combo.stream().mapToInt(Integer::intValue).sum();
                 if (breakdown == null) breakdown = new ArrayList<>(List.of(new DiceRoller.Detail("Damage", result.expression(), result.rolls(), result.total())));
-                breakdown.add(new DiceRoller.Detail("Combo Strike rolls", combo.size() + "d" + die.asInt(), combo, extra));
+                int comboIndex = -1;
+                for (int i = 0; i < breakdown.size(); i++) {
+                    DiceRoller.Detail detail = breakdown.get(i);
+                    if (detail.total() == 0 && detail.rolls().isEmpty()
+                            && (detail.label().contains("Combo Strike"))) {
+                        comboIndex = i;
+                        break;
+                    }
+                }
+                DiceRoller.Detail comboDetail = new DiceRoller.Detail("Combo Strike rolls",
+                        combo.size() + "d" + die.asInt(), combo, extra,
+                        comboIndex < 0 ? null : breakdown.get(comboIndex).rollSource());
+                ArrayNode comboNotes = MAPPER.createArrayNode();
+                if (comboIndex >= 0) {
+                    breakdown.remove(comboIndex);
+                    if (comboIndex < breakdownNotes.size()) comboNotes = breakdownNotes.remove(comboIndex);
+                }
+                while (breakdownNotes.size() < breakdown.size()) breakdownNotes.add(MAPPER.createArrayNode());
+                breakdown.add(comboDetail);
+                breakdownNotes.add(comboNotes);
                 List<Integer> all = new ArrayList<>(result.rolls());
                 all.addAll(combo);
                 result = new DiceRoller.Result(result.expression() + "+" + extra, all, result.total() + extra);
@@ -6685,7 +6722,7 @@ public final class OnlineSessionServer {
                 }
                 if (resonanceIndex >= 0) {
                     DiceRoller.Detail detail = breakdown.get(resonanceIndex);
-                    breakdown.set(resonanceIndex, new DiceRoller.Detail(detail.label(), String.valueOf(extra), List.of(), extra));
+                    breakdown.set(resonanceIndex, new DiceRoller.Detail(detail.label(), String.valueOf(extra), List.of(), extra, detail.rollSource()));
                 } else {
                     resonanceIndex = breakdown.size();
                     breakdown.add(new DiceRoller.Detail("Sacred Resonance", String.valueOf(extra), List.of(), extra));
@@ -6695,6 +6732,23 @@ public final class OnlineSessionServer {
                         .put("impact", "Matching damage dice add " + extra + " additional damage.");
                 result = new DiceRoller.Result(result.expression(), result.rolls(), result.total() + extra);
             }
+        if (breakdown != null) {
+            while (breakdownNotes.size() < breakdown.size()) breakdownNotes.add(MAPPER.createArrayNode());
+            for (int i = breakdown.size() - 1; i > 0; i--) {
+                DiceRoller.Detail previous = breakdown.get(i - 1), current = breakdown.get(i);
+                if (!previous.label().equals(current.label())
+                        || !java.util.Objects.equals(previous.rollSource(), current.rollSource())) continue;
+                List<Integer> faces = new ArrayList<>(previous.rolls());
+                faces.addAll(current.rolls());
+                String expression = previous.expression() + (current.expression().startsWith("-") ? "" : "+")
+                        + current.expression().replaceFirst("^\\+", "");
+                breakdown.set(i - 1, new DiceRoller.Detail(previous.label(), expression, faces,
+                        Math.addExact(previous.total(), current.total()), previous.rollSource()));
+                breakdown.remove(i);
+                breakdownNotes.get(i - 1).addAll(breakdownNotes.get(i));
+                breakdownNotes.remove(i);
+            }
+        }
         return new ResolvedDice(result, breakdown, breakdownNotes);
     }
 

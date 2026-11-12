@@ -52,7 +52,10 @@ public final class ChatCards {
     public record Note(String label, String impact) {
     }
 
-    public record Detail(String label, String expression, List<Integer> rolls, int total, List<Note> notes) {
+    public record Detail(String label, String expression, List<Integer> rolls, int total, List<Note> notes, JsonNode rollSource) {
+        public Detail(String label, String expression, List<Integer> rolls, int total, List<Note> notes) {
+            this(label, expression, rolls, total, notes, null);
+        }
     }
 
     public record RestReport(boolean longRest, String subtitle, List<String> lines) {
@@ -124,7 +127,7 @@ public final class ChatCards {
                 List<Note> notes = new ArrayList<>();
                 d.path("notes").forEach(n -> notes.add(new Note(n.path("label").asText(), n.path("impact").asText())));
                 details.add(new Detail(d.path("label").asText(), d.path("expression").asText(), values,
-                        d.path("total").asInt(), notes));
+                        d.path("total").asInt(), notes, d.path("rollSource").isObject() ? d.path("rollSource") : null));
             }
             return details;
         }
@@ -826,7 +829,7 @@ public final class ChatCards {
         if (m.path("featureRoll").isObject()) {
             body.getChildren().add(wrapped(m.path("featureRoll").path("consequence").asText(), "chat-feature-result"));
         }
-        body.getChildren().add(breakdown(expression, details, total));
+        body.getChildren().add(breakdown(expression, details, total, m.path("rollSource")));
         return body;
     }
 
@@ -867,7 +870,7 @@ public final class ChatCards {
         return label;
     }
 
-    private static Node breakdown(String expression, List<Detail> details, int total) {
+    private static Node breakdown(String expression, List<Detail> details, int total, JsonNode fallbackSource) {
         VBox content = new VBox();
         Label formula = wrapped(expression, "chat-roll-formula");
         content.getChildren().add(formula);
@@ -877,11 +880,32 @@ public final class ChatCards {
                 source.getChildren().add(wrapped(d.expression().replaceFirst("^\\+", "") + ": " + d.rolls(),
                         "chat-detail-small"));
             }
+            for (Note note : d.notes())
+                if (d.label().equals(note.label()) || d.label().startsWith(note.label() + ":"))
+                    source.getChildren().add(wrapped(note.impact(), "chat-detail-small"));
             HBox.setHgrow(source, Priority.ALWAYS);
             Label value = new Label(signed(d.total()));
             value.getStyleClass().add(d.total() < 0 ? "chat-detail-negative" : "chat-detail-value");
-            content.getChildren().add(detailRow(source, value, "chat-detail"));
+            HBox row = detailRow(source, value, "chat-detail");
+            JsonNode description = d.rollSource() != null ? d.rollSource()
+                    : fallbackSource.isObject() && (d.label().equals(fallbackSource.path("name").asText())
+                    || d.label().startsWith(fallbackSource.path("name").asText() + " damage")) ? fallbackSource : null;
+            if (description != null) {
+                VBox preview = new VBox(4, wrapped(description.path("source").asText(), "chat-shared-source"),
+                        wrapped(description.path("name").asText(), "chat-source-name"),
+                        markdown(description.path("text").asText(), "chat-source-text"));
+                preview.getStyleClass().add("chat-source-preview");
+                Tooltip tooltip = Icons.tooltip("");
+                tooltip.setMaxWidth(Region.USE_PREF_SIZE);
+                tooltip.getStyleClass().add("chat-source-tooltip");
+                tooltip.getScene().getStylesheets().add(Icons.STYLESHEET);
+                row.setFocusTraversable(true);
+                row.setAccessibleText(d.label() + ". Source: " + description.path("name").asText());
+                Icons.sourcePreview(row, preview, tooltip);
+            }
+            content.getChildren().add(row);
             for (Note note : d.notes()) {
+                if (d.label().equals(note.label()) || d.label().startsWith(note.label() + ":")) continue;
                 Label noteLabel = wrapped(note.label(), "chat-detail-note");
                 Label impact = wrapped(note.impact(), "chat-detail-note");
                 noteLabel.setMinWidth(0);

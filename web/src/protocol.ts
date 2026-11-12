@@ -222,6 +222,7 @@ export interface RollSource {
 export interface RollContribution {
   label: string;
   expression: string;
+  rollSource?: RollSource;
   notes?: Array<{ label: string; impact: string }>;
 }
 

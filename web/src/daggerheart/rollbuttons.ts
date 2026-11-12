@@ -160,7 +160,7 @@ export function rerollRequest(m: RollMessage, t: AvailableRollTrigger, original?
     label: m.label ?? 'Roll',
     expression: m.expression,
     kind: m.kind === 'duality' ? 'duality' : undefined,
-    contributions: m.breakdown?.map(({ label: name, expression, notes }) => ({ label: name, expression, notes })),
+    contributions: m.breakdown?.map(({ label: name, expression, notes, rollSource }) => ({ label: name, expression, notes, rollSource })),
     rollSource: m.rollSource,
     actorId: m.actorId,
     source: m.source,

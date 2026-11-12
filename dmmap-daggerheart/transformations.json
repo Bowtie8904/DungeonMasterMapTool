@@ -175,7 +175,7 @@
         },
         "steps": [
          { "op": "effect", "effect": { "name": "Wolf Form", "kind": "buff", "until": "rest", "modifiers": [
-          { "roll": "attack", "dice": "1d10" }, { "roll": "damage", "dice": "1d10" }, { "roll": "spelldamage", "dice": "1d10" }
+          { "roll": "attack", "dice": "1d10" }, { "roll": "damage", "dice": "1d10" }
          ] } }
         ]
        }
@@ -183,7 +183,7 @@
       "mitigation": [
        { "id": "wolf-form", "label": "Enter Wolf Form", "when": { "markingHp": true }, "excludesEffect": "Wolf Form", "cost": { "stress": 1 },
         "effect": { "name": "Wolf Form", "kind": "buff", "until": "rest", "modifiers": [
-         { "roll": "attack", "dice": "1d10" }, { "roll": "damage", "dice": "1d10" }, { "roll": "spelldamage", "dice": "1d10" }
+         { "roll": "attack", "dice": "1d10" }, { "roll": "damage", "dice": "1d10" }
         ] }
        }
       ],

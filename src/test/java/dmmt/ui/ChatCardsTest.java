@@ -15,6 +15,19 @@ class ChatCardsTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Test
+    void breakdownRetainsPerRowSourceDescriptionsAndSupportsLegacyDetails() throws Exception {
+        JsonNode breakdown = MAPPER.readTree("""
+                [{"label":"Combo Strike rolls","expression":"2d4","rolls":[4,1],"total":5,
+                  "rollSource":{"name":"Combo Strike","text":"Combo rules","source":"Brawler"}},
+                 {"label":"Weapon bonus","expression":"3","rolls":[],"total":3}]
+                """);
+        var details = ChatCards.rollDetails("2d4+3", List.of(4, 1), false, breakdown);
+        assertEquals("Combo Strike", details.getFirst().rollSource().path("name").asText());
+        assertEquals("Combo rules", details.getFirst().rollSource().path("text").asText());
+        assertNull(details.get(1).rollSource());
+        assertEquals(8, details.stream().mapToInt(ChatCards.Detail::total).sum());
+    }
+    @Test
     void deathOutcomeUsesAdjustedHopeAndConvertedResultsWithoutChangingDice() throws Exception {
         JsonNode tie = MAPPER.readTree("""
                 {"deathMove":"risk","deathResult":{"outcome":"hope","hope":3,"fear":4,"adjustedHope":4}}

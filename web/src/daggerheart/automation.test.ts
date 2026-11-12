@@ -57,7 +57,7 @@ describe('configurable character automation', () => {
       expect(options[0].key).toBe(`feat:${name}:roll:bonus`);
       const bonus = selectedRollBonus(c, rollBonus(c, ['action']), options);
       expect(bonus.names).toEqual([expected]);
-      expect(bonus.contributions).toEqual([{ label: expected, expression: '1' }]);
+      expect(bonus.contributions).toEqual([{ label: expected, expression: '1', rollSource: { name, text: '', source } }]);
       commitRollOptions(c, options);
       expect(actionBlocker(c, options[0].key, options[0].automation, options[0].option)).toBeTruthy();
       c.usage = {};

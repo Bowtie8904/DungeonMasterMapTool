@@ -478,6 +478,12 @@ The host validates optional `contributions: [{label, expression}]` against the r
 Contributions can include bounded `notes: [{label, impact}]` to explain dice-pool adjustments such as
 Proficiency buffs; these are context, not additional terms in the total. Weapon damage dice and fixed bonuses
 are separate breakdown rows.
+Each damage-adding feature has one damage entry; Combo Strike replaces its selection placeholder and
+First Strike has its own doubling contribution. Additive extra-die effects have separate damage rows,
+while Proficiency and keep/discard pool explanations remain on the weapon.
+Contributions and returned details may also include a bounded description-only
+`rollSource: {name, text, source}`. Hover or focus the row to open its themed source preview; Escape dismisses it.
+The desktop DM chat uses the same saved descriptions. Older messages without row descriptions remain usable.
 These fields are additive; compatibility versions are unchanged. Older hosts/history fall back to formula
 and dice details. Open breakdown and source sections survive new messages and updates to their own message,
 independently for each viewer. The reader's scroll position survives new messages.

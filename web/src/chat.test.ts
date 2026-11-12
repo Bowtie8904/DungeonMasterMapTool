@@ -8,6 +8,53 @@ const message: RollMessage = {
 };
 
 describe('roll breakdowns', () => {
+  it('previews the row feature rather than the main weapon on hover and focus, with Escape dismissal', () => {
+    class Element {
+      id = '';
+      role = '';
+      className = '';
+      tabIndex = -1;
+      children: Array<Element | string> = [];
+      attrs = new Map<string, string>();
+      listeners = new Map<string, (event?: { key: string }) => void>();
+      style: Record<string, string> = {};
+      classList = {
+        add: (name: string) => { this.className += ` ${name}`; },
+        remove: (name: string) => { this.className = this.className.split(' ').filter(value => value !== name).join(' '); },
+      };
+      append(...children: Array<Element | string>) { this.children.push(...children); }
+      setAttribute(key: string, value: string) { this.attrs.set(key, value); }
+      addEventListener(type: string, handler: (event?: { key: string }) => void) { this.listeners.set(type, handler); }
+      getBoundingClientRect() { return { left: 100, top: 650, bottom: 680, height: 200 }; }
+      get textContent(): string { return this.children.map(child => typeof child === 'string' ? child : child.textContent).join(''); }
+      find(cls: string): Element | undefined {
+        return this.className.split(' ').includes(cls) ? this : this.children.flatMap(child => typeof child === 'string' ? [] : [child])
+          .map(child => child.find(cls)).find(Boolean);
+      }
+    }
+    vi.stubGlobal('document', { createElement: () => new Element() });
+    vi.stubGlobal('window', { innerWidth: 800, innerHeight: 700 });
+    try {
+      const card = renderLogEntry({ kind: 'roll', m: {
+        ...message, kind: 'damage', expression: '1d8+5', rolls: [3, 4, 1], total: 8,
+        rollSource: { name: 'Sword', text: 'Weapon rules', source: 'Weapon' },
+        breakdown: [{ label: 'Combo Strike rolls', expression: '2d4', rolls: [4, 1], total: 5,
+          rollSource: { name: 'Combo Strike', text: '**Combo rules**', source: 'Brawler' } }],
+      } }, 'player') as unknown as Element;
+      const row = card.find('has-source-preview')!;
+      const panel = row.find('roll-source-preview')!;
+      expect(panel.textContent).toBe('BrawlerCombo StrikeCombo rules');
+      expect(row.tabIndex).toBe(0);
+      expect(row.attrs.get('aria-describedby')).toBe(panel.id);
+      expect(panel.role).toBe('tooltip');
+      row.listeners.get('mouseenter')!();
+      expect(panel.style.top).toBe('446px');
+      row.listeners.get('keydown')!({ key: 'Escape' });
+      expect(row.className).toContain('source-preview-dismissed');
+      row.listeners.get('focus')!();
+      expect(row.className).not.toContain('source-preview-dismissed');
+    } finally { vi.unstubAllGlobals(); }
+  });
   it.each([
     ['long', true, false],
     ['short', true, false],

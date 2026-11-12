@@ -9,7 +9,7 @@ import {
   dualityExpression, handsUsed, ignoresWeaponBurden, multiclassesOf, shortTrait, signed, tierOf,
 } from './data';
 import {
-  ActionDef, ActiveEffect, Automation, RollBonus, StatSource, activeFeatures, activeWeapons, actionBlocker, actionCost, addEffect, asksSpellcastRoll, consumeBonus, costText, damageExpression,
+  ActionDef, ActiveEffect, Automation, RollBonus, StatSource, activeFeatures, activeWeapons, actionBlocker, actionCost, addEffect, asksSpellcastRoll, consumeBonus, costText,
   availableRollOptions, commitRollOptions, configuredRollOption, criticalBonus, damageContributions, damageRollFormula, derivedStats, deathrunProficiency, evalValue, experienceModifier, resourceDefinitions, rollBonus, rollExperienceRefund, rollOptionQuantityMax,
   damagePool, effectCounterMax, effectCounterText, effectiveAdvantage, maximizeDamageDie, maximizableDamageDice, poolDice, rollLocal, rollOptionDice, rollOptionLabel, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, setTrackSlots, sheetActions, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft, usesMax,
 } from './engine';
@@ -59,7 +59,7 @@ export interface RollRequest {
   deathrunRemove?: number;
   weaponDamage?: { proficiency: number; proficiencyBonus: number; maximizeDie?: number; multiplier: number; options: Array<{ key: string; id: string }> };
   damageRules?: { comboDie?: number; maximumOnes?: boolean; rerollBelow?: number; matchingDice?: boolean;
-    weaponRules?: { onesAs?: number; onesBonus?: number; explode?: 'once' | 'repeat'; label?: string } };
+    weaponRules?: { onesAs?: number; onesBonus?: number; explode?: 'once' | 'repeat'; label?: string; rollSource?: RollSource } };
   label: string;
   expression: string;
   kind?: 'duality';
@@ -2480,13 +2480,15 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
   damageType.value = weapon?.damageType === 'magic' ? 'magic' : 'physical';
   const otherworldly = !!weapon && (c.effects.some(e => e.stance && e.name === 'Otherworldly') || !!weapon.automation?.damageTypeChoice);
   const damageText = (b: RollBonus) => {
-    const base = damageExpression(weapon!.damage, derivedStats(c).proficiency + proficiencyExtra(), b, damagePool(c, weapon!), weapon!.fixedDice);
+    const base = damageContributions(c, weapon!, b, proficiencyExtra())
+      .map(part => part.expression.replace(/^0\+|^\+/, '')).filter(expression => expression !== '0')
+      .join('+').replace(/\+-/g, '-') || '0';
     const extra = crit.checked ? criticalBonus(base) : 0;
     return { base, extra, text: extra ? `${base}+${extra}` : base };
   };
   const damageParts = (b: RollBonus) => {
-    let expression = damageText(b).text;
     const contributions = [...damageContributions(c, weapon!, b, proficiencyExtra()), ...(damageText(b).extra ? [{ label: 'Critical hit (maximum dice)', expression: String(damageText(b).extra) }] : [])];
+    let expression = damageText(b).text;
     const choiceIndex = options.findIndex((s, i) => checked.has(i) && s.option.maximizeDie);
     if (choiceIndex >= 0) {
       const index = Number(dieChoices.get(choiceIndex)?.value);
@@ -2609,6 +2611,10 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     const requestedAdvantage = Number(advantage) as Advantage;
     const actualAdvantage = effectiveAdvantage(requestedAdvantage, selected());
     const ignored = selected().filter((s) => s.option.ignoreDisadvantage);
+    const weaponRules = weapon ? weaponDamageRules(c, weapon) : undefined;
+    const ruleEffect = weaponRules ? c.effects.find(effect => effect.name === weaponRules.label || effect.damage?.label === weaponRules.label) : undefined;
+    const ruleSource = weaponRules ? rollSourceFor(c, `feat:${weaponRules.label}`)
+      ?? rollSourceFor(c, ruleEffect ? `effect:${ruleEffect.id}` : `weapon:${weapon!.name}`) : undefined;
     const request: RollRequest = weapon ? {
       label: selected().some(s => s.option.magicDamage) ? `${label} (magic)`.slice(0, 80) : otherworldly ? `${label} (${damageType.value})`.slice(0, 80) : label,
       ...(selected().some(s => s.option.magicDamage) ? { source: ['damage', 'magicdamage', ...(targets.includes('spelldamage') ? ['spelldamage'] : []), ...(weapon.profile ? [`weaponProfile:${weapon.profile}`] : []), ...(weapon.dieOverride ? [`damageDie:${weapon.dieOverride}`] : [])].join(',') } : {}),
@@ -2616,7 +2622,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
         ...(selected().some(s => s.option.matchingDice) ? { matchingDice: true } : {}),
         ...(selected().some(s => s.option.combo) ? { comboDie: comboDie(c) } : {}),
         ...(damagePool(c, weapon)?.maximumOnes ? { maximumOnes: true } : {}),
-        ...(weaponDamageRules(c, weapon) ? { weaponRules: weaponDamageRules(c, weapon) } : {}),
+        ...(weaponRules ? { weaponRules: { ...weaponRules, rollSource: ruleSource } } : {}),
         ...(selected().some(s => s.option.rerollBelowProficiency || s.option.rerollBelow) ? { rerollBelow: Math.max(
           ...selected().map(s => s.option.rerollBelowProficiency ? derivedStats(c).proficiency : s.option.rerollBelow ?? 0)) } : {}),
       } } : {}),

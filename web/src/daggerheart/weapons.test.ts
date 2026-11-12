@@ -224,7 +224,8 @@ describe('weapon roll dialogs', () => {
     expect(old.querySelectorAll('div').some(div => div.text().includes('Update the host to roll Brutal damage.'))).toBe(true);
     await open(true).querySelectorAll('button').find(button => button.text() === 'Roll to chat')!.click();
     expect(brutal).toHaveLength(1);
-    expect(brutal[0].damageRules).toEqual({ weaponRules: { explode: 'once', label: 'Brutal' } });
+    expect(brutal[0].damageRules).toMatchObject({ weaponRules: { explode: 'once', label: 'Brutal',
+      rollSource: { name: 'Knuckle Blades', text: expect.stringContaining('Brutal') } } });
   });
 
   it('tags a Devastating attack so its Damage button rolls d20s', async () => {

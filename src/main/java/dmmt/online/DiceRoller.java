@@ -16,7 +16,11 @@ public final class DiceRoller {
     public record Contribution(String label, String expression) {
     }
 
-    public record Detail(String label, String expression, List<Integer> rolls, int total) {
+    public record Detail(String label, String expression, List<Integer> rolls, int total,
+                         com.fasterxml.jackson.databind.JsonNode rollSource) {
+        public Detail(String label, String expression, List<Integer> rolls, int total) {
+            this(label, expression, rolls, total, null);
+        }
     }
 
     private record Keep(int offset, int count, int kept, boolean low) {

@@ -780,6 +780,13 @@ Nothing starts until you click **Start online session**, so offline play and the
   Expand **Roll breakdown** for individual dice and each applied trait, Experience,
   advantage/disadvantage, weapon feature and automated buff/debuff with its actual impact.
   Damage details separate the weapon's fixed bonus and explain changes to its Proficiency dice pool.
+  Damage-adding features appear once with their own damage, including Combo Strike and First Strike;
+  Wolf Form adds only one bonus die to spell damage. Proficiency attribution remains unchanged.
+  Hover or keyboard-focus a sourced breakdown row to preview its feature, card, equipment or effect
+  in browser/player and desktop DM chat. Descriptions are saved with the roll, not read from a later sheet.
+  DM previews use wider, content-sized panels anchored outside the hovered row. Ordinary descriptions
+  need no scrollbar; unusually long descriptions scroll within the screen, and you can move into the panel.
+  Press Escape to dismiss a preview.
   Hope/Fear, criticals and difficulty outcomes have distinct badges. Breakdown and source sections stay open
   when messages arrive or the displayed message is updated, independently for each viewer.
   Historical rolls and older hosts show the formula and dice without inventing missing source names;
