@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { lightActive, lightFalloff, rasterLightTint, TintEnvironment, TintLight } from './lighting';
+import { lightActive, lightFalloff, rasterLightTint, rasterShapeGlow, TintEnvironment, TintLight } from './lighting';
+import { Overlay } from './protocol';
 import { Grid } from './vision';
 
 const grid: Grid = { originX: 0, originY: 0, cols: 2, rows: 1, cellSize: 1 };
@@ -9,6 +10,79 @@ const light = (color: TintLight['color'] = [255, 0, 0], strength = 1): TintLight
   polygon: { xs: [-10, 10, 10, -10], ys: [-10, -10, 10, 10] },
 });
 const indoor: TintEnvironment['indoor'] = { grid, inside: Uint8Array.of(1, 0), darkness: 0.9 };
+
+describe('desktop shape glow parity', () => {
+  const shape: Overlay = {
+    id: 'effect', type: 'rect', x: -10, y: -10, width: 20, height: 20, radius: 10,
+    strokeWidth: 20, color: '#ff0000', alpha: 1, texture: 'fire', border: false, points: [0, 0],
+  };
+  function raster(o: Overlay, range = 10) {
+    const result = rasterShapeGlow(o, range);
+    if (!result) throw new Error('Expected shape glow');
+    const { grid: g, pixels } = result;
+    return {
+      ...result,
+      at(x: number, y: number) {
+        const col = Math.floor((x - g.originX) / g.cellSize);
+        const row = Math.floor((y - g.originY) / g.cellSize);
+        return {
+          alpha: pixels[(row * g.cols + col) * 4 + 3],
+          x: g.originX + (col + 0.5) * g.cellSize,
+          y: g.originY + (row + 0.5) * g.cellSize,
+        };
+      },
+    };
+  }
+
+  it.each(['circle', 'rect', 'brush'])('fades continuously beyond the %s edge with no brightness step', type => {
+    const glow = raster({ ...shape, type, x: type === 'circle' ? 0 : shape.x, y: type === 'circle' ? 0 : shape.y });
+    expect(glow.at(0, 0).alpha).toBe(255);
+    const edge = glow.at(10, 0);
+    expect(edge.alpha).toBeGreaterThan(250);
+    const halfway = glow.at(15, 0);
+    const distance = type === 'rect' ? halfway.x - 10 : Math.hypot(halfway.x, halfway.y) - 10;
+    const t = distance / 10;
+    expect(halfway.alpha).toBe(Math.round(255 * (1 - t * t * (3 - 2 * t))));
+    expect(glow.at(19, 0).alpha).toBeLessThan(12);
+    expect(glow.at(20, 0).alpha).toBe(0);
+    expect(glow.pixels[3]).toBe(0);
+  });
+
+  it('uses Euclidean distance around box corners', () => {
+    const sample = raster(shape).at(15, 15);
+    const t = Math.hypot(sample.x - 10, sample.y - 10) / 10;
+    expect(sample.alpha).toBe(Math.round(255 * (1 - t * t * (3 - 2 * t))));
+  });
+
+  it('lights the union of brush segments without seams or double-strength crossings', () => {
+    const glow = raster({ ...shape, type: 'brush', points: [-20, 0, 20, 0, 0, -20, 0, 20, 0, 20] });
+    expect(glow.at(0, 0).alpha).toBe(255);
+    expect(glow.at(0, 15).alpha).toBe(255);
+    expect(glow.at(15, 0).alpha).toBe(255);
+  });
+
+  it('shrinks reach with flicker without reducing the inside mask', () => {
+    const full = raster(shape);
+    const flickering = raster(shape, 7.5);
+    expect(flickering.at(0, 0).alpha).toBe(255);
+    expect(flickering.at(17, 0).alpha).toBeLessThan(full.at(17, 0).alpha);
+  });
+
+  it('supports zero range and bounds memory even for very large, thin shapes', () => {
+    const zero = raster(shape, 0);
+    expect(zero.at(0, 0).alpha).toBe(255);
+    expect(zero.pixels[3]).toBe(0);
+    const large = raster({ ...shape, width: 1e7, height: 1 });
+    expect(large.grid.cols).toBeLessThanOrEqual(386);
+    expect(large.grid.rows).toBeLessThanOrEqual(386);
+  });
+
+  it('never treats annotation strokes or empty brushes as emitters', () => {
+    for (const type of ['pen', 'line', 'unknown', 'brush']) {
+      expect(rasterShapeGlow({ ...shape, type, points: [] }, 10)).toBeNull();
+    }
+  });
+});
 
 describe('desktop light tint parity', () => {
   it('caps an 8% tint once, regardless of how many lights overlap', () => {

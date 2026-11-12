@@ -261,6 +261,9 @@ of lighting; walls and closed doors block it. Sight-only cells are not added to 
 tokens keep their existing vision behavior. The optional `view.actorSightTiles` field defaults to 40 for older hosts;
 older clients retain their previous range. The additive field requires no protocol version change.
 `lighting.ts` mirrors desktop light-tint accumulation, falloff and indoor/daytime eligibility.
+Shape emitters use cached, bounded world-space masks with the desktop's distance-based smoothstep glow,
+not hard fills with blurred shadows. Flicker adjusts strength and reach; indoor clipping is preserved.
+Simplified lighting retains its flat-shape approximation. No protocol or settings contract changes are required.
 Tint uses the host's optional `lighting.tintDarknessFactor` to match the DM view without reducing player ambient darkness;
 older hosts that omit it retain full-strength player tint. Overlapping lights share a single capped tint overlay.
 Settings kept in localStorage: `dmmt.volume`, `dmmt.muted`, `dmmt.maxParticles` (default 1500).

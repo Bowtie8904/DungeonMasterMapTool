@@ -1,4 +1,67 @@
 import { Grid, Polygon } from './vision';
+import { Overlay } from './protocol';
+
+/** Desktop emitShapeLight geometry and smoothstep, sampled in world space with a transparent border. */
+export function rasterShapeGlow(shape: Overlay, range: number): { grid: Grid; pixels: Uint8ClampedArray } | null {
+  let x0: number, y0: number, x1: number, y1: number;
+  const points: number[] = [];
+  let inner = 0;
+  if (shape.type === 'circle') {
+    inner = shape.radius;
+    points.push(shape.x, shape.y);
+    x0 = shape.x - inner; x1 = shape.x + inner;
+    y0 = shape.y - inner; y1 = shape.y + inner;
+  } else if (shape.type === 'rect') {
+    x0 = shape.x; y0 = shape.y;
+    x1 = x0 + shape.width; y1 = y0 + shape.height;
+  } else if (shape.type === 'brush' && shape.points.length >= 2) {
+    const n = Math.floor(shape.points.length / 2);
+    const step = Math.max(1, Math.ceil((n - 1) / 32));
+    for (let i = 0; i <= Math.ceil((n - 1) / step); i++) {
+      const src = Math.min(n - 1, i * step) * 2;
+      points.push(shape.points[src], shape.points[src + 1]);
+    }
+    inner = shape.strokeWidth / 2;
+    x0 = Infinity; y0 = Infinity; x1 = -Infinity; y1 = -Infinity;
+    for (let i = 0; i < points.length; i += 2) {
+      x0 = Math.min(x0, points[i] - inner); x1 = Math.max(x1, points[i] + inner);
+      y0 = Math.min(y0, points[i + 1] - inner); y1 = Math.max(y1, points[i + 1] + inner);
+    }
+  } else {
+    return null;
+  }
+  const glow = Math.max(0, range);
+  const spanX = x1 - x0 + 2 * glow;
+  const spanY = y1 - y0 + 2 * glow;
+  const cellSize = Math.max(glow / 16, Math.max(spanX, spanY) / 384, 0.001);
+  const grid: Grid = {
+    originX: x0 - glow - cellSize, originY: y0 - glow - cellSize, cellSize,
+    cols: Math.ceil(spanX / cellSize) + 2, rows: Math.ceil(spanY / cellSize) + 2,
+  };
+  const pixels = new Uint8ClampedArray(grid.cols * grid.rows * 4);
+  for (let row = 0; row < grid.rows; row++) {
+    const y = grid.originY + (row + 0.5) * cellSize;
+    for (let col = 0; col < grid.cols; col++) {
+      const x = grid.originX + (col + 0.5) * cellSize;
+      let distance: number;
+      if (points.length === 0) {
+        distance = Math.hypot(Math.max(x0 - x, 0, x - x1), Math.max(y0 - y, 0, y - y1));
+      } else {
+        let best = Math.hypot(x - points[0], y - points[1]);
+        for (let i = 0; i + 3 < points.length; i += 2) {
+          const dx = points[i + 2] - points[i], dy = points[i + 3] - points[i + 1];
+          const len2 = dx * dx + dy * dy;
+          const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((x - points[i]) * dx + (y - points[i + 1]) * dy) / len2));
+          best = Math.min(best, Math.hypot(x - points[i] - t * dx, y - points[i + 1] - t * dy));
+        }
+        distance = Math.max(0, best - inner);
+      }
+      const t = glow > 0 ? Math.min(1, distance / glow) : distance > 0 ? 1 : 0;
+      pixels[(row * grid.cols + col) * 4 + 3] = Math.round(255 * (1 - t * t * (3 - 2 * t)));
+    }
+  }
+  return { grid, pixels };
+}
 
 export interface TintEnvironment {
   night: boolean;

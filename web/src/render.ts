@@ -2,7 +2,7 @@ import { base64ToBytes, bitsToFlags } from './bitset';
 import { flickerAmount } from './flicker';
 import { FogState } from './fogstate';
 import { TokenMotion } from './motion';
-import { lightActive, rasterLightTint, TintEnvironment, TintScratch } from './lighting';
+import { lightActive, rasterLightTint, rasterShapeGlow, TintEnvironment, TintScratch } from './lighting';
 import { Door, GameState, IndoorData, Measurement, Overlay, TextBoxState, Token } from './protocol';
 import { DrawMode, DrawingStyle, MapTool, drawingBounds, drawingHit, drawingId, measurementBounds, measurementHit, measurementLabel, measurementPath, ownsDrawing, resizeDrawing, translateDrawing } from './tools';
 import { chooseLevel, PyramidInfo, tileUrl, visibleTiles } from './pyramid';
@@ -115,6 +115,7 @@ export class MapView {
   private brushBorder = document.createElement('canvas');
   private brushBorderKey = '';
   private maskCache = new Map<string, { key: string; canvas: HTMLCanvasElement; ox: number; oy: number; cell: number }>();
+  private glowCache = new Map<string, { key: string; canvas: HTMLCanvasElement; grid: Grid }>();
   private zoneCache: { src: IndoorData; outside: Path2D; exposure: Map<string, HTMLCanvasElement> } | null = null;
   private indoorCache: { key: string; src: IndoorData; ambient: HTMLCanvasElement; inside: HTMLCanvasElement; flags: Uint8Array } | null = null;
   private textureActive = false;
@@ -206,7 +207,7 @@ export class MapView {
     this.cancelPingHold();
     this.destroyed = true;
     this.resizeObserver.disconnect();
-    this.images.clear(); this.tiles.clear(); this.maskCache.clear();
+    this.images.clear(); this.tiles.clear(); this.maskCache.clear(); this.glowCache.clear();
   }
 
   /** Call after walls/doors/lights/tokens/lighting/fog changes. */
@@ -1855,23 +1856,15 @@ export class MapView {
         const strength = (0.35 + 0.65 * Math.min(1, Math.max(0, l.brightness))) * (1 - 0.6 * f);
         this.punchLight(c, l.x, l.y, l.range * (1 - 0.25 * f), strength, this.lightPolygon(l));
       }
-      const scale = this.cam.scale * this.dpr;
       const ppc = s.grid.pixelsPerCell;
       const seconds = Math.floor(this.serverNow() / MIN_FRAME_MS) * MIN_FRAME_MS;
       for (const o of emitters) {
         const f = this.flickerEnabled && s.lighting.flicker !== false && (o.flicker ?? 0) > 0
           ? flickerAmount(o.id, o.flicker ?? 0, o.flickerSpeed ?? 1, seconds)
           : 0;
-        const strength = Math.min(1, (o.lightStrength ?? 0) * (1 - 0.6) * (1 - 0.6 * f));
-        const range = (o.lightRange ?? 0) * ppc * (1 - 0.25) * (1 - 0.25 * f);
-        c.save();
-        c.fillStyle = `rgba(0,0,0,${strength})`;
-        c.strokeStyle = `rgba(0,0,0,${strength})`;
-        c.shadowColor = `rgba(0,0,0,${strength})`;
-        // Canvas shadow blur is the costliest part of effect lighting; simplified lighting keeps only the flat shape.
-        c.shadowBlur = this.simpleLighting ? 0 : range * scale;
-        this.paintShape(c, o);
-        c.restore();
+        const strength = Math.min(1, (o.lightStrength ?? 0) * (1 - 0.6 * f));
+        const range = (o.lightRange ?? 0) * ppc * (1 - 0.25 * f);
+        this.punchShapeLight(c, o, range, strength);
       }
     };
     g.globalCompositeOperation = 'destination-out';
@@ -1988,6 +1981,41 @@ export class MapView {
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(this.lightTint, 0, 0, cols * scale, rows * scale);
     ctx.restore();
+  }
+
+  private punchShapeLight(c: CanvasRenderingContext2D, o: Overlay, range: number, strength: number): void {
+    if (o.type !== 'circle' && o.type !== 'rect' && o.type !== 'brush') return;
+    c.save();
+    if (this.simpleLighting) {
+      c.fillStyle = c.strokeStyle = `rgba(0,0,0,${strength * 0.4})`;
+      this.paintShape(c, o);
+    } else {
+      const key = JSON.stringify([o.type, o.x, o.y, o.width, o.height, o.radius, o.strokeWidth, o.points, range]);
+      let mask = this.glowCache.get(o.id);
+      if (!mask || mask.key !== key) {
+        const raster = rasterShapeGlow(o, range);
+        if (raster) {
+          const { grid, pixels } = raster;
+          const canvas = mask?.canvas ?? document.createElement('canvas');
+          canvas.width = grid.cols; canvas.height = grid.rows;
+          const g = canvas.getContext('2d')!;
+          const image = g.createImageData(grid.cols, grid.rows);
+          image.data.set(pixels);
+          g.putImageData(image, 0, 0);
+          mask = { key, canvas, grid };
+          this.glowCache.delete(o.id);
+          if (this.glowCache.size >= 64) this.glowCache.delete(this.glowCache.keys().next().value!);
+          this.glowCache.set(o.id, mask);
+        }
+      }
+      if (mask && mask.key === key) {
+        const grid = mask.grid;
+        c.globalAlpha = strength;
+        c.imageSmoothingEnabled = true;
+        c.drawImage(mask.canvas, grid.originX, grid.originY, grid.cols * grid.cellSize, grid.rows * grid.cellSize);
+      }
+    }
+    c.restore();
   }
 
   private punchLight(g: CanvasRenderingContext2D, x: number, y: number, range: number, strength: number, poly: Polygon | null): void {

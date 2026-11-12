@@ -12,7 +12,12 @@ class CanvasStub {
   tabIndex = 0;
   private listeners = new Map<string, (event: Event) => void>();
   private captured = false;
-  getContext() { return {}; }
+  getContext() {
+    return {
+      createImageData: (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4) }),
+      putImageData: vi.fn(),
+    };
+  }
   getBoundingClientRect() { return { left: 0, top: 0 }; }
   addEventListener(type: string, listener: (event: Event) => void) { this.listeners.set(type, listener); }
   focus() {}
@@ -74,6 +79,38 @@ describe('map interaction cursors', () => {
     view.setMeasurements([{ ...measure }]);
   });
   afterEach(() => { view.destroy(); vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  it('draws a cached smooth glow with runtime strength and invalidates it for range and geometry changes', () => {
+    const context = { save: vi.fn(), restore: vi.fn(), drawImage: vi.fn(), globalAlpha: 1, imageSmoothingEnabled: false };
+    const punch = Reflect.get(view, 'punchShapeLight').bind(view);
+    punch(context, shape, 100, 0.7);
+    expect(context.globalAlpha).toBe(0.7);
+    expect(context.imageSmoothingEnabled).toBe(true);
+    expect(context.drawImage).toHaveBeenCalledOnce();
+    const cache = Reflect.get(view, 'glowCache');
+    const first = cache.get(shape.id);
+    punch(context, shape, 100, 0.5);
+    expect(cache.get(shape.id)).toBe(first);
+    expect(context.globalAlpha).toBe(0.5);
+    punch(context, shape, 75, 0.5);
+    expect(cache.get(shape.id)).not.toBe(first);
+    const flickering = cache.get(shape.id);
+    punch(context, { ...shape, width: 200 }, 75, 0.5);
+    expect(cache.get(shape.id)).not.toBe(flickering);
+    view.destroy();
+    expect(cache.size).toBe(0);
+  });
+
+  it('retains the inexpensive flat shape in simplified lighting', () => {
+    view.simpleLighting = true;
+    const context = { save: vi.fn(), restore: vi.fn(), fillStyle: '', strokeStyle: '', drawImage: vi.fn(),
+      beginPath: vi.fn(), rect: vi.fn(), fill: vi.fn() };
+    Reflect.get(view, 'punchShapeLight').call(view, context, shape, 100, 0.5);
+    expect(context.fillStyle).toBe('rgba(0,0,0,0.2)');
+    expect(context.rect).toHaveBeenCalledWith(shape.x, shape.y, shape.width, shape.height);
+    expect(context.fill).toHaveBeenCalledOnce();
+    expect(context.drawImage).not.toHaveBeenCalled();
+  });
 
   it('keeps unsent pointer movement ahead of stale state and acknowledgements', () => {
     const store = new Store();
