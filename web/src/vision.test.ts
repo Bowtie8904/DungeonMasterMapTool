@@ -21,6 +21,12 @@ describe('scanline cell fill', () => {
       }
     }
   });
+
+  it('does not fill cells when a polygon lies entirely outside the grid', () => {
+    const grid = { originX: 0, originY: 0, cellSize: 10, cols: 20, rows: 20 };
+    const outside = { xs: [-100, -50, -50, -100], ys: [0, 0, 100, 100] };
+    expect(cellsInPolygons(grid, [outside]).some(Boolean)).toBe(false);
+  });
 });
 
 // Room 0..1000 square walls, one vertical wall at x=600 from y=0..700 (gap at the bottom).

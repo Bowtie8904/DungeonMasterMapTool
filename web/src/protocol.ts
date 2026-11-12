@@ -319,6 +319,8 @@ export interface GameState {
     fogSoftness?: number;
     fogFade?: boolean;
     fogEnabled?: boolean;
+    /** Host-configured actor fog sight radius; absent on older hosts. */
+    actorSightTiles?: number;
     fogRevealSeconds?: number;
     fogHideSeconds?: number;
     ping?: { color: string; startRadius: number; grow: number };

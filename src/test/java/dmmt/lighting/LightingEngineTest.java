@@ -3,11 +3,39 @@ package dmmt.lighting;
 import dmmt.model.DmProject;
 import dmmt.model.FogMask;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LightingEngineTest {
+    @AfterEach
+    void resetTuning() {
+        dmmt.service.Tuning.reset();
+    }
+
+    @Test
+    void actorSightRangeChangesLiveAndIsClamped() {
+        DmProject project = projectWithWall();
+        project.getInteractables().getFirst().setState("open");
+        project.getMap().getGrid().setPixelsPerCell(10);
+        project.getTokens().add(DmProject.TokenInstance.builder()
+                .id("actor").actorId("a").playerVisible(true).x(300).y(500).build());
+        LightingEngine engine = new LightingEngine();
+        engine.update(project);
+        FogMask mask = project.getFog().getMask();
+        int cell = cellAt(mask, 600, 500);
+        assertTrue(engine.getLiveReveal().get(cell));
+        dmmt.service.Tuning.apply(key -> key.equals("fog.actorSightTiles") ? "10" : null);
+        engine.update(project);
+        assertFalse(engine.getLiveReveal().get(cell));
+        dmmt.service.Tuning.apply(key -> key.equals("fog.actorSightTiles") ? "1000" : null);
+        org.junit.jupiter.api.Assertions.assertEquals(100, dmmt.service.Tuning.FOG_ACTOR_SIGHT_TILES.get());
+        engine.updateReplica(project);
+        assertTrue(engine.getLiveReveal().get(cell));
+        assertTrue(mask.copyBits().isEmpty());
+    }
+
     @Test
     void replicaRenderingNeverCreatesResizesOrRevealsAnAuthoritativeFogMask() {
         var project = projectWithWall();
@@ -111,6 +139,95 @@ class LightingEngineTest {
         light.setY(100);
         engine.update(project);
         assertFalse(engine.getLiveReveal().get(cell), "Reveal must disappear once the light moves away");
+    }
+
+    @Test
+    void visibleActorSightIsTemporaryAndBlockedByWallsAndDoors() {
+        DmProject project = projectWithWall();
+        project.getMap().getGrid().setPixelsPerCell(10);
+        DmProject.TokenInstance actor = DmProject.TokenInstance.builder()
+                .id("actor-token").actorId("actor").playerVisible(true).x(300).y(500).build();
+        project.getTokens().add(actor);
+        LightingEngine engine = new LightingEngine();
+        engine.update(project);
+        FogMask mask = project.getFog().getMask();
+        assertTrue(engine.getLiveReveal().get(cellAt(mask, 450, 500)));
+        assertFalse(engine.getLiveReveal().get(cellAt(mask, 600, 500)));
+        assertTrue(mask.copyBits().isEmpty());
+        assertTrue(project.effectiveLights().isEmpty(), "Sight must not create a light");
+
+        project.getInteractables().getFirst().setState("open");
+        engine.update(project);
+        assertTrue(engine.getLiveReveal().get(cellAt(mask, 600, 500)));
+        assertFalse(engine.getLiveReveal().get(cellAt(mask, 720, 500)), "Sight ends at 40 tiles");
+
+        project.getMap().getGrid().setPixelsPerCell(20);
+        engine.update(project);
+        assertTrue(engine.getLiveReveal().get(cellAt(mask, 720, 500)), "Grid changes update sight range");
+        project.getMap().getGrid().setPixelsPerCell(10);
+        actor.setX(800);
+        engine.update(project);
+        assertFalse(engine.getLiveReveal().get(cellAt(mask, 300, 500)));
+        assertTrue(engine.getLiveReveal().get(cellAt(mask, 800, 500)));
+        actor.setPlayerVisible(false);
+        engine.update(project);
+        assertTrue(engine.getLiveReveal().isEmpty());
+        actor.setPlayerVisible(true);
+        actor.setActorId(null);
+        engine.update(project);
+        assertTrue(engine.getLiveReveal().isEmpty(), "Ordinary tokens do not gain actor sight");
+        assertTrue(mask.copyBits().isEmpty());
+    }
+
+    @Test
+    void actorSightCombinesVisibleActorsAndTracksFogToggle() {
+        DmProject project = projectWithWall();
+        project.getMap().getGrid().setPixelsPerCell(10);
+        project.getTokens().add(DmProject.TokenInstance.builder()
+                .id("left").actorId("a").playerVisible(true).x(200).y(500).build());
+        project.getTokens().add(DmProject.TokenInstance.builder()
+                .id("right").actorId("b").playerVisible(true).x(800).y(500).build());
+        LightingEngine engine = new LightingEngine();
+        engine.update(project);
+        FogMask mask = project.getFog().getMask();
+        assertTrue(engine.getLiveReveal().get(cellAt(mask, 200, 500)));
+        assertTrue(engine.getLiveReveal().get(cellAt(mask, 800, 500)));
+        project.getFog().setEnabled(false);
+        engine.update(project);
+        assertTrue(engine.getLiveReveal().isEmpty());
+        project.getFog().setEnabled(true);
+        engine.updateReplica(project);
+        assertTrue(engine.getLiveReveal().get(cellAt(mask, 200, 500)));
+        assertTrue(engine.getLiveReveal().get(cellAt(mask, 800, 500)));
+        assertTrue(mask.copyBits().isEmpty());
+    }
+
+    @Test
+    void cachedRevealsMatchFreshEngineWhenSourcesOverlapAndGeometryChanges() {
+        DmProject project = projectWithWall();
+        project.getMap().getGrid().setPixelsPerCell(10);
+        var first = DmProject.TokenInstance.builder().id("a").actorId("a").playerVisible(true).x(250).y(500).build();
+        var second = DmProject.TokenInstance.builder().id("b").actorId("b").playerVisible(true).x(350).y(500).build();
+        project.getTokens().add(first);
+        project.getTokens().add(second);
+        project.getLighting().getLights().add(light(DmProject.RevealMode.WHILE_LIT));
+        LightingEngine cached = new LightingEngine();
+        cached.update(project);
+        for (int step = 0; step < 7; step++) {
+            switch (step) {
+                case 0 -> first.setX(270);
+                case 1 -> project.getInteractables().getFirst().setState("open");
+                case 2 -> second.setPlayerVisible(false);
+                case 3 -> project.getLighting().getLights().getFirst().setEnabled(false);
+                case 4 -> project.getFog().getMask().resizeToCover(-200, -100, 1200, 1200);
+                case 5 -> project.getMap().getGrid().setPixelsPerCell(15);
+                case 6 -> second.setPlayerVisible(true);
+            }
+            cached.update(project);
+            LightingEngine fresh = new LightingEngine();
+            fresh.updateReplica(project);
+            org.junit.jupiter.api.Assertions.assertEquals(fresh.getLiveReveal(), cached.getLiveReveal(), "step " + step);
+        }
     }
 
     @Test

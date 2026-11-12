@@ -4,6 +4,7 @@ import dmmt.lighting.TimeOfDayPreset;
 import dmmt.model.DmProject;
 import dmmt.service.Tuning;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
@@ -16,6 +17,22 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 class OnlineLightingStateTest {
     @TempDir
     Path temp;
+
+    @AfterEach
+    void resetTuning() {
+        Tuning.reset();
+    }
+
+    @Test
+    void publishesConfiguredActorSightInView() {
+        var builder = new OnlineStateBuilder(file -> null);
+        var project = new DmProject();
+        var context = new OnlineStateBuilder.Context("map", "level", "Map", null, 0, false, false);
+        var assets = new AssetRegistry(temp.resolve("cache"), 2048, null);
+        assertEquals(40, builder.build(project, context, null, assets, List.of()).path("view").path("actorSightTiles").asInt());
+        Tuning.apply(key -> key.equals("fog.actorSightTiles") ? "12" : null);
+        assertEquals(12, builder.build(project, context, null, assets, List.of()).path("view").path("actorSightTiles").asInt());
+    }
 
     @Test
     void recoloringTexturedDrawingPublishesNewColoredPixelsAndAssetUrl() throws Exception {

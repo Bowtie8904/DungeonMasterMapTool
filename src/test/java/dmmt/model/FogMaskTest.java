@@ -48,6 +48,24 @@ class FogMaskTest {
     }
 
     @Test
+    void polygonSpansMatchCellIndicesWithoutChangingMask() {
+        FogMask mask = new FogMask(-30, 20, 7, 180, 140);
+        verifyPolygonSpans(mask, new double[]{-100, 430, 700, 160, -100},
+                new double[]{50, -100, 400, 900, 50});
+        verifyPolygonSpans(mask, new double[]{0, 5}, new double[]{0, 5});
+    }
+
+    private static void verifyPolygonSpans(FogMask mask, double[] xs, double[] ys) {
+        BitSet expected = new BitSet();
+        for (int cell : mask.cellsInPolygon(xs, ys)) expected.set(cell);
+        BitSet actual = new BitSet();
+        mask.addPolygonTo(actual, xs, ys);
+        assertEquals(expected, actual);
+        assertTrue(mask.copyBits().isEmpty());
+        assertEquals(0, mask.getVersion());
+    }
+
+    @Test
     void jsonRoundTripPreservesBits() throws Exception {
         FogMask mask = new FogMask(-50, 30, 8, 64, 40);
         mask.applyCircle(100, 150, 60, true);

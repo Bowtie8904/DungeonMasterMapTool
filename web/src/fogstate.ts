@@ -10,7 +10,7 @@ export class FogState {
   key = '';
   memory: Uint8Array = new Uint8Array(0);
   dmRevealed: Uint8Array = new Uint8Array(0);
-  /** When the DM drew a fog mask it decides what is hidden; only lights set to reveal while lit uncover more. */
+  /** When the DM drew a fog mask it decides what is hidden apart from temporary sight and light reveals. */
   dmControlled = false;
   explored: Uint8Array = new Uint8Array(0);
   visible: Uint8Array = new Uint8Array(0);
@@ -64,12 +64,12 @@ export class FogState {
   }
 
   /** Stores the currently visible cells and queues newly explored ones for the host. */
-  setVisible(visible: Uint8Array, commit = true): boolean {
+  setVisible(visible: Uint8Array, commit = true, exploredVisible = visible): boolean {
     if (visible.length !== this.visible.length) return false;
     this.visible = visible;
     let added = false;
-    for (let i = 0; i < visible.length; i++) {
-      if (commit && visible[i] && !this.explored[i]) {
+    if (commit) for (let i = 0; i < visible.length; i++) {
+      if (exploredVisible[i] && !this.explored[i]) {
         this.explored[i] = 1;
         this.pending[i] = 1;
         added = true;

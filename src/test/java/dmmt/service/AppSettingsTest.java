@@ -22,6 +22,24 @@ class AppSettingsTest {
     }
 
     @Test
+    void actorSightRangeIsEditableLiveAndPersists() {
+        var settings = new AppSettings(dir.resolve("sight.ini"));
+        var info = AppSettings.editableSettings().stream()
+                .filter(entry -> entry.key().equals("fog.actorSightTiles")).findFirst().orElseThrow();
+        assertEquals("Fog and lighting", info.category());
+        assertEquals("Actor token fog sight range", info.label());
+        assertEquals(Tuning.Kind.INTEGER, info.kind());
+        assertFalse(info.restart());
+        assertTrue(info.keywords().contains("vision"));
+        settings.applyEdit(info.key(), "12");
+        assertEquals(12, Tuning.FOG_ACTOR_SIGHT_TILES.get());
+        new AppSettings(settings.getFile());
+        assertEquals(12, Tuning.FOG_ACTOR_SIGHT_TILES.get());
+        settings.applyEdit(info.key(), null);
+        assertEquals(40, Tuning.FOG_ACTOR_SIGHT_TILES.get());
+    }
+
+    @Test
     void ownerPulseConsumesAppliedChangesWithoutReadingAnExternalFile() throws IOException {
         var settings = new AppSettings(dir.resolve("pulse.ini"));
         settings.applyEdit("ui.gridOpacity", "0.3");

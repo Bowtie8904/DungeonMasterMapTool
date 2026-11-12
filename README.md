@@ -1218,6 +1218,10 @@ Drag a token onto the DM map to place it **hidden from players**. Drag to move w
 
 **Token lights:** right-click a placed token and choose **Add light (torch)** to attach a light to that token instance only (it is not part of the library token). The token menu then shows a **Light** submenu with the same options as a map light (Light on, Fog reveal, Range, Brightness, Flicker, Color, Blocked by walls); switch the light off instead of removing it. The light follows the token when it moves or rotates, and is undoable, copied, saved and exported with the token. Because this adds data to the remote protocol, both PCs of a remote session must run a version with the same compatibility version.
 
+Player-visible actor tokens temporarily clear fog within their sight range, blocked by walls and closed doors, even without a torch. Set **Actor token fog sight range** in **Settings > Fog and lighting** (default 40 tiles, range 1–100); larger ranges can slow wall-dense maps. This sight does not create light: dark areas remain dark. The shared player view combines all visible actor tokens' sight; online players use sight from their own controlled actor tokens. Sight alone does not permanently reveal fog or add explored memory.
+
+For large open maps, temporary fog sight reuses unchanged reveals and updates affected fog regions without shortening sight range or adding movement delays.
+
 Token artwork is affected by map lighting and fog. Hidden tokens use the same crossed-out-eye badge as hidden text boxes; DM name tags and badges remain above lighting.
 
 Character-token borders match normal DM token thickness (5.5% of the diameter) in both the preview and saved artwork. Re-save an existing customized character token to apply the updated thickness.

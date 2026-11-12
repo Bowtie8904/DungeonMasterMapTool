@@ -425,6 +425,8 @@ public final class Tuning {
 
     // ---- Fog ----
 
+    public static final Setting<Integer> FOG_ACTOR_SIGHT_TILES = integer(FOG, "fog.actorSightTiles", 40, 1, 100, false,
+            "Actor token fog sight range in grid tiles; larger ranges can slow wall-heavy maps.");
     public static final Setting<Integer> FOG_CELLS_MIN = integer(FOG, "fog.cellsPerGrid.min", 5, 1, 100, true,
             "Lowest fog sharpness (fog cells per tile); also the resolution performance mode draws fog at.");
     public static final Setting<Integer> FOG_CELLS_MAX = integer(FOG, "fog.cellsPerGrid.max", 30, 1, 200, true,

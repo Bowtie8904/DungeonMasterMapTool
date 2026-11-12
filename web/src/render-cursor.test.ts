@@ -150,6 +150,69 @@ describe('map interaction cursors', () => {
     expect(view.fog.hasNewExplored).toBe(true);
   });
 
+  it('reveals only controlled actor sight temporarily in darkness, respecting doors and range', () => {
+    current.tokens[0].actorId = 'owned';
+    current.tokens[1].actorId = 'other-actor';
+    current.lighting.ambient = 0;
+    current.dmFog = { originX: 0, originY: 0, cellSize: 50, cols: 80, rows: 20, revealed: '' };
+    current.doors = [{ id: 'door', x1: 500, y1: 0, x2: 500, y2: 1000, open: false, kind: 'door' }];
+    const visibleAt = (x: number, y: number) => view.fog.visible[Math.floor(y / 50) * 80 + Math.floor(x / 50)];
+    Reflect.get(view, 'recomputeVision').call(view, current);
+    expect(visibleAt(300, 100)).toBe(1);
+    expect(visibleAt(600, 100)).toBe(0);
+    expect(view.fog.hasNewExplored).toBe(false);
+
+    current.doors[0].open = true;
+    Reflect.get(view, 'recomputeVision').call(view, current);
+    expect(visibleAt(600, 100)).toBe(1);
+    expect(visibleAt(2200, 100)).toBe(0);
+    current.tokens[0].controlledBy = ['other'];
+    Reflect.get(view, 'recomputeVision').call(view, current);
+    expect(visibleAt(300, 100)).toBe(0);
+  });
+
+  it('does not add sight-only cells to explored memory when there is no DM mask', () => {
+    current.tokens[0].actorId = 'owned';
+    current.lighting.ambient = 0;
+    current.fogGrid = { originX: 0, originY: 0, cellSize: 50, cols: 40, rows: 20 };
+    Reflect.get(view, 'recomputeVision').call(view, current);
+    expect(view.fog.visible[2 * 40 + 6]).toBe(1);
+    expect(view.fog.explored[2 * 40 + 6]).toBe(0);
+    expect(view.fog.hasNewExplored).toBe(false);
+    current.tokens[0].actorId = undefined;
+    Reflect.get(view, 'recomputeVision').call(view, current);
+    expect(view.fog.visible[2 * 40 + 6]).toBe(0);
+  });
+
+  it('updates controlled actor sight from the host view while retaining the older host default', () => {
+    current.tokens[0].actorId = 'owned';
+    current.lighting.ambient = 0;
+    current.dmFog = { originX: 0, originY: 0, cellSize: 50, cols: 80, rows: 20, revealed: '' };
+    const at = (col: number) => view.fog.visible[2 * 80 + col];
+    Reflect.get(view, 'recomputeVision').call(view, current);
+    expect(at(30)).toBe(1);
+    current.view = { gridOpacity: 0, actorSightTiles: 5 };
+    view.setState(current);
+    Reflect.get(view, 'recomputeVision').call(view, current);
+    expect(at(8)).toBe(0);
+    current.view.actorSightTiles = 60;
+    view.setState(current);
+    Reflect.get(view, 'recomputeVision').call(view, current);
+    expect(at(50)).toBe(1);
+    expect(view.fog.hasNewExplored).toBe(false);
+  });
+
+  it('limits the legacy ambient sight to the configured actor range without changing regular tokens', () => {
+    current.tokens[0].actorId = 'owned';
+    current.view = { gridOpacity: 0, actorSightTiles: 5 };
+    current.fogGrid = { originX: 0, originY: 0, cellSize: 50, cols: 40, rows: 20 };
+    Reflect.get(view, 'recomputeVision').call(view, current);
+    expect(view.fog.visible[2 * 40 + 8]).toBe(0);
+    current.tokens[0].actorId = undefined;
+    Reflect.get(view, 'recomputeVision').call(view, current);
+    expect(view.fog.visible[2 * 40 + 8]).toBe(1);
+  });
+
   it('skips hidden-tab canvas and vision work but redraws the latest state on visibility', () => {
     const draw = vi.fn();
     const vision = vi.fn();

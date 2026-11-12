@@ -42,6 +42,58 @@ class CanvasMapRendererTest {
     }
 
     @Test
+    void movingActorIncrementalFogMatchesFreshRenderer() throws Exception {
+        FutureTask<Void> task = new FutureTask<>(() -> {
+            double oldSoftness = CanvasMapRenderer.getFogSoftness();
+            boolean oldFade = CanvasMapRenderer.isFogFadeEnabled();
+            try {
+                CanvasMapRenderer.setFogFadeEnabled(false);
+                CanvasMapRenderer.setFogSoftness(0.3);
+                Tuning.apply(key -> key.equals("fog.actorSightTiles") ? "5" : null);
+                var project = DmProject.builder().build();
+                project.getMap().getGrid().setPixelsPerCell(100);
+                project.getImageLayers().add(DmProject.ImageLayer.builder().id("map").width(2000).height(2000).build());
+                project.getFog().setEnabled(true);
+                var actor = DmProject.TokenInstance.builder().id("a").actorId("a").playerVisible(true)
+                        .x(700).y(700).build();
+                project.getTokens().add(actor);
+                var engine = new LightingEngine();
+                engine.update(project);
+                var renderer = new CanvasMapRenderer(engine);
+                var camera = DmProject.CameraState.builder().x(1200).y(700).zoom(1).build();
+                Canvas canvas = new Canvas(320, 240);
+                renderer.renderFogMaskLayer(canvas.getGraphicsContext2D(), project, 320, 240, camera, true);
+                actor.setX(715);
+                engine.update(project);
+                renderer.renderFogMaskLayer(canvas.getGraphicsContext2D(), project, 320, 240, camera, true);
+                var actual = transparentSnapshot(canvas).getPixelReader();
+                var fresh = new CanvasMapRenderer(engine);
+                Canvas expectedCanvas = new Canvas(320, 240);
+                fresh.renderFogMaskLayer(expectedCanvas.getGraphicsContext2D(), project, 320, 240, camera, true);
+                var targetField = CanvasMapRenderer.class.getDeclaredField("fogTarget");
+                targetField.setAccessible(true);
+                org.junit.jupiter.api.Assertions.assertArrayEquals((float[]) targetField.get(fresh),
+                        (float[]) targetField.get(renderer), 1e-6f);
+                var expected = transparentSnapshot(expectedCanvas).getPixelReader();
+                for (int y = 0; y < 240; y++) {
+                    for (int x = 0; x < 320; x++) {
+                        int expectedAlpha = expected.getArgb(x, y) >>> 24;
+                        int actualAlpha = actual.getArgb(x, y) >>> 24;
+                        assertTrue(Math.abs(expectedAlpha - actualAlpha) <= 1,
+                                x + "," + y + " expected=" + expectedAlpha + " actual=" + actualAlpha);
+                    }
+                }
+            } finally {
+                CanvasMapRenderer.setFogFadeEnabled(oldFade);
+                CanvasMapRenderer.setFogSoftness(oldSoftness);
+            }
+            return null;
+        });
+        Platform.runLater(task);
+        task.get(20, TimeUnit.SECONDS);
+    }
+
+    @Test
     void actorResourceBarsAreDmOnlyUprightAndInvalidateRetainedForeground() throws Exception {
         FutureTask<Void> task = new FutureTask<>(() -> {
             var project = DmProject.builder().build();

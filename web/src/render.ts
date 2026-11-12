@@ -11,6 +11,7 @@ import {
   cellsInPolygons,
   computeVisibility,
   computeVisibleCells,
+  fillPolygonCells,
   Grid,
   Polygon,
 } from './vision';
@@ -963,7 +964,17 @@ export class MapView {
     this.segmentsCache = blockingSegments(s.walls, s.doors);
     const ppc = s.grid.pixelsPerCell;
     const mine = s.tokens.filter((t) => this.isMine(t));
-    this.sights = mine.map((token) => ({ token, sight: computeVisibility(token.x, token.y, AMBIENT_SIGHT_TILES * ppc, this.segmentsCache) }));
+    const configuredSight = s.view?.actorSightTiles;
+    const actorSightTiles = typeof configuredSight === 'number' && Number.isFinite(configuredSight)
+      ? Math.max(1, Math.min(100, configuredSight)) : AMBIENT_SIGHT_TILES;
+    const actorSights = new Map<string, Polygon>();
+    this.sights = mine.map((token) => {
+      const tiles = token.actorId ? Math.min(actorSightTiles, AMBIENT_SIGHT_TILES) : AMBIENT_SIGHT_TILES;
+      const sight = computeVisibility(token.x, token.y, tiles * ppc, this.segmentsCache);
+      if (token.actorId) actorSights.set(token.id, tiles === actorSightTiles ? sight
+        : computeVisibility(token.x, token.y, actorSightTiles * ppc, this.segmentsCache));
+      return { token, sight };
+    });
     const grid = this.fogGridOf(s);
     this.fog.configure(grid);
     if (this.fog.dmControlled !== !!s.dmFog) {
@@ -979,7 +990,7 @@ export class MapView {
       const polygons = this.liveLights(s)
         .filter((l) => l.on && (dmControlled ? l.revealMode === 'WHILE_LIT' && revealsForMe(l.id) : dark))
         .map((l) => this.lightPolygon(l));
-      const visible = dmControlled
+      const exploredVisible = dmControlled
         ? cellsInPolygons(grid, polygons)
         : computeVisibleCells({
           grid,
@@ -988,7 +999,9 @@ export class MapView {
           darkVisionRadius: dark ? 0 : null,
           lightPolygons: polygons,
         });
-      if (this.fog.setVisible(visible, !dmControlled && !this.tentative())) this.onExplored();
+      const visible = dmControlled ? exploredVisible : exploredVisible.slice();
+      for (const sight of actorSights.values()) fillPolygonCells(grid, sight, visible);
+      if (this.fog.setVisible(visible, !dmControlled && !this.tentative(), exploredVisible)) this.onExplored();
     }
   }
 

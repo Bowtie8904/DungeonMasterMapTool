@@ -728,6 +728,16 @@ configured with `fog.revealSeconds`, `fog.hideSeconds`, `fog.lightFadeSeconds`, 
 
 *Keywords:* fog fade, fog animation, fade in, fade out, transition, instant fog
 
+### `fog.actorSightTiles`
+**Default:** `40` · **Range:** 1 to 100 tiles · **Applies:** live
+
+Actor tokens temporarily clear fog within this line-of-sight radius, without producing light or modifying the saved
+fog mask. Walls and closed doors block sight. Larger values can slow wall-dense maps. Set it in **Settings > Fog and
+lighting**; it applies to all maps and to connected online players using a current browser client. Older hosts use
+40 tiles; older browser clients retain their prior range.
+
+*Keywords:* actor, token, vision, sight, fog, range, radius, line of sight
+
 ### `fog.cellsPerGrid.min`
 **Default:** `5` · **Range:** 1 to 100 · **Applies:** restart
 

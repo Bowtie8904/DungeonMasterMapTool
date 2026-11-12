@@ -256,6 +256,10 @@ the new transactions; older clients remain connectable and no LAN compatibility 
 
 Layout: `bitset.ts` (base64 + zlib bitset codec), `store.ts` (snapshot/delta), `clock.ts`, `vision.ts`, `weather.ts`,
 `render.ts` (canvas), `net.ts` (WebSocket), `app.ts` (map UI), `sheet.ts` (mock sheet), `login.ts`.
+Controlled actor tokens temporarily clear fog within the host's configured sight range (default 40 tiles), independent
+of lighting; walls and closed doors block it. Sight-only cells are not added to explored memory, and controlled ordinary
+tokens keep their existing vision behavior. The optional `view.actorSightTiles` field defaults to 40 for older hosts;
+older clients retain their previous range. The additive field requires no protocol version change.
 `lighting.ts` mirrors desktop light-tint accumulation, falloff and indoor/daytime eligibility.
 Tint uses the host's optional `lighting.tintDarknessFactor` to match the DM view without reducing player ambient darkness;
 older hosts that omit it retain full-strength player tint. Overlapping lights share a single capped tint overlay.

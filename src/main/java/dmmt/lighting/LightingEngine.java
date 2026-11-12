@@ -22,6 +22,9 @@ public class LightingEngine {
     private final VisibilityService visibilityService = new VisibilityService();
     private final FogService fogService = new FogService();
     private final Map<String, CachedVisibility> cache = new HashMap<>();
+    private final Map<String, CachedVisibility> actorSightCache = new HashMap<>();
+    private final Map<String, CachedReveal> liveLightCache = new HashMap<>();
+    private final Map<String, CachedReveal> liveActorCache = new HashMap<>();
     private final Map<String, String> lastPersistentKey = new HashMap<>();
 
     private DmProject currentProject;
@@ -115,6 +118,19 @@ public class LightingEngine {
                 liveKey.append(vis.key).append('|');
             }
         }
+        Set<String> activeActors = new HashSet<>();
+        if (fogEnabled && mask != null) {
+            for (DmProject.TokenInstance token : project.getTokens()) {
+                if (token.getId() == null || token.getActorId() == null || !token.isPlayerVisible()) {
+                    continue;
+                }
+                activeActors.add(token.getId());
+                liveKey.append("actor:").append(token.getId()).append(':')
+                        .append(actorSight(project, token).key).append('|');
+            }
+        }
+        actorSightCache.keySet().retainAll(activeActors);
+        liveActorCache.keySet().retainAll(activeActors);
         cache.keySet().retainAll(activeIds);
         lastPersistentKey.keySet().retainAll(activeIds);
 
@@ -154,6 +170,9 @@ public class LightingEngine {
 
     public void reset() {
         cache.clear();
+        actorSightCache.clear();
+        liveLightCache.clear();
+        liveActorCache.clear();
         lastPersistentKey.clear();
         geometrySignature = Long.MIN_VALUE;
         blockingSegments = new double[0];
@@ -184,20 +203,54 @@ public class LightingEngine {
         return fresh;
     }
 
+    private CachedVisibility actorSight(DmProject project, DmProject.TokenInstance token) {
+        double range = dmmt.service.Tuning.FOG_ACTOR_SIGHT_TILES.get() * project.getMap().getGrid().getPixelsPerCell();
+        String key = token.getX() + "," + token.getY() + "," + range + "," + geometrySignature;
+        CachedVisibility cached = actorSightCache.get(token.getId());
+        if (cached != null && cached.key.equals(key)) {
+            return cached;
+        }
+        CachedVisibility fresh = new CachedVisibility(key,
+                visibilityService.compute(token.getX(), token.getY(), range, blockingSegments));
+        actorSightCache.put(token.getId(), fresh);
+        return fresh;
+    }
+
     private void rebuildLiveReveal(DmProject project, FogMask mask) {
         BitSet next = new BitSet();
+        Set<String> activeLights = new HashSet<>();
         if (mask != null) {
             for (DmProject.LightSource light : project.effectiveLights()) {
                 if (light.getId() == null || !light.isEnabled() || light.getRevealMode() != DmProject.RevealMode.WHILE_LIT) {
                     continue;
                 }
-                VisibilityService.Polygon polygon = visibility(light).polygon;
-                for (int cell : mask.cellsInPolygon(polygon.xs(), polygon.ys())) {
-                    next.set(cell);
+                activeLights.add(light.getId());
+                next.or(rasterized(liveLightCache, light.getId(), visibility(light), mask));
+            }
+            if (project.getFog().isEnabled()) {
+                for (DmProject.TokenInstance token : project.getTokens()) {
+                    if (token.getId() == null || token.getActorId() == null || !token.isPlayerVisible()) {
+                        continue;
+                    }
+                    next.or(rasterized(liveActorCache, token.getId(), actorSight(project, token), mask));
                 }
             }
         }
+        liveLightCache.keySet().retainAll(activeLights);
         liveReveal = next;
+    }
+
+    private BitSet rasterized(Map<String, CachedReveal> rasters, String id, CachedVisibility visibility, FogMask mask) {
+        String geometry = mask.getOriginX() + "," + mask.getOriginY() + "," + mask.getCellSize()
+                + "," + mask.getCols() + "," + mask.getRows();
+        CachedReveal cached = rasters.get(id);
+        if (cached != null && cached.visibilityKey.equals(visibility.key) && cached.maskGeometry.equals(geometry)) {
+            return cached.cells;
+        }
+        BitSet cells = new BitSet();
+        mask.addPolygonTo(cells, visibility.polygon.xs(), visibility.polygon.ys());
+        rasters.put(id, new CachedReveal(visibility.key, geometry, cells));
+        return cells;
     }
 
     private void refreshGeometry(DmProject project) {
@@ -225,6 +278,7 @@ public class LightingEngine {
         }
         blockingSegments = java.util.Arrays.copyOf(segments, i);
         cache.clear();
+        actorSightCache.clear();
     }
 
     private static boolean blocksSight(DmProject.Interactable interactable) {
@@ -250,5 +304,8 @@ public class LightingEngine {
     }
 
     private record CachedVisibility(String key, VisibilityService.Polygon polygon) {
+    }
+
+    private record CachedReveal(String visibilityKey, String maskGeometry, BitSet cells) {
     }
 }

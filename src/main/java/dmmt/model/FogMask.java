@@ -166,9 +166,25 @@ public class FogMask {
 
     /** Returns indices (row * cols + col) of all cells whose center lies inside the polygon. */
     public int[] cellsInPolygon(double[] xs, double[] ys) {
+        IntList result = new IntList();
+        polygonSpans(xs, ys, (row, colStart, colEnd) -> {
+            for (int col = colStart; col <= colEnd; col++) {
+                result.add(row * cols + col);
+            }
+        });
+        return result.toArray();
+    }
+
+    /** Adds the polygon's cells to an independent bitset without changing the saved fog mask. */
+    public void addPolygonTo(BitSet target, double[] xs, double[] ys) {
+        polygonSpans(xs, ys, (row, colStart, colEnd) ->
+                target.set(row * cols + colStart, row * cols + colEnd + 1));
+    }
+
+    private void polygonSpans(double[] xs, double[] ys, PolygonRaster.SpanConsumer consumer) {
         int n = xs.length;
         if (n < 3) {
-            return new int[0];
+            return;
         }
         double[] cx = new double[n];
         double[] cy = new double[n];
@@ -176,13 +192,7 @@ public class FogMask {
             cx[i] = (xs[i] - originX) / cellSize;
             cy[i] = (ys[i] - originY) / cellSize;
         }
-        IntList result = new IntList();
-        PolygonRaster.fill(cx, cy, cols, rows, (row, colStart, colEnd) -> {
-            for (int col = colStart; col <= colEnd; col++) {
-                result.add(row * cols + col);
-            }
-        });
-        return result.toArray();
+        PolygonRaster.fill(cx, cy, cols, rows, consumer);
     }
 
     /** Grows the mask (never shrinks) so it covers the given world rectangle, keeping existing reveals. */

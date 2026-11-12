@@ -138,6 +138,7 @@ public final class OnlineStateBuilder {
         view.put("fogSoftness", dmmt.render.CanvasMapRenderer.getFogSoftness());
         view.put("fogFade", dmmt.render.CanvasMapRenderer.isFogFadeEnabled());
         view.put("fogEnabled", project.getFog() == null || project.getFog().isEnabled());
+        view.put("actorSightTiles", dmmt.service.Tuning.FOG_ACTOR_SIGHT_TILES.get());
         view.put("fogRevealSeconds", dmmt.service.Tuning.FOG_REVEAL_SECONDS.get());
         view.put("fogHideSeconds", dmmt.service.Tuning.FOG_HIDE_SECONDS.get());
         view.putObject("ping").put("color", dmmt.service.Tuning.PING_COLOR.get())

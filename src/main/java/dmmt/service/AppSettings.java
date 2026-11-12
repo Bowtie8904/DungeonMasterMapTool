@@ -1126,6 +1126,9 @@ public final class AppSettings {
                 }
                 return key.matches("text\\.(autoMaxWidthCells|minBoxSize)") ? new Placement("Text box size", 1) : new Placement(null, 0);
             case "fog":
+                if (key.equals("fog.actorSightTiles")) {
+                    return new Placement(null, 1);
+                }
                 if (key.matches("fog\\.(revealSeconds|hideSeconds|lightFadeSeconds|fadeMaxStepSeconds|fadeEasing)")) {
                     return new Placement("Fog fade", 1);
                 }
@@ -1236,6 +1239,9 @@ public final class AppSettings {
     private static String label(String key, int skip) {
         if (key.equals("work.mode")) {
             return "Work mode";
+        }
+        if (key.equals("fog.actorSightTiles")) {
+            return "Actor token fog sight range";
         }
         String[] parts = key.split("\\.");
         List<String> words = new ArrayList<>();

@@ -2905,64 +2905,69 @@ public class CanvasMapRenderer {
     private void updateFogRegion(BitSet revealed, int cols, int rows, int radius, boolean fadeAllowed) {
         BitSet diff = (BitSet) fogPrevRevealed.clone();
         diff.xor(revealed);
-        int total = cols * rows;
-        int minC = Integer.MAX_VALUE;
-        int minR = Integer.MAX_VALUE;
-        int maxC = -1;
-        int maxR = -1;
-        for (int idx = diff.nextSetBit(0); idx >= 0 && idx < total; idx = diff.nextSetBit(idx + 1)) {
-            int r = idx / cols;
-            int c = idx - r * cols;
-            minC = Math.min(minC, c);
-            maxC = Math.max(maxC, c);
-            minR = Math.min(minR, r);
-            maxR = Math.max(maxR, r);
-        }
-        if (maxC < 0) {
+        int tileSize = 64;
+        int tileCols = (cols + tileSize - 1) / tileSize;
+        BitSet tiles = FogShading.dirtyTiles(diff, cols, rows, radius, tileSize);
+        if (tiles.isEmpty()) {
             return;
         }
-        int reach = radius > 0 ? radius + 1 : 0;
-        int c0 = Math.max(0, minC - reach);
-        int r0 = Math.max(0, minR - reach);
-        int c1 = Math.min(cols - 1, maxC + reach);
-        int r1 = Math.min(rows - 1, maxR + reach);
-        float[] values = FogShading.fogOpacityRegion(revealed, cols, rows, radius, c0, r0, c1, r1);
-        int w = c1 - c0 + 1;
         boolean startedFade = false;
         boolean immediate = false;
-        for (int r = r0; r <= r1; r++) {
-            int base = r * cols;
-            for (int c = c0; c <= c1; c++) {
-                int i = base + c;
-                float nv = values[(r - r0) * w + (c - c0)];
-                if (nv == fogTarget[i]) {
-                    continue;
-                }
-                fogTarget[i] = nv;
-                if (fadeAllowed) {
-                    fogFrom[i] = fogShown[i];
-                    fogProgress[i] = 0f;
-                    startedFade = true;
-                } else {
-                    fogShown[i] = nv;
-                    fogFrom[i] = nv;
-                    fogProgress[i] = 1f;
-                    immediate = true;
+        int firstRow = rows;
+        int lastRow = -1;
+        int minTileCol = tileCols, maxTileCol = -1, minTileRow = rows, maxTileRow = -1;
+        for (int tile = tiles.nextSetBit(0); tile >= 0; tile = tiles.nextSetBit(tile + 1)) {
+            minTileCol = Math.min(minTileCol, tile % tileCols);
+            maxTileCol = Math.max(maxTileCol, tile % tileCols);
+            minTileRow = Math.min(minTileRow, tile / tileCols);
+            maxTileRow = Math.max(maxTileRow, tile / tileCols);
+        }
+        int rectangleTiles = (maxTileCol - minTileCol + 1) * (maxTileRow - minTileRow + 1);
+        boolean dense = tiles.cardinality() * 4L >= rectangleTiles * 3L;
+        for (int tile = tiles.nextSetBit(0); tile >= 0; tile = tiles.nextSetBit(tile + 1)) {
+            int c0 = (dense ? minTileCol : tile % tileCols) * tileSize;
+            int r0 = (dense ? minTileRow : tile / tileCols) * tileSize;
+            int c1 = Math.min(cols - 1, (dense ? maxTileCol + 1 : tile % tileCols + 1) * tileSize - 1);
+            int r1 = Math.min(rows - 1, (dense ? maxTileRow + 1 : tile / tileCols + 1) * tileSize - 1);
+            float[] values = FogShading.fogOpacityRegion(revealed, cols, rows, radius, c0, r0, c1, r1);
+            int w = c1 - c0 + 1;
+            for (int r = r0; r <= r1; r++) {
+                int base = r * cols;
+                for (int c = c0; c <= c1; c++) {
+                    int i = base + c;
+                    float nv = values[(r - r0) * w + (c - c0)];
+                    if (nv == fogTarget[i]) {
+                        continue;
+                    }
+                    firstRow = Math.min(firstRow, r);
+                    lastRow = Math.max(lastRow, r);
+                    fogTarget[i] = nv;
+                    if (fadeAllowed) {
+                        fogFrom[i] = fogShown[i];
+                        fogProgress[i] = 0f;
+                        startedFade = true;
+                    } else {
+                        fogShown[i] = nv;
+                        fogFrom[i] = nv;
+                        fogProgress[i] = 1f;
+                        immediate = true;
+                    }
                 }
             }
+            if (dense) break;
         }
         if (immediate) {
-            uploadFogRows(cols, r0, r1);
+            uploadFogRows(cols, firstRow, lastRow);
         }
         if (startedFade) {
             // Keep the clock of a running fade, otherwise a target that changes every frame never advances.
             if (!fogAnimating) {
                 fogLastAdvanceNanos = System.nanoTime();
-                fogActiveFirst = r0 * cols;
-                fogActiveEnd = (r1 + 1) * cols;
+                fogActiveFirst = firstRow * cols;
+                fogActiveEnd = (lastRow + 1) * cols;
             } else {
-                fogActiveFirst = Math.min(fogActiveFirst, r0 * cols);
-                fogActiveEnd = Math.max(fogActiveEnd, (r1 + 1) * cols);
+                fogActiveFirst = Math.min(fogActiveFirst, firstRow * cols);
+                fogActiveEnd = Math.max(fogActiveEnd, (lastRow + 1) * cols);
             }
             fogAnimating = true;
         }

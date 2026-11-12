@@ -13,6 +13,34 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FogShadingTest {
 
     @Test
+    void tiledUpdatesMatchFullShadingForMovingAndOverlappingReveals() {
+        int cols = 263, rows = 201, tileSize = 32;
+        var old = block(cols, 10, 15, 190, 160);
+        var next = block(cols, 16, 20, 195, 164);
+        old.or(block(cols, 145, 70, 250, 190));
+        next.or(block(cols, 145, 70, 250, 190));
+        next.flip(63 * cols + 63);
+        next.flip(64 * cols + 64);
+        for (int radius : new int[]{0, 3, 10}) {
+            float[] updated = FogShading.fogOpacity(old, cols, rows, radius);
+            float[] expected = FogShading.fogOpacity(next, cols, rows, radius);
+            BitSet diff = (BitSet) old.clone();
+            diff.xor(next);
+            BitSet tiles = FogShading.dirtyTiles(diff, cols, rows, radius, tileSize);
+            int tileCols = (cols + tileSize - 1) / tileSize;
+            for (int tile = tiles.nextSetBit(0); tile >= 0; tile = tiles.nextSetBit(tile + 1)) {
+                int c0 = tile % tileCols * tileSize, r0 = tile / tileCols * tileSize;
+                int c1 = Math.min(cols - 1, c0 + tileSize - 1), r1 = Math.min(rows - 1, r0 + tileSize - 1);
+                float[] region = FogShading.fogOpacityRegion(next, cols, rows, radius, c0, r0, c1, r1);
+                for (int r = r0; r <= r1; r++) {
+                    System.arraycopy(region, (r - r0) * (c1 - c0 + 1), updated, r * cols + c0, c1 - c0 + 1);
+                }
+            }
+            assertArrayEquals(expected, updated, 1e-6f, "radius " + radius);
+        }
+    }
+
+    @Test
     void regionOpacityMatchesFullComputation() {
         BitSet revealed = block(60, 10, 12, 45, 40);
         float[] full = FogShading.fogOpacity(revealed, 60, 60, 4);

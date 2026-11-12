@@ -11,6 +11,28 @@ public final class FogShading {
 
     private static final float DIAGONAL = 1.4142135f;
 
+    /** Tiles affected by changed cells, expanded by the soft-edge reach. */
+    public static BitSet dirtyTiles(BitSet diff, int cols, int rows, int radius, int tileSize) {
+        int tileCols = (cols + tileSize - 1) / tileSize;
+        int total = cols * rows;
+        int reach = radius > 0 ? radius + 1 : 0;
+        BitSet tiles = new BitSet();
+        for (int first = diff.nextSetBit(0); first >= 0 && first < total;) {
+            int row = first / cols;
+            int rowEnd = (row + 1) * cols;
+            int end = Math.min(rowEnd, diff.nextClearBit(first));
+            int c0 = Math.max(0, first - row * cols - reach) / tileSize;
+            int c1 = Math.min(cols - 1, end - 1 - row * cols + reach) / tileSize;
+            int r0 = Math.max(0, row - reach) / tileSize;
+            int r1 = Math.min(rows - 1, row + reach) / tileSize;
+            for (int r = r0; r <= r1; r++) {
+                tiles.set(r * tileCols + c0, r * tileCols + c1 + 1);
+            }
+            first = diff.nextSetBit(end);
+        }
+        return tiles;
+    }
+
     /**
      * Fog opacity (0 = clear, 1 = fully fogged) per mask cell. Fogged cells are always fully opaque, so soft edges
      * never reveal anything beyond the real edge of the revealed area (no peeking past walls). With

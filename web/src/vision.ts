@@ -204,7 +204,7 @@ export function fillPolygonCells(grid: Grid, p: Polygon, out: Uint8Array): void 
       const left = Math.max(0, Math.ceil((crossings[k] - grid.originX) / grid.cellSize - 0.5));
       const right = Math.min(grid.cols - 1, Math.ceil((crossings[k + 1] - grid.originX) / grid.cellSize - 0.5) - 1);
       const base = r * grid.cols;
-      for (let c = left; c <= right; c++) out[base + c] = 1;
+      if (left <= right) out.fill(1, base + left, base + right + 1);
     }
   }
 }
