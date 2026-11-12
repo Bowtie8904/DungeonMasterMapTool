@@ -139,6 +139,14 @@ describe('roll breakdowns', () => {
       } }, 'player') as unknown as Element;
       expect(rawCrit.find('roll-dice')?.text).toBe('Hope5Fear5');
       expect(rawCrit.find('roll-outcome crit')?.text).toBe('Critical success');
+      expect(rawCrit.className).toContain('critical-roll');
+      expect(rawCrit.find('roll-die hope')).toBeDefined();
+      expect(rawCrit.find('roll-die fear')).toBeDefined();
+      expect(adjusted.className).not.toContain('critical-roll');
+      const dualityCrit = renderLogEntry({ kind: 'roll', m: {
+        ...message, kind: 'duality', expression: '2d12', rolls: [6, 6], total: 12,
+      } }, 'player') as unknown as Element;
+      expect(dualityCrit.className).toContain('critical-roll');
       const dm = renderLogEntry({ kind: 'roll', m: { ...message, fromId: 'dm', from: 'DM' } }, 'player') as unknown as Element;
       expect(dm.find('message-sender')?.text).toBe('Gamemaster');
       expect(dm.find('message-avatar')?.text).toBe('G');

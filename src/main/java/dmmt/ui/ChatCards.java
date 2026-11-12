@@ -314,7 +314,10 @@ public final class ChatCards {
         VBox card = new VBox();
         card.getStyleClass().add("chat-entry");
         if (!reactionTrait.isEmpty()) card.getStyleClass().add("chat-reaction");
-        if (roll) card.getStyleClass().add("chat-roll");
+        if (roll) {
+            card.getStyleClass().add("chat-roll");
+            if (isCriticalRoll(m)) card.getStyleClass().add("chat-critical-roll");
+        }
         if (!system.isEmpty()) card.getStyleClass().add("chat-system");
         if (rest != null) card.getStyleClass().add("chat-rest");
         if (damage != null) card.getStyleClass().add("chat-damage");
@@ -839,6 +842,17 @@ public final class ChatCards {
             case "fear" -> "fear";
             default -> hope > fear ? "hope" : "fear";
         };
+    }
+
+    static boolean isCriticalRoll(JsonNode message) {
+        boolean hasSecretReal = message.path("secretReal").isObject();
+        if (message.path("secret").asBoolean(false) && !hasSecretReal) return false;
+        JsonNode real = hasSecretReal ? message.path("secretReal") : message;
+        List<Integer> values = new ArrayList<>();
+        real.path("rolls").forEach(value -> values.add(value.asInt()));
+        boolean duality = "duality".equals(message.path("kind").asText())
+                || "risk".equals(message.path("deathMove").asText());
+        return duality && values.size() >= 2 && "crit".equals(dualityOutcome(message, values));
     }
 
     private static boolean[] allTrue(int size) {

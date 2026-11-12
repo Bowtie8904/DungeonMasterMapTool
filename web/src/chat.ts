@@ -57,6 +57,15 @@ export function rollDetails(m: RollMessage): RollDetail[] {
   return doubled ? details.map((d) => ({ ...d, expression: `(${d.expression})*2`, total: d.total * 2 })) : details;
 }
 
+function isCriticalRoll(m: RollMessage): boolean {
+  if (m.secret === true || (m.kind !== 'duality' && m.deathMove !== 'risk')) return false;
+  const rolls = Array.isArray(m.rolls) ? m.rolls.filter((v): v is number => typeof v === 'number') : [];
+  if (rolls.length < 2) return false;
+  const result = dualityResult(rolls, m.total);
+  const outcome = m.deathResult?.outcome ?? (result.outcome === 'crit' ? 'crit' : (m.outcome ?? result.outcome));
+  return outcome === 'crit';
+}
+
 function rollContent(m: RollMessage): HTMLElement {
   const secret = m.secret === true;
   const details = rollDetails(m);
@@ -144,7 +153,7 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
   const damage = plainChat && !report ? parseDamageReport(e.m.text) : null;
   const action = plainChat && !report && !damage ? parseActionReport(e.m.text) : null;
   const reaction = e.kind === 'chat' && plainChat && !report && !damage && !action && e.m.reactionPrompt ? e.m.reactionPrompt : null;
-  const card = el('article', { class: `entry${e.kind === 'roll' ? ' roll' : ''}${report ? ' rest-report' : ''}${damage ? ' damage-report' : ''}${action ? ' action-report' : ''}${reaction ? ' reaction-report' : ''}${system ? ' system-report' : ''}${m.toId ? ' whisper' : ''}` }, header);
+  const card = el('article', { class: `entry${e.kind === 'roll' ? ' roll' : ''}${e.kind === 'roll' && isCriticalRoll(e.m) ? ' critical-roll' : ''}${report ? ' rest-report' : ''}${damage ? ' damage-report' : ''}${action ? ' action-report' : ''}${reaction ? ' reaction-report' : ''}${system ? ' system-report' : ''}${m.toId ? ' whisper' : ''}` }, header);
   if (m.toId) {
     card.append(el('div', { class: 'message-recipient' }, el('span', { class: 'whisper-label' },
       `Whisper to ${m.toId === 'dm' ? 'Gamemaster' : m.to ?? (m.toId === playerId ? 'you' : m.toId)}`)));

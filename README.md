@@ -776,7 +776,8 @@ Nothing starts until you click **Start online session**, so offline play and the
   another connected player in the chat recipient dropdown; whispers have purple text and a recipient label and
   are delivered only to sender and recipient. Roll with `/roll 2d6+3` or `/r 2d6+3` in chat, using the same recipient.
   Chat messages appear as individual sender-headed cards (the DM is shown as Gamemaster). Roll cards show styled dice, a combined bonus and a
-  prominent total; expand **Roll breakdown** for individual dice and each applied trait, Experience,
+  prominent total; criticals stand out with a warm glowing card border and matching glowing Hope/Fear dice.
+  Expand **Roll breakdown** for individual dice and each applied trait, Experience,
   advantage/disadvantage, weapon feature and automated buff/debuff with its actual impact.
   Damage details separate the weapon's fixed bonus and explain changes to its Proficiency dice pool.
   Hope/Fear, criticals and difficulty outcomes have distinct badges. Breakdown and source sections stay open

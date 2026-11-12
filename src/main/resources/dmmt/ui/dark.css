@@ -1548,6 +1548,7 @@
 .chat-status { -fx-text-fill: -dm-danger; -fx-font-size: 11px; }
 .chat-entry { -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #222a36, #191f29 70%); -fx-background-radius: 12; -fx-border-color: #303947; -fx-border-radius: 12; }
 .chat-entry.chat-roll { -fx-background-color: radial-gradient(focus-angle 0deg, focus-distance 0%, center 100% 0%, radius 55%, #ad81301a, transparent), linear-gradient(from 0% 0% to 100% 100%, #222a36, #191f29 70%); -fx-border-color: #66573b; }
+.chat-entry.chat-roll.chat-critical-roll { -fx-background-color: radial-gradient(focus-angle 0deg, focus-distance 0%, center 100% 0%, radius 55%, #e6b94f2b, transparent), linear-gradient(from 0% 0% to 100% 100%, #302a1d, #1d1e22 72%); -fx-border-color: #d7a93e; -fx-effect: dropshadow(gaussian, #e6b94f55, 18, 0.25, 0, 0); }
 .chat-entry.chat-whisper { -fx-border-color: #785488; }
 .chat-entry.chat-rest { -fx-background-color: radial-gradient(focus-angle 0deg, focus-distance 0%, center 0% 0%, radius 70%, #2f8f6a22, transparent), linear-gradient(to bottom right, #1f2b29, #181f24); -fx-border-color: #3f6b57 #3f6b57 #3f6b57 #4fb58a; -fx-border-width: 1 1 1 4; }
 .chat-entry.chat-damage { -fx-background-color: radial-gradient(focus-angle 0deg, focus-distance 0%, center 0% 0%, radius 70%, #c0393f26, transparent), linear-gradient(to bottom right, #2b2025, #1b1a21); -fx-border-color: #6e3b3f #6e3b3f #6e3b3f #d9545c; -fx-border-width: 1 1 1 4; }
@@ -1570,6 +1571,9 @@
 .chat-die-hope .chat-die-value, .chat-die-hope .chat-die-name { -fx-text-fill: #ffda84; }
 .chat-die-fear { -fx-background-color: #574079; }
 .chat-die-fear .chat-die-value, .chat-die-fear .chat-die-name { -fx-text-fill: #e0d0ff; }
+.chat-critical-roll .chat-die-hope, .chat-critical-roll .chat-die-fear { -fx-background-color: linear-gradient(to bottom, #896b2e, #40321b); -fx-border-color: #e6b94f; -fx-border-radius: 8; -fx-text-fill: #ffe6a1; -fx-effect: dropshadow(gaussian, #e6b94f88, 10, 0.25, 0, 0); }
+.chat-critical-roll .chat-die-hope .chat-die-value, .chat-critical-roll .chat-die-hope .chat-die-name,
+.chat-critical-roll .chat-die-fear .chat-die-value, .chat-critical-roll .chat-die-fear .chat-die-name { -fx-text-fill: #ffe6a1; }
 .chat-die-discarded { -fx-opacity: 0.45; }
 .chat-die-secret .chat-die-value { -fx-text-fill: #d8c6f5; }
 .chat-roll-title { -fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #e6c97d; }
@@ -1582,7 +1586,8 @@
 .chat-outcome { -fx-background-radius: 10; -fx-padding: 2 8; -fx-font-size: 11px; -fx-font-weight: bold; }
 .chat-outcome-hope { -fx-background-color: #755728; -fx-text-fill: #ffda84; }
 .chat-outcome-fear { -fx-background-color: #574079; -fx-text-fill: #e0d0ff; }
-.chat-outcome-crit, .chat-outcome-success { -fx-background-color: #2b4a36; -fx-text-fill: #a6ddb2; }
+.chat-outcome-crit { -fx-background-color: #d7a93e24; -fx-border-color: #e6b94f88; -fx-border-radius: 10; -fx-text-fill: #ffe3a0; -fx-effect: dropshadow(gaussian, #e6b94f55, 9, 0.2, 0, 0); }
+.chat-outcome-success { -fx-background-color: #2b4a36; -fx-text-fill: #a6ddb2; }
 .chat-outcome-failure { -fx-background-color: #5a2f2f; -fx-text-fill: #f2a4a4; }
 .chat-disclosure { -fx-border-color: #ffffff12 transparent transparent transparent; -fx-padding: 8 0 0 0; }
 .chat-player-actions { -fx-padding: 5 14 9 14; -fx-border-color: #ffffff0b transparent transparent transparent; }

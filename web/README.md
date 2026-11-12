@@ -472,6 +472,7 @@ Gamemaster or another connected player; private messages and rolls are purple wi
 Messages use separate sender/timestamp cards. Roll cards have styled dice, a summed modifier, a large total and
 an initially collapsed, keyboard-accessible **Roll breakdown**. Sheet rolls list named trait/passive/Experience,
 advantage/disadvantage, weapon and effect contributions with individual dice and signed impacts.
+Criticals stand out with a warm glowing card border and matching glowing Hope/Fear dice.
 The host validates optional `contributions: [{label, expression}]` against the rolled formula and returns/persists
 `breakdown: [{label, expression, rolls, total}]`, using its own dice rather than client-provided totals.
 Contributions can include bounded `notes: [{label, impact}]` to explain dice-pool adjustments such as

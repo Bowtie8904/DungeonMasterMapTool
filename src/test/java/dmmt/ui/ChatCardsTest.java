@@ -127,4 +127,24 @@ class ChatCardsTest {
                 """);
         assertEquals("crit", ChatCards.dualityOutcome(criticalWithOverride, List.of(8, 8)));
     }
+
+    @Test
+    void criticalRollCardsAreHighlightedButHiddenRollsAreNot() throws Exception {
+        JsonNode critical = MAPPER.readTree("""
+                {"kind":"duality","expression":"2d12","rolls":[8,8],"total":16}
+                """);
+        assertEquals(true, ChatCards.isCriticalRoll(critical));
+        JsonNode ordinary = MAPPER.readTree("""
+                {"kind":"duality","expression":"2d12","rolls":[8,7],"total":15}
+                """);
+        assertEquals(false, ChatCards.isCriticalRoll(ordinary));
+        JsonNode hiddenCritical = MAPPER.readTree("""
+                {"kind":"duality","secret":true,"expression":"2d12","rolls":[8,8],"total":16}
+                """);
+        assertEquals(false, ChatCards.isCriticalRoll(hiddenCritical));
+        JsonNode visibleSecretCritical = MAPPER.readTree("""
+                {"kind":"duality","secret":true,"secretReal":{"expression":"2d12","rolls":[8,8],"total":16}}
+                """);
+        assertEquals(true, ChatCards.isCriticalRoll(visibleSecretCritical));
+    }
 }

@@ -121,6 +121,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, canvas:focus-vi
 .log { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; scrollbar-gutter: stable; background: #10141b80; overflow-anchor: none; }
 .entry { margin-bottom: 12px; overflow: hidden; overflow-wrap: anywhere; font-size: 13px; line-height: 1.5; border: 1px solid #303947; border-radius: 12px; background: linear-gradient(145deg, #222a36, #191f29 70%); box-shadow: 0 3px 12px #0003, inset 0 1px #ffffff05; }
 .entry.roll { border-color: #66573b; background: radial-gradient(ellipse at top right, #ad81301a, transparent 70%), linear-gradient(145deg, #252b35, #191f29 70%); }
+.entry.roll.critical-roll { border-color: #d7a93e; background: radial-gradient(ellipse at top right, #e6b94f2b, transparent 72%), linear-gradient(145deg, #302a1d, #1d1e22 72%); box-shadow: 0 0 0 1px #e6b94f55, 0 0 18px #e6b94f38, 0 3px 12px #0005, inset 0 1px #fff2; }
 .entry.whisper { color: #edccf4; border-color: #785488; }
 .entry.rest-report { border-color: #3f6b57; border-left: 4px solid #4fb58a; background: radial-gradient(ellipse at top right, #2f8f6a22, transparent 70%), linear-gradient(145deg, #1f2b29, #181f24 70%); }
 .rest-banner { display: flex; align-items: center; gap: 8px; padding: 8px 12px 0; text-transform: uppercase; letter-spacing: .06em; font-size: 12px; color: #7fd8b0; }
@@ -217,6 +218,7 @@ button.share-icon:disabled { opacity: .25; }
 .roll-die.discarded { opacity: .45; text-decoration: line-through; border-style: dashed; }
 .roll-die.hope { color: #ffda84; border-color: #ab8138; background: linear-gradient(145deg, #755728, #392d1e); }
 .roll-die.fear { color: #e0d0ff; border-color: #8866be; background: linear-gradient(145deg, #574079, #2d243e); }
+.critical-roll .roll-die.hope, .critical-roll .roll-die.fear { color: #ffe6a1; border-color: #e6b94f; background: linear-gradient(145deg, #896b2e, #40321b); box-shadow: inset 0 1px #ffffff30, 0 0 10px #e6b94f66, 0 3px 8px #0005; }
 .roll-die.secret { color: #d8c6f5; border-color: #6b5a8a; }
 .roll-modifier { font-size: 17px; font-weight: 650; color: #b7d1bb; }
 .roll-equals { color: #8793a3; }
@@ -233,7 +235,8 @@ button.share-icon:disabled { opacity: .25; }
 .roll-outcome { font-size: 10px; font-weight: 650; padding: 3px 7px; border-radius: 5px; background: #ffffff08; border: 1px solid #ffffff14; }
 .roll-outcome.hope { color: #ffda84; background: #a379181a; border-color: #a3791844; }
 .roll-outcome.fear { color: #d9c2ff; background: #8964c61a; border-color: #8964c644; }
-.roll-outcome.crit, .roll-outcome.success { color: #a6ddb2; background: #5da56a1a; border-color: #5da56a44; }
+.roll-outcome.crit { color: #ffe3a0; background: #d7a93e24; border-color: #e6b94f88; box-shadow: 0 0 9px #e6b94f33; }
+.roll-outcome.success { color: #a6ddb2; background: #5da56a1a; border-color: #5da56a44; }
 .roll-outcome.failure, .roll-body .negative { color: #f2a4a4; }
 .roll-breakdown { margin-top: 14px; border-top: 1px solid #ffffff12; }
 .roll-breakdown summary { cursor: pointer; color: #a6b2c3; font-size: 11px; padding: 10px 0 0; user-select: none; }

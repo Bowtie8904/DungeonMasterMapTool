@@ -290,7 +290,7 @@
            "name": "Ignition",
            "kind": "buff",
            "until": "scene",
-           "text": "Your primary weapon is ablaze: +1d6 damage and bright light. Remove at the end of the scene."
+           "text": "Your primary weapon is ablaze: +1d6 damage and bright light."
           }
          }
         ]
@@ -310,7 +310,7 @@
          "name": "Ignition",
          "kind": "buff",
          "until": "scene",
-         "text": "Your primary weapon is ablaze: +1d6 damage and bright light. Remove at the end of the scene."
+         "text": "Your primary weapon is ablaze: +1d6 damage and bright light."
         }
        }
       ]
