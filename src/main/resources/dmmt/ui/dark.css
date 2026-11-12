@@ -1553,6 +1553,7 @@
 .chat-entry.chat-rest { -fx-background-color: radial-gradient(focus-angle 0deg, focus-distance 0%, center 0% 0%, radius 70%, #2f8f6a22, transparent), linear-gradient(to bottom right, #1f2b29, #181f24); -fx-border-color: #3f6b57 #3f6b57 #3f6b57 #4fb58a; -fx-border-width: 1 1 1 4; }
 .chat-entry.chat-damage { -fx-background-color: radial-gradient(focus-angle 0deg, focus-distance 0%, center 0% 0%, radius 70%, #c0393f26, transparent), linear-gradient(to bottom right, #2b2025, #1b1a21); -fx-border-color: #6e3b3f #6e3b3f #6e3b3f #d9545c; -fx-border-width: 1 1 1 4; }
 .chat-header { -fx-padding: 11 12 11 12; -fx-background-color: #ffffff03; -fx-border-color: transparent transparent #ffffff08 transparent; }
+.chat-roll .chat-header { -fx-padding: 6 12; }
 .chat-avatar { -fx-background-color: linear-gradient(to bottom, #475a73, #2c3a4d); -fx-background-radius: 8; -fx-text-fill: -dm-text; -fx-font-weight: bold; -fx-font-size: 11px; }
 .chat-whisper .chat-avatar { -fx-background-color: #563760; }
 .chat-sender { -fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: -dm-text; }
@@ -1566,7 +1567,7 @@
 .chat-text { -fx-padding: 12; -fx-text-fill: -dm-text; }
 .chat-die { -fx-background-color: linear-gradient(to bottom, #3e5068, #263241); -fx-border-color: #52667d; -fx-border-radius: 8; -fx-background-radius: 8; }
 .chat-die-name { -fx-font-size: 9px; -fx-text-fill: #aab6c6; }
-.chat-die-value { -fx-font-size: 23px; -fx-font-weight: bold; -fx-text-fill: white; }
+.chat-die-value { -fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: white; }
 .chat-die-hope { -fx-background-color: #755728; }
 .chat-die-hope .chat-die-value, .chat-die-hope .chat-die-name { -fx-text-fill: #ffda84; }
 .chat-die-fear { -fx-background-color: #574079; }
@@ -1581,7 +1582,7 @@
 .chat-roll-modifier-negative { -fx-text-fill: #f2a4a4; }
 .chat-roll-equals { -fx-text-fill: #9da9b9; -fx-font-size: 17px; }
 .chat-total-caption { -fx-font-size: 9px; -fx-text-fill: #9da9b9; }
-.chat-total-value { -fx-font-size: 32px; -fx-font-weight: bold; -fx-text-fill: #ffe2a0; }
+.chat-total-value { -fx-font-size: 28px; -fx-font-weight: bold; -fx-text-fill: #ffe2a0; }
 .chat-secret-note { -fx-text-fill: #d8c6f5; -fx-font-size: 11px; -fx-font-style: italic; }
 .chat-outcome { -fx-background-radius: 10; -fx-padding: 2 8; -fx-font-size: 11px; -fx-font-weight: bold; }
 .chat-outcome-hope { -fx-background-color: #755728; -fx-text-fill: #ffda84; }
@@ -1598,6 +1599,8 @@
 .chat-player-action-label { -fx-font-size: 10px; -fx-text-fill: #a4b4c8; -fx-background-color: #829bc00c; -fx-background-radius: 3; -fx-padding: 1 4; }
 .chat-player-action-label.unavailable { -fx-text-fill: #798391; }
 .chat-roll-breakdown { -fx-padding: 8 14 12 14; }
+.chat-roll .chat-roll-breakdown { -fx-padding: 4 14 0 14; }
+.chat-roll .chat-roll-breakdown:expanded { -fx-padding: 8 14 12 14; }
 .chat-summary { -fx-text-fill: #a6b2c3; -fx-font-size: 11px; -fx-padding: 2 0 4 0; -fx-cursor: hand; }
 .chat-summary:hover { -fx-text-fill: #d0ad66; }
 .chat-roll-formula { -fx-font-family: "Consolas", monospace; -fx-font-size: 11px; -fx-text-fill: #b8c5d6; -fx-background-color: #00000033; -fx-background-radius: 5; -fx-padding: 6 8; }
@@ -1611,6 +1614,8 @@
 .chat-detail-total { -fx-border-color: transparent; }
 .chat-detail-total .label { -fx-text-fill: #f5d490; -fx-font-weight: bold; -fx-font-size: 12px; }
 .chat-roll-source { -fx-padding: 0 14 12 14; }
+.chat-roll .chat-roll-source { -fx-padding: 2 14 0 14; }
+.chat-roll .chat-roll-source:expanded { -fx-padding: 4 14 8 14; }
 .chat-source-name, .chat-shared-name { -fx-font-weight: bold; -fx-font-size: 15px; -fx-text-fill: -dm-text; }
 .chat-source-preview .chat-source-name { -fx-text-fill: #f5d490; }
 .chat-source-tooltip .scroll-pane, .chat-source-tooltip .viewport { -fx-background-color: transparent; }

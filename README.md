@@ -777,6 +777,8 @@ Nothing starts until you click **Start online session**, so offline play and the
   are delivered only to sender and recipient. Roll with `/roll 2d6+3` or `/r 2d6+3` in chat, using the same recipient.
   Chat messages appear as individual sender-headed cards (the DM is shown as Gamemaster). Roll cards show styled dice, a combined bonus and a
   prominent total; criticals stand out with a warm glowing card border and matching glowing Hope/Fear dice.
+  Desktop DM roll cards use smaller dice and tighter spacing so more rolls fit in chat;
+  collapsed breakdown and source sections take only their summary space.
   Expand **Roll breakdown** for individual dice and each applied trait, Experience,
   advantage/disadvantage, weapon feature and automated buff/debuff with its actual impact.
   Damage details separate the weapon's fixed bonus and explain changes to its Proficiency dice pool.

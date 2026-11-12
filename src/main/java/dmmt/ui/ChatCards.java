@@ -2,6 +2,7 @@ package dmmt.ui;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import javafx.application.Platform;
+import javafx.css.PseudoClass;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -382,7 +383,7 @@ public final class ChatCards {
                     markdown(source.path("text").asText(), "chat-source-text"));
             content.getStyleClass().add("chat-source-content");
             Node details = disclosure("Source: " + source.path("name").asText(), content, "chat-roll-source");
-            VBox.setMargin(details, new Insets(0, 14, 12, 14));
+            VBox.setMargin(details, new Insets(0, 14, card.getStyleClass().contains("chat-roll") ? 4 : 12, 14));
             card.getChildren().add(details);
         }
     }
@@ -746,8 +747,8 @@ public final class ChatCards {
                 valueLabel.getStyleClass().add("chat-die-value");
                 VBox tile = new VBox(nameLabel, valueLabel);
                 tile.setAlignment(Pos.CENTER);
-                tile.setMinSize(45, 56);
-                tile.setPrefSize(45, 56);
+                tile.setMinSize(38, 44);
+                tile.setPrefSize(38, 44);
                 tile.getStyleClass().add("chat-die");
                 if (discarded) tile.getStyleClass().add("chat-die-discarded");
                 if (duality) tile.getStyleClass().add(n == 0 ? "chat-die-hope" : "chat-die-fear");
@@ -800,8 +801,8 @@ public final class ChatCards {
                 : hidden || secretToPlayers ? "Secret roll" : duality ? "Duality roll" : "Dice roll";
         if (List.of(m.path("source").asText("").split(",")).contains("reaction")) title += " - Reaction roll";
         Label titleLabel = wrapped(title, "chat-roll-title");
-        VBox body = new VBox(12, titleLabel, equation);
-        body.setPadding(new Insets(12));
+        VBox body = new VBox(6, titleLabel, equation);
+        body.setPadding(new Insets(8, 12, 6, 12));
         if (secretToPlayers) {
             Label note = new Label("Secret \u2013 players see ? instead of the numbers");
             note.getStyleClass().add("chat-secret-note");
@@ -951,6 +952,9 @@ public final class ChatCards {
         });
         summary.setOnMouseClicked(e -> content.setVisible(!content.isVisible()));
         VBox box = new VBox(summary, content);
+        box.setMaxHeight(Region.USE_PREF_SIZE);
+        content.visibleProperty().addListener((o, previous, open) ->
+                box.pseudoClassStateChanged(PseudoClass.getPseudoClass("expanded"), open));
         box.getStyleClass().addAll("chat-disclosure", styleClass);
         return box;
     }

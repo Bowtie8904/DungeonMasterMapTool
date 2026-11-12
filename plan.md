@@ -48,6 +48,8 @@ Desktop tool for tabletop dungeon masters that:
 
 - **Stable roll disclosures:** Preserve each viewer's open or closed roll breakdown and source when an existing roll or action message is updated, in both the browser and DM chat. Render updated results and actions normally; new messages start collapsed. This is local presentation state, with no network, settings or compatibility-version changes.
 
+- **Compact DM roll cards:** Keep the existing roll-card palette, dice styling, prominent total and outcome badges, but use smaller dice and tighter header/body spacing in desktop DM chat. Collapsed breakdown and source sections must not reserve expanded-content padding or stretch vertically; expanded details retain comfortable reading space. Preserve disclosure state and all roll information. Desktop presentation only; browser assets, settings and remote contracts remain unchanged.
+
 - **Stable online movement vision:** Preserve each token's latest local move through release and acknowledgement until authoritative token state catches up. Older deltas, acknowledgements and rejections must not undo newer local moves; genuine corrections, token removal and snapshots remain authoritative. Keep attached lights at the same reconciled position during and after dragging, and do not commit tentative vision to explored memory. Cover delayed state, multiple moves, rejection and resync. Browser-only, backward-compatible fix with no new settings or compatibility-version changes.
 
 - **Loot row highlighting:** give inventory body rows a subtle blue-tinted background on hover and keyboard focus within the row, without changing expansion, controls or equipment styling. Presentation-only; no settings or compatibility changes.

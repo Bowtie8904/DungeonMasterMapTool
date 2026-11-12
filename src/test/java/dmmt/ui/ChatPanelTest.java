@@ -439,6 +439,57 @@ class ChatPanelTest {
     }
 
     @Test
+    void dmRollCardsKeepCollapsedDisclosuresAndDiceCompact() throws Exception {
+        JsonNode message = MAPPER.readTree("""
+                {"type":"roll","from":"Alice","kind":"duality","expression":"2d12+3",
+                 "rolls":[8,4],"total":15,"difficulty":12,
+                 "rollSource":{"name":"Spell","source":"Codex","text":"Detailed spell rules."}}
+                """);
+        ((com.fasterxml.jackson.databind.node.ObjectNode) message.path("rollSource"))
+                .put("text", "Detailed spell rules.\n".repeat(20));
+        onFx(() -> {
+            VBox card = (VBox) ChatCards.render(message);
+            card.setMaxHeight(javafx.scene.layout.Region.USE_PREF_SIZE);
+            StackPane root = new StackPane(card);
+            Scene scene = new Scene(root, 260, 900);
+            scene.getStylesheets().add(Icons.STYLESHEET);
+            root.applyCss();
+            VBox breakdown = (VBox) card.lookup(".chat-roll-breakdown");
+            VBox source = (VBox) card.lookup(".chat-roll-source");
+            for (double width : new double[]{260, 340}) {
+                root.resize(width, 900);
+                root.layout();
+                double collapsedHeight = card.getHeight();
+                assertTrue(collapsedHeight <= 220, "A collapsed duality roll with source fits within 220px");
+                for (VBox disclosure : List.of(breakdown, source)) {
+                    assertFalse(disclosure.getChildren().get(1).isManaged());
+                    assertEquals(javafx.scene.layout.Region.USE_PREF_SIZE, disclosure.getMaxHeight());
+                    Label summary = (Label) disclosure.getChildren().get(0);
+                    assertTrue(disclosure.getHeight() - summary.getHeight() <= 6,
+                            "Collapsed disclosures reserve no expanded-content padding");
+                }
+                for (var die : card.lookupAll(".chat-die")) {
+                    assertEquals(38, die.getLayoutBounds().getWidth(), 1);
+                    assertEquals(44, die.getLayoutBounds().getHeight(), 1);
+                }
+                assertEquals("15", ((Label) card.lookup(".chat-total-value")).getText());
+                for (VBox disclosure : List.of(breakdown, source))
+                    ((Label) disclosure.getChildren().get(0)).getOnMouseClicked().handle(null);
+                root.applyCss();
+                root.layout();
+                assertTrue(card.getHeight() > collapsedHeight + 80, "Expanded rules remain fully laid out");
+                assertEquals(12, breakdown.getPadding().getBottom());
+                assertEquals(8, source.getPadding().getBottom());
+                for (VBox disclosure : List.of(breakdown, source))
+                    ((Label) disclosure.getChildren().get(0)).getOnMouseClicked().handle(null);
+                root.applyCss();
+                root.layout();
+                assertEquals(collapsedHeight, card.getHeight(), 1, "Collapsing removes all expanded space");
+            }
+        });
+    }
+
+    @Test
     void rollAndChatUpdatesPreserveDisclosureStateWhileRenderingNewContent() throws Exception {
         JsonNode roll = MAPPER.readTree("""
                 {"type":"roll","id":9,"ts":10,"from":"Alice","expression":"1d6","rolls":[4],"total":4,
