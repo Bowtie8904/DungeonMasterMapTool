@@ -113,6 +113,27 @@ export class FogState {
     return i >= 0 && (this.visible[i] === 1 || this.dmRevealed[i] === 1);
   }
 
+  /** Uses the displayed, unblurred fog opacity so soft edges cannot expose hidden objects. */
+  hasUncoveredCircle(x: number, y: number, radius: number): boolean {
+    const g = this.grid;
+    if (!g || !this.canvas || radius <= 0) return false;
+    const left = Math.max(0, Math.floor((x - radius - g.originX) / g.cellSize));
+    const right = Math.min(g.cols - 1, Math.floor((x + radius - g.originX) / g.cellSize));
+    const top = Math.max(0, Math.floor((y - radius - g.originY) / g.cellSize));
+    const bottom = Math.min(g.rows - 1, Math.floor((y + radius - g.originY) / g.cellSize));
+    for (let row = top; row <= bottom; row++) {
+      for (let col = left; col <= right; col++) {
+        if (Math.round(this.current[row * g.cols + col]) >= 255) continue;
+        const x1 = g.originX + col * g.cellSize;
+        const y1 = g.originY + row * g.cellSize;
+        const dx = Math.max(x1 - x, 0, x - (x1 + g.cellSize));
+        const dy = Math.max(y1 - y, 0, y - (y1 + g.cellSize));
+        if (dx * dx + dy * dy < radius * radius) return true;
+      }
+    }
+    return false;
+  }
+
   /**
    * Alpha per cell: visible 0, remembered/revealed ~55% black, unknown opaque. With `fade` the alpha eases towards
    * that target (linear, like the desktop), and `softCells` blurs the edge. Check `animating` to keep redrawing.

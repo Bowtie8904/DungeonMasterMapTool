@@ -20,6 +20,9 @@ The **Online Play** tab (next to DM Link) lets you host an optional, DM-controll
 who join from a browser. **It is not DM control** (that is DM Link below); players get restricted access.
 Nothing starts until you click **Start online session**, so offline play and the second-screen view are unchanged.
 
+Browser door and window badges appear in full once any part overlaps uncovered or explored fog.
+Fully fog-covered badges remain hidden and cannot be clicked.
+
 Light-emitting shape effects in the browser use the DM view's smooth glow falloff beyond their edges.
 The browser's simplified-lighting option still uses flat shapes for performance.
 

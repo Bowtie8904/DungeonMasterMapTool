@@ -623,7 +623,9 @@ and movement without rotation handles; Online Play and DM Link compatibility ver
 Arrow keys with the map focused move all selected controlled tokens by exactly half a grid tile per
 press/repeat, through the existing move command and rollback path. They do nothing during pointer
 gestures, while paused or in text controls. Door/window badges are always light gray; only their glyph
-changes on opening/closing, and the browser draws no portal segments. DM rendering is unchanged.
+changes on opening/closing, and the browser draws no portal segments. A badge is shown in full above fog
+when its circular footprint intersects a currently uncovered or explored fog cell. Fully fog-covered
+badges stay hidden and cannot be clicked; fog blur alone does not reveal them. DM rendering is unchanged.
 Local moves stay at their latest position after release until acknowledged authoritative token state
 catches up. An acknowledgement alone may precede publication, so stale state cannot rewind token vision.
 Attached lights follow the reconciled token position, not lagging light coordinates. Superseded move

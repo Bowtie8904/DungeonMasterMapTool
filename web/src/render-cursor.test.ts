@@ -761,6 +761,56 @@ describe('map interaction cursors', () => {
     expect(ctx.arc.mock.calls).toEqual([[0, 0, 11, 0, Math.PI * 2], [0, 0, 11, 0, Math.PI * 2]]);
   });
 
+  it.each(['door', 'window'])('draws and permits interaction with a %s badge only when its footprint is uncovered', kind => {
+    current.doors = [{ id: 'portal', x1: 10, y1: 20, x2: 30, y2: 20, kind, open: false }];
+    view.fog.configure({ originX: 0, originY: 0, cellSize: 10, cols: 8, rows: 8 });
+    view.fog.bitmap();
+    view.canControlPortals = true;
+    const toggle = vi.fn();
+    view.onPortal = toggle;
+    const badge = vi.spyOn(view, 'drawBadge' as never).mockImplementation(() => {});
+    view['drawDoors'](canvas.getContext() as unknown as CanvasRenderingContext2D, current);
+    expect(badge).not.toHaveBeenCalled();
+    expect(view['portalAt'](20, 20)).toBeUndefined();
+    canvas.pointer('pointerdown', 20, 20); canvas.pointer('pointerup', 20, 20);
+    expect(toggle).not.toHaveBeenCalled();
+
+    view.fog.visible[1 * 8 + 0] = 1;
+    view.fog.bitmapDirty = true;
+    view.fog.bitmap();
+    view['drawDoors'](canvas.getContext() as unknown as CanvasRenderingContext2D, current);
+    expect(badge).toHaveBeenCalledTimes(1);
+    expect(badge).toHaveBeenCalledWith(expect.anything(), 20, 20, '#dddddd', kind === 'window', false);
+    expect(view['portalAt'](20, 20)?.id).toBe('portal');
+    canvas.pointer('pointerdown', 20, 20); canvas.pointer('pointerup', 20, 20);
+    expect(toggle).toHaveBeenCalledWith('portal');
+
+    current.doors[0].x1 = 90; current.doors[0].x2 = 110;
+    expect(view['portalAt'](100, 20)).toBeUndefined();
+    current.view = { gridOpacity: 0.08, ...current.view, fogEnabled: false };
+    expect(view['portalAt'](100, 20)?.id).toBe('portal');
+  });
+
+  it('draws fog-enabled badges after fog and keeps the original layering when fog is disabled', () => {
+    const calls: string[] = [];
+    view.fog.configure({ originX: 0, originY: 0, cellSize: 10, cols: 8, rows: 8 });
+    view.weatherEnabled = false;
+    current.images = [];
+    Object.assign(view['ctx'], { setTransform: vi.fn(), fillRect: vi.fn(), save: vi.fn(), restore: vi.fn() });
+    for (const name of ['drawFloorOverlays', 'drawTokens', 'drawLighting', 'drawOverlays', 'drawTexts',
+      'drawPings', 'drawToolAnnotations']) {
+      vi.spyOn(view, name as never).mockImplementation(() => {});
+    }
+    vi.spyOn(view, 'drawFog' as never).mockImplementation(() => { calls.push('fog'); });
+    vi.spyOn(view, 'drawDoors' as never).mockImplementation(() => { calls.push('doors'); });
+    view['draw'](current);
+    expect(calls).toEqual(['fog', 'doors']);
+    calls.length = 0;
+    current.view = { gridOpacity: 0.08, fogEnabled: false };
+    view['draw'](current);
+    expect(calls).toEqual(['doors', 'fog']);
+  });
+
   it('does not render token names in the player map', () => {
     current.tokens[0].name = 'Private DM label';
     const ctx = Object.assign(document.createElement('canvas').getContext('2d')!, {

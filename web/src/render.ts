@@ -452,8 +452,9 @@ export class MapView {
   }
 
   private portalAt(x: number, y: number): Door | undefined {
-    if (!this.canControlPortals) return undefined;
-    return [...this.state?.doors ?? []].reverse().find(d =>
+    const s = this.state;
+    if (!this.canControlPortals || !s) return undefined;
+    return [...s.doors].reverse().find(d => this.portalVisible(d, s) &&
       Math.hypot(x - (d.x1 + d.x2) / 2, y - (d.y1 + d.y2) / 2) <= 12 / this.cam.scale);
   }
 
@@ -1096,7 +1097,7 @@ export class MapView {
 
     this.textureActive = this.animatedTextures && (s.overlays ?? []).some((o) => o.tile && (o.layers ?? []).some((l) => l[0] !== 0 || l[1] !== 0 || l[4] > 0));
     if (s.view?.showGrid === true) this.drawGrid(ctx, ppc, s.view?.gridOpacity ?? 0.08);
-    this.drawDoors(ctx, s);
+    if (s.view?.fogEnabled === false || !this.fog.grid) this.drawDoors(ctx, s);
     this.drawFloorOverlays(ctx, s);
     this.drawTokens(ctx, s, ppc);
     this.drawLighting(ctx, s, () => this.drawOverlays(ctx, s, false));
@@ -1110,6 +1111,7 @@ export class MapView {
     }
     this.drawTexts(ctx, s);
     this.drawFog(ctx, s);
+    if (s.view?.fogEnabled !== false && this.fog.grid) this.drawDoors(ctx, s);
     this.drawPings(ctx, s);
     this.drawToolAnnotations(ctx, s);
 
@@ -1311,9 +1313,15 @@ export class MapView {
 
   private drawDoors(ctx: CanvasRenderingContext2D, s: GameState): void {
     for (const d of s.doors) {
+      if (!this.portalVisible(d, s)) continue;
       const window = (d.kind ?? '').toLowerCase() === 'window';
       this.drawBadge(ctx, (d.x1 + d.x2) / 2, (d.y1 + d.y2) / 2, '#dddddd', window, d.open);
     }
+  }
+
+  private portalVisible(d: Door, s: GameState): boolean {
+    if (s.view?.fogEnabled === false || !this.fog.grid) return true;
+    return this.fog.hasUncoveredCircle((d.x1 + d.x2) / 2, (d.y1 + d.y2) / 2, 12 / this.cam.scale);
   }
 
   private drawTokenSelection(ctx: CanvasRenderingContext2D, t: Token, ppc: number, handle: boolean): void {
