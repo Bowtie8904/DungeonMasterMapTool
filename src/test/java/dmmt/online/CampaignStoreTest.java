@@ -529,7 +529,10 @@ class CampaignStoreTest {
         store.deleteHistoryEntry(campaign.getId(), 2, 20);
         assertNull(store.historyCard(campaign.getId(), "card-one"));
         Path history = dir.resolve(campaign.getId()).resolve("history.jsonl");
+        FileTime modified = Files.getLastModifiedTime(history);
         Files.writeString(history, first + "\n");
+        // Same size and inode: ensure the external edit is not hidden by coarse filesystem timestamps.
+        Files.setLastModifiedTime(history, FileTime.fromMillis(modified.toMillis() + 2000));
         assertEquals(first, store.historyCard(campaign.getId(), "card-one"));
         assertNull(store.historyCard(campaign.getId(), "card-two"));
     }

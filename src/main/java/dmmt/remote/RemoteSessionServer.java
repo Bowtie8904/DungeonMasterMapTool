@@ -95,6 +95,11 @@ public final class RemoteSessionServer implements AutoCloseable {
         return lastError;
     }
 
+    /** True once no peer or challenger connection occupies a transport slot. */
+    boolean idle() {
+        return active.get() == null && challenger.get() == null;
+    }
+
     /** Host owner thread only. A stale approval cannot grant access on another pairing connection. */
     public void approve(UUID requestId) {
         session.status(); // Enforce the same owner as the application session.

@@ -642,6 +642,8 @@ class RemoteSessionTransportTest {
                             RemoteWire.payload(response, RemoteProtocol.Failure.class).code());
                     assertFalse(response.payload().has("settings"));
                 }
+                // The server releases the closed peer's slot asynchronously; otherwise the next one is a BUSY challenger.
+                await(host.server::idle);
             }
             try (var channel = host.raw()) {
                 channel.send(RemoteWire.message(RemoteWire.Type.CONNECT,
