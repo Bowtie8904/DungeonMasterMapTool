@@ -72,6 +72,7 @@ public final class AppSettings {
                 "fearDown|Fear counter minus", "fearUp|Fear counter plus", "endScene|End scene (shown while hosting)",
                 "newSession|New session (shown while hosting)", "chat|Chat tab (shown while hosting)",
                 "countdowns|Countdown overlay (shown while hosting)", "countdowns.add|Create countdown",
+                "pullPlayers|Pull online players to DM map", "returnToPlayers|Return to online players' map",
                 "measure|Measure tab (shown while hosting)", "measure.distance|Measure distance",
                 "measure.radius|Measure radius", "measure.cone|Measure cone", "measure.rect|Measure rectangle",
                 "measure.hint|Measure hint", "measure.color|Measurement color",

@@ -426,7 +426,95 @@ class TokenControlTest {
         assertFalse(controller.mapPing("player", "map", "level", 0, 0).get(5, TimeUnit.SECONDS).ok());
     }
 
-    private static final class TestApp implements OnlineSessionController.App {
+    @Test
+    void separatePlayerContextDrivesPublicationAndPlayerCommandsButNotDmEdits() throws Exception {
+        DmProject playerMap = new DmProject();
+        var playerToken = DmProject.TokenInstance.builder().id("token").definitionId("image")
+                .playerVisible(true).build();
+        playerMap.setTokens(new java.util.ArrayList<>(List.of(playerToken)));
+        var portal = new DmProject.Interactable();
+        portal.setId("door");
+        portal.setState("closed");
+        portal.setX1(50);
+        portal.setY1(50);
+        portal.setX2(60);
+        portal.setY2(50);
+        playerMap.setInteractables(new java.util.ArrayList<>(List.of(portal)));
+        TestApp app = new TestApp() {
+            @Override public OnlineSessionController.PlayerMap playerMap() {
+                return new OnlineSessionController.PlayerMap(playerMap, null, "players", "floor", "Player map", true);
+            }
+            @Override public void applyPlayerMove(String id, double x, double y) {
+                playerToken.setX(x);
+                playerToken.setY(y);
+            }
+            @Override public void applyPlayerRotation(String id, double rotation) {
+                playerToken.setRotationDeg(rotation);
+            }
+            @Override public void togglePlayerPortal(DmProject.Interactable target) {
+                target.setState("open".equals(target.getState()) ? "closed" : "open");
+            }
+            @Override public void applyPlayerOverlay(String id, DmProject.OverlayShape shape) {
+                playerMap.getOverlays().removeIf(item -> id.equals(item.getId()));
+                if (shape != null) playerMap.getOverlays().add(shape);
+            }
+        };
+        var controller = new OnlineSessionController(temp, app);
+        Campaign campaign = controller.store().create("Separate maps");
+        campaign.getPlayers().add(Campaign.Player.builder().id("player").name("Player").build());
+        campaign.getControlledTokens().add(new Campaign.TokenLink("player", "players", "token"));
+        try {
+            onFx(() -> {
+                try (var socket = new java.net.ServerSocket(0)) {
+                    String port = String.valueOf(socket.getLocalPort());
+                    Tuning.apply(key -> "online.port".equals(key) ? port : null);
+                }
+                controller.start(campaign);
+                var field = OnlineSessionServer.class.getDeclaredField("current");
+                field.setAccessible(true);
+                var state = (com.fasterxml.jackson.databind.JsonNode) field.get(controller.server());
+                assertEquals("players", state.path("mapId").asText());
+                assertEquals("floor", state.path("levelId").asText());
+                assertEquals("Player map", state.path("mapName").asText());
+                return null;
+            });
+            assertTrue(controller.mapPing("player", "players", "floor", 1, 2).get(5, TimeUnit.SECONDS).ok());
+            assertFalse(controller.mapPing("player", "map", "level", 1, 2).get(5, TimeUnit.SECONDS).ok());
+            assertTrue(controller.rotateToken("player", "token", "players", "floor", 90).get(5, TimeUnit.SECONDS).ok());
+            assertFalse(controller.rotateToken("player", "token", "map", "level", 90).get(5, TimeUnit.SECONDS).ok());
+            assertFalse(controller.moveToken("player", "token", 3, 0, "map/level").get(5, TimeUnit.SECONDS).ok());
+            assertTrue(controller.moveToken("player", "token", 3, 0, "players/floor").get(5, TimeUnit.SECONDS).ok());
+            assertTrue(controller.togglePortal("player", "door", "players", "floor").get(5, TimeUnit.SECONDS).ok());
+            var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            var drawing = mapper.createObjectNode().put("mapId", "players").put("levelId", "floor")
+                    .put("id", "drawing").put("action", "create");
+            drawing.putObject("shape").put("type", "rect").put("color", "#123456")
+                    .put("x", 0).put("y", 0).put("width", 2).put("height", 2).put("radius", 0)
+                    .put("strokeWidth", 1).put("alpha", 1).putArray("points");
+            assertTrue(controller.editDrawing("player", drawing).get(5, TimeUnit.SECONDS).ok());
+            assertTrue(controller.setTokenCondition("player", "token", "players", "floor",
+                    "hidden", "Hidden", "hidden", "cond_invisible", true).get(5, TimeUnit.SECONDS).ok());
+            assertTrue(controller.setTokenCondition("token", "hidden", "Hidden", "hidden", "cond_invisible", true)
+                    .get(5, TimeUnit.SECONDS).ok());
+            onFx(() -> {
+                assertEquals(3, playerToken.getX());
+                assertEquals(90, playerToken.getRotationDeg());
+                assertEquals("open", portal.getState());
+                assertEquals(1, playerMap.getOverlays().size());
+                assertEquals(1, playerMap.getActivePings().size());
+                assertEquals(0, app.project.getTokens().getFirst().getX());
+                assertEquals(0, app.project.getTokens().getFirst().getRotationDeg());
+                assertTrue(app.project.getOverlays().isEmpty());
+                assertTrue(app.project.getActivePings().isEmpty());
+                assertEquals("hidden", app.project.getTokens().getFirst().getConditions().getFirst().getId());
+                return null;
+            });
+        } finally {
+            onFx(() -> { controller.stop(); Tuning.reset(); return null; });
+        }
+    }
+
+    private static class TestApp implements OnlineSessionController.App {
         private final DmProject project = new DmProject();
         TestApp() {
             project.setTokens(new java.util.ArrayList<>(List.of(

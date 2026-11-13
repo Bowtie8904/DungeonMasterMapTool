@@ -59,6 +59,41 @@ class MultiLevelServiceTest {
         service.activateLevel(file, prospective);
         assertEquals(otherId, service.loadManifest(file).getCurrentLevelId());
     }
+
+    @Test
+    void inactiveLevelSavePersistsChangesWithoutOverwritingTheActiveLevelOrManifest() throws IOException {
+        Path file = createTower().manifestFile();
+        MultiLevelManifest manifest = service.loadManifest(file);
+        String playerId = manifest.getLevels().getFirst().getId();
+        String dmId = manifest.getLevels().get(1).getId();
+        DmProject player = service.loadLevel(file, playerId).project();
+        DmProject dm = service.loadLevel(file, dmId).project();
+        dm.getLighting().setTimeOfDayPreset("NIGHT");
+        service.saveLevel(file, dmId, dm);
+        byte[] manifestBefore = Files.readAllBytes(file);
+        byte[] thumbnailBefore = Files.readAllBytes(ThumbnailService.thumbnailFile(file));
+
+        player.getMap().setRotationQuarterTurns(3);
+        player.getLighting().setTimeOfDayPreset("DAY");
+        service.saveInactiveLevel(file, playerId, player);
+
+        org.junit.jupiter.api.Assertions.assertArrayEquals(manifestBefore, Files.readAllBytes(file));
+        org.junit.jupiter.api.Assertions.assertArrayEquals(thumbnailBefore,
+                Files.readAllBytes(ThumbnailService.thumbnailFile(file)));
+        assertEquals(dmId, service.loadManifest(file).getCurrentLevelId());
+        DmProject reloaded = service.loadLevelForPreparation(file, playerId).project();
+        assertEquals(3, reloaded.getMap().getRotationQuarterTurns());
+        assertEquals("NIGHT", reloaded.getLighting().getTimeOfDayPreset());
+    }
+
+    @Test
+    void inactiveLevelSaveRejectsMissingLevelWithoutChangingTheManifest() throws IOException {
+        Path file = createTower().manifestFile();
+        byte[] before = Files.readAllBytes(file);
+        assertThrows(IOException.class, () -> service.saveInactiveLevel(file, "missing", DmProject.builder().build()));
+        org.junit.jupiter.api.Assertions.assertArrayEquals(before, Files.readAllBytes(file));
+    }
+
     @Test
     void lightningIntervalIsSharedAcrossLevelsWithoutAliasing() {
         DmProject first = DmProject.builder().build();

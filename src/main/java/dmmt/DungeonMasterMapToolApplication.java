@@ -257,11 +257,22 @@ public class DungeonMasterMapToolApplication extends Application {
     private final CanvasMapRenderer renderer = new CanvasMapRenderer(lightingEngine);
 
     private DmProject project;
+    private String startupProjectId;
     private Path projectFile;
     /** Manifest of the open multilevel map ({@code projectFile} is then the open level's file), else {@code null}. */
     private Path multiLevelFile;
     private MultiLevelManifest multiLevelManifest;
     private String currentLevelId;
+    private OnlinePlayerMap onlinePlayerMap;
+    private final LightingEngine onlinePlayerLighting = new LightingEngine();
+    private HBox onlineMapControls;
+    private Button pullPlayersButton;
+    private Button returnToPlayersButton;
+    private boolean onlinePlayerMapDirty;
+    private long lastOnlineMapSaveNanos = System.nanoTime();
+
+    private record OnlinePlayerMap(DmProject project, SaveTarget target, String mapId, String levelId,
+                                   String mapName, String levelName, boolean showGrid) { }
     private HBox levelSwitcher;
     private ComboBox<MultiLevelManifest.Level> levelSelector;
     private Button levelDownButton;
@@ -675,6 +686,7 @@ public class DungeonMasterMapToolApplication extends Application {
         CanvasMapRenderer.setAnimationFps(animationFps);
         idleFps = clampFps(preferences.getInt(PREF_FPS_IDLE, DEFAULT_FPS_IDLE));
         this.project = DmProject.builder().build();
+        startupProjectId = project.getId();
         this.project.getMap().setSourceType("custom");
         Path libraryRoot = resolveProjectsRoot();
         mapLibrary = new MapLibraryService(libraryRoot, projectService);
@@ -734,6 +746,8 @@ public class DungeonMasterMapToolApplication extends Application {
         levelSwitcher = createLevelSwitcher();
         StackPane.setAlignment(levelSwitcher, Pos.TOP_LEFT);
         StackPane.setMargin(levelSwitcher, new Insets(10));
+        onlineMapControls = createOnlineMapControls();
+        updateOnlineMapControls();
         center.getChildren().addAll(chip, topBanners, levelSwitcher, controls);
         fearOverlay = new dmmt.ui.FearOverlay(delta -> {
             if (onlineController != null) onlineController.adjustFear(delta);
@@ -742,6 +756,7 @@ public class DungeonMasterMapToolApplication extends Application {
         }, () -> {
             if (onlineController != null) onlineController.newSession();
         });
+        fearOverlay.setLeadingControls(onlineMapControls);
         center.getChildren().add(fearOverlay);
         connectedPlayersOverlay = new dmmt.ui.ConnectedPlayersOverlay();
         StackPane.setAlignment(connectedPlayersOverlay, Pos.BOTTOM_LEFT);
@@ -1009,6 +1024,18 @@ public class DungeonMasterMapToolApplication extends Application {
             event.consume();
             if (stopping) {
                 return;
+            }
+            if (ioBusy && onlineController != null && onlineController.running()) {
+                status("Wait for the current file operation before closing.");
+                return;
+            }
+            if (onlinePlayerMap != null) {
+                try {
+                    saveOnlinePlayerMap();
+                } catch (IOException | RuntimeException ex) {
+                    reportOnlineMapFailure("Could not save the players' map", ex);
+                    return;
+                }
             }
             stopping = true;
             LOG.info("Closing application window; saving pending changes and stopping services.");
@@ -3198,6 +3225,20 @@ public class DungeonMasterMapToolApplication extends Application {
             }
 
             @Override
+            public Path playerMapFile() {
+                if (onlineController == null || !onlineController.running()) return null;
+                OnlinePlayerMap map = onlinePlayerMap == null ? currentOnlineMap() : onlinePlayerMap;
+                if (map.target() == null) return null;
+                return map.target().manifest() == null ? map.target().file() : map.target().manifest();
+            }
+
+            @Override
+            public String playerLevelName() {
+                if (onlineController == null || !onlineController.running()) return null;
+                return (onlinePlayerMap == null ? currentOnlineMap() : onlinePlayerMap).levelName();
+            }
+
+            @Override
             public void importMultiLevelMap(Path suggestedFolder) {
                 handleImportMultiLevel(suggestedFolder);
             }
@@ -3335,6 +3376,11 @@ public class DungeonMasterMapToolApplication extends Application {
         dmCanvas.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, event -> {
             if (measureMode == null || project == null || onlineController == null || onlineController.server() == null
                     || event.getButton() != javafx.scene.input.MouseButton.PRIMARY) return;
+            if (onlinePlayerMap != null) {
+                status("Return to the players' map before using online measurements.");
+                event.consume();
+                return;
+            }
             dmCanvas.requestFocus();
             var camera = project.getViews().getDmCamera();
             var point = renderer.screenToWorld(event.getX(), event.getY(), dmCanvas.getWidth(), dmCanvas.getHeight(), camera);
@@ -3384,7 +3430,7 @@ public class DungeonMasterMapToolApplication extends Application {
             renderDm();
         });
         dmCanvas.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, event -> {
-            if (project == null || activeTool != EditorTool.SELECT || measureMode != null || onlineController == null
+            if (project == null || activeTool != EditorTool.SELECT || measureMode != null || onlinePlayerMap != null || onlineController == null
                     || onlineController.server() == null) return;
             var camera = project.getViews().getDmCamera();
             var point = renderer.screenToWorld(event.getX(), event.getY(), dmCanvas.getWidth(), dmCanvas.getHeight(), camera);
@@ -4634,7 +4680,7 @@ public class DungeonMasterMapToolApplication extends Application {
                         project.getOverlays(), project.getTokens()),
                 Tuning.DOOR_OPEN_COLOR.get(), Tuning.DOOR_CLOSED_COLOR.get(),
                 Tuning.WINDOW_OPEN_COLOR.get(), Tuning.WINDOW_CLOSED_COLOR.get());
-        var onlineMeasurements = onlineController == null || onlineController.server() == null
+        var onlineMeasurements = onlinePlayerMap != null || onlineController == null || onlineController.server() == null
                 ? java.util.List.<dmmt.online.OnlineMeasurement>of() : onlineController.server().measurements();
         if (selectedMeasurementId != null && onlineMeasurements.stream().noneMatch(m -> m.id().equals(selectedMeasurementId))) {
             selectedMeasurementId = null;
@@ -5383,6 +5429,15 @@ public class DungeonMasterMapToolApplication extends Application {
 
     private void autoSaveTick() {
         long intervalNanos = autoSaveMinutes() * 60_000_000_000L;
+        if (onlinePlayerMap != null && onlinePlayerMapDirty && onlinePlayerMap.target() != null
+                && !ioBusy && System.nanoTime() - lastOnlineMapSaveNanos >= intervalNanos) {
+            lastOnlineMapSaveNanos = System.nanoTime();
+            try {
+                saveOnlinePlayerMap();
+            } catch (IOException | RuntimeException ex) {
+                statusFailure("Could not save the players' map: " + ex.getMessage(), ex);
+            }
+        }
         if (System.nanoTime() - lastAutoSaveNanos >= intervalNanos) {
             autoSaveIfDirty();
         }
@@ -5519,6 +5574,10 @@ public class DungeonMasterMapToolApplication extends Application {
      */
     private void runLibraryOperation(String busyMessage, Path affectedPath, MapBrowser.LibraryOperation operation,
                                      Consumer<MapLibraryService.Result> onDone) {
+        if (onlineController != null && onlineController.running()) {
+            status("Stop Online Play before changing the map library.");
+            return;
+        }
         Path openFile = projectFile == null ? null : projectFile.toAbsolutePath().normalize();
         Path openManifest = multiLevelFile == null ? null : multiLevelFile.toAbsolutePath().normalize();
         SaveTarget saveTarget = currentSaveTarget();
@@ -5678,17 +5737,20 @@ public class DungeonMasterMapToolApplication extends Application {
             return;
         }
         ioBusy = true;
+        updateOnlineMapControls();
         status(busyMessage);
         Thread thread = new Thread(() -> {
             try {
                 T result = work.run();
                 Platform.runLater(() -> {
                     ioBusy = false;
+                    updateOnlineMapControls();
                     onSuccess.accept(result);
                 });
             } catch (IOException | RuntimeException ex) {
                 Platform.runLater(() -> {
                     ioBusy = false;
+                    updateOnlineMapControls();
                     statusFailure(failurePrefix + ex.getMessage(), ex);
                     if (onFailure != null) {
                         onFailure.accept(ex);
@@ -5698,6 +5760,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 IOException failure = new IOException("Not enough memory to prepare the map.", ex);
                 Platform.runLater(() -> {
                     ioBusy = false;
+                    updateOnlineMapControls();
                     statusFailure(failurePrefix + failure.getMessage(), failure);
                     if (onFailure != null) {
                         onFailure.accept(failure);
@@ -5960,7 +6023,8 @@ public class DungeonMasterMapToolApplication extends Application {
             var bounds = dmCanvas.sceneToLocal(dmControls.localToScene(dmControls.getBoundsInLocal()));
             right = clamp(bounds.getMinX(), 0, right);
         }
-        for (javafx.scene.Node overlay : new javafx.scene.Node[]{toolChip, imageUnlockBanner, onlinePausedBanner, levelSwitcher}) {
+        for (javafx.scene.Node overlay : new javafx.scene.Node[]{toolChip, imageUnlockBanner, onlinePausedBanner,
+                levelSwitcher}) {
             if (overlay != null && overlay.isVisible()) {
                 var bounds = dmCanvas.sceneToLocal(overlay.localToScene(overlay.getBoundsInLocal()));
                 if (bounds.getMinX() < right && bounds.getMaxX() > 0) {
@@ -6750,11 +6814,157 @@ public class DungeonMasterMapToolApplication extends Application {
 
     // ---- Project switching & control sync ----
 
+    private OnlinePlayerMap currentOnlineMap() {
+        return new OnlinePlayerMap(project, currentSaveTarget(),
+                multiLevelManifest != null ? multiLevelManifest.getId() : project.getId(),
+                currentLevelId != null ? currentLevelId : project.getId(),
+                openMapFile() == null ? "Unsaved new map" : MapBrowser.displayName(openMapFile()),
+                currentLevel() == null ? null : currentLevel().getName(), showPlayerGrid);
+    }
+
+    private static boolean sameOnlineMap(OnlinePlayerMap map, Path file, LevelContext level, DmProject next) {
+        if (map.target() == null) return file == null && map.project().getId().equals(next.getId());
+        Path wanted = level == null ? file : level.manifestFile();
+        Path existing = map.target().manifest() == null ? map.target().file() : map.target().manifest();
+        if (wanted == null || !wanted.toAbsolutePath().normalize().equals(existing.toAbsolutePath().normalize())) return false;
+        return level == null ? map.target().manifest() == null
+                : java.util.Objects.equals(map.target().levelId(), level.levelId());
+    }
+
+    private void saveOnlinePlayerMap() throws IOException {
+        if (onlinePlayerMap == null || !onlinePlayerMapDirty) return;
+        SaveTarget target = onlinePlayerMap.target();
+        if (target == null && onlinePlayerMap.project().getId().equals(startupProjectId)
+                && !hasContent(onlinePlayerMap.project()) && onlinePlayerMap.project().getInteractables().isEmpty()) {
+            return;
+        }
+        if (target == null) throw new IOException("The players' map has not been saved. Return to it and save it first.");
+        if (!Files.isRegularFile(target.file()) || target.manifest() != null && !Files.isRegularFile(target.manifest())) {
+            throw new IOException("The players' map no longer exists at " + target.displayName() + ".");
+        }
+        DmProject snapshot = projectService.copy(onlinePlayerMap.project());
+        if (target.manifest() == null) projectService.save(target.file(), snapshot);
+        else mapLibrary.multiLevels().saveInactiveLevel(target.manifest(), target.levelId(), snapshot);
+        onlinePlayerMapDirty = false;
+        lastOnlineMapSaveNanos = System.nanoTime();
+    }
+
+    private void reportOnlineMapFailure(String header, Throwable failure) {
+        statusFailure(header + ": " + failure.getMessage(), failure);
+        if (!apiActionRunning && primaryStage != null && primaryStage.isShowing()) {
+            Dialogs.error(primaryStage, header, failure.getMessage());
+        }
+    }
+
+    private void pullOnlinePlayers() {
+        if (onlineController == null || !onlineController.running() || onlinePlayerMap == null) return;
+        if (ioBusy) {
+            status("Wait for the current map operation before pulling players.");
+            return;
+        }
+        try {
+            saveOnlinePlayerMap();
+            onlinePlayerMap = null;
+            onlinePlayerLighting.reset();
+            onlineController.publishNow();
+            updateOnlineMapControls();
+            if (mapBrowser != null) mapBrowser.updateCurrentMap();
+            status("Players moved to the current map and level.");
+        } catch (IOException | RuntimeException ex) {
+            reportOnlineMapFailure("Could not pull players", ex);
+            if (apiActionRunning) {
+                throw new LocalApiServer.ApiException(500, "Could not pull players: " + ex.getMessage());
+            }
+        }
+    }
+
+    private void returnToOnlinePlayers() {
+        if (onlinePlayerMap == null || ioBusy) return;
+        SaveTarget target = onlinePlayerMap.target();
+        if (target == null) {
+            leaveCurrentMap(() -> switchProject(onlinePlayerMap.project(), null));
+        } else {
+            switchToMap(target.manifest() == null ? target.file() : target.manifest(), target.levelId());
+        }
+    }
+
+    private void updateOnlineMapControls() {
+        if (onlineMapControls == null) return;
+        boolean hosted = onlineController != null && onlineController.running();
+        onlineMapControls.setVisible(hosted);
+        onlineMapControls.setManaged(hosted);
+        pullPlayersButton.setDisable(!hosted || onlinePlayerMap == null || ioBusy);
+        returnToPlayersButton.setDisable(!hosted || onlinePlayerMap == null || ioBusy);
+    }
+
+    private HBox createOnlineMapControls() {
+        pullPlayersButton = new Button("Pull players");
+        Icons.tooltip(pullPlayersButton, "Pull online players to this map and level");
+        pullPlayersButton.setOnAction(event -> pullOnlinePlayers());
+        returnToPlayersButton = new Button("Return to players' map");
+        Icons.tooltip(returnToPlayersButton, "Return to the online players' map and level");
+        returnToPlayersButton.setOnAction(event -> returnToOnlinePlayers());
+        dmControlVisibility.register("online.pullPlayers", pullPlayersButton);
+        dmControlVisibility.register("online.returnToPlayers", returnToPlayersButton);
+        HBox controls = new HBox(6, pullPlayersButton, returnToPlayersButton);
+        controls.getStyleClass().add("level-switcher");
+        controls.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        return controls;
+    }
+
     private void switchProject(DmProject next, Path file) {
         switchProject(next, file, null);
     }
 
+    private void prepareOnlineMapSwitch(DmProject next, Path file, LevelContext level) throws IOException {
+        if (onlineController != null && onlineController.running() && project != null && next != project) {
+            boolean parkedHere = onlinePlayerMap == null;
+            try {
+                if (parkedHere) {
+                    onlinePlayerMap = currentOnlineMap();
+                    onlinePlayerMapDirty = true;
+                    onlinePlayerLighting.acceptCommittedState(onlinePlayerMap.project());
+                }
+                boolean returning = sameOnlineMap(onlinePlayerMap, file, level, next);
+                if (returning && onlinePlayerMap.target() != null
+                        || !returning && Tuning.ONLINE_AUTO_PULL_PLAYERS.get()) {
+                    saveOnlinePlayerMap();
+                }
+            } catch (IOException | RuntimeException failure) {
+                if (parkedHere) {
+                    onlinePlayerMap = null;
+                    onlinePlayerMapDirty = false;
+                    onlinePlayerLighting.reset();
+                }
+                throw failure;
+            }
+        }
+    }
+
     private void switchProject(DmProject next, Path file, LevelContext level) {
+        if (measureDraft != null) cancelMeasureDraft();
+        measurementDrag = null;
+        selectedMeasurementId = null;
+        try {
+            prepareOnlineMapSwitch(next, file, level);
+        } catch (IOException ex) {
+            reportOnlineMapFailure("Could not save the players' map", ex);
+            throw new IllegalStateException("Could not save the players' map: " + ex.getMessage(), ex);
+        }
+        if (onlineController != null && onlineController.running() && onlinePlayerMap != null
+                && project != null && next != project) {
+            if (onlinePlayerMap != null && sameOnlineMap(onlinePlayerMap, file, level, next)) {
+                next = onlinePlayerMap.project();
+                if (level != null && level.manifest().getShared() != null) {
+                    mapLibrary.multiLevels().applyShared(level.manifest().getShared(), next);
+                }
+                onlinePlayerMap = null;
+                onlinePlayerLighting.reset();
+            } else if (onlinePlayerMap != null && Tuning.ONLINE_AUTO_PULL_PLAYERS.get()) {
+                onlinePlayerMap = null;
+                onlinePlayerLighting.reset();
+            }
+        }
         LOG.info("Activating map {}{}", file, level == null ? "" : " (level " + level.levelId() + " of " + level.manifestFile() + ")");
         if (remoteMapsHost != null) remoteMapsHost.invalidate();
         prefetchGeneration++;
@@ -6816,6 +7026,8 @@ public class DungeonMasterMapToolApplication extends Application {
         if (mapBrowser != null) {
             mapBrowser.updateCurrentMap();
         }
+        updateOnlineMapControls();
+        if (onlineController != null && onlineController.running()) onlineController.publishNow();
         updateWindowTitle();
         scheduleAdjacentPrefetch();
         if (remoteWorkspaceHost != null) {
@@ -7533,7 +7745,6 @@ public class DungeonMasterMapToolApplication extends Application {
                         && prefetched.matches(loaded.project(), loaded.levelFile(), dmViewport, playerViewport)
                         ? prefetched : ImagePyramidStore.shared().prepareProject(loaded.project(), loaded.levelFile(),
                         dmViewport, playerViewport, false, () -> false);
-                mapLibrary.multiLevels().activateLevel(target, loaded);
                 return new LoadedProject(loaded.project(), loaded.levelFile(), LevelContext.of(target, loaded), images);
             }
             DmProject loaded = projectService.load(file);
@@ -7543,6 +7754,13 @@ public class DungeonMasterMapToolApplication extends Application {
             return new LoadedProject(loaded, file, null, images);
         }, loaded -> {
             try {
+                prepareOnlineMapSwitch(loaded.project(), loaded.file(), loaded.level());
+                if (loaded.level() != null) {
+                    LevelContext context = loaded.level();
+                    var level = context.manifest().findLevel(context.levelId());
+                    mapLibrary.multiLevels().activateLevel(context.manifestFile(),
+                            new MultiLevelService.LoadedLevel(context.manifest(), level, loaded.file(), loaded.project()));
+                }
                 ImagePyramidStore.shared().adopt(loaded.images());
                 switchProject(loaded.project(), loaded.file(), loaded.level());
                 String frozenNote = frozenPlayerProject != null
@@ -7557,9 +7775,14 @@ public class DungeonMasterMapToolApplication extends Application {
                     mapBrowser.invalidateThumbnails();
                 }
                 completion.complete(null);
-            } catch (RuntimeException failure) {
+            } catch (IOException | RuntimeException failure) {
+                if (onlinePlayerMap != null && onlinePlayerMap.project() == project) {
+                    onlinePlayerMap = null;
+                    onlinePlayerMapDirty = false;
+                    onlinePlayerLighting.reset();
+                }
                 completion.completeExceptionally(failure);
-                statusFailure("Could not display the map: " + failure.getMessage(), failure);
+                reportOnlineMapFailure("Could not display the map", failure);
             } finally {
                 setMapLoading(false, null);
             }
@@ -7990,6 +8213,10 @@ public class DungeonMasterMapToolApplication extends Application {
      */
     private void runLevelChange(String busy, String failureTitle, boolean openResult, LevelWork work,
                                 Function<MultiLevelService.ApplyResult, String> doneMessage) {
+        if (!openResult && onlineController != null && onlineController.running()) {
+            status("Stop Online Play before changing multilevel maps.");
+            return;
+        }
         if (ioBusy) {
             status("Still working on the previous file operation.");
             return;
@@ -11318,8 +11545,14 @@ public class DungeonMasterMapToolApplication extends Application {
             @Override public String mapName() {
                 return projectFile == null ? "" : MapBrowser.displayName(multiLevelFile != null ? multiLevelFile : projectFile);
             }
+            @Override public dmmt.online.OnlineSessionController.PlayerMap playerMap() {
+                OnlinePlayerMap map = onlinePlayerMap == null ? currentOnlineMap() : onlinePlayerMap;
+                return new dmmt.online.OnlineSessionController.PlayerMap(map.project(),
+                        map.target() == null ? null : map.target().file(), map.mapId(), map.levelId(),
+                        map.mapName(), map.showGrid());
+            }
             @Override public void applyMove(String tokenId, double x, double y) {
-                applyPlayerMove(tokenId, x, y);
+                DungeonMasterMapToolApplication.this.applyPlayerMove(tokenId, x, y);
                 renderDm();
                 renderPlayer();
             }
@@ -11338,8 +11571,73 @@ public class DungeonMasterMapToolApplication extends Application {
                 renderDm();
                 renderPlayer();
             }
+            @Override public void applyPlayerMove(String tokenId, double x, double y) {
+                if (onlinePlayerMap == null) {
+                    applyMove(tokenId, x, y);
+                } else {
+                    var token = onlinePlayerMap.project().getTokens().stream()
+                            .filter(t -> tokenId.equals(t.getId())).findFirst().orElseThrow();
+                    token.setX(x);
+                    token.setY(y);
+                    playerStateChanged();
+                }
+            }
+            @Override public void applyPlayerRotation(String tokenId, double rotationDeg) {
+                if (onlinePlayerMap == null) {
+                    applyRotation(tokenId, rotationDeg);
+                } else {
+                    var token = onlinePlayerMap.project().getTokens().stream()
+                            .filter(t -> tokenId.equals(t.getId())).findFirst().orElseThrow();
+                    token.setRotationDeg(rotationDeg);
+                    playerStateChanged();
+                }
+            }
+            @Override public void togglePlayerPortal(DmProject.Interactable portal) {
+                if (onlinePlayerMap == null) {
+                    togglePortal(portal);
+                } else {
+                    portal.setState("open".equalsIgnoreCase(portal.getState()) ? "closed" : "open");
+                    playerStateChanged();
+                }
+            }
+            @Override public void applyPlayerOverlay(String id, DmProject.OverlayShape shape) {
+                if (onlinePlayerMap == null) {
+                    applyOverlay(id, shape);
+                } else {
+                    var overlays = onlinePlayerMap.project().getOverlays();
+                    int index = -1;
+                    for (int i = 0; i < overlays.size(); i++) {
+                        if (id.equals(overlays.get(i).getId())) { index = i; break; }
+                    }
+                    if (shape == null) {
+                        if (index >= 0) overlays.remove(index);
+                    } else if (index >= 0) {
+                        overlays.set(index, cloneOverlay(shape));
+                    } else {
+                        overlays.add(cloneOverlay(shape));
+                    }
+                    playerStateChanged();
+                }
+            }
+            @Override public void playerStateChanged() {
+                if (onlinePlayerMap != null) {
+                    onlinePlayerMapDirty = true;
+                    onlinePlayerLighting.update(onlinePlayerMap.project());
+                }
+            }
+            @Override public void beforeStop() throws IOException {
+                if (ioBusy) throw new IOException("Wait for the current file operation.");
+                try {
+                    saveOnlinePlayerMap();
+                } catch (IOException | RuntimeException ex) {
+                    reportOnlineMapFailure("Could not stop Online Play", ex);
+                    throw ex;
+                }
+                onlinePlayerMap = null;
+                onlinePlayerLighting.reset();
+            }
             @Override public void measurementsChanged() {
-                renderDm();
+                if (dmBaseCanvas != null) renderDm();
             }
             @Override public void status(String text) { DungeonMasterMapToolApplication.this.status(text); }
             @Override public void actorResourcesChanged() { refreshActorTokenResources(); }
@@ -11354,6 +11652,8 @@ public class DungeonMasterMapToolApplication extends Application {
                 updateOnlinePausedBanner();
                 updateFearOverlay();
                 applySectionVisibility();
+                updateOnlineMapControls();
+                if (mapBrowser != null) mapBrowser.updateCurrentMap();
             }
         });
         onlineController.setCompendiumDirectory(() -> AppSettings.resolveConfiguredFolder(preferences.getFile(),
@@ -12324,6 +12624,9 @@ public class DungeonMasterMapToolApplication extends Application {
                 return switchToMapAsync(entry.mapFile(), request.action().equals("openLevel")
                         ? request.options().path("id").asText() : null)
                         .thenApply(ignored -> com.fasterxml.jackson.databind.node.NullNode.getInstance());
+            }
+            if (onlineController != null && onlineController.running()) {
+                throw new IOException("Stop Online Play before changing the map library.");
             }
             var library = mapLibrary;
             var service = projectService;

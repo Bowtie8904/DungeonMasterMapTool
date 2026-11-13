@@ -1,5 +1,7 @@
 # Copilot Instructions
 
+- when the user asks you to implement a feature, then you should implement the entire feature in one go. Do not report intermediate progress before implementing the entire feature, unless the user specifically requiests this. The user will ask for changes if needed. If feature details are unclear and you need guidance you can ask the user.
+
 ## Planning-first workflow
 
 Before implementing any code change, always open and review `plan.md` in the project root.

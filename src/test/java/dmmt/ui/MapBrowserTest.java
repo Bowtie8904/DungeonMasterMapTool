@@ -42,6 +42,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
@@ -68,6 +69,71 @@ class MapBrowserTest {
         FutureTask<Void> task = new FutureTask<>(action, null);
         Platform.runLater(task);
         task.get(10, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void playerMapAndLevelAppearInTreeAndRecentMapsAndClearOnStop() throws Exception {
+        onFx(() -> {
+            Fixture f = new Fixture();
+            Path player = f.entry(1).mapFile();
+            Path current = f.entry(0).mapFile();
+            try {
+                Files.createDirectories(player.getParent());
+                Files.createDirectories(current.getParent());
+                Files.createFile(player);
+                new ProjectService().save(current, DmProject.builder().build());
+            } catch (IOException ex) {
+                throw new AssertionError(ex);
+            }
+            f.host.current = player;
+            f.browser.updateCurrentMap();
+            f.host.current = current;
+            f.host.player = player;
+            f.host.playerLevel = "Cellar";
+            f.browser.updateCurrentMap();
+            Stage stage = new Stage();
+            try {
+                stage.setScene(new Scene(f.browser, 400, 700));
+                stage.show();
+                f.browser.applyCss();
+                f.browser.layout();
+                assertTrue(f.tree.lookupAll(".tree-cell").stream().filter(TreeCell.class::isInstance)
+                        .map(TreeCell.class::cast).anyMatch(cell -> "Multilevel".equals(cell.getText())
+                                && cell.lookup(".player-map-badge") != null));
+                assertTrue(f.browser.lookupAll(".list-cell").stream().filter(javafx.scene.control.ListCell.class::isInstance)
+                        .map(javafx.scene.control.ListCell.class::cast)
+                        .anyMatch(cell -> "Multilevel".equals(cell.getText())
+                                && cell.lookup(".player-map-badge") != null));
+                assertEquals(2, f.browser.lookupAll(".player-map-badge").size());
+                for (var node : f.browser.lookupAll(".player-map-badge")) {
+                    Label badge = (Label) node;
+                    assertEquals("Players", badge.getText());
+                    assertEquals("Players are here - Cellar", badge.getTooltip().getText());
+                    assertEquals(badge.getTooltip().getText(), badge.getAccessibleText());
+                }
+                f.host.player = current;
+                f.host.playerLevel = null;
+                f.browser.updateCurrentMap();
+                f.browser.applyCss();
+                f.browser.layout();
+                assertTrue(f.tree.lookupAll(".tree-cell").stream().filter(TreeCell.class::isInstance)
+                        .map(TreeCell.class::cast).anyMatch(cell -> "Ordinary".equals(cell.getText())
+                                && cell.lookup(".player-map-badge") != null));
+                assertTrue(f.tree.lookupAll(".tree-cell").stream().filter(TreeCell.class::isInstance)
+                        .map(TreeCell.class::cast).filter(cell -> "Multilevel".equals(cell.getText()))
+                        .allMatch(cell -> cell.lookup(".player-map-badge") == null));
+                assertEquals(2, f.browser.lookupAll(".player-map-badge").size());
+                for (var node : f.browser.lookupAll(".player-map-badge")) {
+                    assertEquals("Players are here", ((Label) node).getTooltip().getText());
+                }
+                f.host.player = null;
+                f.browser.updateCurrentMap();
+                f.browser.layout();
+                assertTrue(f.browser.lookupAll(".player-map-badge").isEmpty());
+            } finally {
+                stage.close();
+            }
+        });
     }
 
     @Test
@@ -1238,6 +1304,8 @@ class MapBrowserTest {
 
     private static final class RecordingHost implements MapBrowser.Host {
         Path current;
+        Path player;
+        String playerLevel;
         Path affected;
         Path opened;
         List<Entry> merged;
@@ -1252,6 +1320,8 @@ class MapBrowserTest {
         @Override public void rotateMap(boolean clockwise) {}
         @Override public void openMap(Path file) { opened = file; }
         @Override public Path currentMapFile() { return current; }
+        @Override public Path playerMapFile() { return player; }
+        @Override public String playerLevelName() { return playerLevel; }
         @Override public void importMultiLevelMap(Path folder) {}
         @Override public void mergeIntoMultiLevelMap(List<Entry> maps) { merged = maps; }
         @Override public void manageLevels(Path file) {}

@@ -47,6 +47,10 @@ public final class FearOverlay extends StackPane {
         visibleProperty().addListener((o, a, b) -> action.run());
     }
 
+    public void setLeadingControls(Node controls) {
+        card.getChildren().addFirst(controls);
+    }
+
     public FearOverlay(IntConsumer adjust) {
         this(adjust, () -> { }, () -> { });
     }

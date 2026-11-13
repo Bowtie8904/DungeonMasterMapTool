@@ -20,6 +20,15 @@ The **Online Play** tab (next to DM Link) lets you host an optional, DM-controll
 who join from a browser. **It is not DM control** (that is DM Link below); players get restricted access.
 Nothing starts until you click **Start online session**, so offline play and the second-screen view are unchanged.
 
+**Independent player maps:** By default, switching the DM's map leaves online players on their
+current map. The **Pull players** and **Return to players' map** buttons at the bottom right, left of the scene and session buttons,
+move players to the DM's map or return the DM to theirs. A separate **Players** badge marks their map in the
+library and recent maps; hover over it to see their level. `online.autoPullPlayers` changes switches to pull automatically. Tokens are not
+placed automatically. Stop Online Play before changing the map library or multilevel structure.
+The empty startup workspace does not need saving before pulling players. Actual unsaved maps remain
+protected: if a transition cannot save the players' map, an error dialog explains how to proceed
+(for an unsaved map, return to it and save it first).
+
 Browser door and window badges appear in full once any part overlaps uncovered or explored fog.
 Fully fog-covered badges remain hidden and cannot be clicked.
 
@@ -247,6 +256,9 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   shows whether the session is live or paused. It refreshes even with the Online Play sidebar closed
   and does not intercept map clicks. Character pronouns, when present, appear as
   `username (character [pronouns])`; both rosters grow with their contents and wrap at the map edge.
+- **Movement during map switches:** Updated player browsers identify the map and level with each token move,
+  so the host can reject a delayed move from a previous map. Older browsers remain compatible but cannot
+  supply that additional check.
 - **Roll context:** feature actions and Spellcast rolls have a subtle, collapsed **Source** section in chat.
   Reports from chat action buttons (including Marked For Death and Death Strike) also show the activated
   feature's description and origin, retained in saved chat history rather than the original weapon's source.

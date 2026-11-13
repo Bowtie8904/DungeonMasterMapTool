@@ -38,6 +38,7 @@ describe('online movement reconciliation', () => {
   it('holds the latest release through stale state and ack until token publication catches up', () => {
     const f = fixture();
     const first = f.move(50);
+    expect(first).toMatchObject({ mapKey: 'map/level' });
     const final = f.move(100);
     f.delta(2, 50, { rotationDeg: 90 });
     expect(f.x()).toBe(100);
@@ -134,5 +135,17 @@ describe('online movement reconciliation', () => {
       state: normalizeState({ mapId: 'new-map', levelId: 'level', tokens: [] }) });
     expect(f.store.movesAwaitingState).toBe(0);
     expect(f.x()).toBe(kind === 'control' ? 30 : undefined);
+  });
+
+  it('ignores a late move rejection after a snapshot replaces the map with the same token id', () => {
+    const f = fixture();
+    const move = f.move(100);
+    f.handle({ type: 'snapshot', seq: 2, state: normalizeState({
+      mapId: 'new-map', levelId: 'level', tokens: [{ id: 'token', x: 200, y: 0, sizeTiles: 1 }],
+    }) });
+    f.handle({ type: 'reject', cmdId: move.cmdId, reason: 'Map changed',
+      token: { id: 'token', x: 0, y: 0 } });
+    expect(f.x()).toBe(200);
+    expect(f.context.view.corrected).not.toHaveBeenCalled();
   });
 });

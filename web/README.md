@@ -272,6 +272,10 @@ prediction when older hosts omit `phaseMovement`, rather than incorrectly blocki
 No settings or compatibility-version changes are required. Restart updated hosts and reload browser pages;
 rebuild packaged apps when applicable. This prevents ordinary drag peeking, not modified-client access
 to downloaded map assets.
+Token move commands include an additive `mapKey` identifying the displayed map and level. Updated hosts reject
+stale moves after a map switch; older hosts ignore the extra field, and updated hosts still accept legacy clients
+that omit it. A late move rejection cannot correct a same-ID token after a new map snapshot. This does not change
+the Online Play protocol version.
 `lighting.ts` mirrors desktop light-tint accumulation, falloff and indoor/daytime eligibility.
 Shape emitters use cached, bounded world-space masks with the desktop's distance-based smoothstep glow,
 not hard fills with blurred shadows. Flicker adjusts strength and reach; indoor clipping is preserved.

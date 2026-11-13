@@ -1285,11 +1285,14 @@ export class App {
   }
 
   private commitMove(m: MoveCommit): void {
+    const state = this.store.state;
+    if (!state) return;
     const cmdId = `${Date.now().toString(36)}-${++this.cmdCounter}`;
     this.pendingMoves.set(cmdId, m);
     this.store.beginMove(cmdId, m, this.playerId);
     this.syncInFlight();
-    if (!this.conn.send({ type: 'command', cmdId, kind: 'moveToken', tokenId: m.tokenId, x: m.x, y: m.y })) {
+    if (!this.conn.send({ type: 'command', cmdId, kind: 'moveToken', tokenId: m.tokenId, x: m.x, y: m.y,
+      mapKey: `${state.mapId}/${state.levelId}` })) {
       this.store.cancelMove(cmdId, m.tokenId, { x: m.prevX, y: m.prevY });
       this.restore(m.tokenId, m.prevX, m.prevY);
       this.pendingMoves.delete(cmdId);
@@ -1325,7 +1328,7 @@ export class App {
     const pending = this.pendingMoves.get(msg.cmdId);
     this.pendingMoves.delete(msg.cmdId);
     const correction = msg.token ?? (pending ? { id: pending.tokenId, x: pending.prevX, y: pending.prevY } : undefined);
-    const applyCorrection = !pending || !!correction && this.store.cancelMove(msg.cmdId, pending.tokenId, correction);
+    const applyCorrection = !!pending && !!correction && this.store.cancelMove(msg.cmdId, pending.tokenId, correction);
     this.syncInFlight();
     if (correction && applyCorrection) this.restore(correction.id, correction.x, correction.y);
     if (msg.cmdId.startsWith('portal-') && (msg.reason === 'locked' || msg.reason === 'paused'

@@ -1300,6 +1300,7 @@ class OnlineSessionServerTest {
     private int port;
     private final HttpClient http = HttpClient.newHttpClient();
     private final List<String> moves = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private volatile CompletableFuture<OnlineSessionServer.MoveResult> pendingMove;
     private final List<String> drawings = new java.util.concurrent.CopyOnWriteArrayList<>();
     private final List<JsonNode> dmMessages = new java.util.concurrent.CopyOnWriteArrayList<>();
     private volatile boolean drawingSupported;
@@ -7567,7 +7568,8 @@ class OnlineSessionServerTest {
                     public CompletableFuture<OnlineSessionServer.MoveResult> moveToken(String playerId, String tokenId,
                                                                                          double x, double y) {
                         moves.add(playerId + ":" + tokenId);
-                        return CompletableFuture.completedFuture(OnlineSessionServer.MoveResult.accepted());
+                        CompletableFuture<OnlineSessionServer.MoveResult> pending = pendingMove;
+                        return pending != null ? pending : CompletableFuture.completedFuture(OnlineSessionServer.MoveResult.accepted());
                     }
 
                     @Override
@@ -7983,6 +7985,61 @@ class OnlineSessionServerTest {
         } finally {
             moverWs.abort();
             watcherWs.abort();
+        }
+    }
+
+    @Test
+    void acceptedMoveFromPreviousMapIsNotRelayedAfterMapSwitch() throws Exception {
+        server.publish(state("m1", 0), "m1/l1");
+        pendingMove = new CompletableFuture<>();
+        String cookie = cookie();
+        Inbox mover = new Inbox();
+        Inbox watcher = new Inbox();
+        WebSocket moverWs = connect(cookie, mover);
+        WebSocket watcherWs = connect(cookie, watcher);
+        try {
+            mover.next("snapshot");
+            watcher.next("snapshot");
+            moverWs.sendText("{\"type\":\"command\",\"cmdId\":\"c1\",\"kind\":\"moveToken\",\"tokenId\":\"t1\",\"x\":1,\"y\":2}", true).join();
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (moves.isEmpty() && System.nanoTime() < deadline) Thread.sleep(10);
+            assertFalse(moves.isEmpty());
+            server.publish(state("m2", 0), "m2/l1");
+            watcher.next("snapshot");
+            pendingMove.complete(OnlineSessionServer.MoveResult.accepted());
+            mover.next("ack");
+            Thread.sleep(150);
+            assertTrue(watcher.messages.stream().noneMatch(m -> "tokenMoved".equals(m.path("type").asText())));
+        } finally {
+            moverWs.abort();
+            watcherWs.abort();
+        }
+    }
+
+    @Test
+    void moveMapKeyRejectsStaleAndInvalidKeysWithoutBreakingLegacyClients() throws Exception {
+        server.publish(state("m2", 0), "m2/l1");
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            inbox.next("snapshot");
+            ws.sendText("{\"type\":\"command\",\"cmdId\":\"stale\",\"kind\":\"moveToken\",\"tokenId\":\"t1\","
+                    + "\"x\":1,\"y\":2,\"mapKey\":\"m1/l1\"}", true).join();
+            assertEquals("Map changed", inbox.next("reject").path("reason").asText());
+            assertTrue(moves.isEmpty());
+            ws.sendText("{\"type\":\"command\",\"cmdId\":\"invalid\",\"kind\":\"moveToken\",\"tokenId\":\"t1\","
+                    + "\"x\":1,\"y\":2,\"mapKey\":42}", true).join();
+            assertEquals("Map changed", inbox.next("reject").path("reason").asText());
+            assertTrue(moves.isEmpty());
+            ws.sendText("{\"type\":\"command\",\"cmdId\":\"current\",\"kind\":\"moveToken\",\"tokenId\":\"t1\","
+                    + "\"x\":1,\"y\":2,\"mapKey\":\"m2/l1\"}", true).join();
+            assertEquals("current", inbox.next("ack").path("cmdId").asText());
+            ws.sendText("{\"type\":\"command\",\"cmdId\":\"legacy\",\"kind\":\"moveToken\",\"tokenId\":\"t1\","
+                    + "\"x\":1,\"y\":2}", true).join();
+            assertEquals("legacy", inbox.next("ack").path("cmdId").asText());
+            assertEquals(2, moves.size());
+        } finally {
+            ws.abort();
         }
     }
 

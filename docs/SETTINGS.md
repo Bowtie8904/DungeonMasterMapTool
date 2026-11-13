@@ -237,6 +237,16 @@ API endpoint.
 
 Settings of the optional Online Play web server (the **Online Play** tab). Nothing listens until you click **Start online session**. Online Play is for players in browsers and is not the DM Link (LAN remote control between two DM machines). See the README for tunnel setup.
 
+### `online.autoPullPlayers`
+
+**Default:** `false`. **Applies:** Live.
+
+When false, opening another map or level in the DM view leaves online players on their current map until the DM
+pulls them. When true, map and level switches automatically pull players to the DM's newly opened map.
+Token placement is always manual.
+
+**Keywords:** online, players, map, level, switch, automatic pull.
+
 ### `online.port`
 
 **Default:** `7080`. **Range:** `1024` to `65535`. **Applies:** Live (next session start).

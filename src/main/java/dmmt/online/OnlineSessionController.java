@@ -21,6 +21,10 @@ import java.util.concurrent.CompletableFuture;
 /** Application-side owner of the optional Online Play session: starts the host and publishes the map state. */
 public final class OnlineSessionController implements OnlineSessionServer.Host {
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    public record PlayerMap(DmProject project, Path projectFile, String mapId, String levelId,
+                            String mapName, boolean showGrid) {
+    }
+
     /** What the controller needs from the running application; all calls happen on the JavaFX thread. */
     public interface App {
         DmProject project();
@@ -38,12 +42,43 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         /** Whether the DM's player-grid toggle is on; browsers only draw the grid when it is. */
         boolean showGrid();
 
+        /** The live map published to online players; normally this is the open DM map. */
+        default PlayerMap playerMap() {
+            return new PlayerMap(project(), projectFile(), mapId(), levelId(), mapName(), showGrid());
+        }
+
         /** Applies an already validated move with undo history. */
         void applyMove(String tokenId, double x, double y);
         void applyRotation(String tokenId, double rotationDeg);
         void togglePortal(DmProject.Interactable portal);
 
         void applyOverlay(String id, DmProject.OverlayShape shape);
+
+        private void requireOpenPlayerMap() {
+            if (playerMap().project() != project()) {
+                throw new IllegalStateException("Player map actions require a separate map handler");
+            }
+        }
+
+        default void applyPlayerMove(String tokenId, double x, double y) {
+            requireOpenPlayerMap();
+            applyMove(tokenId, x, y);
+        }
+        default void applyPlayerRotation(String tokenId, double rotationDeg) {
+            requireOpenPlayerMap();
+            applyRotation(tokenId, rotationDeg);
+        }
+        default void togglePlayerPortal(DmProject.Interactable portal) {
+            requireOpenPlayerMap();
+            togglePortal(portal);
+        }
+        default void applyPlayerOverlay(String id, DmProject.OverlayShape shape) {
+            requireOpenPlayerMap();
+            applyOverlay(id, shape);
+        }
+
+        default void playerStateChanged() { }
+        default void beforeStop() throws IOException { }
 
         void measurementsChanged();
 
@@ -156,6 +191,14 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
     }
 
     public synchronized void stop() {
+        if (server != null) {
+            try {
+                app.beforeStop();
+            } catch (IOException ex) {
+                app.status("Online Play: could not save the players' map; session remains running: " + ex.getMessage());
+                return;
+            }
+        }
         if (timer != null) {
             timer.stop();
             timer = null;
@@ -389,19 +432,23 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         return (int) Math.max(0, Math.min(3, (idle + TICK_MS - 1) / TICK_MS));
     }
 
-    private void publishNow() {
+    public void publishNow() {
         OnlineSessionServer current = server;
-        DmProject project = app.project();
+        PlayerMap map = app.playerMap();
+        DmProject project = map.project();
         if (current == null || project == null || campaign == null) {
             return;
         }
         try {
-            if (ActorTokenArtwork.synchronize(project, campaign, store)) app.changed();
+            if (ActorTokenArtwork.synchronize(project, campaign, store)) {
+                app.playerStateChanged();
+                app.changed();
+            }
             var actorSheets = synchronizeActorConditions(project);
-            OnlineStateBuilder.Context ctx = new OnlineStateBuilder.Context(app.mapId(), app.levelId(),
-                    app.mapName(), app.projectFile(), weatherSeed, current.isPaused(), app.showGrid());
+            OnlineStateBuilder.Context ctx = new OnlineStateBuilder.Context(map.mapId(), map.levelId(),
+                    map.mapName(), map.projectFile(), weatherSeed, current.isPaused(), map.showGrid());
             ObjectNode state = builder.build(project, ctx, campaign, assets, java.util.List.copyOf(chatTail), actorSheets);
-            current.publish(state, app.mapId() + "/" + app.levelId());
+            current.publish(state, map.mapId() + "/" + map.levelId());
         } catch (IOException | RuntimeException ex) {
             app.status("Online Play: could not publish the map state: " + ex.getMessage());
         }
@@ -411,7 +458,12 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         Campaign.Actor actor = OnlineStateBuilder.actorOf(token, source);
         if (actor == null) return;
         JsonNode sheet = sheetSnapshot(source.getId(), actor.getId());
-        if (sheet != null) token.setConditions(OnlineTokenConditions.actorConditions(sheet));
+        if (sheet != null) {
+            var conditions = OnlineTokenConditions.actorConditions(sheet);
+            if (!java.util.Objects.equals(token.getConditions(), conditions)) {
+                token.setConditions(conditions);
+            }
+        }
     }
 
     private java.util.Map<String, JsonNode> synchronizeActorConditions(DmProject project) throws IOException {
@@ -423,7 +475,13 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
                 sheets.put(actor.getId(), sheetSnapshot(campaign.getId(), actor.getId()));
             }
             JsonNode sheet = sheets.get(actor.getId());
-            if (sheet != null) token.setConditions(OnlineTokenConditions.actorConditions(sheet));
+            if (sheet != null) {
+                var conditions = OnlineTokenConditions.actorConditions(sheet);
+                if (!java.util.Objects.equals(token.getConditions(), conditions)) {
+                    token.setConditions(conditions);
+                    app.playerStateChanged();
+                }
+            }
         }
         return sheets;
     }
@@ -460,16 +518,17 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         Platform.runLater(() -> {
             if (result.isDone()) return;
             try {
-                if (!running() || paused() || !app.mapId().equals(mapId) || !app.levelId().equals(levelId)) {
+                PlayerMap map = app.playerMap();
+                if (!running() || paused() || !map.mapId().equals(mapId) || !map.levelId().equals(levelId)) {
                     result.complete(OnlineSessionServer.MoveResult.rejected("Map changed or game paused"));
                     return;
                 }
-                if (!Double.isFinite(x) || !Double.isFinite(y) || app.project() == null
+                if (!Double.isFinite(x) || !Double.isFinite(y) || map.project() == null
                         || campaign.getPlayers().stream().noneMatch(p -> playerId.equals(p.getId()))) {
                     result.complete(OnlineSessionServer.MoveResult.rejected("Invalid map ping"));
                     return;
                 }
-                var pings = app.project().getActivePings();
+                var pings = map.project().getActivePings();
                 if (pings.size() >= 256) pings.removeFirst();
                 pings.add(DmProject.PingEvent.builder().x(x).y(y).createdAtMillis(System.currentTimeMillis())
                         .durationMillis(Tuning.PING_DURATION_MS.get()).build());
@@ -489,14 +548,15 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         Platform.runLater(() -> {
             if (result.isDone()) return;
             try {
-                if (!running() || paused() || !app.mapId().equals(command.path("mapId").asText())
-                        || !app.levelId().equals(command.path("levelId").asText())) {
+                PlayerMap map = app.playerMap();
+                if (!running() || paused() || !map.mapId().equals(command.path("mapId").asText())
+                        || !map.levelId().equals(command.path("levelId").asText())) {
                     throw new IllegalArgumentException("Map changed or game paused");
                 }
                 String id = command.path("id").asText("");
-                DmProject project = app.project();
+                DmProject project = map.project();
                 DmProject.OverlayShape shape = OnlineDrawingEdits.prepare(project, campaign.getId(), playerId, command);
-                app.applyOverlay(id, shape);
+                app.applyPlayerOverlay(id, shape);
                 publishNow();
                 result.complete(OnlineSessionServer.MoveResult.accepted());
             } catch (IllegalArgumentException ex) {
@@ -531,18 +591,19 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         Platform.runLater(() -> {
             if (result.isDone()) return;
             try {
-                if (!running() || paused() || !app.mapId().equals(mapId) || !app.levelId().equals(levelId)) {
+                PlayerMap map = app.playerMap();
+                if (!running() || paused() || !map.mapId().equals(mapId) || !map.levelId().equals(levelId)) {
                     result.complete(OnlineSessionServer.MoveResult.rejected("Map changed or game paused"));
                     return;
                 }
-                DmProject project = app.project();
+                DmProject project = map.project();
                 DmProject.Interactable portal = project == null ? null : project.getInteractables().stream()
                         .filter(p -> id.equals(p.getId())).findFirst().orElse(null);
                 if (portal == null || portal.isLocked()) {
                     result.complete(OnlineSessionServer.MoveResult.rejected(portal == null ? "Portal not found" : "locked"));
                     return;
                 }
-                app.togglePortal(portal);
+                app.togglePlayerPortal(portal);
                 publishNow();
                 result.complete(OnlineSessionServer.MoveResult.accepted());
             } catch (RuntimeException ex) {
@@ -560,11 +621,12 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         Platform.runLater(() -> {
             if (result.isDone()) return;
             try {
-                if (!running() || paused() || !app.mapId().equals(mapId) || !app.levelId().equals(levelId)) {
+                PlayerMap map = app.playerMap();
+                if (!running() || paused() || !map.mapId().equals(mapId) || !map.levelId().equals(levelId)) {
                     result.complete(OnlineSessionServer.MoveResult.rejected("Map changed or game paused"));
                     return;
                 }
-                DmProject project = app.project();
+                DmProject project = map.project();
                 DmProject.TokenInstance token = project == null ? null : project.getTokens().stream()
                         .filter(t -> tokenId.equals(t.getId())).findFirst().orElse(null);
                 String problem = !Double.isFinite(rotationDeg) ? "Invalid rotation"
@@ -573,7 +635,7 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
                     result.complete(OnlineSessionServer.MoveResult.rejected(problem));
                     return;
                 }
-                app.applyRotation(tokenId, (rotationDeg % 360 + 360) % 360);
+                app.applyPlayerRotation(tokenId, (rotationDeg % 360 + 360) % 360);
                 publishNow();
                 result.complete(OnlineSessionServer.MoveResult.accepted());
             } catch (RuntimeException ex) {
@@ -586,10 +648,22 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
 
     @Override
     public CompletableFuture<OnlineSessionServer.MoveResult> moveToken(String playerId, String tokenId, double x, double y) {
+        return moveToken(playerId, tokenId, x, y, null);
+    }
+
+    @Override
+    public CompletableFuture<OnlineSessionServer.MoveResult> moveToken(String playerId, String tokenId, double x, double y,
+                                                                      String expectedMapKey) {
         CompletableFuture<OnlineSessionServer.MoveResult> result = new CompletableFuture<>();
         Platform.runLater(() -> {
+            if (result.isDone()) return;
             try {
-                DmProject project = app.project();
+                PlayerMap map = app.playerMap();
+                if (expectedMapKey != null && !expectedMapKey.equals(map.mapId() + "/" + map.levelId())) {
+                    result.complete(OnlineSessionServer.MoveResult.rejected("Map changed"));
+                    return;
+                }
+                DmProject project = map.project();
                 DmProject.TokenInstance token = project == null ? null : project.getTokens().stream()
                         .filter(t -> tokenId.equals(t.getId())).findFirst().orElse(null);
                 // One sheet read serves condition inheritance, the movement block check and phase movement.
@@ -598,18 +672,24 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
                     Campaign.Actor actor = OnlineStateBuilder.actorOf(token, campaign);
                     if (actor != null) {
                         sheet = sheetSnapshot(campaign.getId(), actor.getId());
-                        if (sheet != null) token.setConditions(OnlineTokenConditions.actorConditions(sheet));
+                        if (sheet != null) {
+                            var conditions = OnlineTokenConditions.actorConditions(sheet);
+                            if (!java.util.Objects.equals(token.getConditions(), conditions)) {
+                                token.setConditions(conditions);
+                                app.playerStateChanged();
+                            }
+                        }
                     }
                 }
                 String problem = project == null ? "No map open" : MoveValidator.movementBlockReason(sheet);
                 if (problem == null)
-                    problem = MoveValidator.check(project, campaign, app.mapId(), playerId, token, x, y, MoveValidator.phaseMovement(sheet));
+                    problem = MoveValidator.check(project, campaign, map.mapId(), playerId, token, x, y, MoveValidator.phaseMovement(sheet));
                 if (problem != null) {
                     result.complete(token == null ? OnlineSessionServer.MoveResult.rejected(problem)
                             : OnlineSessionServer.MoveResult.rejected(problem, token.getX(), token.getY()));
                     return;
                 }
-                app.applyMove(tokenId, x, y);
+                app.applyPlayerMove(tokenId, x, y);
                 result.complete(OnlineSessionServer.MoveResult.accepted());
             } catch (IOException ex) {
                 result.complete(OnlineSessionServer.MoveResult.rejected("Could not verify this character's movement effects."));
@@ -627,12 +707,15 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         CompletableFuture<OnlineSessionServer.MoveResult> result = new CompletableFuture<>();
         Platform.runLater(() -> {
             try {
-                if (!running() || app.project() == null || !app.mapId().equals(mapId) || !app.levelId().equals(levelId)
+                PlayerMap map = playerId == null
+                        ? new PlayerMap(app.project(), app.projectFile(), app.mapId(), app.levelId(), app.mapName(), app.showGrid())
+                        : app.playerMap();
+                if (!running() || map.project() == null || !map.mapId().equals(mapId) || !map.levelId().equals(levelId)
                         || playerId != null && paused()) {
                     result.complete(OnlineSessionServer.MoveResult.rejected("Map changed, game paused, or session stopped"));
                     return;
                 }
-                DmProject project = app.project();
+                DmProject project = map.project();
                 DmProject.TokenInstance token = project.getTokens().stream()
                         .filter(t -> tokenId.equals(t.getId())).findFirst().orElse(null);
                 if (token == null) {
@@ -646,7 +729,11 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
                         return;
                     }
                 }
+                var previousConditions = token.getConditions();
                 inheritActorConditions(campaign, token);
+                if (playerId != null && !java.util.Objects.equals(previousConditions, token.getConditions())) {
+                    app.playerStateChanged();
+                }
                 String resolvedName = name == null ? "" : name.trim();
                 String problem = OnlineTokenConditions.validationProblem(type, resolvedName);
                 if (problem == null) problem = OnlineTokenConditions.iconValidationProblem(type, iconId);
@@ -694,6 +781,7 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
                     return;
                 }
                 token.setConditions(conditions);
+                if (playerId != null) app.playerStateChanged();
                 app.changed();
                 publishNow();
                 result.complete(OnlineSessionServer.MoveResult.accepted());
@@ -751,6 +839,10 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
     public void campaignChanged(Campaign changed) {
         Platform.runLater(() -> {
             if (app.project() != null) ActorTokenArtwork.synchronize(app.project(), changed, store);
+            DmProject playerProject = app.playerMap().project();
+            if (playerProject != null && playerProject != app.project()) {
+                if (ActorTokenArtwork.synchronize(playerProject, changed, store)) app.playerStateChanged();
+            }
             app.actorResourcesChanged();
             app.changed();
         });

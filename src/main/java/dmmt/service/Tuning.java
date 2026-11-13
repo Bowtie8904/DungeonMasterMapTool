@@ -270,6 +270,8 @@ public final class Tuning {
             "Maximum number of players connected at the same time.");
     public static final Setting<Boolean> ONLINE_AUDIO_STREAMING = bool(ONLINE, "online.audioStreaming", true, false,
             "Let players' browsers play the DM's music and sound effects during an online session (the DM can toggle it per session).");
+    public static final Setting<Boolean> ONLINE_AUTO_PULL_PLAYERS = bool(ONLINE, "online.autoPullPlayers", false, false,
+            "Automatically move online players to the DM's map and level when the DM switches; otherwise wait for Pull players.");
     public static final Setting<String> ONLINE_CAMPAIGNS_DIR = text(ONLINE, "online.campaignsDirectory", "", false,
             "Folder holding the Online Play campaigns. Empty uses a dmmap-campaigns folder beside the settings file.");
     public static final Setting<String> ONLINE_DAGGERHEART_DIR = text(ONLINE, "online.daggerheartDirectory", "", false,

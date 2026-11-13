@@ -1333,6 +1333,10 @@ public class MapBrowser extends VBox
             return null;
         }
 
+        default Path playerMapFile() { return null; }
+
+        default String playerLevelName() { return null; }
+
         /**
          * Imports several dd2vtt files as the levels of one multilevel map.
          */
@@ -1398,6 +1402,22 @@ public class MapBrowser extends VBox
     private static final PseudoClass OPEN_MAP = PseudoClass.getPseudoClass("open-map");
     private static final PseudoClass DROP_TARGET = PseudoClass.getPseudoClass("drop-target");
     private static final PseudoClass MERGE_TARGET = PseudoClass.getPseudoClass("merge-target");
+
+    private Label playerMapBadge(Path file)
+    {
+        Path player = host.playerMapFile();
+        if (remoteCatalog != null || player == null || file == null
+                || !player.toAbsolutePath().normalize().equals(file.toAbsolutePath().normalize()))
+            return null;
+        String level = host.playerLevelName();
+        String description = "Players are here" + (level == null ? "" : " - " + level);
+        Label badge = new Label("", Icons.icon(MaterialDesignA.ACCOUNT_GROUP));
+        badge.getStyleClass().add("player-map-badge");
+        badge.setMinWidth(Region.USE_PREF_SIZE);
+        badge.setTooltip(new Tooltip(description));
+        badge.setAccessibleText(description);
+        return badge;
+    }
 
     /**
      * What dropping a dragged library entry onto a cell does.
@@ -2581,6 +2601,7 @@ public class MapBrowser extends VBox
         protected void updateItem(Path path, boolean empty)
         {
             super.updateItem(path, empty);
+            setGraphic(null);
             if (empty || path == null)
             {
                 setText(null);
@@ -2590,6 +2611,8 @@ public class MapBrowser extends VBox
             }
             String name = remoteEntries.containsKey(path) ? remoteEntries.get(path).name() : displayName(path);
             setText(name);
+            setGraphic(playerMapBadge(path));
+            setContentDisplay(ContentDisplay.RIGHT);
             Path current = currentMapFile();
             boolean open = current != null && current.toAbsolutePath().normalize().equals(path);
             setTooltip(previewTooltip(name + (open ? " (open)" : "") + "\nDouble-click to open",
@@ -2816,7 +2839,14 @@ public class MapBrowser extends VBox
                 }
                 setTooltip(previewTooltip(entry.name() + (isOpenMap(entry) ? " (open)" : "") + kind
                                                   + "\nDouble-click to open", image));
-                setGraphic(thumbnailBox);
+                Label playerBadge = playerMapBadge(entry.mapFile());
+                if (playerBadge == null) {
+                    setGraphic(thumbnailBox);
+                } else {
+                    HBox graphic = new HBox(6, thumbnailBox, playerBadge);
+                    graphic.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+                    setGraphic(graphic);
+                }
                 return;
             }
             setGraphic(icon);

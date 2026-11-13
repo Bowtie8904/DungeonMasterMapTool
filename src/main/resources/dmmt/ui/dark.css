@@ -848,6 +848,21 @@
     -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.9), 3, 0.6, 0, 0);
 }
 
+.player-map-badge {
+    -fx-background-color: #194b42;
+    -fx-background-radius: 9;
+    -fx-border-color: #5fd0b0;
+    -fx-border-radius: 9;
+    -fx-padding: 1 6;
+    -fx-font-size: 10px;
+    -fx-text-fill: #b7ffe6;
+}
+
+.player-map-badge .ikonli-font-icon {
+    -fx-icon-color: #b7ffe6;
+    -fx-icon-size: 12px;
+}
+
 /* A map dragged onto another map: merge / add into a multilevel map. */
 .tree-cell:merge-target {
     -fx-background-color: #23362c;

@@ -25,8 +25,8 @@ import java.util.UUID;
 
 /**
  * Multilevel maps: a package {@code <Name>/<Name>.dmlevels} (manifest) with one ordinary map package per level below
- * {@code levels/<id>/level.dmmap}. Only one level is ever loaded; settings shared by all levels live in the manifest
- * and are applied to a level whenever it is loaded.
+ * {@code levels/<id>/level.dmmap}. Settings shared by all levels live in the manifest and are applied to a level
+ * whenever it is loaded.
  */
 public class MultiLevelService {
     private static final Log LOG = Log.of(MultiLevelService.class);
@@ -230,6 +230,19 @@ public class MultiLevelService {
         saveManifest(manifestFile, manifest);
         writePackageThumbnail(manifestFile, levelFile);
         return manifest;
+    }
+
+    /**
+     * Saves an inactive level without changing the last-opened level, shared settings, or package thumbnail.
+     * Callers must serialize this with map library operations and other saves of the same level.
+     */
+    public void saveInactiveLevel(Path manifestFile, String levelId, DmProject project) throws IOException {
+        MultiLevelManifest manifest = loadManifest(manifestFile);
+        MultiLevelManifest.Level level = manifest.findLevel(levelId);
+        if (level == null) {
+            throw new IOException("The level no longer exists.");
+        }
+        projectService.save(levelFile(manifestFile, level), project);
     }
 
     public static MultiLevelManifest.SharedSettings captureShared(DmProject project) {

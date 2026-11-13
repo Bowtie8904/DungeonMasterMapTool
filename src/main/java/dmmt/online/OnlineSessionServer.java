@@ -99,6 +99,12 @@ public final class OnlineSessionServer {
         /** Validates and applies a move on the application thread. */
         CompletableFuture<MoveResult> moveToken(String playerId, String tokenId, double x, double y);
 
+        /** The map key is captured before a move is dispatched to the application thread. */
+        default CompletableFuture<MoveResult> moveToken(String playerId, String tokenId, double x, double y,
+                                                        String mapKey) {
+            return moveToken(playerId, tokenId, x, y);
+        }
+
         void rosterChanged();
 
         void campaignChanged(Campaign campaign);
@@ -6251,18 +6257,28 @@ public final class OnlineSessionServer {
             sendTo(client.ctx, reject(cmdId, "invalid", tokenId));
             return;
         }
-        host.moveToken(client.playerId, tokenId, x, y).orTimeout(5, TimeUnit.SECONDS).whenComplete((result, error) -> {
+        String moveMapKey = currentMapKey();
+        if (moveMapKey == null || msg.has("mapKey") && (!msg.path("mapKey").isTextual()
+                || !java.util.Objects.equals(moveMapKey, msg.path("mapKey").asText()))) {
+            sendTo(client.ctx, reject(cmdId, "Map changed", null));
+            return;
+        }
+        host.moveToken(client.playerId, tokenId, x, y, moveMapKey).orTimeout(5, TimeUnit.SECONDS).whenComplete((result, error) -> {
             if (error != null || result == null) {
                 sendTo(client.ctx, reject(cmdId, "failed", tokenId));
             } else if (result.ok()) {
                 ObjectNode ack = MAPPER.createObjectNode();
                 ack.put("type", "ack").put("cmdId", cmdId).put("seq", seq());
                 sendTo(client.ctx, ack.toString());
-                relayTokenMove(client, tokenId, x, y);
+                relayTokenMove(client, tokenId, x, y, moveMapKey);
             } else {
                 sendTo(client.ctx, reject(cmdId, result.reason(), tokenId, result.x(), result.y()));
             }
         });
+    }
+
+    private synchronized String currentMapKey() {
+        return currentMapKey;
     }
 
     /**
@@ -6270,8 +6286,8 @@ public final class OnlineSessionServer {
      * delta. Only tokens in the published player state are relayed, so hidden tokens never leak; the authoritative
      * position still arrives with the next delta.
      */
-    private synchronized void relayTokenMove(Client sender, String tokenId, double x, double y) {
-        if (current == null || currentMapKey == null) {
+    private synchronized void relayTokenMove(Client sender, String tokenId, double x, double y, String moveMapKey) {
+        if (current == null || currentMapKey == null || !currentMapKey.equals(moveMapKey)) {
             return;
         }
         boolean published = false;
