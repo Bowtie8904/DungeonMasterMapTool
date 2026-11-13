@@ -750,6 +750,11 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   The account becomes available when its last tab disconnects, on logout or when you kick the player.
   An abandoned login reservation expires after 30 seconds if no tab connects.
   Players move only their assigned actors/tokens; the host validates walls, closed doors and ownership.
+  Updated browsers stop token centers just before walls and closed doors/windows locally, so dragging
+  stays immediate without revealing fog from an illegal position. Keyboard nudges and group token
+  previews use the same checks; spectral wall passage and movement-blocking effects follow host policy.
+  The host still validates every move and corrects conflicts. Restart the updated host and reload player
+  pages to enable this; older hosts retain legacy drag prediction. This is not protection against modified clients.
   In Select mode, hovering over a controllable token or your own drawing/measurement shows a **grab** cursor;
   double-click a controlled token for an actor you own to open its character sheet. Moving a token shows
   **grabbing**. Drawing resize handles show a diagonal resize cursor, and your measurement

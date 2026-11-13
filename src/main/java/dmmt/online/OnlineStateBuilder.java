@@ -57,6 +57,11 @@ public final class OnlineStateBuilder {
     /** Builds the player-independent state; per-client fields ({@code fogMemory}) are added by the server. */
     public synchronized ObjectNode build(DmProject project, Context ctx, Campaign campaign, AssetRegistry assets,
                                          List<JsonNode> chatTail) {
+        return build(project, ctx, campaign, assets, chatTail, Map.of());
+    }
+
+    public synchronized ObjectNode build(DmProject project, Context ctx, Campaign campaign, AssetRegistry assets,
+                                         List<JsonNode> chatTail, Map<String, JsonNode> actorSheets) {
         ObjectNode state = MAPPER.createObjectNode();
         state.put("mapId", ctx.mapId());
         state.put("levelId", ctx.levelId());
@@ -247,7 +252,7 @@ public final class OnlineStateBuilder {
             flash.put("color", dmmt.service.Tuning.WEATHER_FLASH_COLOR.get());
         }
 
-        state.set("tokens", tokens(project, campaign, assets, ctx.mapId()));
+        state.set("tokens", tokens(project, campaign, assets, ctx.mapId(), actorSheets));
 
         FogMask mask = project.getFog() == null ? null : project.getFog().getMask();
         if (mask != null) {
@@ -299,7 +304,8 @@ public final class OnlineStateBuilder {
         return node;
     }
 
-    private ArrayNode tokens(DmProject project, Campaign campaign, AssetRegistry assets, String mapId) {
+    private ArrayNode tokens(DmProject project, Campaign campaign, AssetRegistry assets, String mapId,
+                             Map<String, JsonNode> actorSheets) {
         ArrayNode tokens = MAPPER.createArrayNode();
         Map<String, DmProject.TokenDefinition> defs = project.getTokenDefinitions() == null
                 ? Map.of() : project.getTokenDefinitions();
@@ -314,6 +320,10 @@ public final class OnlineStateBuilder {
             node.put("rotationDeg", token.getRotationDeg());
             DmProject.TokenDefinition def = defs.get(token.getDefinitionId());
             Campaign.Actor actor = actorOf(token, campaign);
+            JsonNode sheet = actor == null ? null : actorSheets.get(actor.getId());
+            node.put("phaseMovement", MoveValidator.phaseMovement(sheet));
+            String movementBlocked = MoveValidator.movementBlockReason(sheet);
+            if (movementBlocked != null) node.put("movementBlocked", movementBlocked);
             if (token.isNameVisible() && def != null && def.getName() != null) {
                 node.put("name", def.getName());
             } else if (actor != null) {

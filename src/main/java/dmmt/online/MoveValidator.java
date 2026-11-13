@@ -1,10 +1,40 @@
 package dmmt.online;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import dmmt.model.DmProject;
 
 /** Host-side rules for a player-requested token move: ownership, visibility, walls and closed doors. */
 public final class MoveValidator {
     private MoveValidator() {
+    }
+
+    static String movementBlockReason(JsonNode saved) {
+        if (saved == null) return null;
+        JsonNode effects = saved.path("effects");
+        if (effects.isArray()) {
+            for (JsonNode effect : effects)
+                if (effect.path("blocksMovement").asBoolean())
+                    return "This character cannot move while a movement-blocking effect is active.";
+        }
+        return null;
+    }
+
+    static boolean phaseMovement(JsonNode saved) {
+        if (saved == null) return false;
+        boolean spectral = false;
+        for (JsonNode effect : saved.path("effects")) {
+            if (effect.has("spectralHp") && effect.path("phaseMovement").asBoolean()) {
+                spectral = true;
+                break;
+            }
+        }
+        if (!spectral) return false;
+        ObjectNode sheet = ((ObjectNode) saved).deepCopy();
+        DeathMoves.sync(sheet);
+        for (JsonNode effect : sheet.path("effects"))
+            if (effect.has("spectralHp") && effect.path("phaseMovement").asBoolean()) return true;
+        return false;
     }
 
     /** Returns {@code null} when the move is allowed, otherwise a short reason. */

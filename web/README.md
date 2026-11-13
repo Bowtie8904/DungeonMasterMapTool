@@ -260,6 +260,18 @@ Controlled actor tokens temporarily clear fog within the host's configured sight
 of lighting; walls and closed doors block it. Sight-only cells are not added to explored memory, and controlled ordinary
 tokens keep their existing vision behavior. The optional `view.actorSightTiles` field defaults to 40 for older hosts;
 older clients retain their previous range. The additive field requires no protocol version change.
+`movement.ts` sweeps token centers against cached walls and closed doors/windows before drag positions
+reach tokens, attached lights or fog sight. Fast jumps, endpoints and collinear walls cannot tunnel;
+collisions stop just short of the first barrier without a network round trip. Half-tile snapping and
+Shift free movement remain available; keyboard nudges and group token previews/commits use the same rules.
+The host publishes optional token `phaseMovement` (boolean) and `movementBlocked` (reason) fields from
+the same sheet rules as move validation. Restrained tokens remain blocked even when spectral. Geometry
+and policy refresh on state updates, while authoritative rejection/correction and tentative explored-memory
+handling remain unchanged. Older clients ignore these additive fields; newer clients retain legacy
+prediction when older hosts omit `phaseMovement`, rather than incorrectly blocking spectral passage.
+No settings or compatibility-version changes are required. Restart updated hosts and reload browser pages;
+rebuild packaged apps when applicable. This prevents ordinary drag peeking, not modified-client access
+to downloaded map assets.
 `lighting.ts` mirrors desktop light-tint accumulation, falloff and indoor/daytime eligibility.
 Shape emitters use cached, bounded world-space masks with the desktop's distance-based smoothstep glow,
 not hard fills with blurred shadows. Flicker adjusts strength and reach; indoor clipping is preserved.

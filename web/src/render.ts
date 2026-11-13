@@ -2,6 +2,7 @@ import { base64ToBytes, bitsToFlags } from './bitset';
 import { flickerAmount } from './flicker';
 import { FogState } from './fogstate';
 import { TokenMotion } from './motion';
+import { stopAtObstacle } from './movement';
 import { lightActive, rasterLightTint, rasterShapeGlow, TintEnvironment, TintScratch } from './lighting';
 import { Door, GameState, IndoorData, Measurement, Overlay, TextBoxState, Token } from './protocol';
 import { DrawMode, DrawingStyle, MapTool, drawingBounds, drawingHit, drawingId, measurementBounds, measurementHit, measurementLabel, measurementPath, ownsDrawing, resizeDrawing, translateDrawing } from './tools';
@@ -140,6 +141,7 @@ export class MapView {
   private lightPolys = new Map<string, Polygon>();
   private sights: Array<{ token: Token; sight: Polygon }> = [];
   private segmentsCache: number[] = [];
+  private movementSegments: number[] = [];
   private fitted = '';
   private drag: { kind: 'pan' | 'token'; moved?: boolean; token?: Token; startX: number; startY: number; prevX: number; prevY: number; camX: number; camY: number } | null = null;
 
@@ -234,6 +236,7 @@ export class MapView {
       this.selectedDrawing = null; this.onSelection(null, false);
     }
     this.state = state;
+    this.movementSegments = state ? blockingSegments(state.walls, state.doors) : [];
     for (const id of this.selectedTokens) {
       if (!state?.tokens.some(t => t.id === id && this.isMine(t))) this.selectedTokens.delete(id);
     }
@@ -474,11 +477,21 @@ export class MapView {
     const step = this.state.grid.pixelsPerCell / 2;
     for (const t of tokens) {
       const prevX = t.x, prevY = t.y;
-      t.x += direction[0] * step; t.y += direction[1] * step;
+      const next = this.movementPosition(t, t.x + direction[0] * step, t.y + direction[1] * step);
+      if (next.x === prevX && next.y === prevY) continue;
+      t.x = next.x; t.y = next.y;
       this.onMove({ tokenId: t.id, x: t.x, y: t.y, prevX, prevY });
     }
     this.invalidateVision();
     return true;
+  }
+
+  private movementPosition(token: Token, x: number, y: number): { x: number; y: number } {
+    const policy = this.state?.tokens.find(t => t.id === token.id) ?? token;
+    if (policy.movementBlocked || policy.conditions?.some(c => c.type === 'restrained')) return { x: token.x, y: token.y };
+    // Older hosts lack the policy needed to distinguish ordinary movement from spectral passage.
+    if (policy.phaseMovement === undefined || policy.phaseMovement) return { x, y };
+    return stopAtObstacle(token, x, y, this.movementSegments);
   }
 
   private rotationHandle(t: Token): { x: number; y: number } {
@@ -705,8 +718,10 @@ export class MapView {
     if (d.token && !this.paused) {
       const w = this.toWorld(e);
       const step = this.state.grid.pixelsPerCell / 2;
-      const nx = e.shiftKey ? w.x : Math.round(w.x / step) * step;
-      const ny = e.shiftKey ? w.y : Math.round(w.y / step) * step;
+      const next = this.movementPosition(d.token,
+        e.shiftKey ? w.x : Math.round(w.x / step) * step,
+        e.shiftKey ? w.y : Math.round(w.y / step) * step);
+      const nx = next.x, ny = next.y;
       if (nx !== d.token.x || ny !== d.token.y) {
         d.token.x = nx;
         d.token.y = ny;
@@ -772,8 +787,11 @@ export class MapView {
             this.onDrawing('update', o.id, translateDrawing(o, dx, dy));
         }
         for (const t of g.tokens) {
-          if (this.state?.tokens.some(current => current.id === t.id && this.isMine(current)))
-            this.onMove({ tokenId: t.id, x: t.x + dx, y: t.y + dy, prevX: t.x, prevY: t.y });
+          if (this.state?.tokens.some(current => current.id === t.id && this.isMine(current))) {
+            const next = this.movementPosition(t, t.x + dx, t.y + dy);
+            if (next.x !== t.x || next.y !== t.y)
+              this.onMove({ tokenId: t.id, ...next, prevX: t.x, prevY: t.y });
+          }
         }
         for (const m of g.measures) {
           if (this.measurements.some(current => current.id === m.id && current.ownerId === this.playerId))
@@ -1159,7 +1177,7 @@ export class MapView {
       const g = this.group, dx = g.end.x - g.start.x, dy = g.end.y - g.start.y;
       for (const o of g.shapes) this.drawOverlay(ctx, translateDrawing(o, dx, dy), s.grid.pixelsPerCell);
       for (const t of g.tokens) {
-        this.drawTokenSelection(ctx, { ...t, x: t.x + dx, y: t.y + dy }, s.grid.pixelsPerCell, false);
+        this.drawTokenSelection(ctx, { ...t, ...this.movementPosition(t, t.x + dx, t.y + dy) }, s.grid.pixelsPerCell, false);
       }
       for (const m of g.measures) {
         measurementPath(ctx, { ...m, x1: m.x1 + dx, y1: m.y1 + dy, x2: m.x2 + dx, y2: m.y2 + dy }); ctx.stroke();

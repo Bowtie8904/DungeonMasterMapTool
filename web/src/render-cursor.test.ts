@@ -24,8 +24,8 @@ class CanvasStub {
   setPointerCapture() { this.captured = true; }
   hasPointerCapture() { return this.captured; }
   releasePointerCapture() { this.captured = false; }
-  pointer(type: string, x: number, y: number, button = 0) {
-    const event = Object.assign(new Event(type, { cancelable: true }), { clientX: x, clientY: y, button, pointerId: 1 });
+  pointer(type: string, x: number, y: number, button = 0, shiftKey = false) {
+    const event = Object.assign(new Event(type, { cancelable: true }), { clientX: x, clientY: y, button, pointerId: 1, shiftKey });
     this.listeners.get(type)?.(event);
     return event;
   }
@@ -51,7 +51,7 @@ const measure: Measurement = { id: 'measure', ownerId: 'player', kind: 'distance
 function state(): GameState {
   return { mapId: 'map', levelId: 'level', grid: { pixelsPerCell: 50 }, images: [], walls: [], doors: [],
     lights: [], lighting: { ambient: 1 }, weather: { type: 'NONE', intensity: 0, lightningIntervalSeconds: 0, seed: 0 },
-    tokens: [{ id: 'token', x: 100, y: 100, sizeTiles: 1, controlledBy: ['player'] },
+    tokens: [{ id: 'token', x: 100, y: 100, sizeTiles: 1, controlledBy: ['player'], phaseMovement: false },
       { id: 'other', x: 600, y: 100, sizeTiles: 1, controlledBy: ['other'] }],
     overlays: [{ ...shape }], dmFog: null, fogMemory: null, actors: [], paused: false, visionTiles: 8 };
 }
@@ -79,6 +79,105 @@ describe('map interaction cursors', () => {
     view.setMeasurements([{ ...measure }]);
   });
   afterEach(() => { view.destroy(); vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  it.each([false, true])('clips fast drags before vision, attached lighting and move commands (Shift=%s)', shift => {
+    current.walls = [150, -10000, 150, 10000];
+    current.fogGrid = { originX: 0, originY: 0, cellSize: 10, cols: 50, rows: 50 };
+    current.lights = [{ id: 'token-light-token', x: 100, y: 100, range: 200, on: true,
+      color: '#ffffff', brightness: 1, revealMode: 'WHILE_LIT' }];
+    view.setState(current);
+    const moves = vi.fn();
+    view.onMove = moves;
+    canvas.pointer('pointerdown', 100, 100);
+    canvas.pointer('pointermove', 900, 100, 0, shift);
+    const token = current.tokens[0];
+    expect(token.x).toBeCloseTo(149.9999, 7);
+    Reflect.get(view, 'recomputeVision').call(view, current);
+    const sight = Reflect.get(view, 'sights')[0];
+    expect(sight.token.x).toBe(token.x);
+    expect(Math.max(...sight.sight.xs)).toBeLessThanOrEqual(150.000001);
+    expect(Reflect.get(view, 'liveLights').call(view, current)[0].x).toBe(token.x);
+    expect(view.fog.visible[10 * 50 + 10]).toBe(1);
+    expect(view.fog.visible[10 * 50 + 20]).toBe(0);
+    expect(view.fog.hasNewExplored).toBe(false);
+    canvas.pointer('pointerup', 900, 100);
+    expect(moves).toHaveBeenCalled();
+    expect(moves.mock.calls.every(([move]) => move.x < 150)).toBe(true);
+    expect(token.x).toBeLessThan(150);
+    expect(Reflect.get(view, 'liveLights').call(view, current)[0].x).toBe(token.x);
+  });
+
+  it('refreshes closed door/window collisions during a drag and passes an open portal', () => {
+    current.doors = [{ id: 'door', x1: 150, y1: 0, x2: 150, y2: 1000, open: false, kind: 'window' }];
+    view.setState(current);
+    canvas.pointer('pointerdown', 100, 100);
+    canvas.pointer('pointermove', 200, 100);
+    expect(current.tokens[0].x).toBeLessThan(150);
+    current.doors[0].open = true;
+    view.setState(current);
+    canvas.pointer('pointermove', 200, 100);
+    expect(current.tokens[0].x).toBe(200);
+    current.doors[0].open = false;
+    view.setState(current);
+    canvas.pointer('pointermove', 100, 100);
+    expect(current.tokens[0].x).toBeGreaterThan(150);
+  });
+
+  it('retains snapping, free movement, spectral passage and legacy-host prediction', () => {
+    canvas.pointer('pointerdown', 100, 100);
+    canvas.pointer('pointermove', 133, 100);
+    expect(current.tokens[0].x).toBe(125);
+    canvas.pointer('pointermove', 133, 100, 0, true);
+    expect(current.tokens[0].x).toBeCloseTo(133);
+    current.walls = [150, 0, 150, 1000];
+    current.tokens[0].phaseMovement = true;
+    view.setState(current);
+    canvas.pointer('pointermove', 200, 100);
+    expect(current.tokens[0].x).toBe(200);
+    delete current.tokens[0].phaseMovement;
+    view.setState(current);
+    canvas.pointer('pointermove', 100, 100);
+    expect(current.tokens[0].x).toBe(100);
+  });
+
+  it.each(['effect', 'restrained'])('prevents local movement under a %s restriction, even when spectral', restriction => {
+    current.tokens[0].phaseMovement = true;
+    if (restriction === 'effect') current.tokens[0].movementBlocked = 'Cannot move';
+    else current.tokens[0].conditions = [{ id: 'restrained', type: 'restrained', name: 'Restrained' }];
+    view.setState(current);
+    const move = vi.fn(); view.onMove = move;
+    canvas.pointer('pointerdown', 100, 100);
+    canvas.pointer('pointermove', 200, 100);
+    canvas.pointer('pointerup', 200, 100);
+    canvas.key('ArrowRight');
+    expect(current.tokens[0].x).toBe(100);
+    expect(move).not.toHaveBeenCalled();
+  });
+
+  it('clips keyboard nudges and group token commits with the same movement rules', () => {
+    current.walls = [110, 0, 110, 1000];
+    view.setState(current);
+    const move = vi.fn(); view.onMove = move;
+    canvas.pointer('pointerdown', 100, 100);
+    canvas.pointer('pointerup', 100, 100);
+    canvas.key('ArrowRight');
+    expect(current.tokens[0].x).toBeCloseTo(109.9999, 7);
+    expect(move.mock.calls[0][0].x).toBeLessThan(110);
+    move.mockClear();
+    current.tokens[0].x = 100;
+    canvas.pointer('pointerdown', 50, 50);
+    canvas.pointer('pointermove', 350, 350);
+    canvas.pointer('pointerup', 350, 350);
+    canvas.pointer('pointerdown', 100, 100);
+    canvas.pointer('pointermove', 200, 100);
+    const group = Reflect.get(view, 'group');
+    expect(group).not.toBeNull();
+    const preview = Reflect.get(view, 'movementPosition').call(view, group.tokens[0], 200, 100);
+    expect(preview.x).toBeLessThan(110);
+    canvas.pointer('pointerup', 200, 100);
+    expect(move).toHaveBeenCalledOnce();
+    expect(move.mock.calls[0][0].x).toBe(preview.x);
+  });
 
   it('draws a cached smooth glow with runtime strength and invalidates it for range and geometry changes', () => {
     const context = { save: vi.fn(), restore: vi.fn(), drawImage: vi.fn(), globalAlpha: 1, imageSmoothingEnabled: false };

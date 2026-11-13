@@ -166,6 +166,9 @@ export interface Token {
   centerY?: number;
   actorId?: string;
   controlledBy?: string[];
+  /** Absent on legacy hosts, which cannot advertise movement exceptions. */
+  phaseMovement?: boolean;
+  movementBlocked?: string;
   conditions?: Array<{ id: string; type: 'hidden' | 'restrained' | 'vulnerable' | 'custom'; name: string; iconId?: string }>;
 }
 

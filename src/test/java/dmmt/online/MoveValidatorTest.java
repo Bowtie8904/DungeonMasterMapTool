@@ -8,6 +8,44 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MoveValidatorTest {
+    @Test
+    void publishesMovementPolicyUsingTheHostsSheetRules(@org.junit.jupiter.api.io.TempDir java.nio.file.Path temp)
+            throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var sheet = mapper.readTree("""
+                {"hp":{"on":3,"slots":6},"effects":[
+                  {"spectralHp":3,"phaseMovement":true},{"blocksMovement":true}]}
+                """);
+        var before = sheet.deepCopy();
+        Campaign campaign = campaign();
+        DmProject project = new DmProject();
+        project.getTokens().add(token(campaign, true));
+        project.getTokens().add(DmProject.TokenInstance.builder().id("ordinary").definitionId("d").playerVisible(true).build());
+        project.getTokens().add(DmProject.TokenInstance.builder().id("hidden").definitionId("d").playerVisible(false).build());
+        var builder = new OnlineStateBuilder(file -> null);
+        var context = new OnlineStateBuilder.Context("m", "level", "", null, 0, false, false);
+        var assets = new AssetRegistry(temp.resolve("cache"), 2048, null);
+        var state = builder.build(project, context, campaign, assets, List.of(), java.util.Map.of("a1", sheet));
+        assertEquals(2, state.path("tokens").size());
+        var actorToken = state.path("tokens").get(0);
+        assertTrue(actorToken.path("phaseMovement").asBoolean());
+        assertEquals(MoveValidator.movementBlockReason(sheet), actorToken.path("movementBlocked").asText());
+        assertFalse(state.path("tokens").get(1).path("phaseMovement").asBoolean());
+        assertFalse(state.path("tokens").get(1).has("movementBlocked"));
+        assertEquals(before, sheet, "Publishing must not mutate saved sheets");
+
+        ((com.fasterxml.jackson.databind.node.ObjectNode) sheet.path("hp")).put("on", 2);
+        assertFalse(MoveValidator.phaseMovement(sheet), "Taking damage expires spectral passage");
+        assertFalse(builder.build(project, context, campaign, assets, List.of(), java.util.Map.of("a1", sheet))
+                .path("tokens").get(0).path("phaseMovement").asBoolean());
+        ((com.fasterxml.jackson.databind.node.ObjectNode) sheet.path("hp")).put("on", 6);
+        assertFalse(MoveValidator.phaseMovement(sheet), "Full HP expires spectral passage");
+        assertNull(MoveValidator.movementBlockReason(null));
+        assertFalse(MoveValidator.phaseMovement(null));
+        assertFalse(builder.build(project, context, campaign, assets, List.of())
+                .path("tokens").get(0).path("phaseMovement").asBoolean());
+    }
+
     private static Campaign campaign() {
         Campaign c = new Campaign();
         c.setName("c");

@@ -397,10 +397,10 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         }
         try {
             if (ActorTokenArtwork.synchronize(project, campaign, store)) app.changed();
-            synchronizeActorConditions(project);
+            var actorSheets = synchronizeActorConditions(project);
             OnlineStateBuilder.Context ctx = new OnlineStateBuilder.Context(app.mapId(), app.levelId(),
                     app.mapName(), app.projectFile(), weatherSeed, current.isPaused(), app.showGrid());
-            ObjectNode state = builder.build(project, ctx, campaign, assets, java.util.List.copyOf(chatTail));
+            ObjectNode state = builder.build(project, ctx, campaign, assets, java.util.List.copyOf(chatTail), actorSheets);
             current.publish(state, app.mapId() + "/" + app.levelId());
         } catch (IOException | RuntimeException ex) {
             app.status("Online Play: could not publish the map state: " + ex.getMessage());
@@ -414,7 +414,7 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         if (sheet != null) token.setConditions(OnlineTokenConditions.actorConditions(sheet));
     }
 
-    private void synchronizeActorConditions(DmProject project) throws IOException {
+    private java.util.Map<String, JsonNode> synchronizeActorConditions(DmProject project) throws IOException {
         var sheets = new java.util.HashMap<String, JsonNode>();
         for (var token : project.getTokens()) {
             Campaign.Actor actor = OnlineStateBuilder.actorOf(token, campaign);
@@ -425,6 +425,7 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
             JsonNode sheet = sheets.get(actor.getId());
             if (sheet != null) token.setConditions(OnlineTokenConditions.actorConditions(sheet));
         }
+        return sheets;
     }
 
     private JsonNode sheetSnapshot(String campaignId, String actorId) throws IOException {
@@ -600,9 +601,9 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
                         if (sheet != null) token.setConditions(OnlineTokenConditions.actorConditions(sheet));
                     }
                 }
-                String problem = project == null ? "No map open" : movementBlockReason(sheet);
+                String problem = project == null ? "No map open" : MoveValidator.movementBlockReason(sheet);
                 if (problem == null)
-                    problem = MoveValidator.check(project, campaign, app.mapId(), playerId, token, x, y, phaseMovement(sheet));
+                    problem = MoveValidator.check(project, campaign, app.mapId(), playerId, token, x, y, MoveValidator.phaseMovement(sheet));
                 if (problem != null) {
                     result.complete(token == null ? OnlineSessionServer.MoveResult.rejected(problem)
                             : OnlineSessionServer.MoveResult.rejected(problem, token.getX(), token.getY()));
@@ -736,25 +737,6 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         }
     }
 
-    private String movementBlockReason(JsonNode saved) {
-        if (saved == null) return null;
-        JsonNode effects = saved.path("effects");
-        if (effects.isArray()) {
-            for (JsonNode effect : effects)
-                if (effect.path("blocksMovement").asBoolean())
-                    return "This character cannot move while a movement-blocking effect is active.";
-        }
-        return null;
-    }
-
-    private boolean phaseMovement(JsonNode saved) {
-        if (saved == null) return false;
-        ObjectNode sheet = ((ObjectNode) saved).deepCopy();
-        DeathMoves.sync(sheet);
-        for (JsonNode effect : sheet.path("effects"))
-            if (effect.has("spectralHp") && effect.path("phaseMovement").asBoolean()) return true;
-        return false;
-    }
     @Override
     public void rosterChanged() {
         Platform.runLater(app::changed);
