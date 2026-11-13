@@ -651,6 +651,27 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         return moveToken(playerId, tokenId, x, y, null);
     }
 
+    private JsonNode actorSheet(DmProject.TokenInstance token) throws IOException {
+        Campaign.Actor actor = token == null ? null : OnlineStateBuilder.actorOf(token, campaign);
+        return actor == null ? null : sheetSnapshot(campaign.getId(), actor.getId());
+    }
+
+    private String movementBlockReason(DmProject.TokenInstance token) throws IOException {
+        return movementBlockReason(actorSheet(token));
+    }
+
+    private String movementBlockReason(JsonNode sheet) {
+        return MoveValidator.movementBlockReason(sheet);
+    }
+
+    private boolean phaseMovement(DmProject.TokenInstance token) throws IOException {
+        return phaseMovement(actorSheet(token));
+    }
+
+    private boolean phaseMovement(JsonNode sheet) {
+        return MoveValidator.phaseMovement(sheet);
+    }
+
     @Override
     public CompletableFuture<OnlineSessionServer.MoveResult> moveToken(String playerId, String tokenId, double x, double y,
                                                                       String expectedMapKey) {
@@ -667,23 +688,17 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
                 DmProject.TokenInstance token = project == null ? null : project.getTokens().stream()
                         .filter(t -> tokenId.equals(t.getId())).findFirst().orElse(null);
                 // One sheet read serves condition inheritance, the movement block check and phase movement.
-                JsonNode sheet = null;
-                if (token != null && campaign != null) {
-                    Campaign.Actor actor = OnlineStateBuilder.actorOf(token, campaign);
-                    if (actor != null) {
-                        sheet = sheetSnapshot(campaign.getId(), actor.getId());
-                        if (sheet != null) {
-                            var conditions = OnlineTokenConditions.actorConditions(sheet);
-                            if (!java.util.Objects.equals(token.getConditions(), conditions)) {
-                                token.setConditions(conditions);
-                                app.playerStateChanged();
-                            }
-                        }
+                JsonNode sheet = actorSheet(token);
+                if (sheet != null) {
+                    var conditions = OnlineTokenConditions.actorConditions(sheet);
+                    if (!java.util.Objects.equals(token.getConditions(), conditions)) {
+                        token.setConditions(conditions);
+                        app.playerStateChanged();
                     }
                 }
-                String problem = project == null ? "No map open" : MoveValidator.movementBlockReason(sheet);
+                String problem = project == null ? "No map open" : movementBlockReason(sheet);
                 if (problem == null)
-                    problem = MoveValidator.check(project, campaign, map.mapId(), playerId, token, x, y, MoveValidator.phaseMovement(sheet));
+                    problem = MoveValidator.check(project, campaign, map.mapId(), playerId, token, x, y, phaseMovement(sheet));
                 if (problem != null) {
                     result.complete(token == null ? OnlineSessionServer.MoveResult.rejected(problem)
                             : OnlineSessionServer.MoveResult.rejected(problem, token.getX(), token.getY()));

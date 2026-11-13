@@ -648,32 +648,36 @@ describe('cross-player roll buttons', () => {
 
   it('assigns configured content roll triggers to valid sections', () => {
     const files = ['ancestries', 'classes', 'communities', 'consumables', 'domain-cards', 'items', 'transformations'];
-    const triggers: Array<{ label: string; on: string; rollSection?: string }> = [];
-    const walk = (node: unknown): void => {
-      if (Array.isArray(node)) { node.forEach(walk); return; }
+    const triggers: Array<{ id: string; on: string; file: string; rollSection?: string }> = [];
+    const walk = (node: unknown, file: string): void => {
+      if (Array.isArray(node)) { node.forEach(child => walk(child, file)); return; }
       if (!node || typeof node !== 'object') return;
       for (const [key, value] of Object.entries(node)) {
-        if ((key === 'rollTriggers' || key === 'conditionalRollTriggers') && Array.isArray(value)) triggers.push(...value);
-        walk(value);
+        if ((key === 'rollTriggers' || key === 'conditionalRollTriggers') && Array.isArray(value)) {
+          triggers.push(...value.map(trigger => ({ ...trigger, file })));
+        }
+        walk(value, file);
       }
     };
-    for (const file of files) walk(JSON.parse(readFileSync(new URL(`../../../dmmap-daggerheart/${file}.json`, import.meta.url), 'utf8')));
+    for (const file of files) {
+      walk(JSON.parse(readFileSync(new URL(`../../../dmmap-daggerheart/${file}.json`, import.meta.url), 'utf8')), file);
+    }
     expect(triggers.length).toBeGreaterThan(100);
     expect(triggers.filter(t => t.rollSection && !['result', 'feature', 'other'].includes(t.rollSection))).toEqual([]);
-    const section = (label: string) => {
-      const trigger = triggers.find(t => t.label === label)!;
+    const section = (file: string, id: string, on: string) => {
+      const trigger = triggers.find(t => t.file === file && t.id === id && t.on === on)!;
       return rollTriggerSection({ key: 'feat:x', source: 'x', automation: {}, trigger: trigger as never }, '');
     };
-    expect(section('Stunning Sunlight: spend Hope and roll damage')).toBe('result');
-    expect(section('Successful Fireball: damage')).toBe('result');
-    expect(section('Successful Damnation: Stress damage')).toBe('result');
-    expect(section('Blighting Strike failed: mark a Stress')).toBe('feature');
-    expect(section('Siphon Essence: heal target\'s marked HP')).toBe('feature');
-    expect(section('End Run')).toBe('feature');
-    expect(section('Feed')).toBe('feature');
-    expect(section('Build on companion success')).toBe('feature');
-    expect(section('Charge: roll damage')).toBe('other');
-    expect(section('Endless Charisma: reroll Hope Die')).toBe('other');
+    expect(section('domain-cards', 'damage', 'card:Stunning Sunlight')).toBe('result');
+    expect(section('domain-cards', 'damage', 'card:Fireball')).toBe('result');
+    expect(section('domain-cards', 'damage', 'card:Damnation')).toBe('result');
+    expect(section('domain-cards', 'fail-stress', 'card:Blighting Strike')).toBe('feature');
+    expect(section('domain-cards', 'heal', 'damage')).toBe('feature');
+    expect(section('domain-cards', 'end', 'damage')).toBe('feature');
+    expect(section('transformations', 'feed', 'attack')).toBe('feature');
+    expect(section('classes', 'build-on-companion', 'companion')).toBe('feature');
+    expect(section('ancestries', 'charge', 'trait:Agility')).toBe('other');
+    expect(section('domain-cards', 'hope', 'trait')).toBe('other');
   });
 
   it.each([

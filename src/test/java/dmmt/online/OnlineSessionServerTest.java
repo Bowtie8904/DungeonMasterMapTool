@@ -8217,6 +8217,7 @@ class OnlineSessionServerTest {
 
     @Test
     void hostsWithoutRotationKeepLegacyMovementAndRejectUnsupportedRotation() throws Exception {
+        server.publish(state("m1", 0), "m1/l1");
         Inbox inbox = new Inbox();
         WebSocket ws = connect(cookie(), inbox);
         try {

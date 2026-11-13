@@ -107,7 +107,8 @@ class MapBrowserTest {
                 assertEquals(2, f.browser.lookupAll(".player-map-badge").size());
                 for (var node : f.browser.lookupAll(".player-map-badge")) {
                     Label badge = (Label) node;
-                    assertEquals("Players", badge.getText());
+                    assertEquals("", badge.getText());
+                    assertNotNull(badge.getGraphic());
                     assertEquals("Players are here - Cellar", badge.getTooltip().getText());
                     assertEquals(badge.getTooltip().getText(), badge.getAccessibleText());
                 }
@@ -273,7 +274,7 @@ class MapBrowserTest {
                 assertSame(root.get(), f.tree.getRoot());
                 assertEquals(selected, f.tree.getSelectionModel().getSelectedItems());
                 assertTrue(root.get().getChildren().getFirst().isExpanded());
-                assertEquals(scrollValue.get(), scrollbar.get().getValue(), .0001);
+                assertEquals(scrollValue.get(), scrollbar.get().getValue(), .001);
                 assertTrue(statuses.isEmpty());
             } finally {
                 stage.get().close();

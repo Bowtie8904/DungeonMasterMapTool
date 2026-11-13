@@ -3,8 +3,10 @@ import { App } from './app';
 import { renderLogEntry } from './chat';
 
 vi.mock('./chat', () => ({ renderLogEntry: vi.fn() }));
+vi.mock('./chat-action-reports', () => ({ ChatActionReports: class { reset() {} } }));
 
 class Card {
+  dataset: Record<string, string> = {};
   parentElement?: Container;
   details: Record<string, { open: boolean }> = {};
   constructor(readonly label: string) {}

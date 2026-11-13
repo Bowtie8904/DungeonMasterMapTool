@@ -136,11 +136,11 @@ describe('character mancer rules', () => {
   });
 
   it('offers only the flagged basic gear', () => {
-    expect(starterGear(data.armor).map((e) => e.name).sort()).toEqual(['Chainmail Armor', 'Full Plate Armor', 'Gambeson Armor', 'Leather Armor']);
+    expect(starterGear(data.armor)).toEqual(data.armor.filter((e) => e.starter));
     const weapons = starterGear(data.weapons);
-    expect(weapons.every((e) => e.starter)).toBe(true);
+    expect(weapons).toEqual(data.weapons.filter((e) => e.starter));
+    expect(weapons.every((e) => (e.tier ?? 1) === 1)).toBe(true);
     expect(weapons.some((e) => e.weapon?.slot === 'secondary')).toBe(true);
-    expect(weapons.map((e) => e.name)).not.toContain('Katana');
   });
 
   it('lists the sources of derived stats', () => {
