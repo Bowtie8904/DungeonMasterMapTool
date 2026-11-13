@@ -41,6 +41,40 @@ class ChatPanelTest {
     }
 
     @Test
+    void mixedDiceCardsLabelEachPoolIncludingLegacyAndSecretRolls() throws Exception {
+        for (String message : List.of(
+                """
+                {"type":"roll","from":"Alice","expression":"2d8+2d6+1","rolls":[7,3,5,2],"total":18,
+                 "breakdown":[{"label":"Brawler damage","expression":"2d8+2d6","rolls":[7,3,5,2],"total":17}]}
+                """,
+                """
+                {"type":"roll","from":"Alice","expression":"2d8+2d6+1","rolls":[7,3,5,2],"total":18}
+                """,
+                """
+                {"type":"roll","from":"Alice","expression":"(2d8kh1+2d6)*2","rolls":[7,3,5,2],"total":28,
+                 "breakdown":[{"label":"Brawler damage","expression":"2d8kh1+2d6","rolls":[7,3,5,2],"total":14}]}
+                """,
+                """
+                {"type":"roll","from":"Alice","secret":true,"expression":"2d8+2d6","rolls":[0,0,0,0],"total":0}
+                """)) {
+            JsonNode parsed = MAPPER.readTree(message);
+            onFx(() -> {
+                VBox card = (VBox) ChatCards.render(parsed);
+                var first = card.lookup(".chat-die");
+                assertNotNull(first);
+                var dice = (javafx.scene.layout.FlowPane) first.getParent();
+                assertEquals(List.of("d8", "d8", "d6", "d6"), dice.getChildren().stream()
+                        .map(tile -> ((Label) ((VBox) tile).getChildren().getFirst()).getText()).toList());
+                if (parsed.path("expression").asText().contains("kh1"))
+                    assertTrue(dice.getChildren().get(1).getStyleClass().contains("chat-die-discarded"));
+                if (parsed.path("secret").asBoolean())
+                    assertEquals(List.of("?", "?", "?", "?"), dice.getChildren().stream()
+                            .map(tile -> ((Label) ((VBox) tile).getChildren().get(1)).getText()).toList());
+            });
+        }
+    }
+
+    @Test
     void breakdownSourcePreviewOpensOnKeyboardFocusAndEscapeClosesIt() throws Exception {
         assertSourcePreview("Combo feature rules", false);
     }

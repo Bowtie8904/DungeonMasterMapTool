@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 
 import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -24,61 +25,82 @@ final class BoneValorRules {
         }
     }
 
-    static void validateWeaponDice(JsonNode request, JsonNode weapon, int proficiency, ObjectNode sheet) {
+    private record Pool(int count, int sides, int drop) {
+        String expression(boolean maximized) {
+            int rolled = count - (maximized ? 1 : 0);
+            int kept = rolled - drop;
+            String dice = rolled == 0 ? "" : rolled + "d" + sides + (drop > 0 ? "kh" + kept : "");
+            return maximized ? (dice.isEmpty() ? "" : dice + "+") + sides : dice;
+        }
+    }
+
+    private record WeaponPools(List<Pool> pools, int maximized) {}
+
+    private static WeaponPools weaponPools(JsonNode request, JsonNode weapon, int proficiency, ObjectNode sheet) {
         JsonNode base = request.path("contributions").path(0);
-        String expression = base.path("expression").asText().replaceFirst("^\\((.*)\\)\\*2$", "$1");
-        if (expression.matches("\\d+")) expression = "0d" + expression + "+" + expression;
-        var dice = Pattern.compile("(?i)^(\\d+)d(\\d+)(?:kh(\\d+))?(?:\\+(\\d+))?$").matcher(expression);
-        var weaponDie = Pattern.compile("(?i)(\\d*)d(\\d+)").matcher(weapon.path("damage").asText());
-        if (proficiency < 1 || !dice.find() || !weaponDie.find())
+        String expression = base.path("expression").asText().replaceFirst("^\\((.*)\\)\\*2$", "$1").toLowerCase(java.util.Locale.ROOT);
+        String damage = weapon.path("damage").asText().replaceAll("\\s", "");
+        var weaponDie = Pattern.compile("(?i)(\\d*)d(\\d+)").matcher(damage);
+        if (proficiency < 1 || !damage.matches("(?i)^(?:\\d*d\\d+\\+)*\\d*d\\d+(?:[+-]\\d+)?$"))
             throw new IllegalArgumentException("Deathrun must use the current remaining weapon dice.");
-        int extra = weapon.path("automation").path("damage").path("extraDice").asInt();
-        int drop = weapon.path("automation").path("damage").path("dropLowest").asInt();
+        JsonNode weaponPool = weapon.path("automation").path("damage");
+        boolean skipWeaponPool = weaponPool.path("proficiencyOnly").asBoolean() && weapon.path("fixedDice").asBoolean();
+        int extra = skipWeaponPool ? 0 : weaponPool.path("extraDice").asInt();
+        int drop = skipWeaponPool ? 0 : weaponPool.path("dropLowest").asInt();
         for (JsonNode effect : sheet.path("effects")) {
             JsonNode pool = effect.path("damage");
             if (pool.path("proficiencyOnly").asBoolean() && weapon.path("fixedDice").asBoolean()) continue;
             extra += pool.path("extraDice").asInt();
             drop += pool.path("dropLowest").asInt();
         }
-        int count = (weapon.path("fixedDice").asBoolean()
-                ? weaponDie.group(1).isEmpty() ? 1 : Integer.parseInt(weaponDie.group(1)) : proficiency) + extra;
-        boolean maximized = dice.group(4) != null;
-        if (maximized && !dice.group(4).equals(dice.group(2)))
-            throw new IllegalArgumentException("Invalid maximized Deathrun weapon die.");
-        int rolled = count - (maximized ? 1 : 0);
-        if (Integer.parseInt(dice.group(1)) != rolled || !dice.group(2).equals(weaponDie.group(2))
-                || (drop > 0 ? dice.group(3) == null || Integer.parseInt(dice.group(3)) != rolled - drop : dice.group(3) != null))
-            throw new IllegalArgumentException("Deathrun must use the current remaining weapon dice.");
+        // Without a drop rule, the browser attributes extra dice as separate damage contributions.
+        if (drop == 0) extra = 0;
+        List<Pool> pools = new ArrayList<>();
+        while (weaponDie.find()) {
+            int count = (weapon.path("fixedDice").asBoolean()
+                    ? weaponDie.group(1).isEmpty() ? 1 : Integer.parseInt(weaponDie.group(1)) : proficiency) + extra;
+            if (count < 1 || drop < 0 || drop >= count)
+                throw new IllegalArgumentException("Deathrun must use the current remaining weapon dice.");
+            pools.add(new Pool(count, Integer.parseInt(weaponDie.group(2)), drop));
+        }
+        for (int maximized = -1; maximized < pools.size(); maximized++) {
+            List<String> terms = new ArrayList<>();
+            for (int i = 0; i < pools.size(); i++) terms.add(pools.get(i).expression(i == maximized));
+            if (String.join("+", terms).equals(expression)) return new WeaponPools(pools, maximized);
+        }
+        throw new IllegalArgumentException("Deathrun must use the current remaining weapon dice.");
     }
 
-    static ObjectNode deathrunSnapshot(ObjectNode roll) {
+    static void validateWeaponDice(JsonNode request, JsonNode weapon, int proficiency, ObjectNode sheet) {
+        weaponPools(request, weapon, proficiency, sheet);
+    }
+
+    static ObjectNode deathrunSnapshot(ObjectNode roll, JsonNode request, JsonNode weapon, int proficiency, ObjectNode sheet) {
         ObjectNode snapshot = roll.deepCopy();
         ObjectNode base = (ObjectNode) snapshot.path("breakdown").path(0);
         String expression = base.path("expression").asText();
         boolean doubled = expression.matches("^\\(.*\\)\\*2$");
-        expression = expression.replaceFirst("^\\((.*)\\)\\*2$", "$1");
-        if (expression.matches("\\d+")) expression = "0d" + expression + "+" + expression;
-        var maximized = Pattern.compile("^(\\d+)d(\\d+)(?:kh(\\d+))?\\+(\\d+)$")
-                .matcher(expression);
-        if (!maximized.matches()) return snapshot;
-        int face = Integer.parseInt(maximized.group(4));
-        if (face != Integer.parseInt(maximized.group(2))) return snapshot;
+        WeaponPools parsed = weaponPools(request, weapon, proficiency, sheet);
+        if (parsed.maximized() < 0) return snapshot;
+        Pool pool = parsed.pools().get(parsed.maximized());
+        int insertion = pool.count() - 1;
+        for (int i = 0; i < parsed.maximized(); i++) insertion += parsed.pools().get(i).count();
         ArrayNode baseRolls = (ArrayNode) base.path("rolls");
-        int previousCount = baseRolls.size();
-        baseRolls.add(face);
+        baseRolls.insert(insertion, pool.sides());
         ArrayNode all = snapshot.putArray("rolls");
         for (int i = 0; i < roll.path("rolls").size(); i++) {
-            if (i == previousCount) all.add(face);
+            if (i == insertion) all.add(pool.sides());
             all.add(roll.path("rolls").path(i));
         }
-        if (previousCount == roll.path("rolls").size()) all.add(face);
-        String dice = (Integer.parseInt(maximized.group(1)) + 1) + "d" + maximized.group(2)
-                + (maximized.group(3) == null ? "" : "kh" + (Integer.parseInt(maximized.group(3)) + 1));
+        if (insertion == roll.path("rolls").size()) all.add(pool.sides());
+        List<String> pools = new ArrayList<>();
+        for (Pool p : parsed.pools()) pools.add(p.expression(false));
+        String dice = String.join("+", pools);
         base.put("expression", doubled ? "(" + dice + ")*2" : dice);
         List<String> parts = new java.util.ArrayList<>();
         boolean smite = false;
         for (JsonNode part : snapshot.path("breakdown")) {
-            if ("Smite".equals(part.path("label").asText()) && part.path("rolls").isEmpty()) smite = true;
+            if (List.of("Smite", "Invoke Torment", "First Strike").contains(part.path("label").asText()) && part.path("rolls").isEmpty()) smite = true;
             else parts.add(part.path("expression").asText());
         }
         snapshot.put("expression", smite ? "(" + String.join("+", parts) + ")*2" : String.join("+", parts));
@@ -112,10 +134,18 @@ final class BoneValorRules {
         result.put("total", original.path("total").asInt() - lost);
         ObjectNode detail = (ObjectNode) result.path("breakdown").path(0);
         detail.put("total", base.path("total").asInt() - lost);
-        detail.put("expression", base.path("expression").asText().replaceFirst("\\d+d", remaining.size() + "d").replaceFirst("kh\\d+", ""));
-        result.put("expression", original.path("expression").asText().replaceFirst("\\d+d", remaining.size() + "d").replaceFirst("kh\\d+", ""));
+        String originalBase = base.path("expression").asText();
+        String updatedBase = remainingExpression(originalBase, kept);
+        detail.put("expression", updatedBase);
+        String originalExpression = original.path("expression").asText();
+        String search = originalBase.replaceFirst("^\\((.*)\\)\\*2$", "$1");
+        String replacement = updatedBase.replaceFirst("^\\((.*)\\)\\*2$", "$1");
+        int baseStart = originalExpression.indexOf(search);
+        if (baseStart < 0) throw new IllegalArgumentException("Deathrun damage no longer matches its weapon dice.");
+        result.put("expression", originalExpression.substring(0, baseStart) + replacement
+                + originalExpression.substring(baseStart + search.length()));
         for (JsonNode part : result.path("breakdown")) {
-            if (!"Smite".equals(part.path("label").asText()) || !part.path("rolls").isEmpty()) continue;
+            if (!List.of("Smite", "Invoke Torment", "First Strike").contains(part.path("label").asText()) || !part.path("rolls").isEmpty()) continue;
             ObjectNode smite = (ObjectNode) part;
             int bonus = smite.path("total").asInt() - lost;
             smite.put("total", bonus).put("expression", String.valueOf(bonus));
@@ -127,16 +157,35 @@ final class BoneValorRules {
 
     static List<Integer> keptWeaponDice(JsonNode base) {
         List<Integer> indices = new java.util.ArrayList<>();
-        for (int i = 0; i < base.path("rolls").size(); i++) indices.add(i);
-        var keep = Pattern.compile("kh(\\d+)").matcher(base.path("expression").asText());
-        if (keep.find()) {
-            int count = Integer.parseInt(keep.group(1));
-            indices.sort(java.util.Comparator.<Integer>comparingInt(i -> base.path("rolls").path(i).asInt()).reversed()
+        var pools = Pattern.compile("(\\d+)d(\\d+)(?:kh(\\d+))?", Pattern.CASE_INSENSITIVE).matcher(base.path("expression").asText());
+        int offset = 0;
+        while (pools.find()) {
+            int rolled = Integer.parseInt(pools.group(1));
+            int count = pools.group(3) == null ? rolled : Integer.parseInt(pools.group(3));
+            List<Integer> current = new ArrayList<>();
+            for (int i = offset; i < offset + rolled; i++) current.add(i);
+            current.sort(java.util.Comparator.<Integer>comparingInt(i -> base.path("rolls").path(i).asInt()).reversed()
                     .thenComparing(java.util.Comparator.reverseOrder()));
-            indices = new java.util.ArrayList<>(indices.subList(0, Math.min(count, indices.size())));
-            indices.sort(Integer::compareTo);
+            indices.addAll(current.subList(0, Math.min(count, current.size())));
+            offset += rolled;
         }
+        indices.sort(Integer::compareTo);
         return indices;
+    }
+
+    private static String remainingExpression(String expression, Set<Integer> kept) {
+        var pools = Pattern.compile("(\\d+)d(\\d+)(?:kh(\\d+))?", Pattern.CASE_INSENSITIVE).matcher(expression);
+        List<String> parts = new ArrayList<>();
+        int offset = 0;
+        while (pools.find()) {
+            int rolled = Integer.parseInt(pools.group(1)), count = 0;
+            for (int i = offset; i < offset + rolled; i++) if (kept.contains(i)) count++;
+            if (count > 0) parts.add(count + "d" + pools.group(2));
+            offset += rolled;
+        }
+        if (parts.isEmpty()) throw new IllegalArgumentException("Deathrun has no remaining weapon dice.");
+        String result = String.join("+", parts);
+        return expression.matches("^\\(.*\\)\\*2$") ? "(" + result + ")*2" : result;
     }
 
     static void validateRest(ObjectNode before, ObjectNode next, JsonNode request) {

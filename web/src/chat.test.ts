@@ -8,6 +8,41 @@ const message: RollMessage = {
 };
 
 describe('roll breakdowns', () => {
+  it('labels each mixed-pool die in attributed, legacy, doubled and secret rolls', () => {
+    class Element {
+      className = '';
+      children: Array<Element | string> = [];
+      attrs = new Map<string, string>();
+      append(...children: Array<Element | string>) { this.children.push(...children); }
+      setAttribute(key: string, value: string) { this.attrs.set(key, value); }
+      get text(): string { return this.children.map(child => typeof child === 'string' ? child : child.text).join(''); }
+      find(cls: string): Element | undefined {
+        return this.className.split(' ').includes(cls) ? this : this.children.flatMap(child => typeof child === 'string' ? [] : [child])
+          .map(child => child.find(cls)).find(Boolean);
+      }
+    }
+    vi.stubGlobal('document', { createElement: () => new Element() });
+    try {
+      const base = { ...message, kind: 'dice' as const, expression: '2d8+2d6+1', rolls: [7, 3, 5, 2], total: 18 };
+      for (const roll of [
+        { ...base, breakdown: [{ label: 'Brawler damage', expression: '2d8+2d6', rolls: [7, 3, 5, 2], total: 17 }] },
+        base,
+        { ...base, expression: '(2d8kh1+2d6)*2', total: 28,
+          breakdown: [{ label: 'Brawler damage', expression: '2d8kh1+2d6', rolls: [7, 3, 5, 2], total: 14 }] },
+        { ...base, secret: true },
+      ]) {
+        const card = renderLogEntry({ kind: 'roll', m: roll }, 'player') as unknown as Element;
+        const dice = card.find('roll-dice')!.children as Element[];
+        expect(dice.map(die => (die.children[0] as Element).text)).toEqual(['d8', 'd8', 'd6', 'd6']);
+        expect(dice.map(die => die.attrs.get('aria-label'))).toEqual(roll.secret
+          ? ['d8: secret', 'd8: secret', 'd6: secret', 'd6: secret']
+          : roll.expression.includes('kh1')
+            ? ['d8: 7', 'd8: 3 (discarded)', 'd6: 5', 'd6: 2']
+            : ['d8: 7', 'd8: 3', 'd6: 5', 'd6: 2']);
+      }
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   it('previews the row feature rather than the main weapon on hover and focus, with Escape dismissal', () => {
     class Element {
       id = '';

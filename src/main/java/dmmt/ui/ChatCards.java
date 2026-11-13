@@ -732,9 +732,23 @@ public final class ChatCards {
         dice.setMinWidth(0);
         int index = 0;
         for (Detail detail : details) {
-            Matcher sides = Pattern.compile("d(\\d+)", Pattern.CASE_INSENSITIVE).matcher(detail.expression());
-            String sidesText = sides.find() ? sides.group(1) : "?";
+            List<String> dieSides = new ArrayList<>();
+            Matcher terms = TERM.matcher(detail.expression());
+            while (terms.find() && dieSides.size() < detail.rolls().size()) {
+                if (terms.group(3) == null) continue;
+                int count;
+                try {
+                    count = terms.group(2).isEmpty() ? 1 : Integer.parseInt(terms.group(2));
+                } catch (NumberFormatException ex) {
+                    break;
+                }
+                for (int i = 0; i < count && dieSides.size() < detail.rolls().size(); i++)
+                    dieSides.add(terms.group(3));
+            }
+            int detailIndex = 0;
             for (int value : detail.rolls()) {
+                String sidesText = detailIndex < dieSides.size() ? dieSides.get(detailIndex) : "?";
+                detailIndex++;
                 int n = index++;
                 if (duality && n > 1) {
                     continue;

@@ -3281,6 +3281,9 @@ public final class OnlineSessionServer {
             roll = featureRollMessage(actor, source, input.path("label").asText("Roll"), resolved.result());
             putDiceBreakdown(roll, resolved);
         }
+        ObjectNode deathrunSheet = run != null && !run.has("deathrunRoll") ? sheet.deepCopy() : null;
+        int deathrunProficiency = deathrunSheet == null ? 0
+                : CharacterSheetRules.proficiencyTotal(sheet, campaign.getFear()) + 1 - run.path("counter").path("value").asInt();
         roll.put("ref", ref).put("source", input.path("source").asText());
         if (actionDefinition != null && actionDefinition.has("castTokens"))
             roll.putObject("spentTokens").put("key", actionKey).put("amount", actionDefinition.path("selectedAmount").asInt());
@@ -3313,7 +3316,7 @@ public final class OnlineSessionServer {
         if (run != null) {
             int count = run.path("counter").path("value").asInt();
             if (!run.has("deathrunRoll")) {
-                ObjectNode first = BoneValorRules.deathrunSnapshot(roll);
+                ObjectNode first = BoneValorRules.deathrunSnapshot(roll, input, weapon, deathrunProficiency, deathrunSheet);
                 run.set("deathrunRoll", first);
                 ArrayNode remaining = run.putArray("deathrunRemaining");
                 for (int index : BoneValorRules.keptWeaponDice(first.path("breakdown").path(0))) remaining.add(index);
@@ -3321,7 +3324,7 @@ public final class OnlineSessionServer {
             roll.putObject("deathrun").put("effectId", run.path("id").asText()).put("count", count);
             run.withObject("/counter").put("value", count + 1);
             run.put("text", "Damage rolls used: " + (count + 1) + ". Next weapon damage has "
-                    + Math.max(0, run.path("deathrunRemaining").size() - 1) + " dice. End Run when no targets remain.");
+                    + Math.max(0, run.path("deathrunRemaining").size() - 1) + " dice. End Deathrun when no targets remain.");
         }
         lines.addAll(ArcanaSageRules.finishForms(sheet, roll));
         if (!lines.isEmpty()) roll.putObject("featureRoll").put("name", "Card automation")

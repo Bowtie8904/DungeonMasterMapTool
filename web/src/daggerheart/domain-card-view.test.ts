@@ -374,6 +374,34 @@ it.each(['ordinary', 'initial', 'continuing'] as const)('shows Deathrun die remo
   }
 });
 
+it('previews mixed-pool Deathrun removal with doubled bonus damage', () => {
+  const body = new Element('body');
+  vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag),
+    addEventListener: () => {}, removeEventListener: () => {} });
+  const c = emptyCharacter('Hero');
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+  addEffect(c, catalog.entries.find(entry => entry.id === 'deathrun')!.automation!.actions![0].steps![0].effect!);
+  c.effects[0].deathrunRoll = {
+    expression: '(2d8+2d6+2)*2', total: 38, rolls: [3, 8, 2, 4],
+    breakdown: [
+      { label: 'Weapon', expression: '2d8+2d6', total: 17, rolls: [3, 8, 2, 4] },
+      { label: 'Bonus', expression: '2', total: 2, rolls: [] },
+      { label: 'Smite', expression: '19', total: 19, rolls: [] },
+    ],
+  };
+  c.effects[0].deathrunRemaining = [0, 1, 2, 3];
+  const weapon = { name: "Brawler's Strike", slot: 'Primary' as const, trait: 'Strength' as const, range: 'Melee', damage: 'd8+d6', damageType: 'phys' as const, hands: 1 as const, tier: 1 };
+  openRollDialog(body as unknown as HTMLElement, c, 'Damage', [], rollBonus(c, ['damage'], weapon),
+    () => true, () => {}, ['damage'], weapon);
+  const preview = body.querySelectorAll('div').find(div => div.textContent.includes('Remaining damage:'))!;
+  expect(preview.textContent).toContain('Remaining damage: 34.');
+  const select = body.querySelectorAll('select').find(node => node.ariaLabel === 'Deathrun die to remove')!;
+  select.value = '1';
+  select.listeners.get('change')?.();
+  expect(preview.textContent).toContain('Remaining damage: 22.');
+});
+
 it('preselects one Cruel Precision option and the highest current printed trait in weapon damage', async () => {
   const body = new Element('body');
   vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag),

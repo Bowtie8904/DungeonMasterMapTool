@@ -2191,6 +2191,46 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void deathrunWithBrawlersStrikeRemovesDiceFromEitherOriginalPool() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("runner").name("Runner").ownerId(playerId()).build());
+        ObjectNode sheet = bloodSheet("deathrun");
+        sheet.putObject("proficiency").put("on", 2);
+        sheet.putArray("activeWeapons").addObject().put("name", "Brawler's Strike").put("damage", "d8+d6").put("trait", "Strength");
+        store.saveSheet(campaign.getId(), "runner", sheet.toString());
+        String cookie = cookie();
+        ObjectNode action = MAPPER.createObjectNode().put("actorId", "runner").put("key", "card:Deathrun").put("actionId", "use");
+        var response = featureHttp(cookie, action);
+        assertEquals(200, response.statusCode(), response.body());
+        String effectId = MAPPER.readTree(store.loadSheet(campaign.getId(), "runner")).path("effects").path(0).path("id").asText();
+        ObjectNode body = MAPPER.createObjectNode().put("actorId", "runner");
+        ObjectNode roll = body.putObject("transactionalRoll").put("ref", "mixed-first").put("kind", "dice")
+                .put("source", "damage").put("weapon", "Brawler's Strike").put("expression", "3d8+3d6");
+        roll.putArray("contributions").addObject().put("label", "Brawler's Strike").put("expression", "3d8+3d6");
+        roll.putArray("hostOptions").addObject().put("key", "effect:" + effectId).put("id", "damage");
+        roll.putObject("deathrun").put("effectId", effectId).put("count", 0);
+        response = featureHttp(cookie, body);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode first = dmMessages.stream().filter(m -> m.path("ref").asText().equals("mixed-first")).findFirst().orElseThrow();
+        assertEquals(6, first.path("rolls").size());
+        roll.withObject("/deathrun").put("count", 1);
+        roll.put("ref", "mixed-second").put("deathrunRemove", 4);
+        response = featureHttp(cookie, body);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode second = dmMessages.stream().filter(m -> m.path("ref").asText().equals("mixed-second")).findFirst().orElseThrow();
+        assertEquals(first.path("total").asInt() - first.path("rolls").path(4).asInt(), second.path("total").asInt());
+        assertEquals("3d8+2d6", second.path("expression").asText());
+        roll.withObject("/deathrun").put("count", 2);
+        roll.put("ref", "mixed-third").put("deathrunRemove", 0);
+        response = featureHttp(cookie, body);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode third = dmMessages.stream().filter(m -> m.path("ref").asText().equals("mixed-third")).findFirst().orElseThrow();
+        assertEquals(second.path("total").asInt() - first.path("rolls").path(0).asInt(), third.path("total").asInt());
+        assertEquals("2d8+2d6", third.path("expression").asText());
+        roll.put("ref", "mixed-stale");
+        assertEquals(400, featureHttp(cookie, body).statusCode());
+    }
+
+    @Test
     void invisibilityCastsOnOfflineSheetsReplacesRecipientAndSpendsCasterTokensOnlyOnCommittedActions() throws Exception {
         compendiumDir = Path.of("dmmap-daggerheart");
         campaign.getActors().add(Campaign.Actor.builder().id("invisible-caster").name("Caster").ownerId(playerId()).build());

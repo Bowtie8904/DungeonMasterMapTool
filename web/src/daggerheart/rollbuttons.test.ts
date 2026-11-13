@@ -519,7 +519,7 @@ describe('cross-player roll buttons', () => {
       deathrun: { effectId: 'run', count: 0 } };
     const box = rollButtons(message, supported) as unknown as FakeElement;
     await new Promise(resolve => setTimeout(resolve, 0));
-    const next = box.queryAll('button').find(button => button.text === 'Continue Run')!;
+    const next = box.queryAll('button').find(button => button.text === 'Continue Deathrun')!;
     expect(next).toBeDefined();
     await next.click();
     expect(flush).not.toHaveBeenCalled();
@@ -535,12 +535,12 @@ describe('cross-player roll buttons', () => {
     ]) {
       const stale = rollButtons(variant, supported) as unknown as FakeElement;
       await new Promise(resolve => setTimeout(resolve, 0));
-      expect(stale.queryAll('button').some(button => button.text === 'Continue Run')).toBe(false);
+      expect(stale.queryAll('button').some(button => button.text === 'Continue Deathrun')).toBe(false);
     }
     c.effects[0].deathrunRemaining = [0];
     const exhausted = rollButtons({ ...message, deathrun: { effectId: 'run', count: 1 } }, supported) as unknown as FakeElement;
     await new Promise(resolve => setTimeout(resolve, 0));
-    expect(exhausted.queryAll('button').some(button => button.text === 'Continue Run')).toBe(false);
+    expect(exhausted.queryAll('button').some(button => button.text === 'Continue Deathrun')).toBe(false);
   });
 
   it('carries Honed Proficiency from only the clicked attack into damage', async () => {

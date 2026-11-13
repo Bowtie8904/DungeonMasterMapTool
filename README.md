@@ -269,10 +269,12 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   Breaking Blow, Wrangle and Lead by Example offer contextual chat actions. Cruel Precision is one
   preselected Agility/Finesse damage option, defaulting to the higher current trait. Breaking Blow
   prepares a consumable +2d12 weapon-damage buff. Deathrun tracks its initial +1-Proficiency weapon
-  dice, lets you remove a chosen die for each subsequent target without rerolling, and offers **End Run**.
+  dice (including both Brawler's Strike dice pools), lets you remove a chosen die for each subsequent
+  target without rerolling, and offers **End Run**.
   The latest damage result also offers **Continue Run** to open the next damage dialog while dice remain.
   Its die-removal selector sits on the right within the Deathrun option, defaults to the lowest remaining
   die, and appears only when continuing the run, not on ordinary or initial damage rolls.
+  Mixed weapon dice, such as Brawler's Strike, show each die's correct type in player and DM chat.
   Host-backed damage and rest actions support full-size character sheets without using the smaller chat-message allowance.
   Recovery can grant an ally one long-rest move during their short rest; Armorer repairs allies and
   names them in rest chat. Untouchable adds half current Agility rounded up to Evasion, Rise Up clears

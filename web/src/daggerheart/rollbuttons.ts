@@ -544,7 +544,7 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
       && effect.counter?.value === m.deathrun!.count + 1 && (effect.deathrunRemaining?.length ?? 0) > 1);
     if (rolledActor && ctx?.kind === 'damage' && m.weapon && m.fromId === host.playerId
         && host.supportsDomainCardAutomation?.() && canContinueDeathrun(rolledActor.sheet.character)) {
-      const next = el('button', { class: 'small primary', type: 'button' }, 'Continue Run');
+      const next = el('button', { class: 'small primary', type: 'button' }, 'Continue Deathrun');
       next.addEventListener('click', async () => {
         next.disabled = true;
         try {

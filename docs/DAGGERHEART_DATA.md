@@ -178,8 +178,8 @@ without blocking connection. LAN compatibility version and settings contracts ar
 - `hostOwned` actions/options and `hostRollAction` casts use the existing feature endpoint for
   transactional payment, dice, effects and chat. Breaking Blow's host-owned damage option consumes
   its prepared effect only when selected and committed. Deathrun effects retain `deathrunRoll`,
-  `deathrunRemaining` and a host-owned counter: the first weapon pool gains +1 Proficiency,
-  later uses remove a chosen initial die without rerolling, and exhausting the pool ends the run
+  `deathrunRemaining` and a host-owned counter: each weapon pool gains +1 Proficiency,
+  later uses remove a chosen initial die from any pool without rerolling, and exhausting the dice ends the run
   before another damage window. Saved result `deathrun` metadata identifies the activation for End Run.
 - Rest modifiers with `repairAllies` clear that many marked Armor Slots on eligible allies and
   name the recipients in chat. A rest passive with `chooseAlly` selects a recipient;

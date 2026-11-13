@@ -104,11 +104,15 @@ function rollContent(m: RollMessage): HTMLElement {
   const dice = el('div', { class: 'roll-dice' });
   let index = 0;
   for (const detail of details) {
-    const sides = /d(\d+)/i.exec(detail.expression)?.[1] ?? '?';
-    for (const value of detail.rolls) {
+    const sides: string[] = [];
+    for (const match of detail.expression.matchAll(/(\d*)d(\d+)(?:k[hl]\d+)?/gi)) {
+      const count = Math.min(Number(match[1] || 1), detail.rolls.length - sides.length);
+      for (let i = 0; i < count; i++) sides.push(match[2]);
+    }
+    for (const [i, value] of detail.rolls.entries()) {
       const n = index++;
       if (duality && n > 1) continue;
-      const name = duality ? (n === 0 ? 'Hope' : 'Fear') : `d${sides}`;
+      const name = duality ? (n === 0 ? 'Hope' : 'Fear') : `d${sides[i] ?? '?'}`;
       const discarded = kept[n] === false;
       const shown = secret ? '?' : String(value);
       const tile = el('span', { class: `roll-die${discarded ? ' discarded' : ''}${duality ? (n === 0 ? ' hope' : ' fear') : ''}${secret ? ' secret' : ''}`, title: secret ? `${name}: secret` : `${detail.label}: ${value}${discarded ? ' (discarded)' : ''}` },

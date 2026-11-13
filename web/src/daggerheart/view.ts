@@ -2529,10 +2529,12 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
       : `Modifier ${signed(currentMod() + b.value + experienceModifier(exp.value === '' ? 0 : experiences[Number(exp.value)]?.mod ?? 0, selected()))}${b.dice.length ? `; extra dice ${b.dice.join(', ')}` : ''}`;
     if (continuing) {
       const effect = runEffect()!;
-      const kept = (effect.deathrunRemaining ?? []).filter(index => index !== Number(removeRunDie.value))
-        .reduce((sum, index) => sum + Number(effect.deathrunRoll!.rolls[index]), 0);
       const base = effect.deathrunRoll!.breakdown?.[0];
-      const total = effect.deathrunRoll!.total - (base?.total ?? 0) + kept * (/^\(.*\)\*2$/.test(base?.expression ?? '') ? 2 : 1);
+      const baseMultiplier = /^\(.*\)\*2$/.test(base?.expression ?? '') ? 2 : 1;
+      const doubled = effect.deathrunRoll!.breakdown?.some(part =>
+        ['Smite', 'Invoke Torment', 'First Strike'].includes(part.label) && !part.rolls.length);
+      const removed = Number(effect.deathrunRoll!.rolls[Number(removeRunDie.value)]);
+      const total = effect.deathrunRoll!.total - removed * baseMultiplier * (doubled ? 2 : 1);
       preview.textContent = `Reuse the first damage roll; remove die ${Number(removeRunDie.value) + 1}. Remaining damage: ${total}. No new dice are rolled.`;
     }
     error.textContent = blocker() ?? '';
