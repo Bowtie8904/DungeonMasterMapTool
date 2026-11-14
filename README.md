@@ -851,6 +851,8 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   `/sr 2d6` (or `/secret 2d6`) always rolls secretly, regardless of the toggle, without changing its state.
   The DM can type `/gold 500` to post a gold transfer offer (to the selected recipient) that players grab
   into their characters.
+  Type `/reaction Agility` (or any Daggerheart trait) to publicly ask every player for that character-specific
+  reaction roll; players use the same clickable reaction-roll card as adversary prompts, with no Difficulty shown.
   Only the DM has a subtle trash icon on chat cards to delete messages and rolls for everyone, including
   saved history. Players cannot delete messages. Deleting a transfer offer also prevents further claims.
 - **Share to chat:** subtle chat icons on sheet features, domain cards and equipment post formatted descriptions

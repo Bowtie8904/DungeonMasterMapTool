@@ -56,6 +56,11 @@ public final class ChatPanel extends VBox {
         default String offerGold(int amount, String toPlayerId) {
             return "Gold offers are not supported.";
         }
+
+        /** Publicly requests a reaction roll from every player; returns an error message or null on success. */
+        default String requestReactionRoll(String trait) {
+            return "Reaction-roll requests are not supported.";
+        }
     }
 
     public record Recipient(String id, String name) {
@@ -149,7 +154,7 @@ public final class ChatPanel extends VBox {
         recipient.setMaxWidth(Double.MAX_VALUE);
         recipient.setOnShowing(e -> refreshRecipients());
         refreshRecipients();
-        input.setPromptText("Message, /r 2d6+3, /sr 1d20 or /gold 500");
+        input.setPromptText("Message, /r 2d6+3, /sr 1d20, /reaction Agility or /gold 500");
         HBox.setHgrow(input, Priority.ALWAYS);
         input.setOnAction(e -> submit());
         Button send = Icons.button(MaterialDesignS.SEND, "Send message", this::submit);
@@ -410,6 +415,10 @@ public final class ChatPanel extends VBox {
             return;
         }
         String lower = text.toLowerCase(Locale.ROOT);
+        if (lower.equals("/reaction") || lower.startsWith("/reaction ")) {
+            requestReactionRoll(text.substring("/reaction".length()).trim());
+            return;
+        }
         if (lower.equals("/gold") || lower.startsWith("/gold ")) {
             offerGold(text.substring("/gold".length()).trim());
             return;
@@ -431,6 +440,26 @@ public final class ChatPanel extends VBox {
             return null;
         int amount = Integer.parseInt(argument);
         return amount > 0 ? amount : null;
+    }
+
+    private void requestReactionRoll(String argument) {
+        String trait = canonicalReactionTrait(argument);
+        if (trait == null) {
+            showStatus("Use /reaction followed by Strength, Agility, Finesse, Instinct, Presence or Knowledge.");
+            return;
+        }
+        String error = backend.requestReactionRoll(trait);
+        if (error == null) {
+            input.clear();
+        }
+        showStatus(error);
+    }
+
+    private static String canonicalReactionTrait(String argument) {
+        if (argument == null) return null;
+        return List.of("Strength", "Agility", "Finesse", "Instinct", "Presence", "Knowledge").stream()
+                .filter(trait -> trait.equalsIgnoreCase(argument))
+                .findFirst().orElse(null);
     }
 
     private void offerGold(String argument) {

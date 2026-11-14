@@ -436,6 +436,57 @@ class ChatPanelTest {
     }
 
     @Test
+    void reactionCommandRequestsPublicCharacterSpecificRollsAndValidatesTrait() throws Exception {
+        onFx(() -> {
+            RecordingBackend backend = new RecordingBackend();
+            ChatPanel panel = new ChatPanel(backend);
+            HBox composer = (HBox) panel.getChildren().get(2);
+            TextField input = (TextField) composer.getChildren().get(0);
+            Button send = (Button) composer.getChildren().get(1);
+            ComboBox<?> recipients = (ComboBox<?>) panel.getChildren().get(1);
+            recipients.getSelectionModel().select(1);
+
+            for (String trait : List.of("Strength", "Agility", "Finesse", "Instinct", "Presence", "Knowledge")) {
+                input.setText("/reaction " + trait.toLowerCase(java.util.Locale.ROOT));
+                send.fire();
+                assertEquals(trait, backend.reactionRequests.getLast());
+                assertTrue(input.getText().isEmpty());
+            }
+
+            int calls = backend.reactionRequests.size();
+            input.setText("/reaction Luck");
+            send.fire();
+            assertEquals(calls, backend.reactionRequests.size());
+            assertEquals("/reaction Luck", input.getText());
+            assertTrue(((Label) panel.lookup(".chat-status")).getText().contains("Strength, Agility"));
+
+            input.setText("/reaction");
+            send.fire();
+            assertEquals(calls, backend.reactionRequests.size());
+            assertTrue(((Label) panel.lookup(".chat-status")).getText().startsWith("Use /reaction"));
+
+            input.setText("/reactionary is a message");
+            send.fire();
+            assertEquals(List.of("/reactionary is a message"), backend.messages);
+        });
+    }
+
+    @Test
+    void reactionCommandKeepsInputWhenRequestFails() throws Exception {
+        onFx(() -> {
+            RecordingBackend backend = new RecordingBackend();
+            backend.reactionError = "Start an online session to request a reaction roll.";
+            ChatPanel panel = new ChatPanel(backend);
+            HBox composer = (HBox) panel.getChildren().get(2);
+            TextField input = (TextField) composer.getChildren().get(0);
+            input.setText("/reaction Agility");
+            input.fireEvent(new ActionEvent());
+            assertEquals("/reaction Agility", input.getText());
+            assertEquals(backend.reactionError, ((Label) panel.lookup(".chat-status")).getText());
+        });
+    }
+
+    @Test
     void sacredResonanceNotesWrapInsideNarrowDmCardsWithoutChangingTotals() throws Exception {
         JsonNode message = MAPPER.readTree("""
                 {"type":"roll","id":9,"ts":10,"from":"Seraph","expression":"4d8","rolls":[4,4,3,2],"total":21,
@@ -673,8 +724,10 @@ class ChatPanelTest {
         final List<String> rolls = new ArrayList<>();
         final List<String> messages = new ArrayList<>();
         final List<Integer> gold = new ArrayList<>();
+        final List<String> reactionRequests = new ArrayList<>();
         String lastTarget;
         String error;
+        String reactionError;
 
         RecordingBackend() { super(null); }
         @Override public List<JsonNode> history() { return List.of(); }
@@ -694,6 +747,10 @@ class ChatPanelTest {
             gold.add(amount);
             lastTarget = toPlayerId;
             return null;
+        }
+        @Override public String requestReactionRoll(String trait) {
+            reactionRequests.add(trait);
+            return reactionError;
         }
     }
 

@@ -1841,6 +1841,14 @@ public class DungeonMasterMapToolApplication extends Application {
             @Override public String offerGold(int amount, String toPlayerId) {
                 return onlineController == null ? "Not hosting." : onlineController.offerGold(amount, toPlayerId);
             }
+            @Override public String requestReactionRoll(String trait) {
+                if (onlineController == null || !onlineController.running()) {
+                    return "Start an online session to request a reaction roll.";
+                }
+                String article = "AEIOU".contains(trait.substring(0, 1)) ? "an" : "a";
+                onlineController.sendReactionPrompt("Make " + article + " " + trait + " Reaction Roll.", trait);
+                return null;
+            }
             @Override public List<dmmt.ui.ChatPanel.Recipient> recipients() {
                 if (onlineController == null) return List.of();
                 return onlineController.roster().stream().filter(r -> r.connections() > 0)

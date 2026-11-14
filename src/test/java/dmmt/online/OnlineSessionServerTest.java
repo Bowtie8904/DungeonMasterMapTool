@@ -109,17 +109,25 @@ class OnlineSessionServerTest {
     @Test
     void adversaryReactionPromptsAreClickableAndDoNotPublishDifficultyOrOutcome() throws Exception {
         Inbox inbox = new Inbox();
+        Inbox otherInbox = new Inbox();
         WebSocket ws = connect(cookie(), inbox);
+        WebSocket otherWs = connect(allyCookie("bob"), otherInbox);
         try {
             inbox.next("hello");
+            otherInbox.next("hello");
             server.dmReactionPrompt("Acid Burrower · Agility Reaction", "Agility");
             JsonNode prompt = inbox.next("chat");
+            JsonNode otherPrompt = otherInbox.next("chat");
             assertEquals("Agility", prompt.path("reactionPrompt").path("trait").asText());
+            assertEquals("Agility", otherPrompt.path("reactionPrompt").path("trait").asText());
             assertFalse(prompt.has("difficulty"));
             assertFalse(prompt.has("outcome"));
+            assertFalse(otherPrompt.has("difficulty"));
+            assertFalse(otherPrompt.has("outcome"));
             assertThrows(IllegalArgumentException.class, () -> server.dmReactionPrompt("Invalid", "Luck"));
         } finally {
             ws.abort();
+            otherWs.abort();
         }
     }
 
