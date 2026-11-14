@@ -420,6 +420,52 @@ export function isCatalogObject(value: CatalogValue | undefined): value is Catal
 
 export function cloneValue<T extends CatalogValue>(value: T): T { return structuredClone(value); }
 
+export const VARIANT_CATEGORIES = ['armor', 'weapons', 'consumables', 'items'];
+
+export function variantNameProblem(entries: CatalogObject[], name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return 'Enter a name for the new item.';
+  if (trimmed.length > 100) return 'Use at most 100 characters.';
+  if (entries.some(entry => String(entry.name).trim().toLowerCase() === trimmed.toLowerCase())) return `"${trimmed}" already exists in this catalog.`;
+  return '';
+}
+
+/**
+ * Copies an entry under a new name. Effects the copy creates are renamed too, because active effects are
+ * identified by name and a same-named buff from another item would replace instead of stack with it.
+ */
+export function createVariant(base: CatalogObject, name: string, entries: CatalogObject[]): CatalogObject {
+  const newName = name.trim();
+  const renames = new Map<string, string>();
+  const collect = (value: CatalogValue, key = ''): void => {
+    if (Array.isArray(value)) value.forEach(child => collect(child));
+    else if (isCatalogObject(value)) {
+      if (key === 'effect' && typeof value.name === 'string') renames.set(value.name, `${value.name} (${newName})`);
+      for (const [field, child] of Object.entries(value)) collect(child, field);
+    }
+  };
+  collect(base);
+  renames.set(String(base.name), newName);
+  const rewrite = (value: CatalogValue): CatalogValue => {
+    if (typeof value === 'string') return renames.get(value) ?? value;
+    if (Array.isArray(value)) return value.map(rewrite);
+    if (isCatalogObject(value)) return Object.fromEntries(Object.entries(value)
+      .filter(([key]) => key !== '_catalogFeatureId' && key !== '_editorOriginal')
+      .map(([key, child]) => [key, rewrite(child)]));
+    return value;
+  };
+  const copy = rewrite(cloneValue(base)) as CatalogObject;
+  const ids = new Set(entries.map(entry => String(entry.id)));
+  const slug = newName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100) || `${String(base.id)}-variant`;
+  let id = slug;
+  for (let n = 2; ids.has(id); n++) id = `${slug}-${n}`;
+  copy.id = id;
+  copy.name = newName;
+  copy.variantOf = String(base.id);
+  delete copy.starter;
+  return copy;
+}
+
 /** Collect optional shapes from real rules, merging automation regardless of its owning category. */
 export class CatalogShapes {
   private shapes = new Map<string, CatalogObject>();

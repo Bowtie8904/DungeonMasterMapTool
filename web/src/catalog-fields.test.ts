@@ -1,5 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { CATALOG_LABELS, CatalogShapes, cloneValue, entryTemplate, entryFieldTab, fieldHelp, ruleSection, ruleSummary, STEP_TEMPLATES } from './catalog-fields';
+import { CATALOG_LABELS, CatalogShapes, cloneValue, createVariant, entryTemplate, entryFieldTab, fieldHelp, ruleSection, ruleSummary, STEP_TEMPLATES, variantNameProblem, type CatalogObject } from './catalog-fields';
+import { mockCharacter } from './daggerheart/data';
+import { addEffect, type EffectDef } from './daggerheart/engine';
 
 describe('guided catalog forms', () => {
   it('organizes entry fields by task while retaining uncommon fields in Advanced', () => {
@@ -52,5 +55,29 @@ describe('guided catalog forms', () => {
     const copy = cloneValue(source);
     copy.entries[0].name = 'Copy';
     expect(source.entries[0].name).toBe('Example');
+  });
+  it('creates renamed variants whose buffs stack with the base item', () => {
+    const potion = (JSON.parse(readFileSync(new URL('../../dmmap-daggerheart/consumables.json', import.meta.url), 'utf8')) as { entries: CatalogObject[] })
+      .entries;
+    const base = potion.find(entry => entry.name === 'Bolster Potion')!;
+    const variant = createVariant(base, ' Red Lemonade ', potion);
+    expect(variant).toMatchObject({ id: 'red-lemonade', name: 'Red Lemonade', variantOf: base.id, text: base.text });
+    expect(variantNameProblem(potion, 'bolster potion')).toMatch(/already exists/);
+    expect(variantNameProblem(potion, 'Red Lemonade')).toBe('');
+    expect(createVariant(base, 'Red Lemonade', [...potion, variant]).id).toBe('red-lemonade-2');
+    expect(base.name).toBe('Bolster Potion');
+    const baseEffect = ((base.automation as CatalogObject).actions as CatalogObject[])[0].steps as CatalogObject[];
+    const variantEffect = (((variant.automation as CatalogObject).actions as CatalogObject[])[0].steps as CatalogObject[])[0].effect as CatalogObject;
+    expect(variantEffect.name).toBe('Next Strength Roll +1 (Red Lemonade)');
+    expect((baseEffect[0].effect as CatalogObject).name).toBe('Next Strength Roll +1');
+    expect(variantEffect.modifiers).toEqual(((baseEffect[0].effect as CatalogObject).modifiers));
+
+    const c = mockCharacter();
+    c.effects = [];
+    for (const entry of [base, variant]) {
+      const effect = ((((entry.automation as CatalogObject).actions as CatalogObject[])[0].steps as CatalogObject[])[0].effect) as unknown as EffectDef;
+      addEffect(c, effect, String(entry.name));
+    }
+    expect(c.effects.map(e => e.name)).toEqual(['Next Strength Roll +1', 'Next Strength Roll +1 (Red Lemonade)']);
   });
 });

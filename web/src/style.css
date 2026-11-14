@@ -464,6 +464,9 @@ button.share-icon:disabled { opacity: .25; }
 .app-message-dialog { width: min(420px, calc(100vw - 32px)); padding: 20px; border: 1px solid var(--border); border-radius: 10px; color: var(--text); background: var(--panel); box-shadow: 0 16px 48px #0008; }
 .app-message-dialog::backdrop { background: #0008; }
 .app-message-dialog h3 { margin: 0 0 12px; }
+.app-message-dialog label { display: flex; flex-direction: column; gap: 6px; }
+.app-message-dialog input[type=text] { width: 100%; box-sizing: border-box; color: var(--text); background: #1f252d; border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
+.app-message-dialog p.error { color: #ff9b9b; min-height: 1.2em; margin: 8px 0 0; }
 .app-message-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
 .demiplane-dialog { width: min(600px, calc(100vw - 32px)); }
 .demiplane-dialog input { width: 100%; box-sizing: border-box; }

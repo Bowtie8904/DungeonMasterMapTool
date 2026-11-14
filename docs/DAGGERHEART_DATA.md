@@ -34,7 +34,9 @@ authoritative base values and existing Armor modifier; no compatibility-version 
 ## Guided DM editor and live catalog links
 
 While hosting, the DM compendium's **Edit JSON catalogs** view edits all nine files above, including automation,
-features and grimoire spells. Select an entry or use **New entry** / **Duplicate as new**. Plain-language field
+features and grimoire spells. **Create renamed variant** (armor, weapons, consumables, items) saves a copy of the
+selected entry under a new name with a generated id and `variantOf: <base id>`; effect names it creates get a
+" (New name)" suffix so its buffs stack separately from the base item's. It is a snapshot of the base. Select an entry or use **New entry** / **Duplicate as new**. Plain-language field
 help explains scope, costs and limits. **Overview** holds identity, category statistics and a live formatted preview;
 **Features** presents named features/spells in a list with a dedicated editor. **Automation** selects entry-wide
 or feature/spell-owned rules and presents cards with focused activation, conditions, effects and costs/limits.
