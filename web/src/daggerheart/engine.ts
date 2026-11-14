@@ -50,6 +50,11 @@ export interface Modifier {
 }
 
 export interface EffectDef {
+  /** Created and removed by the DM or the host's expiration/consumption rules. */
+  dmManaged?: boolean;
+  dmUsesRemaining?: number;
+  dmUsesMax?: number;
+  dmConsumeOnRoll?: string;
   /** Host-created Reloading debuff: blocks attacks with this weapon until reloaded. */
   unloadedWeapon?: string;
   endOnAction?: boolean;
@@ -805,10 +810,28 @@ export function syncDerived(c: CharacterSheet): DerivedStats {
   c.effects = c.effects.filter(e => !e.stance || c.hp.on < c.hp.slots
     && c.knownStances?.includes(e.name) && stances.some(s => s.name === e.name && s.tier <= tierOf(c.level)));
   syncResources(c);
+  reconcileCapacity(c);
   const d = derivedStats(c);
   c.armorTrack.slots = Math.min(c.armorTrack.total, d.armorSlots);
   c.armorTrack.on = Math.min(c.armorTrack.on, c.armorTrack.slots);
   return d;
+}
+
+/** Applies hpSlots/stressSlots modifiers as a tracked delta so expiry restores the exact base capacity. */
+function reconcileCapacity(c: CharacterSheet): void {
+  for (const kind of ['hp', 'stress'] as const) {
+    const applied = c.capacityApplied?.[kind] ?? 0;
+    const delta = statTotal(c, `${kind}Slots`) - applied;
+    if (!delta) continue;
+    const track = c[kind];
+    const floor = kind === 'hp' ? Math.max(1, hpHealingFloor(c)) : 1;
+    const target = Math.max(Math.min(floor, track.slots), Math.min(track.total, track.slots + delta));
+    c.capacityApplied = { hp: c.capacityApplied?.hp ?? 0, stress: c.capacityApplied?.stress ?? 0 };
+    c.capacityApplied[kind] = applied + (target - track.slots);
+    track.slots = target;
+    track.on = Math.min(track.on, track.slots);
+    if (!c.capacityApplied.hp && !c.capacityApplied.stress) delete c.capacityApplied;
+  }
 }
 
 export type ManualStat = 'hp' | 'stress' | 'proficiency' | 'evasion' | `trait.${TraitName}`;
@@ -913,8 +936,8 @@ export function rollBonus(c: CharacterSheet, targets: string[], weapon?: Charact
     const level = Object.keys(m.diceByLevel ?? {}).map(Number).filter((n) => n <= c.level).sort((a, b) => b - a)[0];
     const dice = level === undefined ? m.dice : m.diceByLevel![String(level)];
     if (dice) out.dice.push(dice);
-    out.names.push(`${name} ${dice ? `+${dice}` : v >= 0 ? `+${v}` : v}`);
-    out.contributions.push({ label: name.slice(0, 120), expression: `${v}${dice ? `+${dice.startsWith('d') ? `1${dice}` : dice}` : ''}`,
+    out.names.push(`${name} ${dice ? signedDice(dice) : v >= 0 ? `+${v}` : v}`);
+    out.contributions.push({ label: name.slice(0, 120), expression: `${v}${dice ? signedDice(dice) : ''}`,
       rollSource: rollSourceFor(c, effect ? `effect:${effect.id}` : sourceKey ?? `feat:${name}`) });
     if (effect && m.consume) out.applied.push({ effect, modifier: m });
   };
@@ -1170,11 +1193,17 @@ export function selectedRollBonus(c: CharacterSheet, base: RollBonus, selected: 
     out.value += value;
     if (dice) out.dice.push(dice);
     out.names.push(label);
-    out.contributions.push({ label, expression: `${value}${dice ? `+${dice.startsWith('d') ? `1${dice}` : dice}` : ''}`,
+    out.contributions.push({ label, expression: `${value}${dice ? signedDice(dice) : ''}`,
       rollSource: rollSourceFor(c, selection.key.replace(/:roll:[^:]+$/, '')),
       ...(option.diceResource ? { notes: [{ label: 'Dice resource', impact: option.diceResource }] } : {}) });
   }
   return out;
+}
+
+export function signedDice(dice: string): string {
+  const negative = dice.startsWith('-');
+  const unsigned = negative ? dice.slice(1) : dice;
+  return `${negative ? '-' : '+'}${unsigned.startsWith('d') ? `1${unsigned}` : unsigned}`;
 }
 
 export function suggestedAdvantage(selected: AvailableRollOption[]): Advantage {
@@ -1336,9 +1365,9 @@ export function addEffect(c: CharacterSheet, def: EffectDef, source?: string): A
     id: `e${Date.now().toString(36)}${effectCounter++}`,
     source,
   };
-  if (def.group) c.effects = c.effects.filter(e => e.group !== def.group);
+  if (def.group) c.effects = c.effects.filter(e => e.dmManaged || e.group !== def.group);
   syncEffectDependencies(c);
-  const existing = c.effects.findIndex((e) => e.name === def.name);
+  const existing = c.effects.findIndex((e) => !e.dmManaged && e.name === def.name);
   if (existing >= 0) c.effects.splice(existing, 1);
   c.effects.push(effect);
   return effect;
@@ -1364,6 +1393,7 @@ export function applyRest(c: CharacterSheet, kind: RestKind): void {
     c.resources![effect.surgeResource!] = 0;
   }
   c.effects = c.effects.filter((e) => !expiring.includes(e.until ?? 'manual'));
+  reconcileCapacity(c);
   for (const r of restResources) {
     if (r.resetOn === 'rest' || r.resetOn === 'shortRest' || (kind === 'long' && r.resetOn === 'longRest')) {
       c.resources![r.id] = Math.max(r.minimumReset ?? 0, evalValue(r.resetValue ?? r.initial, c));
@@ -1532,8 +1562,8 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
   if (cost) log.push(`spent ${cost}`);
   if (action.toggleEffect) {
     const definition = action.toggleEffect;
-    if (c.effects.some(effect => effect.name === definition.name)) {
-      c.effects = c.effects.filter(effect => effect.name !== definition.name);
+    if (c.effects.some(effect => !effect.dmManaged && effect.name === definition.name)) {
+      c.effects = c.effects.filter(effect => effect.dmManaged || effect.name !== definition.name);
       log.push(`ended ${definition.name}`);
     } else {
       addEffect(c, structuredClone(definition), label);
@@ -1644,7 +1674,7 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
     }
   }
   if (action.endEffect) {
-    c.effects = c.effects.filter((e) => e.name !== action.endEffect);
+    c.effects = c.effects.filter((e) => e.dmManaged || e.name !== action.endEffect);
     log.push(`ended ${action.endEffect}`);
   }
   if (action.report) log.push(action.report.text.replace('{amount}', String(Math.max(0, reportAmount))));
@@ -1721,7 +1751,7 @@ export function damageExpression(damage: string, proficiency: number, extra: Rol
     });
   }
   if (extra.value) e += extra.value > 0 ? `+${extra.value}` : `${extra.value}`;
-  for (const d of extra.dice) e += `+${d.startsWith('d') ? `1${d}` : d}`;
+  for (const d of extra.dice) e += signedDice(d);
   return e;
 }
 

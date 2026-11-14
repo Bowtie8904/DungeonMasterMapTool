@@ -11,7 +11,7 @@ import {
 import {
   ActionDef, ActiveEffect, Automation, RollBonus, StatSource, activeFeatures, activeWeapons, actionBlocker, actionCost, addEffect, asksSpellcastRoll, consumeBonus, costText,
   availableRollOptions, commitRollOptions, configuredRollOption, criticalBonus, damageContributions, damageRollFormula, derivedStats, deathrunProficiency, evalValue, experienceModifier, resourceDefinitions, rollBonus, rollExperienceRefund, rollOptionQuantityMax,
-  damagePool, effectCounterMax, effectCounterText, effectiveAdvantage, maximizeDamageDie, maximizableDamageDice, poolDice, rollLocal, rollOptionDice, rollOptionLabel, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, setTrackSlots, sheetActions, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft, usesMax,
+  damagePool, effectCounterMax, effectCounterText, effectiveAdvantage, maximizeDamageDie, maximizableDamageDice, poolDice, rollLocal, rollOptionDice, rollOptionLabel, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, setTrackSlots, sheetActions, signedDice, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft, usesMax,
 } from './engine';
 import { comboDie, criticalMeleeBonus, refocus, shiftStance } from './brawler';
 import { chooseStance } from './brawler-view';
@@ -1532,18 +1532,21 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   }
 
   function effectsPage(): HTMLElement {
-    const untilText = (e: ActiveEffect) => isVitalityEffect(e) ? 'Permanent (edit mode removal)' : ({ manual: 'Until dismissed', rest: 'Until your next rest', shortRest: 'Until a short rest', longRest: 'Until a long rest', scene: 'Until the end of the scene', session: 'Until the end of the session' })[e.until ?? 'manual'];
+    const untilText = (e: ActiveEffect) => isVitalityEffect(e) ? 'Permanent (edit mode removal)'
+      : e.dmManaged && (!e.until || e.until === 'manual') ? 'Until removed by the DM'
+        : ({ manual: 'Until dismissed', rest: 'Until your next rest', shortRest: 'Until a short rest', longRest: 'Until a long rest', scene: 'Until the end of the scene', session: 'Until the end of the session' })[e.until ?? 'manual'];
     const rows = c.effects.filter(e => !e.dicePool).map((e) => {
       const dismiss = el('button', { class: 'small', type: 'button' }, 'Remove');
       const manual = isManualOverride(e);
       const vitality = isVitalityEffect(e);
-      dismiss.disabled = !!e.lockedHp || !!e.earthAuraGrant || (manual || vitality) && !canEdit();
+      dismiss.disabled = !!e.dmManaged || !!e.lockedHp || !!e.earthAuraGrant || (manual || vitality) && !canEdit();
+      if (e.dmManaged) dismiss.title = 'Only the DM can remove this effect.';
       if (manual && !canEdit()) dismiss.title = 'Enable edit mode to remove the manual adjustments.';
       if (vitality && !canEdit()) dismiss.title = 'Enable edit mode to remove Vitality and reverse its benefits.';
       if (e.earthAuraGrant) dismiss.title = 'Ends automatically with the granting druid\'s Earth aura; select the roll option only when in range.';
       if (e.lockedHp) dismiss.title = 'This HP lock ends only when you rest.';
       dismiss.addEventListener('click', () => {
-        if ((manual || vitality) && !canEdit()) return;
+        if (e.dmManaged || (manual || vitality) && !canEdit()) return;
         if (vitality) removeVitality(c, e, canEdit());
         else if (manual) removeManualOverride(c, e);
         else c.effects.splice(c.effects.indexOf(e), 1);
@@ -1551,7 +1554,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       });
       const mods = (e.modifiers ?? []).filter(m => !manual || m.stat !== 'armorScore').map((m) => {
         const v = m.traitValue ? `${m.traitValue} (${signed(traitTotal(c, m.traitValue))})`
-          : m.dice ? `+${m.dice}` : typeof m.value === 'number' ? signed(m.value) : String(m.value);
+          : m.dice ? `${typeof m.value === 'number' && m.value ? signed(m.value) : ''}${signedDice(m.dice)}` : typeof m.value === 'number' ? signed(m.value) : String(m.value);
         return m.stat ? `${m.stat.replace('trait.', '')} ${v}` : `next ${(m.roll ?? '').replace('trait:', '')} roll ${v}`;
       });
       return el(
@@ -1559,6 +1562,9 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         el('div', { class: 'src' }, `${e.kind === 'buff' ? 'Buff' : 'Debuff'} - ${untilText(e)}${e.source ? ` - from ${manual ? 'sheet edit mode' : e.source}` : ''}`),
         el('div', { class: 'ft' }, e.name, el('span', { style: 'float:right' }, dismiss)),
         rich(mutagenEffectSource(c, e)?.text ?? e.text),
+        ...(e.dmManaged && e.dmUsesRemaining !== undefined
+          ? [el('div', { class: 'badges' }, tag(`${e.dmUsesRemaining} / ${e.dmUsesMax ?? e.dmUsesRemaining} uses remaining`),
+            ...(e.dmConsumeOnRoll ? [tag(`Expires after ${e.dmConsumeOnRoll.replace('trait:', '')} rolls`)] : []))] : []),
         ...(e.counter ? [el('div', { class: 'badges' }, tag(e.deathrun
           ? `Deathrun: ${e.counter.value} damage use${e.counter.value === 1 ? '' : 's'}${e.deathrunRemaining ? ` · ${e.deathrunRemaining.length} weapon dice remain` : ''}`
           : `Die: ${e.counter.value} / d${effectCounterMax(c, e)}`))] : []),
@@ -2398,7 +2404,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
   const go = el('button', { class: 'primary', type: 'button' }, 'Roll to chat');
   const cancel = el('button', { type: 'button' }, 'Cancel');
   const error = el('div', { class: 'error', role: 'alert' });
-  const hostSupportsOption = (key: string) => !c.effects.some(effect => key === `effect:${effect.id}` && effect.linkedTokenResource)
+  const hostSupportsOption = (key: string) => !c.effects.some(effect => key === `effect:${effect.id}` && (effect.linkedTokenResource || effect.dmManaged))
     || !!supportsDomainCardAutomation?.();
   const currentOptions = () => availableRollOptions(c, currentTargets(), weapon ?? actionWeapon, outcome).filter(option => hostSupportsOption(option.key));
   let options = currentOptions();
@@ -2586,7 +2592,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
       sizeSelect.addEventListener('change', () => { dieSizeChoices.set(i, Number(sizeSelect.value)); update(); });
     }
     const choice = el('label', { class: 'dh-roll-option' }, input,
-      el('span', {}, `${rollOptionLabel(s)}${value ? ` (${signed(value)}${s.option.quantity ? ' per token' : ''})` : ''}${dice ? ` +${dice}` : ''}${note ? `; ${note}` : ''}`,
+      el('span', {}, `${rollOptionLabel(s)}${value ? ` (${signed(value)}${s.option.quantity ? ' per token' : ''})` : ''}${dice ? ` ${signedDice(dice)}` : ''}${note ? `; ${note}` : ''}`,
         ...(s.option.description ? [el('small', { class: 'muted' }, s.option.description)] : []),
         ...(block ? [el('small', { class: 'error' }, block)] : [])));
     const continuingRun = s.option.deathrun && !!runEffect();
@@ -2645,7 +2651,7 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
         ...(selected().some(s => s.option.linkedDamageTrait) ? [`linkedDamage:${selected().reduce((n, s) => n + (s.option.linkedDamageTrait ? (s.option.linkedDamageMultiplier ?? 2) * traitTotal(c, s.option.linkedDamageTrait) : 0), 0)}`] : [])].join(','),
       expression: dualityExpression(total, actualAdvantage, selected().some((s) => s.option.hopeDie === 20) ? 20 : 12,
         selected().some((s) => s.option.fearDie === 20) ? 20 : 12, selected().some(s => s.option.advantageDie === 8) ? 8 : 6)
-        + b.dice.map((d) => `+${d.startsWith('d') ? `1${d}` : d}`).join(''),
+        + b.dice.map(signedDice).join(''),
       kind: 'duality',
       contributions: [
         { label: 'Hope die', expression: selected().some((s) => s.option.hopeDie === 20) ? '1d20' : '1d12' },

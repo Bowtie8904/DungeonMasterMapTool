@@ -240,6 +240,8 @@ export interface CharacterSheet {
   hope: Track;
   scars?: number;
   permanentHp?: number;
+  /** HP/Stress slots currently added or removed by hpSlots/stressSlots effect modifiers. */
+  capacityApplied?: { hp: number; stress: number };
   spectralBlocked?: boolean;
   deathNarrative?: string;
   pendingDeathRoll?: { id: number; ts: number };

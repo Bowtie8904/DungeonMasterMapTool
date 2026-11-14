@@ -20,6 +20,19 @@ The **Online Play** tab (next to DM Link) lets you host an optional, DM-controll
 who join from a browser. **It is not DM control** (that is DM Link below); players get restricted access.
 Nothing starts until you click **Start online session**, so offline play and the second-screen view are unchanged.
 
+**Custom effects (partial implementation):** While hosting, the **Custom effects** tool on the right-hand tool rail (below Handouts) opens a dialog that lets the DM
+select saved player characters, compose stat or roll modifiers, optional roll bonuses, damage mitigation,
+resource actions and visible narrative rules, and remove individual DM-managed effects. Passive and selectable
+roll modifiers can include positive or negative dice. Selectable roll bonuses can
+suggest advantage or disadvantage and have Hope or Stress costs. Choose a scene, rest, session or manual
+duration and, optionally, a per-character use limit shared by roll options and actions. Choose whether a
+use is consumed by a successfully submitted selected option or action, or automatically by a matching
+roll. Rally-style selectable-use effects are not spent merely by making an eligible roll. Same-name effects can stack or
+be replaced. Players cannot manually remove DM-managed effects. Resource capacity, condition immunity,
+restrictions, temporary actions and other planned automation presets are not yet implemented.
+Damage-type-specific roll modifiers and choices are not reliable for all weapon damage rolls; use a
+general damage modifier with a visible instruction until that filtering is complete.
+
 **Independent player maps:** By default, switching the DM's map leaves online players on their
 current map. The **Pull players** and **Return to players' map** buttons at the bottom right, left of the scene and session buttons,
 move players to the DM's map or return the DM to theirs. A separate **Players** badge marks their map in the

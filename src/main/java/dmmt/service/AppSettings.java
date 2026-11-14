@@ -69,6 +69,7 @@ public final class AppSettings {
         addControls(controls, "session", "browser|DM Link tab");
         addControls(controls, "online", "browser|Online Play tab", "start|Start online session",
                 "stop|Stop online session", "pause|Pause online play (API only; use the pause key)", "copyLink|Copy online invite link",
+                "customEffects|Custom player buffs and debuffs",
                 "fearDown|Fear counter minus", "fearUp|Fear counter plus", "endScene|End scene (shown while hosting)",
                 "newSession|New session (shown while hosting)", "chat|Chat tab (shown while hosting)",
                 "countdowns|Countdown overlay (shown while hosting)", "countdowns.add|Create countdown",

@@ -85,10 +85,14 @@ export function renderEffects(
         onToggle();
       });
       const remove = el('button', { class: 'effect-remove', type: 'button', title: `Remove ${e.name}` }, '\u00D7');
-      remove.disabled = !!e.lockedHp;
-      if (e.lockedHp) remove.title = 'This HP lock ends only when you rest.';
+      remove.disabled = !!e.lockedHp || !!e.dmManaged;
+      if (e.dmManaged) remove.title = 'Only the DM can remove this effect.';
+      else if (e.lockedHp) remove.title = 'This HP lock ends only when you rest.';
       remove.setAttribute('aria-label', `Remove ${e.name}`);
-      remove.addEventListener('click', () => { expanded.delete(key); onRemove(g, e); });
+      remove.addEventListener('click', () => {
+        if (e.dmManaged || e.lockedHp) return;
+        expanded.delete(key); onRemove(g, e);
+      });
       const row = el('div', { class: `effect-row ${e.kind}${open ? ' open' : ''}` }, el('div', { class: 'effect-head' }, label, remove));
       if (open) {
         const src = effectSource(g.character, e);

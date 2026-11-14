@@ -484,6 +484,10 @@ Tabs of the DM controls that are **completely hidden**: a hidden tab's icon is r
 
 ### `ui.controls.hidden`
 
+Hide `online.customEffects` to remove the **Custom effects** tool from the right-hand tool rail (below Handouts, shown while hosting). It remains accessible
+through the local API while hosting. The effect editor is a partial implementation; see the README for
+the currently supported presets.
+
 The hosting-only countdown list can be hidden with `online.countdowns`, or just its Add button with
 `online.countdowns.add`. This affects only the DM overlay, not the read-only browser display or saved campaign data.
 The local API retains `online.countdowns.add` (opens the name/initial-value dialog) and discovers

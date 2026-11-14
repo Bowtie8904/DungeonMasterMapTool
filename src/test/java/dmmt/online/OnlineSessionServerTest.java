@@ -36,6 +36,151 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OnlineSessionServerTest {
     @Test
+    void dmEffectRollUsesAreIndependentAndOnlyCommittedAfterAValidSelectedRoll() throws Exception {
+        for (String id : List.of("rally-one", "rally-two")) {
+            campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId()).build());
+            store.saveSheet(campaign.getId(), id, sageArcanaSheet("Flight").toString());
+        }
+        ObjectNode definition = MAPPER.createObjectNode().put("name", "Rally Die").put("kind", "buff")
+                .put("until", "scene").put("uses", 1);
+        definition.putArray("parts").addObject().put("type", "option").put("target", "action")
+                .put("value", 0).put("dice", "1d6");
+        server.applyDmEffect(List.of("rally-one", "rally-two"), definition, false);
+        JsonNode first = server.dmEffects("rally-one").get(0);
+        JsonNode second = server.dmEffects("rally-two").get(0);
+        assertFalse(first.path("id").equals(second.path("id")));
+        String cookie = cookie();
+        ObjectNode body = MAPPER.createObjectNode().put("actorId", "rally-one");
+        ObjectNode roll = body.putObject("transactionalRoll").put("ref", "rally-roll").put("kind", "duality")
+                .put("expression", "2d12+1d6").put("source", "action");
+        roll.putArray("hostOptions").addObject().put("key", "effect:" + first.path("id").asText()).put("id", "part-0");
+        roll.putArray("contributions").addObject().put("label", "Hope die").put("expression", "1d12");
+        roll.withArray("contributions").addObject().put("label", "Fear die").put("expression", "1d12");
+        roll.withArray("contributions").addObject().put("label", "Rally Die").put("expression", "0+1d4");
+        assertEquals(400, featureHttp(cookie, body).statusCode());
+        assertEquals(1, server.dmEffects("rally-one").size());
+        ((ObjectNode) roll.withArray("contributions").get(2)).put("expression", "0+1d6");
+        var response = featureHttp(cookie, body);
+        assertEquals(200, response.statusCode(), response.body());
+        assertTrue(server.dmEffects("rally-one").isEmpty());
+        assertEquals(1, server.dmEffects("rally-two").get(0).path("dmUsesRemaining").asInt());
+        roll.put("ref", "rally-again");
+        assertEquals(400, featureHttp(cookie, body).statusCode());
+        assertEquals(1, server.dmEffects("rally-two").size());
+    }
+
+    @Test
+    void dmEffectApplicationIsAtomicAndSceneExpiryIncludesDisabledCharacters() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("warded").name("Warded").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("unsaved").name("Unsaved").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "warded", sageArcanaSheet("Flight").toString());
+        ObjectNode definition = MAPPER.createObjectNode().put("name", "Ward").put("kind", "buff").put("until", "scene");
+        definition.putArray("parts").addObject().put("type", "stat").put("target", "evasion").put("value", 1);
+        assertThrows(IllegalArgumentException.class,
+                () -> server.applyDmEffect(List.of("warded", "unsaved"), definition, false));
+        assertTrue(server.dmEffects("warded").isEmpty());
+        server.applyDmEffect(List.of("warded"), definition, false);
+        server.applyDmEffect(List.of("warded"), definition, false);
+        assertEquals(2, server.dmEffects("warded").size());
+        server.applyDmEffect(List.of("warded"), definition, true);
+        assertEquals(1, server.dmEffects("warded").size());
+        campaign.actor("warded").setDisabled(true);
+        assertNull(server.endScene());
+        assertTrue(server.dmEffects("warded").isEmpty());
+    }
+
+    @Test
+    void dmResourceActionCostsAndSharedUsesAreCommittedOnlyOnSuccess() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("healer").name("Healer").ownerId(playerId()).build());
+        ObjectNode sheet = sageArcanaSheet("Flight");
+        sheet.withObject("/hope").put("on", 0);
+        sheet.withObject("/stress").put("on", 2);
+        store.saveSheet(campaign.getId(), "healer", sheet.toString());
+        ObjectNode definition = MAPPER.createObjectNode().put("name", "Reserve").put("kind", "buff").put("uses", 1);
+        definition.putArray("parts").addObject().put("type", "action").put("target", "stress").put("operation", "clear")
+                .put("label", "Recover").put("value", 1).put("hopeCost", 1);
+        server.applyDmEffect(List.of("healer"), definition, false);
+        String id = server.dmEffects("healer").get(0).path("id").asText();
+        ObjectNode body = MAPPER.createObjectNode().put("actorId", "healer").put("key", "effect:" + id).put("actionId", "part-0");
+        String cookie = cookie();
+        assertEquals(400, featureHttp(cookie, body).statusCode());
+        assertEquals(1, server.dmEffects("healer").size());
+        ObjectNode current = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "healer"));
+        assertEquals(2, current.path("stress").path("on").asInt());
+        current.withObject("/hope").put("on", 2);
+        store.saveSheet(campaign.getId(), "healer", current.toString());
+        var response = featureHttp(cookie, body);
+        assertEquals(200, response.statusCode(), response.body());
+        current = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "healer"));
+        assertEquals(1, current.path("stress").path("on").asInt());
+        assertEquals(1, current.path("hope").path("on").asInt());
+        assertTrue(server.dmEffects("healer").isEmpty());
+        assertEquals(400, featureHttp(cookie, body).statusCode());
+    }
+
+    @Test
+    void dmEffectMatchingRollExpiryDoesNotConsumeOnOtherRollsOrTwiceForASelectedOption() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("roller").name("Roller").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "roller", sageArcanaSheet("Flight").toString());
+        ObjectNode definition = MAPPER.createObjectNode().put("name", "Fleeting Blessing").put("kind", "buff")
+                .put("uses", 2).put("consumeOn", "action");
+        definition.putArray("parts").addObject().put("type", "option").put("target", "action").put("value", 1);
+        server.applyDmEffect(List.of("roller"), definition, false);
+        String id = server.dmEffects("roller").get(0).path("id").asText();
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket socket = connect(cookie, inbox);
+        try {
+            inbox.next("hello");
+            socket.sendText("{\"type\":\"roll\",\"actorId\":\"roller\",\"kind\":\"duality\",\"expression\":\"2d12\",\"source\":\"reaction\"}", true).join();
+            inbox.next("roll");
+            assertEquals(2, server.dmEffects("roller").get(0).path("dmUsesRemaining").asInt());
+            ObjectNode body = MAPPER.createObjectNode().put("actorId", "roller");
+            ObjectNode roll = body.putObject("transactionalRoll").put("ref", "fleeting").put("kind", "duality")
+                    .put("expression", "2d12+1").put("source", "action");
+            roll.putArray("hostOptions").addObject().put("key", "effect:" + id).put("id", "part-0");
+            roll.putArray("contributions").addObject().put("label", "Hope die").put("expression", "1d12");
+            roll.withArray("contributions").addObject().put("label", "Fear die").put("expression", "1d12");
+            roll.withArray("contributions").addObject().put("label", "Fleeting Blessing").put("expression", "1");
+            var response = featureHttp(cookie, body);
+            assertEquals(200, response.statusCode(), response.body());
+            assertEquals(1, server.dmEffects("roller").get(0).path("dmUsesRemaining").asInt());
+            socket.sendText("{\"type\":\"roll\",\"actorId\":\"roller\",\"kind\":\"duality\",\"expression\":\"2d12\",\"source\":\"action\"}", true).join();
+            inbox.next("roll");
+            inbox.next("roll");
+            assertTrue(server.dmEffects("roller").isEmpty());
+        } finally { socket.abort(); }
+    }
+
+    @Test
+    void dmPenaltyDieIsValidatedAndRolledAsANegativeContribution() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("hexed").name("Hexed").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "hexed", sageArcanaSheet("Flight").toString());
+        ObjectNode definition = MAPPER.createObjectNode().put("name", "Hex").put("kind", "debuff").put("uses", 1);
+        definition.putArray("parts").addObject().put("type", "option").put("target", "action")
+                .put("value", 0).put("dice", "-d6");
+        definition.withArray("parts").addObject().put("type", "option").put("target", "action")
+                .put("value", 0).put("dice", "-d6");
+        server.applyDmEffect(List.of("hexed"), definition, false);
+        String id = server.dmEffects("hexed").get(0).path("id").asText();
+        ObjectNode body = MAPPER.createObjectNode().put("actorId", "hexed");
+        ObjectNode roll = body.putObject("transactionalRoll").put("ref", "hex-roll").put("kind", "duality")
+                .put("expression", "2d12-1d6").put("source", "action");
+        roll.putArray("hostOptions").addObject().put("key", "effect:" + id).put("id", "part-0");
+        roll.putArray("contributions").addObject().put("label", "Hope die").put("expression", "1d12");
+        roll.withArray("contributions").addObject().put("label", "Fear die").put("expression", "1d12");
+        roll.withArray("contributions").addObject().put("label", "Hex").put("expression", "0-1d6");
+        roll.withArray("hostOptions").addObject().put("key", "effect:" + id).put("id", "part-1");
+        String cookie = cookie();
+        assertEquals(400, featureHttp(cookie, body).statusCode());
+        assertEquals(1, server.dmEffects("hexed").get(0).path("dmUsesRemaining").asInt());
+        roll.withArray("hostOptions").remove(1);
+        var response = featureHttp(cookie, body);
+        assertEquals(200, response.statusCode(), response.body());
+        assertTrue(server.dmEffects("hexed").isEmpty());
+    }
+
+    @Test
     void demiplaneImportRequiresAnOwnedEnabledUncreatedActorAndRejectsArbitraryUrls() throws Exception {
         campaign.getActors().add(Campaign.Actor.builder().id("new").name("New").ownerId(playerId()).build());
         campaign.getActors().add(Campaign.Actor.builder().id("other").name("Other").ownerId("someone-else").build());

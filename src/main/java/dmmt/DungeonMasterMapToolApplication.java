@@ -393,6 +393,7 @@ public class DungeonMasterMapToolApplication extends Application {
         chatPanel.markRead();
     }
     private ToggleButton compendiumButton;
+    private ToggleButton customEffectsButton;
     private ControlSection filesSection;
     private dmmt.ui.HandoutsPanel handoutsPanel;
     private final dmmt.ui.CompendiumWindow compendiumWindow = new dmmt.ui.CompendiumWindow();
@@ -1880,6 +1881,17 @@ public class DungeonMasterMapToolApplication extends Application {
                 status("Start hosting a campaign before opening the compendium.");
             }
         });
+        customEffectsButton = Icons.toggle(org.kordamp.ikonli.materialdesign2.MaterialDesignA.AUTO_FIX,
+                "Custom effects: give buffs and debuffs to player characters");
+        customEffectsButton.getStyleClass().add("rail-toggle");
+        customEffectsButton.setOnAction(event -> {
+            customEffectsButton.setSelected(false);
+            if (onlineController != null && onlineController.running()) {
+                dmmt.ui.DmEffectsDialog.show(primaryStage, onlineController.campaign(), onlineController.server());
+            } else {
+                status("Start hosting a campaign before applying custom effects.");
+            }
+        });
         handoutsPanel = new dmmt.ui.HandoutsPanel(() -> mapCenter, this::status);
         filesSection = new ControlSection("Handouts", org.kordamp.ikonli.materialdesign2.MaterialDesignF.FOLDER_IMAGE, "files", handoutsPanel);
 
@@ -1973,6 +1985,7 @@ public class DungeonMasterMapToolApplication extends Application {
             section.railButton().setToggleGroup(railGroup);
             rail.getChildren().add(section.railButton());
             if (section.id().equals("measure")) rail.getChildren().add(compendiumButton);
+            if (section.id().equals("files")) rail.getChildren().add(customEffectsButton);
         }
         railGroup.selectedToggleProperty().addListener((observable, oldToggle, newToggle) -> {
             flyout.getChildren().clear();
@@ -2395,6 +2408,12 @@ public class DungeonMasterMapToolApplication extends Application {
             compendiumWindow.syncSession(hosting ? onlineController.server() : null);
             for (var sheet : new ArrayList<>(characterSheets.values()))
                 sheet.syncSession(hosting ? onlineController.server() : null);
+        }
+        if (customEffectsButton != null) {
+            boolean visible = onlineController != null && onlineController.running() && onlineController.campaign() != null
+                    && !preferences.hiddenControls().contains("online.customEffects");
+            customEffectsButton.setVisible(visible);
+            customEffectsButton.setManaged(visible);
         }
         if (handoutsPanel != null) {
             boolean hosting = onlineController != null && onlineController.running() && onlineController.campaign() != null;
@@ -3176,6 +3195,7 @@ public class DungeonMasterMapToolApplication extends Application {
         dmControlVisibility.register("online.measure", dmSections.get("measure").railButton());
         dmControlVisibility.register("online.compendium", compendiumButton);
         dmControlVisibility.register("online.files", filesSection.railButton());
+        dmControlVisibility.register("online.customEffects", customEffectsButton);
         handoutsPanel.controls().forEach((id, node) -> dmControlVisibility.register(id, node));
         onlinePanel.controls().forEach((id, node) -> dmControlVisibility.register(id, node));
         if (fearOverlay != null) fearOverlay.controls().forEach((id, node) -> dmControlVisibility.register(id, node));

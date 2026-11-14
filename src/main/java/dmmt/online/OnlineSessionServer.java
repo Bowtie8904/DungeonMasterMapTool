@@ -1659,6 +1659,7 @@ public final class OnlineSessionServer {
             CopycatCards.preserveSave((ObjectNode) sheet, previous);
             SpecialCardActions.preserveSave((ObjectNode) sheet, previous, actor.isTestingCharacter(), expected != null);
             SplendorActions.preserveSave((ObjectNode) sheet, previous);
+            DmEffectProtection.validate(previous, sheet, null);
             BoneValorRules.validateSave(previous, (ObjectNode) sheet);
             String problem = CharacterSheetRules.problem(sheet, previous, actor.isTestingCharacter(), c.getFear());
             if (problem != null) {
@@ -2860,6 +2861,9 @@ public final class OnlineSessionServer {
                 }
             }
 
+            if (source.path("dmManaged").asBoolean() && !source.has("dmConsumeOnRoll"))
+                DmCustomEffects.consume(sourceSheet, Set.of(key.substring("effect:".length())));
+
             if (hasRoll) {
                 ArrayNode featureUses = originalRoll.withArray("featureUses");
                 String use = sourceActor.getId() + ":" + key + ":" + actionId;
@@ -2981,6 +2985,7 @@ public final class OnlineSessionServer {
     private synchronized void resolveBoneValorDamage(Campaign.Actor actor, JsonNode request) throws IOException {
         ObjectNode before = storedSheet(actor.getId());
         if (!(request.path("sheet") instanceof ObjectNode next)) throw new IllegalArgumentException("Invalid damage result.");
+        DmEffectProtection.validate(before, next, null);
         if (next.path("longRestRevision").asLong() != before.path("longRestRevision").asLong())
             throw new IllegalArgumentException("Incoming damage cannot advance a long rest.");
         SplendorActions.preserveSave(next, before);
@@ -3190,6 +3195,8 @@ public final class OnlineSessionServer {
         List<JsonNode> definitions = new ArrayList<>();
         List<String> keys = new ArrayList<>();
         java.util.Set<String> selected = new java.util.HashSet<>();
+        java.util.Set<String> dmEffectUses = new java.util.HashSet<>();
+        java.util.Set<String> dmExclusiveEffects = new java.util.HashSet<>();
         for (JsonNode selection : input.path("hostOptions")) {
             String key = selection.path("key").asText();
             String id = selection.path("id").asText();
@@ -3201,6 +3208,10 @@ public final class OnlineSessionServer {
             for (JsonNode option : automation.path("rollOptions"))
                 if (id.equals(option.path("id").asText())) definition = option;
             if (definition == null) throw new IllegalArgumentException("This card roll option is no longer available.");
+            boolean dmManaged = key.startsWith("effect:") && source.path("dmManaged").asBoolean();
+            if (dmManaged && definition.has("exclusive") && !dmExclusiveEffects.add(key))
+                throw new IllegalArgumentException("Choose only one option from this effect.");
+            if (dmManaged && !source.has("dmConsumeOnRoll")) dmEffectUses.add(key.substring("effect:".length()));
             if (key.startsWith("card:") && !activeCardKey(sheet, key))
                 throw new IllegalArgumentException("This card must be in the active loadout.");
             if (!tags.contains(definition.path("roll").asText())
@@ -3222,12 +3233,25 @@ public final class OnlineSessionServer {
             if (definition.has("endEffect") && !DruidEffects.hasEffect(sheet, definition.path("endEffect").asText()))
                 throw new IllegalArgumentException("This prepared effect is no longer active.");
             if (definition.has("dice")) {
-                String expected = "0+" + definition.path("dice").asText();
+                String die = definition.path("dice").asText();
+                String expected = (dmManaged ? definition.path("value").asInt() : 0) + (die.startsWith("-") ? "" : "+") + die;
                 boolean contributed = false;
                 for (JsonNode part : input.path("contributions"))
-                    if (part.path("label").asText().contains(definition.path("label").asText())
-                            && expected.equals(part.path("expression").asText())) contributed = true;
+                    if ((dmManaged ? part.path("label").asText().equals(source.path("name").asText())
+                            : part.path("label").asText().contains(definition.path("label").asText()))
+                            && (expected.equals(part.path("expression").asText())
+                            || dmManaged && ("(" + expected + ")*2").equals(part.path("expression").asText())))
+                        contributed = true;
                 if (!contributed) throw new IllegalArgumentException("The selected prepared damage dice must be rolled.");
+            }
+            if (dmManaged && !definition.has("dice")) {
+                String expected = String.valueOf(definition.path("value").asInt());
+                boolean contributed = false;
+                for (JsonNode part : input.path("contributions"))
+                    if (part.path("label").asText().equals(source.path("name").asText())
+                            && (expected.equals(part.path("expression").asText())
+                            || ("(" + expected + ")*2").equals(part.path("expression").asText()))) contributed = true;
+                if (!contributed) throw new IllegalArgumentException("The selected effect bonus must be included.");
             }
             if (definition.has("resourceMultiplier")) {
                 JsonNode multiplier = definition.path("resourceMultiplier");
@@ -3327,6 +3351,8 @@ public final class OnlineSessionServer {
                     + Math.max(0, run.path("deathrunRemaining").size() - 1) + " dice. End Deathrun when no targets remain.");
         }
         lines.addAll(ArcanaSageRules.finishForms(sheet, roll));
+        dmEffectUses.addAll(DmCustomEffects.matchingRolls(sheet, tags, "duality".equals(input.path("kind").asText())));
+        DmCustomEffects.consume(sheet, dmEffectUses);
         if (!lines.isEmpty()) roll.putObject("featureRoll").put("name", "Card automation")
                 .put("result", roll.path("total").asInt()).put("consequence", String.join(" ", lines));
         Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
@@ -3372,6 +3398,7 @@ public final class OnlineSessionServer {
         SplendorActions.preserveSave(next, before);
         String kind = request.path("kind").asText();
         if (!List.of("short", "long").contains(kind)) throw new IllegalArgumentException("Choose a short or long rest.");
+        DmEffectProtection.validate(before, next, kind);
         if (next.path("featureRevision").asLong() != before.path("featureRevision").asLong())
             throw new IllegalArgumentException("The character changed. Reopen downtime.");
         String problem = CharacterSheetRules.problem(next, before, actor.isTestingCharacter(), campaign.getFear());
@@ -4139,6 +4166,14 @@ public final class OnlineSessionServer {
             for (JsonNode candidate : sheet.path("effects"))
                 if (name.equals(candidate.path("id").asText())) effect = candidate;
             if (effect == null) throw new IllegalArgumentException("The effect is no longer active.");
+            if (effect.path("dmManaged").asBoolean()) {
+                ObjectNode source = MAPPER.createObjectNode().put("name", effect.path("name").asText()).put("dmManaged", true);
+                if (effect.has("dmConsumeOnRoll")) source.set("dmConsumeOnRoll", effect.get("dmConsumeOnRoll"));
+                ObjectNode automation = source.putObject("automation");
+                if (effect.path("rollOptions").isArray()) automation.set("rollOptions", effect.path("rollOptions").deepCopy());
+                if (effect.path("actions").isArray()) automation.set("actions", effect.path("actions").deepCopy());
+                return source;
+            }
             Campaign.Actor effectSource = campaign.actor(effect.path("sourceActorId").asText());
             if (effectSource != null && effectSource.isDisabled())
                 throw new IllegalArgumentException("The effect's source actor is disabled.");
@@ -4884,7 +4919,8 @@ public final class OnlineSessionServer {
         ArrayNode kept = MAPPER.createArrayNode();
         boolean removed = false;
         for (JsonNode effect : effects) {
-            boolean match = (name == null || name.equals(effect.path("name").asText()))
+            boolean match = !effect.path("dmManaged").asBoolean()
+                    && (name == null || name.equals(effect.path("name").asText()))
                     && (sourceActorId == null || sourceActorId.equals(effect.path("sourceActorId").asText()))
                     && (sourceKey == null || sourceKey.equals(effect.path("sourceKey").asText()));
             if (match) removed = true;
@@ -5180,6 +5216,7 @@ public final class OnlineSessionServer {
             if (entry.getValue().path("inventoryRevision").asLong() != storedSheet(entry.getKey()).path("inventoryRevision").asLong())
                 stockChanges.add(entry.getKey());
         for (ObjectNode sheet : changedSheets.values()) {
+            DmCustomEffects.reconcileCapacity(sheet);
             DeathMoves.sync(sheet);
             sheet.put("featureRevision", sheet.path("featureRevision").asLong(0) + 1);
             if (sheet.toString().getBytes(StandardCharsets.UTF_8).length > MAX_SHEET_BYTES)
@@ -5335,6 +5372,62 @@ public final class OnlineSessionServer {
         return resetPeriod(true);
     }
 
+    /** Apply a separate instance to each selected, saved character in one transaction. */
+    public synchronized void applyDmEffect(List<String> actorIds, JsonNode definition, boolean replace) throws IOException {
+        if (!isRunning()) throw new IllegalStateException("Start an online session first.");
+        if (actorIds == null || actorIds.isEmpty()) throw new IllegalArgumentException("Select at least one character.");
+        DmCustomEffects.create(definition);
+        Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
+        for (String id : actorIds) {
+            if (changed.containsKey(id)) throw new IllegalArgumentException("A character was selected more than once.");
+            Campaign.Actor actor = campaign.actor(id);
+            if (actor == null || actor.isDisabled() || !hasPlayerSheet(actor))
+                throw new IllegalArgumentException("A selected character is unavailable or has no saved sheet.");
+            ObjectNode sheet = storedSheet(id);
+            ObjectNode effect = DmCustomEffects.create(definition);
+            ArrayNode effects = sheet.withArray("effects");
+            if (replace) {
+                for (int i = effects.size() - 1; i >= 0; i--)
+                    if (effects.get(i).path("dmManaged").asBoolean()
+                            && effect.path("name").asText().equals(effects.get(i).path("name").asText()))
+                        effects.remove(i);
+            }
+            effects.add(effect);
+            changed.put(id, sheet);
+        }
+        commitFeatureSheets(changed);
+        for (var entry : changed.entrySet()) sendFeatureState(campaign.actor(entry.getKey()), entry.getValue());
+    }
+
+    public synchronized ArrayNode dmEffects(String actorId) throws IOException {
+        if (!isRunning()) throw new IllegalStateException("Start an online session first.");
+        Campaign.Actor actor = campaign.actor(actorId);
+        if (actor == null || !hasPlayerSheet(actor)) throw new IllegalArgumentException("Character has no saved sheet.");
+        ArrayNode result = MAPPER.createArrayNode();
+        for (JsonNode effect : storedSheet(actorId).path("effects"))
+            if (effect.path("dmManaged").asBoolean()) result.add(effect.deepCopy());
+        return result;
+    }
+
+    public synchronized void removeDmEffect(String actorId, String effectId) throws IOException {
+        if (!isRunning()) throw new IllegalStateException("Start an online session first.");
+        Campaign.Actor actor = campaign.actor(actorId);
+        if (actor == null || !hasPlayerSheet(actor)) throw new IllegalArgumentException("Character has no saved sheet.");
+        ObjectNode sheet = storedSheet(actorId);
+        ArrayNode effects = sheet.withArray("effects");
+        boolean found = false;
+        for (int i = effects.size() - 1; i >= 0; i--) {
+            JsonNode effect = effects.get(i);
+            if (effect.path("dmManaged").asBoolean() && effectId.equals(effect.path("id").asText())) {
+                effects.remove(i);
+                found = true;
+            }
+        }
+        if (!found) throw new IllegalArgumentException("This effect has already ended.");
+        commitFeatureSheets(Map.of(actorId, sheet));
+        sendFeatureState(actor, sheet);
+    }
+
     private String resetPeriod(boolean session) {
         Campaign c = campaign;
         if (c == null) return "No online session is running.";
@@ -5344,9 +5437,25 @@ public final class OnlineSessionServer {
         List<String> lines = new ArrayList<>();
         try {
             for (Campaign.Actor actor : c.getActors()) {
-                if (actor.isDisabled()) continue;
                 if (store.loadSheet(c.getId(), actor.getId()) == null) continue;
                 ObjectNode sheet = storedSheet(actor.getId());
+                if (actor.isDisabled()) {
+                    if (sheet.get("effects") instanceof ArrayNode effects) {
+                        List<String> ended = new ArrayList<>();
+                        for (int i = effects.size() - 1; i >= 0; i--) {
+                            JsonNode effect = effects.get(i);
+                            if (effect.path("dmManaged").asBoolean() && periods.contains(effect.path("until").asText())) {
+                                ended.add(effect.path("name").asText("Effect"));
+                                effects.remove(i);
+                            }
+                        }
+                        if (!ended.isEmpty()) {
+                            changed.put(actor.getId(), sheet);
+                            lines.add(actor.getName() + ": ended " + String.join(", ", new LinkedHashSet<>(ended)));
+                        }
+                    }
+                    continue;
+                }
                 int uses = 0;
                 if (sheet.get("usage") instanceof ObjectNode usage) {
                     List<String> stale = new ArrayList<>();
@@ -6477,6 +6586,8 @@ public final class OnlineSessionServer {
                         for (JsonNode effect : rollerSheet.path("effects")) {
                             String prefix = "option:effect:" + effect.path("id").asText() + ":";
                             Campaign.Actor source = campaign.actor(effect.path("sourceActorId").asText());
+                            if (tag.startsWith(prefix) && effect.path("dmManaged").asBoolean())
+                                throw new IllegalArgumentException("DM effect options require a transactional roll.");
                             if (tag.startsWith(prefix) && source != null && source.isDisabled())
                                 throw new IllegalArgumentException("The selected effect's source actor is disabled.");
                         }
@@ -6805,7 +6916,6 @@ public final class OnlineSessionServer {
     }
 
     private synchronized boolean applyAutomaticFeatureTriggers(Client client, ObjectNode roll) throws IOException {
-        if (!"duality".equals(roll.path("kind").asText())) return false;
         Campaign.Actor actor = campaign.actor(roll.path("actorId").asText());
         boolean linkedTokens = roll.path("source").asText().contains("option:effect:");
         if (actor == null || !client.playerId.equals(actor.getOwnerId())) {
@@ -6816,6 +6926,19 @@ public final class OnlineSessionServer {
         boolean changed = false;
         Map<String, ObjectNode> changedSheets = new java.util.LinkedHashMap<>();
         changedSheets.put(actor.getId(), sheet);
+        List<String> tags = List.of(roll.path("source").asText("").split(","));
+        boolean duality = "duality".equals(roll.path("kind").asText());
+        Set<String> rollExpirations = DmCustomEffects.matchingRolls(sheet, tags, duality);
+        if (!rollExpirations.isEmpty()) {
+            DmCustomEffects.consume(sheet, rollExpirations);
+            changed = true;
+        }
+        if (!duality) {
+            if (!changed) return false;
+            commitFeatureSheets(changedSheets, roll, true);
+            sendFeatureState(actor, sheet);
+            return true;
+        }
         if (linkedTokens) {
             Map<String, ObjectNode> party = new java.util.LinkedHashMap<>();
             Map<String, ObjectNode> before = new java.util.LinkedHashMap<>();
@@ -6826,12 +6949,11 @@ public final class OnlineSessionServer {
                 party.put(candidate.getId(), other);
                 before.put(candidate.getId(), other.deepCopy());
             }
-            changed = InvisibilityEffects.spendSelected(party, actor.getId(), roll);
+            changed = InvisibilityEffects.spendSelected(party, actor.getId(), roll) || changed;
             party.forEach((id, other) -> {
                 if (!other.equals(before.get(id))) changedSheets.put(id, other);
             });
         }
-        List<String> tags = List.of(roll.path("source").asText("").split(","));
         for (String tag : tags) {
             if (!tag.startsWith("featureAction:card:")) continue;
             String key = tag.substring("featureAction:".length(), tag.lastIndexOf(':'));

@@ -106,6 +106,7 @@ export function applyTestingBuild(d: RulesData, c: CharacterSheet, build: Testin
   c.transformation = base.transformation;
   c.level = b.level;
   c.evasion = base.evasion;
+  delete c.capacityApplied;
   c.hp.slots = base.hp.slots + (c.vitalityEffectRemoved ? 0 : c.vitalityBenefits?.includes('hp') ? 1 : 0);
   c.hp.total = Math.max(c.hp.total, c.hp.slots);
   c.hp.on = Math.min(c.hp.on, c.hp.slots);
