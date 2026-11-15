@@ -48,6 +48,7 @@ export class MapView {
   drawMode: DrawMode = 'pen';
   measureMode: Measurement['kind'] = 'distance';
   measurementColor = '#80d8ff';
+  showMoveLine = true;
   style: DrawingStyle = { color: '#55aa33', alpha: 1, texture: 'none', size: 2, border: false, emits: false, above: true };
   measurements: Measurement[] = [];
   onDrawing: (action: 'create' | 'update' | 'delete', id: string, shape?: Overlay) => void = () => {};
@@ -143,7 +144,7 @@ export class MapView {
   private segmentsCache: number[] = [];
   private movementSegments: number[] = [];
   private fitted = '';
-  private drag: { kind: 'pan' | 'token'; moved?: boolean; token?: Token; startX: number; startY: number; prevX: number; prevY: number; camX: number; camY: number } | null = null;
+  private drag: { kind: 'pan' | 'token'; moved?: boolean; token?: Token; originX?: number; originY?: number; startX: number; startY: number; prevX: number; prevY: number; camX: number; camY: number } | null = null;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -650,7 +651,7 @@ export class MapView {
     const t = this.paused ? null : this.tokenAt(w.x, w.y);
     if (t) { this.selectedTokens.add(t.id); this.onSelection(null, false, 1); this.invalidate(); }
     this.drag = t
-      ? { kind: 'token', token: t, startX: e.clientX, startY: e.clientY, prevX: t.x, prevY: t.y, camX: 0, camY: 0 }
+      ? { kind: 'token', token: t, originX: t.x, originY: t.y, startX: e.clientX, startY: e.clientY, prevX: t.x, prevY: t.y, camX: 0, camY: 0 }
       : null;
     if (!t && s && !this.paused) this.marquee = { start: w, end: w };
   }
@@ -1191,6 +1192,7 @@ export class MapView {
       ctx.strokeStyle = '#000a'; ctx.lineWidth = 3 / this.cam.scale; ctx.stroke();
       ctx.strokeStyle = '#fffd'; ctx.lineWidth = 1 / this.cam.scale; ctx.stroke();
     }
+    this.drawMoveLine(ctx, s.grid.pixelsPerCell);
     const measures = [...this.measurements.filter(m => m.id !== this.gesture?.measurement?.id)];
     if (this.gesture?.measurement) measures.push(this.gesture.measurement);
     for (const m of measures) {
@@ -1213,6 +1215,25 @@ export class MapView {
         ctx.moveTo(x + r / 3, y - r / 3); ctx.lineTo(x - r / 3, y + r / 3); ctx.stroke();
       }
     }
+    ctx.restore();
+  }
+
+  /** Dashed ruler from where the dragged token started to its current position. */
+  private drawMoveLine(ctx: CanvasRenderingContext2D, ppc: number): void {
+    const d = this.drag, t = d?.token;
+    if (!this.showMoveLine || d?.kind !== 'token' || !t || d.originX === undefined || d.originY === undefined) return;
+    if (t.x === d.originX && t.y === d.originY) return;
+    const m: Measurement = { id: '', ownerId: this.playerId, kind: 'distance', color: this.measurementColor, x1: d.originX, y1: d.originY, x2: t.x, y2: t.y };
+    const k = 1 / this.cam.scale;
+    ctx.save();
+    ctx.strokeStyle = m.color!; ctx.lineWidth = 2 * k; ctx.setLineDash([8 * k, 6 * k]);
+    measurementPath(ctx, m); ctx.stroke();
+    ctx.setLineDash([]);
+    const label = measurementLabel(m, ppc);
+    ctx.font = `${12 * k}px system-ui`;
+    const width = ctx.measureText(label).width;
+    ctx.fillStyle = '#151a20e8'; ctx.fillRect(m.x2 - 5 * k, m.y2 - 22 * k, width + 10 * k, 20 * k);
+    ctx.fillStyle = '#fff'; ctx.fillText(label, m.x2, m.y2 - 8 * k);
     ctx.restore();
   }
 
@@ -1442,6 +1463,23 @@ export class MapView {
         }
       }
       ctx.restore();
+      if (t.defeated) {
+        const half = diameter * 0.4;
+        ctx.save();
+        ctx.translate(pos.x, pos.y);
+        ctx.lineCap = 'round';
+        for (const [width, style] of [[Math.max(3, diameter * 0.12), 'rgba(0,0,0,0.75)'], [Math.max(2, diameter * 0.07), '#e53935']] as const) {
+          ctx.lineWidth = width;
+          ctx.strokeStyle = style;
+          ctx.beginPath();
+          ctx.moveTo(-half, -half);
+          ctx.lineTo(half, half);
+          ctx.moveTo(-half, half);
+          ctx.lineTo(half, -half);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
       const conditions = t.conditions ?? [];
       const badge = 18 / this.cam.scale;
       conditions.slice(0, 5).forEach((condition, index) => {

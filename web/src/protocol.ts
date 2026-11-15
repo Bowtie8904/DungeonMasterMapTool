@@ -156,6 +156,8 @@ export interface Token {
   y: number;
   sizeTiles: number;
   rotationDeg?: number;
+  /** Defeated adversary: drawn crossed out. */
+  defeated?: boolean;
   name?: string;
   image?: string;
   color?: string;

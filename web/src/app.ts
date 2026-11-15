@@ -192,6 +192,7 @@ export class App {
     this.view = new MapView(canvas);
     this.applyEffectSettings();
     this.view.smoothMovement = settings.smoothTokens;
+    this.view.showMoveLine = settings.moveLine;
     this.updateDrawingMode('pen');
     this.view.onSelectTool = () => this.selectTool();
     this.view.onPing = (x, y) => {
@@ -314,6 +315,12 @@ export class App {
       this.view.smoothMovement = smooth.checked;
       this.view.invalidate();
     });
+    const moveLine = el('input', { type: 'checkbox', checked: settings.moveLine });
+    moveLine.addEventListener('change', () => {
+      settings.moveLine = moveLine.checked;
+      this.view.showMoveLine = moveLine.checked;
+      this.view.invalidate();
+    });
     const resources = el('input', { type: 'checkbox', checked: settings.tokenResources });
     resources.addEventListener('change', () => {
       settings.tokenResources = resources.checked;
@@ -336,6 +343,8 @@ export class App {
       el('section', { class: 'settings-group' }, el('h3', {}, 'Display'),
         el('label', { class: 'setting-check', title: 'Glide moving tokens between updates. Turn off on slow devices to redraw less.' },
           smooth, ' Smooth token movement'),
+        el('label', { class: 'setting-check', title: 'While dragging your token, show a dashed line from its start with the distance in tiles and Daggerheart range.' },
+          moveLine, ' Show movement distance line'),
         el('label', { class: 'setting-check', title: 'Show HP, Stress, Armor and Hope on your own tokens, like the DM sees them.' },
           resources, ' Show resources on my tokens')),
       el('section', { class: 'settings-group' }, el('h3', {}, 'Performance'),

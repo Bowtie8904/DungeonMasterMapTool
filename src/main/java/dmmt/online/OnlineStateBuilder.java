@@ -318,6 +318,9 @@ public final class OnlineStateBuilder {
             node.put("x", token.getX()).put("y", token.getY());
             node.put("sizeTiles", token.getSizeTiles());
             node.put("rotationDeg", token.getRotationDeg());
+            if (token.getAdversaryState() != null && token.getAdversaryState().isDead()) {
+                node.put("defeated", true);
+            }
             DmProject.TokenDefinition def = defs.get(token.getDefinitionId());
             Campaign.Actor actor = actorOf(token, campaign);
             JsonNode sheet = actor == null ? null : actorSheets.get(actor.getId());

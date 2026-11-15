@@ -22,6 +22,10 @@ name when no enabled actor is assigned. The bottom-left overlay shows the accoun
 between position updates instead of jumping; the map redraws only while a token is gliding. Turn it off on
 slow devices to show positions immediately with fewer redraws. Movement updates arrive equally fast either way.
 
+**Settings > Show movement distance line** (default on, dmmt.moveLine) is browser-local. While the player drags their
+token, a dashed line runs from the drag start to the token with the distance in tiles and Daggerheart range; it
+vanishes on release. Turn it off to hide it.
+
 **Settings > Show resources on my tokens** (default off, `dmmt.tokenResources`) is also browser-local. It draws
 HP, Stress, Armor and Hope on the player's own tokens, read from that player's own character sheet.
 **Settings > Audio** keeps *Enable sound* (`dmmt.muted`, default sound on) and the Master, Music and Ambient

@@ -664,14 +664,34 @@ public class CanvasMapRenderer {
     }
 
     private record TokenState(String id, double x, double y, double size, double rotation, String image, String color,
-                              DmProject.TokenShape shape, boolean border, boolean visible, List<String> conditions) {
-        private static TokenState of(DmProject.TokenInstance token, DmProject project) {
+                              DmProject.TokenShape shape, boolean border,                               boolean visible, List<String> conditions,
+                                                            boolean dead) {
+                                      private static TokenState of(DmProject.TokenInstance token, DmProject project) {
             var definition = project.getTokenDefinitions().get(token.getDefinitionId());
             return new TokenState(token.getDefinitionId(), token.getX(), token.getY(), token.getSizeTiles(), token.getRotationDeg(),
                     definition == null ? null : definition.getImage(), definition == null ? null : definition.getColor(),
                     definition == null ? null : definition.getShape(), definition != null && definition.isBorder(),
-                    token.isPlayerVisible(), conditionState(token));
+                    token.isPlayerVisible(), conditionState(token), isDefeated(token));
         }
+    }
+
+    private static boolean isDefeated(DmProject.TokenInstance token) {
+        return token.getAdversaryState() != null && token.getAdversaryState().isDead();
+    }
+
+    private static void drawDefeatedCross(GraphicsContext gc, double diameter) {
+        double half = diameter * .4;
+        gc.save();
+        gc.setLineCap(javafx.scene.shape.StrokeLineCap.ROUND);
+        gc.setLineWidth(Math.max(3, diameter * .12));
+        gc.setStroke(Color.color(0, 0, 0, .75));
+        gc.strokeLine(-half, -half, half, half);
+        gc.strokeLine(-half, half, half, -half);
+        gc.setLineWidth(Math.max(2, diameter * .07));
+        gc.setStroke(Color.web("#e53935"));
+        gc.strokeLine(-half, -half, half, half);
+        gc.strokeLine(-half, half, half, -half);
+        gc.restore();
     }
 
     private static List<String> conditionState(DmProject.TokenInstance token) {
@@ -743,6 +763,10 @@ public class CanvasMapRenderer {
                 gc.translate(x, y);
                 gc.rotate(token.getRotationDeg());
                 TokenArt.draw(gc, definition, 0, 0, diameter);
+                if (isDefeated(token)) {
+                    gc.rotate(-token.getRotationDeg());
+                    drawDefeatedCross(gc, diameter);
+                }
                 gc.restore();
             }
             if (!decorations) drawTokenConditionBadges(gc, token, x, y, radius);

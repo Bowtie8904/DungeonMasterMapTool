@@ -50,6 +50,12 @@ export const settings = {
   set smoothTokens(on: boolean) {
     localStorage.setItem('dmmt.smoothTokens', on ? '1' : '0');
   },
+  get moveLine(): boolean {
+    return localStorage.getItem('dmmt.moveLine') !== '0';
+  },
+  set moveLine(on: boolean) {
+    localStorage.setItem('dmmt.moveLine', on ? '1' : '0');
+  },
   get tokenResources(): boolean {
     return localStorage.getItem('dmmt.tokenResources') === '1';
   },
