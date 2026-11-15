@@ -1,6 +1,7 @@
 import { CompendiumPanel } from './compendium';
 import { el } from './login';
 import { CatalogEditor } from './catalog-editor';
+import { openVariantDialog } from './variant-dialog';
 import type { CatalogObject } from './catalog-fields';
 
 declare global {
@@ -40,6 +41,12 @@ export function startDmCompendium(root: HTMLElement): void {
     link: async (category, entry) => {
       await request('/api/dm/compendium/link', { category, entryId: entry.id });
       status.textContent = `${entry.name} linked in chat.`;
+    },
+    customize: (category, entry) => {
+      void openVariantDialog(request, category, entry.id, async name => {
+        await panel.reload();
+        status.textContent = `${name} was added to the compendium.`;
+      });
     },
   });
   const editor = new CatalogEditor(request, () => panel.reload());

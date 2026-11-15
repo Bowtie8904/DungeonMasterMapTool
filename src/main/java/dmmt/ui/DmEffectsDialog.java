@@ -45,13 +45,11 @@ public final class DmEffectsDialog {
     private static final Map<String, String> ADVANTAGE = targets(
             "No advantage change|", "Suggest advantage|advantage", "Suggest disadvantage|disadvantage");
 
-    private record Recipient(String id, String label) {
+    private record Recipient(String id, String label, String name) {
         @Override public String toString() { return label; }
     }
 
-    private record Existing(String id, String label) {
-        @Override public String toString() { return label; }
-    }
+    private record Existing(String characterId, String character, String id, String name, String expires, String uses) { }
 
     private DmEffectsDialog() { }
 
@@ -65,7 +63,7 @@ public final class DmEffectsDialog {
             Campaign.Player player = campaign.player(actor.getOwnerId());
             if (player != null) {
                 Recipient recipient = new Recipient(actor.getId(), actor.getName() + "  —  " + player.getName()
-                        + (actor.isDisabled() ? " (disabled)" : ""));
+                        + (actor.isDisabled() ? " (disabled)" : ""), actor.getName());
                 manageable.add(recipient);
                 if (!actor.isDisabled()) recipients.add(recipient);
             }
@@ -257,45 +255,55 @@ public final class DmEffectsDialog {
     }
 
     private static VBox manage(OnlineSessionServer server, List<Recipient> recipients, Runnable[] refreshOnSelect) {
-        ComboBox<Recipient> character = new ComboBox<>();
-        character.getItems().setAll(recipients);
-        character.setMaxWidth(Double.MAX_VALUE);
-        ListView<Existing> effects = new ListView<>();
+        TableView<Existing> effects = new TableView<>();
+        effects.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+        effects.getColumns().add(column("Character", 180, Existing::character));
+        effects.getColumns().add(column("Effect", 240, Existing::name));
+        effects.getColumns().add(column("Expires", 110, Existing::expires));
+        effects.getColumns().add(column("Uses left", 90, Existing::uses));
         Label error = new Label();
         error.setWrapText(true);
-        effects.setPlaceholder(new Label("No DM-managed effects on this character."));
+        effects.setPlaceholder(new Label("No active custom effects."));
         Runnable refresh = () -> {
             effects.getItems().clear();
-            if (character.getValue() == null) return;
             try {
-                for (JsonNode effect : server.dmEffects(character.getValue().id())) {
-                    String remaining = effect.has("dmUsesRemaining") ? "  ·  " + effect.path("dmUsesRemaining").asInt() + " uses left" : "";
-                    effects.getItems().add(new Existing(effect.path("id").asText(),
-                            effect.path("name").asText() + "  ·  " + effect.path("until").asText() + remaining));
+                for (Recipient recipient : recipients) {
+                    for (JsonNode effect : server.dmEffects(recipient.id())) {
+                        effects.getItems().add(new Existing(recipient.id(), recipient.name(), effect.path("id").asText(),
+                                effect.path("name").asText(), effect.path("until").asText(),
+                                effect.has("dmUsesRemaining") ? String.valueOf(effect.path("dmUsesRemaining").asInt()) : ""));
+                    }
                 }
                 error.setText("");
             } catch (IllegalArgumentException | IllegalStateException | IOException ex) { status(error, String.valueOf(ex.getMessage()), false); }
         };
         refreshOnSelect[0] = refresh;
-        character.valueProperty().addListener((o, a, b) -> refresh.run());
         Button reload = new Button("Refresh");
         reload.setOnAction(e -> refresh.run());
         Button remove = new Button("Remove selected effect");
         remove.setOnAction(e -> {
             Existing selected = effects.getSelectionModel().getSelectedItem();
-            if (character.getValue() == null || selected == null) { status(error, "Select a character and an effect.", false); return; }
+            if (selected == null) { status(error, "Select an effect.", false); return; }
             try {
-                server.removeDmEffect(character.getValue().id(), selected.id());
+                server.removeDmEffect(selected.characterId(), selected.id());
                 refresh.run();
                 status(error, "Effect removed.", true);
             } catch (IllegalArgumentException | IllegalStateException | IOException ex) { status(error, String.valueOf(ex.getMessage()), false); }
         });
-        VBox page = new VBox(10, heading("Character"), character, heading("DM-managed effects"), effects,
-                new HBox(8, reload, remove), error);
+        VBox page = new VBox(10, heading("Active custom effects"), effects, new HBox(8, reload, remove), error);
         page.setPadding(new Insets(14));
         VBox.setVgrow(effects, Priority.ALWAYS);
-        if (!recipients.isEmpty()) character.getSelectionModel().selectFirst();
+        refresh.run();
         return page;
+    }
+
+    private static TableColumn<Existing, String> column(String title, double width,
+                                                        java.util.function.Function<Existing, String> value) {
+        TableColumn<Existing, String> column = new TableColumn<>(title);
+        column.setPrefWidth(width);
+        column.setSortable(false);
+        column.setCellValueFactory(cell -> new javafx.beans.property.SimpleStringProperty(value.apply(cell.getValue())));
+        return column;
     }
 
     private static Label heading(String text) {

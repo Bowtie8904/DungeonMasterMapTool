@@ -577,10 +577,12 @@ The browser's simplified-lighting option still uses flat shapes for performance.
     catalogs, edit an entry, or use **New entry** / **Duplicate as new**. **Overview**, **Features**,
     **Automation** and **Advanced** tabs organize the entry by task. Named features use a list/detail layout;
     automation uses rule cards and focused panels with activation, conditions, effects and costs/limits.
-    **Create renamed variant** (armor, weapons, consumables, items) copies the saved entry under a new name
-    (e.g. a Bolster Potion as "Red Lemonade") and adds it to the compendium. It automates identically but
-    stacks, tracks and buffs separately: effects it creates get a "(New name)" suffix, so drinking both gives
-    two independent buffs. The copy is a snapshot; later edits to the base do not propagate.
+    The DM compendium also has a copy button next to **Link in chat** on armor, weapons, consumables and items rows:
+    a flat "customize copy" dialog shows what the entry does (description, feature, stats, dice, numbers) with
+    plain fields, no triggers or JSON. Save adds the copy (default name "<Base> (custom)") to the compendium. It automates
+    identically but stacks, tracks and buffs separately: unique effect names are generated and never shown, so
+    drinking both gives two independent buffs. Changing a dice formula also updates matching description text.
+    The copy is a snapshot; later edits to the base do not propagate.
     Breadcrumbs navigate deeper structures without nested accordions. Every field has inline guidance;
     typed inputs, optional-field pickers and ordered lists work without raw JSON. Save stays visible,
     and structural edits retain the current panel's scroll position.

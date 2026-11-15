@@ -62,6 +62,23 @@ class CatalogEditorTest {
     }
 
     @Test
+    void addingAnEntryKeepsTheRestOfTheFileTextIdentical() throws Exception {
+        String head = "{\r\n \"format\": \"dmmap-daggerheart\",\r\n \"version\": 1,\r\n \"category\": \"items\",\r\n \"entries\": [\r\n";
+        String first = "  {\r\n   \"id\": \"one\",\r\n   \"name\": \"One\",\r\n   \"tags\": [\"a\", \"b\"],\r\n   \"empty\": {}\r\n  }";
+        String tail = "\r\n ]\r\n}\r\n";
+        Path path = temp.resolve("items.json");
+        Files.writeString(path, head + first + tail);
+        var loaded = CatalogEditor.read(temp, "items");
+        ObjectNode added = MAPPER.createObjectNode().put("id", "two").put("name", "Two");
+        added.putObject("extra").putArray("list").add(1);
+        CatalogEditor.save(temp, "items", loaded.revision(), "", added);
+        String after = Files.readString(path);
+        assertTrue(after.startsWith(head + first + ","), after);
+        assertTrue(after.endsWith("\r\n  }" + tail), after);
+        assertTrue(after.contains("   \"name\": \"Two\""), after);
+    }
+
+    @Test
     void rejectsUnknownPathsInvalidAutomationAndInvalidNumbersWithoutWriting() throws Exception {
         ObjectNode original = file("[{\"id\":\"one\",\"name\":\"One\"}]");
         Files.writeString(temp.resolve("items.json"), original.toString());

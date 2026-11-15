@@ -1,5 +1,10 @@
 package dmmt.online;
 
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.util.DefaultIndenter;
+import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -19,7 +24,88 @@ final class CatalogEditor {
     static final int MAX_BYTES = 8 * 1024 * 1024;
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    record Document(ObjectNode file, String revision) { }
+    record Document(ObjectNode file, String revision, byte[] bytes) {
+        Document(ObjectNode file, String revision) { this(file, revision, new byte[0]); }
+    }
+
+    /** Pretty printer that mimics compact hand-written JSON: "key": value and [] / {} for empty containers. */
+    private static final class CatalogPrinter extends DefaultPrettyPrinter {
+        CatalogPrinter(String indent, String linefeed) {
+            DefaultIndenter indenter = new DefaultIndenter(indent, linefeed);
+            indentArraysWith(indenter);
+            indentObjectsWith(indenter);
+        }
+
+        private CatalogPrinter(CatalogPrinter base) { super(base); }
+
+        @Override public DefaultPrettyPrinter createInstance() { return new CatalogPrinter(this); }
+
+        @Override public void writeObjectFieldValueSeparator(JsonGenerator g) throws IOException { g.writeRaw(": "); }
+
+        @Override public void writeEndArray(JsonGenerator g, int values) throws IOException {
+            if (values == 0) { _nesting--; g.writeRaw(']'); } else super.writeEndArray(g, values);
+        }
+
+        @Override public void writeEndObject(JsonGenerator g, int fields) throws IOException {
+            if (fields == 0) { _nesting--; g.writeRaw('}'); } else super.writeEndObject(g, fields);
+        }
+    }
+
+    /** Rewrites only the changed entry inside the original text so the rest of the file keeps its formatting. */
+    private static byte[] splice(byte[] original, ObjectNode saved, int index, ObjectNode expected) throws IOException {
+        try {
+            String text = new String(original, java.nio.charset.StandardCharsets.UTF_8);
+            List<int[]> spans = entrySpans(text);
+            if (index >= 0 ? index >= spans.size() : spans.isEmpty()) return fullWrite(expected);
+            int first = spans.get(0)[0];
+            int lineStart = text.lastIndexOf('\n', first) + 1;
+            String lead = text.substring(lineStart, first);
+            if (!lead.isBlank()) return fullWrite(expected);
+            String linefeed = text.contains("\r\n") ? "\r\n" : "\n";
+            int unitLength = Math.max(1, lead.replace("\t", "").length() == 0 ? 1 : lead.length() / 2);
+            String unit = lead.contains("\t") ? "\t" : " ".repeat(unitLength);
+            String body = MAPPER.writer(new CatalogPrinter(unit, linefeed)).writeValueAsString(saved)
+                    .replace(linefeed, linefeed + lead);
+            String result;
+            if (index >= 0) {
+                int[] span = spans.get(index);
+                result = text.substring(0, span[0]) + body + text.substring(span[1]);
+            } else {
+                int end = spans.get(spans.size() - 1)[1];
+                result = text.substring(0, end) + "," + linefeed + lead + body + text.substring(end);
+            }
+            byte[] bytes = result.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            return MAPPER.readTree(bytes).equals(expected) ? bytes : fullWrite(expected);
+        } catch (IOException | RuntimeException ex) {
+            return fullWrite(expected);
+        }
+    }
+
+    private static byte[] fullWrite(ObjectNode file) throws IOException {
+        return MAPPER.writerWithDefaultPrettyPrinter().writeValueAsBytes(file);
+    }
+
+    /** Character offsets [start, end) of each element of the top-level "entries" array. */
+    private static List<int[]> entrySpans(String text) throws IOException {
+        List<int[]> spans = new java.util.ArrayList<>();
+        try (JsonParser parser = MAPPER.getFactory().createParser(text)) {
+            if (parser.nextToken() != JsonToken.START_OBJECT) return spans;
+            while (parser.nextToken() == JsonToken.FIELD_NAME) {
+                boolean entries = "entries".equals(parser.getCurrentName());
+                JsonToken value = parser.nextToken();
+                if (entries && value == JsonToken.START_ARRAY) {
+                    while (parser.nextToken() != JsonToken.END_ARRAY) {
+                        int start = (int) parser.getTokenLocation().getCharOffset();
+                        parser.skipChildren();
+                        spans.add(new int[]{start, (int) parser.getCurrentLocation().getCharOffset()});
+                    }
+                    return spans;
+                }
+                parser.skipChildren();
+            }
+        }
+        return spans;
+    }
 
     static final class Rejected extends IllegalArgumentException {
         private final int status;
@@ -41,7 +127,7 @@ final class CatalogEditor {
         JsonNode file = MAPPER.readTree(bytes);
         if (!(file instanceof ObjectNode object) || !file.path("entries").isArray())
             throw new Rejected(400, "Catalog must be an object with an entries list.");
-        return new Document(object, CampaignStore.sha256(bytes));
+        return new Document(object, CampaignStore.sha256(bytes), bytes);
     }
 
     static synchronized Document save(Path directory, String category, String revision, String existingId,
@@ -71,7 +157,7 @@ final class CatalogEditor {
             entries.add(saved);
         }
         validate(file, category);
-        byte[] bytes = MAPPER.writerWithDefaultPrettyPrinter().writeValueAsBytes(file);
+        byte[] bytes = splice(before.bytes(), saved, index, file);
         if (bytes.length > MAX_BYTES) throw new Rejected(413, "Catalog would exceed the file size limit.");
         Path target = path(directory, category);
         Path temporary = Files.createTempFile(target.getParent(), category + "-", ".tmp");

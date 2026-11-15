@@ -1,9 +1,9 @@
 import { el } from './login';
-import { confirmDialog, promptDialog } from './dialogs';
+import { confirmDialog } from './dialogs';
 import { markdownBlock } from './compendium';
 import {
-  CatalogShapes, CATALOG_LABELS, cloneValue, createVariant, entryTemplate, entryFieldTab, fieldHelp, fieldLabel, isCatalogObject,
-  ruleSection, ruleSummary, STEP_TEMPLATES, variantNameProblem, VARIANT_CATEGORIES, type EditorTab, type CatalogObject, type CatalogValue,
+  CatalogShapes, CATALOG_LABELS, cloneValue, entryTemplate, entryFieldTab, fieldHelp, fieldLabel, isCatalogObject,
+  ruleSection, ruleSummary, STEP_TEMPLATES, type EditorTab, type CatalogObject, type CatalogValue,
 } from './catalog-fields';
 
 interface Document { file: CatalogObject; revision: string }
@@ -88,24 +88,6 @@ export class CatalogEditor {
     finally { this.busy = false; this.render(); }
   }
 
-  private async createVariantOf(): Promise<void> {
-    const document = this.documents.get(this.category);
-    const base = this.entries().find(entry => entry.id === this.existingId);
-    if (!document || !base || this.busy) return;
-    const name = await promptDialog('Create renamed variant', 'Name of the new item', 'Create',
-      value => variantNameProblem(this.entries(), value),
-      `Copies "${String(base.name)}" as saved, including its rules and automation, into the ${CATALOG_LABELS[this.category]} compendium. `
-      + 'The new item stacks, buffs and is tracked separately in inventories.');
-    if (name === null || this.busy) return;
-    if (!this.canClose() && !await this.requestClose()) return;
-    this.draft = createVariant(base, name, this.entries());
-    this.existingId = ''; this.original = ''; this.tab = 'Overview'; this.panels = [];
-    this.sourcePath = ''; this.featurePath = ''; this.scrollPositions.clear(); this.renderedView = '';
-    await this.save();
-    if (!this.error) this.message = `Created "${name}" in ${this.category}.json from ${String(base.name)}. Edit it below if you like.`;
-    this.render();
-  }
-
   private async save(): Promise<void> {
     const document = this.documents.get(this.category);
     if (!document || !this.draft || this.busy) return;
@@ -177,14 +159,10 @@ export class CatalogEditor {
       duplicate.onclick = () => {
         if (this.draft) this.choose(this.draft, true);
       };
-      const variant = el('button', { type: 'button', disabled: this.busy || !this.existingId,
-        title: 'Creates a separate compendium item that works like this one under a new name' }, 'Create renamed variant');
-      variant.onclick = () => { void this.createVariantOf(); };
       const state = el('span', { class: 'muted', role: 'status' });
       const changed = () => { state.textContent = this.dirty ? 'Unsaved changes' : 'No unsaved changes'; };
       this.listeners.add(changed); changed();
-      const controls = el('div', { class: 'catalog-save-bar' }, save, duplicate,
-        ...(VARIANT_CATEGORIES.includes(this.category) ? [variant] : []), state);
+      const controls = el('div', { class: 'catalog-save-bar' }, save, duplicate, state);
       const tabs = el('nav', { class: 'catalog-view-tabs', ariaLabel: 'Entry sections' });
       for (const name of ['Overview', 'Features', 'Automation', 'Advanced'] as EditorTab[]) {
         const button = el('button', { type: 'button', class: name === this.tab ? 'active' : '', disabled: this.busy }, name);

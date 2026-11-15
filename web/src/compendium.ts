@@ -47,7 +47,11 @@ export interface CompendiumHost {
   add: (actorId: string, category: string, entry: CompendiumEntry) => string | null | Promise<string | null>;
   toast: (text: string) => void;
   link: (category: string, entry: CompendiumEntry) => Promise<void>;
+  /** Host-only: opens the flat "customize a copy" editor. Omitted for players. */
+  customize?: (category: string, entry: CompendiumEntry) => void;
 }
+
+const CUSTOMIZABLE = ['armor', 'weapons', 'consumables', 'items'];
 
 interface Column {
   label: string;
@@ -310,6 +314,11 @@ export class CompendiumPanel {
     });
     link.addEventListener('click', ev => ev.stopPropagation());
     actions.append(link);
+    if (this.host.customize && CUSTOMIZABLE.includes(this.category)) {
+      const customize = iconButton('copy', `Create a customized copy of ${e.name}`, () => this.host.customize!(this.category, e));
+      customize.addEventListener('click', ev => ev.stopPropagation());
+      actions.append(customize);
+    }
     if (addable) {
       const label = ADDABLE[this.category];
       const add = iconButton('add', `${label}: ${e.name}`, () => {
