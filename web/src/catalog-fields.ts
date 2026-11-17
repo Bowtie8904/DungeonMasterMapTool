@@ -9,6 +9,7 @@ export const CATALOG_LABELS: Record<string, string> = {
 export const FIELD_HELP: Record<string, string> = {
   id: 'Stable identifier, not a display name. References use this ID; do not reuse it for a different entry.',
   name: 'Display name in the compendium and linked sheets. Renaming keeps the same catalog identity.',
+  image: 'Optional bundled artwork path: /item-icons/author/icon-name.svg. Used in the compendium, equipment, loot and chat; leave empty for no artwork.',
   label: 'Human-readable label shown on a button, counter or choice.',
   text: 'Rules or description. Supports **bold**, *italic*, paragraphs and bullet lists; prose does not create automation.',
   description: 'Explains a situational rule or prerequisite to the player. It does not automatically check position or targeting.',
@@ -349,7 +350,7 @@ export const STEP_TEMPLATES: { label: string; value: CatalogObject }[] = [
 
 export type EditorTab = 'Overview' | 'Features' | 'Automation' | 'Advanced';
 export const OVERVIEW_FIELDS = new Set([
-  'id', 'name', 'text', 'description', 'tier', 'rarity', 'starter', 'armor', 'weapon',
+  'id', 'name', 'image', 'text', 'description', 'tier', 'rarity', 'starter', 'armor', 'weapon',
   'kind', 'domains', 'startingHp', 'startingEvasion', 'parent', 'stage', 'spellcastTrait',
   'domain', 'level', 'cardType', 'recall',
 ]);
@@ -506,6 +507,7 @@ export class CatalogShapes {
     path = path.replace(/\[\d+\]/g, '[]');
     const fields = { ...this.shapes.get(this.key(path)) };
     if (Object.keys(CATALOG_LABELS).includes(path)) {
+      fields.image = '';
       fields.automation = {};
       fields.feature = { name: '', text: '' };
       if (path === 'classes') Object.assign(fields, { parent: '', stage: 'foundation', spellcastTrait: 'Agility' });

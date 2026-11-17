@@ -24,6 +24,7 @@ export interface Track {
 }
 
 export interface Weapon {
+  image?: string;
   catalog?: CatalogLink;
   generated?: string;
   name: string;
@@ -48,6 +49,7 @@ export interface Weapon {
 }
 
 export interface Armor {
+  image?: string;
   catalog?: CatalogLink;
   name: string;
   /** Armor Score: usable armor slots */
@@ -68,6 +70,7 @@ export interface GearAttachment {
 }
 
 export interface InventoryItem {
+  image?: string;
   witchTalisman?: { sourceActorId: string; activationId: string };
   catalog?: CatalogLink;
   name: string;

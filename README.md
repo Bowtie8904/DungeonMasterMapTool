@@ -887,10 +887,20 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   (use or action) are removed; the − stepper may rest at 0 so accidental clicks lose nothing. Grabbed transfers remove emptied source stacks. Active gear keeps its chat icon in the card's top-right corner.
   Search carried equipment or loot by name and description (all search words must match).
   Loot rows highlight subtly on hover or when a control within the row has keyboard focus.
-  Loot descriptions start hidden for compact rows. Click a row or its item-name disclosure button to show/hide the full description; keyboard users can activate that button with Enter/Space. Quantity, action and tool buttons do not expand rows. Expansion is retained across sheet refreshes, including in read-only views.
+  Weapon and armor artwork and tier markers appear only in the carried, unequipped list, not on active gear cards; active stat badges and controls remain unchanged.
+  A slim marker beside sheet inventory icons shows rarity or equipment tier: white for Common/tier 1,
+  blue for Uncommon/tier 2, green for Rare/tier 3 and orange for Legendary/tier 4. Hover for the
+  label; it is also available to screen readers. Custom and unclassified items use the same white marker
+  without being labeled Common.
+  Armor, weapons, items and consumables have consistent bundled icons in unequipped Equipment, Loot, compendium
+  rows/details and shared/transfer chat cards, including desktop DM chat and player browsers. Configure the
+  optional `image` field in **Edit JSON catalogs > Overview**; see [item artwork](docs/DAGGERHEART_DATA.md#item-artwork)
+  for paths and attribution. Existing catalog-backed gear picks up artwork without recreating characters.
+  Loot descriptions start hidden for compact rows. Click a row or its item name to show/hide the full description; there is no plus/minus icon, and keyboard users can activate the name with Enter/Space. Quantity, action and tool buttons do not expand rows. Expansion is retained across sheet refreshes, including in read-only views.
   The subtle **+** next to the Inventory search box adds a custom item (name, optional description, type -
-  loot by default - and quantity, default 1). Custom items have no action buttons and never appear in or
-  merge with the compendium.
+  loot by default - and quantity, default 1). Custom loot, gear, consumables and class items use chest,
+  backpack, potion and pendant icons respectively. Older custom items without artwork show the same
+  category icons in Loot. Custom items have no action buttons and never appear in or merge with the compendium.
 - **Browser layout:** the map fills the viewport. The left icon rail has Navigate/select, Drawing and Measure;
   tool options fly out over the map. The right vertical icon rail switches   between Chat, My actors and
     Settings (at the bottom); the Compendium button opens a floating window instead. Open character sheets from My actors, not a separate navigation shortcut.

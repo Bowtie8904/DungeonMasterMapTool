@@ -1,4 +1,5 @@
 import { el } from './login';
+import { itemName } from './item-artwork';
 import { confirmDialog } from './dialogs';
 import { markdownBlock } from './compendium';
 import {
@@ -194,7 +195,7 @@ export class CatalogEditor {
           const preview = el('aside', { class: 'catalog-preview' });
           const update = () => {
             if (!this.draft) return;
-            preview.replaceChildren(el('h3', {}, 'Entry preview'), el('strong', {}, String(this.draft.name || 'Unnamed entry')),
+            preview.replaceChildren(el('h3', {}, 'Entry preview'), el('strong', {}, itemName({ name: String(this.draft.name || 'Unnamed entry'), image: typeof this.draft.image === 'string' ? this.draft.image : undefined })),
               markdownBlock(String(this.draft.text ?? this.draft.description ?? 'No description yet.')));
             for (const source of this.featureSources()) preview.append(el('strong', {}, source.title), markdownBlock(String(source.value.text ?? '')));
           };

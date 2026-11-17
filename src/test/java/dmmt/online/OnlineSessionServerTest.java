@@ -36,6 +36,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OnlineSessionServerTest {
     @Test
+    void servesBundledItemArtworkToPlayerBrowsersWithoutExternalRequests() throws Exception {
+        JsonNode entry = MAPPER.readTree(Path.of("dmmap-daggerheart", "items.json").toFile()).path("entries").get(0);
+        String image = entry.path("image").asText();
+        assertTrue(ItemArtwork.validPath(image));
+        var response = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + image))
+                        .header("Cookie", cookie()).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, response.statusCode(), response.body());
+        assertTrue(response.headers().firstValue("Content-Type").orElse("").contains("image/svg+xml"));
+        try (var stream = ItemArtwork.resource(image).openStream()) {
+            assertEquals(new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8), response.body());
+        }
+    }
+
+    @Test
     void dmEffectRollUsesAreIndependentAndOnlyCommittedAfterAValidSelectedRoll() throws Exception {
         for (String id : List.of("rally-one", "rally-two")) {
             campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId()).build());
@@ -2082,6 +2096,7 @@ class OnlineSessionServerTest {
         JsonNode potion = inventory.get(1);
         assertEquals("Minor Health Potion", potion.path("name").asText());
         assertEquals("consumable", potion.path("type").asText());
+        assertEquals(deathEntry("consumables.json", "Minor Health Potion").path("image"), potion.path("image"));
         assertEquals(2, potion.path("qty").asInt());
         assertEquals("1d4", potion.path("automation").path("actions").path(0).path("steps").path(0).path("amount").asText());
         assertTrue(dmMessages.stream().anyMatch(m -> m.path("text").asText().contains("crafted Minor Health Potion")));
@@ -7274,6 +7289,9 @@ class OnlineSessionServerTest {
         ObjectNode original = (ObjectNode) MAPPER.readTree("""
                 {"name":"Mara","inventory":[{"name":"Potion","type":"consumable","note":"Clear **HP**","qty":2}]}
                 """);
+        String image = MAPPER.readTree(Path.of("dmmap-daggerheart", "consumables.json").toFile())
+                .path("entries").get(0).path("image").asText();
+        ((ObjectNode) original.path("inventory").get(0)).put("image", image);
         store.saveSheet(campaign.getId(), "source", original.toString());
         store.saveSheet(campaign.getId(), "target", "{\"name\":\"Rook\",\"inventory\":[]}");
         server.publish(state("m1", 0), "m1/l1");
@@ -7295,6 +7313,7 @@ class OnlineSessionServerTest {
             assertEquals("Mara", message.path("from").asText());
             assertTrue(message.path("text").asText().contains("Clear **HP**"));
             assertEquals("Potion", message.path("sharedCard").path("item").path("name").asText());
+            assertEquals(image, message.path("sharedCard").path("item").path("image").asText());
             assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "source")).path("inventory").get(0).path("qty").asInt());
             HttpResponse<String> duplicate = cardHttp(cookie, "", request);
             assertEquals(200, duplicate.statusCode());
@@ -7319,6 +7338,7 @@ class OnlineSessionServerTest {
             JsonNode target = MAPPER.readTree(store.loadSheet(campaign.getId(), "target"));
             assertEquals(0, source.path("inventory").size(), "Emptied stacks are removed");
             assertEquals(2, target.path("inventory").get(0).path("qty").asInt());
+            assertEquals(image, target.path("inventory").get(0).path("image").asText());
             assertEquals(2, source.path("inventoryRevision").asInt());
             assertEquals("sheetInventory", inbox.next("sheetInventory").path("type").asText());
             var stale = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/source"))
@@ -7537,9 +7557,11 @@ class OnlineSessionServerTest {
     void compendiumChatLinksResolveHostDataWithoutInventoryAndCannotTransfer() throws Exception {
         Path dir = temp.resolve("chat-compendium");
         java.nio.file.Files.createDirectories(dir);
+        String image = MAPPER.readTree(Path.of("dmmap-daggerheart", "items.json").toFile())
+                .path("entries").get(0).path("image").asText();
         java.nio.file.Files.writeString(dir.resolve("items.json"), """
-                {"category":"items","label":"Items","entries":[{"id":"potion","name":"Host potion","rarity":"Rare","text":"Clear **HP**."}]}
-                """);
+                {"category":"items","label":"Items","entries":[{"id":"potion","name":"Host potion","image":"%s","rarity":"Rare","text":"Clear **HP**."}]}
+                """.formatted(image));
         compendiumDir = dir;
         server.publish(state("m1", 0), "m1/l1");
         String cookie = cookie();
@@ -7558,6 +7580,7 @@ class OnlineSessionServerTest {
             JsonNode card = MAPPER.readTree(posted.body());
             assertEquals("feature", card.path("category").asText());
             assertEquals("Host potion", card.path("item").path("name").asText());
+            assertEquals(image, card.path("item").path("image").asText());
             assertEquals("Compendium - Items", card.path("actorName").asText());
             assertEquals(MAPPER.readTree("[\"gear\",\"Rare\"]"), card.path("badges"));
             assertFalse(card.path("item").has("badges"));

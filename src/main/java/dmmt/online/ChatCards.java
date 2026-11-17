@@ -46,7 +46,7 @@ final class ChatCards {
         for (JsonNode entry : document.path("entries")) {
             if (!entryId.equals(entry.path("id").asText()))
                 continue;
-            ObjectNode item = identity(entry).retain("name");
+            ObjectNode item = identity(entry).retain("name", "image");
             List<String> text = new ArrayList<>();
             ArrayNode sections = item.putArray("sections");
             ArrayNode badges = item.putArray("badges");
@@ -131,6 +131,17 @@ final class ChatCards {
         return copy;
     }
 
+    private static boolean sameIdentity(JsonNode item, JsonNode other) {
+        return matchingIdentity(item).equals(matchingIdentity(other));
+    }
+
+    private static ObjectNode matchingIdentity(JsonNode item) {
+        ObjectNode copy = identity(item);
+        copy.remove("image");
+        if (copy.path("catalog").get("values") instanceof ObjectNode values) values.remove("image");
+        return copy;
+    }
+
     static List<JsonNode> entries(JsonNode sheet, String category) {
         List<JsonNode> entries = new ArrayList<>();
         List<String> fields = switch (category) {
@@ -184,7 +195,7 @@ final class ChatCards {
         };
         List<JsonNode> stock = new ArrayList<>();
         sheet.path(field).forEach(stock::add);
-        return stock.stream().filter(e -> identity(e).equals(key))
+        return stock.stream().filter(e -> sameIdentity(e, key))
                                        .mapToInt(e -> "item".equals(category) ? Math.max(0, e.path("qty").asInt()) : 1).sum();
     }
 
@@ -201,9 +212,11 @@ final class ChatCards {
         if (GOLD.equals(category))
             return goldItem();
         ObjectNode key = identity(item);
-        return entries(sheet, category).stream().filter(e -> identity(e).equals(key))
-                                       .findFirst().map(ChatCards::identity)
-                                       .orElseThrow(() -> new IllegalArgumentException("Entry is no longer on the source sheet. Save it before sharing."));
+        List<JsonNode> candidates = entries(sheet, category);
+        return candidates.stream().filter(e -> identity(e).equals(key)).findFirst()
+                .or(() -> candidates.stream().filter(e -> sameIdentity(e, key)).findFirst())
+                .map(ChatCards::identity)
+                .orElseThrow(() -> new IllegalArgumentException("Entry is no longer on the source sheet. Save it before sharing."));
     }
 
     static void transfer(ObjectNode source, ObjectNode target, String category, JsonNode item) {
@@ -249,7 +262,7 @@ final class ChatCards {
                 continue;
             for (int i = 0; i < array.size() && left > 0; i++) {
                 JsonNode entry = array.get(i);
-                if (!identity(entry).equals(key))
+                if (!sameIdentity(entry, key))
                     continue;
                 if ("item".equals(category)) {
                     if (entry.path("qty").asInt() <= 0)
@@ -273,7 +286,9 @@ final class ChatCards {
         ArrayNode array = target.withArray(destination);
         if ("item".equals(category)) {
             for (JsonNode entry : array) {
-                if (identity(entry).equals(key)) {
+                if (sameIdentity(entry, key)) {
+                    if (entry.path("custom").asBoolean(false) && !entry.has("image") && key.hasNonNull("image"))
+                        ((ObjectNode)entry).set("image", key.get("image").deepCopy());
                     ((ObjectNode)entry).put("qty", Math.max(0, entry.path("qty").asInt()) + quantity);
                     return;
                 }

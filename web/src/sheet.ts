@@ -9,7 +9,7 @@ import { refreshCharacterAutomation } from './daggerheart/persist';
 import { renderSheetView, SheetBus } from './daggerheart/view';
 import { setGmFear } from './daggerheart/engine';
 import { postCard, transferable } from './shared-cards';
-import { addToSheet, type CompendiumEntry } from './daggerheart/compendium';
+import { addToSheet, needsInventoryRarityCatalogs, refreshInventoryRarities, type CompendiumEntry } from './daggerheart/compendium';
 import { pickActor } from './actor-picker';
 import { openCopycat } from './daggerheart/copycat-view';
 import { openSplendorAction } from './daggerheart/splendor-view';
@@ -42,10 +42,18 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
     if (!error) { error = el('div', { class: 'sheet-error error', role: 'alert' }); root.append(error); }
     error.textContent = message;
   };
+  const refreshRarities = () => {
+    if (!character) return;
+    void refreshInventoryRarities().finally(() => bus.notify(false))
+      .catch((error: Error) => report(`Could not refresh inventory rarity: ${error.message}`));
+  };
+  const ensureRarities = () => {
+    if (character && needsInventoryRarityCatalogs(character.inventory)) refreshRarities();
+  };
   const receiveEntry = async (category: string, entry: CompendiumEntry): Promise<string | null> => {
     if (!character || !changed || !allowed || unauthorized || disabled && !dmSheetAuthorization()) throw new Error('The receiving character sheet is not ready or is read-only.');
     const target = addToSheet(character, category, entry);
-    if (target) { bus.notify(); changed(); await changed.flush(); }
+    if (target) { bus.notify(); changed(); ensureRarities(); await changed.flush(); }
     return target ? `${character.name}'s ${target}` : null;
   };
   const receive = (event: MessageEvent<{ type?: string; id?: string; actorId?: string; category?: string; entry?: CompendiumEntry }>) => {
@@ -81,6 +89,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
       if ((event as CustomEvent<string>).detail === actorId) {
         document.title = `${sheet.name} - Daggerheart`;
         bus.notify(false);
+        ensureRarities();
       }
     });
     document.addEventListener('dmmt-feature-refreshed', (event) => {
@@ -222,6 +231,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
           chatCards = m.chatCards === true;
           transferOffers = m.transferOffers === true;
           goldTransfers = m.goldTransfers === true;
+          refreshRarities();
           if (changed) void changed.refresh().catch((e: Error) => report(e.message));
           return;
         }
@@ -231,6 +241,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
           return;
         }
         if (m.type === 'catalogChanged') {
+          refreshRarities();
           if (changed) void changed.flush().then(() => changed!.refresh()).catch((error: Error) => report(error.message));
           return;
         }
@@ -241,7 +252,10 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
         if (m.type === 'error') { report(m.message); return; }
         if (m.type === 'sheetInventory') {
           if (conn.sheetSync) return;
-          if (m.actorId === actorId && character && applyInventory(character, m.inventory)) bus.notify();
+          if (m.actorId === actorId && character && applyInventory(character, m.inventory)) {
+            bus.notify();
+            ensureRarities();
+          }
           return;
         }
         if (m.type === 'sheetFeature') {

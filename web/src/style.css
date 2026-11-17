@@ -8,6 +8,10 @@
   --accent: #4fc3f7;
 }
 * { box-sizing: border-box; }
+.item-name { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; vertical-align: middle; }
+.item-name-text { min-width: 0; overflow-wrap: anywhere; }
+.item-artwork { display: block; width: 28px; height: 28px; flex: 0 0 28px; object-fit: contain; }
+.item-artwork-error { color: #ff8a80; }
 html, body, #app { height: 100%; margin: 0; }
 body { background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
 button, select, input[type='text'], input[type='password'] {

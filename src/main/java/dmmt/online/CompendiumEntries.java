@@ -26,7 +26,7 @@ final class CompendiumEntries {
                 && !sheet.path("mancer").path("done").asBoolean())
             throw new IllegalArgumentException("Create this character's sheet before adding compendium entries.");
         ObjectNode item = sheet.objectNode().put("name", entry.path("name").asText());
-        copy(entry, item, "automation");
+        copy(entry, item, "automation", "image");
         switch (category) {
             case "armor" -> {
                 if (!entry.path("armor").isObject())

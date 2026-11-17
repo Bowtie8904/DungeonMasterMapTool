@@ -645,6 +645,11 @@ public final class ChatCards {
         Label source = new Label(offer ? "Transfer offer from " + actor : actor);
         source.getStyleClass().add("chat-shared-source");
         Label name = wrapped(item.path("name").asText(), "chat-shared-name");
+        Node icon = ItemIconView.create(item.path("image").asText());
+        if (icon != null) {
+            name.setGraphic(icon);
+            name.setGraphicTextGap(8);
+        }
         FlowPane badgePane = new FlowPane(4, 4);
         for (String badge : badges) {
             if (!badge.isBlank()) {

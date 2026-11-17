@@ -216,6 +216,9 @@ final class CatalogEditor {
         for (JsonNode entry : file.path("entries")) {
             if (!entry.isObject()) throw new Rejected(400, "Every catalog entry must be an object.");
             text(entry, "id"); text(entry, "name");
+            if (entry.has("image") && (!entry.get("image").isTextual()
+                    || !entry.path("image").asText().isEmpty() && ItemArtwork.resource(entry.path("image").asText()) == null))
+                throw new Rejected(400, "Image must be empty or reference an existing bundled /item-icons/author/icon-name.svg.");
             if (!entry.path("id").asText().matches("[a-zA-Z0-9_-]{1,128}"))
                 throw new Rejected(400, "Entry ID must use 1-128 letters, digits, underscores or hyphens.");
             if (!ids.add(entry.path("id").asText())) throw new Rejected(400, "Entry IDs must be unique.");

@@ -169,7 +169,7 @@ final class CatalogSheets {
 
     private static ObjectNode values(ObjectNode sheet, JsonNode entry, String category) {
         ObjectNode values = sheet.objectNode();
-        copy(entry, values, "name", "automation");
+        copy(entry, values, "name", "automation", "image");
         switch (category) {
             case "armor" -> {
                 copy(entry.path("armor"), values, "score", "major", "severe");
@@ -256,7 +256,7 @@ final class CatalogSheets {
         values.fieldNames().forEachRemaining(keys::add);
         for (String key : keys) {
             // Names are identities used by rules/actions; the stable link keeps renames attached.
-            if ("name".equals(key) || Objects.equals(row.get(key), previous.get(key))) {
+            if ("name".equals(key) || "image".equals(key) && !row.has(key) || Objects.equals(row.get(key), previous.get(key))) {
                 if (values.has(key)) row.set(key, values.get(key).deepCopy());
                 else row.remove(key);
             } else if (row.get(key) instanceof ObjectNode nested && previous.get(key) instanceof ObjectNode old

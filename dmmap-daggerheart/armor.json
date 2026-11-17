@@ -6,6 +6,7 @@
  "entries": [
   {
    "id": "gambeson-armor",
+   "image": "/item-icons/lorc/armor-vest.svg",
    "name": "Gambeson Armor",
    "tier": 1,
    "armor": {
@@ -29,6 +30,7 @@
   },
   {
    "id": "leather-armor",
+   "image": "/item-icons/delapouite/leather-armor.svg",
    "name": "Leather Armor",
    "tier": 1,
    "armor": {
@@ -40,6 +42,7 @@
   },
   {
    "id": "chainmail-armor",
+   "image": "/item-icons/willdabeast/chain-mail.svg",
    "name": "Chainmail Armor",
    "tier": 1,
    "armor": {
@@ -63,6 +66,7 @@
   },
   {
    "id": "full-plate-armor",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Full Plate Armor",
    "tier": 1,
    "armor": {
@@ -90,6 +94,7 @@
   },
   {
    "id": "improved-gambeson-armor",
+   "image": "/item-icons/lorc/armor-vest.svg",
    "name": "Improved Gambeson Armor",
    "tier": 2,
    "armor": {
@@ -112,6 +117,7 @@
   },
   {
    "id": "improved-leather-armor",
+   "image": "/item-icons/delapouite/leather-armor.svg",
    "name": "Improved Leather Armor",
    "tier": 2,
    "armor": {
@@ -122,6 +128,7 @@
   },
   {
    "id": "improved-chainmail-armor",
+   "image": "/item-icons/willdabeast/chain-mail.svg",
    "name": "Improved Chainmail Armor",
    "tier": 2,
    "armor": {
@@ -144,6 +151,7 @@
   },
   {
    "id": "improved-full-plate-armor",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Improved Full Plate Armor",
    "tier": 2,
    "armor": {
@@ -170,6 +178,7 @@
   },
   {
    "id": "elundrian-chain-armor",
+   "image": "/item-icons/willdabeast/chain-mail.svg",
    "name": "Elundrian Chain Armor",
    "tier": 2,
    "armor": {
@@ -197,6 +206,7 @@
   },
   {
    "id": "harrowbone-armor",
+   "image": "/item-icons/delapouite/abdominal-armor.svg",
    "name": "Harrowbone Armor",
    "tier": 2,
    "armor": {
@@ -224,10 +234,43 @@
       "saveArmor": 1
      }
     ]
+   },
+   "_editorOriginal": {
+    "id": "harrowbone-armor",
+    "image": "/item-icons/lorc/backbone-shell.svg",
+    "name": "Harrowbone Armor",
+    "tier": 2,
+    "armor": {
+     "score": 4,
+     "major": 9,
+     "severe": 21
+    },
+    "feature": {
+     "name": "Resilient",
+     "text": "Before you mark your last Armor Slot, roll a d6. On a result of 6, reduce the severity by one threshold without marking an Armor Slot."
+    },
+    "automation": {
+     "mitigation": [
+      {
+       "id": "resilient",
+       "label": "Resilient",
+       "passive": true,
+       "when": {
+        "lastArmor": true
+       },
+       "roll": {
+        "sides": 6,
+        "success": 6
+       },
+       "saveArmor": 1
+      }
+     ]
+    }
    }
   },
   {
    "id": "irontree-breastplate-armor",
+   "image": "/item-icons/delapouite/chest-armor.svg",
    "name": "Irontree Breastplate Armor",
    "tier": 2,
    "armor": {
@@ -257,6 +300,7 @@
   },
   {
    "id": "runetan-floating-armor",
+   "image": "/item-icons/delapouite/chest-armor.svg",
    "name": "Runetan Floating Armor",
    "tier": 2,
    "armor": {
@@ -282,6 +326,7 @@
   },
   {
    "id": "tyris-soft-armor",
+   "image": "/item-icons/lorc/armor-vest.svg",
    "name": "Tyris Soft Armor",
    "tier": 2,
    "armor": {
@@ -309,6 +354,7 @@
   },
   {
    "id": "rosewild-armor",
+   "image": "/item-icons/lorc/rosa-shield.svg",
    "name": "Rosewild Armor",
    "tier": 2,
    "armor": {
@@ -323,6 +369,7 @@
   },
   {
    "id": "advanced-gambeson-armor",
+   "image": "/item-icons/lorc/armor-vest.svg",
    "name": "Advanced Gambeson Armor",
    "tier": 3,
    "armor": {
@@ -345,6 +392,7 @@
   },
   {
    "id": "advanced-leather-armor",
+   "image": "/item-icons/delapouite/leather-armor.svg",
    "name": "Advanced Leather Armor",
    "tier": 3,
    "armor": {
@@ -355,6 +403,7 @@
   },
   {
    "id": "advanced-chainmail-armor",
+   "image": "/item-icons/willdabeast/chain-mail.svg",
    "name": "Advanced Chainmail Armor",
    "tier": 3,
    "armor": {
@@ -377,6 +426,7 @@
   },
   {
    "id": "advanced-full-plate-armor",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Advanced Full Plate Armor",
    "tier": 3,
    "armor": {
@@ -403,6 +453,7 @@
   },
   {
    "id": "bellamoi-fine-armor",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Bellamoi Fine Armor",
    "tier": 3,
    "armor": {
@@ -425,6 +476,7 @@
   },
   {
    "id": "dragonscale-armor",
+   "image": "/item-icons/lorc/scale-mail.svg",
    "name": "Dragonscale Armor",
    "tier": 3,
    "armor": {
@@ -460,6 +512,7 @@
   },
   {
    "id": "spiked-plate-armor",
+   "image": "/item-icons/lorc/spiked-armor.svg",
    "name": "Spiked Plate Armor",
    "tier": 3,
    "armor": {
@@ -486,6 +539,7 @@
   },
   {
    "id": "bladefare-armor",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Bladefare Armor",
    "tier": 3,
    "armor": {
@@ -513,6 +567,7 @@
   },
   {
    "id": "monetts-cloak",
+   "image": "/item-icons/lucasms/cloak.svg",
    "name": "Monett’s Cloak",
    "tier": 3,
    "armor": {
@@ -540,6 +595,7 @@
   },
   {
    "id": "runes-of-fortification",
+   "image": "/item-icons/lorc/rune-stone.svg",
    "name": "Runes of Fortification",
    "tier": 3,
    "armor": {
@@ -566,6 +622,7 @@
   },
   {
    "id": "legendary-gambeson-armor",
+   "image": "/item-icons/lorc/armor-vest.svg",
    "name": "Legendary Gambeson Armor",
    "tier": 4,
    "armor": {
@@ -588,6 +645,7 @@
   },
   {
    "id": "legendary-leather-armor",
+   "image": "/item-icons/delapouite/leather-armor.svg",
    "name": "Legendary Leather Armor",
    "tier": 4,
    "armor": {
@@ -598,6 +656,7 @@
   },
   {
    "id": "legendary-chainmail-armor",
+   "image": "/item-icons/willdabeast/chain-mail.svg",
    "name": "Legendary Chainmail Armor",
    "tier": 4,
    "armor": {
@@ -620,6 +679,7 @@
   },
   {
    "id": "legendary-full-plate-armor",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Legendary Full Plate Armor",
    "tier": 4,
    "armor": {
@@ -646,6 +706,7 @@
   },
   {
    "id": "dunamis-silkchain",
+   "image": "/item-icons/willdabeast/chain-mail.svg",
    "name": "Dunamis Silkchain",
    "tier": 4,
    "armor": {
@@ -677,6 +738,7 @@
   },
   {
    "id": "channeling-armor",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Channeling Armor",
    "tier": 4,
    "armor": {
@@ -699,6 +761,7 @@
   },
   {
    "id": "emberwoven-armor",
+   "image": "/item-icons/lorc/robe.svg",
    "name": "Emberwoven Armor",
    "tier": 4,
    "armor": {
@@ -713,6 +776,7 @@
   },
   {
    "id": "full-fortified-armor",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Full Fortified Armor",
    "tier": 4,
    "armor": {
@@ -737,6 +801,7 @@
   },
   {
    "id": "veritas-opal-armor",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Veritas Opal Armor",
    "tier": 4,
    "armor": {
@@ -751,6 +816,7 @@
   },
   {
    "id": "savior-chainmail",
+   "image": "/item-icons/willdabeast/chain-mail.svg",
    "name": "Savior Chainmail",
    "tier": 4,
    "armor": {
@@ -777,6 +843,7 @@
   },
   {
    "id": "sparkleweave",
+   "image": "/item-icons/lorc/robe.svg",
    "name": "Sparkleweave",
    "tier": 2,
    "armor": {
@@ -828,6 +895,7 @@
   },
   {
    "id": "robes-of-the-warmage",
+   "image": "/item-icons/lorc/robe.svg",
    "name": "Robes of the Warmage",
    "tier": 2,
    "armor": {
@@ -854,6 +922,7 @@
   },
   {
    "id": "fairy-silk-robes",
+   "image": "/item-icons/lorc/robe.svg",
    "name": "Fairy-Silk Robes",
    "tier": 2,
    "armor": {
@@ -887,6 +956,7 @@
   },
   {
    "id": "runebinders-plate",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Runebinders Plate",
    "tier": 3,
    "armor": {
@@ -901,6 +971,7 @@
   },
   {
    "id": "brightsuit-of-the-ebon-star",
+   "image": "/item-icons/delapouite/chest-armor.svg",
    "name": "Brightsuit of the Ebon Star",
    "tier": 3,
    "armor": {
@@ -923,6 +994,7 @@
   },
   {
    "id": "terrorscale-armor",
+   "image": "/item-icons/lorc/scale-mail.svg",
    "name": "Terrorscale Armor",
    "tier": 2,
    "armor": {
@@ -955,6 +1027,7 @@
   },
   {
    "id": "voidweight-harness",
+   "image": "/item-icons/delapouite/chest-armor.svg",
    "name": "Voidweight Harness",
    "tier": 3,
    "armor": {
@@ -980,6 +1053,7 @@
   },
   {
    "id": "resonant-aegis",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Resonant Aegis",
    "tier": 4,
    "armor": {
@@ -1007,6 +1081,7 @@
   },
   {
    "id": "slipphase-carapace",
+   "image": "/item-icons/lorc/armoured-shell.svg",
    "name": "Slipphase Carapace",
    "tier": 3,
    "armor": {
@@ -1039,6 +1114,7 @@
   },
   {
    "id": "stonebound-mail",
+   "image": "/item-icons/willdabeast/chain-mail.svg",
    "name": "Stonebound Mail",
    "tier": 2,
    "armor": {
@@ -1064,6 +1140,7 @@
   },
   {
    "id": "spellglass-mantle",
+   "image": "/item-icons/lucasms/cloak.svg",
    "name": "Spellglass Mantle",
    "tier": 4,
    "armor": {
@@ -1104,6 +1181,7 @@
   },
   {
    "id": "closefold-vestment",
+   "image": "/item-icons/lorc/robe.svg",
    "name": "Closefold Vestment",
    "tier": 3,
    "armor": {
@@ -1118,6 +1196,7 @@
   },
   {
    "id": "burdenward-shell",
+   "image": "/item-icons/delapouite/chest-armor.svg",
    "name": "Burdenward Shell",
    "tier": 2,
    "armor": {
@@ -1132,6 +1211,7 @@
   },
   {
    "id": "defiant-bulwark",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Defiant Bulwark",
    "tier": 3,
    "armor": {
@@ -1165,6 +1245,7 @@
   },
   {
    "id": "reservoir-plate",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Reservoir Plate",
    "tier": 4,
    "armor": {
@@ -1182,6 +1263,7 @@
   },
   {
    "id": "barbed-embrace",
+   "image": "/item-icons/lorc/spiked-armor.svg",
    "name": "Barbed Embrace",
    "tier": 2,
    "armor": {
@@ -1196,6 +1278,7 @@
   },
   {
    "id": "grudgeplate",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Grudgeplate",
    "tier": 2,
    "armor": {
@@ -1222,6 +1305,7 @@
   },
   {
    "id": "dreadclatter-harness",
+   "image": "/item-icons/delapouite/chest-armor.svg",
    "name": "Dreadclatter Harness",
    "tier": 2,
    "armor": {
@@ -1252,6 +1336,7 @@
   },
   {
    "id": "dormant-sigil-armor",
+   "image": "/item-icons/delapouite/chest-armor.svg",
    "name": "Dormant Sigil Armor",
    "tier": 3,
    "armor": {
@@ -1285,6 +1370,7 @@
   },
   {
    "id": "voracious-wardplate",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Voracious Wardplate",
    "tier": 4,
    "armor": {
@@ -1313,6 +1399,7 @@
   },
   {
    "id": "vowkeepers-panoply",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Vowkeeper’s Panoply",
    "tier": 3,
    "armor": {
@@ -1356,6 +1443,7 @@
   },
   {
    "id": "threadveil-mantle",
+   "image": "/item-icons/lucasms/cloak.svg",
    "name": "Threadveil Mantle",
    "tier": 2,
    "armor": {
@@ -1370,6 +1458,7 @@
   },
   {
    "id": "prismhide-armor",
+   "image": "/item-icons/delapouite/leather-armor.svg",
    "name": "Prismhide Armor",
    "tier": 3,
    "armor": {
@@ -1398,6 +1487,7 @@
   },
   {
    "id": "failsafe-brigandine",
+   "image": "/item-icons/lorc/layered-armor.svg",
    "name": "Failsafe Brigandine",
    "tier": 2,
    "armor": {
@@ -1461,6 +1551,7 @@
   },
   {
    "id": "patchwork-bastion",
+   "image": "/item-icons/lorc/layered-armor.svg",
    "name": "Patchwork Bastion",
    "tier": 2,
    "armor": {
@@ -1494,6 +1585,7 @@
   },
   {
    "id": "gravemark-harness",
+   "image": "/item-icons/delapouite/chest-armor.svg",
    "name": "Gravemark Harness",
    "tier": 3,
    "armor": {
@@ -1508,6 +1600,7 @@
   },
   {
    "id": "briarforged-armor",
+   "image": "/item-icons/lorc/spiked-armor.svg",
    "name": "Briarforged Armor",
    "tier": 3,
    "armor": {
@@ -1539,6 +1632,7 @@
   },
   {
    "id": "shieldwall-panoply",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Shieldwall Panoply",
    "tier": 2,
    "armor": {
@@ -1561,6 +1655,7 @@
   },
   {
    "id": "colossus-frame",
+   "image": "/item-icons/delapouite/robot-leg.svg",
    "name": "Colossus Frame",
    "tier": 3,
    "armor": {
@@ -1596,6 +1691,7 @@
   },
   {
    "id": "endure-all-bulwark",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Endure-All Bulwark",
    "tier": 4,
    "armor": {
@@ -1626,6 +1722,7 @@
   },
   {
    "id": "ruinwake-aegis",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Ruinwake Aegis",
    "tier": 3,
    "armor": {
@@ -1657,6 +1754,7 @@
   },
   {
    "id": "love-guard",
+   "image": "/item-icons/delapouite/heart-armor.svg",
    "name": "Love Guard",
    "tier": 2,
    "armor": {
@@ -1700,6 +1798,7 @@
   },
   {
    "id": "brightnerv-vest",
+   "image": "/item-icons/lorc/armor-vest.svg",
    "name": "Brightnerv Vest",
    "tier": 2,
    "armor": {
@@ -1728,6 +1827,7 @@
   },
   {
    "id": "bannerbound-mail",
+   "image": "/item-icons/willdabeast/chain-mail.svg",
    "name": "Bannerbound Mail",
    "tier": 2,
    "armor": {
@@ -1761,6 +1861,7 @@
   },
   {
    "id": "heartsteel-armor",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Heartsteel Armor",
    "tier": 3,
    "armor": {
@@ -1808,6 +1909,7 @@
   },
   {
    "id": "gravefaith-harness",
+   "image": "/item-icons/delapouite/chest-armor.svg",
    "name": "Gravefaith Harness",
    "tier": 3,
    "armor": {
@@ -1840,6 +1942,7 @@
   },
   {
    "id": "candescent-robes",
+   "image": "/item-icons/lorc/robe.svg",
    "name": "Candescent Robes",
    "tier": 2,
    "armor": {
@@ -1857,6 +1960,7 @@
   },
   {
    "id": "blacksignal-harness",
+   "image": "/item-icons/delapouite/chest-armor.svg",
    "name": "Blacksignal Harness",
    "tier": 3,
    "armor": {
@@ -1879,6 +1983,7 @@
   },
   {
    "id": "mantle-of-the-pathfinder",
+   "image": "/item-icons/lucasms/cloak.svg",
    "name": "Mantle of the Pathfinder",
    "tier": 3,
    "armor": {
@@ -1901,6 +2006,7 @@
   },
   {
    "id": "robes-of-the-lorekeeper",
+   "image": "/item-icons/lorc/robe.svg",
    "name": "Robes of the Lorekeeper",
    "tier": 3,
    "armor": {
@@ -1923,6 +2029,7 @@
   },
   {
    "id": "bladebarrier-mantle",
+   "image": "/item-icons/lucasms/cloak.svg",
    "name": "Bladebarrier Mantle",
    "tier": 4,
    "armor": {
@@ -1963,6 +2070,7 @@
   },
   {
    "id": "mage-robes",
+   "image": "/item-icons/lorc/robe.svg",
    "name": "Mage Robes",
    "tier": 1,
    "armor": {
@@ -1986,6 +2094,7 @@
   },
   {
    "id": "brigandine-armor",
+   "image": "/item-icons/lorc/layered-armor.svg",
    "name": "Brigandine Armor",
    "tier": 1,
    "armor": {
@@ -2019,6 +2128,7 @@
   },
   {
    "id": "scale-mail-armor",
+   "image": "/item-icons/lorc/scale-mail.svg",
    "name": "Scale Mail Armor",
    "tier": 1,
    "armor": {
@@ -2042,6 +2152,7 @@
   },
   {
    "id": "banded-armor",
+   "image": "/item-icons/lorc/layered-armor.svg",
    "name": "Banded Armor",
    "tier": 1,
    "armor": {
@@ -2074,6 +2185,7 @@
   },
   {
    "id": "improved-mage-robes",
+   "image": "/item-icons/lorc/robe.svg",
    "name": "Improved Mage Robes",
    "tier": 2,
    "armor": {
@@ -2096,6 +2208,7 @@
   },
   {
    "id": "improved-brigandine-armor",
+   "image": "/item-icons/lorc/layered-armor.svg",
    "name": "Improved Brigandine Armor",
    "tier": 2,
    "armor": {
@@ -2128,6 +2241,7 @@
   },
   {
    "id": "improved-scale-mail-armor",
+   "image": "/item-icons/lorc/scale-mail.svg",
    "name": "Improved Scale Mail Armor",
    "tier": 2,
    "armor": {
@@ -2150,6 +2264,7 @@
   },
   {
    "id": "improved-banded-armor",
+   "image": "/item-icons/lorc/layered-armor.svg",
    "name": "Improved Banded Armor",
    "tier": 2,
    "armor": {
@@ -2181,6 +2296,7 @@
   },
   {
    "id": "enchanters-robes",
+   "image": "/item-icons/lorc/robe.svg",
    "name": "Enchanter’s Robes",
    "tier": 2,
    "armor": {
@@ -2207,6 +2323,7 @@
   },
   {
    "id": "hawkguards-mantle",
+   "image": "/item-icons/lucasms/cloak.svg",
    "name": "Hawkguard’s Mantle",
    "tier": 2,
    "armor": {
@@ -2221,6 +2338,7 @@
   },
   {
    "id": "spidersilk-tunic",
+   "image": "/item-icons/lorc/armor-vest.svg",
    "name": "Spidersilk Tunic",
    "tier": 2,
    "armor": {
@@ -2243,6 +2361,7 @@
   },
   {
    "id": "stormthread-habit",
+   "image": "/item-icons/lorc/robe.svg",
    "name": "Stormthread Habit",
    "tier": 2,
    "armor": {
@@ -2277,6 +2396,7 @@
   },
   {
    "id": "wyrdwood-splint-armor",
+   "image": "/item-icons/delapouite/chest-armor.svg",
    "name": "Wyrdwood Splint Armor",
    "tier": 2,
    "armor": {
@@ -2291,6 +2411,7 @@
   },
   {
    "id": "trollhide-cuirass",
+   "image": "/item-icons/delapouite/leather-armor.svg",
    "name": "Trollhide Cuirass",
    "tier": 2,
    "armor": {
@@ -2323,6 +2444,7 @@
   },
   {
    "id": "gilded-sunplate",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Gilded Sunplate",
    "tier": 2,
    "armor": {
@@ -2357,6 +2479,7 @@
   },
   {
    "id": "advanced-mage-robes",
+   "image": "/item-icons/lorc/robe.svg",
    "name": "Advanced Mage Robes",
    "tier": 3,
    "armor": {
@@ -2379,6 +2502,7 @@
   },
   {
    "id": "advanced-brigandine-armor",
+   "image": "/item-icons/lorc/layered-armor.svg",
    "name": "Advanced Brigandine Armor",
    "tier": 3,
    "armor": {
@@ -2411,6 +2535,7 @@
   },
   {
    "id": "advanced-scale-mail-armor",
+   "image": "/item-icons/lorc/scale-mail.svg",
    "name": "Advanced Scale Mail Armor",
    "tier": 3,
    "armor": {
@@ -2433,6 +2558,7 @@
   },
   {
    "id": "advanced-banded-armor",
+   "image": "/item-icons/lorc/layered-armor.svg",
    "name": "Advanced Banded Armor",
    "tier": 3,
    "armor": {
@@ -2464,6 +2590,7 @@
   },
   {
    "id": "granminsters-finery",
+   "image": "/item-icons/lorc/robe.svg",
    "name": "Granminster’s Finery",
    "tier": 3,
    "armor": {
@@ -2486,6 +2613,7 @@
   },
   {
    "id": "astral-raiment",
+   "image": "/item-icons/lorc/robe.svg",
    "name": "Astral Raiment",
    "tier": 3,
    "armor": {
@@ -2513,6 +2641,7 @@
   },
   {
    "id": "cloverweave-cloak",
+   "image": "/item-icons/lucasms/cloak.svg",
    "name": "Cloverweave Cloak",
    "tier": 3,
    "armor": {
@@ -2546,6 +2675,7 @@
   },
   {
    "id": "skywardens-lamellar",
+   "image": "/item-icons/lorc/scale-mail.svg",
    "name": "Skywarden’s Lamellar",
    "tier": 3,
    "armor": {
@@ -2568,6 +2698,7 @@
   },
   {
    "id": "bloodstone-plate-armor",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Bloodstone Plate Armor",
    "tier": 3,
    "armor": {
@@ -2601,6 +2732,7 @@
   },
   {
    "id": "deep-forged-coral-armor",
+   "image": "/item-icons/lorc/scale-mail.svg",
    "name": "Deep-Forged Coral Armor",
    "tier": 3,
    "armor": {
@@ -2626,6 +2758,7 @@
   },
   {
    "id": "legendary-mage-robes",
+   "image": "/item-icons/lorc/robe.svg",
    "name": "Legendary Mage Robes",
    "tier": 4,
    "armor": {
@@ -2648,6 +2781,7 @@
   },
   {
    "id": "legendary-brigandine-armor",
+   "image": "/item-icons/lorc/layered-armor.svg",
    "name": "Legendary Brigandine Armor",
    "tier": 4,
    "armor": {
@@ -2680,6 +2814,7 @@
   },
   {
    "id": "legendary-scale-mail-armor",
+   "image": "/item-icons/lorc/scale-mail.svg",
    "name": "Legendary Scale Mail Armor",
    "tier": 4,
    "armor": {
@@ -2702,6 +2837,7 @@
   },
   {
    "id": "legendary-banded-armor",
+   "image": "/item-icons/lorc/layered-armor.svg",
    "name": "Legendary Banded Armor",
    "tier": 4,
    "armor": {
@@ -2733,6 +2869,7 @@
   },
   {
    "id": "darkweave-shroud",
+   "image": "/item-icons/lucasms/cloak.svg",
    "name": "Darkweave Shroud",
    "tier": 4,
    "armor": {
@@ -2762,6 +2899,7 @@
   },
   {
    "id": "godbound-laminar",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Godbound Laminar",
    "tier": 4,
    "armor": {
@@ -2789,6 +2927,7 @@
   },
   {
    "id": "circle-forged-dreadplate",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Circle-Forged Dreadplate",
    "tier": 4,
    "armor": {
@@ -2819,6 +2958,7 @@
   },
   {
    "id": "rune-forged-exosuit",
+   "image": "/item-icons/delapouite/robot-leg.svg",
    "name": "Rune-Forged Exosuit",
    "tier": 4,
    "armor": {
@@ -2845,6 +2985,7 @@
   },
   {
    "id": "hallowed-heroplate",
+   "image": "/item-icons/lorc/breastplate.svg",
    "name": "Hallowed Heroplate",
    "tier": 4,
    "armor": {
@@ -2878,6 +3019,7 @@
   },
   {
    "id": "resonant-harness",
+   "image": "/item-icons/delapouite/chest-armor.svg",
    "name": "Resonant Harness",
    "tier": 4,
    "armor": {

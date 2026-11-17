@@ -44,7 +44,7 @@ class Element {
 
 afterEach(() => vi.unstubAllGlobals());
 
-function setup(readOnly = false, configure?: (c: CharacterSheet) => void) {
+function setup(readOnly = false, configure?: (c: CharacterSheet) => void, visible = false) {
   let mini: Element | null = null;
   vi.stubGlobal('document', {
     createElement: (tag: string) => new Element(tag),
@@ -65,14 +65,36 @@ function setup(readOnly = false, configure?: (c: CharacterSheet) => void) {
   const bus = new SheetBus();
   const changed = vi.fn();
   let content: Element;
-  renderSheetView({
+  const view = renderSheetView({
     character: c, bus, readOnly: () => readOnly, onRoll: () => false, onChange: changed,
-    visible: () => false, miniVisible: () => true, quickAccessVisible: () => true,
+    visible: () => visible, miniVisible: () => true, quickAccessVisible: () => true,
     onQuickAccess: node => { content = node as unknown as Element; },
     onMiniStrip: strip => { mini = strip as unknown as Element | null; },
   });
-  return { c, bus, changed, content: () => content, mini: () => mini };
+  return { c, bus, changed, content: () => content, mini: () => mini, view: view as unknown as Element };
 }
+
+it('shows item artwork on carried equipment and loot with an accessible disclosure', () => {
+  const image = (name: string) => `/item-icons/lorc/${name}.svg`;
+  const test = setup(false, c => {
+    const weapon = { name: 'Sword', image: image('sword'), slot: 'Primary' as const, trait: 'Agility' as const,
+      damageType: 'phys' as const, damage: 'd6', range: 'Melee', hands: 1 as const, tier: 1 };
+    c.activeWeapons = [weapon];
+    c.carriedWeapons = [{ ...weapon, name: 'Carried sword', image: image('carried-sword') }];
+    c.activeArmor = { name: 'Leather', image: image('leather'), score: 3, tier: 1 };
+    c.carriedArmor = [{ name: 'Plate', image: image('plate'), score: 4, tier: 1 }];
+    c.inventory = [{ name: 'Potion', image: image('potion'), type: 'consumable', qty: 2, note: 'Drink it.' }];
+  }, true);
+  test.view.all().find(node => node.tag === 'button' && node.text.startsWith('Equipment'))!.click();
+  const sources = () => test.view.all().filter(node => node.tag === 'img').map(node => (node as unknown as { src: string }).src);
+  for (const name of ['carried-sword', 'plate']) expect(sources()).toContain(image(name));
+  for (const name of ['sword', 'leather']) expect(sources()).not.toContain(image(name));
+  test.view.all().find(node => node.tag === 'button' && node.text.startsWith('Loot'))!.click();
+  expect(sources()).toContain(image('potion'));
+  const disclosure = test.view.all().find(node => node.className === 'loot-description-toggle')!;
+  expect(disclosure.text).toBe('Potion (Unclassified rarity)');
+  expect(disclosure.attributes['aria-label']).toBe("Show Potion's description (Unclassified rarity)");
+});
 
 it('places a take-damage button directly after Evasion on the minimized bar, disabled when read-only', () => {
   for (const readOnly of [false, true]) {

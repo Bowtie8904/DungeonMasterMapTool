@@ -21,12 +21,13 @@ class CompendiumEntriesTest {
     void convertsEquipmentLikeTheBrowserAndPreservesAutomation() throws Exception {
         ObjectNode sheet = sheet();
         JsonNode armor = MAPPER.readTree("""
-                {"id":"a","name":"Armor","tier":2,"armor":{"score":4,"major":7,"severe":15},
+                {"id":"a","name":"Armor","image":"/item-icons/lorc/armor.svg","tier":2,"armor":{"score":4,"major":7,"severe":15},
                 "feature":{"name":"Flexible","text":"+1 evasion"},"automation":{"modifiers":[{"stat":"evasion","value":1}]}}
                 """);
         assertEquals("carried armor", CompendiumEntries.add(sheet, "armor", armor));
         JsonNode saved = sheet.path("carriedArmor").get(0);
         assertEquals(4, saved.path("score").asInt());
+        assertEquals(armor.path("image"), saved.path("image"));
         assertEquals(7, saved.path("major").asInt());
         assertEquals(armor.path("automation"), saved.path("automation"));
         assertEquals(armor.path("feature"), saved.path("feature"));

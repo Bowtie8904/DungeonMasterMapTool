@@ -46,12 +46,14 @@ class CompendiumWindowTest {
                 """);
         Path data = temp.resolve("data");
         Files.createDirectories(data);
+        String image = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(Path.of("dmmap-daggerheart", "items.json").toFile()).path("entries").get(0).path("image").asText();
         Files.writeString(data.resolve("items.json"), """
                 {"format":"dmmap-daggerheart","version":1,"category":"items","label":"Items","entries":[{
-                  "id":"torch","name":"Embedded torch","text":"Light.","editorExtension":{"note":"Keep me"},
+                  "id":"torch","name":"Embedded torch","image":"%s","text":"Light.","editorExtension":{"note":"Keep me"},
                   "features":[{"name":"Illuminating","text":"A named feature.","automation":{"actions":[%s]}}]
                 }]}
-                """.formatted(java.util.stream.IntStream.range(0, 20).mapToObj(index -> """
+                """.formatted(image, java.util.stream.IntStream.range(0, 20).mapToObj(index -> """
                 {"id":"light%d","label":"Light %d","timing":"action","confirm":"Confirm the target.",
                  "cost":{"hope":1},"steps":[{"op":"clear","resource":"stress","amount":1}]}
                 """.formatted(index, index)).collect(java.util.stream.Collectors.joining(","))));
@@ -90,6 +92,15 @@ class CompendiumWindowTest {
                 Thread.sleep(100);
             }
             assertTrue(text.contains("Embedded torch"), "Real browser bundle must load in JavaFX WebView: " + text);
+            for (int attempt = 0; attempt < 100; attempt++) {
+                if ("true".equals(fx(() -> String.valueOf(web.getEngine().executeScript(
+                        "Boolean(document.querySelector('.cmp-row img')?.naturalWidth > 0)"))))) break;
+                Thread.sleep(50);
+            }
+            assertEquals(image, fx(() -> String.valueOf(web.getEngine().executeScript(
+                    "document.querySelector('.cmp-row img').getAttribute('src')"))));
+            assertEquals("true", fx(() -> String.valueOf(web.getEngine().executeScript(
+                    "document.querySelector('.cmp-row img').naturalWidth > 0"))), "Bundled SVG must load in the embedded compendium");
             assertEquals("0", fx(() -> String.valueOf(web.getEngine().executeScript("location.hash.length"))));
             assertEquals("1", fx(() -> String.valueOf(web.getEngine().executeScript("document.querySelectorAll('.cmp-table').length"))));
             assertEquals("0", fx(() -> String.valueOf(web.getEngine().executeScript("document.querySelectorAll('.dh-win-minimize, .dh-win-popout').length"))));

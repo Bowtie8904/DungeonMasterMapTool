@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { configureDmSheet } from '../api';
-import { fetchCompendiumCategory, fetchCompendiumIndex, invalidateCompendium } from './compendium';
+import { cachedInventoryRarity, fetchCompendiumCategory, fetchCompendiumIndex, invalidateCompendium, needsInventoryRarityCatalogs, refreshInventoryRarities } from './compendium';
 import { loadRulesData } from './rules';
 import { refreshCharacterAutomation } from './persist';
 import { emptyCharacter } from './data';
@@ -62,4 +62,96 @@ it('keeps custom fetchers and DM authorization scopes isolated', async () => {
   await fetchCompendiumCategory('classes', request);
   expect(request).toHaveBeenCalledTimes(2);
   expect(other).toHaveBeenCalledTimes(1);
+});
+
+it('resolves inventory rarity from the scoped catalog without changing sheet data', async () => {
+  let revision = '1';
+  let includeItems = true;
+  const fetch = vi.fn(async (url: string) => new Response(JSON.stringify(url === '/api/compendium'
+    ? { categories: [
+      ...(includeItems ? [{ category: 'items', revision }] : []),
+      { category: 'consumables', revision: '1' },
+    ] }
+    : url.endsWith('/items')
+      ? { category: 'items', entries: [
+        { id: 'relic', name: 'Relic', rarity: revision === '1' ? 'Rare' : 'Legendary' },
+        { id: 'duplicate-a', name: 'Duplicate', rarity: 'Common' },
+        { id: 'duplicate-b', name: 'Duplicate', rarity: 'Rare' },
+      ] }
+      : { category: 'consumables', entries: [{ id: 'relic', name: 'Relic', rarity: 'Uncommon' }] })));
+  vi.stubGlobal('fetch', fetch);
+  const item = { name: 'Relic', type: 'gear', qty: 1 } as const;
+  const linked = { ...item, name: 'Old name', catalog: { category: 'items', id: 'relic', values: {} } };
+  const before = JSON.stringify([item, linked]);
+  expect(cachedInventoryRarity(item)).toBeUndefined();
+  await refreshInventoryRarities();
+  expect(cachedInventoryRarity(item)).toBe('Rare');
+  expect(cachedInventoryRarity(linked)).toBe('Rare');
+  expect(cachedInventoryRarity({ ...item, type: 'consumable' })).toBe('Uncommon');
+  expect(cachedInventoryRarity({ ...item, custom: true })).toBeUndefined();
+  expect(cachedInventoryRarity({ ...item, name: 'Duplicate' })).toBeUndefined();
+  expect(cachedInventoryRarity({ ...item, catalog: { category: 'items', id: 'missing', values: {} } })).toBeUndefined();
+  expect(cachedInventoryRarity({ ...item, catalog: { category: 'consumables', id: 'relic', values: {} } })).toBeUndefined();
+  const copy = await fetchCompendiumCategory('items');
+  copy.entries[0].rarity = 'Common';
+  expect(cachedInventoryRarity(item)).toBe('Rare');
+  expect(JSON.stringify([item, linked])).toBe(before);
+
+  revision = '2';
+  invalidateCompendium();
+  await refreshInventoryRarities();
+  expect(cachedInventoryRarity(linked)).toBe('Legendary');
+  includeItems = false;
+  invalidateCompendium();
+  await refreshInventoryRarities();
+  expect(cachedInventoryRarity(item)).toBeUndefined();
+  expect(cachedInventoryRarity({ ...item, type: 'consumable' })).toBe('Uncommon');
+  configureDmSheet('another-test-scope');
+  expect(cachedInventoryRarity({ ...item, type: 'consumable' })).toBeUndefined();
+});
+
+it('loads missing inventory catalogs when an initially empty sheet receives items', async () => {
+  const fetch = vi.fn(async (url: string) => new Response(JSON.stringify(url === '/api/compendium'
+    ? { categories: [{ category: 'items' }] }
+    : { category: 'items', entries: [{ id: 'relic', name: 'Relic', rarity: 'Rare' }] })));
+  vi.stubGlobal('fetch', fetch);
+  const item = { name: 'Relic', type: 'gear', qty: 1 } as const;
+  const consumable = { name: 'Potion', type: 'consumable', qty: 1 } as const;
+  expect(needsInventoryRarityCatalogs([])).toBe(false);
+  expect(needsInventoryRarityCatalogs([{ ...item, custom: true }])).toBe(false);
+  expect(needsInventoryRarityCatalogs([item])).toBe(true);
+  await fetchCompendiumIndex();
+  expect(needsInventoryRarityCatalogs([consumable])).toBe(false);
+  expect(needsInventoryRarityCatalogs([item, consumable])).toBe(true);
+  await refreshInventoryRarities();
+  expect(needsInventoryRarityCatalogs([item, consumable])).toBe(false);
+  expect(cachedInventoryRarity(item)).toBe('Rare');
+  expect(fetch.mock.calls.filter(([url]) => url.endsWith('/items'))).toHaveLength(1);
+  configureDmSheet('different-grant');
+  expect(needsInventoryRarityCatalogs([item])).toBe(true);
+});
+
+it('retains successful category refreshes and reports every failed category', async () => {
+  let fail = true;
+  const fetch = vi.fn(async (url: string) => {
+    if (url === '/api/compendium') return new Response(JSON.stringify({
+      categories: [{ category: 'items', label: 'Items' }, { category: 'consumables', label: 'Consumables' }],
+    }));
+    if (url.endsWith('/consumables') && fail) return new Response('', { status: 503 });
+    return new Response(JSON.stringify({ entries: [
+      { id: 'relic', name: 'Relic', rarity: url.endsWith('/items') ? 'Rare' : 'Uncommon' },
+    ] }));
+  });
+  vi.stubGlobal('fetch', fetch);
+  const item = { name: 'Relic', type: 'gear', qty: 1 } as const;
+  const consumable = { ...item, type: 'consumable' } as const;
+  await expect(refreshInventoryRarities()).rejects.toThrow('Consumables: Compendium unavailable (503)');
+  expect(cachedInventoryRarity(item)).toBe('Rare');
+  expect(cachedInventoryRarity(consumable)).toBeUndefined();
+  expect(needsInventoryRarityCatalogs([item, consumable])).toBe(true);
+  fail = false;
+  await refreshInventoryRarities();
+  expect(cachedInventoryRarity(consumable)).toBe('Uncommon');
+  expect(needsInventoryRarityCatalogs([item, consumable])).toBe(false);
+  expect(fetch.mock.calls.filter(([url]) => url.endsWith('/items'))).toHaveLength(1);
 });

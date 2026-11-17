@@ -16,7 +16,7 @@ import { rosterPlayerName } from './roster';
 import { setGmFear } from './daggerheart/engine';
 import { rollButtons } from './daggerheart/rollbuttons';
 import { ChatActionReports } from './chat-action-reports';
-import { addToSheet } from './daggerheart/compendium';
+import { addToSheet, needsInventoryRarityCatalogs, refreshInventoryRarities } from './daggerheart/compendium';
 import { CompendiumPanel } from './compendium';
 import { pickActor } from './actor-picker';
 import { openCopycat } from './daggerheart/copycat-view';
@@ -127,7 +127,10 @@ export class App {
       if (!actor) return null;
       const handle = await this.ensureSheet(actor);
       const where = addToSheet(handle.character, category, entry);
-      if (where) handle.bus.notify();
+      if (where) {
+        handle.bus.notify();
+        this.ensureInventoryRarities(handle.character);
+      }
       return where ? `${actor.name}'s ${where}` : null;
     },
     toast: (t) => this.toast(t),
@@ -878,6 +881,17 @@ export class App {
     window.setTimeout(() => this.toastEl.classList.add('hidden'), 4000);
   }
 
+  private refreshInventoryRarities(): void {
+    if (!this.sheetHandles.size) return;
+    void refreshInventoryRarities().finally(() => {
+      for (const handle of this.sheetHandles.values()) handle.bus.notify(false);
+    }).catch((error: Error) => this.toast(`Could not refresh inventory rarity: ${error.message}`));
+  }
+
+  private ensureInventoryRarities(character: CharacterSheet): void {
+    if (needsInventoryRarityCatalogs(character.inventory)) this.refreshInventoryRarities();
+  }
+
   private conditionMenuDismiss = (event: PointerEvent): void => {
     if (!this.conditionMenu.contains(event.target as Node)) this.closeTokenConditionMenu();
   };
@@ -1002,6 +1016,7 @@ export class App {
       case 'hello':
         this.actionReports?.reset();
         void this.compendium.revalidate().catch((error: Error) => this.toast(error.message));
+        this.refreshInventoryRarities();
         this.playerId = msg.playerId;
         this.setAccountColor(msg.campaignId ?? '', msg.playerId, msg.accountColor);
         this.measurementColors = msg.measurementColors === true;
@@ -1145,6 +1160,7 @@ export class App {
         break;
       case 'catalogChanged':
         void this.compendium.reload().catch((error: Error) => this.toast(error.message));
+        this.refreshInventoryRarities();
         for (const handle of this.sheetHandles.values())
           void handle.save.flush().then(() => handle.save.refresh()).catch((error: Error) => this.toast(error.message));
         break;
@@ -1156,7 +1172,10 @@ export class App {
       case 'sheetInventory': {
         if (this.conn.sheetSync) break;
         const handle = this.sheetHandles.get(msg.actorId);
-        if (handle && applyInventory(handle.character, msg.inventory)) handle.bus.notify();
+        if (handle && applyInventory(handle.character, msg.inventory)) {
+          handle.bus.notify();
+          this.ensureInventoryRarities(handle.character);
+        }
         break;
       }
       case 'sheetFeature': {
@@ -1598,6 +1617,7 @@ export class App {
         document.addEventListener('dmmt-inventory-refreshed', (event) => {
           if ((event as CustomEvent<string>).detail === a.id) {
             bus.notify(false);
+            this.ensureInventoryRarities(character);
             this.scheduleRollActions();
           }
         });

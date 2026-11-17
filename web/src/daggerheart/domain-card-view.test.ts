@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { CompendiumFile } from './compendium';
+import { invalidateCompendium, refreshInventoryRarities, type CompendiumFile } from './compendium';
 import { emptyCharacter, normalizeSheet } from './data';
 import { openRollDialog, renderSheetView, SheetBus, type RollRequest } from './view';
 import * as artworkEditor from '../token-artwork';
@@ -22,6 +22,8 @@ class Element {
   hidden = false;
   open = false;
   ariaLabel = '';
+  src = '';
+  title = '';
   style = { cssText: '', setProperty: () => {} };
   classList = { toggle: () => {}, add: () => {}, contains: (name: string) => this.className.split(' ').includes(name) };
   dataset: Record<string, string> = {};
@@ -145,6 +147,195 @@ it('separates loot tools from limited actions while preserving sharing, usage an
   expect(find(root, 'loot-description')!.hidden).toBe(true);
   await tools.querySelectorAll('button')[3].click();
   expect(c.inventory).toHaveLength(0);
+});
+
+it('marks loot rarity and carried tiers but keeps active equipment names plain', async () => {
+  const createElement = (tag: string) => {
+    const node = new Element(tag);
+    node.classList.add = (...names: string[]) => { node.className += ` ${names.join(' ')}`; };
+    return node;
+  };
+  vi.stubGlobal('document', { body: new Element('body'), createElement,
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  let revision = '1';
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url === '/api/compendium'
+    ? { categories: [{ category: 'items', revision }, { category: 'consumables', revision: '1' }] }
+    : url.endsWith('/items')
+      ? { category: 'items', entries: [
+        { id: 'plain', name: 'Plain', rarity: 'Common' },
+        { id: 'relic', name: 'Relic', rarity: revision === '1' ? 'Uncommon' : 'Legendary' },
+        { id: 'treasure', name: 'Treasure', rarity: 'Legendary' },
+        { id: 'without-rarity', name: 'Without rarity' },
+        { id: 'duplicate-a', name: 'Duplicate', rarity: 'Common' },
+        { id: 'duplicate-b', name: 'Duplicate', rarity: 'Rare' },
+      ] }
+      : { category: 'consumables', entries: [
+        { id: 'potion', name: 'Potion', rarity: 'Rare' },
+        { id: 'herb', name: 'Herb', rarity: 'Foraged' },
+      ] }))));
+  await refreshInventoryRarities();
+  const c = emptyCharacter('Collector');
+  c.mancer = { done: true };
+  c.inventory = [
+    { name: 'Plain', type: 'gear', qty: 1, image: '/item-icons/lorc/potion-ball.svg' },
+    { name: 'Relic', type: 'gear', qty: 1, note: 'Its description.' },
+    { name: 'Potion', type: 'consumable', qty: 1 },
+    { name: 'Treasure', type: 'loot', qty: 1 },
+    { name: 'Herb', type: 'consumable', qty: 1 },
+    { name: 'Duplicate', type: 'gear', qty: 1 },
+    { name: 'Treasure', type: 'loot', qty: 1, custom: true },
+    { name: 'Unknown', type: 'loot', qty: 1 },
+    { name: 'Without rarity', type: 'loot', qty: 1, note: 'No assigned rarity.' },
+  ];
+  const weapon = (name: string, tier: number) => ({
+    name, tier, slot: 'Primary' as const, damageType: 'phys' as const, trait: 'Agility' as const,
+    range: 'Melee', damage: 'd6', hands: 1 as const, image: '/item-icons/lorc/broadsword.svg',
+  });
+  c.activeWeapons = [weapon('Equipped sword', 1)];
+  c.activeArmor = { name: 'Equipped armor', score: 3, tier: 2, image: '/item-icons/lorc/breastplate.svg' };
+  c.carriedWeapons = [weapon('Carried sword', 3)];
+  c.carriedArmor = [{ name: 'Carried armor', score: 3, tier: 4, image: '/item-icons/lorc/breastplate.svg' }];
+  const before = JSON.stringify(c.inventory);
+  const changed = vi.fn();
+  const bus = new SheetBus();
+  const root = renderSheetView({ character: c, bus, onChange: changed, onRoll: () => true }) as unknown as Element;
+  const grade = (node: Element) => node.querySelectorAll('span')
+    .find(child => child.className.split(' ').includes('inventory-grade'));
+  await root.querySelectorAll('button').find(button => button.text() === 'Equipment')!.click();
+  for (const [name, level] of [['Equipped sword', 1], ['Equipped armor', 2], ['Carried sword', 3], ['Carried armor', 4]] as const) {
+    const container = root.querySelectorAll(name.startsWith('Equipped') ? 'div' : 'tr')
+      .find(node => (node.className === 'slot' || node.tag === 'tr') && node.text().includes(name))!;
+    if (name.startsWith('Equipped')) {
+      expect(grade(container)).toBeUndefined();
+      expect(container.querySelectorAll('img')).toHaveLength(0);
+    } else {
+      expect(grade(container)?.className.split(' ')).toContain(`inventory-grade-${level}`);
+      expect(grade(container)?.title).toBe(`Tier ${level}`);
+      expect(grade(container)?.text()).toContain(`(Tier ${level})`);
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+    }
+  }
+  for (const name of ['Equipped sword', 'Equipped armor']) {
+    const active = root.querySelectorAll('div').find(node => node.className === 'slot' && node.text().includes(name))!;
+    await active.querySelectorAll('button').find(button => button.text() === 'Unequip')!.click();
+    const carried = root.querySelectorAll('tr').find(node => node.text().includes(name))!;
+    expect(grade(carried)).toBeDefined();
+    expect(carried.querySelectorAll('img')).toHaveLength(1);
+    await carried.querySelectorAll('button').find(button => button.text() === 'Equip')!.click();
+    const equipped = root.querySelectorAll('div').find(node => node.className === 'slot' && node.text().includes(name))!;
+    expect(grade(equipped)).toBeUndefined();
+    expect(equipped.querySelectorAll('img')).toHaveLength(0);
+  }
+  await root.querySelectorAll('button').find(button => button.text() === 'Loot')!.click();
+  const rows = () => root.querySelectorAll('tr').filter(node => node.querySelectorAll('td').length);
+  expect(rows().slice(0, 4).map(row => grade(row)?.className.match(/inventory-grade-[1-4]/)?.[0]))
+    .toEqual(['inventory-grade-1', 'inventory-grade-2', 'inventory-grade-3', 'inventory-grade-4']);
+  for (const row of rows().slice(4)) {
+    expect(grade(row)?.className.split(' ')).toContain('inventory-grade-1');
+    expect(grade(row)?.title).toBe('Unclassified rarity');
+    expect(grade(row)?.text()).toContain('(Unclassified rarity)');
+  }
+  expect(rows()[1].querySelectorAll('img')).toHaveLength(0);
+  const toggle = rows()[1].querySelectorAll('button').find(button => button.className === 'loot-description-toggle')!;
+  expect(toggle.ariaLabel).toBe("Show Relic's description (Uncommon rarity)");
+  await toggle.click();
+  expect(toggle.ariaLabel).toBe("Hide Relic's description (Uncommon rarity)");
+  const unclassifiedToggle = rows()[8].querySelectorAll('button').find(button => button.className === 'loot-description-toggle')!;
+  expect(unclassifiedToggle.ariaLabel).toBe("Show Without rarity's description (Unclassified rarity)");
+  await unclassifiedToggle.click();
+  expect(unclassifiedToggle.ariaLabel).toBe("Hide Without rarity's description (Unclassified rarity)");
+
+  revision = '2';
+  invalidateCompendium();
+  await refreshInventoryRarities();
+  changed.mockClear();
+  bus.notify(false);
+  await Promise.resolve();
+  expect(grade(rows()[1])?.className.split(' ')).toContain('inventory-grade-4');
+  expect(rows()[1].querySelectorAll('button').find(button => button.className === 'loot-description-toggle')?.ariaLabel)
+    .toBe("Hide Relic's description (Legendary rarity)");
+  expect(JSON.stringify(c.inventory)).toBe(before);
+  expect(changed).not.toHaveBeenCalled();
+});
+
+it.each([
+  ['loot', '/item-icons/delapouite/chest.svg'],
+  ['gear', '/item-icons/delapouite/backpack.svg'],
+  ['consumable', '/item-icons/lorc/standing-potion.svg'],
+  ['class item', '/item-icons/lorc/gem-pendant.svg'],
+] as const)('uses the %s category icon for new and existing custom loot', async (type, image) => {
+  const body = new Element('body');
+  vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const c = emptyCharacter('Collector');
+  c.mancer = { done: true };
+  const override = image === '/item-icons/delapouite/chest.svg'
+    ? '/item-icons/delapouite/backpack.svg' : '/item-icons/delapouite/chest.svg';
+  c.inventory = [
+    { name: 'Old custom item', type, qty: 1, custom: true },
+    { name: 'Custom artwork', type, qty: 1, custom: true, image: override },
+    { name: 'Plain catalog item', type, qty: 1 },
+  ];
+  const onChange = vi.fn();
+  const onShare = vi.fn();
+  const root = renderSheetView({ character: c, onRoll: () => true, onChange, onShare }) as unknown as Element;
+  await root.querySelectorAll('button').find(button => button.text() === 'Loot')!.click();
+  const row = (name: string) => root.querySelectorAll('tr').find(entry => entry.text().includes(name))!;
+  expect(row('Old custom item').querySelectorAll('img')[0].src).toBe(image);
+  expect(c.inventory[0].image).toBeUndefined();
+  expect(row('Custom artwork').querySelectorAll('img')[0].src).toBe(override);
+  expect(row('Plain catalog item').querySelectorAll('img')).toHaveLength(0);
+
+  await root.querySelectorAll('button').find(button => button.ariaLabel === 'Add custom item')!.click();
+  body.querySelectorAll('input').find(input => input.ariaLabel === 'Item name')!.value = 'New custom item';
+  body.querySelectorAll('textarea')[0].value = 'A description.';
+  body.querySelectorAll('select')[0].value = type;
+  const form = body.querySelectorAll('form')[0];
+  Reflect.apply(form.listeners.get('submit')!, form, [{ preventDefault() {} }]);
+  const item = c.inventory.at(-1)!;
+  expect(item).toEqual({ name: 'New custom item', note: 'A description.', type, qty: 1, custom: true, image });
+  expect(normalizeSheet(JSON.parse(JSON.stringify(c)), 'Collector').inventory.at(-1)).toEqual(item);
+  expect(onChange).toHaveBeenCalled();
+  const newRow = row('New custom item');
+  expect(newRow.querySelectorAll('img')[0].src).toBe(image);
+  expect(newRow.querySelectorAll('button').find(button => button.className === 'loot-description-toggle')!.text())
+    .toBe('New custom item (Unclassified rarity)');
+  await newRow.querySelectorAll('button').find(button => button.ariaLabel === 'Post New custom item to chat')!.click();
+  expect(onShare).toHaveBeenLastCalledWith({ category: 'item', item });
+  await newRow.querySelectorAll('button').find(button => button.ariaLabel === 'Offer New custom item for transfer')!.click();
+  expect(onShare).toHaveBeenLastCalledWith({ category: 'item', item }, 1);
+});
+
+it('offers matching inventory stacks together when only their artwork differs', async () => {
+  const body = new Element('body');
+  vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const c = emptyCharacter('Collector');
+  c.mancer = { done: true };
+  const image = '/item-icons/delapouite/backpack.svg';
+  const catalog = { category: 'items', id: 'supplies', values: { name: 'Supplies' } };
+  c.inventory = [
+    { name: 'Custom supplies', type: 'gear', qty: 1, custom: true },
+    { name: 'Custom supplies', type: 'gear', qty: 1, custom: true, image },
+    { name: 'Catalog supplies', type: 'gear', qty: 1, catalog },
+    { name: 'Catalog supplies', type: 'gear', qty: 1, image, catalog: { ...catalog, values: { ...catalog.values, image } } },
+  ];
+  const onShare = vi.fn();
+  const root = renderSheetView({ character: c, onRoll: () => true, onShare }) as unknown as Element;
+  await root.querySelectorAll('button').find(button => button.text() === 'Loot')!.click();
+  for (const [name, item] of [['Custom supplies', c.inventory[0]], ['Catalog supplies', c.inventory[2]]] as const) {
+    await root.querySelectorAll('button').find(button => button.ariaLabel === `Offer ${name} for transfer`)!.click();
+    const form = body.querySelectorAll('form').at(-1)!;
+    expect(form.querySelectorAll('input')[0].value).toBe('2');
+    Reflect.apply(form.listeners.get('submit')!, form, [{ preventDefault() {} }]);
+    expect(onShare).toHaveBeenLastCalledWith({ category: 'item', item }, 2);
+  }
 });
 
 it.each([['umbral-veil', 'Umbral Veil', 'rest'], ['dark-army', 'Dark Army', 'long rest']])(

@@ -12,6 +12,7 @@ export interface CompendiumFeature {
 }
 
 export interface CompendiumEntry {
+  image?: string;
   id: string;
   name: string;
   tier?: number;
@@ -64,7 +65,7 @@ export type CompendiumFetch = (url: string) => Promise<Response>;
 const compendiumFetch: CompendiumFetch = url => hostFetch(url, { credentials: 'same-origin', cache: 'no-cache' });
 let catalogGeneration = 0;
 interface CatalogCache {
-  entries: Map<string, { generation: number; revision?: string; pending: Promise<unknown> }>;
+  entries: Map<string, { generation: number; revision?: string; pending: Promise<unknown>; value?: unknown }>;
   revisions: Map<string, string>;
 }
 const catalogs = new WeakMap<CompendiumFetch, Map<string, CatalogCache>>();
@@ -107,6 +108,7 @@ async function catalog<T>(url: string, request: CompendiumFetch): Promise<T> {
   }
   const value = await entry.pending;
   if (generation !== catalogGeneration || authorization !== (dmSheetAuthorization() ?? '')) return catalog(url, request);
+  entry.value = value;
   // Sheet automation is editable. Never let a consumer mutate another actor's cached rules.
   return structuredClone(value) as T;
 }
@@ -118,6 +120,62 @@ export async function fetchCompendiumIndex(request: CompendiumFetch = compendium
 
 export async function fetchCompendiumCategory(category: string, request: CompendiumFetch = compendiumFetch): Promise<CompendiumFile> {
   return catalog(`/api/compendium/${encodeURIComponent(category)}`, request);
+}
+
+function inventoryCategory(item: InventoryItem): 'items' | 'consumables' {
+  return item.type === 'consumable' ? 'consumables' : 'items';
+}
+
+function currentInventoryCache(): CatalogCache | undefined {
+  return catalogs.get(globalThis.fetch as CompendiumFetch)?.get(dmSheetAuthorization() ?? '');
+}
+
+function currentCategories(cache: CatalogCache | undefined): CompendiumIndexItem[] | undefined {
+  const index = cache?.entries.get('/api/compendium');
+  if (index?.generation !== catalogGeneration) return undefined;
+  const body = index.value as { categories?: CompendiumIndexItem[] } | CompendiumIndexItem[] | undefined;
+  return Array.isArray(body) ? body : body?.categories;
+}
+
+/** Avoid repeated downloads when an item arrives after an initially empty sheet was opened. */
+export function needsInventoryRarityCatalogs(inventory: readonly InventoryItem[]): boolean {
+  const cache = currentInventoryCache();
+  const categories = currentCategories(cache);
+  return inventory.some(item => {
+    if (item.custom) return false;
+    const category = inventoryCategory(item);
+    const file = cache?.entries.get(`/api/compendium/${category}`)?.value as CompendiumFile | undefined;
+    if (file && Array.isArray(file.entries)) return false;
+    return !Array.isArray(categories) || categories.some(entry => entry.category === category);
+  });
+}
+
+/** Rarity is presentation metadata, not part of a sheet or transfer identity. */
+export function cachedInventoryRarity(item: InventoryItem): string | undefined {
+  if (item.custom) return undefined;
+  const category = inventoryCategory(item);
+  const cache = currentInventoryCache();
+  const cached = cache?.entries.get(`/api/compendium/${category}`);
+  const file = cached?.value as CompendiumFile | undefined;
+  if (!cached || !file || !Array.isArray(file.entries)) return undefined;
+  const categories = currentCategories(cache);
+  if (cached.generation !== catalogGeneration && Array.isArray(categories)
+      && !categories.some(entry => entry.category === category)) return undefined;
+  const link = item.catalog;
+  if (link && (link.category !== category || !link.id)) return undefined;
+  const matches = file.entries.filter(entry => link ? entry.id === link.id : entry.name === item.name);
+  return matches.length === 1 && typeof matches[0].rarity === 'string' ? matches[0].rarity : undefined;
+}
+
+/** Revalidate only the inventory categories the host actually advertises. */
+export async function refreshInventoryRarities(): Promise<void> {
+  const index = await fetchCompendiumIndex();
+  const categories = index.filter(entry => entry.category === 'items' || entry.category === 'consumables');
+  const results = await Promise.allSettled(categories.map(entry => fetchCompendiumCategory(entry.category)));
+  const failures = results.flatMap((result, i) => result.status === 'rejected'
+    ? [`${categories[i].label || categories[i].category}: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`]
+    : []);
+  if (failures.length) throw new Error(failures.join('; '));
 }
 
 /** Entries that can be put on a character sheet, with the label of the target list. */
@@ -143,13 +201,13 @@ function damageText(w: NonNullable<CompendiumEntry['weapon']>): string {
 
 export function armorFrom(e: CompendiumEntry): Armor {
   const a = e.armor!;
-  return { name: e.name, score: a.score, major: a.major, severe: a.severe, tier: e.tier ?? 1, feature: e.feature, automation: e.automation };
+  return { name: e.name, image: e.image, score: a.score, major: a.major, severe: a.severe, tier: e.tier ?? 1, feature: e.feature, automation: e.automation };
 }
 
 export function weaponFrom(e: CompendiumEntry): Weapon {
   const w = e.weapon!;
   return {
-    name: e.name, slot: w.slot === 'secondary' ? 'Secondary' : 'Primary', damageType: w.damage.type === 'magic' ? 'magic' : 'phys',
+    name: e.name, image: e.image, slot: w.slot === 'secondary' ? 'Secondary' : 'Primary', damageType: w.damage.type === 'magic' ? 'magic' : 'phys',
     trait: w.trait as Weapon['trait'], range: w.range, damage: damageText(w), hands: /two/i.test(w.burden) ? 2 : 1, tier: e.tier ?? 1,
     feature: e.feature, automation: e.automation,
   };
@@ -179,7 +237,7 @@ export function addToSheet(c: CharacterSheet, category: string, e: CompendiumEnt
     const existing = c.inventory.find((i) => i.name === e.name && i.type === (consumable ? 'consumable' : 'gear'));
     if (existing) existing.qty = Math.min(consumable ? 5 : 99, existing.qty + 1);
     else {
-      const item: InventoryItem = { name: e.name, note: e.text, type: consumable ? 'consumable' : 'gear', qty: 1, capped: consumable, automation: e.automation };
+      const item: InventoryItem = { name: e.name, image: e.image, note: e.text, type: consumable ? 'consumable' : 'gear', qty: 1, capped: consumable, automation: e.automation };
       c.inventory.push(item);
     }
     return 'inventory';

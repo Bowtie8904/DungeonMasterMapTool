@@ -3551,14 +3551,15 @@ public final class OnlineSessionServer {
                 .put("qty", 1).put("type", "consumable").put("note", entry.path("text").asText());
         if (foraged) item.put("foraged", true);
         else item.put("capped", true);
+        if (entry.hasNonNull("image")) item.set("image", entry.get("image").deepCopy());
         item.set("automation", entry.path("automation").deepCopy());
         ObjectNode identity = ChatCards.identity(item);
-        identity.remove(List.of("foraged", "capped"));
+        identity.remove(List.of("foraged", "capped", "image"));
         ObjectNode stack = null;
         for (JsonNode existing : sheet.withArray("inventory")) {
             if (!(existing instanceof ObjectNode object) || object.path("name").asText("").isBlank()) continue;
             ObjectNode existingIdentity = ChatCards.identity(object);
-            existingIdentity.remove(List.of("catalog", "foraged", "capped"));
+            existingIdentity.remove(List.of("catalog", "foraged", "capped", "image"));
             if (existingIdentity.equals(identity)) {
                 stack = object;
                 break;

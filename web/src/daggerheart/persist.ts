@@ -19,10 +19,12 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
   };
   // Class, heritage, transformation and domain card rules are shared content and follow the compendium on every load.
   // Only missing rest and damage-mitigation metadata is added to equipment; existing GM-authored mechanics are preserved.
-  const restMetadata = (category: string, items: Array<{ name: string; automation?: import('./engine').Automation }>) => {
+  const restMetadata = (category: string, items: Array<{ name: string; image?: string; automation?: import('./engine').Automation }>) => {
     for (const item of items) {
       if ('catalog' in item) continue;
-      const rules = entries(category).find((e) => e.name === item.name)?.automation;
+      const entry = entries(category).find((e) => e.name === item.name);
+      if (entry?.image && !item.image) item.image = entry.image;
+      const rules = entry?.automation;
       if (!rules) continue;
       if (rules.deathMove) {
         item.automation ??= {};

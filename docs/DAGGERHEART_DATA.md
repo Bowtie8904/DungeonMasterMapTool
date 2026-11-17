@@ -23,6 +23,34 @@ Each file: `{ "format": "dmmap-daggerheart", "version": 1, "category", "label", 
 
 `starter: true` (weapons, armor) marks the basic gear the Character Mancer offers.
 
+## Item artwork
+
+Catalog entries accept optional `image` metadata, editable in the guided editor's **Overview** tab:
+
+```json
+{ "id": "example", "name": "Example", "image": "/item-icons/lorc/standing-potion.svg" }
+```
+
+Choose an existing bundled icon from `web\public\item-icons\<author>\<name>.svg`.
+The editor validates the path and bundled resource; remove the field or leave it empty for no artwork.
+Only `/item-icons/<author>/<name>.svg` paths with lowercase letters, digits and hyphens are accepted:
+no external URLs, filesystem paths, SVG markup or traversal. To bundle additional icons, copy the
+selected SVGs into that public folder, update its attribution, rebuild `web`, and run `mvn process-resources`.
+Icons are served locally and work offline in both embedded desktop views and player browsers.
+
+Every maintained armor, weapon, item and consumable has an explicitly selected icon. Related weapon
+tiers and potion families share silhouettes; poisons and distinct item/equipment subcategories use
+different artwork. Icons appear beside names in Equipment, Loot, compendium rows/details, editor
+previews and shared/transfer chat cards, including native desktop chat. Existing catalog-linked
+characters refresh artwork without resetting quantities or mechanics; custom items remain independent.
+Creation, imports and transfers preserve artwork. Artwork is additive presentation metadata, ignored
+when matching transfer stock, so legacy offers remain usable and compatibility versions are unchanged.
+
+Selected icons are from [game-icons.net](https://game-icons.net), licensed under
+[Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/).
+Contributor credits and the supplied license accompany the bundled icons in
+`web\public\item-icons`; the complete source collection is not bundled.
+
 Sheet edit mode stores one persistent **Manual override** effect (`source: "manual:armor-slots"`,
 including legacy Armor-only effects). Armor uses a normal `armorScore` modifier. Optional `manualChanges`
 records signed accumulated changes keyed by `hp`, `stress`, `proficiency`, `evasion`, and `trait.<Name>`.

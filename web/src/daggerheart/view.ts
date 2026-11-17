@@ -16,7 +16,8 @@ import {
 import { comboDie, criticalMeleeBonus, refocus, shiftStance } from './brawler';
 import { chooseStance } from './brawler-view';
 import { activateAura, assumeBeastform, canCastDomain, catalogBeastforms, channelElement, transformBeastform } from './druid';
-import { fetchCompendiumCategory } from './compendium';
+import { cachedInventoryRarity, fetchCompendiumCategory } from './compendium';
+import { gradedItemName, rarityGrade, tierGrade } from './inventory-grade';
 import { chooseBeastform } from './druid-view';
 import { channelRawPower, chooseActionEffects } from './sorcerer';
 import { chooseChannelCard, chooseFeatureEffects } from './sorcerer-view';
@@ -51,6 +52,12 @@ import type { DomainCardView } from '../api';
 import { favoriteKey, isFavorite, quickAccessEntries, type FavoriteCategory } from './quick-access';
 
 const CARD_DRAG = 'application/x-dmmt-domain-card';
+const CUSTOM_ITEM_ICONS: Record<InventoryItem['type'], string> = {
+  loot: '/item-icons/delapouite/chest.svg',
+  gear: '/item-icons/delapouite/backpack.svg',
+  consumable: '/item-icons/lorc/standing-potion.svg',
+  'class item': '/item-icons/lorc/gem-pendant.svg',
+};
 
 export interface RollRequest {
   hostOptions?: Array<{ key: string; id: string; trait?: TraitName }>;
@@ -403,11 +410,16 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   }
 
   function offerEntry(entry: SharedEntry): void {
-    const identity = (item: SharedEntry['item']) => JSON.stringify(
-      Object.fromEntries(Object.entries(item).filter(([key]) => key !== 'qty')),
-      (_key, value: unknown) => value && typeof value === 'object' && !Array.isArray(value)
-        ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value,
-    );
+    const identity = (item: SharedEntry['item']) => {
+      const fields = Object.fromEntries(Object.entries(item).filter(([key]) => key !== 'qty' && key !== 'image'));
+      if ('catalog' in item && item.catalog?.values) {
+        fields.catalog = { ...item.catalog, values: Object.fromEntries(
+          Object.entries(item.catalog.values).filter(([key]) => key !== 'image'),
+        ) };
+      }
+      return JSON.stringify(fields, (_key, value: unknown) => value && typeof value === 'object' && !Array.isArray(value)
+        ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value);
+    };
     const available = entry.category === 'gold' ? Math.max(0, Math.floor(c.gold))
       : (entry.category === 'item' ? c.inventory : entry.category === 'weapon' ? c.carriedWeapons : c.carriedArmor)
         .filter(item => identity(item) === identity(entry.item))
@@ -454,6 +466,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (!name.value.trim()) name.value = '';
       if (!form.reportValidity()) return;
       const item: InventoryItem = { name: name.value.trim(), type: type.value as InventoryItem['type'], qty: amount.valueAsNumber, custom: true };
+      item.image = CUSTOM_ITEM_ICONS[item.type];
       if (note.value.trim()) item.note = note.value.trim();
       c.inventory.push(item);
       dialog.close();
@@ -1810,10 +1823,10 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const rows: HTMLElement[] = [];
     const equipBtn = (fn: () => void) => { const b = el('button', { class: 'small', type: 'button' }, 'Equip'); b.addEventListener('click', fn); return b; };
     for (const w of c.carriedWeapons) {
-      rows.push(share(el('tr', {}, el('td', {}, el('b', {}, w.name), weaponBadges(w), ...(attachmentControls(w) ? [attachmentControls(w)!] : [])), featureCell(w.feature), el('td', { class: 'controls-cell' }, el('div', { class: 'inventory-controls' }, equipBtn(() => equipWeapon(w))))), { category: 'weapon', item: w }, true));
+      rows.push(share(el('tr', {}, el('td', {}, el('b', {}, gradedItemName(w, tierGrade(w.tier))), weaponBadges(w), ...(attachmentControls(w) ? [attachmentControls(w)!] : [])), featureCell(w.feature), el('td', { class: 'controls-cell' }, el('div', { class: 'inventory-controls' }, equipBtn(() => equipWeapon(w))))), { category: 'weapon', item: w }, true));
     }
     for (const a of c.carriedArmor) {
-      rows.push(share(el('tr', {}, el('td', {}, el('b', {}, a.name), armorBadges(a), ...(attachmentControls(a) ? [attachmentControls(a)!] : [])), featureCell(a.feature), el('td', { class: 'controls-cell' }, el('div', { class: 'inventory-controls' }, equipBtn(() => equipArmor(a))))), { category: 'armor', item: a }, true));
+      rows.push(share(el('tr', {}, el('td', {}, el('b', {}, gradedItemName(a, tierGrade(a.tier))), armorBadges(a), ...(attachmentControls(a) ? [attachmentControls(a)!] : [])), featureCell(a.feature), el('td', { class: 'controls-cell' }, el('div', { class: 'inventory-controls' }, equipBtn(() => equipArmor(a))))), { category: 'armor', item: a }, true));
     }
     const table = el('table', { class: 't inventory-table equipment-table' }, el('thead', {}, el('tr', {}, el('th', {}, 'Name'), el('th', {}, 'Feature'), el('th', { class: 'controls-cell' }, 'Actions'))), el('tbody', {}, ...rows));
     const entries = [...c.carriedWeapons, ...c.carriedArmor];
@@ -1958,7 +1971,9 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       gold.append(transfer);
     }
     const rows = c.inventory.map((i) => {
-      const name = el('div', { class: 'loot-name' }, el('b', {}, i.name), tag(i.type));
+      const displayedItem = i.custom && i.image === undefined ? { ...i, image: CUSTOM_ITEM_ICONS[i.type] } : i;
+      const grade = rarityGrade(cachedInventoryRarity(i));
+      const name = el('div', { class: 'loot-name' }, el('b', {}, gradedItemName(displayedItem, grade)), tag(i.type));
       const description = i.note ? el('div', { class: 'loot-description muted' }, i.note) : null;
       const row = share(el('tr', {},
         el('td', {}, name, ...(description ? [description] : [])),
@@ -1968,14 +1983,14 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       ), { category: 'item', item: i }, true, i.qty > 0);
       if (description) {
         const key = `${i.name}\n${i.note}`;
-        const toggle = el('button', { type: 'button', class: 'loot-description-toggle' }, i.name);
+        const toggle = el('button', { type: 'button', class: 'loot-description-toggle' }, gradedItemName(displayedItem, grade));
         name.replaceChildren(toggle, tag(i.type));
         row.classList.add('loot-expandable');
         const paint = () => {
           const expanded = expandedDescriptions.has(key);
           description.hidden = !expanded;
           toggle.setAttribute('aria-expanded', String(expanded));
-          toggle.setAttribute('aria-label', `${expanded ? 'Hide' : 'Show'} ${i.name}'s description`);
+          toggle.setAttribute('aria-label', `${expanded ? 'Hide' : 'Show'} ${i.name}'s description (${grade.label})`);
         };
         const expand = () => {
           if (expandedDescriptions.has(key)) expandedDescriptions.delete(key);

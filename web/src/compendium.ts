@@ -1,5 +1,6 @@
 import { el } from './login';
 import { iconButton } from './icons';
+import { itemName } from './item-artwork';
 import { pickActor } from './actor-picker';
 import { groupFeatures } from './daggerheart/feature-groups';
 import {
@@ -303,7 +304,7 @@ export class CompendiumPanel {
     const toggle = el('button', { type: 'button', class: 'cmp-toggle', title: 'Show details' }, '\u25B8');
     toggle.setAttribute('aria-expanded', 'false');
     toggle.setAttribute('aria-label', `Details of ${e.name}`);
-    const row = el('tr', { class: 'cmp-row' }, el('td', { class: 'cmp-expander' }, toggle), el('td', { class: 'nm' }, e.name),
+    const row = el('tr', { class: 'cmp-row' }, el('td', { class: 'cmp-expander' }, toggle), el('td', { class: 'nm' }, itemName(e)),
       ...layout.columns.map((c) => el('td', { class: c.wide ? 'wide' : c.numeric ? 'num' : '' }, c.wide ? el('div', { class: 'clamp' }, c.value(e)) : c.value(e))));
     const actions = el('div', { class: 'cmp-action-buttons' });
     const link = iconButton('chat', `Link ${e.name} in chat`, () => {
@@ -357,6 +358,7 @@ export class CompendiumPanel {
 
   private detail(e: CompendiumEntry): HTMLElement {
     const box = el('div', { class: 'cmp-detail' });
+    if (e.image) box.append(el('h3', {}, itemName(e)));
     const badges = el('div', { class: 'badges' });
     const tag = (t: string) => badges.append(el('span', { class: 'tag' }, t));
     if (e.tier) tag(`Tier ${e.tier}`);

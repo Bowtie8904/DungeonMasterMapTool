@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Inventory grade regression</title></head>
+<body>
+<main id="sheet" style="width: 1000px; height: 900px; display: flex"></main>
+<pre id="result">RUNNING</pre>
+<script type="module">
+import '../src/style.css';
+import '../src/daggerheart/sheet.css';
+import { emptyCharacter } from '../src/daggerheart/data.ts';
+import { invalidateCompendium, refreshInventoryRarities } from '../src/daggerheart/compendium.ts';
+import { renderSheetView, SheetBus } from '../src/daggerheart/view.ts';
+import { startSheet } from '../src/sheet.ts';
+
+const checks = [];
+const assert = (condition, name) => { if (!condition) throw new Error(name); checks.push(name); };
+const frame = () => new Promise(resolve => setTimeout(resolve, 50));
+const result = document.getElementById('result');
+try {
+  let revision = '1';
+  const originalFetch = window.fetch;
+  window.fetch = async (url, options) => {
+    if (url === '/api/compendium') return Response.json({ categories: [
+      { category: 'items', revision }, { category: 'consumables', revision: '1' },
+    ] });
+    if (url === '/api/compendium/items') return Response.json({ category: 'items', entries: [
+      { id: 'common', name: 'Common item', rarity: 'Common' },
+      { id: 'uncommon', name: 'Uncommon item', rarity: revision === '1' ? 'Uncommon' : 'Legendary' },
+      { id: 'legendary', name: 'Legendary item', rarity: 'Legendary' },
+      { id: 'unspecified', name: 'Unspecified item' },
+      { id: 'duplicate-a', name: 'Ambiguous item', rarity: 'Rare' },
+      { id: 'duplicate-b', name: 'Ambiguous item', rarity: 'Legendary' },
+    ] });
+    if (url === '/api/compendium/consumables') return Response.json({ category: 'consumables', entries: [
+      { id: 'rare', name: 'Rare potion', rarity: 'Rare' },
+      { id: 'foraged', name: 'Foraged herb', rarity: 'Foraged' },
+    ] });
+    return originalFetch(url, options);
+  };
+  await refreshInventoryRarities();
+  const c = emptyCharacter('Collector');
+  c.mancer = { done: true };
+  c.inventory = [
+    { name: 'Common item', type: 'gear', qty: 1, image: '/item-icons/delapouite/chest.svg' },
+    { name: 'Uncommon item', type: 'gear', qty: 1, note: 'Its description.' },
+    { name: 'Rare potion', type: 'consumable', qty: 1, image: '/item-icons/lorc/standing-potion.svg' },
+    { name: 'Legendary item', type: 'gear', qty: 1, image: '/item-icons/lorc/gem-pendant.svg' },
+    { name: 'Foraged herb', type: 'consumable', qty: 1 },
+    { name: 'Legendary item', type: 'gear', qty: 1, custom: true },
+    { name: 'Unspecified item', type: 'gear', qty: 1, note: 'No assigned rarity.' },
+    { name: 'Ambiguous item', type: 'gear', qty: 1 },
+    { name: 'Unknown item', type: 'gear', qty: 1 },
+  ];
+  const weapon = (name, tier) => ({ name, tier, slot: 'Primary', damageType: 'phys', trait: 'Agility',
+    range: 'Melee', damage: 'd6', hands: 1, image: '/item-icons/lorc/broadsword.svg' });
+  c.activeWeapons = [weapon('Equipped sword', 1)];
+  c.activeArmor = { name: 'Equipped armor', score: 3, tier: 2, image: '/item-icons/lorc/breastplate.svg' };
+  c.carriedWeapons = [weapon('Carried sword', 3)];
+  c.carriedArmor = [{ name: 'Carried armor', score: 3, tier: 4, image: '/item-icons/lorc/breastplate.svg' }];
+  const inventory = JSON.stringify(c.inventory);
+  const host = document.getElementById('sheet');
+  const bus = new SheetBus();
+  host.append(renderSheetView({ character: c, bus, onRoll: () => true }));
+  const tab = name => [...host.querySelectorAll('[role=tab]')].find(button => button.textContent === name).click();
+  const colors = ['rgb(215, 220, 229)', 'rgb(117, 183, 229)', 'rgb(130, 200, 156)', 'rgb(234, 165, 103)'];
+  const verifyMarker = (marker, level, label) => {
+    assert(!!marker, `${label} marker exists`);
+    const style = getComputedStyle(marker);
+    assert(style.borderLeftWidth === '3px' && style.borderLeftColor === colors[level - 1], `${label} uses the correct slim color`);
+    assert(marker.title === label && marker.querySelector('.inventory-grade-label')?.textContent.includes(label), `${label} has a text alternative`);
+  };
+  tab('Equipment');
+  await frame();
+  for (const [name, level] of [['Equipped sword', 1], ['Equipped armor', 2], ['Carried sword', 3], ['Carried armor', 4]]) {
+    const container = [...host.querySelectorAll('.slot, .equipment-table tbody tr')].find(node => node.textContent.includes(name));
+    if (name.startsWith('Equipped')) {
+      assert(!!container && !container.querySelector('.inventory-grade, img'), `${name} has no artwork or tier marker`);
+    } else {
+      verifyMarker(container?.querySelector('.inventory-grade'), level, `Tier ${level}`);
+      assert(!!container.querySelector('img'), `${name} retains its artwork`);
+    }
+  }
+  tab('Loot');
+  await frame();
+  const rows = () => [...host.querySelectorAll('.loot-table tbody tr')];
+  for (const [index, label] of ['Common rarity', 'Uncommon rarity', 'Rare rarity', 'Legendary rarity'].entries())
+    verifyMarker(rows()[index].querySelector('.inventory-grade'), index + 1, label);
+  assert(!rows()[1].querySelector('img') && !!rows()[1].querySelector('.inventory-grade'), 'rarity remains visible without artwork');
+  for (const row of rows().slice(4)) verifyMarker(row.querySelector('.inventory-grade'), 1, 'Unclassified rarity');
+  const toggle = rows()[1].querySelector('.loot-description-toggle');
+  const noDisclosureIcon = () => ['::before', '::after'].every(pseudo => ['none', 'normal'].includes(getComputedStyle(toggle, pseudo).content));
+  assert(noDisclosureIcon(), 'collapsed description has no plus icon');
+  assert(toggle.getAttribute('aria-label').includes('Uncommon rarity'), 'disclosure announces rarity');
+  toggle.click();
+  assert(toggle.getAttribute('aria-expanded') === 'true', 'description still expands');
+  assert(noDisclosureIcon(), 'expanded description has no minus icon');
+  const unclassifiedToggle = rows()[6].querySelector('.loot-description-toggle');
+  assert(unclassifiedToggle.getAttribute('aria-label').includes('Unclassified rarity'), 'unclassified disclosure does not claim Common rarity');
+  unclassifiedToggle.click();
+  assert(unclassifiedToggle.getAttribute('aria-expanded') === 'true', 'unclassified description still expands');
+  assert(Math.abs(rows()[0].querySelector('.inventory-grade').getBoundingClientRect().left
+    - rows()[1].querySelector('.inventory-grade').getBoundingClientRect().left) < 1, 'expandable names align with other item names');
+  host.style.width = '700px';
+  await frame();
+  const marker = rows()[1].querySelector('.inventory-grade');
+  assert(marker.getBoundingClientRect().right <= rows()[1].cells[0].getBoundingClientRect().right + 1, 'marker fits a narrow sheet');
+  revision = '2';
+  invalidateCompendium();
+  await refreshInventoryRarities();
+  bus.notify(false);
+  await frame();
+  verifyMarker(rows()[1].querySelector('.inventory-grade'), 4, 'Legendary rarity');
+  assert(rows()[1].querySelector('.loot-description-toggle').getAttribute('aria-expanded') === 'true', 'refresh preserves expansion');
+  assert(JSON.stringify(c.inventory) === inventory, 'presentation does not modify inventory data');
+
+  let liveRevision = '1';
+  let sheetVersion = 0;
+  let indexRequests = 0;
+  let saves = 0;
+  let saved = emptyCharacter('Networked');
+  saved.mancer = { done: true };
+  const liveFetch = async (url, options = {}) => {
+    if (url === '/api/sheet/fresh') {
+      if (options.method === 'PUT') {
+        saved = JSON.parse(options.body);
+        sheetVersion++;
+        saves++;
+      }
+      return Response.json({ name: 'Networked', sheet: saved, version: `sheet-${sheetVersion}` });
+    }
+    if (url === '/api/compendium') {
+      if (++indexRequests === 1) return new Response('', { status: 503 });
+      return Response.json({ categories: [
+        { category: 'items', revision: liveRevision }, { category: 'consumables', revision: liveRevision },
+      ] });
+    }
+    if (url === '/api/compendium/items') return Response.json({ category: 'items', entries: [
+      { id: 'incoming', name: 'Incoming relic', rarity: liveRevision === '1' ? 'Rare' : liveRevision === '2' ? 'Uncommon' : 'Legendary' },
+      { id: 'shared', name: 'Shared relic', rarity: 'Common' },
+    ] });
+    if (url === '/api/compendium/consumables') return Response.json({ category: 'consumables', entries: [
+      { id: 'potion', name: 'Received potion', rarity: 'Uncommon' },
+    ] });
+    return originalFetch(url, options);
+  };
+  window.fetch = liveFetch;
+  let socket;
+  window.WebSocket = class {
+    static OPEN = 1;
+    readyState = 1;
+    constructor() { socket = this; }
+    send() {}
+    close() {}
+    emit(message) { this.onmessage?.({ data: JSON.stringify(message) }); }
+  };
+  const liveRoot = document.createElement('main');
+  liveRoot.style.cssText = 'width: 1000px; height: 900px; display: flex';
+  document.body.append(liveRoot);
+  await startSheet(liveRoot, 'fresh');
+  assert(liveRoot.querySelector('.sheet-error')?.textContent.includes('503'), 'initial catalog failure is reported');
+  [...liveRoot.querySelectorAll('[role=tab]')].find(button => button.textContent === 'Loot').click();
+  const liveRows = () => [...liveRoot.querySelectorAll('.loot-table tbody tr')];
+  const rowNamed = name => liveRows().find(row => row.textContent.includes(name));
+  const waitFor = async (condition, name) => {
+    for (let i = 0; i < 30 && !condition(); i++) await frame();
+    assert(condition(), name);
+  };
+  socket.emit({ type: 'sheetInventory', actorId: 'fresh', inventory: {
+    inventoryRevision: 1, inventory: [{ name: 'Incoming relic', type: 'gear', qty: 1 }],
+  } });
+  await waitFor(() => rowNamed('Incoming relic')?.querySelector('.inventory-grade-3'),
+    'legacy inventory updates load missing rarity metadata');
+  liveRevision = '2';
+  socket.emit({ type: 'catalogChanged' });
+  await waitFor(() => rowNamed('Incoming relic')?.querySelector('.inventory-grade-2'),
+    'catalog-change events refresh standalone sheet colors');
+  await frame();
+  const savesBeforeReconnect = saves;
+  liveRevision = '3';
+  socket.emit({ type: 'hello', serverTime: Date.now() });
+  await waitFor(() => rowNamed('Incoming relic')?.querySelector('.inventory-grade-4'),
+    'reconnects refresh standalone sheet colors');
+  await frame();
+  assert(saves === savesBeforeReconnect, 'rarity refresh does not save the sheet');
+
+  window.fetch = (...args) => liveFetch(...args);
+  let reply;
+  const postMessage = window.postMessage;
+  window.postMessage = message => { reply = message; };
+  window.dispatchEvent(new MessageEvent('message', {
+    origin: location.origin, source: window,
+    data: { type: 'dmmt-compendium-add', id: 'shared-test', actorId: 'fresh', category: 'items',
+      entry: { id: 'shared', name: 'Shared relic', rarity: 'Common' } },
+  }));
+  await waitFor(() => reply?.type === 'dmmt-compendium-added', 'compendium pop-out receives its save acknowledgment');
+  await waitFor(() => rowNamed('Shared relic')?.querySelector('.inventory-grade-1'),
+    'compendium pop-out additions load missing rarity metadata');
+  window.postMessage = postMessage;
+  assert(saved.inventory.every(item => !('rarity' in item)), 'rarity is not persisted on transferred or added loot');
+
+  saved.inventory.push({ name: 'Received potion', type: 'consumable', qty: 1 });
+  saved.inventoryRevision++;
+  sheetVersion++;
+  window.fetch = (...args) => liveFetch(...args);
+  const savesBeforeReplacement = saves;
+  socket.emit({ type: 'sheetChanged', actorId: 'fresh', version: `sheet-${sheetVersion}` });
+  await waitFor(() => rowNamed('Received potion')?.querySelector('.inventory-grade-2'),
+    'full sheet replacements load missing rarity metadata');
+  await frame();
+  assert(saves === savesBeforeReplacement, 'sheet replacement and rarity refresh do not save presentation data');
+  result.textContent = `PASS (${checks.length})\n${checks.join('\n')}`;
+} catch (error) {
+  result.textContent = `FAIL: ${error.stack}`;
+}
+</script>
+</body>
+</html>

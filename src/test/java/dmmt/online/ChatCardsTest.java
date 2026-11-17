@@ -15,6 +15,66 @@ class ChatCardsTest {
     }
 
     @Test
+    void artworkSurvivesSharingAndTransfersWithoutInvalidatingLegacyOffers() throws Exception {
+        String image = "/item-icons/lorc/potion-ball.svg";
+        ObjectNode document = sheet("""
+                {"category":"items","entries":[{"id":"potion","name":"Potion"}]}
+                """);
+        ((ObjectNode) document.path("entries").get(0)).put("image", image);
+        assertEquals(image, ChatCards.compendiumItem(document, "potion").path("image").asText());
+        ObjectNode source = sheet("""
+                {"inventory":[{"name":"Potion","type":"consumable","qty":3,
+                 "catalog":{"category":"consumables","id":"potion","values":{"name":"Potion"}}}]}
+                """);
+        ObjectNode legacy = ChatCards.identity(source.path("inventory").get(0));
+        ObjectNode current = (ObjectNode) source.path("inventory").get(0);
+        current.put("image", image);
+        current.withObject("/catalog/values").put("image", image);
+        assertEquals(3, ChatCards.available(source, "item", legacy));
+        assertEquals(image, ChatCards.resolve(source, "item", legacy).path("image").asText());
+        ObjectNode target = sheet("{\"inventory\":[]}");
+        ChatCards.transfer(source, target, "item", ChatCards.resolve(source, "item", legacy), 2);
+        assertEquals(image, target.path("inventory").get(0).path("image").asText());
+        assertEquals(1, source.path("inventory").get(0).path("qty").asInt());
+        assertEquals(1, ChatCards.available(source, "item", legacy));
+        ObjectNode tampered = legacy.deepCopy().put("type", "gear");
+        assertThrows(IllegalArgumentException.class, () -> ChatCards.resolve(source, "item", tampered));
+    }
+
+    @Test
+    void customArtworkSurvivesMixedLegacyStockAndPreservesRecipientOverrides() throws Exception {
+        String image = "/item-icons/delapouite/backpack.svg";
+        ObjectNode source = sheet("""
+                {"inventory":[{"name":"Supplies","type":"gear","qty":1,"custom":true},
+                  {"name":"Supplies","type":"gear","qty":1,"custom":true,
+                   "image":"/item-icons/delapouite/backpack.svg"}]}
+                """);
+        ObjectNode legacy = ChatCards.identity(source.path("inventory").get(0));
+        ObjectNode current = ChatCards.identity(source.path("inventory").get(1));
+        assertFalse(ChatCards.resolve(source, "item", legacy).has("image"));
+        assertEquals(image, ChatCards.resolve(source, "item", current).path("image").asText());
+        assertEquals(2, ChatCards.available(source, "item", current));
+        ObjectNode target = sheet("""
+                {"inventory":[{"name":"Supplies","type":"gear","qty":1,"custom":true}]}
+                """);
+        ChatCards.transfer(source, target, "item", ChatCards.resolve(source, "item", current), 2);
+        assertEquals(3, target.path("inventory").get(0).path("qty").asInt());
+        assertEquals(image, target.path("inventory").get(0).path("image").asText());
+
+        ObjectNode otherSource = sheet("""
+                {"inventory":[{"name":"Supplies","type":"gear","qty":1,"custom":true,
+                   "image":"/item-icons/delapouite/backpack.svg"}]}
+                """);
+        ObjectNode override = sheet("""
+                {"inventory":[{"name":"Supplies","type":"gear","qty":1,"custom":true,
+                   "image":"/item-icons/delapouite/chest.svg"}]}
+                """);
+        ChatCards.transfer(otherSource, override, "item", current, 1);
+        assertEquals(2, override.path("inventory").get(0).path("qty").asInt());
+        assertEquals("/item-icons/delapouite/chest.svg", override.path("inventory").get(0).path("image").asText());
+    }
+
+    @Test
     void companionAttackCanBeSharedFromSavedStateButNotTransferredOrSpoofed() throws Exception {
         ObjectNode source = sheet("""
                 {"features":[{"automation":{"companion":{}}}],

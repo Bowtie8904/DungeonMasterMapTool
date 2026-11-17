@@ -6,6 +6,7 @@
  "entries": [
   {
    "id": "broadsword",
+   "image": "/item-icons/lorc/broadsword.svg",
    "name": "Broadsword",
    "tier": 1,
    "weapon": {
@@ -35,6 +36,7 @@
   },
   {
    "id": "longsword",
+   "image": "/item-icons/delapouite/two-handed-sword.svg",
    "name": "Longsword",
    "tier": 1,
    "weapon": {
@@ -48,10 +50,29 @@
     },
     "burden": "Two-Handed"
    },
-   "starter": true
+   "starter": true,
+   "_editorOriginal": {
+    "id": "longsword",
+    "image": "/item-icons/delapouite/ancient-sword.svg",
+    "name": "Longsword",
+    "tier": 1,
+    "weapon": {
+     "slot": "primary",
+     "trait": "Agility",
+     "range": "Melee",
+     "damage": {
+      "dice": "1d10",
+      "bonus": 3,
+      "type": "physical"
+     },
+     "burden": "Two-Handed"
+    },
+    "starter": true
+   }
   },
   {
    "id": "battleaxe",
+   "image": "/item-icons/lorc/battle-axe.svg",
    "name": "Battleaxe",
    "tier": 1,
    "weapon": {
@@ -69,6 +90,7 @@
   },
   {
    "id": "greatsword",
+   "image": "/item-icons/delapouite/two-handed-sword.svg",
    "name": "Greatsword",
    "tier": 1,
    "weapon": {
@@ -102,6 +124,7 @@
   },
   {
    "id": "mace",
+   "image": "/item-icons/delapouite/flanged-mace.svg",
    "name": "Mace",
    "tier": 1,
    "weapon": {
@@ -119,6 +142,7 @@
   },
   {
    "id": "warhammer",
+   "image": "/item-icons/delapouite/warhammer.svg",
    "name": "Warhammer",
    "tier": 1,
    "weapon": {
@@ -148,6 +172,7 @@
   },
   {
    "id": "dagger",
+   "image": "/item-icons/lorc/plain-dagger.svg",
    "name": "Dagger",
    "tier": 1,
    "weapon": {
@@ -165,6 +190,7 @@
   },
   {
    "id": "quarterstaff",
+   "image": "/item-icons/delapouite/bo.svg",
    "name": "Quarterstaff",
    "tier": 1,
    "weapon": {
@@ -178,10 +204,29 @@
     },
     "burden": "Two-Handed"
    },
-   "starter": true
+   "starter": true,
+   "_editorOriginal": {
+    "id": "quarterstaff",
+    "image": "/item-icons/delapouite/wood-stick.svg",
+    "name": "Quarterstaff",
+    "tier": 1,
+    "weapon": {
+     "slot": "primary",
+     "trait": "Instinct",
+     "range": "Melee",
+     "damage": {
+      "dice": "1d10",
+      "bonus": 3,
+      "type": "physical"
+     },
+     "burden": "Two-Handed"
+    },
+    "starter": true
+   }
   },
   {
    "id": "cutlass",
+   "image": "/item-icons/lorc/crossed-sabres.svg",
    "name": "Cutlass",
    "tier": 1,
    "weapon": {
@@ -199,6 +244,7 @@
   },
   {
    "id": "rapier",
+   "image": "/item-icons/lorc/piercing-sword.svg",
    "name": "Rapier",
    "tier": 1,
    "weapon": {
@@ -233,6 +279,7 @@
   },
   {
    "id": "halberd",
+   "image": "/item-icons/delapouite/sharp-halberd.svg",
    "name": "Halberd",
    "tier": 1,
    "weapon": {
@@ -262,6 +309,7 @@
   },
   {
    "id": "spear",
+   "image": "/item-icons/lorc/spears.svg",
    "name": "Spear",
    "tier": 1,
    "weapon": {
@@ -279,6 +327,7 @@
   },
   {
    "id": "shortbow",
+   "image": "/item-icons/lorc/pocket-bow.svg",
    "name": "Shortbow",
    "tier": 1,
    "weapon": {
@@ -296,6 +345,7 @@
   },
   {
    "id": "crossbow",
+   "image": "/item-icons/carl-olsen/crossbow.svg",
    "name": "Crossbow",
    "tier": 1,
    "weapon": {
@@ -313,6 +363,7 @@
   },
   {
    "id": "longbow",
+   "image": "/item-icons/delapouite/bow-arrow.svg",
    "name": "Longbow",
    "tier": 1,
    "weapon": {
@@ -342,6 +393,7 @@
   },
   {
    "id": "arcane-gauntlets",
+   "image": "/item-icons/lorc/mailed-fist.svg",
    "name": "Arcane Gauntlets",
    "tier": 1,
    "weapon": {
@@ -359,6 +411,7 @@
   },
   {
    "id": "hallowed-axe",
+   "image": "/item-icons/delapouite/magic-axe.svg",
    "name": "Hallowed Axe",
    "tier": 1,
    "weapon": {
@@ -376,6 +429,7 @@
   },
   {
    "id": "glowing-rings",
+   "image": "/item-icons/lorc/linked-rings.svg",
    "name": "Glowing Rings",
    "tier": 1,
    "weapon": {
@@ -393,6 +447,7 @@
   },
   {
    "id": "hand-runes",
+   "image": "/item-icons/lorc/magic-palm.svg",
    "name": "Hand Runes",
    "tier": 1,
    "weapon": {
@@ -410,6 +465,7 @@
   },
   {
    "id": "returning-blade",
+   "image": "/item-icons/lorc/spinning-sword.svg",
    "name": "Returning Blade",
    "tier": 1,
    "weapon": {
@@ -431,6 +487,7 @@
   },
   {
    "id": "shortstaff",
+   "image": "/item-icons/lorc/wizard-staff.svg",
    "name": "Shortstaff",
    "tier": 1,
    "weapon": {
@@ -448,6 +505,7 @@
   },
   {
    "id": "dualstaff",
+   "image": "/item-icons/delapouite/crescent-staff.svg",
    "name": "Dualstaff",
    "tier": 1,
    "weapon": {
@@ -465,6 +523,7 @@
   },
   {
    "id": "scepter",
+   "image": "/item-icons/delapouite/winged-scepter.svg",
    "name": "Scepter",
    "tier": 1,
    "weapon": {
@@ -496,6 +555,7 @@
   },
   {
    "id": "wand",
+   "image": "/item-icons/lorc/crystal-wand.svg",
    "name": "Wand",
    "tier": 1,
    "weapon": {
@@ -513,6 +573,7 @@
   },
   {
    "id": "greatstaff",
+   "image": "/item-icons/lorc/wizard-staff.svg",
    "name": "Greatstaff",
    "tier": 1,
    "weapon": {
@@ -540,6 +601,7 @@
   },
   {
    "id": "improved-broadsword",
+   "image": "/item-icons/lorc/broadsword.svg",
    "name": "Improved Broadsword",
    "tier": 2,
    "weapon": {
@@ -568,6 +630,7 @@
   },
   {
    "id": "improved-longsword",
+   "image": "/item-icons/delapouite/two-handed-sword.svg",
    "name": "Improved Longsword",
    "tier": 2,
    "weapon": {
@@ -580,10 +643,28 @@
      "type": "physical"
     },
     "burden": "Two-Handed"
+   },
+   "_editorOriginal": {
+    "id": "improved-longsword",
+    "image": "/item-icons/delapouite/ancient-sword.svg",
+    "name": "Improved Longsword",
+    "tier": 2,
+    "weapon": {
+     "slot": "primary",
+     "trait": "Agility",
+     "range": "Melee",
+     "damage": {
+      "dice": "1d10",
+      "bonus": 6,
+      "type": "physical"
+     },
+     "burden": "Two-Handed"
+    }
    }
   },
   {
    "id": "improved-battleaxe",
+   "image": "/item-icons/lorc/battle-axe.svg",
    "name": "Improved Battleaxe",
    "tier": 2,
    "weapon": {
@@ -600,6 +681,7 @@
   },
   {
    "id": "improved-greatsword",
+   "image": "/item-icons/delapouite/two-handed-sword.svg",
    "name": "Improved Greatsword",
    "tier": 2,
    "weapon": {
@@ -632,6 +714,7 @@
   },
   {
    "id": "improved-mace",
+   "image": "/item-icons/delapouite/flanged-mace.svg",
    "name": "Improved Mace",
    "tier": 2,
    "weapon": {
@@ -648,6 +731,7 @@
   },
   {
    "id": "improved-warhammer",
+   "image": "/item-icons/delapouite/warhammer.svg",
    "name": "Improved Warhammer",
    "tier": 2,
    "weapon": {
@@ -676,6 +760,7 @@
   },
   {
    "id": "improved-dagger",
+   "image": "/item-icons/lorc/plain-dagger.svg",
    "name": "Improved Dagger",
    "tier": 2,
    "weapon": {
@@ -692,6 +777,7 @@
   },
   {
    "id": "improved-quarterstaff",
+   "image": "/item-icons/delapouite/bo.svg",
    "name": "Improved Quarterstaff",
    "tier": 2,
    "weapon": {
@@ -704,10 +790,28 @@
      "type": "physical"
     },
     "burden": "Two-Handed"
+   },
+   "_editorOriginal": {
+    "id": "improved-quarterstaff",
+    "image": "/item-icons/delapouite/wood-stick.svg",
+    "name": "Improved Quarterstaff",
+    "tier": 2,
+    "weapon": {
+     "slot": "primary",
+     "trait": "Instinct",
+     "range": "Melee",
+     "damage": {
+      "dice": "1d10",
+      "bonus": 6,
+      "type": "physical"
+     },
+     "burden": "Two-Handed"
+    }
    }
   },
   {
    "id": "improved-cutlass",
+   "image": "/item-icons/lorc/crossed-sabres.svg",
    "name": "Improved Cutlass",
    "tier": 2,
    "weapon": {
@@ -724,6 +828,7 @@
   },
   {
    "id": "improved-rapier",
+   "image": "/item-icons/lorc/piercing-sword.svg",
    "name": "Improved Rapier",
    "tier": 2,
    "weapon": {
@@ -757,6 +862,7 @@
   },
   {
    "id": "improved-halberd",
+   "image": "/item-icons/delapouite/sharp-halberd.svg",
    "name": "Improved Halberd",
    "tier": 2,
    "weapon": {
@@ -785,6 +891,7 @@
   },
   {
    "id": "improved-spear",
+   "image": "/item-icons/lorc/spears.svg",
    "name": "Improved Spear",
    "tier": 2,
    "weapon": {
@@ -801,6 +908,7 @@
   },
   {
    "id": "improved-shortbow",
+   "image": "/item-icons/lorc/pocket-bow.svg",
    "name": "Improved Shortbow",
    "tier": 2,
    "weapon": {
@@ -817,6 +925,7 @@
   },
   {
    "id": "improved-crossbow",
+   "image": "/item-icons/carl-olsen/crossbow.svg",
    "name": "Improved Crossbow",
    "tier": 2,
    "weapon": {
@@ -833,6 +942,7 @@
   },
   {
    "id": "improved-longbow",
+   "image": "/item-icons/delapouite/bow-arrow.svg",
    "name": "Improved Longbow",
    "tier": 2,
    "weapon": {
@@ -861,6 +971,7 @@
   },
   {
    "id": "gilded-falchion",
+   "image": "/item-icons/lorc/croc-sword.svg",
    "name": "Gilded Falchion",
    "tier": 2,
    "weapon": {
@@ -887,6 +998,7 @@
   },
   {
    "id": "knuckle-blades",
+   "image": "/item-icons/lorc/steel-claws.svg",
    "name": "Knuckle Blades",
    "tier": 2,
    "weapon": {
@@ -915,6 +1027,7 @@
   },
   {
    "id": "urok-broadsword",
+   "image": "/item-icons/lorc/broadsword.svg",
    "name": "Urok Broadsword",
    "tier": 2,
    "weapon": {
@@ -935,6 +1048,7 @@
   },
   {
    "id": "bladed-whip",
+   "image": "/item-icons/lorc/whiplash.svg",
    "name": "Bladed Whip",
    "tier": 2,
    "weapon": {
@@ -968,6 +1082,7 @@
   },
   {
    "id": "steelforged-halberd",
+   "image": "/item-icons/delapouite/sharp-halberd.svg",
    "name": "Steelforged Halberd",
    "tier": 2,
    "weapon": {
@@ -988,6 +1103,7 @@
   },
   {
    "id": "war-scythe",
+   "image": "/item-icons/lorc/reaper-scythe.svg",
    "name": "War Scythe",
    "tier": 2,
    "weapon": {
@@ -1016,6 +1132,7 @@
   },
   {
    "id": "blunderbuss",
+   "image": "/item-icons/lorc/blunderbuss.svg",
    "name": "Blunderbuss",
    "tier": 2,
    "weapon": {
@@ -1042,6 +1159,7 @@
   },
   {
    "id": "greatbow",
+   "image": "/item-icons/delapouite/bow-arrow.svg",
    "name": "Greatbow",
    "tier": 2,
    "weapon": {
@@ -1068,6 +1186,7 @@
   },
   {
    "id": "finehair-bow",
+   "image": "/item-icons/delapouite/bow-arrow.svg",
    "name": "Finehair Bow",
    "tier": 2,
    "weapon": {
@@ -1096,6 +1215,7 @@
   },
   {
    "id": "improved-arcane-gauntlets",
+   "image": "/item-icons/lorc/mailed-fist.svg",
    "name": "Improved Arcane Gauntlets",
    "tier": 2,
    "weapon": {
@@ -1112,6 +1232,7 @@
   },
   {
    "id": "improved-hallowed-axe",
+   "image": "/item-icons/delapouite/magic-axe.svg",
    "name": "Improved Hallowed Axe",
    "tier": 2,
    "weapon": {
@@ -1128,6 +1249,7 @@
   },
   {
    "id": "improved-glowing-rings",
+   "image": "/item-icons/lorc/linked-rings.svg",
    "name": "Improved Glowing Rings",
    "tier": 2,
    "weapon": {
@@ -1144,6 +1266,7 @@
   },
   {
    "id": "improved-hand-runes",
+   "image": "/item-icons/lorc/magic-palm.svg",
    "name": "Improved Hand Runes",
    "tier": 2,
    "weapon": {
@@ -1160,6 +1283,7 @@
   },
   {
    "id": "improved-returning-blade",
+   "image": "/item-icons/lorc/spinning-sword.svg",
    "name": "Improved Returning Blade",
    "tier": 2,
    "weapon": {
@@ -1180,6 +1304,7 @@
   },
   {
    "id": "improved-shortstaff",
+   "image": "/item-icons/lorc/wizard-staff.svg",
    "name": "Improved Shortstaff",
    "tier": 2,
    "weapon": {
@@ -1196,6 +1321,7 @@
   },
   {
    "id": "improved-dualstaff",
+   "image": "/item-icons/delapouite/crescent-staff.svg",
    "name": "Improved Dualstaff",
    "tier": 2,
    "weapon": {
@@ -1212,6 +1338,7 @@
   },
   {
    "id": "improved-scepter",
+   "image": "/item-icons/delapouite/winged-scepter.svg",
    "name": "Improved Scepter",
    "tier": 2,
    "weapon": {
@@ -1242,6 +1369,7 @@
   },
   {
    "id": "improved-wand",
+   "image": "/item-icons/lorc/crystal-wand.svg",
    "name": "Improved Wand",
    "tier": 2,
    "weapon": {
@@ -1258,6 +1386,7 @@
   },
   {
    "id": "improved-greatstaff",
+   "image": "/item-icons/lorc/wizard-staff.svg",
    "name": "Improved Greatstaff",
    "tier": 2,
    "weapon": {
@@ -1284,6 +1413,7 @@
   },
   {
    "id": "ego-blade",
+   "image": "/item-icons/lorc/relic-blade.svg",
    "name": "Ego Blade",
    "tier": 2,
    "weapon": {
@@ -1310,6 +1440,7 @@
   },
   {
    "id": "casting-sword",
+   "image": "/item-icons/lorc/rune-sword.svg",
    "name": "Casting Sword",
    "tier": 2,
    "weapon": {
@@ -1340,6 +1471,7 @@
   },
   {
    "id": "devouring-dagger",
+   "image": "/item-icons/lorc/sacrificial-dagger.svg",
    "name": "Devouring Dagger",
    "tier": 2,
    "weapon": {
@@ -1360,6 +1492,7 @@
   },
   {
    "id": "hammer-of-exota",
+   "image": "/item-icons/lorc/flat-hammer.svg",
    "name": "Hammer of Exota",
    "tier": 2,
    "weapon": {
@@ -1380,6 +1513,7 @@
   },
   {
    "id": "yutari-bloodbow",
+   "image": "/item-icons/delapouite/bow-arrow.svg",
    "name": "Yutari Bloodbow",
    "tier": 2,
    "weapon": {
@@ -1408,6 +1542,7 @@
   },
   {
    "id": "elder-bow",
+   "image": "/item-icons/delapouite/bow-arrow.svg",
    "name": "Elder Bow",
    "tier": 2,
    "weapon": {
@@ -1434,6 +1569,7 @@
   },
   {
    "id": "scepter-of-elias",
+   "image": "/item-icons/delapouite/winged-scepter.svg",
    "name": "Scepter of Elias",
    "tier": 2,
    "weapon": {
@@ -1475,6 +1611,7 @@
   },
   {
    "id": "wand-of-enthrallment",
+   "image": "/item-icons/lorc/crystal-wand.svg",
    "name": "Wand of Enthrallment",
    "tier": 2,
    "weapon": {
@@ -1508,6 +1645,7 @@
   },
   {
    "id": "keepers-staff",
+   "image": "/item-icons/lorc/wizard-staff.svg",
    "name": "Keeper’s Staff",
    "tier": 2,
    "weapon": {
@@ -1536,6 +1674,7 @@
   },
   {
    "id": "advanced-broadsword",
+   "image": "/item-icons/lorc/broadsword.svg",
    "name": "Advanced Broadsword",
    "tier": 3,
    "weapon": {
@@ -1564,6 +1703,7 @@
   },
   {
    "id": "advanced-longsword",
+   "image": "/item-icons/delapouite/two-handed-sword.svg",
    "name": "Advanced Longsword",
    "tier": 3,
    "weapon": {
@@ -1576,10 +1716,28 @@
      "type": "physical"
     },
     "burden": "Two-Handed"
+   },
+   "_editorOriginal": {
+    "id": "advanced-longsword",
+    "image": "/item-icons/delapouite/ancient-sword.svg",
+    "name": "Advanced Longsword",
+    "tier": 3,
+    "weapon": {
+     "slot": "primary",
+     "trait": "Agility",
+     "range": "Melee",
+     "damage": {
+      "dice": "1d10",
+      "bonus": 9,
+      "type": "physical"
+     },
+     "burden": "Two-Handed"
+    }
    }
   },
   {
    "id": "advanced-battleaxe",
+   "image": "/item-icons/lorc/battle-axe.svg",
    "name": "Advanced Battleaxe",
    "tier": 3,
    "weapon": {
@@ -1596,6 +1754,7 @@
   },
   {
    "id": "advanced-greatsword",
+   "image": "/item-icons/delapouite/two-handed-sword.svg",
    "name": "Advanced Greatsword",
    "tier": 3,
    "weapon": {
@@ -1628,6 +1787,7 @@
   },
   {
    "id": "advanced-mace",
+   "image": "/item-icons/delapouite/flanged-mace.svg",
    "name": "Advanced Mace",
    "tier": 3,
    "weapon": {
@@ -1644,6 +1804,7 @@
   },
   {
    "id": "advanced-warhammer",
+   "image": "/item-icons/delapouite/warhammer.svg",
    "name": "Advanced Warhammer",
    "tier": 3,
    "weapon": {
@@ -1672,6 +1833,7 @@
   },
   {
    "id": "advanced-dagger",
+   "image": "/item-icons/lorc/plain-dagger.svg",
    "name": "Advanced Dagger",
    "tier": 3,
    "weapon": {
@@ -1688,6 +1850,7 @@
   },
   {
    "id": "advanced-quarterstaff",
+   "image": "/item-icons/delapouite/bo.svg",
    "name": "Advanced Quarterstaff",
    "tier": 3,
    "weapon": {
@@ -1700,10 +1863,28 @@
      "type": "physical"
     },
     "burden": "Two-Handed"
+   },
+   "_editorOriginal": {
+    "id": "advanced-quarterstaff",
+    "image": "/item-icons/delapouite/wood-stick.svg",
+    "name": "Advanced Quarterstaff",
+    "tier": 3,
+    "weapon": {
+     "slot": "primary",
+     "trait": "Instinct",
+     "range": "Melee",
+     "damage": {
+      "dice": "1d10",
+      "bonus": 9,
+      "type": "physical"
+     },
+     "burden": "Two-Handed"
+    }
    }
   },
   {
    "id": "advanced-cutlass",
+   "image": "/item-icons/lorc/crossed-sabres.svg",
    "name": "Advanced Cutlass",
    "tier": 3,
    "weapon": {
@@ -1720,6 +1901,7 @@
   },
   {
    "id": "advanced-rapier",
+   "image": "/item-icons/lorc/piercing-sword.svg",
    "name": "Advanced Rapier",
    "tier": 3,
    "weapon": {
@@ -1753,6 +1935,7 @@
   },
   {
    "id": "advanced-halberd",
+   "image": "/item-icons/delapouite/sharp-halberd.svg",
    "name": "Advanced Halberd",
    "tier": 3,
    "weapon": {
@@ -1781,6 +1964,7 @@
   },
   {
    "id": "advanced-spear",
+   "image": "/item-icons/lorc/spears.svg",
    "name": "Advanced Spear",
    "tier": 3,
    "weapon": {
@@ -1797,6 +1981,7 @@
   },
   {
    "id": "advanced-shortbow",
+   "image": "/item-icons/lorc/pocket-bow.svg",
    "name": "Advanced Shortbow",
    "tier": 3,
    "weapon": {
@@ -1813,6 +1998,7 @@
   },
   {
    "id": "advanced-crossbow",
+   "image": "/item-icons/carl-olsen/crossbow.svg",
    "name": "Advanced Crossbow",
    "tier": 3,
    "weapon": {
@@ -1829,6 +2015,7 @@
   },
   {
    "id": "advanced-longbow",
+   "image": "/item-icons/delapouite/bow-arrow.svg",
    "name": "Advanced Longbow",
    "tier": 3,
    "weapon": {
@@ -1857,6 +2044,7 @@
   },
   {
    "id": "flickerfly-blade",
+   "image": "/item-icons/lorc/winged-sword.svg",
    "name": "Flickerfly Blade",
    "tier": 3,
    "weapon": {
@@ -1885,6 +2073,7 @@
   },
   {
    "id": "bravesword",
+   "image": "/item-icons/lorc/broadsword.svg",
    "name": "Bravesword",
    "tier": 3,
    "weapon": {
@@ -1917,6 +2106,7 @@
   },
   {
    "id": "hammer-of-wrath",
+   "image": "/item-icons/delapouite/warhammer.svg",
    "name": "Hammer of Wrath",
    "tier": 3,
    "weapon": {
@@ -1951,6 +2141,7 @@
   },
   {
    "id": "labrys-axe",
+   "image": "/item-icons/lorc/battle-axe.svg",
    "name": "Labrys Axe",
    "tier": 3,
    "weapon": {
@@ -1979,6 +2170,7 @@
   },
   {
    "id": "meridian-cutlass",
+   "image": "/item-icons/lorc/crossed-sabres.svg",
    "name": "Meridian Cutlass",
    "tier": 3,
    "weapon": {
@@ -2010,6 +2202,7 @@
   },
   {
    "id": "retractable-saber",
+   "image": "/item-icons/lorc/saber-slash.svg",
    "name": "Retractable Saber",
    "tier": 3,
    "weapon": {
@@ -2030,6 +2223,7 @@
   },
   {
    "id": "double-flail",
+   "image": "/item-icons/delapouite/flail.svg",
    "name": "Double Flail",
    "tier": 3,
    "weapon": {
@@ -2056,6 +2250,7 @@
   },
   {
    "id": "talon-blades",
+   "image": "/item-icons/lorc/steel-claws.svg",
    "name": "Talon Blades",
    "tier": 3,
    "weapon": {
@@ -2084,6 +2279,7 @@
   },
   {
    "id": "black-powder-revolver",
+   "image": "/item-icons/delapouite/revolver.svg",
    "name": "Black Powder Revolver",
    "tier": 3,
    "weapon": {
@@ -2110,6 +2306,7 @@
   },
   {
    "id": "spiked-bow",
+   "image": "/item-icons/delapouite/bow-arrow.svg",
    "name": "Spiked Bow",
    "tier": 3,
    "weapon": {
@@ -2140,6 +2337,7 @@
   },
   {
    "id": "advanced-arcane-gauntlets",
+   "image": "/item-icons/lorc/mailed-fist.svg",
    "name": "Advanced Arcane Gauntlets",
    "tier": 3,
    "weapon": {
@@ -2156,6 +2354,7 @@
   },
   {
    "id": "advanced-hallowed-axe",
+   "image": "/item-icons/delapouite/magic-axe.svg",
    "name": "Advanced Hallowed Axe",
    "tier": 3,
    "weapon": {
@@ -2172,6 +2371,7 @@
   },
   {
    "id": "advanced-glowing-rings",
+   "image": "/item-icons/lorc/linked-rings.svg",
    "name": "Advanced Glowing Rings",
    "tier": 3,
    "weapon": {
@@ -2188,6 +2388,7 @@
   },
   {
    "id": "advanced-hand-runes",
+   "image": "/item-icons/lorc/magic-palm.svg",
    "name": "Advanced Hand Runes",
    "tier": 3,
    "weapon": {
@@ -2204,6 +2405,7 @@
   },
   {
    "id": "advanced-returning-blade",
+   "image": "/item-icons/lorc/spinning-sword.svg",
    "name": "Advanced Returning Blade",
    "tier": 3,
    "weapon": {
@@ -2224,6 +2426,7 @@
   },
   {
    "id": "advanced-shortstaff",
+   "image": "/item-icons/lorc/wizard-staff.svg",
    "name": "Advanced Shortstaff",
    "tier": 3,
    "weapon": {
@@ -2240,6 +2443,7 @@
   },
   {
    "id": "advanced-dualstaff",
+   "image": "/item-icons/delapouite/crescent-staff.svg",
    "name": "Advanced Dualstaff",
    "tier": 3,
    "weapon": {
@@ -2256,6 +2460,7 @@
   },
   {
    "id": "advanced-scepter",
+   "image": "/item-icons/delapouite/winged-scepter.svg",
    "name": "Advanced Scepter",
    "tier": 3,
    "weapon": {
@@ -2286,6 +2491,7 @@
   },
   {
    "id": "advanced-wand",
+   "image": "/item-icons/lorc/crystal-wand.svg",
    "name": "Advanced Wand",
    "tier": 3,
    "weapon": {
@@ -2302,6 +2508,7 @@
   },
   {
    "id": "advanced-greatstaff",
+   "image": "/item-icons/lorc/wizard-staff.svg",
    "name": "Advanced Greatstaff",
    "tier": 3,
    "weapon": {
@@ -2328,6 +2535,7 @@
   },
   {
    "id": "axe-of-fortunis",
+   "image": "/item-icons/delapouite/magic-axe.svg",
    "name": "Axe of Fortunis",
    "tier": 3,
    "weapon": {
@@ -2363,6 +2571,7 @@
   },
   {
    "id": "blessed-anlace",
+   "image": "/item-icons/lorc/broad-dagger.svg",
    "name": "Blessed Anlace",
    "tier": 3,
    "weapon": {
@@ -2401,6 +2610,7 @@
   },
   {
    "id": "ghostblade",
+   "image": "/item-icons/lorc/energy-sword.svg",
    "name": "Ghostblade",
    "tier": 3,
    "weapon": {
@@ -2424,6 +2634,7 @@
   },
   {
    "id": "runes-of-ruination",
+   "image": "/item-icons/lorc/rune-stone.svg",
    "name": "Runes of Ruination",
    "tier": 3,
    "weapon": {
@@ -2458,6 +2669,7 @@
   },
   {
    "id": "widogast-pendant",
+   "image": "/item-icons/lorc/gem-pendant.svg",
    "name": "Widogast Pendant",
    "tier": 3,
    "weapon": {
@@ -2478,6 +2690,7 @@
   },
   {
    "id": "gilded-bow",
+   "image": "/item-icons/delapouite/bow-arrow.svg",
    "name": "Gilded Bow",
    "tier": 3,
    "weapon": {
@@ -2506,6 +2719,7 @@
   },
   {
    "id": "firestaff",
+   "image": "/item-icons/lorc/fireball.svg",
    "name": "Firestaff",
    "tier": 3,
    "weapon": {
@@ -2526,6 +2740,7 @@
   },
   {
    "id": "mage-orb",
+   "image": "/item-icons/lorc/crystal-ball.svg",
    "name": "Mage Orb",
    "tier": 3,
    "weapon": {
@@ -2552,6 +2767,7 @@
   },
   {
    "id": "ilmaris-rifle",
+   "image": "/item-icons/skoll/musket.svg",
    "name": "Ilmari’s Rifle",
    "tier": 3,
    "weapon": {
@@ -2578,6 +2794,7 @@
   },
   {
    "id": "legendary-broadsword",
+   "image": "/item-icons/lorc/broadsword.svg",
    "name": "Legendary Broadsword",
    "tier": 4,
    "weapon": {
@@ -2606,6 +2823,7 @@
   },
   {
    "id": "legendary-longsword",
+   "image": "/item-icons/delapouite/two-handed-sword.svg",
    "name": "Legendary Longsword",
    "tier": 4,
    "weapon": {
@@ -2618,10 +2836,28 @@
      "type": "physical"
     },
     "burden": "Two-Handed"
+   },
+   "_editorOriginal": {
+    "id": "legendary-longsword",
+    "image": "/item-icons/delapouite/ancient-sword.svg",
+    "name": "Legendary Longsword",
+    "tier": 4,
+    "weapon": {
+     "slot": "primary",
+     "trait": "Agility",
+     "range": "Melee",
+     "damage": {
+      "dice": "1d10",
+      "bonus": 12,
+      "type": "physical"
+     },
+     "burden": "Two-Handed"
+    }
    }
   },
   {
    "id": "legendary-battleaxe",
+   "image": "/item-icons/lorc/battle-axe.svg",
    "name": "Legendary Battleaxe",
    "tier": 4,
    "weapon": {
@@ -2638,6 +2874,7 @@
   },
   {
    "id": "legendary-greatsword",
+   "image": "/item-icons/delapouite/two-handed-sword.svg",
    "name": "Legendary Greatsword",
    "tier": 4,
    "weapon": {
@@ -2670,6 +2907,7 @@
   },
   {
    "id": "legendary-mace",
+   "image": "/item-icons/delapouite/flanged-mace.svg",
    "name": "Legendary Mace",
    "tier": 4,
    "weapon": {
@@ -2686,6 +2924,7 @@
   },
   {
    "id": "legendary-warhammer",
+   "image": "/item-icons/delapouite/warhammer.svg",
    "name": "Legendary Warhammer",
    "tier": 4,
    "weapon": {
@@ -2714,6 +2953,7 @@
   },
   {
    "id": "legendary-dagger",
+   "image": "/item-icons/lorc/plain-dagger.svg",
    "name": "Legendary Dagger",
    "tier": 4,
    "weapon": {
@@ -2730,6 +2970,7 @@
   },
   {
    "id": "legendary-quarterstaff",
+   "image": "/item-icons/delapouite/bo.svg",
    "name": "Legendary Quarterstaff",
    "tier": 4,
    "weapon": {
@@ -2742,10 +2983,28 @@
      "type": "physical"
     },
     "burden": "Two-Handed"
+   },
+   "_editorOriginal": {
+    "id": "legendary-quarterstaff",
+    "image": "/item-icons/delapouite/wood-stick.svg",
+    "name": "Legendary Quarterstaff",
+    "tier": 4,
+    "weapon": {
+     "slot": "primary",
+     "trait": "Instinct",
+     "range": "Melee",
+     "damage": {
+      "dice": "1d10",
+      "bonus": 12,
+      "type": "physical"
+     },
+     "burden": "Two-Handed"
+    }
    }
   },
   {
    "id": "legendary-cutlass",
+   "image": "/item-icons/lorc/crossed-sabres.svg",
    "name": "Legendary Cutlass",
    "tier": 4,
    "weapon": {
@@ -2762,6 +3021,7 @@
   },
   {
    "id": "legendary-rapier",
+   "image": "/item-icons/lorc/piercing-sword.svg",
    "name": "Legendary Rapier",
    "tier": 4,
    "weapon": {
@@ -2795,6 +3055,7 @@
   },
   {
    "id": "legendary-halberd",
+   "image": "/item-icons/delapouite/sharp-halberd.svg",
    "name": "Legendary Halberd",
    "tier": 4,
    "weapon": {
@@ -2823,6 +3084,7 @@
   },
   {
    "id": "legendary-spear",
+   "image": "/item-icons/lorc/spears.svg",
    "name": "Legendary Spear",
    "tier": 4,
    "weapon": {
@@ -2839,6 +3101,7 @@
   },
   {
    "id": "legendary-shortbow",
+   "image": "/item-icons/lorc/pocket-bow.svg",
    "name": "Legendary Shortbow",
    "tier": 4,
    "weapon": {
@@ -2855,6 +3118,7 @@
   },
   {
    "id": "legendary-crossbow",
+   "image": "/item-icons/carl-olsen/crossbow.svg",
    "name": "Legendary Crossbow",
    "tier": 4,
    "weapon": {
@@ -2871,6 +3135,7 @@
   },
   {
    "id": "legendary-longbow",
+   "image": "/item-icons/delapouite/bow-arrow.svg",
    "name": "Legendary Longbow",
    "tier": 4,
    "weapon": {
@@ -2899,6 +3164,7 @@
   },
   {
    "id": "dual-ended-sword",
+   "image": "/item-icons/delapouite/hook-swords.svg",
    "name": "Dual-Ended Sword",
    "tier": 4,
    "weapon": {
@@ -2932,6 +3198,7 @@
   },
   {
    "id": "impact-gauntlet",
+   "image": "/item-icons/lorc/mailed-fist.svg",
    "name": "Impact Gauntlet",
    "tier": 4,
    "weapon": {
@@ -2965,6 +3232,7 @@
   },
   {
    "id": "sledge-axe",
+   "image": "/item-icons/delapouite/axe-sword.svg",
    "name": "Sledge Axe",
    "tier": 4,
    "weapon": {
@@ -2993,6 +3261,7 @@
   },
   {
    "id": "curved-dagger",
+   "image": "/item-icons/skoll/crescent-blade.svg",
    "name": "Curved Dagger",
    "tier": 4,
    "weapon": {
@@ -3021,6 +3290,7 @@
   },
   {
    "id": "extended-polearm",
+   "image": "/item-icons/delapouite/sharp-halberd.svg",
    "name": "Extended Polearm",
    "tier": 4,
    "weapon": {
@@ -3041,6 +3311,7 @@
   },
   {
    "id": "swinging-ropeblade",
+   "image": "/item-icons/lorc/whiplash.svg",
    "name": "Swinging Ropeblade",
    "tier": 4,
    "weapon": {
@@ -3074,6 +3345,7 @@
   },
   {
    "id": "ricochet-axes",
+   "image": "/item-icons/lorc/crossed-axes.svg",
    "name": "Ricochet Axes",
    "tier": 4,
    "weapon": {
@@ -3111,6 +3383,7 @@
   },
   {
    "id": "aantari-bow",
+   "image": "/item-icons/delapouite/bow-arrow.svg",
    "name": "Aantari Bow",
    "tier": 4,
    "weapon": {
@@ -3139,6 +3412,7 @@
   },
   {
    "id": "hand-cannon",
+   "image": "/item-icons/lorc/blunderbuss.svg",
    "name": "Hand Cannon",
    "tier": 4,
    "weapon": {
@@ -3165,6 +3439,7 @@
   },
   {
    "id": "legendary-arcane-gauntlets",
+   "image": "/item-icons/lorc/mailed-fist.svg",
    "name": "Legendary Arcane Gauntlets",
    "tier": 4,
    "weapon": {
@@ -3181,6 +3456,7 @@
   },
   {
    "id": "legendary-hallowed-axe",
+   "image": "/item-icons/delapouite/magic-axe.svg",
    "name": "Legendary Hallowed Axe",
    "tier": 4,
    "weapon": {
@@ -3197,6 +3473,7 @@
   },
   {
    "id": "legendary-glowing-rings",
+   "image": "/item-icons/lorc/linked-rings.svg",
    "name": "Legendary Glowing Rings",
    "tier": 4,
    "weapon": {
@@ -3213,6 +3490,7 @@
   },
   {
    "id": "legendary-hand-runes",
+   "image": "/item-icons/lorc/magic-palm.svg",
    "name": "Legendary Hand Runes",
    "tier": 4,
    "weapon": {
@@ -3229,6 +3507,7 @@
   },
   {
    "id": "legendary-returning-blade",
+   "image": "/item-icons/lorc/spinning-sword.svg",
    "name": "Legendary Returning Blade",
    "tier": 4,
    "weapon": {
@@ -3249,6 +3528,7 @@
   },
   {
    "id": "legendary-shortstaff",
+   "image": "/item-icons/lorc/wizard-staff.svg",
    "name": "Legendary Shortstaff",
    "tier": 4,
    "weapon": {
@@ -3265,6 +3545,7 @@
   },
   {
    "id": "legendary-dualstaff",
+   "image": "/item-icons/delapouite/crescent-staff.svg",
    "name": "Legendary Dualstaff",
    "tier": 4,
    "weapon": {
@@ -3281,6 +3562,7 @@
   },
   {
    "id": "legendary-scepter",
+   "image": "/item-icons/delapouite/winged-scepter.svg",
    "name": "Legendary Scepter",
    "tier": 4,
    "weapon": {
@@ -3311,6 +3593,7 @@
   },
   {
    "id": "legendary-wand",
+   "image": "/item-icons/lorc/crystal-wand.svg",
    "name": "Legendary Wand",
    "tier": 4,
    "weapon": {
@@ -3327,6 +3610,7 @@
   },
   {
    "id": "legendary-greatstaff",
+   "image": "/item-icons/lorc/wizard-staff.svg",
    "name": "Legendary Greatstaff",
    "tier": 4,
    "weapon": {
@@ -3353,6 +3637,7 @@
   },
   {
    "id": "sword-of-light-flame",
+   "image": "/item-icons/lorc/shining-sword.svg",
    "name": "Sword of Light & Flame",
    "tier": 4,
    "weapon": {
@@ -3373,6 +3658,7 @@
   },
   {
    "id": "siphoning-gauntlets",
+   "image": "/item-icons/lorc/mailed-fist.svg",
    "name": "Siphoning Gauntlets",
    "tier": 4,
    "weapon": {
@@ -3431,6 +3717,7 @@
   },
   {
    "id": "midas-scythe",
+   "image": "/item-icons/lorc/reaper-scythe.svg",
    "name": "Midas Scythe",
    "tier": 4,
    "weapon": {
@@ -3465,6 +3752,7 @@
   },
   {
    "id": "floating-bladeshards",
+   "image": "/item-icons/lorc/shard-sword.svg",
    "name": "Floating Bladeshards",
    "tier": 4,
    "weapon": {
@@ -3491,6 +3779,7 @@
   },
   {
    "id": "bloodstaff",
+   "image": "/item-icons/lorc/wizard-staff.svg",
    "name": "Bloodstaff",
    "tier": 4,
    "weapon": {
@@ -3525,6 +3814,7 @@
   },
   {
    "id": "thistlebow",
+   "image": "/item-icons/delapouite/bow-arrow.svg",
    "name": "Thistlebow",
    "tier": 4,
    "weapon": {
@@ -3553,6 +3843,7 @@
   },
   {
    "id": "wand-of-essek",
+   "image": "/item-icons/lorc/crystal-wand.svg",
    "name": "Wand of Essek",
    "tier": 4,
    "weapon": {
@@ -3573,6 +3864,7 @@
   },
   {
    "id": "magus-revolver",
+   "image": "/item-icons/delapouite/revolver.svg",
    "name": "Magus Revolver",
    "tier": 4,
    "weapon": {
@@ -3599,6 +3891,7 @@
   },
   {
    "id": "fusion-gloves",
+   "image": "/item-icons/delapouite/gloves.svg",
    "name": "Fusion Gloves",
    "tier": 4,
    "weapon": {
@@ -3627,6 +3920,7 @@
   },
   {
    "id": "light-frame-wheelchair",
+   "image": "/item-icons/delapouite/office-chair.svg",
    "name": "Light-Frame Wheelchair",
    "tier": 1,
    "weapon": {
@@ -3661,6 +3955,7 @@
   },
   {
    "id": "improved-light-frame-wheelchair",
+   "image": "/item-icons/delapouite/office-chair.svg",
    "name": "Improved Light-Frame Wheelchair",
    "tier": 2,
    "weapon": {
@@ -3694,6 +3989,7 @@
   },
   {
    "id": "advanced-light-frame-wheelchair",
+   "image": "/item-icons/delapouite/office-chair.svg",
    "name": "Advanced Light-Frame Wheelchair",
    "tier": 3,
    "weapon": {
@@ -3727,6 +4023,7 @@
   },
   {
    "id": "legendary-light-frame-wheelchair",
+   "image": "/item-icons/delapouite/office-chair.svg",
    "name": "Legendary Light-Frame Wheelchair",
    "tier": 4,
    "weapon": {
@@ -3760,6 +4057,7 @@
   },
   {
    "id": "heavy-frame-wheelchair",
+   "image": "/item-icons/delapouite/office-chair.svg",
    "name": "Heavy-Frame Wheelchair",
    "tier": 1,
    "weapon": {
@@ -3789,6 +4087,7 @@
   },
   {
    "id": "improved-heavy-frame-wheelchair",
+   "image": "/item-icons/delapouite/office-chair.svg",
    "name": "Improved Heavy-Frame Wheelchair",
    "tier": 2,
    "weapon": {
@@ -3817,6 +4116,7 @@
   },
   {
    "id": "advanced-heavy-frame-wheelchair",
+   "image": "/item-icons/delapouite/office-chair.svg",
    "name": "Advanced Heavy-Frame Wheelchair",
    "tier": 3,
    "weapon": {
@@ -3845,6 +4145,7 @@
   },
   {
    "id": "legendary-heavy-frame-wheelchair",
+   "image": "/item-icons/delapouite/office-chair.svg",
    "name": "Legendary Heavy-Frame Wheelchair",
    "tier": 4,
    "weapon": {
@@ -3873,6 +4174,7 @@
   },
   {
    "id": "arcane-frame-wheelchair",
+   "image": "/item-icons/delapouite/office-chair.svg",
    "name": "Arcane-Frame Wheelchair",
    "tier": 1,
    "weapon": {
@@ -3902,6 +4204,7 @@
   },
   {
    "id": "improved-arcane-frame-wheelchair",
+   "image": "/item-icons/delapouite/office-chair.svg",
    "name": "Improved Arcane-Frame Wheelchair",
    "tier": 2,
    "weapon": {
@@ -3930,6 +4233,7 @@
   },
   {
    "id": "advanced-arcane-frame-wheelchair",
+   "image": "/item-icons/delapouite/office-chair.svg",
    "name": "Advanced Arcane-Frame Wheelchair",
    "tier": 3,
    "weapon": {
@@ -3958,6 +4262,7 @@
   },
   {
    "id": "legendary-arcane-frame-wheelchair",
+   "image": "/item-icons/delapouite/office-chair.svg",
    "name": "Legendary Arcane-Frame Wheelchair",
    "tier": 4,
    "weapon": {
@@ -3986,6 +4291,7 @@
   },
   {
    "id": "shortsword",
+   "image": "/item-icons/lorc/pointy-sword.svg",
    "name": "Shortsword",
    "tier": 1,
    "weapon": {
@@ -4019,6 +4325,7 @@
   },
   {
    "id": "round-shield",
+   "image": "/item-icons/willdabeast/round-shield.svg",
    "name": "Round Shield",
    "tier": 1,
    "weapon": {
@@ -4048,6 +4355,7 @@
   },
   {
    "id": "tower-shield",
+   "image": "/item-icons/delapouite/roman-shield.svg",
    "name": "Tower Shield",
    "tier": 1,
    "weapon": {
@@ -4081,6 +4389,7 @@
   },
   {
    "id": "small-dagger",
+   "image": "/item-icons/lorc/plain-dagger.svg",
    "name": "Small Dagger",
    "tier": 1,
    "weapon": {
@@ -4114,6 +4423,7 @@
   },
   {
    "id": "whip",
+   "image": "/item-icons/lorc/whip.svg",
    "name": "Whip",
    "tier": 1,
    "weapon": {
@@ -4146,6 +4456,7 @@
   },
   {
    "id": "grappler",
+   "image": "/item-icons/lorc/grapple.svg",
    "name": "Grappler",
    "tier": 1,
    "weapon": {
@@ -4167,6 +4478,7 @@
   },
   {
    "id": "hand-crossbow",
+   "image": "/item-icons/carl-olsen/crossbow.svg",
    "name": "Hand Crossbow",
    "tier": 1,
    "weapon": {
@@ -4184,6 +4496,7 @@
   },
   {
    "id": "improved-shortsword",
+   "image": "/item-icons/lorc/pointy-sword.svg",
    "name": "Improved Shortsword",
    "tier": 2,
    "weapon": {
@@ -4216,6 +4529,7 @@
   },
   {
    "id": "improved-round-shield",
+   "image": "/item-icons/willdabeast/round-shield.svg",
    "name": "Improved Round Shield",
    "tier": 2,
    "weapon": {
@@ -4244,6 +4558,7 @@
   },
   {
    "id": "improved-tower-shield",
+   "image": "/item-icons/delapouite/roman-shield.svg",
    "name": "Improved Tower Shield",
    "tier": 2,
    "weapon": {
@@ -4276,6 +4591,7 @@
   },
   {
    "id": "improved-small-dagger",
+   "image": "/item-icons/lorc/plain-dagger.svg",
    "name": "Improved Small Dagger",
    "tier": 2,
    "weapon": {
@@ -4308,6 +4624,7 @@
   },
   {
    "id": "improved-whip",
+   "image": "/item-icons/lorc/whip.svg",
    "name": "Improved Whip",
    "tier": 2,
    "weapon": {
@@ -4339,6 +4656,7 @@
   },
   {
    "id": "improved-grappler",
+   "image": "/item-icons/lorc/grapple.svg",
    "name": "Improved Grappler",
    "tier": 2,
    "weapon": {
@@ -4359,6 +4677,7 @@
   },
   {
    "id": "improved-hand-crossbow",
+   "image": "/item-icons/carl-olsen/crossbow.svg",
    "name": "Improved Hand Crossbow",
    "tier": 2,
    "weapon": {
@@ -4375,6 +4694,7 @@
   },
   {
    "id": "spiked-shield",
+   "image": "/item-icons/delapouite/spiked-shield.svg",
    "name": "Spiked Shield",
    "tier": 2,
    "weapon": {
@@ -4413,6 +4733,7 @@
   },
   {
    "id": "parrying-dagger",
+   "image": "/item-icons/lorc/broad-dagger.svg",
    "name": "Parrying Dagger",
    "tier": 2,
    "weapon": {
@@ -4445,6 +4766,7 @@
   },
   {
    "id": "returning-axe",
+   "image": "/item-icons/delapouite/sharp-axe.svg",
    "name": "Returning Axe",
    "tier": 2,
    "weapon": {
@@ -4465,6 +4787,7 @@
   },
   {
    "id": "advanced-shortsword",
+   "image": "/item-icons/lorc/pointy-sword.svg",
    "name": "Advanced Shortsword",
    "tier": 3,
    "weapon": {
@@ -4497,6 +4820,7 @@
   },
   {
    "id": "advanced-round-shield",
+   "image": "/item-icons/willdabeast/round-shield.svg",
    "name": "Advanced Round Shield",
    "tier": 3,
    "weapon": {
@@ -4525,6 +4849,7 @@
   },
   {
    "id": "advanced-tower-shield",
+   "image": "/item-icons/delapouite/roman-shield.svg",
    "name": "Advanced Tower Shield",
    "tier": 3,
    "weapon": {
@@ -4557,6 +4882,7 @@
   },
   {
    "id": "advanced-small-dagger",
+   "image": "/item-icons/lorc/plain-dagger.svg",
    "name": "Advanced Small Dagger",
    "tier": 3,
    "weapon": {
@@ -4589,6 +4915,7 @@
   },
   {
    "id": "advanced-whip",
+   "image": "/item-icons/lorc/whip.svg",
    "name": "Advanced Whip",
    "tier": 3,
    "weapon": {
@@ -4620,6 +4947,7 @@
   },
   {
    "id": "advanced-grappler",
+   "image": "/item-icons/lorc/grapple.svg",
    "name": "Advanced Grappler",
    "tier": 3,
    "weapon": {
@@ -4640,6 +4968,7 @@
   },
   {
    "id": "advanced-hand-crossbow",
+   "image": "/item-icons/carl-olsen/crossbow.svg",
    "name": "Advanced Hand Crossbow",
    "tier": 3,
    "weapon": {
@@ -4656,6 +4985,7 @@
   },
   {
    "id": "buckler",
+   "image": "/item-icons/willdabeast/round-shield.svg",
    "name": "Buckler",
    "tier": 3,
    "weapon": {
@@ -4692,6 +5022,7 @@
   },
   {
    "id": "powered-gauntlet",
+   "image": "/item-icons/lorc/mailed-fist.svg",
    "name": "Powered Gauntlet",
    "tier": 3,
    "weapon": {
@@ -4727,6 +5058,7 @@
   },
   {
    "id": "hand-sling",
+   "image": "/item-icons/delapouite/sling.svg",
    "name": "Hand Sling",
    "tier": 3,
    "weapon": {
@@ -4757,6 +5089,7 @@
   },
   {
    "id": "legendary-shortsword",
+   "image": "/item-icons/lorc/pointy-sword.svg",
    "name": "Legendary Shortsword",
    "tier": 4,
    "weapon": {
@@ -4789,6 +5122,7 @@
   },
   {
    "id": "legendary-round-shield",
+   "image": "/item-icons/willdabeast/round-shield.svg",
    "name": "Legendary Round Shield",
    "tier": 4,
    "weapon": {
@@ -4817,6 +5151,7 @@
   },
   {
    "id": "legendary-tower-shield",
+   "image": "/item-icons/delapouite/roman-shield.svg",
    "name": "Legendary Tower Shield",
    "tier": 4,
    "weapon": {
@@ -4849,6 +5184,7 @@
   },
   {
    "id": "legendary-small-dagger",
+   "image": "/item-icons/lorc/plain-dagger.svg",
    "name": "Legendary Small Dagger",
    "tier": 4,
    "weapon": {
@@ -4881,6 +5217,7 @@
   },
   {
    "id": "legendary-whip",
+   "image": "/item-icons/lorc/whip.svg",
    "name": "Legendary Whip",
    "tier": 4,
    "weapon": {
@@ -4912,6 +5249,7 @@
   },
   {
    "id": "legendary-grappler",
+   "image": "/item-icons/lorc/grapple.svg",
    "name": "Legendary Grappler",
    "tier": 4,
    "weapon": {
@@ -4932,6 +5270,7 @@
   },
   {
    "id": "legendary-hand-crossbow",
+   "image": "/item-icons/carl-olsen/crossbow.svg",
    "name": "Legendary Hand Crossbow",
    "tier": 4,
    "weapon": {
@@ -4948,6 +5287,7 @@
   },
   {
    "id": "braveshield",
+   "image": "/item-icons/lorc/winged-shield.svg",
    "name": "Braveshield",
    "tier": 4,
    "weapon": {
@@ -4968,6 +5308,7 @@
   },
   {
    "id": "knuckle-claws",
+   "image": "/item-icons/lorc/steel-claws.svg",
    "name": "Knuckle Claws",
    "tier": 4,
    "weapon": {
@@ -4988,6 +5329,7 @@
   },
   {
    "id": "primer-shard",
+   "image": "/item-icons/lorc/crystal-bars.svg",
    "name": "Primer Shard",
    "tier": 4,
    "weapon": {
@@ -5040,6 +5382,7 @@
   },
   {
    "id": "leviathan-harpoon",
+   "image": "/item-icons/lorc/harpoon-chain.svg",
    "name": "Leviathan Harpoon",
    "tier": 2,
    "weapon": {
@@ -5060,6 +5403,7 @@
   },
   {
    "id": "seekers-bow",
+   "image": "/item-icons/delapouite/bow-arrow.svg",
    "name": "Seeker’s Bow",
    "tier": 2,
    "weapon": {
@@ -5080,6 +5424,7 @@
   },
   {
    "id": "arcane-scalpel",
+   "image": "/item-icons/lorc/scalpel.svg",
    "name": "Arcane Scalpel",
    "tier": 3,
    "weapon": {
@@ -5100,6 +5445,7 @@
   },
   {
    "id": "bug-hunters-aegis",
+   "image": "/item-icons/willdabeast/round-shield.svg",
    "name": "Bug Hunter’s Aegis",
    "tier": 2,
    "weapon": {
@@ -5137,6 +5483,7 @@
   },
   {
    "id": "manacle-bolas",
+   "image": "/item-icons/lorc/bolas.svg",
    "name": "Manacle Bolas",
    "tier": 2,
    "weapon": {
@@ -5170,6 +5517,7 @@
   },
   {
    "id": "staff-of-the-whispering-archive",
+   "image": "/item-icons/lorc/wizard-staff.svg",
    "name": "Staff of the Whispering Archive",
    "tier": 2,
    "weapon": {
@@ -5221,6 +5569,7 @@
   },
   {
    "id": "claws-of-yifang",
+   "image": "/item-icons/lorc/steel-claws.svg",
    "name": "Claws of Yifang",
    "tier": 2,
    "weapon": {
@@ -5274,6 +5623,7 @@
   },
   {
    "id": "devils-smithing-hammer",
+   "image": "/item-icons/lorc/flat-hammer.svg",
    "name": "Devil’s Smithing Hammer",
    "tier": 2,
    "weapon": {
@@ -5307,6 +5657,7 @@
   },
   {
    "id": "life-wand",
+   "image": "/item-icons/lorc/crystal-wand.svg",
    "name": "Life Wand",
    "tier": 2,
    "weapon": {
@@ -5338,6 +5689,7 @@
   },
   {
    "id": "snowblade",
+   "image": "/item-icons/lorc/ice-spear.svg",
    "name": "Snowblade",
    "tier": 3,
    "weapon": {
@@ -5358,6 +5710,7 @@
   },
   {
    "id": "spiders-sting",
+   "image": "/item-icons/lorc/spider-web.svg",
    "name": "Spider’s Sting",
    "tier": 2,
    "weapon": {
@@ -5389,6 +5742,7 @@
   },
   {
    "id": "katana",
+   "image": "/item-icons/delapouite/katana.svg",
    "name": "Katana",
    "tier": 1,
    "weapon": {
@@ -5423,6 +5777,7 @@
   },
   {
    "id": "brass-knuckles",
+   "image": "/item-icons/delapouite/brass-knuckles.svg",
    "name": "Brass Knuckles",
    "tier": 1,
    "weapon": {
@@ -5440,6 +5795,7 @@
   },
   {
    "id": "scimitar",
+   "image": "/item-icons/lorc/croc-sword.svg",
    "name": "Scimitar",
    "tier": 1,
    "weapon": {
@@ -5457,6 +5813,7 @@
   },
   {
    "id": "twisted-dagger",
+   "image": "/item-icons/lorc/sacrificial-dagger.svg",
    "name": "Twisted Dagger",
    "tier": 1,
    "weapon": {
@@ -5478,6 +5835,7 @@
   },
   {
    "id": "whipsword",
+   "image": "/item-icons/lorc/whiplash.svg",
    "name": "Whipsword",
    "tier": 1,
    "weapon": {
@@ -5509,6 +5867,7 @@
   },
   {
    "id": "rope-dart",
+   "image": "/item-icons/delapouite/rope-dart.svg",
    "name": "Rope Dart",
    "tier": 1,
    "weapon": {
@@ -5526,6 +5885,7 @@
   },
   {
    "id": "brightsword",
+   "image": "/item-icons/lorc/shining-sword.svg",
    "name": "Brightsword",
    "tier": 1,
    "weapon": {
@@ -5543,6 +5903,7 @@
   },
   {
    "id": "shadowblade",
+   "image": "/item-icons/lorc/energy-sword.svg",
    "name": "Shadowblade",
    "tier": 1,
    "weapon": {
@@ -5567,6 +5928,7 @@
   },
   {
    "id": "enchanted-chakram",
+   "image": "/item-icons/delapouite/chakram.svg",
    "name": "Enchanted Chakram",
    "tier": 1,
    "weapon": {
@@ -5601,6 +5963,7 @@
   },
   {
    "id": "casting-dagger",
+   "image": "/item-icons/lorc/sacrificial-dagger.svg",
    "name": "Casting Dagger",
    "tier": 1,
    "weapon": {
@@ -5632,6 +5995,7 @@
   },
   {
    "id": "runelock-pistol",
+   "image": "/item-icons/lorc/crossed-pistols.svg",
    "name": "Runelock Pistol",
    "tier": 1,
    "weapon": {
@@ -5659,6 +6023,7 @@
   },
   {
    "id": "arcane-rifle",
+   "image": "/item-icons/skoll/musket.svg",
    "name": "Arcane Rifle",
    "tier": 1,
    "weapon": {
@@ -5702,6 +6067,7 @@
   },
   {
    "id": "improved-katana",
+   "image": "/item-icons/delapouite/katana.svg",
    "name": "Improved Katana",
    "tier": 2,
    "weapon": {
@@ -5735,6 +6101,7 @@
   },
   {
    "id": "improved-brass-knuckles",
+   "image": "/item-icons/delapouite/brass-knuckles.svg",
    "name": "Improved Brass Knuckles",
    "tier": 2,
    "weapon": {
@@ -5751,6 +6118,7 @@
   },
   {
    "id": "improved-scimitar",
+   "image": "/item-icons/lorc/croc-sword.svg",
    "name": "Improved Scimitar",
    "tier": 2,
    "weapon": {
@@ -5767,6 +6135,7 @@
   },
   {
    "id": "improved-twisted-dagger",
+   "image": "/item-icons/lorc/sacrificial-dagger.svg",
    "name": "Improved Twisted Dagger",
    "tier": 2,
    "weapon": {
@@ -5787,6 +6156,7 @@
   },
   {
    "id": "improved-whipsword",
+   "image": "/item-icons/lorc/whiplash.svg",
    "name": "Improved Whipsword",
    "tier": 2,
    "weapon": {
@@ -5817,6 +6187,7 @@
   },
   {
    "id": "improved-rope-dart",
+   "image": "/item-icons/delapouite/rope-dart.svg",
    "name": "Improved Rope Dart",
    "tier": 2,
    "weapon": {
@@ -5833,6 +6204,7 @@
   },
   {
    "id": "war-pick",
+   "image": "/item-icons/delapouite/war-pick.svg",
    "name": "War Pick",
    "tier": 2,
    "weapon": {
@@ -5853,6 +6225,7 @@
   },
   {
    "id": "cane-sword",
+   "image": "/item-icons/skoll/telescopic-baton.svg",
    "name": "Cane Sword",
    "tier": 2,
    "weapon": {
@@ -5869,10 +6242,32 @@
    "feature": {
     "name": "Retractable",
     "text": "The blade can be hidden in the cane to avoid detection."
+   },
+   "_editorOriginal": {
+    "id": "cane-sword",
+    "image": "/item-icons/delapouite/wood-stick.svg",
+    "name": "Cane Sword",
+    "tier": 2,
+    "weapon": {
+     "slot": "primary",
+     "trait": "Finesse",
+     "range": "Melee",
+     "damage": {
+      "dice": "1d8",
+      "bonus": 4,
+      "type": "physical"
+     },
+     "burden": "One-Handed"
+    },
+    "feature": {
+     "name": "Retractable",
+     "text": "The blade can be hidden in the cane to avoid detection."
+    }
    }
   },
   {
    "id": "bladed-fan",
+   "image": "/item-icons/delapouite/handheld-fan.svg",
    "name": "Bladed Fan",
    "tier": 2,
    "weapon": {
@@ -5905,6 +6300,7 @@
   },
   {
    "id": "cyrurgiens-scalpel",
+   "image": "/item-icons/lorc/scalpel.svg",
    "name": "Cyrurgien’s Scalpel",
    "tier": 2,
    "weapon": {
@@ -5925,6 +6321,7 @@
   },
   {
    "id": "lance",
+   "image": "/item-icons/lorc/barbed-spear.svg",
    "name": "Lance",
    "tier": 2,
    "weapon": {
@@ -5953,6 +6350,7 @@
   },
   {
    "id": "javelins",
+   "image": "/item-icons/lorc/thrown-spear.svg",
    "name": "Javelins",
    "tier": 2,
    "weapon": {
@@ -5983,6 +6381,7 @@
   },
   {
    "id": "improved-brightsword",
+   "image": "/item-icons/lorc/shining-sword.svg",
    "name": "Improved Brightsword",
    "tier": 2,
    "weapon": {
@@ -5999,6 +6398,7 @@
   },
   {
    "id": "improved-shadowblade",
+   "image": "/item-icons/lorc/energy-sword.svg",
    "name": "Improved Shadowblade",
    "tier": 2,
    "weapon": {
@@ -6022,6 +6422,7 @@
   },
   {
    "id": "improved-enchanted-chakram",
+   "image": "/item-icons/delapouite/chakram.svg",
    "name": "Improved Enchanted Chakram",
    "tier": 2,
    "weapon": {
@@ -6055,6 +6456,7 @@
   },
   {
    "id": "improved-casting-dagger",
+   "image": "/item-icons/lorc/sacrificial-dagger.svg",
    "name": "Improved Casting Dagger",
    "tier": 2,
    "weapon": {
@@ -6085,6 +6487,7 @@
   },
   {
    "id": "improved-runelock-pistol",
+   "image": "/item-icons/lorc/crossed-pistols.svg",
    "name": "Improved Runelock Pistol",
    "tier": 2,
    "weapon": {
@@ -6111,6 +6514,7 @@
   },
   {
    "id": "improved-arcane-rifle",
+   "image": "/item-icons/skoll/musket.svg",
    "name": "Improved Arcane Rifle",
    "tier": 2,
    "weapon": {
@@ -6153,6 +6557,7 @@
   },
   {
    "id": "enchanted-shillelagh",
+   "image": "/item-icons/delapouite/wood-club.svg",
    "name": "Enchanted Shillelagh",
    "tier": 2,
    "weapon": {
@@ -6181,6 +6586,7 @@
   },
   {
    "id": "displacement-razor",
+   "image": "/item-icons/lorc/razor-blade.svg",
    "name": "Displacement Razor",
    "tier": 2,
    "weapon": {
@@ -6212,6 +6618,7 @@
   },
   {
    "id": "spellbound-bangles",
+   "image": "/item-icons/lorc/linked-rings.svg",
    "name": "Spellbound Bangles",
    "tier": 2,
    "weapon": {
@@ -6228,6 +6635,7 @@
   },
   {
    "id": "fury-gem",
+   "image": "/item-icons/delapouite/fire-gem.svg",
    "name": "Fury Gem",
    "tier": 2,
    "weapon": {
@@ -6248,6 +6656,7 @@
   },
   {
    "id": "enchanted-lute",
+   "image": "/item-icons/lorc/guitar.svg",
    "name": "Enchanted Lute",
    "tier": 2,
    "weapon": {
@@ -6289,6 +6698,7 @@
   },
   {
    "id": "splintershaft-bow",
+   "image": "/item-icons/delapouite/bow-arrow.svg",
    "name": "Splintershaft Bow",
    "tier": 2,
    "weapon": {
@@ -6322,6 +6732,7 @@
   },
   {
    "id": "advanced-katana",
+   "image": "/item-icons/delapouite/katana.svg",
    "name": "Advanced Katana",
    "tier": 3,
    "weapon": {
@@ -6355,6 +6766,7 @@
   },
   {
    "id": "advanced-brass-knuckles",
+   "image": "/item-icons/delapouite/brass-knuckles.svg",
    "name": "Advanced Brass Knuckles",
    "tier": 3,
    "weapon": {
@@ -6371,6 +6783,7 @@
   },
   {
    "id": "advanced-scimitar",
+   "image": "/item-icons/lorc/croc-sword.svg",
    "name": "Advanced Scimitar",
    "tier": 3,
    "weapon": {
@@ -6387,6 +6800,7 @@
   },
   {
    "id": "advanced-twisted-dagger",
+   "image": "/item-icons/lorc/sacrificial-dagger.svg",
    "name": "Advanced Twisted Dagger",
    "tier": 3,
    "weapon": {
@@ -6407,6 +6821,7 @@
   },
   {
    "id": "advanced-whipsword",
+   "image": "/item-icons/lorc/whiplash.svg",
    "name": "Advanced Whipsword",
    "tier": 3,
    "weapon": {
@@ -6437,6 +6852,7 @@
   },
   {
    "id": "advanced-rope-dart",
+   "image": "/item-icons/delapouite/rope-dart.svg",
    "name": "Advanced Rope Dart",
    "tier": 3,
    "weapon": {
@@ -6453,6 +6869,7 @@
   },
   {
    "id": "blitz-hammer",
+   "image": "/item-icons/delapouite/warhammer.svg",
    "name": "Blitz Hammer",
    "tier": 3,
    "weapon": {
@@ -6491,6 +6908,7 @@
   },
   {
    "id": "platinum-estoc",
+   "image": "/item-icons/lorc/piercing-sword.svg",
    "name": "Platinum Estoc",
    "tier": 3,
    "weapon": {
@@ -6511,6 +6929,7 @@
   },
   {
    "id": "soldiers-pike",
+   "image": "/item-icons/lorc/spears.svg",
    "name": "Soldier’s Pike",
    "tier": 3,
    "weapon": {
@@ -6543,6 +6962,7 @@
   },
   {
    "id": "chained-scythe",
+   "image": "/item-icons/lorc/scythe.svg",
    "name": "Chained Scythe",
    "tier": 3,
    "weapon": {
@@ -6576,6 +6996,7 @@
   },
   {
    "id": "singing-sword",
+   "image": "/item-icons/lorc/sparkling-sabre.svg",
    "name": "Singing Sword",
    "tier": 3,
    "weapon": {
@@ -6627,6 +7048,7 @@
   },
   {
    "id": "bladed-star",
+   "image": "/item-icons/lorc/shuriken.svg",
    "name": "Bladed Star",
    "tier": 3,
    "weapon": {
@@ -6660,6 +7082,7 @@
   },
   {
    "id": "advanced-brightsword",
+   "image": "/item-icons/lorc/shining-sword.svg",
    "name": "Advanced Brightsword",
    "tier": 3,
    "weapon": {
@@ -6676,6 +7099,7 @@
   },
   {
    "id": "advanced-shadowblade",
+   "image": "/item-icons/lorc/energy-sword.svg",
    "name": "Advanced Shadowblade",
    "tier": 3,
    "weapon": {
@@ -6699,6 +7123,7 @@
   },
   {
    "id": "advanced-enchanted-chakram",
+   "image": "/item-icons/delapouite/chakram.svg",
    "name": "Advanced Enchanted Chakram",
    "tier": 3,
    "weapon": {
@@ -6732,6 +7157,7 @@
   },
   {
    "id": "advanced-casting-dagger",
+   "image": "/item-icons/lorc/sacrificial-dagger.svg",
    "name": "Advanced Casting Dagger",
    "tier": 3,
    "weapon": {
@@ -6762,6 +7188,7 @@
   },
   {
    "id": "advanced-runelock-pistol",
+   "image": "/item-icons/lorc/crossed-pistols.svg",
    "name": "Advanced Runelock Pistol",
    "tier": 3,
    "weapon": {
@@ -6788,6 +7215,7 @@
   },
   {
    "id": "advanced-arcane-rifle",
+   "image": "/item-icons/skoll/musket.svg",
    "name": "Advanced Arcane Rifle",
    "tier": 3,
    "weapon": {
@@ -6830,6 +7258,7 @@
   },
   {
    "id": "rocket-maul",
+   "image": "/item-icons/lorc/flat-hammer.svg",
    "name": "Rocket Maul",
    "tier": 3,
    "weapon": {
@@ -6863,6 +7292,7 @@
   },
   {
    "id": "crystal-spear",
+   "image": "/item-icons/lorc/ice-spear.svg",
    "name": "Crystal Spear",
    "tier": 3,
    "weapon": {
@@ -6883,6 +7313,7 @@
   },
   {
    "id": "arc-wand",
+   "image": "/item-icons/lorc/crystal-wand.svg",
    "name": "Arc Wand",
    "tier": 3,
    "weapon": {
@@ -6920,6 +7351,7 @@
   },
   {
    "id": "rime-scepter",
+   "image": "/item-icons/delapouite/winged-scepter.svg",
    "name": "Rime Scepter",
    "tier": 3,
    "weapon": {
@@ -6940,6 +7372,7 @@
   },
   {
    "id": "gunblade",
+   "image": "/item-icons/delapouite/saber-and-pistol.svg",
    "name": "Gunblade",
    "tier": 3,
    "weapon": {
@@ -6971,6 +7404,7 @@
   },
   {
    "id": "staff-of-augma",
+   "image": "/item-icons/lorc/wizard-staff.svg",
    "name": "Staff of Augma",
    "tier": 3,
    "weapon": {
@@ -7029,6 +7463,7 @@
   },
   {
    "id": "legendary-katana",
+   "image": "/item-icons/delapouite/katana.svg",
    "name": "Legendary Katana",
    "tier": 4,
    "weapon": {
@@ -7062,6 +7497,7 @@
   },
   {
    "id": "legendary-brass-knuckles",
+   "image": "/item-icons/delapouite/brass-knuckles.svg",
    "name": "Legendary Brass Knuckles",
    "tier": 4,
    "weapon": {
@@ -7078,6 +7514,7 @@
   },
   {
    "id": "legendary-scimitar",
+   "image": "/item-icons/lorc/croc-sword.svg",
    "name": "Legendary Scimitar",
    "tier": 4,
    "weapon": {
@@ -7094,6 +7531,7 @@
   },
   {
    "id": "legendary-twisted-dagger",
+   "image": "/item-icons/lorc/sacrificial-dagger.svg",
    "name": "Legendary Twisted Dagger",
    "tier": 4,
    "weapon": {
@@ -7114,6 +7552,7 @@
   },
   {
    "id": "legendary-whipsword",
+   "image": "/item-icons/lorc/whiplash.svg",
    "name": "Legendary Whipsword",
    "tier": 4,
    "weapon": {
@@ -7144,6 +7583,7 @@
   },
   {
    "id": "legendary-rope-dart",
+   "image": "/item-icons/delapouite/rope-dart.svg",
    "name": "Legendary Rope Dart",
    "tier": 4,
    "weapon": {
@@ -7160,6 +7600,7 @@
   },
   {
    "id": "severed-dragon-claw",
+   "image": "/item-icons/lorc/flaming-claw.svg",
    "name": "Severed Dragon Claw",
    "tier": 4,
    "weapon": {
@@ -7188,6 +7629,7 @@
   },
   {
    "id": "infinite-staff",
+   "image": "/item-icons/delapouite/crescent-staff.svg",
    "name": "Infinite Staff",
    "tier": 4,
    "weapon": {
@@ -7244,6 +7686,7 @@
   },
   {
    "id": "bec-de-corbin",
+   "image": "/item-icons/delapouite/war-pick.svg",
    "name": "Bec de Corbin",
    "tier": 4,
    "weapon": {
@@ -7278,6 +7721,7 @@
   },
   {
    "id": "black-powder-serpentine",
+   "image": "/item-icons/skoll/musket.svg",
    "name": "Black Powder Serpentine",
    "tier": 4,
    "weapon": {
@@ -7306,6 +7750,7 @@
   },
   {
    "id": "clockwork-crossbow",
+   "image": "/item-icons/carl-olsen/crossbow.svg",
    "name": "Clockwork Crossbow",
    "tier": 4,
    "weapon": {
@@ -7339,6 +7784,7 @@
   },
   {
    "id": "arquebus",
+   "image": "/item-icons/skoll/musket.svg",
    "name": "Arquebus",
    "tier": 4,
    "weapon": {
@@ -7365,6 +7811,7 @@
   },
   {
    "id": "legendary-brightsword",
+   "image": "/item-icons/lorc/shining-sword.svg",
    "name": "Legendary Brightsword",
    "tier": 4,
    "weapon": {
@@ -7381,6 +7828,7 @@
   },
   {
    "id": "legendary-shadowblade",
+   "image": "/item-icons/lorc/energy-sword.svg",
    "name": "Legendary Shadowblade",
    "tier": 4,
    "weapon": {
@@ -7404,6 +7852,7 @@
   },
   {
    "id": "legendary-enchanted-chakram",
+   "image": "/item-icons/delapouite/chakram.svg",
    "name": "Legendary Enchanted Chakram",
    "tier": 4,
    "weapon": {
@@ -7437,6 +7886,7 @@
   },
   {
    "id": "legendary-casting-dagger",
+   "image": "/item-icons/lorc/sacrificial-dagger.svg",
    "name": "Legendary Casting Dagger",
    "tier": 4,
    "weapon": {
@@ -7467,6 +7917,7 @@
   },
   {
    "id": "legendary-runelock-pistol",
+   "image": "/item-icons/lorc/crossed-pistols.svg",
    "name": "Legendary Runelock Pistol",
    "tier": 4,
    "weapon": {
@@ -7493,6 +7944,7 @@
   },
   {
    "id": "legendary-arcane-rifle",
+   "image": "/item-icons/skoll/musket.svg",
    "name": "Legendary Arcane Rifle",
    "tier": 4,
    "weapon": {
@@ -7535,6 +7987,7 @@
   },
   {
    "id": "starmetal-blade",
+   "image": "/item-icons/lorc/relic-blade.svg",
    "name": "Starmetal Blade",
    "tier": 4,
    "weapon": {
@@ -7563,6 +8016,7 @@
   },
   {
    "id": "adders-fang",
+   "image": "/item-icons/lorc/dripping-blade.svg",
    "name": "Adder’s Fang",
    "tier": 4,
    "weapon": {
@@ -7583,6 +8037,7 @@
   },
   {
    "id": "demons-edge",
+   "image": "/item-icons/lorc/relic-blade.svg",
    "name": "Demon’s Edge",
    "tier": 4,
    "weapon": {
@@ -7603,6 +8058,7 @@
   },
   {
    "id": "storm-gods-greataxe",
+   "image": "/item-icons/delapouite/magic-axe.svg",
    "name": "Storm God’s Greataxe",
    "tier": 4,
    "weapon": {
@@ -7640,6 +8096,7 @@
   },
   {
    "id": "ethereal-zweih-nder",
+   "image": "/item-icons/delapouite/two-handed-sword.svg",
    "name": "Ethereal Zweihänder",
    "tier": 4,
    "weapon": {
@@ -7682,6 +8139,7 @@
   },
   {
    "id": "gravity-arbalest",
+   "image": "/item-icons/carl-olsen/crossbow.svg",
    "name": "Gravity Arbalest",
    "tier": 4,
    "weapon": {
@@ -7715,6 +8173,7 @@
   },
   {
    "id": "hatchet",
+   "image": "/item-icons/delapouite/sharp-axe.svg",
    "name": "Hatchet",
    "tier": 1,
    "weapon": {
@@ -7751,6 +8210,7 @@
   },
   {
    "id": "offhand-brass-knuckles",
+   "image": "/item-icons/delapouite/brass-knuckles.svg",
    "name": "Offhand Brass Knuckles",
    "tier": 1,
    "weapon": {
@@ -7784,6 +8244,7 @@
   },
   {
    "id": "throwing-knives",
+   "image": "/item-icons/lorc/thrown-daggers.svg",
    "name": "Throwing Knives",
    "tier": 1,
    "weapon": {
@@ -7815,6 +8276,7 @@
   },
   {
    "id": "fighting-cloak",
+   "image": "/item-icons/lucasms/cloak.svg",
    "name": "Fighting Cloak",
    "tier": 1,
    "weapon": {
@@ -7844,6 +8306,7 @@
   },
   {
    "id": "rune-shield",
+   "image": "/item-icons/lorc/magic-shield.svg",
    "name": "Rune Shield",
    "tier": 1,
    "weapon": {
@@ -7873,6 +8336,7 @@
   },
   {
    "id": "focus-runes",
+   "image": "/item-icons/lorc/rune-stone.svg",
    "name": "Focus Runes",
    "tier": 1,
    "weapon": {
@@ -7906,6 +8370,7 @@
   },
   {
    "id": "improved-hatchet",
+   "image": "/item-icons/delapouite/sharp-axe.svg",
    "name": "Improved Hatchet",
    "tier": 2,
    "weapon": {
@@ -7941,6 +8406,7 @@
   },
   {
    "id": "improved-offhand-brass-knuckles",
+   "image": "/item-icons/delapouite/brass-knuckles.svg",
    "name": "Improved Offhand Brass Knuckles",
    "tier": 2,
    "weapon": {
@@ -7973,6 +8439,7 @@
   },
   {
    "id": "improved-throwing-knives",
+   "image": "/item-icons/lorc/thrown-daggers.svg",
    "name": "Improved Throwing Knives",
    "tier": 2,
    "weapon": {
@@ -8003,6 +8470,7 @@
   },
   {
    "id": "improved-fighting-cloak",
+   "image": "/item-icons/lucasms/cloak.svg",
    "name": "Improved Fighting Cloak",
    "tier": 2,
    "weapon": {
@@ -8031,6 +8499,7 @@
   },
   {
    "id": "improved-rune-shield",
+   "image": "/item-icons/lorc/magic-shield.svg",
    "name": "Improved Rune Shield",
    "tier": 2,
    "weapon": {
@@ -8059,6 +8528,7 @@
   },
   {
    "id": "improved-focus-runes",
+   "image": "/item-icons/lorc/rune-stone.svg",
    "name": "Improved Focus Runes",
    "tier": 2,
    "weapon": {
@@ -8091,6 +8561,7 @@
   },
   {
    "id": "collapsible-baton",
+   "image": "/item-icons/delapouite/juggling-clubs.svg",
    "name": "Collapsible Baton",
    "tier": 2,
    "weapon": {
@@ -8111,6 +8582,7 @@
   },
   {
    "id": "eldritch-vambrace",
+   "image": "/item-icons/delapouite/gauntlet.svg",
    "name": "Eldritch Vambrace",
    "tier": 2,
    "weapon": {
@@ -8147,6 +8619,7 @@
   },
   {
    "id": "segmented-staff",
+   "image": "/item-icons/delapouite/crescent-staff.svg",
    "name": "Segmented Staff",
    "tier": 2,
    "weapon": {
@@ -8185,6 +8658,7 @@
   },
   {
    "id": "razor-wire",
+   "image": "/item-icons/lorc/barbed-wire.svg",
    "name": "Razor Wire",
    "tier": 2,
    "weapon": {
@@ -8219,6 +8693,7 @@
   },
   {
    "id": "advanced-hatchet",
+   "image": "/item-icons/delapouite/sharp-axe.svg",
    "name": "Advanced Hatchet",
    "tier": 3,
    "weapon": {
@@ -8254,6 +8729,7 @@
   },
   {
    "id": "advanced-offhand-brass-knuckles",
+   "image": "/item-icons/delapouite/brass-knuckles.svg",
    "name": "Advanced Offhand Brass Knuckles",
    "tier": 3,
    "weapon": {
@@ -8286,6 +8762,7 @@
   },
   {
    "id": "advanced-throwing-knives",
+   "image": "/item-icons/lorc/thrown-daggers.svg",
    "name": "Advanced Throwing Knives",
    "tier": 3,
    "weapon": {
@@ -8316,6 +8793,7 @@
   },
   {
    "id": "advanced-fighting-cloak",
+   "image": "/item-icons/lucasms/cloak.svg",
    "name": "Advanced Fighting Cloak",
    "tier": 3,
    "weapon": {
@@ -8344,6 +8822,7 @@
   },
   {
    "id": "advanced-rune-shield",
+   "image": "/item-icons/lorc/magic-shield.svg",
    "name": "Advanced Rune Shield",
    "tier": 3,
    "weapon": {
@@ -8372,6 +8851,7 @@
   },
   {
    "id": "advanced-focus-runes",
+   "image": "/item-icons/lorc/rune-stone.svg",
    "name": "Advanced Focus Runes",
    "tier": 3,
    "weapon": {
@@ -8404,6 +8884,7 @@
   },
   {
    "id": "tinkers-hammer",
+   "image": "/item-icons/lorc/claw-hammer.svg",
    "name": "Tinker’s Hammer",
    "tier": 3,
    "weapon": {
@@ -8433,6 +8914,7 @@
   },
   {
    "id": "vorpal-shard",
+   "image": "/item-icons/lorc/crystal-bars.svg",
    "name": "Vorpal Shard",
    "tier": 3,
    "weapon": {
@@ -8491,6 +8973,7 @@
   },
   {
    "id": "soul-chain",
+   "image": "/item-icons/lorc/crossed-chains.svg",
    "name": "Soul Chain",
    "tier": 3,
    "weapon": {
@@ -8531,6 +9014,7 @@
   },
   {
    "id": "war-dart",
+   "image": "/item-icons/delapouite/dart.svg",
    "name": "War Dart",
    "tier": 3,
    "weapon": {
@@ -8561,6 +9045,7 @@
   },
   {
    "id": "legendary-hatchet",
+   "image": "/item-icons/delapouite/sharp-axe.svg",
    "name": "Legendary Hatchet",
    "tier": 4,
    "weapon": {
@@ -8596,6 +9081,7 @@
   },
   {
    "id": "legendary-offhand-brass-knuckles",
+   "image": "/item-icons/delapouite/brass-knuckles.svg",
    "name": "Legendary Offhand Brass Knuckles",
    "tier": 4,
    "weapon": {
@@ -8628,6 +9114,7 @@
   },
   {
    "id": "legendary-throwing-knives",
+   "image": "/item-icons/lorc/thrown-daggers.svg",
    "name": "Legendary Throwing Knives",
    "tier": 4,
    "weapon": {
@@ -8658,6 +9145,7 @@
   },
   {
    "id": "legendary-fighting-cloak",
+   "image": "/item-icons/lucasms/cloak.svg",
    "name": "Legendary Fighting Cloak",
    "tier": 4,
    "weapon": {
@@ -8686,6 +9174,7 @@
   },
   {
    "id": "legendary-rune-shield",
+   "image": "/item-icons/lorc/magic-shield.svg",
    "name": "Legendary Rune Shield",
    "tier": 4,
    "weapon": {
@@ -8714,6 +9203,7 @@
   },
   {
    "id": "legendary-focus-runes",
+   "image": "/item-icons/lorc/rune-stone.svg",
    "name": "Legendary Focus Runes",
    "tier": 4,
    "weapon": {
@@ -8746,6 +9236,7 @@
   },
   {
    "id": "void-needle",
+   "image": "/item-icons/lorc/sewing-needle.svg",
    "name": "Void Needle",
    "tier": 4,
    "weapon": {
@@ -8786,6 +9277,7 @@
   },
   {
    "id": "echo-blade",
+   "image": "/item-icons/lorc/bouncing-sword.svg",
    "name": "Echo Blade",
    "tier": 4,
    "weapon": {
@@ -8806,6 +9298,7 @@
   },
   {
    "id": "m-bius-orb",
+   "image": "/item-icons/lorc/crystal-ball.svg",
    "name": "Möbius Orb",
    "tier": 4,
    "weapon": {
@@ -8834,6 +9327,7 @@
   },
   {
    "id": "blackblood-tendril",
+   "image": "/item-icons/lorc/whip.svg",
    "name": "Blackblood Tendril",
    "tier": 4,
    "weapon": {
@@ -8854,6 +9348,7 @@
   },
   {
    "id": "staff-of-the-dance-master",
+   "image": "/item-icons/lorc/wizard-staff.svg",
    "name": "Staff of the Dance Master",
    "tier": 3,
    "weapon": {

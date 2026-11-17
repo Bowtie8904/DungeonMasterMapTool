@@ -6,126 +6,151 @@
  "entries": [
   {
    "id": "torch",
+   "image": "/item-icons/delapouite/torch.svg",
    "name": "Torch",
    "text": "An ordinary torch for lighting your way."
   },
   {
    "id": "50-feet-of-rope",
+   "image": "/item-icons/delapouite/rope-coil.svg",
    "name": "50 feet of rope",
    "text": "A 50-foot length of rope for climbing, securing gear, and other adventuring tasks."
   },
   {
    "id": "basic-supplies",
+   "image": "/item-icons/delapouite/backpack.svg",
    "name": "Basic supplies",
    "text": "Everyday provisions and small necessities for adventuring."
   },
   {
    "id": "mentor-hand-wraps",
+   "image": "/item-icons/delapouite/hand-bandage.svg",
    "name": "hand wraps from a mentor",
    "text": "Training wraps given to you by a mentor, kept as a reminder of their lessons."
   },
   {
    "id": "secret-hobby-book",
+   "image": "/item-icons/delapouite/secret-book.svg",
    "name": "a book about your secret hobby",
    "text": "A book devoted to a pastime you prefer to keep to yourself."
   },
   {
    "id": "romance-novel",
+   "image": "/item-icons/lorc/book-cover.svg",
    "name": "A romance novel",
    "text": "A well-read tale of romance, carried as a Bard's keepsake."
   },
   {
    "id": "unopened-letter",
+   "image": "/item-icons/lorc/envelope.svg",
    "name": "a letter never opened",
    "text": "A sealed letter whose contents remain a mystery to its bearer."
   },
   {
    "id": "bag-of-rocks-and-bones",
+   "image": "/item-icons/lorc/swap-bag.svg",
    "name": "A small bag of rocks and bones",
    "text": "A Druid's collection of small natural curiosities."
   },
   {
    "id": "pendant-from-the-dirt",
+   "image": "/item-icons/lorc/gem-pendant.svg",
    "name": "a strange pendant found in the dirt",
    "text": "An unusual pendant unearthed during your travels."
   },
   {
    "id": "mentor-totem",
+   "image": "/item-icons/delapouite/totem.svg",
    "name": "A totem from your mentor",
    "text": "A token of your mentor's guidance."
   },
   {
    "id": "secret-key",
+   "image": "/item-icons/lorc/key.svg",
    "name": "a secret key",
    "text": "A key kept close, with a purpose known to its bearer."
   },
   {
    "id": "first-kill-trophy",
+   "image": "/item-icons/lorc/animal-skull.svg",
    "name": "A trophy from your first kill",
    "text": "A memento of your first successful hunt."
   },
   {
    "id": "broken-compass",
+   "image": "/item-icons/lorc/compass.svg",
    "name": "a seemingly broken compass",
    "text": "A compass that does not seem to point where it should."
   },
   {
    "id": "forgery-tools",
+   "image": "/item-icons/delapouite/scroll-quill.svg",
    "name": "A set of forgery tools",
    "text": "Tools for preparing convincing copies of documents and signatures."
   },
   {
    "id": "grappling-hook",
+   "image": "/item-icons/lorc/grapple.svg",
    "name": "a grappling hook",
    "text": "A hook that can be secured to a rope to catch a ledge or other anchor."
   },
   {
    "id": "bundle-of-offerings",
+   "image": "/item-icons/delapouite/herbs-bundle.svg",
    "name": "A bundle of offerings",
    "text": "Small offerings prepared for religious observances."
   },
   {
    "id": "divine-sigil",
+   "image": "/item-icons/lorc/holy-symbol.svg",
    "name": "a sigil of your god",
    "text": "A symbol of the deity to whom you have sworn yourself."
   },
   {
    "id": "whispering-orb",
+   "image": "/item-icons/lorc/crystal-ball.svg",
    "name": "A whispering orb",
    "text": "A curious orb that murmurs quietly."
   },
   {
    "id": "family-heirloom",
+   "image": "/item-icons/delapouite/double-necklace.svg",
    "name": "a family heirloom",
    "text": "An object handed down through your family."
   },
   {
    "id": "lover-drawing",
+   "image": "/item-icons/delapouite/portrait.svg",
    "name": "The drawing of a lover",
    "text": "A treasured likeness of someone dear to you."
   },
   {
    "id": "sharpening-stone",
+   "image": "/item-icons/lorc/stone-crafting.svg",
    "name": "a sharpening stone",
    "text": "A stone used to maintain the edge of a blade."
   },
   {
    "id": "untranslated-book",
+   "image": "/item-icons/lorc/open-book.svg",
    "name": "A book you’re trying to translate",
    "text": "A book in a language you are still working to understand."
   },
   {
    "id": "harmless-elemental-pet",
+   "image": "/item-icons/lorc/ifrit.svg",
    "name": "a tiny, harmless elemental pet",
    "text": "A small elemental companion with no combat abilities."
   },
   {
    "id": "personal-keepsake",
+   "image": "/item-icons/delapouite/locked-heart.svg",
    "name": "A keepsake from your past",
    "text": "A personal reminder of the life you led before adventuring."
   },
   {
    "id": "premium-bedroll",
+   "image": "/item-icons/delapouite/sleeping-bag.svg",
    "name": "Premium Bedroll",
    "rarity": "Common",
    "text": "During downtime, you automatically clear a Stress.",
@@ -164,12 +189,14 @@
   },
   {
    "id": "piper-whistle",
+   "image": "/item-icons/delapouite/whistle.svg",
    "name": "Piper Whistle",
    "rarity": "Common",
    "text": "This handcrafted whistle has a distinctive sound. When you blow this whistle, its piercing tone can be heard within a 1-mile radius."
   },
   {
    "id": "charging-quiver",
+   "image": "/item-icons/delapouite/quiver.svg",
    "name": "Charging Quiver",
    "rarity": "Uncommon",
    "text": "When you succeed on an attack with an arrow stored in this quiver, gain a bonus to the damage roll equal to your current tier.",
@@ -187,30 +214,35 @@
   },
   {
    "id": "alistairs-torch",
+   "image": "/item-icons/delapouite/torch.svg",
    "name": "Alistair’s Torch",
    "rarity": "Common",
    "text": "You can light this magic torch at will. The flame’s light fills a much larger space than it should, enough to illuminate a cave bright as day."
   },
   {
    "id": "speaking-orbs",
+   "image": "/item-icons/lorc/crystal-ball.svg",
    "name": "Speaking Orbs",
    "rarity": "Common",
    "text": "This pair of orbs allows any creatures holding them to communicate with each other across any distance."
   },
   {
    "id": "manacles",
+   "image": "/item-icons/lorc/handcuffs.svg",
    "name": "Manacles",
    "rarity": "Common",
    "text": "This pair of locking cuffs comes with a key."
   },
   {
    "id": "arcane-cloak",
+   "image": "/item-icons/lucasms/cloak.svg",
    "name": "Arcane Cloak",
    "rarity": "Common",
    "text": "A creature with a Spellcast trait wearing this cloak can adjust its color, texture, and size at will."
   },
   {
    "id": "woven-net",
+   "image": "/item-icons/lorc/fishing-net.svg",
    "name": "Woven Net",
    "rarity": "Common",
    "text": "You can make a Finesse Roll using this net to trap a small creature. A trapped target can break free with a successful Attack Roll (16).",
@@ -228,18 +260,21 @@
   },
   {
    "id": "fire-jar",
+   "image": "/item-icons/lorc/fire-bottle.svg",
    "name": "Fire Jar",
    "rarity": "Common",
    "text": "You can pour out the strange liquid contents of this jar to instantly produce fire. The contents regenerate when you take a long rest."
   },
   {
    "id": "suspended-rod",
+   "image": "/item-icons/lorc/wizard-staff.svg",
    "name": "Suspended Rod",
    "rarity": "Common",
    "text": "This flat rod is inscribed with runes. When you activate the rod, it is immediately suspended in place. Until the rod is deactivated, it can’t move, doesn’t abide by the rules of gravity, and remains in place."
   },
   {
    "id": "glamour-stone",
+   "image": "/item-icons/lorc/crystal-eye.svg",
    "name": "Glamour Stone",
    "rarity": "Common",
    "text": "Activate this pebble-sized stone to memorize the appearance of someone you can see. Spend a Hope to magically recreate this guise on yourself as an illusion.",
@@ -257,18 +292,21 @@
   },
   {
    "id": "empty-chest",
+   "image": "/item-icons/delapouite/chest.svg",
    "name": "Empty Chest",
    "rarity": "Common",
    "text": "This magical chest appears empty. When you speak a specific trigger word or action and open the chest, you can see the items stored within it."
   },
   {
    "id": "companion-case",
+   "image": "/item-icons/delapouite/locked-box.svg",
    "name": "Companion Case",
    "rarity": "Common",
    "text": "This case can fit a small animal companion. While the companion is inside, the animal and case are immune to all damage and harmful effects."
   },
   {
    "id": "piercing-arrows",
+   "image": "/item-icons/lorc/barbed-arrow.svg",
    "name": "Piercing Arrows",
    "rarity": "Common",
    "text": "Three times per rest when you succeed on an attack with one of these arrows, you can add your Proficiency to the damage roll.",
@@ -290,6 +328,7 @@
   },
   {
    "id": "valorstone",
+   "image": "/item-icons/lorc/gems.svg",
    "name": "Valorstone",
    "rarity": "Common",
    "text": "You can attach this stone to armor that doesn’t already have a feature. The armor gains the following feature. Resilient: Before you mark your last Armor Slot, roll a d6. On a result of 6, reduce the severity by one threshold without marking an Armor Slot.",
@@ -325,6 +364,7 @@
   },
   {
    "id": "skeleton-key",
+   "image": "/item-icons/lorc/skeleton-key.svg",
    "name": "Skeleton Key",
    "rarity": "Common",
    "text": "When you use this key to open a locked door, you gain advantage on the Finesse Roll.",
@@ -342,6 +382,7 @@
   },
   {
    "id": "arcane-prism",
+   "image": "/item-icons/delapouite/prism.svg",
    "name": "Arcane Prism",
    "rarity": "Common",
    "text": "Position this prism in a location of your choosing and activate it. All allies within Close range of it gain a +1 bonus to their Spellcast Rolls. While activated, the prism can’t be moved. Once the prism is deactivated, it can’t be activated again until your next long rest.",
@@ -388,6 +429,7 @@
   },
   {
    "id": "minor-stamina-potion-recipe",
+   "image": "/item-icons/lorc/tied-scroll.svg",
    "name": "Minor Stamina Potion Recipe",
    "rarity": "Common",
    "text": "As a downtime move, you can use the bone of a creature to craft a Minor Stamina Potion.",
@@ -406,6 +448,7 @@
   },
   {
    "id": "minor-health-potion-recipe",
+   "image": "/item-icons/lorc/tied-scroll.svg",
    "name": "Minor Health Potion Recipe",
    "rarity": "Common",
    "text": "As a downtime move, you can use a vial of blood to craft a Minor Health Potion.",
@@ -424,12 +467,14 @@
   },
   {
    "id": "homing-compasses",
+   "image": "/item-icons/lorc/compass.svg",
    "name": "Homing Compasses",
    "rarity": "Common",
    "text": "These two compasses point toward each other no matter how far apart they are."
   },
   {
    "id": "corrector-sprite",
+   "image": "/item-icons/lorc/fairy.svg",
    "name": "Corrector Sprite",
    "rarity": "Common",
    "text": "This tiny sprite sits in the curve of your ear canal and whispers helpful advice during combat. Once per short rest, you can gain advantage on an attack roll.",
@@ -451,12 +496,14 @@
   },
   {
    "id": "gecko-gloves",
+   "image": "/item-icons/delapouite/gloves.svg",
    "name": "Gecko Gloves",
    "rarity": "Uncommon",
    "text": "You can climb up vertical surfaces and across ceilings."
   },
   {
    "id": "lorekeeper",
+   "image": "/item-icons/lorc/open-book.svg",
    "name": "Lorekeeper",
    "rarity": "Uncommon",
    "text": "You can store the name and details of up to three hostile creatures inside this book. You gain a +1 bonus to action rolls against those creatures.",
@@ -474,6 +521,7 @@
   },
   {
    "id": "vial-of-darksmoke-recipe",
+   "image": "/item-icons/lorc/tied-scroll.svg",
    "name": "Vial of Darksmoke Recipe",
    "rarity": "Uncommon",
    "text": "As a downtime move, you can mark a Stress to craft a Vial of Darksmoke.",
@@ -495,6 +543,7 @@
   },
   {
    "id": "bloodstone",
+   "image": "/item-icons/lorc/gems.svg",
    "name": "Bloodstone",
    "rarity": "Uncommon",
    "text": "You can attach this stone to a weapon that doesn’t already have a feature. The weapon gains the following feature. Brutal: When you roll the maximum value on a damage die, roll an additional damage die.",
@@ -521,6 +570,7 @@
   },
   {
    "id": "greatstone",
+   "image": "/item-icons/lorc/gems.svg",
    "name": "Greatstone",
    "rarity": "Uncommon",
    "text": "You can attach this stone to a weapon that doesn’t already have a feature. The weapon gains the following feature. Powerful: On a successful attack, roll an additional damage die and discard the lowest result.",
@@ -545,6 +595,7 @@
   },
   {
    "id": "glider",
+   "image": "/item-icons/lorc/parachute.svg",
    "name": "Glider",
    "rarity": "Uncommon",
    "text": "While falling, you can mark a Stress to deploy this small parachute and glide safely to the ground.",
@@ -562,6 +613,7 @@
   },
   {
    "id": "ring-of-silence",
+   "image": "/item-icons/delapouite/ring.svg",
    "name": "Ring of Silence",
    "rarity": "Uncommon",
    "text": "Spend a Hope to activate this ring. Your footsteps are silent until your next rest.",
@@ -590,6 +642,7 @@
   },
   {
    "id": "calming-pendant",
+   "image": "/item-icons/lorc/gem-pendant.svg",
    "name": "Calming Pendant",
    "rarity": "Uncommon",
    "text": "When you would mark your last Stress, roll a d6. On a result of 5 or higher, don’t mark it.",
@@ -608,12 +661,14 @@
   },
   {
    "id": "dual-flask",
+   "image": "/item-icons/delapouite/water-flask.svg",
    "name": "Dual Flask",
    "rarity": "Uncommon",
    "text": "This flask can hold two different liquids. You can swap between them by flipping a small switch on the flask’s side."
   },
   {
    "id": "bag-of-ficklesand",
+   "image": "/item-icons/lorc/swap-bag.svg",
    "name": "Bag of Ficklesand",
    "rarity": "Uncommon",
    "text": "You can convince this small bag of sand to be much heavier or lighter with a successful Presence Roll (10). Additionally, on a successful Finesse Roll (10), you can blow a bit of sand into a target’s face to make them temporarily Vulnerable.",
@@ -640,6 +695,7 @@
   },
   {
    "id": "ring-of-resistance",
+   "image": "/item-icons/delapouite/ring.svg",
    "name": "Ring of Resistance",
    "rarity": "Uncommon",
    "text": "Once per long rest, you can activate this ring after a successful attack against you to halve the damage.",
@@ -661,6 +717,7 @@
   },
   {
    "id": "phoenix-feather",
+   "image": "/item-icons/lorc/feather.svg",
    "name": "Phoenix Feather",
    "rarity": "Uncommon",
    "text": "If you have at least one Phoenix Feather on you when you fall unconscious, you gain a +1 bonus to the roll you make to determine whether you gain a scar.",
@@ -670,6 +727,7 @@
   },
   {
    "id": "box-of-many-goods",
+   "image": "/item-icons/delapouite/locked-box.svg",
    "name": "Box of Many Goods",
    "rarity": "Uncommon",
    "text": "Once per long rest, you can open this small box and roll a d12.\n\n1–6: it’s empty.\n7–10: it contains one random common consumable.\n11–12: it contains two random common consumables.",
@@ -708,6 +766,7 @@
   },
   {
    "id": "airblade-charm",
+   "image": "/item-icons/lorc/winged-sword.svg",
    "name": "Airblade Charm",
    "rarity": "Uncommon",
    "text": "You can attach this charm to a weapon with a Melee range. Three times per rest, you can activate the charm and attack a target within Close range.",
@@ -736,12 +795,14 @@
   },
   {
    "id": "portal-seed",
+   "image": "/item-icons/delapouite/plant-seed.svg",
    "name": "Portal Seed",
    "rarity": "Uncommon",
    "text": "You can plant this seed in the ground to grow a portal in that spot. The portal is ready to use in 24 hours. You can use this portal to travel to any other location where you planted a portal seed. A portal can be destroyed by dealing any amount of magic damage to it."
   },
   {
    "id": "paragons-chain",
+   "image": "/item-icons/lorc/gem-chain.svg",
    "name": "Paragon’s Chain",
    "rarity": "Rare",
    "text": "As a downtime move, you can meditate on an ideal or principle you hold dear and focus your will into this chain. Once per long rest, you can spend a Hope to roll a d20 as your Hope Die for rolls that directly align with that principle.",
@@ -773,6 +834,7 @@
   },
   {
    "id": "elusive-amulet",
+   "image": "/item-icons/lorc/gem-pendant.svg",
    "name": "Elusive Amulet",
    "rarity": "Rare",
    "text": "Once per long rest, you can activate this amulet to become Hidden until you move. While Hidden in this way, you remain unseen even if an adversary moves to where they would normally see you.",
@@ -802,6 +864,7 @@
   },
   {
    "id": "hopekeeper-locket",
+   "image": "/item-icons/delapouite/heart-necklace.svg",
    "name": "Hopekeeper Locket",
    "rarity": "Rare",
    "text": "During a long rest, if you have 6 Hope, you can spend a Hope to imbue this locket with your bountiful resolve. When you have 0 Hope, you can use the locket to immediately gain a Hope. The locket must be re-imbued before it can be used this way again.",
@@ -856,12 +919,14 @@
   },
   {
    "id": "infinite-bag",
+   "image": "/item-icons/lorc/swap-bag.svg",
    "name": "Infinite Bag",
    "rarity": "Rare",
    "text": "When you store items in this bag, they are kept in a pocket dimension that never runs out of space. You can retrieve an item at any time."
   },
   {
    "id": "stride-relic",
+   "image": "/item-icons/lorc/rune-stone.svg",
    "name": "Stride Relic",
    "rarity": "Rare",
    "text": "You gain a +1 bonus to your Agility. You can only carry one relic.",
@@ -876,6 +941,7 @@
   },
   {
    "id": "bolster-relic",
+   "image": "/item-icons/lorc/rune-stone.svg",
    "name": "Bolster Relic",
    "rarity": "Rare",
    "text": "You gain a +1 bonus to your Strength. You can only carry one relic.",
@@ -890,6 +956,7 @@
   },
   {
    "id": "control-relic",
+   "image": "/item-icons/lorc/rune-stone.svg",
    "name": "Control Relic",
    "rarity": "Rare",
    "text": "You gain a +1 bonus to your Finesse. You can only carry one relic.",
@@ -904,6 +971,7 @@
   },
   {
    "id": "attune-relic",
+   "image": "/item-icons/lorc/rune-stone.svg",
    "name": "Attune Relic",
    "rarity": "Rare",
    "text": "You gain a +1 bonus to your Instinct. You can only carry one relic.",
@@ -918,6 +986,7 @@
   },
   {
    "id": "charm-relic",
+   "image": "/item-icons/lorc/rune-stone.svg",
    "name": "Charm Relic",
    "rarity": "Rare",
    "text": "You gain a +1 bonus to your Presence. You can only carry one relic.",
@@ -932,6 +1001,7 @@
   },
   {
    "id": "enlighten-relic",
+   "image": "/item-icons/lorc/rune-stone.svg",
    "name": "Enlighten Relic",
    "rarity": "Rare",
    "text": "You gain a +1 bonus to your Knowledge. You can only carry one relic.",
@@ -946,6 +1016,7 @@
   },
   {
    "id": "honing-relic",
+   "image": "/item-icons/lorc/rune-stone.svg",
    "name": "Honing Relic",
    "rarity": "Rare",
    "text": "You gain a +1 bonus to an Experience of your choice. You can only carry one relic.",
@@ -963,24 +1034,28 @@
   },
   {
    "id": "flickerfly-pendant",
+   "image": "/item-icons/lorc/gem-pendant.svg",
    "name": "Flickerfly Pendant",
    "rarity": "Rare",
    "text": "While you carry this pendant, your weapons with a Melee range that deal physical damage have a gossamer sheen and can attack targets within Very Close range."
   },
   {
    "id": "lakestrider-boots",
+   "image": "/item-icons/lorc/boots.svg",
    "name": "Lakestrider Boots",
    "rarity": "Legendary",
    "text": "You can walk on the surface of water as if it were soft ground."
   },
   {
    "id": "clay-companion",
+   "image": "/item-icons/delapouite/balloon-dog.svg",
    "name": "Clay Companion",
    "rarity": "Legendary",
    "text": "When you sculpt this ball of clay into a clay animal companion, it behaves as that animal. For example, a clay spider can spin clay webs, while a clay bird can fly. The clay companion retains memory and identity across different shapes, but they can adopt new mannerisms with each form."
   },
   {
    "id": "mythic-dust-recipe",
+   "image": "/item-icons/lorc/tied-scroll.svg",
    "name": "Mythic Dust Recipe",
    "rarity": "Legendary",
    "text": "As a downtime move, you can use a handful of fine gold dust to craft Mythic Dust.",
@@ -999,6 +1074,7 @@
   },
   {
    "id": "shard-of-memory",
+   "image": "/item-icons/lorc/crystal-bars.svg",
    "name": "Shard of Memory",
    "rarity": "Legendary",
    "text": "Once per long rest, you can spend 2 Hope to recall a domain card from your vault instead of paying its Recall Cost.",
@@ -1020,6 +1096,7 @@
   },
   {
    "id": "gem-of-alacrity",
+   "image": "/item-icons/lorc/gems.svg",
    "name": "Gem of Alacrity",
    "rarity": "Legendary",
    "text": "You can attach this gem to a weapon, allowing you to use your Agility when making an attack with that weapon.",
@@ -1032,6 +1109,7 @@
   },
   {
    "id": "gem-of-might",
+   "image": "/item-icons/lorc/gems.svg",
    "name": "Gem of Might",
    "rarity": "Legendary",
    "text": "You can attach this gem to a weapon, allowing you to use your Strength when making an attack with that weapon.",
@@ -1044,6 +1122,7 @@
   },
   {
    "id": "gem-of-precision",
+   "image": "/item-icons/lorc/gems.svg",
    "name": "Gem of Precision",
    "rarity": "Legendary",
    "text": "You can attach this gem to a weapon, allowing you to use your Finesse when making an attack with that weapon.",
@@ -1056,6 +1135,7 @@
   },
   {
    "id": "gem-of-insight",
+   "image": "/item-icons/lorc/gems.svg",
    "name": "Gem of Insight",
    "rarity": "Legendary",
    "text": "You can attach this gem to a weapon, allowing you to use your Instinct when making an attack with that weapon.",
@@ -1068,6 +1148,7 @@
   },
   {
    "id": "gem-of-audacity",
+   "image": "/item-icons/lorc/gems.svg",
    "name": "Gem of Audacity",
    "rarity": "Legendary",
    "text": "You can attach this gem to a weapon, allowing you to use your Presence when making an attack with that weapon.",
@@ -1080,6 +1161,7 @@
   },
   {
    "id": "gem-of-sagacity",
+   "image": "/item-icons/lorc/gems.svg",
    "name": "Gem of Sagacity",
    "rarity": "Legendary",
    "text": "You can attach this gem to a weapon, allowing you to use your Knowledge when making an attack with that weapon.",
@@ -1092,6 +1174,7 @@
   },
   {
    "id": "ring-of-unbreakable-resolve",
+   "image": "/item-icons/delapouite/ring.svg",
    "name": "Ring of Unbreakable Resolve",
    "rarity": "Legendary",
    "text": "Once per session, when the GM spends a Fear, you can spend 4 Hope to cancel the effects of that spent Fear.",
@@ -1113,6 +1196,7 @@
   },
   {
    "id": "belt-of-unity",
+   "image": "/item-icons/lucasms/belt.svg",
    "name": "Belt of Unity",
    "rarity": "Legendary",
    "text": "Once per session, you can spend 5 Hope to lead a Tag Team Roll with three PCs instead of two.",
@@ -1134,6 +1218,7 @@
   },
   {
    "id": "alconite-crystal",
+   "image": "/item-icons/lorc/crystal-cluster.svg",
    "name": "Alconite Crystal",
    "rarity": "Common",
    "text": "You can expend the energy in this crystal to gain a 1d4 bonus to a Spellcast Roll. You can recharge it as a downtime move by immersing it in salt water.",
@@ -1175,6 +1260,7 @@
   },
   {
    "id": "anchoring-hook",
+   "image": "/item-icons/lorc/anchor.svg",
    "name": "Anchoring Hook",
    "rarity": "Common",
    "text": "When you make a reaction roll to avoid being moved against your will, you can deploy this anchor to gain advantage on the roll, and resistance to any damage you take from the movement.",
@@ -1200,6 +1286,7 @@
   },
   {
    "id": "ancient-runestone",
+   "image": "/item-icons/lorc/rune-stone.svg",
    "name": "Ancient Runestone",
    "rarity": "Uncommon",
    "text": "Trace this forgotten rune with your finger and spend a Hope to roll a d6.\n\n1: mark a Stress.\n2–3: nothing happens.\n4–5: you gain advantage on your next Spellcast Roll.\n6: clear all Stress.",
@@ -1275,6 +1362,7 @@
   },
   {
    "id": "big-bug-begone",
+   "image": "/item-icons/lorc/long-antennae-bug.svg",
    "name": "Big Bug Begone",
    "rarity": "Uncommon",
    "text": "Once per rest, point this giant beetle antenna at any giant invertebrate within Close range and force it to make a Reaction Roll (15). On a failure, it is permanently transformed into a normal-sized creature of the same kind.",
@@ -1293,6 +1381,7 @@
   },
   {
    "id": "bogglass-reed",
+   "image": "/item-icons/delapouite/plant-roots.svg",
    "name": "Bogglass Reed",
    "rarity": "Rare",
    "text": "Once per rest, while holding this reed, you can take the spotlight when the GM spends a Fear. Craftinto: ChronoQuill.",
@@ -1311,6 +1400,7 @@
   },
   {
    "id": "bubble-wand",
+   "image": "/item-icons/lorc/fairy-wand.svg",
    "name": "Bubble Wand",
    "rarity": "Common",
    "text": "Once per long rest, you can activate this wand with a successful Finesse Roll (10) to produce a stream of bubbles, giving disadvantage on the next attack against you. If the attack misses, you gain a Hope.",
@@ -1358,12 +1448,14 @@
   },
   {
    "id": "calming-censer",
+   "image": "/item-icons/lorc/incense.svg",
    "name": "Calming Censer",
    "rarity": "Common",
    "text": "This contraption disperses smoke that calms insects and other bugs up to Close range of you, giving them disadvantage on attacks for the scene. Once burned, it needs refilling with fragrant herbs."
   },
   {
    "id": "croakroot-pad",
+   "image": "/item-icons/delapouite/plant-roots.svg",
    "name": "Croakroot Pad",
    "rarity": "Rare",
    "text": "As a downtime move you can meditate on this pad to ask the GM a question about your past or future. Until your next rest you take 1d6 magic damage whenever you make an Insight Roll with Fear.",
@@ -1400,6 +1492,7 @@
   },
   {
    "id": "detuner",
+   "image": "/item-icons/lorc/music-spell.svg",
    "name": "Detuner",
    "rarity": "Uncommon",
    "text": "Once per long rest, you can spend a Hope to activate the detuner. Any melody produced within Far range is disrupted. A creature creating a magical tune can mark a Stress to maintain it or it is forced to stop.",
@@ -1421,6 +1514,7 @@
   },
   {
    "id": "dread-weave-boots",
+   "image": "/item-icons/lorc/boots.svg",
    "name": "Dread-Weave Boots",
    "rarity": "Rare",
    "text": "While wearing these boots, you have resistance to any magic damage triggered by contact with the ground.",
@@ -1440,6 +1534,7 @@
   },
   {
    "id": "dreamers-shard",
+   "image": "/item-icons/lorc/crystal-bars.svg",
    "name": "Dreamer’s Shard",
    "rarity": "Uncommon",
    "text": "During a long rest, you can use this crystal to induce a prophetic dream, giving a hint to a question that is worrying you. When you do this, you must succeed on an Instinct Reaction Roll (14) or be trapped in a nightmare, paralyzed until someone wakes you. The shard shatters if you fail the reaction roll.",
@@ -1459,6 +1554,7 @@
   },
   {
    "id": "etheric-anchor",
+   "image": "/item-icons/lorc/anchor.svg",
    "name": "Etheric Anchor",
    "rarity": "Uncommon",
    "text": "While carrying this anchor you can mark 2 Stress to automatically succeed on a Reaction Roll against the effects of spatial distortions or other hostile geography.",
@@ -1476,6 +1572,7 @@
   },
   {
    "id": "flickerbloom",
+   "image": "/item-icons/delapouite/butterfly-flower.svg",
    "name": "Flickerbloom",
    "rarity": "Rare",
    "text": "While carrying this flower, you have advantage on Reaction Rolls to resist any temporal anomalies, but if you fail such a roll, you must mark a Stress.",
@@ -1493,6 +1590,7 @@
   },
   {
    "id": "gravitic-tether",
+   "image": "/item-icons/lucasms/belt.svg",
    "name": "Gravitic Tether",
    "rarity": "Rare",
    "text": "While wearing this belt, you take half damage from falls, and no damage from the effects of gravitational anomalies, but you can’t travel further than Very Close range on your move without an agility roll.",
@@ -1515,6 +1613,7 @@
   },
   {
    "id": "ice-gloves",
+   "image": "/item-icons/delapouite/gloves.svg",
    "name": "Ice Gloves",
    "rarity": "Common",
    "text": "When you pick up snow with these gloves you can form it into a deadly snowball and throw it as a weapon (Agility, Close, mag d6+1).",
@@ -1541,6 +1640,7 @@
   },
   {
    "id": "jamming-spanner",
+   "image": "/item-icons/lorc/spanner.svg",
    "name": "Jamming Spanner",
    "rarity": "Rare",
    "text": "Make a successful Finesse Roll to place this tool into a machine to prevent it from operating. The GM can spend a Fear to break the spanner and restart the machine, or you can remove it with a second roll. If you make either roll with Fear, you take damage. The Difficulty and damage depend on the machine.",
@@ -1558,6 +1658,7 @@
   },
   {
    "id": "lantern-of-shadows",
+   "image": "/item-icons/lorc/lantern.svg",
    "name": "Lantern of Shadows",
    "rarity": "Rare",
    "text": "While using this lantern, you can see through any illusions and see secret doors and passageways within Close range. When you roll with Fear or when the scene ends, the lantern extinguishes, and can’t be lit again until you take a long rest.",
@@ -1587,6 +1688,7 @@
   },
   {
    "id": "lightning-scarab",
+   "image": "/item-icons/lorc/scarab-beetle.svg",
    "name": "Lightning Scarab",
    "rarity": "Rare",
    "text": "When you’re hit by electrical damage, you can divert it into this brooch, then roll your Duality Dice. If the total is less than the diverted damage, the brooch explodes and you take the sum of all the damage it has absorbed. The brooch safely discharges all stored damage during a long rest.",
@@ -1633,12 +1735,14 @@
   },
   {
    "id": "lovebugs",
+   "image": "/item-icons/lorc/scarab-beetle.svg",
    "name": "Lovebugs",
    "rarity": "Common",
    "text": "A set of two ceramic bugs. When you place one on the floor, it will crawl toward the other by the fastest available route."
   },
   {
    "id": "mimicry-mask",
+   "image": "/item-icons/lorc/duality-mask.svg",
    "name": "Mimicry Mask",
    "rarity": "Uncommon",
    "text": "While wearing this mask, once per scene you can mimic a creature within Close range. Until you are next spotlighted, they experience either delayed speech (must mark a Stress to speak), erratic movements (disadvantage on reaction rolls), or clumsy attacks (disadvantage on attack rolls).",
@@ -1657,6 +1761,7 @@
   },
   {
    "id": "pathfinders-ledger",
+   "image": "/item-icons/lorc/open-book.svg",
    "name": "Pathfinder’s Ledger",
    "rarity": "Rare",
    "text": "If you scribe your path into this book as you travel, you have advantage on rolls to navigate or avoid being disoriented. If you fail such a roll with Fear, you lose one piece of information you previously knew about your current path.",
@@ -1674,6 +1779,7 @@
   },
   {
    "id": "puddleducks-fins",
+   "image": "/item-icons/delapouite/swimfins.svg",
    "name": "Puddleduck’s Fins",
    "rarity": "Common",
    "text": "While wearing these fins on your feet, you must mark a Stress to move further than Very Close range on land, but you can move at normal speed when swimming. A druid wearing these fins can Beastform into an Aquatic Scout without marking a Stress.",
@@ -1694,6 +1800,7 @@
   },
   {
    "id": "pure-crystal",
+   "image": "/item-icons/lorc/crystal-cluster.svg",
    "name": "Pure Crystal",
    "rarity": "Uncommon",
    "text": "Once per session, when you use a feature that restores HP to a creature, restore one additional HP.",
@@ -1720,6 +1827,7 @@
   },
   {
    "id": "quill-of-memory",
+   "image": "/item-icons/lorc/quill-ink.svg",
    "name": "Quill of Memory",
    "rarity": "Common",
    "text": "You can write up to a hundred words with this quill as a downtime move. They don’t appear on the page but are etched into your mind. No effect can erase them, and you don’t need to make a roll to recall them.",
@@ -1735,6 +1843,7 @@
   },
   {
    "id": "red-nose-of-hope",
+   "image": "/item-icons/delapouite/nose-front.svg",
    "name": "Red Nose of Hope",
    "rarity": "Uncommon",
    "text": "While wearing this nose you have advantage on Presence Rolls to entertain an audience. Once per long rest, you can also mark a Stress to turn a roll with Fear into a roll with Hope.",
@@ -1768,6 +1877,7 @@
   },
   {
    "id": "rootslicer-gauntlet",
+   "image": "/item-icons/delapouite/gloves.svg",
    "name": "Rootslicer Gauntlet",
    "rarity": "Uncommon",
    "text": "You have advantage on attacks and Reaction Rolls against plant-based creatures and hazards. Each time you use this feature and still fail the roll, the GM gains a Fear.",
@@ -1792,6 +1902,7 @@
   },
   {
    "id": "shadowangler-lure",
+   "image": "/item-icons/delapouite/fishing-lure.svg",
    "name": "Shadowangler Lure",
    "rarity": "Rare",
    "text": "Once per rest you can activate this lure and cause it to glow. Any creature within Far range must make an Instinct Reaction Roll (12). On a failure, they move in to Very Close range.",
@@ -1810,6 +1921,7 @@
   },
   {
    "id": "sirens-rock",
+   "image": "/item-icons/lorc/stone-sphere.svg",
    "name": "Siren’s Rock",
    "rarity": "Rare",
    "text": "Once per rest you can place this weathered and barnacle-laden stone in seawater. Creatures within Close range must succeed on a Presence Reaction Roll (12) or become temporarily Enraptured. Enraptured creatures can’t make attack rolls and must mark a Stress to move anywhere except toward the stone.",
@@ -1828,6 +1940,7 @@
   },
   {
    "id": "soulweave-cloak",
+   "image": "/item-icons/lucasms/cloak.svg",
    "name": "Soulweave Cloak",
    "rarity": "Legendary",
    "text": "While wearing this cloak, once per long rest you can become Incorporeal, able to move through physical objects and resistant to physical damage, until you end the condition or the scene ends. Other incorporeal creatures have advantage on attacks against you while you are in this form.",
@@ -1868,6 +1981,7 @@
   },
   {
    "id": "spirit-seeker",
+   "image": "/item-icons/lorc/crystal-wand.svg",
    "name": "Spirit Seeker",
    "rarity": "Rare",
    "text": "Hold out this willow wand and spend a Hope to sense the location of the nearest dead or undead creature larger than a cat within Far range. You can additionally mark a stress for each dead or undead creature you want to exclude from the search.",
@@ -1892,6 +2006,7 @@
   },
   {
    "id": "stingshield-robes",
+   "image": "/item-icons/lucasms/cloak.svg",
    "name": "Stingshield Robes",
    "rarity": "Uncommon",
    "text": "While wearing these bug-resistant clothes and dont have any marked Armor Slots you are immune to damage by any creature up to the size of a bee, and resistant to damage from all creatures up to the size of a mouse. These robes regain their properties once you cleared your armor slots.",
@@ -1914,6 +2029,7 @@
   },
   {
    "id": "superior-alconite-crystal",
+   "image": "/item-icons/lorc/crystal-cluster.svg",
    "name": "Superior Alconite Crystal",
    "rarity": "Uncommon",
    "text": "You can use the energy in this crystal to gain a 1d4 bonus to a Spellcast Roll. If you roll a 4, the energy is expended and it can’t be reused until you recharge it as a downtime move by immersing it in salt water.",
@@ -1955,6 +2071,7 @@
   },
   {
    "id": "tarrasque-sinew",
+   "image": "/item-icons/delapouite/bow-string.svg",
    "name": "Tarrasque Sinew",
    "rarity": "Rare",
    "text": "When you string a bow without a feature with this powerful cord, it gains the following feature. Titan-Slayer: You gain a +1 bonus to your Proficiency for damage rolls with this weapon when you hit a creature more than twice your size.",
@@ -1987,6 +2104,7 @@
   },
   {
    "id": "ticket-masters-pouch",
+   "image": "/item-icons/lorc/swap-bag.svg",
    "name": "Ticket Master’s Pouch",
    "rarity": "Uncommon",
    "text": "The pouch can hold a handful of gold. When you use the gold from inside it to pay for something up to a bag of gold in value, you have advantage on Presence Rolls to haggle for the price.",
@@ -2004,6 +2122,7 @@
   },
   {
    "id": "timeglass",
+   "image": "/item-icons/lorc/spyglass.svg",
    "name": "Timeglass",
    "rarity": "Legendary",
    "text": "Once per session, you can look through this spyglass as if looking through it in the same location some time in the past. You can set it to any length of time from 10 minutes to 10 days.",
@@ -2022,6 +2141,7 @@
   },
   {
    "id": "tome-of-ancient-knowledge",
+   "image": "/item-icons/lorc/open-book.svg",
    "name": "Tome of Ancient Knowledge",
    "rarity": "Legendary",
    "text": "As a downtime project (7) you can read this book to permanently increase your Knowledge modifier by +1. Once you do this, the book’s pages turn blank.",
@@ -2037,6 +2157,7 @@
   },
   {
    "id": "tortoise-horn",
+   "image": "/item-icons/delapouite/rhinoceros-horn.svg",
    "name": "Tortoise Horn",
    "rarity": "Common",
    "text": "If you use this bony fragment as a pommel for a weapon that doesn’t already have a feature, the weapon gains the following feature. Concussive: When succeeding an attack roll, you can mark a Stress to gain a +1 bonus to your Proficiency for that attack.",
@@ -2069,6 +2190,7 @@
   },
   {
    "id": "twisted-lens",
+   "image": "/item-icons/lorc/microscope-lens.svg",
    "name": "Twisted Lens",
    "rarity": "Rare",
    "text": "When you look through this lens, you can see into far distance through objects and terrain. However, everything you see is distorted and evil-looking. You must succeed on a Presence Reaction Roll (14). If you fail the roll you must mark a Stress and wont be able to make any sense of what you saw.",
@@ -2088,6 +2210,7 @@
   },
   {
    "id": "veilcloak",
+   "image": "/item-icons/lucasms/cloak.svg",
    "name": "Veilcloak",
    "rarity": "Rare",
    "text": "While wearing this, you have advantage on Finesse Rolls made while in darkness. You can also spend a Hope once per long rest to make it shine with dim light up to Close range. Creatures outside that range must mark a Stress to see inside.",
@@ -2118,6 +2241,7 @@
   },
   {
    "id": "veilshroud-hood",
+   "image": "/item-icons/lucasms/cloak.svg",
    "name": "Veilshroud Hood",
    "rarity": "Uncommon",
    "text": "While wearing this cloak you have advantage on Reaction Rolls against illusions and being magically spied on, but disadvantage on rolls to perceive normal sights and sounds. Once you don the cloak, you must wear it until your next rest or it loses its powers.",
@@ -2142,6 +2266,7 @@
   },
   {
    "id": "war-gods-sigil",
+   "image": "/item-icons/lorc/holy-symbol.svg",
    "name": "War God’s Sigil",
    "rarity": "Common",
    "text": "You can transfer this design onto armor that doesn’t have a feature. It gains the following feature: Herald of War: On your first attack in a scene, you can add your Presence to the attack roll.",
@@ -2175,6 +2300,7 @@
   },
   {
    "id": "winter-wolf-cloak",
+   "image": "/item-icons/lucasms/cloak.svg",
    "name": "Winter Wolf Cloak",
    "rarity": "Rare",
    "text": "While wearing this cloak, when you cause an adversary to mark 1 or more Hit Points, you can spend a Hope to increase your Evasion by 1 until you next take damage. You can’t stack this effect.",
@@ -2211,6 +2337,7 @@
   },
   {
    "id": "witherroot-charm",
+   "image": "/item-icons/delapouite/tribal-pendant.svg",
    "name": "Witherroot Charm",
    "rarity": "Uncommon",
    "text": "Once per long rest, you can ignore all damage from a psychic attack. You then have disadvantage on Presence Reaction Rolls until you take a downtime move to purge the charm of psychic residue.",
@@ -2255,6 +2382,7 @@
   },
   {
    "id": "wolffriend-pendant",
+   "image": "/item-icons/delapouite/feather-necklace.svg",
    "name": "Wolffriend Pendant",
    "rarity": "Common",
    "text": "While wearing this item, dogs and wolves will not attack you unless you are hostile towards them or their packmates, and you have advantage on rolls to befriend or influence them.",
@@ -2272,6 +2400,7 @@
   },
   {
    "id": "wraith-trap",
+   "image": "/item-icons/delapouite/locked-box.svg",
    "name": "Wraith Trap",
    "rarity": "Rare",
    "text": "This box can hold up to three undead spirits. You can make a Finesse Roll to trap an undead creature, with a +1 bonus for every HP the target has marked. For each trapped spirit, you have a +1 bonus to reaction rolls against psychic attacks. You can open the box and release all trapped spirits.",
@@ -2343,6 +2472,7 @@
   },
   {
    "id": "yeti-coat",
+   "image": "/item-icons/lucasms/cloak.svg",
    "name": "Yeti Coat",
    "rarity": "Uncommon",
    "text": "While wearing this coat you take half damage from exposure to cold. In freezing temperatures, you can mark 3 Stress to transform into a Yeti for the scene as if using a Druid’s Beastform feature (use the Powerful Beast form).",
@@ -2372,6 +2502,7 @@
   },
   {
    "id": "potioncraft-kit",
+   "image": "/item-icons/skoll/pestle-mortar.svg",
    "name": "Potioncraft Kit",
    "rarity": "Common",
    "text": "As an additional downtime move, you may choose to forage for ingredients that can be used in potioncraft. Roll a d4 and add your Instinct. You collect a number of ingredients equal to the result of this roll. For each collected ingredient, roll a d6 to determine its properties when used in a potion. Work with the GM to describe these ingredients and add them to your inventory.\n\n1. Heal: Clear 2 Hit Points (2d8 direct physical damage if inverted);\n2. Soothe: Clear 2 Stress;\n3. Empower: You gain a +2 bonus to your next damage roll;\n4. Enhance: You gain a +1 bonus to your next action or reaction roll\n5. Bolster: Double the effectiveness of all ingredients in the potion;\n6. Invert: All ingredient effects become harmful (Mark a Stress or Hit Point instead of clearing it, receive a -1 penalty to the next Roll instead of a +1 bonus, etc.);\n\nWhen you take the “Work on a Project” downtime move, you may create a potion using gathered ingredients. The number of ingredients you can include in a potion equals your Proficiency, and the project’s Countdown duration is equal to the number of included ingredients. The difficulty is 10 + the number of ingredients.\n\nBy default, a potion must be ingested to take effect. However, you may alter the potion for it to activate on contact or disperse as a gas and affect all creatures within Close range of the impact point. If you do so, double the project’s Countdown.",
@@ -2401,6 +2532,7 @@
   },
   {
    "id": "alchemy-jug",
+   "image": "/item-icons/delapouite/jug.svg",
    "name": "Alchemy Jug",
    "rarity": "Uncommon",
    "text": "This ceramic jug appears to be able to hold a gallon of liquid and weighs 12 pounds whether full or empty. Sloshing sounds can be heard from within the jug when it is shaken, even if the jug is empty.\n\nOnce per long rest, You can name one liquid from the table below to cause the jug to produce the chosen liquid. Afterward, you can uncork the jug as an action and pour that liquid out, up to 2 gallons per minute. The maximum amount of liquid the jug can produce depends on the liquid you named.\n\nAcidpaste 8 ounces\nBeer 4 gallons\nHoney 1 gallon\nMayonnaise 2 gallons\nOil quart\nVinegar 2 gallons\nWater, fresh 8 gallons\nWater, salt 12 gallons\nWine 1 gallon",
@@ -2419,6 +2551,7 @@
   },
   {
    "id": "cloak-of-displacement",
+   "image": "/item-icons/lucasms/cloak.svg",
    "name": "Cloak of Displacement",
    "rarity": "Uncommon",
    "text": "While you wear this cloak, mark a Stress to project an illusion that makes you appear to be standing in a place near your actual location, causing any creature to have disadvantage on attack rolls against you. The projection lasts until the end of the scene. If you take damage, the property ceases to function until the start of your next rest. This property is suppressed while you are unable to move.",
@@ -2449,6 +2582,7 @@
   },
   {
    "id": "blood-scrying-crystal",
+   "image": "/item-icons/lorc/crystal-eye.svg",
    "name": "Blood Scrying Crystal",
    "rarity": "Legendary",
    "text": "Once per session you may mark 2 Stress to see through the eyes of your target for a few seconds regardless of distance. This requires you to have a small quantity of the targets blood which will be consumed by the crystal.",
@@ -2470,12 +2604,14 @@
   },
   {
    "id": "caltrops",
+   "image": "/item-icons/delapouite/caltrops.svg",
    "name": "Caltrops",
    "rarity": "Common",
    "text": "You can spread these caltrops in a Very Close area around you. A creature hastening through that area must mark a Stress."
   },
   {
    "id": "grapnel",
+   "image": "/item-icons/lorc/grapple.svg",
    "name": "Grapnel",
    "rarity": "Common",
    "text": "You gain advantage on action rolls to climb sheer surfaces.",
@@ -2493,18 +2629,21 @@
   },
   {
    "id": "ball-bearings",
+   "image": "/item-icons/delapouite/marbles.svg",
    "name": "Ball Bearings",
    "rarity": "Common",
    "text": "This pouch contains perfectly smooth metal spheres."
   },
   {
    "id": "box-of-dragon-dust",
+   "image": "/item-icons/lorc/powder.svg",
    "name": "Box of Dragon Dust",
    "rarity": "Common",
    "text": "This snuffbox is filled with combustible powder."
   },
   {
    "id": "nighthawkers-ring",
+   "image": "/item-icons/delapouite/ring.svg",
    "name": "Nighthawker’s Ring",
    "rarity": "Common",
    "text": "Spend a Hope to activate the gemstone in this ring until the end of the scene. While active, the gemstone changes color to indicate the wearer’s proximity to hidden treasure: warm colors for near, cool colors for far.",
@@ -2533,42 +2672,49 @@
   },
   {
    "id": "elven-spyglass",
+   "image": "/item-icons/lorc/spyglass.svg",
    "name": "Elven Spyglass",
    "rarity": "Common",
    "text": "You can use this spyglass to magnify your vision a hundredfold."
   },
   {
    "id": "gourmet-granules",
+   "image": "/item-icons/lorc/powder.svg",
    "name": "Gourmet Granules",
    "rarity": "Common",
    "text": "This savory powder makes any food it’s sprinkled on delicious and healthy, no matter how bland or rotten it is."
   },
   {
    "id": "collapsible-pole",
+   "image": "/item-icons/lorc/wizard-staff.svg",
    "name": "Collapsible Pole",
    "rarity": "Common",
    "text": "You can break down this 18-foot pole into six interlinked 3-foot segments."
   },
   {
    "id": "blackwing-quill",
+   "image": "/item-icons/lorc/quill-ink.svg",
    "name": "Blackwing Quill",
    "rarity": "Common",
    "text": "This writing quill never runs out of ink or needs to be sharpened."
   },
   {
    "id": "silees-folding-knife",
+   "image": "/item-icons/skoll/switchblade.svg",
    "name": "Silee’s Folding Knife",
    "rarity": "Common",
    "text": "This 3-inch blade has an edge that easily cuts through anything except the handle it’s stored in."
   },
   {
    "id": "windup-toy",
+   "image": "/item-icons/lorc/gears.svg",
    "name": "Windup Toy",
    "rarity": "Common",
    "text": "This small mechanical device is shaped like a strixwolf pup and can be programmed to perform simple tricks."
   },
   {
    "id": "loaded-dice",
+   "image": "/item-icons/delapouite/rolling-dices.svg",
    "name": "Loaded Dice",
    "rarity": "Common",
    "text": "You can choose what result this set of weighted dice rolls with a successful Finesse Roll (14). If you roll with Fear, anyone watching knows the dice are loaded.",
@@ -2587,24 +2733,28 @@
   },
   {
    "id": "hollowbark-horn",
+   "image": "/item-icons/lorc/hunting-horn.svg",
    "name": "Hollowbark Horn",
    "rarity": "Common",
    "text": "You can blow this horn to summon a small woodland creature to perform a simple task."
   },
   {
    "id": "self-tying-rope",
+   "image": "/item-icons/delapouite/rope-coil.svg",
    "name": "Self-Tying Rope",
    "rarity": "Uncommon",
    "text": "You can command this rope to tie or untie itself."
   },
   {
    "id": "thiefs-compass",
+   "image": "/item-icons/lorc/compass.svg",
    "name": "Thief’s Compass",
    "rarity": "Uncommon",
    "text": "This compass points the way toward the nearest exit while indoors and the closest entrance while outdoors."
   },
   {
    "id": "travelers-bell",
+   "image": "/item-icons/lorc/ringing-bell.svg",
    "name": "Traveler’s Bell",
    "rarity": "Uncommon",
    "text": "Once per long rest, you can ring this bell to magically open the shortest safe path through rough terrain for 1 hour.",
@@ -2623,30 +2773,35 @@
   },
   {
    "id": "mandragorian-torch",
+   "image": "/item-icons/delapouite/torch.svg",
    "name": "Mandragorian Torch",
    "rarity": "Uncommon",
    "text": "This torch gives off light only the bearer can see."
   },
   {
    "id": "boots-of-supple-mystique",
+   "image": "/item-icons/lorc/boots.svg",
    "name": "Boots of Supple Mystique",
    "rarity": "Uncommon",
    "text": "While wearing these boots, you don’t leave tracks or footprints."
   },
   {
    "id": "zephyrs-jar",
+   "image": "/item-icons/delapouite/covered-jar.svg",
    "name": "Zephyr’s Jar",
    "rarity": "Uncommon",
    "text": "You can open this empty jar during inclement weather to capture the storm and leave behind clear skies. The storm remains inside until unleashed by reopening the jar."
   },
   {
    "id": "returning-ring",
+   "image": "/item-icons/delapouite/ring.svg",
    "name": "Returning Ring",
    "rarity": "Uncommon",
    "text": "When you throw your primary weapon while wearing this ring, the weapon appears in your hand immediately after the attack."
   },
   {
    "id": "kingfishers-net",
+   "image": "/item-icons/lorc/fishing-net.svg",
    "name": "Kingfisher’s Net",
    "rarity": "Uncommon",
    "text": "Once per long rest, you can use this net to scoop one live fish out of any amount of water, no matter how unlikely it is for that water to have fish in it.",
@@ -2665,6 +2820,7 @@
   },
   {
    "id": "titans-girdle",
+   "image": "/item-icons/lucasms/belt.svg",
    "name": "Titan’s Girdle",
    "rarity": "Uncommon",
    "text": "Once per scene, you can activate this girdle to gain a +1 bonus to your Proficiency for your next attack.",
@@ -2686,12 +2842,14 @@
   },
   {
    "id": "iron-veil",
+   "image": "/item-icons/lorc/mail-shirt.svg",
    "name": "Iron Veil",
    "rarity": "Uncommon",
    "text": "This chain-link head covering renders the wearer invisible to fey creatures."
   },
   {
    "id": "furball-bag",
+   "image": "/item-icons/lorc/swap-bag.svg",
    "name": "Furball Bag",
    "rarity": "Uncommon",
    "text": "Once per rest, you can produce 2d20 harmless, cat-sized fur creatures of indeterminate origin and species from this bag.",
@@ -2710,18 +2868,21 @@
   },
   {
    "id": "whisperstep-anklet",
+   "image": "/item-icons/lorc/linked-rings.svg",
    "name": "Whisperstep Anklet",
    "rarity": "Uncommon",
    "text": "This anklet makes your steps silent as long as you don’t move faster than walking speed."
   },
   {
    "id": "enchanters-loupe",
+   "image": "/item-icons/lorc/microscope-lens.svg",
    "name": "Enchanter’s Loupe",
    "rarity": "Uncommon",
    "text": "You can use this loupe to see through illusions and enchantments."
   },
   {
    "id": "eschers-mirrorball",
+   "image": "/item-icons/lorc/crystal-ball.svg",
    "name": "Escher’s Mirrorball",
    "rarity": "Uncommon",
    "text": "Once per long rest, you can command this fist-sized silver orb to capture an omnidirectional image of its surroundings on its surface. This image lasts until your next long rest.",
@@ -2740,6 +2901,7 @@
   },
   {
    "id": "cheaters-coin",
+   "image": "/item-icons/delapouite/two-coins.svg",
    "name": "Cheater’s Coin",
    "rarity": "Uncommon",
    "text": "When you flip this coin, you can spend a Hope to determine which side it lands on.",
@@ -2757,12 +2919,14 @@
   },
   {
    "id": "gravewardens-bell",
+   "image": "/item-icons/lorc/ringing-bell.svg",
    "name": "Gravewarden’s Bell",
    "rarity": "Uncommon",
    "text": "This bell rings when a ghost or undead creature moves within Far range of it."
   },
   {
    "id": "reliquary-of-the-sightless-saint",
+   "image": "/item-icons/lorc/holy-grail.svg",
    "name": "Reliquary of the Sightless Saint",
    "rarity": "Uncommon",
    "text": "You gain a +1 bonus to your Hope Die when you make the Risk It All death move.",
@@ -2772,18 +2936,21 @@
   },
   {
    "id": "map-of-revelation",
+   "image": "/item-icons/lorc/treasure-map.svg",
    "name": "Map of Revelation",
    "rarity": "Rare",
    "text": "You can attune this map to one creature at a time. The map always shows the attuned creature’s location."
   },
   {
    "id": "dagginaes-obsidian-slate",
+   "image": "/item-icons/lorc/stone-tablet.svg",
    "name": "Dagginae’s Obsidian Slate",
    "rarity": "Rare",
    "text": "This wafer-thin sheet of volcanic glass is used by archivists to keep notes. Any information etched onto its surface disappears but can be recalled via a command you set."
   },
   {
    "id": "gadimans-backpack",
+   "image": "/item-icons/delapouite/backpack.svg",
    "name": "Gadiman’s Backpack",
    "rarity": "Rare",
    "text": "Once per rest, you can spend a Hope to conjure a mundane item up to a cubic foot in size inside this satchel.",
@@ -2805,6 +2972,7 @@
   },
   {
    "id": "eclipse-coin",
+   "image": "/item-icons/delapouite/two-coins.svg",
    "name": "Eclipse Coin",
    "rarity": "Rare",
    "text": "Once per rest, flip a coin. On heads, you gain a +1 bonus to attack rolls until your next successful attack. On tails, you gain +1 to your Evasion until an attack fails against you.",
@@ -2870,6 +3038,7 @@
   },
   {
    "id": "sorcerers-hat",
+   "image": "/item-icons/lorc/pointy-hat.svg",
    "name": "Sorcerer’s Hat",
    "rarity": "Rare",
    "text": "This conical blue hat is covered in silver stars. Once per rest, you can cast a spell from your vault with a Recall Cost equal to or less than your tier. This doesn’t work for permanently vaulted cards.",
@@ -2888,18 +3057,21 @@
   },
   {
    "id": "ghoulskin-gloves",
+   "image": "/item-icons/delapouite/gloves.svg",
    "name": "Ghoulskin Gloves",
    "rarity": "Rare",
    "text": "When you attack with a physical weapon while wearing these gloves, the damage is considered both physical and magic."
   },
   {
    "id": "gloves-of-alacrity",
+   "image": "/item-icons/delapouite/gloves.svg",
    "name": "Gloves of Alacrity",
    "rarity": "Rare",
    "text": "When you would mark a Stress to reload a weapon, you don’t mark it."
   },
   {
    "id": "insomniacs-periapt",
+   "image": "/item-icons/lorc/gem-pendant.svg",
    "name": "Insomniac’s Periapt",
    "rarity": "Rare",
    "text": "When you take a rest without clearing Hit Points or Stress, you gain a +2 bonus to attack and damage rolls until your next rest.",
@@ -2939,12 +3111,14 @@
   },
   {
    "id": "wildriders-saddle",
+   "image": "/item-icons/delapouite/saddle.svg",
    "name": "Wildrider’s Saddle",
    "rarity": "Rare",
    "text": "This saddle grants any animal it’s strapped onto the ability to understand their rider’s commands."
   },
   {
    "id": "soul-twin-circlets",
+   "image": "/item-icons/lorc/linked-rings.svg",
    "name": "Soul-Twin Circlets",
    "rarity": "Rare",
    "text": "Two creatures can wear this pair of circlets. You can spend a Hope to switch places with whoever is wearing the other circlet.",
@@ -2962,6 +3136,7 @@
   },
   {
    "id": "namers-oracle",
+   "image": "/item-icons/delapouite/rolling-dices.svg",
    "name": "Namer’s Oracle",
    "rarity": "Rare",
    "text": "Once per session, you can roll this set of runic dice to reveal the full name of the last person you touched.",
@@ -2980,6 +3155,7 @@
   },
   {
    "id": "crucible-frames",
+   "image": "/item-icons/lorc/spectacle-lenses.svg",
    "name": "Crucible Frames",
    "rarity": "Rare",
    "text": "These eyeglasses reveal weak points in objects and creatures. Three times per rest, you can spend a Hope to gain advantage on an attack roll.",
@@ -3001,6 +3177,7 @@
   },
   {
    "id": "two-faced-aegis-brooch",
+   "image": "/item-icons/delapouite/heart-shield.svg",
    "name": "Two-Faced Aegis Brooch",
    "rarity": "Rare",
    "text": "Once per rest, flip a coin. On heads, you become immune to the next physical damage you take. On tails, you become immune to the next magic damage you take.",
@@ -3078,18 +3255,21 @@
   },
   {
    "id": "knockback-bracelets",
+   "image": "/item-icons/lorc/linked-rings.svg",
    "name": "Knockback Bracelets",
    "rarity": "Rare",
    "text": "On a successful weapon attack, you can knock your target back up to Close range from their location."
   },
   {
    "id": "force-disc",
+   "image": "/item-icons/lorc/ringed-beam.svg",
    "name": "Force Disc",
    "rarity": "Rare",
    "text": "This shimmering two-dimensional disc of magical force has a 4-foot diameter and is magically tethered to a pebble. The disc always floats 3 feet north of, and at the same elevation as, the pebble. The pebble has a mass equal to one-hundredth of the total mass carried by the disc."
   },
   {
    "id": "molepaw-mittens",
+   "image": "/item-icons/delapouite/winter-gloves.svg",
    "name": "Molepaw Mittens",
    "rarity": "Legendary",
    "text": "Spend a Hope to swim through earth as if it were water for the next 10 minutes.",
@@ -3107,6 +3287,7 @@
   },
   {
    "id": "timekeepers-pendant",
+   "image": "/item-icons/skoll/pocket-watch.svg",
    "name": "Timekeeper’s Pendant",
    "rarity": "Legendary",
    "text": "You can choose an additional downtime move each rest.",
@@ -3118,6 +3299,7 @@
   },
   {
    "id": "iron-dagger-pendant",
+   "image": "/item-icons/lorc/gem-pendant.svg",
    "name": "Iron Dagger Pendant",
    "rarity": "Legendary",
    "text": "Once per long rest, you can spend a Hope to tell the pendant a creature’s name. The pendant gently pulls you toward that creature’s current location until your next long rest.",
@@ -3139,12 +3321,14 @@
   },
   {
    "id": "collar-of-ascendancy",
+   "image": "/item-icons/delapouite/heavy-collar.svg",
    "name": "Collar of Ascendancy",
    "rarity": "Legendary",
    "text": "An animal who wears this collar gains the ability to speak and understand common speech."
   },
   {
    "id": "temporal-sanctuary",
+   "image": "/item-icons/delapouite/slumbering-sanctuary.svg",
    "name": "Temporal Sanctuary",
    "rarity": "Legendary",
    "text": "A PC who takes a rest in the temporal sanctuary can choose an additional downtime move.",
@@ -3163,6 +3347,7 @@
   },
   {
    "id": "heros-helm",
+   "image": "/item-icons/lorc/crested-helmet.svg",
    "name": "Hero’s Helm",
    "rarity": "Legendary",
    "text": "When you critically succeed on an attack, all allies within Close range gain a Hope.",
@@ -3193,18 +3378,21 @@
   },
   {
    "id": "rings-of-friendship",
+   "image": "/item-icons/lorc/linked-rings.svg",
    "name": "Rings of Friendship",
    "rarity": "Legendary",
    "text": "Two creatures can wear this pair of rings shaped like coiled snakes. You can spend the Hope of whoever is wearing the other ring (with their permission) as if it were your own."
   },
   {
    "id": "rings-of-camaraderie",
+   "image": "/item-icons/lorc/linked-rings.svg",
    "name": "Rings of Camaraderie",
    "rarity": "Legendary",
    "text": "Two creatures can wear this pair of wooden rings. You can mark the Stress of whoever is wearing the other ring (with their permission) as if it were your own."
   },
   {
    "id": "rings-of-alliance",
+   "image": "/item-icons/lorc/linked-rings.svg",
    "name": "Rings of Alliance",
    "rarity": "Legendary",
    "text": "Two creatures can wear this pair of rose gold rings. Once per session, you can initiate a Tag Team Roll with whoever is wearing the other ring without spending Hope or counting against your session limit for Tag Team Rolls.",
@@ -3223,6 +3411,7 @@
   },
   {
    "id": "phobophages-circlet",
+   "image": "/item-icons/lorc/laurel-crown.svg",
    "name": "Phobophage’s Circlet",
    "rarity": "Legendary",
    "text": "When the GM spends a Fear, roll a d4. Once per scene on a result of 4, you clear a Stress.",
@@ -3256,12 +3445,14 @@
   },
   {
    "id": "quillshawl",
+   "image": "/item-icons/lucasms/cloak.svg",
    "name": "Quillshawl",
    "rarity": "Legendary",
    "text": "If an adversary attacks you within Melee range, they must succeed on a Reaction Roll (12) or mark a Hit Point."
   },
   {
    "id": "warp-pendant",
+   "image": "/item-icons/lorc/gem-pendant.svg",
    "name": "Warp Pendant",
    "rarity": "Legendary",
    "text": "Once per rest, mark a Stress to teleport to a location you can clearly see.",
@@ -3283,12 +3474,14 @@
   },
   {
    "id": "portal-frames",
+   "image": "/item-icons/delapouite/wood-frame.svg",
    "name": "Portal Frames",
    "rarity": "Legendary",
    "text": "This pair of small ornate frames, one red and one blue, are connected. Anything that passes into one exits from the other."
   },
   {
    "id": "communion-relic",
+   "image": "/item-icons/lorc/rune-stone.svg",
    "name": "Communion Relic",
    "rarity": "Legendary",
    "text": "Once per rest, you can spend a Hope to use an ally’s Experience as if it were your own. You can carry only one relic.",
@@ -3310,6 +3503,7 @@
   },
   {
    "id": "augurs-relic",
+   "image": "/item-icons/lorc/rune-stone.svg",
    "name": "Augur’s Relic",
    "rarity": "Legendary",
    "text": "Once per long rest, you can activate your Hope feature without spending Hope. You can carry only one relic.",
@@ -3328,6 +3522,7 @@
   },
   {
    "id": "songbook-of-cursed-carols",
+   "image": "/item-icons/lorc/book-aura.svg",
    "name": "Songbook of cursed carols",
    "rarity": "Uncommon",
    "text": "Spend a Hope to gain +2 on a roll to use fire, or to influence someone else’s mind. If the effect is from the Codex Domain, roll 1d6. On a result of 4 or higher, you regain the Hope you spent to activate this item.",
@@ -3348,6 +3543,7 @@
   },
   {
    "id": "dancing-remains",
+   "image": "/item-icons/lorc/crossed-bones.svg",
    "name": "Dancing remains",
    "rarity": "Rare",
    "text": "Throw the remains within Very Close range and make an Agility or Presence Roll (10). On a success, you make them dance, giving them a resemblence of life until they take damage or until the end of the scene. When a creature within Very Close range of the remains makes a roll, spend a Hope to force them to make it with disadvantage, and forcing them to mark a Stress on a failure. A creature within Very Close range of the remains with all Stress marked starts Dancing, using their movement to move in a random direction whenever they have the spotlight.",
@@ -3381,6 +3577,7 @@
   },
   {
    "id": "mask-of-the-dead-court",
+   "image": "/item-icons/delapouite/ceremonial-mask.svg",
    "name": "Mask of the dead court",
    "rarity": "Rare",
    "text": "While wearing the mask, you look like a healthy, young member of your species, hiding any Transformation, curse or affliction you might have from mundane or magical detection. Whenever something would detect or reveal your true nature, you can make a Presence Reaction roll to prevent it. If you succeed and the GM spent Fear to attempt it, they gain it back.",
@@ -3399,6 +3596,7 @@
   },
   {
    "id": "mask-of-the-dance-master",
+   "image": "/item-icons/lorc/drama-masks.svg",
    "name": "Mask of the Dance Master",
    "rarity": "Rare",
    "text": "The mask gains a token when a living creature dies within Melee range of the mask (maximum four tokens). Spend a token while wearing the mask to gain a +1 to your Hope die on a Death Move, or on a roll to prevent or remove an affliction, contagion, or condition related to you health.",

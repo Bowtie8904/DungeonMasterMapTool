@@ -1,5 +1,14 @@
 # Online Play web client
 
+Item artwork uses optional catalog/sheet `image: "/item-icons/author/icon-name.svg"` metadata.
+The same decorative icons appear in Equipment, Loot, compendium rows/details and shared/transfer
+chat cards; desktop chat renders their bundled SVG paths natively. New custom items receive an icon
+for their selected type; older custom items without artwork show the same defaults in Loot.
+Other missing metadata leaves names unchanged. Only local bundled references are accepted, never remote URLs or inline markup.
+Assets live in `public\item-icons` and are copied by Vite into the packaged classpath web resources.
+See [artwork configuration and attribution](../docs/DAGGERHEART_DATA.md#item-artwork).
+Artwork does not participate in transfer identity, so older offers/clients remain compatible.
+
 Enrapture and Hypnotic Shimmer keep only Spellcast on their cards; successful results offer the
 once-per-rest Stress payment or activation. Target conditions remain table-resolved. Thought Delver
 keeps only its Hope payment on the card, with an optional deeper-thought Spellcast on the payment report.
@@ -574,8 +583,18 @@ in the far-right Tools column. Equipment keeps its compact trailing action group
 settings, sharing/transfer contracts and compatibility versions are unchanged. Search filters name/description in place and retains
 queries across rerenders. Loot descriptions start fully hidden; clicking a row's non-interactive area or its
 keyboard-accessible item-name disclosure button toggles the full text. Other controls never toggle expansion.
-Expanded state survives sheet refreshes, and read-only viewers can also expand descriptions.
+Expandable names have no plus/minus icon. Expanded state survives sheet refreshes, and read-only viewers can also expand descriptions.
 Loot rows use a subtle blue-tinted highlight on hover and focus within, including collapsed rows.
+Active weapon and armor cards show plain names without item artwork or tier/rarity markers, retaining
+their stat badges and action/tool controls. Artwork and tier markers appear in the carried, unequipped list.
+Loot and carried equipment names have a slim tier/rarity marker: white Common/tier 1,
+blue Uncommon/tier 2, green Rare/tier 3 and orange Legendary/tier 4. The label is available on
+hover and to screen readers; markers also work without artwork. Loot rarity comes from the cached
+host compendium, matching stable IDs or unambiguous exact legacy names and refreshing on catalog
+changes/reconnects or when inventory arrives before its catalog loads. Custom, unknown and unclassified entries
+use the same white marker as Common, labeled "Unclassified rarity" rather than claiming they are Common. No sheet or transfer
+data, settings, or compatibility versions change. `checks/inventory-grades.html` verifies the
+rendered colors, accessible labels, narrow layout and live catalog refresh in a browser.
 `cardStock {actorId}` invalidates availability; owner-only `sheetInventory {actorId,inventory}` updates open sheets.
 Transfers increment the persisted `inventoryRevision`; stale PUTs receive 409 and refresh inventory without
 overwriting pending non-inventory edits. Legacy saves still work before transfers; after a transfer they must
