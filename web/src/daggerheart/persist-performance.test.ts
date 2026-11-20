@@ -94,21 +94,50 @@ it('discards an old GET completing after an action representation', async () => 
   expect(c.gold).toBe(8);
 });
 
-it('preserves edits made during an action and leaves version conflict protection intact', async () => {
+it('preserves edits made during an action and merges the later save conflict', async () => {
   const { c, save } = fixture();
   let finish!: (response: FeatureResponse) => void;
   vi.mocked(useFeature).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   const action = save.action(request);
   await vi.waitFor(() => expect(useFeature).toHaveBeenCalledOnce());
-  const latest = { ...c, gold: 2 };
+  const latest = { ...structuredClone(c), notes: 'Host note', gold: 2 };
   c.notes = 'Unsaved local text';
   finish(committed(latest, '"new"'));
   await action;
   expect(c.notes).toBe('Unsaved local text');
   expect(c.gold).not.toBe(2);
   expect(getSheet).not.toHaveBeenCalled();
-  vi.mocked(saveSheet).mockRejectedValueOnce(new InventoryConflict(latest, '"new"'));
-  await expect(save.flush()).rejects.toBeInstanceOf(InventoryConflict);
+  const merged = { ...latest, notes: 'Unsaved local text' };
+  vi.mocked(saveSheet).mockRejectedValueOnce(new InventoryConflict(latest, '"new"'))
+    .mockResolvedValueOnce({ version: '"merged"', sheet: merged });
+  vi.mocked(getSheet).mockResolvedValue({ version: '"merged"', sheet: merged });
+  await save.flush();
+  expect(saveSheet).toHaveBeenCalledTimes(2);
+  expect(c.notes).toBe('Unsaved local text');
+  expect(c.gold).toBe(2);
+});
+
+it('rebuilds a stale rest action from the latest sheet and retries only after a no-op conflict', async () => {
+  const c = emptyCharacter('Hero');
+  rememberLoadedCharacter(c, structuredClone(c));
+  acceptSheetVersion('actor', '"initial"', c);
+  const onError = vi.fn();
+  const save = autosave('actor', c, onError);
+  const latest = { ...structuredClone(c), notes: 'DM note', gold: 12 };
+  const actionRequest = { ...request, rest: { kind: 'short' as const, picks: [], options: {}, sheet: structuredClone(c),
+    result: { lines: [] }, report: 'Rested.' } };
+  const rebase = vi.fn((sheet: CharacterSheet) => ({
+    ...actionRequest, rest: { ...actionRequest.rest, sheet: structuredClone(sheet), report: `Rested with ${sheet.gold} gold.` },
+  }));
+  vi.mocked(useFeature).mockRejectedValueOnce(new InventoryConflict(latest, '"latest"'))
+    .mockResolvedValueOnce(committed(latest, '"committed"'));
+  await save.action(actionRequest, rebase);
+  expect(useFeature).toHaveBeenCalledTimes(2);
+  expect(rebase).toHaveBeenCalledOnce();
+  expect(rebase.mock.calls[0][0].gold).toBe(12);
+  expect(vi.mocked(useFeature).mock.calls[1][0].rest?.sheet.notes).toBe('DM note');
+  expect(vi.mocked(useFeature).mock.calls[1][0].rest?.report).toBe('Rested with 12 gold.');
+  expect(onError).not.toHaveBeenCalled();
 });
 
 it('falls back to a GET on legacy action success, and never replays failed actions', async () => {

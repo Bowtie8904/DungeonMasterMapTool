@@ -139,19 +139,21 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
         });
       },
       restActors: () => (store.state?.actors ?? []).filter(a => !a.disabled && a.id !== actorId && !!a.ownerId),
-      onRest: async rest => {
+      onRest: async (rest, rebase) => {
         if (!conn.boneValorAutomation) throw new Error('Update the host to resolve Bone/Valor rest benefits.');
         await changed!.flush();
-        await useSheetAction(changed!, { actorId, key: '', actionId: 'rest', rest });
+        await useSheetAction(changed!, { actorId, key: '', actionId: 'rest', rest },
+          rebase ? sheet => ({ actorId, key: '', actionId: 'rest', rest: rebase(sheet) }) : undefined);
       },
       onDamageTaken: async (severity) => {
         await changed!.flush();
         await damageTaken(actorId, severity);
       },
-      onIncomingDamage: async incomingDamage => {
+      onIncomingDamage: async (incomingDamage, rebase) => {
         if (!conn.boneValorAutomation) throw new Error('Update the host to resolve Bone/Valor damage benefits.');
         await changed!.flush();
-        await useSheetAction(changed!, { actorId, key: '', actionId: 'damage', incomingDamage });
+        await useSheetAction(changed!, { actorId, key: '', actionId: 'damage', incomingDamage },
+          rebase ? sheet => ({ actorId, key: '', actionId: 'damage', incomingDamage: rebase(sheet) }) : undefined);
       },
       onDeathOptions: async () => {
         await changed!.flush();

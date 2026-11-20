@@ -124,14 +124,16 @@ export interface SheetViewOptions {
   artwork?: string;
   /** Sends a roll to the shared roll log; returns false when it could not be sent. */
   onRoll: (roll: RollRequest) => boolean | Promise<boolean>;
-  onRest?: (rest: NonNullable<import('../api').FeatureRequest['rest']>) => Promise<void>;
+  onRest?: (rest: NonNullable<import('../api').FeatureRequest['rest']>,
+    rebase?: (sheet: CharacterSheet) => NonNullable<import('../api').FeatureRequest['rest']>) => Promise<void>;
   restActors?: () => import('../protocol').Actor[];
   /** Posts a short message (action results) to the shared chat. */
   onLog?: (text: string, rollSource?: RollSource, restDice?: import('./rest').RestDie[], incomingDamage?: boolean) => void;
   onFeature?: (key: string, actionId: string, amount?: number) => Promise<void>;
   onCopycat?: (key: string, actionId: string) => Promise<void>;
   onDamageTaken?: (severity: number) => Promise<void>;
-  onIncomingDamage?: (damage: NonNullable<import('../api').FeatureRequest['incomingDamage']>) => Promise<void>;
+  onIncomingDamage?: (damage: NonNullable<import('../api').FeatureRequest['incomingDamage']>,
+    rebase?: (sheet: CharacterSheet) => NonNullable<import('../api').FeatureRequest['incomingDamage']>) => Promise<void>;
   onDeathMove?: (move: DeathMove, extras?: DeathMoveExtras) => Promise<void>;
   onDeathOptions?: () => Promise<DeathOptions>;
   actorId?: string;

@@ -24,8 +24,10 @@ export function sheetVersion(actorId: string): string | undefined { return sheet
 
 let sheetActionResponses = false;
 let sheetPatches = false;
+let sheetActionRebase = false;
 export function configureSheetActionResponses(enabled: boolean): void { sheetActionResponses = enabled; }
 export function configureSheetPatches(enabled: boolean): void { sheetPatches = enabled; }
+export function configureSheetActionRebase(enabled: boolean): void { sheetActionRebase = enabled; }
 
 export class ApiError extends Error {
   constructor(message: string, public status: number, public retryAfterSeconds?: number) {
@@ -192,6 +194,7 @@ export async function saveSheet(actorId: string, sheet: CharacterSheet, serializ
 }
 
 export interface FeatureRequest {
+  expectedSheetVersion?: string;
   incomingDamage?: { sheet: import('./daggerheart/data').CharacterSheet; input: Omit<import('./daggerheart/damage').DamageInput, 'selected'> & { selected: string[] }; result: { armorUsed: number; armorMarked: number; hp: number; hpBeforeReplace: number; final: number; applied: Array<{ key: string; id: string }> }; report: string };
   transactionalRoll?: import('./daggerheart/view').RollRequest;
   rest?: { kind: 'short' | 'long'; picks: import('./daggerheart/rest').RestPick[]; options: import('./daggerheart/rest').RestOptions; sheet: import('./daggerheart/data').CharacterSheet; result: import('./daggerheart/rest').RestResult; report: string };
@@ -225,12 +228,24 @@ export interface CommittedSheetState {
 export interface FeatureResponse { ok: true; sheetState?: CommittedSheetState }
 
 export async function useFeature(request: FeatureRequest): Promise<FeatureResponse | undefined> {
+  const body: FeatureRequest = { ...request };
+  delete body.expectedSheetVersion;
+  const version = request.expectedSheetVersion ?? sheetVersion(request.actorId);
+  if (sheetActionRebase && version && (request.incomingDamage || request.rest))
+    body.expectedSheetVersion = version;
   const res = await hostFetch('/api/feature', {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', ...(sheetActionResponses ? { 'X-DMMT-Sheet-Response': '1' } : {}) },
-    body: JSON.stringify(request),
+    body: JSON.stringify(body),
   });
+  if (res.status === 409) {
+    let conflict: { error?: string; sheet?: Partial<CharacterSheet>; version?: string } = {};
+    try { conflict = await res.json(); } catch { /* use the standard status message below */ }
+    if (conflict.sheet && typeof conflict.sheet === 'object' && !Array.isArray(conflict.sheet))
+      throw new InventoryConflict(conflict.sheet, conflict.version);
+    throw new ApiError(conflict.error ?? 'The character sheet changed. Reload before continuing.', 409);
+  }
   if (!res.ok) throw await readError(res);
   // Older hosts may return an empty success body.
   const text = await res.text();

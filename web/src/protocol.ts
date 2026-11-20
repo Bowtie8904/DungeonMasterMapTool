@@ -360,6 +360,7 @@ export interface Hello {
   sheetSync?: boolean;
   sheetActionResponses?: boolean;
   sheetPatches?: boolean;
+  sheetActionRebase?: boolean;
   deathMoves?: boolean;
   deathMoveOptions?: boolean;
   protocol: number;

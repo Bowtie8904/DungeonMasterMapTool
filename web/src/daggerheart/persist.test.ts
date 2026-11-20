@@ -149,17 +149,38 @@ describe('chat inventory synchronization', () => {
     expect(saveSheet).not.toHaveBeenCalled();
   });
 
-  it('rejects full-sheet conflicts explicitly and adopts the latest complete state', async () => {
+  it('merges non-overlapping edits on a full-sheet conflict and preserves host-owned state', async () => {
     vi.stubGlobal('window', globalThis);
     vi.stubGlobal('document', { addEventListener: vi.fn(), dispatchEvent: vi.fn() });
     vi.stubGlobal('CustomEvent', class { constructor(public type: string, public options: unknown) {} });
     const c = mockCharacter();
-    const save = autosave('conflict', c, vi.fn());
+    c.inventory = [];
+    const baseline = structuredClone(c);
+    const onError = vi.fn();
+    const save = autosave('conflict', c, onError);
     c.notes = 'Stale DM edit';
-    vi.mocked(saveSheet).mockRejectedValueOnce(new InventoryConflict({ ...c, notes: 'Newest player edit', gold: 20 }, '"latest"'));
-    await expect(save.flush()).rejects.toBeInstanceOf(InventoryConflict);
-    expect(c.notes).toBe('Newest player edit');
+    c.hp.on = 1;
+    c.inventory = [{ name: 'Player item', type: 'gear', qty: 1 }];
+    const latest = structuredClone(baseline);
+    latest.notes = 'Newest player edit';
+    latest.gold = 20;
+    latest.hp.on = 2;
+    latest.inventory = [{ name: 'DM item', type: 'gear', qty: 1 }];
+    latest.inventoryRevision = 1;
+    const saved = structuredClone(latest);
+    saved.notes = 'Stale DM edit';
+    saved.inventory.push({ name: 'Player item', type: 'gear', qty: 1 });
+    vi.mocked(saveSheet).mockRejectedValueOnce(new InventoryConflict(latest, '"latest"'))
+      .mockResolvedValueOnce({ version: '"saved"', sheet: saved });
+    await save.flush();
+    expect(saveSheet).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(vi.mocked(saveSheet).mock.calls[1][2]!).notes).toBe('Stale DM edit');
+    expect(c.notes).toBe('Stale DM edit');
     expect(c.gold).toBe(20);
+    expect(c.hp.on).toBe(2);
+    expect(c.inventory.map(item => item.name).sort()).toEqual(['DM item', 'Player item']);
+    expect(c.inventoryRevision).toBe(1);
+    expect(onError).not.toHaveBeenCalled();
   });
   it('merges partial death feature inventory without clearing equipment and honors independent card revisions', () => {
     const c = mockCharacter();

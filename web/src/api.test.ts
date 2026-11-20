@@ -1,8 +1,8 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { acceptSheetVersion, applyDeathRecovery, configureDmSheet, configureSheetActionResponses, configureSheetPatches, getDeathOptions, logout, saveSheet, takeDeathMove, tokenArtwork, uploadArtwork, useFeature } from './api';
+import { acceptSheetVersion, applyDeathRecovery, configureDmSheet, configureSheetActionRebase, configureSheetActionResponses, configureSheetPatches, getDeathOptions, logout, saveSheet, takeDeathMove, tokenArtwork, uploadArtwork, useFeature } from './api';
 import { emptyCharacter } from './daggerheart/data';
 
-afterEach(() => { configureSheetPatches(false); configureSheetActionResponses(false); vi.unstubAllGlobals(); });
+afterEach(() => { configureSheetPatches(false); configureSheetActionResponses(false); configureSheetActionRebase(false); vi.unstubAllGlobals(); });
 
 it('sends versioned top-level patches only with a known accepted baseline and capability', async () => {
   const c = emptyCharacter('Hero');
@@ -43,6 +43,23 @@ it('requests committed feature sheets only from capable hosts and retains empty 
   fetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
   expect(await useFeature({ actorId: 'hero', key: '', actionId: 'use' })).toBeUndefined();
   expect(new Headers(fetch.mock.calls[1][1]?.headers).has('X-DMMT-Sheet-Response')).toBe(false);
+});
+
+it('versions rest and damage actions only when the host advertises safe rebasing', async () => {
+  const c = emptyCharacter('Hero');
+  acceptSheetVersion('rebase-actor', '"baseline"', c);
+  const fetch = vi.fn(async (_url: string, _init: RequestInit) => new Response(null, { status: 204 }));
+  vi.stubGlobal('fetch', fetch);
+  const request = { actorId: 'rebase-actor', key: '', actionId: 'rest',
+    rest: { kind: 'short' as const, picks: [], options: {}, sheet: c, result: { lines: [] }, report: 'Rested.' } };
+  await useFeature(request);
+  expect(JSON.parse(String(fetch.mock.calls[0][1].body)).expectedSheetVersion).toBeUndefined();
+  configureSheetActionRebase(true);
+  await useFeature(request);
+  expect(JSON.parse(String(fetch.mock.calls[1][1].body)).expectedSheetVersion).toBe('"baseline"');
+  const latest = { ...c, gold: 9 };
+  fetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'stale', sheet: latest, version: '"latest"' }), { status: 409 }));
+  await expect(useFeature(request)).rejects.toMatchObject({ sheet: latest, version: '"latest"' });
 });
 
 it('loads token editor settings and saves a crop without replacing its source', async () => {

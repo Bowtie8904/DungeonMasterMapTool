@@ -2334,6 +2334,23 @@ public final class OnlineSessionServer {
             if (c == null) throw new IllegalArgumentException("No online session is running.");
             Campaign.Actor sourceActor = ownedActor(playerId, request.path("actorId").asText());
             if (sourceActor.isDisabled()) throw new IllegalArgumentException("This character is disabled.");
+            boolean sheetSnapshotAction = request.has("incomingDamage") || request.has("rest");
+            if (request.has("expectedSheetVersion")) {
+                JsonNode expected = request.path("expectedSheetVersion");
+                if (!sheetSnapshotAction || !expected.isTextual() || !expected.asText().matches("\"[0-9a-f]{64}\""))
+                    throw new IllegalArgumentException("Invalid character sheet version.");
+                String stored = store.loadSheet(c.getId(), sourceActor.getId());
+                String actual = sheetVersion(stored, sourceActor);
+                if (!expected.asText().equals(actual)) {
+                    ObjectNode latest = stored == null ? MAPPER.createObjectNode() : hydrateSheet(sourceActor.getId(), stored);
+                    setSheetName(latest, sourceActor.getName());
+                    ObjectNode conflict = errorBody("The character sheet changed while this action was open. The action was not applied.");
+                    conflict.set("sheet", latest);
+                    conflict.put("version", actual);
+                    json(ctx, 409, conflict);
+                    return;
+                }
+            }
             if (request.has("incomingDamage")) {
                 resolveBoneValorDamage(sourceActor, request.path("incomingDamage"));
                 actionResponse(ctx, playerId, sourceActor);
@@ -6161,6 +6178,7 @@ public final class OnlineSessionServer {
             hello.put("sheetSync", true);
             hello.put("sheetActionResponses", true);
             hello.put("sheetPatches", true);
+            hello.put("sheetActionRebase", true);
             hello.put("handouts", true);
             sendTo(ctx, hello.toString());
             sendHandouts(handouts(), client);

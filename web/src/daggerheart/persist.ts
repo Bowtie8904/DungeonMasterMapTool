@@ -256,6 +256,55 @@ function canonical(value: unknown): string {
     ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item);
 }
 
+const hostAuthoritativeFields = new Set([
+  'name', 'testingCharacter', 'gold', 'hp', 'stress', 'hope', 'armorTrack', 'effects', 'usage', 'resources',
+  'companion', 'featureRevision', 'inventoryRevision', 'compendiumRevision', 'longRestRevision',
+  'shortRestsInRow', 'permanentHp', 'pendingDeathRoll', 'deathNarrative', 'spectralBlocked', 'scars',
+  'vitalityBenefits', 'vitalityEffectRemoved', 'transferClaims',
+]);
+
+function sameValue(a: unknown, b: unknown): boolean { return canonical(a) === canonical(b); }
+function record(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+function sheetItemKey(value: unknown): string | undefined {
+  if (!record(value)) return undefined;
+  if (typeof value.id === 'string') return `id:${value.id}`;
+  if (record(value.catalog) && typeof value.catalog.id === 'string') return `catalog:${value.catalog.id}`;
+  if (typeof value.name === 'string') {
+    return `name:${value.name}\u0000${typeof value.source === 'string' ? value.source : ''}\u0000${typeof value.type === 'string' ? value.type : ''}\u0000${value.custom === true}`;
+  }
+  return undefined;
+}
+function keyedArray(value: unknown): value is Record<string, unknown>[] {
+  return Array.isArray(value) && value.every(record) && value.every(item => sheetItemKey(item) !== undefined)
+    && new Set(value.map(sheetItemKey)).size === value.length;
+}
+function mergeSheetValue(base: unknown, local: unknown, host: unknown, preferHost: boolean): unknown {
+  if (sameValue(local, base)) return host;
+  if (sameValue(host, base)) return local;
+  if (sameValue(local, host)) return local;
+  if (record(base) && record(local) && record(host)) {
+    const merged: Record<string, unknown> = {};
+    for (const key of new Set([...Object.keys(base), ...Object.keys(local), ...Object.keys(host)])) {
+      const value = mergeSheetValue(base[key], local[key], host[key], preferHost || hostAuthoritativeFields.has(key));
+      if (value !== undefined) merged[key] = value;
+    }
+    return merged;
+  }
+  if (keyedArray(base) && keyedArray(local) && keyedArray(host)) {
+    const baseItems = new Map(base.map(item => [sheetItemKey(item)!, item]));
+    const localItems = new Map(local.map(item => [sheetItemKey(item)!, item]));
+    const hostItems = new Map(host.map(item => [sheetItemKey(item)!, item]));
+    const order = [...hostItems.keys(), ...[...localItems.keys()].filter(key => !hostItems.has(key))];
+    return order.flatMap(key => {
+      const value = mergeSheetValue(baseItems.get(key), localItems.get(key), hostItems.get(key), preferHost);
+      return value === undefined ? [] : [value];
+    });
+  }
+  return preferHost ? host : local;
+}
+
 /** Only truly unchanged stored sheets start saved; normalization and rule migrations still need persistence. */
 export function rememberLoadedCharacter(c: CharacterSheet, stored?: Partial<CharacterSheet> | null): void {
   if (stored && canonical({ ...stored, testingCharacter: c.testingCharacter }) === canonical(c))
@@ -286,10 +335,10 @@ export function applyInventory(c: CharacterSheet, incoming: Partial<Omit<Charact
 }
 
 export type SheetSave = (() => void) & {
-  flush: () => Promise<void>;
+  flush: (options?: { mergeConflicts?: boolean }) => Promise<void>;
   refresh: (version?: string) => Promise<void>;
   accept: (state: CommittedSheetState) => boolean;
-  action: (request: FeatureRequest) => Promise<void>;
+  action: (request: FeatureRequest, rebase?: (sheet: CharacterSheet) => FeatureRequest) => Promise<void>;
 };
 
 /** Replaces only an uncreated sheet and never rolls a conflict's newer representation back. */
@@ -308,7 +357,7 @@ export async function saveImportedCharacter(c: CharacterSheet, imported: Charact
   Object.assign(c, replacement);
   const pending = JSON.stringify(c);
   try {
-    await save.flush();
+    await save.flush({ mergeConflicts: false });
     if (!canWrite()) throw new Error('Import save could not be confirmed because the actor became read-only. Reload the sheet before retrying.');
   } catch (error) {
     if (JSON.stringify(c) === pending) {
@@ -320,8 +369,9 @@ export async function saveImportedCharacter(c: CharacterSheet, imported: Charact
 }
 
 /** All feature callers use the synchronizer; legacy sheet handles/hosts retain their GET fallback. */
-export async function useSheetAction(save: { action?: SheetSave['action']; refresh?: () => Promise<void> }, request: FeatureRequest): Promise<void> {
-  if (save.action) return save.action(request);
+export async function useSheetAction(save: { action?: SheetSave['action']; refresh?: () => Promise<void> }, request: FeatureRequest,
+                                     rebase?: (sheet: CharacterSheet) => FeatureRequest): Promise<void> {
+  if (save.action) return save.action(request, rebase);
   await useFeature(request);
   await save.refresh?.();
 }
@@ -340,17 +390,26 @@ export function autosave(actorId: string, c: CharacterSheet, onError: (message: 
   let actionTail: Promise<void> = Promise.resolve();
   let currentVersion = sheetVersion(actorId);
   let requestedVersion: string | undefined;
-  const replace = (sheet: Partial<CharacterSheet>, version?: string) => {
+  const replace = (sheet: Partial<CharacterSheet>, version?: string, acceptedSheet: Partial<CharacterSheet> = sheet) => {
     const normalized = normalizeSheet(sheet, c.name);
     normalized.testingCharacter = c.testingCharacter;
+    const accepted = normalizeSheet(acceptedSheet, c.name);
+    accepted.testingCharacter = c.testingCharacter;
     for (const key of Object.keys(c)) Reflect.deleteProperty(c, key);
     Object.assign(c, normalized);
-    acceptSheetVersion(actorId, version, sheet);
+    acceptSheetVersion(actorId, version, acceptedSheet);
     currentVersion = version;
     revision++;
-    last = JSON.stringify(c);
+    last = JSON.stringify(accepted);
     document.dispatchEvent(new CustomEvent('dmmt-inventory-refreshed', { detail: actorId }));
     document.dispatchEvent(new CustomEvent('dmmt-feature-refreshed', { detail: actorId }));
+  };
+  const mergeConflict = (conflict: InventoryConflict) => {
+    const host = normalizeSheet(conflict.sheet, c.name);
+    host.testingCharacter = c.testingCharacter;
+    const base = JSON.parse(last || baseline) as CharacterSheet;
+    const merged = mergeSheetValue(base, structuredClone(c), host, false) as CharacterSheet;
+    replace(merged, conflict.version, host);
   };
   const accept = (state: CommittedSheetState): boolean => {
     if (state.actorId !== actorId || !state.version || !state.sheet || saving || dirty()) return false;
@@ -396,38 +455,50 @@ export function autosave(actorId: string, c: CharacterSheet, onError: (message: 
     })();
     try { await refreshing; } finally { refreshing = undefined; }
   };
-  const flush = async () => {
+  const flush = async (options: { mergeConflicts?: boolean } = {}) => {
     if (timer !== undefined) window.clearTimeout(timer);
     timer = undefined;
     if (readOnly()) return;
     while (saving) await saving;
     if (readOnly()) return;
-    const json = JSON.stringify(c);
-    if (json === last) return;
+    const initial = JSON.stringify(c);
+    if (initial === last) return;
     const operation = async () => {
-      try {
-        const result = await saveSheet(actorId, c, json);
-        if (result?.version) currentVersion = result.version;
-        if (result?.version && result.sheet && JSON.stringify(c) === json) {
-          const normalized = normalizeSheet(result.sheet, c.name);
-          normalized.testingCharacter = c.testingCharacter;
-          if (JSON.stringify(normalized) !== json) replace(result.sheet, result.version);
-          else last = json;
-        } else last = json;
-      } catch (e) {
-        if (e instanceof InventoryConflict) {
-          if (e.version) replace(e.sheet, e.version);
-          else {
-            applyInventory(c, e.sheet);
-            applyFeatureState(c, { actorId, featureRevision: (e.sheet as { featureRevision?: number }).featureRevision ?? 0,
-              hp: e.sheet.hp, stress: e.sheet.stress, hope: e.sheet.hope, scars: e.sheet.scars, armorTrack: e.sheet.armorTrack,
-              effects: e.sheet.effects, usage: e.sheet.usage, resources: e.sheet.resources,
-              permanentHp: e.sheet.permanentHp, longRestRevision: e.sheet.longRestRevision, spectralBlocked: e.sheet.spectralBlocked, deathNarrative: e.sheet.deathNarrative, pendingDeathRoll: e.sheet.pendingDeathRoll ?? null });
-            document.dispatchEvent(new CustomEvent('dmmt-inventory-refreshed', { detail: actorId }));
+      let json = initial;
+      let retries = 0;
+      while (true) {
+        try {
+          const result = await saveSheet(actorId, c, json);
+          if (result?.version) currentVersion = result.version;
+          if (result?.version && result.sheet && JSON.stringify(c) === json) {
+            const normalized = normalizeSheet(result.sheet, c.name);
+            normalized.testingCharacter = c.testingCharacter;
+            if (JSON.stringify(normalized) !== json) replace(result.sheet, result.version);
+            else last = json;
+          } else last = json;
+          break;
+        } catch (e) {
+          if (e instanceof InventoryConflict && e.version && options.mergeConflicts !== false && retries < 3) {
+            mergeConflict(e);
+            json = JSON.stringify(c);
+            retries++;
+            if (json === last) break;
+            continue;
           }
+          if (e instanceof InventoryConflict) {
+            if (e.version) replace(e.sheet, e.version);
+            else {
+              applyInventory(c, e.sheet);
+              applyFeatureState(c, { actorId, featureRevision: (e.sheet as { featureRevision?: number }).featureRevision ?? 0,
+                hp: e.sheet.hp, stress: e.sheet.stress, hope: e.sheet.hope, scars: e.sheet.scars, armorTrack: e.sheet.armorTrack,
+                effects: e.sheet.effects, usage: e.sheet.usage, resources: e.sheet.resources,
+                permanentHp: e.sheet.permanentHp, longRestRevision: e.sheet.longRestRevision, spectralBlocked: e.sheet.spectralBlocked, deathNarrative: e.sheet.deathNarrative, pendingDeathRoll: e.sheet.pendingDeathRoll ?? null });
+              document.dispatchEvent(new CustomEvent('dmmt-inventory-refreshed', { detail: actorId }));
+            }
+          }
+          onError(`Could not save the character sheet: ${(e as Error).message}`);
+          throw e;
         }
-        onError(`Could not save the character sheet: ${(e as Error).message}`);
-        throw e;
       }
     };
     saving = operation();
@@ -449,14 +520,28 @@ export function autosave(actorId: string, c: CharacterSheet, onError: (message: 
     flush,
     refresh: refreshFull,
     accept,
-    action: (request: FeatureRequest) => {
+    action: (request: FeatureRequest, rebase?: (sheet: CharacterSheet) => FeatureRequest) => {
       const operation = actionTail.then(async () => {
         await flush();
         actionPending++;
         let applied = false;
+        let currentRequest = request;
+        let retries = 0;
         try {
-          const result = await useFeature(request);
-          applied = !!result?.sheetState && accept(result.sheetState);
+          while (true) {
+            try {
+              const result = await useFeature(currentRequest);
+              applied = !!result?.sheetState && accept(result.sheetState);
+              break;
+            } catch (e) {
+              if (!(e instanceof InventoryConflict) || !e.version || !rebase || retries >= 3
+                || !(currentRequest.rest || currentRequest.incomingDamage)) throw e;
+              mergeConflict(e);
+              await flush();
+              currentRequest = rebase(c);
+              retries++;
+            }
+          }
         } finally { actionPending--; }
         if (!applied || refreshPending) await refreshFull(requestedVersion);
       });

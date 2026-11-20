@@ -41,8 +41,13 @@ resize measurements are deferred, preventing a flash of overlapping or full-widt
 Unchanged saved sheets no longer need an initial save; new characters and migrations still persist.
 Hosts advertising `sheetActionResponses` can return committed sheet data after feature actions, avoiding a follow-up GET.
 Hosts advertising `sheetPatches` receive top-level save patches only with a known baseline and exact `If-Match` version.
-Old hosts retain full saves and GET refreshes. Pending local edits are never replaced by action responses; conflicts and
-persistence errors remain explicit. Spending and rolls are never queued for automatic offline replay.
+Hosts advertising `sheetActionRebase` also version rest and incoming-damage snapshots. If one is stale, the host returns
+the latest sheet without applying it; the browser refreshes and recomputes from the same choices and rolls before a
+bounded retry. Other spending and rolls are never automatically replayed.
+Versioned sheet-save conflicts are merged against the last accepted sheet: independent fields and keyed entries such as
+inventory are combined, while host-authoritative gameplay state wins overlapping edits. The browser retries the merged
+save a bounded number of times and retains edits made while a save is in flight. Old hosts retain full saves and GET
+refreshes. Persistence failures remain visible, and pending local edits are never replaced by action responses.
 
 The browser map never displays token names, including when a DM enables a name label. Names are hidden by
 default and can be shown to the DM only from the desktop map's token right-click menu.

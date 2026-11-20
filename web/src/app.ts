@@ -1642,10 +1642,11 @@ export class App {
             },
             onFeature: (key, actionId, amount) => this.useSheetFeature(a.id, character, changed, key, actionId, amount),
             restActors: () => (this.store.state?.actors ?? []).filter(actor => !actor.disabled && actor.id !== a.id && !!actor.ownerId),
-            onRest: async rest => {
+            onRest: async (rest, rebase) => {
               if (!this.conn.boneValorAutomation) throw new Error('Update the host to resolve Bone/Valor rest benefits.');
               await changed.flush();
-              await useSheetAction(changed, { actorId: a.id, key: '', actionId: 'rest', rest });
+              await useSheetAction(changed, { actorId: a.id, key: '', actionId: 'rest', rest },
+                rebase ? sheet => ({ actorId: a.id, key: '', actionId: 'rest', rest: rebase(sheet) }) : undefined);
             },
             supportsSpecialCardActions: () => this.conn.specialCardActions,
             gmFear: () => this.store.state?.fear ?? 0,
@@ -1665,10 +1666,11 @@ export class App {
               await changed.flush();
               await damageTaken(a.id, severity);
             },
-            onIncomingDamage: async incomingDamage => {
+            onIncomingDamage: async (incomingDamage, rebase) => {
               if (!this.conn.boneValorAutomation) throw new Error('Update the host to resolve Bone/Valor damage benefits.');
               await changed.flush();
-              await useSheetAction(changed, { actorId: a.id, key: '', actionId: 'damage', incomingDamage });
+              await useSheetAction(changed, { actorId: a.id, key: '', actionId: 'damage', incomingDamage },
+                rebase ? sheet => ({ actorId: a.id, key: '', actionId: 'damage', incomingDamage: rebase(sheet) }) : undefined);
             },
             onDeathOptions: async () => {
               await changed.flush();

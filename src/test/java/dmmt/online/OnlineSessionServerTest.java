@@ -2238,6 +2238,54 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void versionedRestAndDamageActionsReturnLatestSheetWithoutApplyingStaleSnapshots() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("versioned-rest").name("Resting").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("versioned-damage").name("Damaged").ownerId(playerId()).build());
+        ObjectNode beforeRest = bloodSheet();
+        beforeRest.putObject("armorTrack").put("on", 0).put("slots", 6);
+        store.saveSheet(campaign.getId(), "versioned-rest", beforeRest.toString());
+        String cookie = cookie();
+        String staleRestVersion = MAPPER.readTree(sheetRead(cookie, "versioned-rest").body()).path("version").asText();
+        ObjectNode latestRest = beforeRest.deepCopy().put("notes", "DM note").put("gold", 25);
+        store.saveSheet(campaign.getId(), "versioned-rest", latestRest.toString());
+
+        ObjectNode restBody = MAPPER.createObjectNode().put("actorId", "versioned-rest").put("expectedSheetVersion", staleRestVersion);
+        ObjectNode staleRest = restBody.putObject("rest").put("kind", "short").put("report", "Short rest.");
+        staleRest.set("sheet", beforeRest.deepCopy().put("shortRestsInRow", 1));
+        staleRest.putArray("picks");
+        staleRest.putObject("options");
+        var restConflict = featureHttp(cookie, restBody);
+        assertEquals(409, restConflict.statusCode(), restConflict.body());
+        JsonNode restConflictBody = MAPPER.readTree(restConflict.body());
+        assertEquals("DM note", restConflictBody.path("sheet").path("notes").asText());
+        assertEquals(25, restConflictBody.path("sheet").path("gold").asInt());
+        assertEquals(latestRest, MAPPER.readTree(store.loadSheet(campaign.getId(), "versioned-rest")));
+
+        restBody.put("expectedSheetVersion", restConflictBody.path("version").asText());
+        ((ObjectNode) restBody.path("rest")).set("sheet", latestRest.deepCopy().put("shortRestsInRow", 1));
+        var restRetry = featureHttp(cookie, restBody);
+        assertEquals(200, restRetry.statusCode(), restRetry.body());
+        JsonNode savedRest = MAPPER.readTree(store.loadSheet(campaign.getId(), "versioned-rest"));
+        assertEquals("DM note", savedRest.path("notes").asText());
+        assertEquals(25, savedRest.path("gold").asInt());
+        assertEquals(1, savedRest.path("shortRestsInRow").asInt());
+
+        ObjectNode beforeDamage = bloodSheet("octarine-brace");
+        store.saveSheet(campaign.getId(), "versioned-damage", beforeDamage.toString());
+        String staleDamageVersion = MAPPER.readTree(sheetRead(cookie, "versioned-damage").body()).path("version").asText();
+        ObjectNode latestDamage = beforeDamage.deepCopy().put("notes", "Updated by DM").put("gold", 17);
+        store.saveSheet(campaign.getId(), "versioned-damage", latestDamage.toString());
+        ObjectNode damageBody = MAPPER.createObjectNode().put("actorId", "versioned-damage").put("expectedSheetVersion", staleDamageVersion);
+        damageBody.putObject("incomingDamage").set("sheet", beforeDamage);
+        var damageConflict = featureHttp(cookie, damageBody);
+        assertEquals(409, damageConflict.statusCode(), damageConflict.body());
+        JsonNode damageConflictBody = MAPPER.readTree(damageConflict.body());
+        assertEquals("Updated by DM", damageConflictBody.path("sheet").path("notes").asText());
+        assertEquals(17, damageConflictBody.path("sheet").path("gold").asInt());
+        assertEquals(latestDamage, MAPPER.readTree(store.loadSheet(campaign.getId(), "versioned-damage")));
+    }
+
+    @Test
     void boneValorIncomingDamageGrantsFearAndClearsRiseUpStressOnlyOnce() throws Exception {
         campaign.getActors().add(Campaign.Actor.builder().id("braced").name("Braced").ownerId(playerId()).build());
         ObjectNode before = bloodSheet("octarine-brace", "rise-up");

@@ -289,6 +289,9 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   die, and appears only when continuing the run, not on ordinary or initial damage rolls.
   Mixed weapon dice, such as Brawler's Strike, show each die's correct type in player and DM chat.
   Host-backed damage and rest actions support full-size character sheets without using the smaller chat-message allowance.
+  Concurrent sheet saves automatically merge independent fields and keyed inventory entries; host-owned gameplay state
+  wins same-field conflicts. Stale host-backed rest/damage actions refresh and recompute from the same choices before
+  retrying only when the host confirms the original action was not applied.
   Recovery can grant an ally one long-rest move during their short rest; Armorer repairs allies and
   names them in rest chat. Untouchable adds half current Agility rounded up to Evasion, Rise Up clears
   Stress on HP damage, and Octarine Brace grants GM Fear. Unyielding Armor's dice appear only in the

@@ -83,6 +83,33 @@ it.each(['commit', 'missing', 'rejected'] as const)('commits Zone of Protection 
   }
 });
 
+it('recomputes a host-backed damage result against a refreshed sheet using the original selections', async () => {
+  vi.stubGlobal('document', { createElement: (tag: string) => new Element(tag),
+    addEventListener: () => {}, removeEventListener: () => {} });
+  const c = mockCharacter();
+  c.heritage = []; c.loadout = []; c.inventory = []; c.activeWeapons = []; c.features = [];
+  c.activeArmor = undefined;
+  c.resources = {};
+  c.effects = [{ id: 'zone', name: 'Zone of Protection', kind: 'buff', until: 'manual', mitigation: [
+    { id: 'protection', label: 'Zone of Protection', defaultOn: true, reduce: 2, protectionZone: true },
+  ] }];
+  const commit = vi.fn(async (
+    _damage: NonNullable<FeatureRequest['incomingDamage']>,
+    _rebase?: (sheet: typeof c) => NonNullable<FeatureRequest['incomingDamage']>,
+  ) => {});
+  const root = new Element('root');
+  openDamageDialog(root as unknown as HTMLElement, c, vi.fn(), { damage: 12, type: 'physical' }, commit);
+  await root.all(e => e.tag === 'button' && e.text === 'Apply')[0].onclick!();
+  const latest = structuredClone(c);
+  latest.gold = 19;
+  latest.notes = 'Saved while damage was open';
+  const rebase = commit.mock.calls[0][1]!;
+  const retried = rebase(latest);
+  expect(retried.sheet.gold).toBe(19);
+  expect(retried.sheet.notes).toBe('Saved while damage was open');
+  expect(retried.input).toMatchObject({ damage: 12, selected: ['effect:zone/protection'] });
+});
+
 it('groups mitigation and Armor Slot counts beside independent checkboxes, and aligns recovery dropdowns', () => {
   vi.stubGlobal('document', { createElement: (tag: string) => new Element(tag),
     addEventListener: () => {}, removeEventListener: () => {} });

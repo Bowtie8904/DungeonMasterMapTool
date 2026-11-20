@@ -1,6 +1,6 @@
 import { ClockSync } from './clock';
 import { ServerMessage } from './protocol';
-import { configureSheetActionResponses, configureSheetPatches, dmSheetAuthorization } from './api';
+import { configureSheetActionRebase, configureSheetActionResponses, configureSheetPatches, dmSheetAuthorization } from './api';
 import { invalidateCompendium } from './daggerheart/compendium';
 
 export interface ConnectionEvents {
@@ -108,6 +108,7 @@ export class Connection {
     this.deathMoves = false;
     this.deathMoveOptions = false;
     this.sheetSync = false;
+    configureSheetActionRebase(false);
     configureSheetActionResponses(false);
     configureSheetPatches(false);
     this.events.onStatus('connecting');
@@ -143,6 +144,7 @@ export class Connection {
         invalidateCompendium();
         configureSheetActionResponses(msg.sheetActionResponses === true);
         configureSheetPatches(msg.sheetPatches === true);
+        configureSheetActionRebase(msg.sheetActionRebase === true);
         this.keptDice = msg.keptDice === true;
         this.zeroKeptDice = msg.zeroKeptDice === true;
         this.glancingBlowDamage = msg.glancingBlowDamage === true;

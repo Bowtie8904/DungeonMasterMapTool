@@ -9,7 +9,7 @@ import {
 
 /** Incoming-damage dialog: enter damage, pick mitigation, preview the HP to mark, then apply. */
 export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (summary: string, severity: number, incomingDamage: boolean) => void, initial?: { damage: number; type: DamageType; excludeCompanionIntercept?: boolean; guard?: () => string | null },
-  commit?: (damage: NonNullable<FeatureRequest['incomingDamage']>) => Promise<void>,
+  commit?: (damage: NonNullable<FeatureRequest['incomingDamage']>, rebase?: (sheet: CharacterSheet) => NonNullable<FeatureRequest['incomingDamage']>) => Promise<void>,
   reportRoll?: (label: string, value: number) => void): void {
   const options = availableMitigations(c).filter(m => !initial?.excludeCompanionIntercept || !m.option.companionIntercept);
   const input: DamageInput = {
@@ -160,20 +160,33 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
       if (currentGuard) { error.textContent = currentGuard; return; }
       apply.disabled = cancel.disabled = true;
       try {
-        const next = structuredClone(c);
-        const resolved = computeDamage(next, availableMitigations(next), input);
-        const summary = applyDamage(next, resolved, input.type);
-        if (!summary) throw new Error('Could not apply damage');
-        const zoneDamage = resolved.applied.some(m => m.option.protectionZone);
-        const hostDamage = zoneDamage || resolved.applied.some(m => m.option.giveFear || m.option.hiddenRoll || m.option.clearStress);
-        if (commit && hostDamage) await commit({ sheet: next, input: { ...input, selected: [...input.selected] },
-          result: { armorUsed: resolved.armorUsed, armorMarked: resolved.armorMarked, hp: resolved.hp, hpBeforeReplace: resolved.hpBeforeReplace, final: resolved.final,
-            applied: resolved.applied.map(m => ({ key: m.key, id: m.option.id })) }, report: summary });
+        const selectedInput: DamageInput = { ...input, selected: new Set(input.selected),
+          quantities: { ...input.quantities }, rolls: { ...input.rolls } };
+        const buildDamage = (sheet: CharacterSheet) => {
+          const next = structuredClone(sheet);
+          const currentResolved = computeDamage(next, availableMitigations(next), selectedInput);
+          const currentSummary = applyDamage(next, currentResolved, selectedInput.type);
+          if (!currentSummary || currentResolved.error) throw new Error(currentResolved.error ?? 'Could not apply damage');
+          return { next, resolved: currentResolved, summary: currentSummary };
+        };
+        const built = buildDamage(c);
+        let reportResolved = built.resolved;
+        const zoneDamage = built.resolved.applied.some(m => m.option.protectionZone);
+        const hostDamage = zoneDamage || built.resolved.applied.some(m => m.option.giveFear || m.option.hiddenRoll || m.option.clearStress);
+        const toRequest = (sheet: CharacterSheet) => {
+          const current = buildDamage(sheet);
+          reportResolved = current.resolved;
+          return { sheet: current.next, input: { ...selectedInput, selected: [...selectedInput.selected] },
+            result: { armorUsed: current.resolved.armorUsed, armorMarked: current.resolved.armorMarked, hp: current.resolved.hp,
+              hpBeforeReplace: current.resolved.hpBeforeReplace, final: current.resolved.final,
+              applied: current.resolved.applied.map(m => ({ key: m.key, id: m.option.id })) }, report: current.summary };
+        };
+        if (commit && hostDamage) await commit(toRequest(c), sheet => toRequest(sheet));
         else if (zoneDamage) throw new Error('Update the host to resolve Zone of Protection damage.');
-        else if (resolved.applied.some(m => m.option.giveFear)) throw new Error('Update the host to grant GM Fear with this armor option.');
-        else { Object.assign(c, next); onDone(summary, resolved.negated ? 0 : resolved.final, resolved.damage > 0 && !resolved.negated); }
-        for (const m of resolved.applied.filter(m => m.option.reportRoll))
-          reportRoll?.(m.option.label, (resolved.used[m.id] ?? []).reduce((sum, value) => sum + value, 0));
+        else if (built.resolved.applied.some(m => m.option.giveFear)) throw new Error('Update the host to grant GM Fear with this armor option.');
+        else { Object.assign(c, built.next); onDone(built.summary, built.resolved.negated ? 0 : built.resolved.final, built.resolved.damage > 0 && !built.resolved.negated); }
+        for (const m of reportResolved.applied.filter(m => m.option.reportRoll))
+          reportRoll?.(m.option.label, (reportResolved.used[m.id] ?? []).reduce((sum, value) => sum + value, 0));
         close();
       } catch (e) { error.textContent = (e as Error).message; }
       finally { apply.disabled = cancel.disabled = false; }

@@ -1,6 +1,6 @@
 import { el } from '../login';
 import { CharacterSheet, TRAIT_ORDER } from './data';
-import type { RestKind } from './engine';
+import type { DiceRoll, RestKind } from './engine';
 import { activeCardSources } from './copycat';
 import type { Actor } from '../protocol';
 import type { FeatureRequest } from '../api';
@@ -13,7 +13,7 @@ import {
 /** Downtime choices do not change the sheet until confirmation, including any host-backed casting. */
 export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestKind, onDone: (summary: string, result: RestResult) => void,
   castBeforeRest?: (key: string, actionId: string) => Promise<void>, actors?: () => Actor[],
-  commit?: (rest: NonNullable<FeatureRequest['rest']>) => Promise<void>): void {
+  commit?: (rest: NonNullable<FeatureRequest['rest']>, rebase?: (sheet: CharacterSheet) => NonNullable<FeatureRequest['rest']>) => Promise<void>): void {
   const o: RestOptions = {};
   const picks: RestPick[] = [];
   const backdrop = el('div', { class: 'dh dh-rolldlg-backdrop' });
@@ -136,17 +136,41 @@ export function openRestDialog(host: HTMLElement, c: CharacterSheet, kind: RestK
         delete o.passives?.[id];
       }
       const chosen = picks.map((p) => ({ ...p }));
-      const next = structuredClone(c);
-      const result = resolveRest(next, kind, chosen, o);
-      const summary = restSummary(next, kind, chosen, result);
+      const committedPicks = structuredClone(chosen);
+      const committedOptions = structuredClone(o);
+      let recordedRolls: Array<Pick<NonNullable<RestResult['dice']>[number], 'expression' | 'value'>> = [];
+      let rollsRecorded = false;
+      const buildRest = (sheet: CharacterSheet) => {
+        const next = structuredClone(sheet);
+        let rollIndex = 0;
+        const replayRoll: DiceRoll = expression => {
+          const die = recordedRolls[rollIndex++];
+          if (!die || die.expression !== expression) throw new Error('The character changed during downtime. Reopen the rest to roll again.');
+          return die.value;
+        };
+        const result = resolveRest(next, kind, committedPicks, committedOptions, rollsRecorded ? replayRoll : undefined);
+        if (rollsRecorded && rollIndex !== recordedRolls.length)
+          throw new Error('The character changed during downtime. Reopen the rest to roll again.');
+        if (!rollsRecorded) {
+          recordedRolls = (result.dice ?? []).map(({ expression, value }) => ({ expression, value }));
+          rollsRecorded = true;
+        }
+        return {
+          request: { kind, picks: committedPicks, options: committedOptions, sheet: next, result,
+            report: restSummary(next, kind, committedPicks, result) },
+          result,
+        };
+      };
+      const { request: rest, result } = buildRest(c);
+      const summary = rest.report;
       const hostRest = Object.values(o.passives ?? {}).some(Boolean) && Object.keys(o.allies ?? {}).length > 0
         || activeCardSources(c).some(s => s.auto?.actions?.some(a => a.downtime?.table?.forage && chosen.some(p => p.move === `act:${s.key}|${a.id}`)))
         || c.inventory.some(i => !i.custom && i.automation?.actions?.some(a => a.downtime?.craft && chosen.some(p => !p.ally && p.move === `act:item:${i.name}|${a.id}`)))
         || c.effects.some(e => e.consumeLongRestMove || e.dmManaged)
         || activeCardSources(c).some(s => s.auto?.rest?.modifiers?.some(m => m.repairAllies && chosen.some(p => !p.ally && p.move === m.move)));
-      if (commit && hostRest) await commit({ kind, picks: chosen, options: o, sheet: next, result, report: summary });
+      if (commit && hostRest) await commit(rest, sheet => buildRest(sheet).request);
       else if (!commit && hostRest) throw new Error('Update the host to resolve this rest benefit.');
-      else Object.assign(c, next);
+      else Object.assign(c, rest.sheet);
       close();
       if (!commit || !hostRest) onDone(summary, result);
     } catch (e) {
