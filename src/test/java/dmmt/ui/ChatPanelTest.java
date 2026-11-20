@@ -3,6 +3,7 @@ package dmmt.ui;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dmmt.FxTestSupport;
+import dmmt.service.AppSettings;
 import javafx.application.Platform;
 import javafx.animation.PauseTransition;
 import javafx.event.ActionEvent;
@@ -223,7 +224,7 @@ class ChatPanelTest {
         onFx(() -> {
             panel[0] = new ChatPanel(new Backend(null) {
                 @Override public List<JsonNode> history() { return history; }
-            });
+            }, AppSettings.load());
             stage[0] = new Stage();
             Scene scene = new Scene(new StackPane(panel[0]), 320, 240);
             scene.getStylesheets().add(Icons.STYLESHEET);
@@ -273,7 +274,7 @@ class ChatPanelTest {
         onFx(() -> {
             panel[0] = new ChatPanel(new Backend(null) {
                 @Override public List<JsonNode> history() { return history; }
-            });
+            }, AppSettings.load());
             stage[0] = new Stage();
             Scene scene = new Scene(new StackPane(panel[0]), 320, 240);
             scene.getStylesheets().add(Icons.STYLESHEET);
@@ -305,7 +306,7 @@ class ChatPanelTest {
     void chatUsesAvailableSectionHeightAndSeparatesMessageCards() throws Exception {
         onFx(() -> {
             JsonNode message = MAPPER.createObjectNode().put("type", "chat").put("from", "Alice").put("text", "Hello");
-            ChatPanel panel = new ChatPanel(new Backend(message));
+            ChatPanel panel = new ChatPanel(new Backend(message), AppSettings.load());
             VBox.setVgrow(panel, Priority.ALWAYS);
             ControlSection section = new ControlSection("Chat", MaterialDesignC.CHAT_OUTLINE, "chat", panel);
             Stage stage = new Stage();
@@ -351,15 +352,48 @@ class ChatPanelTest {
     }
 
     @Test
+    void secretTogglePersistsBothSelectionsAcrossRestartsAndAppliesToAdversaryRolls() throws Exception {
+        onFx(() -> {
+            AppSettings settings = AppSettings.load();
+            RecordingBackend backend = new RecordingBackend();
+            ChatPanel panel = new ChatPanel(backend, settings);
+            HBox composer = (HBox) panel.getChildren().get(2);
+            ToggleButton secret = (ToggleButton) composer.getChildren().get(2);
+            assertFalse(secret.isSelected());
+            secret.fire();
+            assertTrue(new AppSettings(settings.getFile()).getBoolean("ui.chat.secretRoll", false));
+
+            ChatPanel restarted = new ChatPanel(backend, new AppSettings(settings.getFile()));
+            HBox restartedComposer = (HBox) restarted.getChildren().get(2);
+            ToggleButton restored = (ToggleButton) restartedComposer.getChildren().get(2);
+            assertTrue(restored.isSelected());
+            TextField input = (TextField) restartedComposer.getChildren().getFirst();
+            input.setText("/r 1d20");
+            input.fireEvent(new ActionEvent());
+            assertNull(restarted.rollFromAdversary("2d6"));
+            assertEquals(List.of("1d20:true", "2d6:true"), backend.rolls);
+            assertTrue(restored.isSelected());
+
+            restored.fire();
+            AppSettings reloaded = new AppSettings(settings.getFile());
+            assertFalse(reloaded.getBoolean("ui.chat.secretRoll", true));
+            ChatPanel publicPanel = new ChatPanel(backend, reloaded);
+            assertFalse(((ToggleButton) ((HBox) publicPanel.getChildren().get(2)).getChildren().get(2)).isSelected());
+            assertNull(publicPanel.rollFromAdversary("1d6"));
+            assertEquals("1d6:false", backend.rolls.getLast());
+        });
+    }
+
+    @Test
     void secretToggleAppliesToAllComposerRollsButNotMessagesOrGold() throws Exception {
         onFx(() -> {
             RecordingBackend backend = new RecordingBackend();
-            ChatPanel panel = new ChatPanel(backend);
+            ChatPanel panel = new ChatPanel(backend, AppSettings.load());
             HBox composer = (HBox) panel.getChildren().get(2);
             TextField input = (TextField) composer.getChildren().get(0);
             Button send = (Button) composer.getChildren().get(1);
-            Button roll = (Button) composer.getChildren().get(2);
-            ToggleButton secret = (ToggleButton) composer.getChildren().get(3);
+            assertEquals(3, composer.getChildren().size(), "Composer has input, Send and secret toggle only");
+            ToggleButton secret = (ToggleButton) composer.getChildren().get(2);
             assertFalse(secret.isSelected());
             assertTrue(secret.isFocusTraversable());
             input.setText("2d6+3");
@@ -367,7 +401,8 @@ class ChatPanelTest {
             assertTrue(secret.isSelected());
             assertEquals("2d6+3", input.getText(), "Toggling does not submit or clear input");
             assertTrue(backend.rolls.isEmpty());
-            roll.fire();
+            input.setText("/r " + input.getText());
+            send.fire();
             assertTrue(input.getText().isEmpty());
             for (String command : List.of("/r", "/roll", "/sr", "/secret")) {
                 input.setText(command + " 2d6+3");
@@ -386,26 +421,25 @@ class ChatPanelTest {
             secret.fire();
             input.setText("/r 1d20");
             send.fire();
-            input.setText("1d20");
-            roll.fire();
+            input.setText("/roll 1d20");
+            input.fireEvent(new ActionEvent());
             assertEquals(List.of("1d20:false", "1d20:false"), backend.rolls.subList(5, 7));
         });
     }
 
     @Test
-    void secretCommandsOverrideOffToggleForSendEnterAndRollAndKeepWhisperTarget() throws Exception {
+    void secretCommandsOverrideOffToggleForSendAndEnterAndKeepWhisperTarget() throws Exception {
         onFx(() -> {
             RecordingBackend backend = new RecordingBackend();
-            ChatPanel panel = new ChatPanel(backend);
+            ChatPanel panel = new ChatPanel(backend, AppSettings.load());
             HBox composer = (HBox) panel.getChildren().get(2);
             TextField input = (TextField) composer.getChildren().get(0);
             Button send = (Button) composer.getChildren().get(1);
-            Button roll = (Button) composer.getChildren().get(2);
-            ToggleButton secret = (ToggleButton) composer.getChildren().get(3);
+            ToggleButton secret = (ToggleButton) composer.getChildren().get(2);
             ComboBox<?> recipients = (ComboBox<?>) panel.getChildren().get(1);
             recipients.getSelectionModel().select(1);
             for (String command : List.of("/sr", "/secret", "/SR")) {
-                for (Runnable submit : List.<Runnable>of(send::fire, roll::fire,
+                for (Runnable submit : List.<Runnable>of(send::fire,
                         () -> input.fireEvent(new ActionEvent()))) {
                     input.setText(command + " 1d20+2");
                     submit.run();
@@ -439,7 +473,7 @@ class ChatPanelTest {
     void reactionCommandRequestsPublicCharacterSpecificRollsAndValidatesTrait() throws Exception {
         onFx(() -> {
             RecordingBackend backend = new RecordingBackend();
-            ChatPanel panel = new ChatPanel(backend);
+            ChatPanel panel = new ChatPanel(backend, AppSettings.load());
             HBox composer = (HBox) panel.getChildren().get(2);
             TextField input = (TextField) composer.getChildren().get(0);
             Button send = (Button) composer.getChildren().get(1);
@@ -476,7 +510,7 @@ class ChatPanelTest {
         onFx(() -> {
             RecordingBackend backend = new RecordingBackend();
             backend.reactionError = "Start an online session to request a reaction roll.";
-            ChatPanel panel = new ChatPanel(backend);
+            ChatPanel panel = new ChatPanel(backend, AppSettings.load());
             HBox composer = (HBox) panel.getChildren().get(2);
             TextField input = (TextField) composer.getChildren().get(0);
             input.setText("/reaction Agility");
@@ -585,7 +619,7 @@ class ChatPanelTest {
                  "rollSource":{"name":"Feature","source":"Class","text":"Original"}}
                 """);
         onFx(() -> {
-            ChatPanel panel = new ChatPanel(new Backend(roll));
+            ChatPanel panel = new ChatPanel(new Backend(roll), AppSettings.load());
             Stage stage = showPanel(panel, 320, 900);
             var breakdown = (javafx.scene.layout.VBox) panel.lookup(".chat-roll-breakdown");
             var source = (javafx.scene.layout.VBox) panel.lookup(".chat-roll-source");
@@ -605,7 +639,7 @@ class ChatPanelTest {
             assertFalse(((javafx.scene.layout.VBox) panel.lookup(".chat-roll-breakdown")).getChildren().get(1).isVisible());
             stage.close();
 
-            ChatPanel chatPanel = new ChatPanel(new Backend(chat));
+            ChatPanel chatPanel = new ChatPanel(new Backend(chat), AppSettings.load());
             Stage chatStage = showPanel(chatPanel, 320, 900);
             var chatCard = chatPanel.lookup(".chat-entry");
             var chatSource = (javafx.scene.layout.VBox) chatCard.lookup(".chat-roll-source");
@@ -637,7 +671,7 @@ class ChatPanelTest {
                     .put("disabled", i == 1).put("detail", i == 1 ? "Not enough Hope" : "");
         }
         onFx(() -> {
-            ChatPanel panel = new ChatPanel(new Backend(message));
+            ChatPanel panel = new ChatPanel(new Backend(message), AppSettings.load());
             Stage stage = new Stage();
             StackPane root = new StackPane(panel);
             Scene scene = new Scene(root, 260, 900);
@@ -695,7 +729,7 @@ class ChatPanelTest {
                     assertFalse(Platform.isFxApplicationThread());
                     return "Could not delete chat message.";
                 }
-            });
+            }, AppSettings.load());
             stage[0] = showPanel(panel[0], 320, 400);
             ((Label) panel[0].lookup(".chat-status")).textProperty().addListener((o, a, b) -> called.countDown());
             Button delete = (Button) panel[0].lookup(".chat-delete");

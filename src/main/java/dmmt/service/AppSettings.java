@@ -136,7 +136,8 @@ public final class AppSettings {
             "ui.section.lighting.expanded", "ui.section.effects.expanded", "ui.section.text.expanded",
             "ui.section.building.expanded", "ui.section.player.expanded", "ui.section.performance.expanded");
 
-    private static final Set<String> CLIENT_LOCAL_KEYS = Set.of("import.lastDirectory", "audio.lastDirectory");
+    private static final Set<String> CLIENT_LOCAL_KEYS = Set.of("import.lastDirectory", "audio.lastDirectory",
+            "ui.chat.secretRoll");
 
     private static final class SharedMetadata {
         private static final Map<String, Entry> ENTRIES = entries();
@@ -963,6 +964,7 @@ public final class AppSettings {
         List<Section> sections = new ArrayList<>();
         sections.add(new Section(Tuning.WINDOW, List.of(
                 new Entry("ui.sidebarVisible", "true", "Show the sidebar (true/false)."),
+                new Entry("ui.chat.secretRoll", "false", "Last DM chat secret-roll toggle selection (true/false; local only)."),
                 new Entry("ui.performanceMode", "false", "Performance mode for slow machines (true/false); see the Performance mode section."),
                 new Entry("ui.effectAnimations", "true", "Animate effect textures and weather on all maps (true/false)."),
                 new Entry("ui.lightFlicker", "true", "Light flicker on / off for all maps (true/false); lights flicker according to their own flicker setting while on."),

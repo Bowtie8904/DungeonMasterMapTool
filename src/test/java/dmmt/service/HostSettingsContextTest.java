@@ -28,6 +28,24 @@ class HostSettingsContextTest {
     }
 
     @Test
+    void secretRollPreferenceIsLocalAndNeverBecomesARemoteSettingsEdit() {
+        AppSettings settings = localSettings();
+        settings.putBoolean("ui.chat.secretRoll", true);
+        assertFalse(settings.sharedValues().containsKey("ui.chat.secretRoll"));
+        try (var context = settings.useHostSettings(snapshot(1, "ui.chat.secretRoll", "false"),
+                edit -> fail("Secret-roll selection must not send a remote edit"))) {
+            assertTrue(settings.getBoolean("ui.chat.secretRoll", false));
+            settings.putBoolean("ui.chat.secretRoll", false);
+            assertFalse(settings.getBoolean("ui.chat.secretRoll", true));
+            context.accept(snapshot(2, "ui.chat.secretRoll", "true"));
+            assertFalse(settings.getBoolean("ui.chat.secretRoll", true));
+            assertFalse(settings.sharedValues().containsKey("ui.chat.secretRoll"));
+        }
+        assertTrue(new AppSettings(settings.getFile()).getBoolean("ui.chat.secretRoll", false),
+                "A remote session must not overwrite the standalone selection");
+    }
+
+    @Test
     void dialogEditRetainsItsOriginalHostRevisionAndCannotEscapeItsContext() throws Exception {
         var settings = localSettings();
         byte[] local = Files.readAllBytes(settings.getFile());

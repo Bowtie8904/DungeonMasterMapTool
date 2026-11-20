@@ -2,6 +2,7 @@ package dmmt.ui;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import dmmt.service.AppSettings;
 import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
@@ -22,7 +23,6 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import org.kordamp.ikonli.materialdesign2.MaterialDesignD;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignE;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignS;
 
@@ -87,7 +87,7 @@ public final class ChatPanel extends VBox {
     private final ChangeListener<Number> verticalScrollListener = (o, a, b) -> updateJump();
     private ScrollBar verticalScrollBar;
 
-    public ChatPanel(Backend backend) {
+    public ChatPanel(Backend backend, AppSettings settings) {
         this.backend = backend;
         getStyleClass().add("dm-chat");
         setSpacing(8);
@@ -158,10 +158,11 @@ public final class ChatPanel extends VBox {
         HBox.setHgrow(input, Priority.ALWAYS);
         input.setOnAction(e -> submit());
         Button send = Icons.button(MaterialDesignS.SEND, "Send message", this::submit);
-        Button roll = Icons.button(MaterialDesignD.DICE_MULTIPLE, "Roll the dice in the box (uses the secret-roll toggle)",
-                this::rollFromInput);
+        secretRoll.setSelected(settings.getBoolean("ui.chat.secretRoll", false));
+        secretRoll.selectedProperty().addListener((o, previous, selected) ->
+                settings.putBoolean("ui.chat.secretRoll", selected));
         secretRoll.setFocusTraversable(true);
-        HBox composer = new HBox(4, input, send, roll, secretRoll);
+        HBox composer = new HBox(4, input, send, secretRoll);
         composer.setAlignment(Pos.CENTER_LEFT);
         status.getStyleClass().add("chat-status");
         status.setWrapText(true);
@@ -473,19 +474,6 @@ public final class ChatPanel extends VBox {
             input.clear();
         }
         showStatus(error);
-    }
-
-    private void rollFromInput() {
-        String text = input.getText().trim();
-        boolean secret = false;
-        for (String command : new String[]{"/secret", "/sr", "/roll", "/r"}) {
-            if (text.toLowerCase(Locale.ROOT).startsWith(command + " ") || text.equalsIgnoreCase(command)) {
-                text = text.substring(command.length()).trim();
-                secret = command.equals("/secret") || command.equals("/sr");
-                break;
-            }
-        }
-        runRoll(text, secret);
     }
 
     private void runRoll(String expression, boolean secret) {

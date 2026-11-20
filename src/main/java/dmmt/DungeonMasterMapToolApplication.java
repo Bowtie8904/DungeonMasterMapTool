@@ -1855,7 +1855,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 return onlineController.roster().stream().filter(r -> r.connections() > 0)
                         .map(r -> new dmmt.ui.ChatPanel.Recipient(r.playerId(), r.playerName())).toList();
             }
-        });
+        }, preferences);
         VBox.setVgrow(chatPanel, Priority.ALWAYS);
         chatSection = new ControlSection("Chat", MaterialDesignC.CHAT_OUTLINE, "chat", chatPanel);
         chatSection.addHeaderAction(Icons.button(org.kordamp.ikonli.materialdesign2.MaterialDesignO.OPEN_IN_NEW,

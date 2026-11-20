@@ -868,7 +868,8 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   or an ally; moving unnoticed and the ally's range still require player confirmation.
   The DM has the same chat in a **Chat** tab at the top of the DM controls (only while hosting; hideable via
   `online.chat`), with an unread dot, recipient dropdown and `/roll` (or `/r`). The **secret roll** toggle
-  starts off; when enabled, rolls from the Roll button and `/roll`/`/r` show players only `?` instead of numbers
+  defaults to off and remembers its selection across restarts (`ui.chat.secretRoll`). Use `/roll` or `/r`
+  with Send or Enter; there is no separate Roll button. When enabled, chat and adversary rolls show players only `?` instead of numbers
   while dice type and count stay visible; the DM sees the real result. Normal messages are unaffected.
   `/sr 2d6` (or `/secret 2d6`) always rolls secretly, regardless of the toggle, without changing its state.
   The DM can type `/gold 500` to post a gold transfer offer (to the selected recipient) that players grab

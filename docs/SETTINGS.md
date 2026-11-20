@@ -5,6 +5,15 @@ exact key (for example `fog.revealSeconds`) or with a word describing what you w
 *zoom*, *tooltip*, *torch*, *cache*, *click*, *frame rate*). Every entry ends with a **Keywords** line that lists
 common synonyms to make searching easier.
 
+## DM chat preference
+
+**`ui.chat.secretRoll`** (default `false`) remembers the desktop DM chat's eye-off toggle across restarts.
+Changing the toggle saves it automatically. When enabled, chat `/roll`/`/r` commands and adversary rolls
+are secret; `/secret`/`/sr` always roll secretly without changing this preference.
+This is local to the application, not the campaign, and is excluded from DM Link settings snapshots and edits.
+The composer uses Send or Enter for roll commands and has no separate Roll button.
+**Keywords:** secret rolls, dice, chat, hidden results, remember toggle.
+
 ## Online Play browser preferences
 
 **Domain Cards > Loadout > Card/List icons** (default Card) selects the presentation of both Loadout
