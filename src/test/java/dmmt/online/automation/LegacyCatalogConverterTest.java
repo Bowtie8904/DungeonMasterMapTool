@@ -518,6 +518,87 @@ class LegacyCatalogConverterTest {
         assertEquals(3, invalid.diagnostics().size(), invalid.diagnostics().toString());
     }
 
+    @Test
+    void computedPoolResetsAndAdvantagedRerollTriggersConvert() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"t","name":"T","automation":{"resources":[
+                    {"id":"fane","label":"Fane","initial":0,"resetOn":"longRest","resetValue":"@cards_sage"},
+                    {"id":"plan","label":"Plan","initial":0,"resetOn":"longRest","resetValue":"@total_knowledge","minimumReset":1}],
+                  "rollTriggers":[{"id":"again","label":"Again","reroll":"duality","advantage":true}]}}"""));
+        JsonNode automation = block(result, 0);
+        assertEquals("max", automation.at("/pools/plan/resetTo").fieldNames().next(), automation.toString());
+        RuleCompiler.Program program = program(result, 0);
+        String actor = """
+                {"stats":{"trait":{"Knowledge":-1}},"effects":[],
+                 "loadout":[{"id":"a","domain":"Sage"},{"id":"b","domain":"Arcana"}],"vault":[{"id":"c","domain":"Sage"}]}""";
+        ObjectNode rested = RuleRuntime.resetLimits(program, context(program, actor, "{\"type\":\"rest.long\"}"), "rest.long");
+        assertEquals(2, rested.at("/actor/pools/fane/value").asInt(), rested.toString());
+        assertEquals(1, rested.at("/actor/pools/plan/value").asInt(), "The minimum applies to a negative trait.");
+
+        String duality = """
+                {"id":"check","contributions":[{"id":"hope","kind":"dice","role":"hope","sourceId":"core","label":"Hope",
+                  "dice":[{"id":"h","sides":12,"face":2,"kept":true,"origin":"rolled"}]},
+                  {"id":"fear","kind":"dice","role":"fear","sourceId":"core","label":"Fear",
+                  "dice":[{"id":"f","sides":12,"face":3,"kept":true,"origin":"rolled"}]}]}""";
+        ObjectNode finished = context(program, actor, "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"action\"},\"roll\":" + duality + "}");
+        JsonNode roll = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, finished)),
+                List.of(new RuleRuntime.Intent("again", "use", "fixture", 0, RuleJson.JSON.createObjectNode())),
+                StructuredRollTest.faces(10, 11, 4)).contexts().getFirst().at("/event/roll");
+        assertEquals(10 + 11 + 4, roll.path("total").asInt(), roll.toString());
+        assertEquals("advantage", roll.at("/contributions/2/role").asText());
+
+        var invalid = LegacyCatalogConverter.convert(catalog("""
+                {"id":"b","name":"B","automation":{"resources":[{"id":"x","resetValue":"@cards_sage"}],
+                  "rollTriggers":[{"id":"y","label":"Y","advantage":true}]}}"""));
+        assertEquals(2, invalid.diagnostics().size(), invalid.diagnostics().toString());
+    }
+
+    @Test
+    void giveFearAndOneDieChecksConvert() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"t","name":"T","automation":{"resources":[{"id":"focus","label":"Focus","initial":0}],
+                  "actions":[{"id":"steady","label":"Steady","check":{"dice":"1d6","unless":6,"mark":"stress"}}],
+                  "rollTriggers":[{"id":"fear","label":"Fear","giveFear":2},
+                    {"id":"spark","label":"Spark","check":{"dice":"1d4","success":4,"gain":"focus"}},
+                    {"id":"drain","label":"Drain","check":{"dice":"1d6","success":6},"choices":[
+                      {"id":"hp","label":"Clear HP","steps":[{"op":"clear","resource":"hp","amount":1}]},
+                      {"id":"stress","label":"Clear Stress","steps":[{"op":"clear","resource":"stress","amount":1}]}]}]}}"""));
+        JsonNode rules = block(result, 0).path("rules");
+        assertEquals("Check 1d6: {result.check}.", rules.at("/0/ui/report").asText(), rules.toString());
+        RuleCompiler.Program program = program(result, 0);
+        String actor = "{\"hp\":{\"marked\":2,\"capacity\":6},\"stress\":{\"marked\":2,\"capacity\":6},\"effects\":[]}";
+        ObjectNode sheet = context(program, actor, "{\"type\":\"action.request\"}");
+        var steady = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, sheet)),
+                List.of(new RuleRuntime.Intent("steady", "sheet", "fixture", 0, RuleJson.JSON.createObjectNode())), StructuredRollTest.faces(3));
+        assertEquals(3, steady.contexts().getFirst().at("/actor/stress/marked").asInt());
+        var lucky = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, sheet)),
+                List.of(new RuleRuntime.Intent("steady", "sheet", "fixture", 0, RuleJson.JSON.createObjectNode())), StructuredRollTest.faces(6));
+        assertEquals(2, lucky.contexts().getFirst().at("/actor/stress/marked").asInt());
+
+        ObjectNode finished = context(program, actor, "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"attack\",\"outcome\":\"success\"},\"roll\":" + ROLL + "}");
+        JsonNode outbox = run(program, finished, "fear").contexts().getFirst().path("outbox");
+        assertEquals("table.gain", outbox.at("/0/kind").asText(), outbox.toString());
+        assertEquals("fear", outbox.at("/0/resource").asText());
+        assertEquals(2, outbox.at("/0/amount").asInt());
+        var spark = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, finished)),
+                List.of(new RuleRuntime.Intent("spark", "use", "fixture", 0, RuleJson.JSON.createObjectNode())), StructuredRollTest.faces(4));
+        assertEquals(1, spark.contexts().getFirst().at("/actor/pools/focus/value").asInt(), spark.contexts().getFirst().toString());
+        var drain = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, finished)),
+                List.of(new RuleRuntime.Intent("drain", "use", "fixture", 0, (ObjectNode) RuleJson.parse("{\"choice\":\"hp\"}"))), StructuredRollTest.faces(6));
+        assertEquals(1, drain.contexts().getFirst().at("/actor/hp/marked").asInt());
+        assertEquals(2, drain.contexts().getFirst().at("/actor/stress/marked").asInt());
+
+        var mitigation = LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"armor","label":"Fixture","entries":[
+                  {"id":"a","name":"A","automation":{"mitigation":[{"id":"brace","label":"Brace","when":{"armor":true},"armorSlots":"any","giveFear":1}]}}]}""");
+        assertTrue(block(mitigation, 0).toString().contains("\"table.gain\""));
+
+        var invalid = LegacyCatalogConverter.convert(catalog("""
+                {"id":"b","name":"B","automation":{"actions":[{"id":"x","label":"X","check":{"dice":"2d6","success":4}},
+                  {"id":"y","label":"Y","choices":[]}]}}"""));
+        assertEquals(2, invalid.diagnostics().size(), invalid.diagnostics().toString());
+    }
+
     private static JsonNode block(LegacyCatalogConverter.Result result, int entry) {
         assertEquals(result.blocks(), result.converted(), result.diagnostics().toString());
         return result.catalog().at("/entries/" + entry + "/automation");

@@ -247,7 +247,10 @@ public final class RuleRuntime {
             if (poolReset) {
                 ObjectNode pool = poolState(program, next, definition.getKey());
                 if ("number".equals(definition.getValue().path("kind").asText())) {
-                    int initial = definition.getValue().path("initial").asInt(0);
+                    JsonNode resetTo = definition.getValue().get("resetTo");
+                    int initial = resetTo == null ? definition.getValue().path("initial").asInt(0)
+                            : (int) Math.max(0, Math.min(definition.getValue().path("max").asInt(),
+                                    Math.floor(RuleExpression.number(RuleExpression.evaluate(resetTo, hostContext), "/pools/" + definition.getKey() + "/resetTo"))));
                     if (pool.path("value").asInt() != initial) { pool.put("value", initial); changed = true; }
                 } else if (!pool.path("dice").isEmpty()) {
                     pool.putArray("dice");
@@ -921,7 +924,7 @@ public final class RuleRuntime {
                     result = list.remove(index);
                 }
             }
-            case "damage.deal", "countdown.start", "claim.offer" -> {
+            case "damage.deal", "countdown.start", "claim.offer", "table.gain" -> {
                 ArrayNode outbox = context.has("outbox") ? (ArrayNode) context.get("outbox") : context.putArray("outbox");
                 if (outbox.size() >= 32) throw RuleJson.error("/outbox", "Too many host requests.");
                 ObjectNode request = outbox.addObject().put("kind", kind)
@@ -933,6 +936,7 @@ public final class RuleRuntime {
                     request.put("group", op.path("group").asText());
                     if (op.has("limit")) request.put("limit", whole(op.path("limit"), context, 0, 64));
                 }
+                else if ("table.gain".equals(kind)) request.put("resource", op.path("resource").asText()).put("amount", whole(op.path("amount"), context, 1, 1000));
                 else request.put("value", whole(op.path("value"), context, 1, 1000));
                 result = request.deepCopy();
             }
