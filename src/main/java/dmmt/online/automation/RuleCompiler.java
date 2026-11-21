@@ -67,6 +67,7 @@ public final class RuleCompiler {
             Map.entry("damage.deal", List.of("to", "amount", "label")),
             Map.entry("countdown.start", List.of("label", "value")),
             Map.entry("table.gain", List.of("resource", "amount", "label")),
+            Map.entry("table.spend", List.of("resource", "amount", "label")),
             Map.entry("claim.offer", List.of("group", "label", "limit")),
             Map.entry("roll.selectDice", List.of("from", "where")),
             Map.entry("roll.reroll", List.of("from", "dice", "choose")),
@@ -198,7 +199,9 @@ public final class RuleCompiler {
         pools.fields().forEachRemaining(field -> {
             String id = RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(field.getKey()), "/automation/pools");
             String path = "/automation/pools/" + id;
-            RuleJson.fields(field.getValue(), path, "kind", "scope", "label", "max", "initial", "resetOn", "resetTo");
+            RuleJson.fields(field.getValue(), path, "kind", "scope", "label", "max", "initial", "resetOn", "resetTo", "section");
+            if (field.getValue().has("section") && !Set.of("feature", "class").contains(field.getValue().path("section").asText()))
+                throw RuleJson.error(path + "/section", "Expected feature or class.");
             if (field.getValue().has("label")) RuleTemplate.validate(RuleJson.text(field.getValue().get("label"), path + "/label"));
             String kind = RuleJson.text(field.getValue().get("kind"), path + "/kind");
             if (!Set.of("number", "dice").contains(kind)) throw RuleJson.error(path + "/kind", "Expected number or dice.");
@@ -881,8 +884,8 @@ public final class RuleCompiler {
                     throw RuleJson.error(path + "/to", "Expected actor, recipient or attacker.");
             }
             else if ("group".equals(field) && "claim.offer".equals(op)) RuleJson.id(value, path + "/group");
-            else if ("resource".equals(field) && "table.gain".equals(op)) RuleJson.id(value, path + "/resource");
-            else if (Set.of("id", "label").contains(field) && Set.of("damage.reduce", "damage.deal", "countdown.start", "claim.offer", "table.gain").contains(op))
+            else if ("resource".equals(field) && Set.of("table.gain", "table.spend").contains(op)) RuleJson.id(value, path + "/resource");
+            else if (Set.of("id", "label").contains(field) && Set.of("damage.reduce", "damage.deal", "countdown.start", "claim.offer", "table.gain", "table.spend").contains(op))
                 RuleTemplate.validate(RuleJson.text(value, path + "/" + field));
             else if (Set.of("choose", "maxDice").contains(field)) continue;
             else if ("dieId".equals(field)) RuleExpression.validate(value, path + "/" + field);

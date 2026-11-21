@@ -942,7 +942,7 @@ public final class RuleRuntime {
                     result = list.remove(index);
                 }
             }
-            case "damage.deal", "countdown.start", "claim.offer", "table.gain" -> {
+            case "damage.deal", "countdown.start", "claim.offer", "table.gain", "table.spend" -> {
                 ArrayNode outbox = context.has("outbox") ? (ArrayNode) context.get("outbox") : context.putArray("outbox");
                 if (outbox.size() >= 32) throw RuleJson.error("/outbox", "Too many host requests.");
                 ObjectNode request = outbox.addObject().put("kind", kind)
@@ -954,7 +954,7 @@ public final class RuleRuntime {
                     request.put("group", op.path("group").asText());
                     if (op.has("limit")) request.put("limit", whole(op.path("limit"), context, 0, 64));
                 }
-                else if ("table.gain".equals(kind)) request.put("resource", op.path("resource").asText()).put("amount", whole(op.path("amount"), context, 1, 1000));
+                else if (Set.of("table.gain", "table.spend").contains(kind)) request.put("resource", op.path("resource").asText()).put("amount", whole(op.path("amount"), context, 1, 1000));
                 else request.put("value", whole(op.path("value"), context, 1, 1000));
                 result = request.deepCopy();
             }

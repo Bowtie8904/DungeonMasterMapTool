@@ -31,7 +31,8 @@ public final class LegacyCatalogConverter {
     private static final List<String> FAMILIES = List.of("actions", "rollOptions", "rollTriggers", "conditionalRollTriggers", "mitigation");
     private static final Set<String> BLOCK_FIELDS = Set.of("actions", "reloading", "uses", "modifiers", "resources", "rollOptions", "rollTriggers",
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
-            "damage", "alternateProfiles", "damageTypeChoice", "rest", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions", "conditionalRollOptions");
+            "damage", "alternateProfiles", "damageTypeChoice", "rest", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions", "conditionalRollOptions",
+            "hopeReward", "classResourceOnly");
     /** Legacy gated families that are their base family plus extra conditions, which every family converts the same way. */
     private static final Map<String, String> GATED_FAMILIES = Map.of("conditionalActions", "actions", "conditionalRollOptions", "rollOptions");
     private static final Map<String, String> RANGES = Map.of("melee", "melee", "very close", "veryClose", "veryclose", "veryClose",
@@ -309,6 +310,20 @@ public final class LegacyCatalogConverter {
         if (legacy.has("alternateProfiles")) {
             ArrayNode profiles = profiles(legacy.get("alternateProfiles"), path + "/alternateProfiles", p);
             if (!profiles.isEmpty()) out.set("profiles", profiles);
+        }
+        if (legacy.has("hopeReward")) {
+            ObjectNode rule = hopeReward(legacy.get("hopeReward"), path + "/hopeReward", p, pools);
+            if (rule != null) {
+                rule.put("id", unique(rule.path("id").asText(), ruleIds));
+                rules.add(rule);
+            }
+        }
+        if (legacy.has("classResourceOnly")) {
+            if (!legacy.path("classResourceOnly").isBoolean()) p.add(path + "/classResourceOnly", "Expected a boolean.");
+            else if (legacy.path("classResourceOnly").asBoolean()) {
+                if (pools.local().isEmpty()) p.add(path + "/classResourceOnly", "Only declared pools can be shown with class resources.");
+                pools.local().forEach(pool -> ((ObjectNode) pool).put("section", "class"));
+            }
         }
         if (!pools.local().isEmpty()) out.set("pools", pools.local());
         if (!effects.isEmpty()) out.set("effects", effects);
@@ -1004,6 +1019,47 @@ public final class LegacyCatalogConverter {
             }
         }
         return dice;
+    }
+
+    /**
+     * An alternative Hope reward is a claim on the owner's own successful non-critical duality roll with Hope, in the
+     * {@code roll-reward} claim group the ruleset's base reward also uses, so taking it replaces the normal Hope gain.
+     */
+    private static ObjectNode hopeReward(JsonNode reward, String path, Problems p, Pools pools) {
+        p.onlyFields(reward, path, Set.of("roll", "resource", "amount", "favor", "removeFear"));
+        List<String> kinds = new ArrayList<>(java.util.stream.Stream.of("resource", "favor", "removeFear").filter(reward::has).toList());
+        if (kinds.size() != 1) { p.add(path, "Expected exactly one of resource, favor or removeFear."); return null; }
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "hope-reward");
+        ObjectNode binding = rule.putArray("bindings").addObject().put("id", "claim").put("event", "roll.finished")
+                .put("surface", "roll").put("mode", "button").put("claimGroup", "roll-reward").put("audience", "self");
+        binding.putObject("claimScope").put("recipients", "sourceActor");
+        ArrayNode when = RuleJson.JSON.createArrayNode();
+        rollCondition(reward.path("roll").asText("any"), path + "/roll", p, when);
+        when.addObject().putArray("ne").add(read("event.check.kind")).add("reaction");
+        when.addObject().putArray("eq").add(read("event.check.dominant")).add("hope");
+        when.addObject().putArray("eq").add(read("event.check.critical")).add(false);
+        ObjectNode failure = RuleJson.JSON.createObjectNode();
+        failure.putArray("eq").add(read("event.check.outcome")).add("failure");
+        when.addObject().set("not", failure);
+        applyWhen(rule, when);
+        ArrayNode steps = rule.putArray("do");
+        ObjectNode ui = rule.putObject("ui");
+        String kind = kinds.getFirst();
+        JsonNode amount = amount("resource".equals(kind) ? reward.path("amount") : reward.path(kind));
+        if (amount == null || !amount.isInt()) { p.add(path + "/" + ("resource".equals(kind) ? "amount" : kind), "Expected a positive whole amount."); return null; }
+        if ("removeFear".equals(kind)) {
+            steps.addObject().put("op", "table.spend").put("resource", "fear").put("label", "Remove GM Fear").put("as", "removed").set("amount", amount);
+            ui.put("label", "Remove " + amount.asText() + " GM Fear instead of Hope");
+            ui.put("report", "Removed {result.removed.amount} GM Fear instead of gaining Hope.");
+            return rule;
+        }
+        String resource = "favor".equals(kind) ? "favor" : reward.path("resource").asText();
+        if (!pools.has(resource)) { p.add(path, "Gaining needs a declared pool: " + resource); return null; }
+        steps.addObject().put("op", "pool.gain").put("pool", resource).set("amount", amount);
+        String label = pools.local().path(resource).path("label").asText(resource);
+        ui.put("label", "Gain " + amount.asText() + " " + label + " instead of Hope");
+        ui.put("report", "Gained " + amount.asText() + " " + label + " instead of gaining Hope.");
+        return rule;
     }
 
     private static ObjectNode ruleShell(JsonNode legacy, String path, Problems p, String event, String surface, String mode) {

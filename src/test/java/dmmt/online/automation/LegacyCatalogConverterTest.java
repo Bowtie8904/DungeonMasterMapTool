@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.random.RandomGenerator;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -712,6 +713,37 @@ class LegacyCatalogConverterTest {
 
         var invalid = LegacyCatalogConverter.convert(catalog("""
                 {"id":"b","name":"B","automation":{"rollTriggers":[{"id":"x","label":"X","on":"action","damageDice":"double"}]}}"""));
+        assertEquals(1, invalid.diagnostics().size(), invalid.diagnostics().toString());
+    }
+
+    @Test
+    void alternativeHopeRewardsBecomeRollRewardClaims() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"visage","name":"Visage","automation":{"hopeReward":{"removeFear":1,                "roll":"trait:Presence"}}},
+                                {"id":"slayer","name":"Slayer","automation":{"classResourceOnly":true,"hopeReward":{"resource":"slayer-dice","amount":1,"roll":"action"},
+                  "resources":[{"id":"slayer-dice","label":"Slayer Dice","initial":0,"max":3}]}}"""));
+        JsonNode visage = block(result, 0);
+        assertEquals("roll-reward", visage.at("/rules/0/bindings/0/claimGroup").asText(), visage.toString());
+        assertEquals("class", block(result, 1).at("/pools/slayer-dice/section").asText(), block(result, 1).toString());
+        RuleCompiler.Program program = program(result, 0);
+        String actor = "{\"id\":\"me\",\"hope\":{\"value\":2,\"max\":6},\"effects\":[]}";
+        String hope = "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"action\",\"trait\":\"Presence\",\"dominant\":\"hope\",\"critical\":false,\"outcome\":null}}";
+        ObjectNode presence = context(program, actor, hope);
+        assertEquals(List.of("hope-reward"), available(program, presence, "roll"));
+        for (String other : List.of(hope.replace("\"dominant\":\"hope\"", "\"dominant\":\"fear\""), hope.replace("\"critical\":false", "\"critical\":true"),
+                hope.replace("\"outcome\":null", "\"outcome\":\"failure\""), hope.replace("\"kind\":\"action\"", "\"kind\":\"reaction\""),
+                hope.replace("Presence", "Agility")))
+            assertEquals(List.of(), available(program, context(program, actor, other), "roll"), other);
+        var claim = RuleDispatcher.executeClaims(List.of(new RuleDispatcher.Candidate(program, presence)),
+                List.of(new RuleDispatcher.ClaimIntent(new RuleRuntime.Intent("hope-reward", "claim", "fixture", 0, RuleJson.JSON.createObjectNode()), "me", 0, 0)),
+                List.of(new RuleDispatcher.RecipientCandidate("me", (ObjectNode) presence.path("actor").deepCopy(), 0)),
+                new RuleDispatcher.ClaimLedger(0, Set.of()), StructuredRollTest.noRandom());
+        assertEquals(Set.of(new RuleDispatcher.ClaimKey("roll-reward", "me")), claim.ledger().claims());
+        assertEquals("table.spend", claim.sourceContexts().getFirst().at("/outbox/0/kind").asText(), claim.sourceContexts().toString());
+        assertEquals("Removed 1 GM Fear instead of gaining Hope.", claim.actions().getFirst().action().report());
+
+        var invalid = LegacyCatalogConverter.convert(catalog("""
+                {"id":"b","name":"B","automation":{"hopeReward":{"removeFear":1,"favor":1,"roll":"action"}}}"""));
         assertEquals(1, invalid.diagnostics().size(), invalid.diagnostics().toString());
     }
 
