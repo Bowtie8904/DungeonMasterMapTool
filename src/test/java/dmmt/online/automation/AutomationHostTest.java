@@ -100,6 +100,23 @@ class AutomationHostTest {
     }
 
     @Test
+    void refreshRequestsClearOtherSourcesRestLimitsButNotPools() throws Exception {
+        String tea = LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"consumables","label":"Fixture","entries":[
+                  {"id":"minor-health-potion","name":"Tea","automation":{"actions":[{"id":"drink","label":"Drink","refreshUses":"short"}]}}]}""")
+                .catalog().toString();
+        var pack = AutomationHost.compile("test", Map.of("classes", fixture("rewrite/host-classes").toString(), "consumables", tea),
+                fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet();
+        HOST.execute(pack, sheet, action(), request("r1", 0, "f-rally", "rally"), "self", new SplittableRandom(1));
+        assertEquals(1, sheet.at("/automationState/sources/f-rally/usage/once").asInt());
+        ObjectNode response = HOST.execute(pack, sheet, action(), request("t1", 1, "i-potion", "drink"), "self", null);
+        assertEquals("limits.refresh", response.at("/outbox/0/kind").asText(), response.toString());
+        assertEquals(0, sheet.at("/automationState/sources/f-rally/usage/once").asInt(), sheet.path("automationState").toString());
+        assertEquals(List.of("Rope"), sheet.path("inventory").findValuesAsText("name"), "The tea is used up.");
+    }
+
+    @Test
     void writesTracksCollectionsAndConsumedSourcesThroughTheProjection() throws Exception {
         var pack = pack();
         ObjectNode sheet = sheet();

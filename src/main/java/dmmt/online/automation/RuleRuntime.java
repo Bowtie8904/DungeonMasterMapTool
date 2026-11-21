@@ -215,6 +215,29 @@ public final class RuleRuntime {
         return new Resolution(next, report, List.copyOf(published), List.copyOf(rolls));
     }
 
+    /** Clears used limits that reset on any of the given events, leaving pools untouched (a "refresh uses" host request). */
+    public static ObjectNode refreshLimits(RuleCompiler.Program program, ObjectNode hostContext, Set<String> events) {
+        RuleJson.checkTree(hostContext, "/context", 0, new int[]{0});
+        if (!program.sourceId().equals(hostContext.path("source").path("id").asText()))
+            throw RuleJson.error("/source/id", "Source definition does not match the program.");
+        revision(hostContext);
+        ObjectNode next = hostContext.deepCopy();
+        ObjectNode usage = usage(program, next);
+        boolean changed = false;
+        var limits = program.limits().fields();
+        while (limits.hasNext()) {
+            var limit = limits.next();
+            boolean reset = false;
+            for (JsonNode declared : limit.getValue().path("resetOn")) if (events.contains(declared.asText())) reset = true;
+            if (reset && RuleJson.integer(usage.path(limit.getKey()), "/usage/" + limit.getKey(), 0, 1000) != 0) {
+                usage.put(limit.getKey(), 0);
+                changed = true;
+            }
+        }
+        if (changed) next.set("revision", RuleExpression.numeric(revision(next) + 1d, "/revision"));
+        return next;
+    }
+
     public static ObjectNode resetLimits(RuleCompiler.Program program, ObjectNode hostContext, String event) {
         RuleJson.checkTree(hostContext, "/context", 0, new int[]{0});
         if (!Set.of("rest.short", "rest.long", "scene.end", "session.start").contains(event))
@@ -942,7 +965,7 @@ public final class RuleRuntime {
                     result = list.remove(index);
                 }
             }
-            case "damage.deal", "countdown.start", "claim.offer", "table.gain", "table.spend" -> {
+            case "damage.deal", "countdown.start", "claim.offer", "table.gain", "table.spend", "limits.refresh" -> {
                 ArrayNode outbox = context.has("outbox") ? (ArrayNode) context.get("outbox") : context.putArray("outbox");
                 if (outbox.size() >= 32) throw RuleJson.error("/outbox", "Too many host requests.");
                 ObjectNode request = outbox.addObject().put("kind", kind)
@@ -955,6 +978,7 @@ public final class RuleRuntime {
                     if (op.has("limit")) request.put("limit", whole(op.path("limit"), context, 0, 64));
                 }
                 else if (Set.of("table.gain", "table.spend").contains(kind)) request.put("resource", op.path("resource").asText()).put("amount", whole(op.path("amount"), context, 1, 1000));
+                else if ("limits.refresh".equals(kind)) request.set("on", op.path("on").deepCopy());
                 else request.put("value", whole(op.path("value"), context, 1, 1000));
                 result = request.deepCopy();
             }

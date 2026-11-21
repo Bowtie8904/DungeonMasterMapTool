@@ -69,6 +69,7 @@ public final class RuleCompiler {
             Map.entry("table.gain", List.of("resource", "amount", "label")),
             Map.entry("table.spend", List.of("resource", "amount", "label")),
             Map.entry("claim.offer", List.of("group", "label", "limit")),
+            Map.entry("limits.refresh", List.of("on", "label")),
             Map.entry("roll.selectDice", List.of("from", "where")),
             Map.entry("roll.reroll", List.of("from", "dice", "choose")),
             Map.entry("roll.setFaces", List.of("from", "dice", "face")),
@@ -804,6 +805,11 @@ public final class RuleCompiler {
         }
         if ("event.block".equals(op)) {
             RuleTemplate.validate(RuleJson.text(operation.get("reason"), path + "/reason"));
+            return;
+        }
+        if ("limits.refresh".equals(op)) {
+            resetEvents(operation.get("on"), path + "/on");
+            RuleTemplate.validate(RuleJson.text(operation.get("label"), path + "/label"));
             return;
         }
         if ("plan.adjust".equals(op)) {

@@ -156,6 +156,16 @@ public final class AutomationHost {
             }
             for (JsonNode request2 : context.path("outbox")) outbox.add(request2);
         }
+        for (JsonNode refresh : outbox) {
+            if (!"limits.refresh".equals(refresh.path("kind").asText())) continue;
+            Set<String> events = new java.util.HashSet<>();
+            refresh.path("on").forEach(item -> events.add(item.asText()));
+            for (SheetProjection.SourceElement element : elements.values()) {
+                if (element.instanceId().equals(refresh.path("sourceInstanceId").asText())) continue;
+                RuleCompiler.Program program = pack.programs().get(element.sourceId());
+                if (program != null) storeSource(state, element.instanceId(), RuleRuntime.refreshLimits(program, context(state, element, actor, event), events));
+            }
+        }
         if (!resolution.actions().isEmpty()) projection.write(working, before, persisted(actor));
         for (SheetProjection.SourceElement element : emptied) remove(working, element);
 

@@ -58,10 +58,11 @@ public final class LegacyCatalogConverter {
     private static final List<String> SEVERITIES = List.of("minor", "major", "severe", "massive");
     private static final Pattern DICE = Pattern.compile("([1-9][0-9]?)d([1-9][0-9]{0,2})");
     private static final Pattern ACTION_DAMAGE = Pattern.compile("(?i)(\\d*)d(\\d+)(?:([+-])(\\d+))?");
+    private static final Pattern POOL_DICE = Pattern.compile("@([a-z][a-z0-9_]*)(d\\d+(?:[+-]\\d+)?)");
     private static final Set<String> ACTION_FIELDS = Set.of("id", "label", "description", "cost", "steps", "report", "damage",
             "requiresEffect", "excludesEffect", "endEffect", "uses", "usesSource", "actionRoll", "target",
             "excludeSourceActor", "hostOwned", "selectAmount", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
-            "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices");
+            "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope");
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
@@ -258,6 +259,8 @@ public final class LegacyCatalogConverter {
                     costs.addObject().put("op", "inventory.consume").put("amount", 1);
                 }
             }
+            if ("actions".equals(next.family()) && p.sourceId().startsWith("consumables:") && next.path().matches(Pattern.quote(path) + "/actions/\\d+"))
+                consumableUnit(legacyRule, next.path(), p, pools, rule);
             rules.add(rule);
             for (ObjectNode follow : extra) {
                 follow.put("id", unique(follow.path("id").asText(), ruleIds));
@@ -889,6 +892,10 @@ public final class LegacyCatalogConverter {
         if (legacy.has("requiresZeroHope")) {
             if (!legacy.path("requiresZeroHope").isBoolean()) p.add(path + "/requiresZeroHope", "Expected a boolean.");
             else if (legacy.path("requiresZeroHope").asBoolean()) when.addObject().putArray("eq").add(read("actor.hope.value")).add(0);
+        }
+        if (legacy.has("minimumHope")) {
+            if (!legacy.path("minimumHope").isInt() || legacy.path("minimumHope").asInt() < 1) p.add(path + "/minimumHope", "Expected a positive whole number.");
+            else when.addObject().putArray("gte").add(read("actor.hope.value")).add(legacy.path("minimumHope").asInt());
         }
         if (legacy.has("excludeRolls")) {
             for (JsonNode excluded : legacy.get("excludeRolls")) {
@@ -2199,6 +2206,9 @@ public final class LegacyCatalogConverter {
         if (usesSpellcastTrait)
             when.addObject().put("exists", "actor.spellcastTrait.value");
         sentRollConditions(action, when);
+        var dicePool = POOL_DICE.matcher(damage.path("dice").asText(""));
+        if (dicePool.matches() && pools.has(dicePool.group(1)))
+            when.addObject().putArray("gt").add(read("actor.pools." + dicePool.group(1) + ".value")).add(0);
         if (action.has("channel") && (!action.path("channel").isTextual() || action.path("channel").asText().isBlank()))
             p.add(path + "/channel", "Expected an element name.");
         boolean aura = action.has("aura");
@@ -2211,10 +2221,29 @@ public final class LegacyCatalogConverter {
         applyWhen(rule, when);
         if (action.has("cost")) costs(action.get("cost"), path + "/cost", p, pools, rule);
         if (action.has("selectAmount")) selectAmount(action.get("selectAmount"), path + "/selectAmount", p, pools, rule);
+        boolean transfer = action.has("transferHope");
+        if (transfer) {
+            if (!action.path("transferHope").asBoolean(false) || !"recipient".equals(operationTarget) || action.has("selectAmount")
+                    || !"one".equals(binding.path("targetSelection").path("cardinality").asText())) {
+                p.add(path + "/transferHope", "A Hope transfer needs exactly one ally target and no other amount.");
+                transfer = false;
+            } else {
+                ((ObjectNode) binding.get("targetSelection")).put("excludeSource", true);
+                selectAmount(RuleJson.JSON.createObjectNode().put("resource", "hope").put("label", "Hope to give"), path + "/transferHope", p, pools, rule);
+                ArrayNode costs = rule.has("costs") ? (ArrayNode) rule.get("costs") : rule.putArray("costs");
+                costs.addObject().put("op", "resource.spend").put("pool", "actor.hope").set("amount", read("input.amount"));
+            }
+        }
         if (limited) rule.put("limitRef", "uses");
         ArrayNode steps = RuleJson.JSON.createArrayNode();
         if (action.has("actionRoll")) actionRoll(action.get("actionRoll"), path + "/actionRoll", action, p, steps);
-        if (action.has("damage")) actionDamage(action.get("damage"), path + "/damage", action, p, steps);
+        if (action.has("damage")) {
+            var pooled = POOL_DICE.matcher(damage.path("dice").asText(""));
+            if (pooled.matches() && !pools.has(pooled.group(1))) p.add(path + "/damage/dice", "Unknown dice-count pool: " + pooled.group(1));
+            else {
+                actionDamage(action.get("damage"), path + "/damage", action, p, steps);
+            }
+        }
         if (action.has("sendRoll")) sentRoll(action.get("sendRoll"), path + "/sendRoll", action, p, steps);
         if (aura) {
             ObjectNode marker = RuleJson.JSON.createObjectNode().put("name", label).put("kind", "buff").put("until", "rest")
@@ -2227,13 +2256,24 @@ public final class LegacyCatalogConverter {
         JsonNode list = action.has("check") ? RuleJson.JSON.missingNode() : action.path("steps");
         for (int i = 0; i < list.size(); i++) step(list.get(i), path + "/steps/" + i, p, steps, effects, pools, operationTarget);
         endEffect(action, steps, operationTarget);
+        if (transfer) steps.addObject().put("op", "resource.gain").put("pool", "recipient.hope").set("amount", read("input.amount"));
+        if (action.has("refreshUses")) {
+            String rest = action.path("refreshUses").asText();
+            if (!Set.of("short", "long").contains(rest)) p.add(path + "/refreshUses", "Expected short or long.");
+            else {
+                ArrayNode on = steps.addObject().put("op", "limits.refresh")
+                        .put("label", "Refreshed limited uses as if after a " + rest + " rest").putArray("on").add("rest.short");
+                if ("long".equals(rest)) on.add("rest.long");
+            }
+        }
         if (!steps.isEmpty()) rule.set("do", steps);
         ObjectNode ui = rule.putObject("ui");
         ui.put("label", escape(label));
         if (action.has("description")) ui.put("description", escape(action.path("description").asText()));
         if (aura) ui.put("unavailable", "Channel an element first.");
         if (!action.has("report")) {
-            if (action.has("actionRoll") && action.has("damage"))
+            if (transfer) ui.put("report", "Gave {input.amount} Hope to {recipient.name}.");
+            else if (action.has("actionRoll") && action.has("damage"))
                 ui.put("report", "Roll total: {result.actionRoll.total}. Damage total: {result.actionDamage.total}.");
             else if (action.has("actionRoll")) ui.put("report", "Roll total: {result.actionRoll.total}.");
             else if (action.has("damage")) ui.put("report", "Damage total: {result.actionDamage.total}.");
@@ -2245,6 +2285,31 @@ public final class LegacyCatalogConverter {
     }
 
     private static final Pattern CHECK_DIE = Pattern.compile("1?d(\\d{1,3})");
+
+    /**
+     * A consumable's sheet action uses up one unit unless it keeps the item. With a portion pool, the unit is used up
+     * only once the pool is empty after paying the cost, and the pool then refills for the next unit.
+     */
+    private static void consumableUnit(JsonNode action, String path, Problems p, Pools pools, ObjectNode rule) {
+        if (action.has("keepItem") && !action.path("keepItem").isBoolean()) { p.add(path + "/keepItem", "Expected a boolean."); return; }
+        if (action.path("keepItem").asBoolean(false)) return;
+        if (!action.has("portions")) {
+            ArrayNode costs = rule.has("costs") ? (ArrayNode) rule.get("costs") : rule.putArray("costs");
+            costs.addObject().put("op", "inventory.consume").put("amount", 1);
+            return;
+        }
+        String pool = action.path("portions").asText("");
+        if (!pools.has(pool) || !"number".equals(pools.local().path(pool).path("kind").asText())) {
+            p.add(path + "/portions", "Unknown portion pool: " + pool);
+            return;
+        }
+        ObjectNode empty = RuleJson.JSON.createObjectNode();
+        empty.putArray("eq").add(read("actor.pools." + pool + ".value")).add(0);
+        ArrayNode steps = rule.has("do") ? (ArrayNode) rule.get("do") : rule.putArray("do");
+        steps.addObject().put("op", "inventory.consume").put("amount", 1).set("if", empty.deepCopy());
+        steps.addObject().put("op", "pool.gain").put("pool", pool).put("amount", Math.max(0, pools.local().path(pool).path("initial").asInt(0)))
+                .set("if", empty);
+    }
 
     /**
      * A one-die check: {@code success} runs the outcome on that face, {@code unless} runs it on any other face. The outcome
@@ -2438,6 +2503,12 @@ public final class LegacyCatalogConverter {
     private static void actionDamage(JsonNode legacy, String path, JsonNode action, Problems p, ArrayNode steps, JsonNode critical, String as) {
         p.onlyFields(legacy, path, Set.of("dice", "type", "fixed", "count"));
         String diceText = legacy.path("dice").asText("");
+        String poolCount = null;
+        var pooled = POOL_DICE.matcher(diceText);
+        if (pooled.matches()) {
+            poolCount = pooled.group(1);
+            diceText = pooled.group(2);
+        }
         var matcher = ACTION_DAMAGE.matcher(diceText);
         if (!matcher.matches()) {
             p.add(path + "/dice", "Expected one damage die expression such as d8, 2d10+3 or d8-1.");
@@ -2487,6 +2558,7 @@ public final class LegacyCatalogConverter {
         ObjectNode dice = contributions.addObject().put("id", slug(id + "-damage-dice")).put("kind", "dice")
                 .put("role", "damage").put("sourceId", "core").put("label", action.path("label").asText("Damage"));
         if (spellcastCount) dice.set("count", spellcastDiceCount(fixedCount));
+        else if (poolCount != null) dice.set("count", read("actor.pools." + poolCount + ".value"));
         else if (fixed) dice.put("count", fixedCount);
         else dice.set("count", read("actor.proficiency.value"));
         dice.put("sides", sides);

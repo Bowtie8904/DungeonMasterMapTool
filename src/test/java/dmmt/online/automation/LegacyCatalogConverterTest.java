@@ -815,6 +815,66 @@ class LegacyCatalogConverterTest {
         assertEquals(-80, block(result, 0).at("/rules/0/bindings/0/priority").asInt(), "Matching runs after other options add dice.");
     }
 
+    @Test
+    void consumableActionsUseUpUnitsUnlessKeptOrPortionsRemain() throws Exception {
+        var result = LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"consumables","label":"Fixture","entries":[
+                  {"id":"jar","name":"Jar","automation":{"resources":[{"id":"bites","label":"Bites","initial":2,"max":2}],"actions":[
+                    {"id":"eat","label":"Eat","portions":"bites","cost":{"bites":1}},
+                    {"id":"look","label":"Look","keepItem":true,"report":{"text":"Looked."}},
+                    {"id":"drink","label":"Drink","minimumHope":2,"refreshUses":"long"},
+                    {"id":"throw","label":"Throw","damage":{"dice":"@bitesd8+4","fixed":true,"type":"physical"}}]}}]}""");
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        JsonNode rules = block(result, 0).path("rules");
+        assertTrue(rules.get(3).toString().contains("{\"read\":\"actor.pools.bites.value\"},\"sides\":8"), rules.get(3).toString());
+        assertFalse(rules.get(1).toString().contains("inventory.consume"), "Kept items are not used up.");
+        assertTrue(rules.get(2).path("costs").toString().contains("inventory.consume"), rules.get(2).toString());
+        assertEquals("gte", rules.get(2).path("when").fieldNames().next(), rules.get(2).toString());
+        assertTrue(rules.get(2).toString().contains("\"limits.refresh\""), rules.get(2).toString());
+
+        RuleCompiler.Program program = program(result, 0);
+        String actor = "{\"hope\":{\"value\":1,\"max\":6},\"effects\":[],\"pools\":{\"bites\":{\"value\":%d}}}";
+        String request = "{\"type\":\"action.request\"}";
+        RuleRuntime.Intent eat = new RuleRuntime.Intent("eat", "sheet", "fixture", 0, RuleJson.JSON.createObjectNode());
+        ObjectNode first = context(program, actor.formatted(2), request);
+        first.with("source").put("quantity", 2);
+        JsonNode kept = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, first)), List.of(eat), StructuredRollTest.noRandom()).contexts().getFirst();
+        assertEquals(2, kept.at("/source/quantity").asInt(), kept.toString());
+        assertEquals(1, kept.at("/actor/pools/bites/value").asInt(), kept.toString());
+        ObjectNode last = context(program, actor.formatted(1), request);
+        last.with("source").put("quantity", 2);
+        JsonNode used = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, last)), List.of(eat), StructuredRollTest.noRandom()).contexts().getFirst();
+        assertEquals(1, used.at("/source/quantity").asInt(), used.toString());
+        assertEquals(2, used.at("/actor/pools/bites/value").asInt(), "The next unit starts with full portions.");
+        ObjectNode broke = context(program, actor.formatted(2), request);
+        broke.with("source").put("quantity", 1);
+        assertFalse(available(program, broke, "sheet").contains("drink"), "Needs 2 Hope.");
+        assertTrue(available(program, broke, "sheet").contains("throw"), "Throwing needs portions left.");
+    }
+
+    @Test
+    void transferHopeMovesChosenHopeToOneAlly() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"t","name":"T","automation":{"actions":[{"id":"give","label":"Close-Knit","target":"actor","transferHope":true}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        JsonNode selection = block(result, 0).at("/rules/0/bindings/0/targetSelection");
+        assertEquals("one", selection.path("cardinality").asText(), selection.toString());
+        assertTrue(selection.path("excludeSource").asBoolean(), selection.toString());
+        RuleCompiler.Program program = program(result, 0);
+        ObjectNode source = context(program, "{\"id\":\"owner\",\"name\":\"Ari\",\"hope\":{\"value\":3,\"max\":6},\"effects\":[]}",
+                "{\"type\":\"action.request\"}");
+        source.with("targetOptions").set(selection.path("scope").asText(), RuleJson.parse("""
+                [{"id":"owner","label":"Ari","revision":0},{"id":"mira","label":"Mira","revision":2}]"""));
+        RuleDispatcher.TargetResolution resolved = RuleDispatcher.executeTargets(List.of(new RuleDispatcher.Candidate(program, source)),
+                new RuleDispatcher.TargetIntent(new RuleRuntime.Intent("give", "sheet", "fixture", 0,
+                        (ObjectNode) RuleJson.parse("{\"amount\":2}")), "mira", 2L),
+                List.of(new RuleDispatcher.RecipientCandidate("mira", (ObjectNode) RuleJson.parse(
+                        "{\"id\":\"mira\",\"name\":\"Mira\",\"hope\":{\"value\":1,\"max\":6}}"), 2)), StructuredRollTest.noRandom());
+        assertEquals(1, resolved.sourceContexts().getFirst().at("/actor/hope/value").asInt());
+        assertEquals(3, resolved.recipients().getFirst().snapshot().at("/hope/value").asInt());
+        assertEquals("Gave 2 Hope to Mira.", resolved.actions().getFirst().action().report());
+    }
+
     private static JsonNode block(LegacyCatalogConverter.Result result, int entry) {
         assertEquals(result.blocks(), result.converted(), result.diagnostics().toString());
         return result.catalog().at("/entries/" + entry + "/automation");
