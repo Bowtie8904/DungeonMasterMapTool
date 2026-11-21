@@ -14,6 +14,8 @@
     { "name": "choose only one branch", "expression": { "if": [true, 4, { "read": "event.hidden" }] }, "context": {}, "expected": 4 },
     { "name": "optional fact", "expression": { "exists": "event.difficulty" }, "context": { "event": {} }, "expected": false },
     { "name": "literal collection", "expression": { "includes": [{ "literal": ["a", "b"] }, "a"] }, "context": {}, "expected": true },
+    { "name": "count equal elements", "expression": { "count": [{ "pluck": [{ "read": "actor.loadout" }, "domain"] }, "Valor"] }, "context": { "actor": { "loadout": [{ "domain": "Valor" }, { "domain": "Blade" }, { "domain": "Valor" }] } }, "expected": 2 },
+    { "name": "count needs a collection", "expression": { "count": [3, 3] }, "context": {}, "error": true },
     { "name": "numeric equality", "expression": { "eq": [1.0, 1] }, "context": {}, "expected": true },
     { "name": "object equality independent of order", "expression": { "eq": [{ "literal": { "a": 1, "b": 2 } }, { "literal": { "b": 2.0, "a": 1 } }] }, "context": {}, "expected": true },
     { "name": "unavailable context", "expression": { "read": "event.hiddenDifficulty" }, "context": {}, "error": true },

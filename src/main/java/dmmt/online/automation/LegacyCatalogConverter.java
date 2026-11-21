@@ -31,7 +31,7 @@ public final class LegacyCatalogConverter {
     private static final List<String> FAMILIES = List.of("actions", "rollOptions", "rollTriggers", "conditionalRollTriggers", "mitigation");
     private static final Set<String> BLOCK_FIELDS = Set.of("actions", "reloading", "uses", "modifiers", "resources", "rollOptions", "rollTriggers",
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
-            "damage", "alternateProfiles", "rest", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit");
+            "damage", "alternateProfiles", "rest", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers");
     private static final Map<String, String> RANGES = Map.of("melee", "melee", "very close", "veryClose", "veryclose", "veryClose",
             "close", "close", "far", "far", "very far", "veryFar", "veryfar", "veryFar");
     private static final Set<String> RESOURCE_FIELDS = Set.of("id", "label", "initial", "max", "resetOn");
@@ -188,12 +188,12 @@ public final class LegacyCatalogConverter {
             JsonNode list = legacy.get("resources");
             for (int i = 0; i < list.size(); i++) resource(list.get(i), path + "/resources/" + i, p, pools.local());
         }
-        if (legacy.has("modifiers")) {
-            ArrayNode modifiers = RuleJson.JSON.createArrayNode();
-            JsonNode list = legacy.get("modifiers");
-            for (int i = 0; i < list.size(); i++) modifier(list.get(i), path + "/modifiers/" + i, p, modifiers);
-            if (!modifiers.isEmpty()) out.set("modifiers", modifiers);
+        ArrayNode passive = RuleJson.JSON.createArrayNode();
+        for (String family : List.of("modifiers", "conditionalModifiers")) {
+            JsonNode list = legacy.path(family);
+            for (int i = 0; i < list.size(); i++) modifier(list.get(i), path + "/" + family + "/" + i, p, passive, true);
         }
+        if (!passive.isEmpty()) out.set("modifiers", passive);
         if (legacy.has("grantsFeatures")) grants(legacy, path, p, out);
         else if (legacy.has("groupGrantedFeatures")) p.add(path + "/groupGrantedFeatures", "Grouping needs granted features.");
         ArrayNode rules = RuleJson.JSON.createArrayNode();
@@ -2009,7 +2009,7 @@ public final class LegacyCatalogConverter {
         if (effect.has("modifiers")) {
             ArrayNode modifiers = RuleJson.JSON.createArrayNode();
             JsonNode list = effect.get("modifiers");
-            for (int i = 0; i < list.size(); i++) modifier(list.get(i), path + "/modifiers/" + i, p, modifiers);
+            for (int i = 0; i < list.size(); i++) modifier(list.get(i), path + "/modifiers/" + i, p, modifiers, false);
             declared.set("modifiers", modifiers);
         }
         return id;
@@ -2073,17 +2073,24 @@ public final class LegacyCatalogConverter {
         return null;
     }
 
-    private static void modifier(JsonNode modifier, String path, Problems p, ArrayNode out) {
-        JsonNode value = signed(modifier.path("value"));
-        if (value == null) { p.add(path + "/value", "Expected a whole-number modifier or a supported computed value."); return; }
+    /** Passive (source) modifiers may carry legacy conditions as a {@code when}; effect modifiers are frozen and unconditional. */
+    private static void modifier(JsonNode modifier, String path, Problems p, ArrayNode out, boolean passive) {
+        Set<String> allowed = new HashSet<>(Set.of("value", "min", "max", "markedHpDivisor", "markedHpMultiplier", "markedStressMultiplier"));
+        if (passive) allowed.addAll(MODIFIER_CONDITIONS);
+        JsonNode value = modifierValue(modifier, path, p);
+        if (value == null) return;
+        ArrayNode when = RuleJson.JSON.createArrayNode();
+        if (passive) modifierConditions(modifier, path, p, when);
         List<String> stats = new ArrayList<>();
         if (modifier.has("roll")) {
-            p.onlyFields(modifier, path, Set.of("roll", "value"));
+            allowed.add("roll");
+            p.onlyFields(modifier, path, allowed);
             String roll = modifier.path("roll").asText();
             if (ROLLS.contains(roll)) stats.add("roll." + roll);
             else p.add(path + "/roll", "Unsupported roll modifier: " + roll);
         } else {
-            p.onlyFields(modifier, path, Set.of("stat", "value"));
+            allowed.add("stat");
+            p.onlyFields(modifier, path, allowed);
             String stat = modifier.path("stat").asText();
             switch (stat) {
                 case "thresholds" -> stats.addAll(List.of("thresholds.major", "thresholds.severe"));
@@ -2098,7 +2105,73 @@ public final class LegacyCatalogConverter {
                 }
             }
         }
-        for (String stat : stats) out.addObject().put("stat", stat).set("value", value.deepCopy());
+        for (String stat : stats) {
+            ObjectNode added = out.addObject().put("stat", stat);
+            added.set("value", value.deepCopy());
+            if (when.size() == 1) added.set("when", when.get(0).deepCopy());
+            else if (when.size() > 1) added.putObject("when").set("and", when.deepCopy());
+        }
+    }
+
+    private static final Set<String> MODIFIER_CONDITIONS = Set.of("hopeMin", "requiresArmor", "loadoutDomain", "armorFull", "requiresEffect");
+
+    /** A fixed or computed value; marked-track scaling replaces {@code value}, and {@code min}/{@code max} clamp the result. */
+    private static JsonNode modifierValue(JsonNode modifier, String path, Problems p) {
+        Map<String, String[]> scaled = Map.of("markedHpDivisor", new String[]{"actor.hp.marked", "divide"},
+                "markedHpMultiplier", new String[]{"actor.hp.marked", "multiply"}, "markedStressMultiplier", new String[]{"actor.stress.marked", "multiply"});
+        List<String> present = scaled.keySet().stream().filter(modifier::has).sorted().toList();
+        JsonNode value;
+        if (!present.isEmpty()) {
+            String field = present.get(0);
+            if (present.size() > 1 || modifier.has("value")) { p.add(path + "/" + field, "A modifier needs exactly one value source."); return null; }
+            JsonNode factor = modifier.get(field);
+            if (!factor.isInt() || factor.asInt() < 1 || factor.asInt() > 100) { p.add(path + "/" + field, "Expected a whole number from 1 to 100."); return null; }
+            ObjectNode computed = RuleJson.JSON.createObjectNode();
+            computed.putArray(scaled.get(field)[1]).add(read(scaled.get(field)[0])).add(factor.asInt());
+            value = "divide".equals(scaled.get(field)[1]) ? RuleJson.JSON.createObjectNode().set("floor", computed) : computed;
+        } else {
+            value = signed(modifier.path("value"));
+            if (value == null) { p.add(path + "/value", "Expected a whole-number modifier or a supported computed value."); return null; }
+        }
+        for (String bound : List.of("min", "max")) {
+            if (!modifier.has(bound)) continue;
+            if (!modifier.path(bound).isInt()) { p.add(path + "/" + bound, "Expected a whole number."); return null; }
+            ObjectNode clamped = RuleJson.JSON.createObjectNode();
+            clamped.putArray("min".equals(bound) ? "max" : "min").add(value).add(modifier.path(bound).asInt());
+            value = clamped;
+        }
+        return value;
+    }
+
+    private static void modifierConditions(JsonNode modifier, String path, Problems p, ArrayNode when) {
+        if (modifier.has("hopeMin")) {
+            if (!modifier.path("hopeMin").isInt()) p.add(path + "/hopeMin", "Expected a whole number.");
+            else when.addObject().putArray("gte").add(read("actor.hope.value")).add(modifier.path("hopeMin").asInt());
+        }
+        if (modifier.path("requiresArmor").asBoolean(false)) when.addObject().put("exists", "actor.armor.score");
+        if (modifier.path("armorFull").asBoolean(false)) {
+            when.addObject().putArray("gt").add(read("actor.armorTrack.capacity")).add(0);
+            when.addObject().putArray("gte").add(read("actor.armorTrack.marked")).add(read("actor.armorTrack.capacity"));
+        }
+        if (modifier.has("loadoutDomain")) {
+            JsonNode domain = modifier.get("loadoutDomain");
+            p.onlyFields(domain, path + "/loadoutDomain", Set.of("domain", "min"));
+            if (domain.path("domain").asText("").isBlank() || !domain.path("min").isInt() || domain.path("min").asInt() < 1)
+                p.add(path + "/loadoutDomain", "Expected a domain name and a positive minimum.");
+            else when.add(loadoutDomain(domain));
+        }
+        if (modifier.has("requiresEffect")) when.add(labelPresent(modifier.path("requiresEffect").asText()));
+    }
+
+    /** At least {@code min} active loadout cards of the domain. */
+    private static ObjectNode loadoutDomain(JsonNode domain) {
+        ObjectNode pluck = RuleJson.JSON.createObjectNode();
+        pluck.putArray("pluck").add(read("actor.loadout")).add("domain");
+        ObjectNode count = RuleJson.JSON.createObjectNode();
+        count.putArray("count").add(pluck).add(domain.path("domain").asText());
+        ObjectNode gte = RuleJson.JSON.createObjectNode();
+        gte.putArray("gte").add(count).add(domain.path("min").asInt());
+        return gte;
     }
 
     private record Pools(ObjectNode local, Map<String, ObjectNode> shared) {

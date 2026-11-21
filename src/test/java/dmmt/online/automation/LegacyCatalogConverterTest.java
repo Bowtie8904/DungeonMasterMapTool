@@ -258,7 +258,7 @@ class LegacyCatalogConverterTest {
                 {"id":"b","name":"B","automation":{"rollOptions":[{"id":"x","label":"X","roll":"attack","target":"ally"}]}},
                 {"id":"c","name":"C","automation":{"actions":[{"id":"use","label":"Roll","steps":[{"op":"clear","resource":"hp","amount":"@die"}]}]}},
                 {"id":"d","name":"D","automation":{"uses":{"max":1,"per":"rest"}}},
-                {"id":"e","name":"E","automation":{"modifiers":[{"stat":"evasion","value":1,"hopeMin":2}]}}"""));
+                {"id":"e","name":"E","automation":{"modifiers":[{"stat":"evasion","value":1,"dice":"1d4"}]}}"""));
         assertEquals(5, result.blocks());
         assertEquals(0, result.converted());
         var messages = result.diagnostics().stream().map(d -> d.sourceId() + " " + d.path() + " " + d.message()).toList();
@@ -266,7 +266,7 @@ class LegacyCatalogConverterTest {
         assertTrue(messages.contains("classes:b /entries/1/automation/rollOptions/0/target Unsupported legacy field: target"), messages.toString());
         assertTrue(messages.stream().anyMatch(m -> m.startsWith("classes:c /entries/2/automation/actions/0/steps/0/amount")), messages.toString());
         assertTrue(messages.contains("classes:d /entries/3/automation/uses A use limit without rules has nothing to limit."), messages.toString());
-        assertTrue(messages.contains("classes:e /entries/4/automation/modifiers/0/hopeMin Unsupported legacy field: hopeMin"), messages.toString());
+        assertTrue(messages.contains("classes:e /entries/4/automation/modifiers/0/dice Unsupported legacy field: dice"), messages.toString());
         for (JsonNode entry : result.catalog().path("entries")) assertFalse(entry.has("automation"));
         assertEquals(2, result.catalog().path("version").asInt());
     }
@@ -409,6 +409,34 @@ class LegacyCatalogConverterTest {
                 {"id":"b","name":"B","automation":{"mitigation":[{"id":"keep","label":"Keep","negate":true,"preserveAfterIncomingDamage":"Shell"}]}}"""));
         assertTrue(invalid.diagnostics().stream().anyMatch(d -> d.message().contains("Keeping an effect")), invalid.diagnostics().toString());
     }
+
+    @Test
+    void conditionalModifiersBecomePassiveModifiersWithReadableConditions() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"m","name":"M","automation":{
+                  "modifiers":[{"stat":"evasion","markedHpDivisor":2,"max":2}],
+                  "conditionalModifiers":[
+                    {"stat":"armorScore","value":1,"loadoutDomain":{"domain":"Valor","min":2},"requiresArmor":true},
+                    {"roll":"attack","markedStressMultiplier":1,"hopeMin":2},
+                    {"stat":"evasion","value":1,"armorFull":true,"requiresEffect":"Guarded"}]}}"""));
+        assertEquals(4, block(result, 0).path("modifiers").size(), block(result, 0).toString());
+        RuleCompiler.Program program = program(result, 0);
+        String actor = """
+                {"hp":{"marked":5,"capacity":6},"stress":{"marked":3,"capacity":6},"hope":{"value":%d,"max":6},
+                 "armorTrack":{"marked":3,"capacity":3},%s
+                 "loadout":[{"id":"a","domain":"Valor"},{"id":"b","domain":"Valor"},{"id":"c","domain":"Blade"}],
+                 "effects":[{"id":"x/g/1","effect":"other#g","sourceInstanceId":"x","label":"Guarded"}]}""";
+        ArrayNode all = RuleEffects.passives(program, context(program, actor.formatted(2, "\"armor\":{\"score\":3},"), "{\"type\":\"none\"}"));
+        assertEquals(4, all.size(), all.toString());
+        assertEquals(2, RuleEffects.stat(0, "evasion", List.of(all.get(0))));
+        assertEquals(3, RuleEffects.stat(0, "roll.attack", all));
+        ArrayNode few = RuleEffects.passives(program, context(program, actor.formatted(1, ""), "{\"type\":\"none\"}"));
+        assertEquals(2, few.size(), few.toString());
+        var invalid = LegacyCatalogConverter.convert(catalog("""
+                {"id":"b","name":"B","automation":{"conditionalModifiers":[{"stat":"evasion","value":1,"markedHpDivisor":2}]}}"""));
+        assertTrue(invalid.diagnostics().stream().anyMatch(d -> d.message().contains("exactly one value source")), invalid.diagnostics().toString());
+    }
+
     private static JsonNode block(LegacyCatalogConverter.Result result, int entry) {
         assertEquals(result.blocks(), result.converted(), result.diagnostics().toString());
         return result.catalog().at("/entries/" + entry + "/automation");

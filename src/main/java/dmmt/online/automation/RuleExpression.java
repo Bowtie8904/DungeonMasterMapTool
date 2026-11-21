@@ -11,7 +11,7 @@ import java.util.HashSet;
 public final class RuleExpression {
     private static final Set<String> ROOTS = Set.of("source", "actor", "recipient", "event", "state", "input", "die", "result", "args", "effects", "gear");
     private static final Set<String> UNARY = Set.of("not", "floor", "ceil", "negate", "size");
-    private static final Set<String> BINARY = Set.of("subtract", "divide", "eq", "ne", "gt", "gte", "lt", "lte", "includes", "pluck", "containsText");
+    private static final Set<String> BINARY = Set.of("subtract", "divide", "eq", "ne", "gt", "gte", "lt", "lte", "includes", "count", "pluck", "containsText");
     private static final Set<String> MANY = Set.of("add", "multiply", "min", "max", "and", "or");
     private static final double MAX_NUMBER = 9_007_199_254_740_991d;
 
@@ -134,6 +134,12 @@ public final class RuleExpression {
             boolean found = false;
             for (JsonNode element : values[0]) if (equal(element, values[1])) found = true;
             return BooleanNode.valueOf(found);
+        }
+        if ("count".equals(op)) {
+            if (!values[0].isArray()) throw RuleJson.error(path, "count requires a collection.");
+            int found = 0;
+            for (JsonNode element : values[0]) if (equal(element, values[1])) found++;
+            return numeric(found, path);
         }
         if ("containsText".equals(op)) {
             if (!values[0].isTextual() || !values[1].isTextual()) throw RuleJson.error(path, "containsText requires two texts.");

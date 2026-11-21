@@ -4,7 +4,7 @@ export type Context = { [key: string]: Json };
 const roots = new Set(['source', 'actor', 'recipient', 'event', 'state', 'input', 'die', 'result', 'args', 'gear']);
 const reserved = new Set(['__proto__', 'constructor', 'prototype']);
 const unary = new Set(['not', 'floor', 'ceil', 'negate', 'size']);
-const binary = new Set(['subtract', 'divide', 'eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'includes', 'pluck', 'containsText']);
+const binary = new Set(['subtract', 'divide', 'eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'includes', 'count', 'pluck', 'containsText']);
 const many = new Set(['add', 'multiply', 'min', 'max', 'and', 'or']);
 
 function fail(path: string, message: string): never { throw new Error(`${path}: ${message}`); }
@@ -136,6 +136,10 @@ export function evaluate(expression: Json, context: Context): Json {
     if (op === 'includes') {
       if (!Array.isArray(values[0])) fail('/expression', 'includes requires a collection.');
       return values[0].some(v => equal(v, values[1]));
+    }
+    if (op === 'count') {
+      if (!Array.isArray(values[0])) fail('/expression', 'count requires a collection.');
+      return values[0].filter(v => equal(v, values[1])).length;
     }
     if (op === 'containsText') {
       if (typeof values[0] !== 'string' || typeof values[1] !== 'string') fail('/expression', 'containsText requires two texts.');

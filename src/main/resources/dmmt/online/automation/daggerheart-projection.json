@@ -37,6 +37,7 @@
     "features": { "kind": "collection", "path": "features",
                   "fields": { "id": "automationItem", "label": "name", "text": "text", "grantedBy": "automationGrantedBy" },
                   "defaults": { "source": "Automation", "text": "" } },
+    "loadout": { "kind": "collection", "path": "loadout", "fields": { "id": "name", "domain": "domain" }, "writable": false },
     "pools": { "kind": "engine", "path": "automationState.pools", "default": {} },
     "effects": { "kind": "engine", "path": "automationState.effects", "default": [] },
     "conditions": { "kind": "engine", "path": "automationState.conditions", "default": [] },
