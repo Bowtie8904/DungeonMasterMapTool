@@ -31,7 +31,7 @@ public final class LegacyCatalogConverter {
     private static final List<String> FAMILIES = List.of("actions", "rollOptions", "rollTriggers", "conditionalRollTriggers", "mitigation");
     private static final Set<String> BLOCK_FIELDS = Set.of("actions", "reloading", "uses", "modifiers", "resources", "rollOptions", "rollTriggers",
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
-            "damage", "alternateProfiles", "rest", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions", "conditionalRollOptions");
+            "damage", "alternateProfiles", "damageTypeChoice", "rest", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions", "conditionalRollOptions");
     /** Legacy gated families that are their base family plus extra conditions, which every family converts the same way. */
     private static final Map<String, String> GATED_FAMILIES = Map.of("conditionalActions", "actions", "conditionalRollOptions", "rollOptions");
     private static final Map<String, String> RANGES = Map.of("melee", "melee", "very close", "veryClose", "veryclose", "veryClose",
@@ -297,6 +297,15 @@ public final class LegacyCatalogConverter {
                 rule.put("id", unique(rule.path("id").asText(), ruleIds));
                 rules.add(rule);
             }
+        if (legacy.has("damageTypeChoice")) {
+            if (!legacy.path("damageTypeChoice").isBoolean() || !p.sourceId().startsWith("weapons:"))
+                p.add(path + "/damageTypeChoice", "Only weapons can offer a damage type choice.");
+            else if (legacy.path("damageTypeChoice").asBoolean()) {
+                ObjectNode rule = damageTypeChoice();
+                rule.put("id", unique(rule.path("id").asText(), ruleIds));
+                rules.add(rule);
+            }
+        }
         if (legacy.has("alternateProfiles")) {
             ArrayNode profiles = profiles(legacy.get("alternateProfiles"), path + "/alternateProfiles", p);
             if (!profiles.isEmpty()) out.set("profiles", profiles);
@@ -875,6 +884,23 @@ public final class LegacyCatalogConverter {
     }
 
     private static ObjectNode read(String path) { return RuleJson.JSON.createObjectNode().put("read", path); }
+
+    /** A damage-roll option on this weapon that marks the roll as dealing magic instead of its listed type. */
+    private static ObjectNode damageTypeChoice() {
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "magic-damage");
+        rule.putArray("bindings").addObject().put("id", "use").put("event", "roll.prepare").put("surface", "roll").put("mode", "option");
+        ObjectNode when = rule.putObject("when");
+        ArrayNode all = when.putArray("and");
+        all.addObject().putArray("eq").add(read("event.check.kind")).add("damage");
+        all.addObject().putArray("eq").add(read("event.check.weaponSource")).add(read("source.instanceId"));
+        ArrayNode steps = rule.putArray("do");
+        ObjectNode annotate = steps.addObject().put("op", "roll.annotate");
+        annotate.set("from", read("event.roll"));
+        annotate.put("field", "damageType").put("value", "magic").put("as", "magic");
+        steps.addObject().put("op", "roll.publish").set("roll", read("result.magic"));
+        rule.putObject("ui").put("label", "Deal magic damage").put("description", "This weapon can deal physical or magic damage.");
+        return rule;
+    }
 
     /** True when an optional host-provided event value is present and equals {@code value}. */
     private static ObjectNode flag(String path, Object value) {

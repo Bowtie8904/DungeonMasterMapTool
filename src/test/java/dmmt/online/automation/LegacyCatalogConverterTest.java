@@ -654,6 +654,26 @@ class LegacyCatalogConverterTest {
                   {"id":"y","label":"Y","roll":"damage","weaponRanges":["Distant"]}]}}"""));
         assertEquals(2, invalid.diagnostics().size(), invalid.diagnostics().toString());
     }
+    @Test
+    void damageTypeChoiceMarksTheDamageRoll() throws Exception {
+        var result = LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"weapons","label":"Fixture","entries":[
+                  {"id":"blade","name":"Blade","automation":{"damageTypeChoice":true}}]}""");
+        RuleCompiler.Program program = program(result, 0);
+        String prepare = """
+                {"type":"roll.prepare","check":{"kind":"damage","trait":null,"weaponSource":"%s"},"roll":{"id":"d","metadata":{"kind":"damage","damageType":"physical"},
+                  "contributions":[{"id":"base","kind":"flat","role":"damage","sourceId":"core","label":"Base","value":3}]}}""";
+        assertEquals(List.of(), available(program, context(program, "{\"effects\":[]}", prepare.formatted("other")), "roll"));
+        ObjectNode own = context(program, "{\"effects\":[]}", prepare.formatted("fixture"));
+        assertEquals(List.of("magic-damage"), available(program, own, "roll"));
+        JsonNode roll = run(program, own, "magic-damage").contexts().getFirst().at("/event/roll");
+        assertEquals("magic", roll.at("/metadata/damageType").asText(), roll.toString());
+        assertEquals(3, roll.path("total").asInt());
+
+        var invalid = LegacyCatalogConverter.convert(catalog("""
+                {"id":"b","name":"B","automation":{"damageTypeChoice":true}}"""));
+        assertEquals(1, invalid.diagnostics().size(), invalid.diagnostics().toString());
+    }
     private static JsonNode block(LegacyCatalogConverter.Result result, int entry) {
         assertEquals(result.blocks(), result.converted(), result.diagnostics().toString());
         return result.catalog().at("/entries/" + entry + "/automation");
