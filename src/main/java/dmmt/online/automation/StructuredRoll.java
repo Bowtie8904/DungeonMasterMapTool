@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -195,7 +196,14 @@ public final class StructuredRoll {
     public static ArrayNode select(JsonNode original, java.util.function.Predicate<ObjectNode> where) {
         ObjectNode roll = validate(original);
         ArrayNode ids = RuleJson.JSON.createArrayNode();
-        for (ObjectNode[] entry : editableDice(roll)) if (where.test(dieView(entry[0], entry[1]))) ids.add(entry[1].path("id").asText());
+        List<ObjectNode[]> dice = editableDice(roll);
+        Map<String, Integer> faces = new HashMap<>();
+        for (ObjectNode[] entry : dice) faces.merge(entry[0].path("role").asText() + ":" + entry[1].path("face").asInt(), 1, Integer::sum);
+        for (ObjectNode[] entry : dice) {
+            ObjectNode view = dieView(entry[0], entry[1]);
+            view.put("matches", faces.get(entry[0].path("role").asText() + ":" + entry[1].path("face").asInt()) - 1);
+            if (where.test(view)) ids.add(entry[1].path("id").asText());
+        }
         return ids;
     }
 

@@ -747,6 +747,74 @@ class LegacyCatalogConverterTest {
         assertEquals(1, invalid.diagnostics().size(), invalid.diagnostics().toString());
     }
 
+    @Test
+    void armorSlotStatesBecomeDerivedEffectsAndTrackRules() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"plate","name":"Plate","automation":{
+                  "armorHalfEffect":{"name":"Beacon","kind":"debuff","until":"manual","text":"Enemies have advantage."},
+                  "armorFullHeldEffect":{"name":"Reinforced","until":"manual","modifiers":[{"stat":"thresholds","value":2,"armorFull":true}]},
+                  "armorFullEffect":{"name":"Last Bastion","until":"scene","text":"Resistance."},
+                  "zeroHopeClearArmor":1,"overflowHope":1}},
+                {"id":"brawler","name":"Brawler","automation":{"criticalMelee":{"hope":1,"stress":1,"proficiency":1}}}"""));
+        JsonNode plate = block(result, 0);
+        RuleCompiler.Program program = program(result, 0);
+        String actor = "{\"id\":\"me\",\"hope\":{\"value\":2,\"max\":6},\"armorTrack\":{\"marked\":%d,\"capacity\":4},\"effects\":[]}";
+        List<String> derived = new java.util.ArrayList<>();
+        for (int marked : new int[]{1, 2, 4}) {
+            List<String> labels = new java.util.ArrayList<>();
+            RuleEffects.derived(program, context(program, actor.formatted(marked), "{\"type\":\"track.changed\"}")).forEach(e -> labels.add(e.path("label").asText()));
+            derived.add(String.join("+", labels));
+        }
+        assertEquals(List.of("", "Beacon", "Beacon+Reinforced"), derived, plate.toString());
+        assertEquals(2, plate.at("/effects/reinforced/modifiers/0/value").asInt(), plate.toString());
+
+        String full = "{\"type\":\"track.changed\",\"track\":\"armorTrack\",\"change\":\"mark\",\"requested\":1,"
+                + "\"before\":{\"marked\":3,\"capacity\":4},\"after\":{\"marked\":4,\"capacity\":4}}";
+        var filled = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context(program, actor.formatted(4), full))),
+                List.of(), StructuredRollTest.noRandom());
+        assertEquals(1, filled.actions().size());
+        assertEquals("Last Bastion started.", filled.actions().getFirst().report());
+        String overflow = "{\"type\":\"track.changed\",\"track\":\"armorTrack\",\"change\":\"clear\",\"requested\":2,"
+                + "\"before\":{\"marked\":1,\"capacity\":4},\"after\":{\"marked\":0,\"capacity\":4}}";
+        var gained = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context(program, actor.formatted(0), overflow))),
+                List.of(), StructuredRollTest.noRandom());
+        assertEquals(3, gained.contexts().getFirst().at("/actor/hope/value").asInt(), gained.contexts().toString());
+        String zero = "{\"type\":\"track.changed\",\"track\":\"hope\",\"before\":{\"value\":1},\"after\":{\"value\":0}}";
+        var cleared = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program,
+                context(program, actor.formatted(3).replace("\"value\":2", "\"value\":0"), zero))), List.of(), StructuredRollTest.noRandom());
+        assertEquals(2, cleared.contexts().getFirst().at("/actor/armorTrack/marked").asInt(), cleared.contexts().toString());
+
+        RuleCompiler.Program brawler = program(result, 1);
+        String melee = "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"attack\",\"critical\":true,\"range\":\"melee\",\"dominant\":\"hope\",\"outcome\":null}}";
+        String me = "{\"id\":\"me\",\"hope\":{\"value\":2,\"max\":6},\"stress\":{\"marked\":3,\"capacity\":6},\"effects\":[]}";
+        ObjectNode crit = context(brawler, me, melee);
+        assertEquals(List.of("critical-melee-reward"), available(brawler, crit, "roll"));
+        assertEquals(List.of(), available(brawler, context(brawler, me, melee.replace("melee\"", "far\"")), "roll"));
+        var claim = RuleDispatcher.executeClaims(List.of(new RuleDispatcher.Candidate(brawler, crit)),
+                List.of(new RuleDispatcher.ClaimIntent(new RuleRuntime.Intent("critical-melee-reward", "claim", "fixture", 0, RuleJson.JSON.createObjectNode()), "me", 0, 0)),
+                List.of(new RuleDispatcher.RecipientCandidate("me", (ObjectNode) crit.path("actor").deepCopy(), 0)),
+                new RuleDispatcher.ClaimLedger(0, Set.of()), StructuredRollTest.noRandom());
+        assertEquals("Gained 2 Hope and cleared 2 Stress from a critical melee attack.", claim.actions().getFirst().action().report());
+        var pending = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(brawler, crit)), List.of(), StructuredRollTest.noRandom());
+        assertEquals(1, pending.contexts().getFirst().at("/actor/effects").size(), pending.contexts().toString());
+    }
+
+    @Test
+    void matchingDiceDoubleSharedDamageFaces() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"t","name":"T","automation":{"rollOptions":[
+                  {"id":"res","label":"Resonance","roll":"damage","dice":"3d6","matchingDice":true}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        RuleCompiler.Program program = program(result, 0);
+        String damage = "{\"type\":\"roll.prepare\",\"check\":{\"kind\":\"damage\",\"trait\":null},\"roll\":{\"id\":\"d\",\"contributions\":[{\"id\":\"base\",\"kind\":\"flat\",\"role\":\"damage\",\"sourceId\":\"core\",\"label\":\"Base\",\"value\":0}]}}";
+        String actor = "{\"stats\":{\"level\":1,\"tier\":1},\"features\":[],\"heritage\":[],\"hp\":{\"marked\":0,\"capacity\":6},\"effects\":[]}";
+        JsonNode roll = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context(program, actor, damage))),
+                List.of(new RuleRuntime.Intent("res", "use", "fixture", 0, RuleJson.JSON.createObjectNode())), StructuredRollTest.faces(2, 5, 2))
+                .contexts().getFirst().at("/event/roll");
+        assertEquals(13, roll.path("total").asInt(), roll.toString());
+        assertEquals(-80, block(result, 0).at("/rules/0/bindings/0/priority").asInt(), "Matching runs after other options add dice.");
+    }
+
     private static JsonNode block(LegacyCatalogConverter.Result result, int entry) {
         assertEquals(result.blocks(), result.converted(), result.diagnostics().toString());
         return result.catalog().at("/entries/" + entry + "/automation");

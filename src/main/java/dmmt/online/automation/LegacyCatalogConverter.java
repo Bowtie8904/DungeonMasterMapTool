@@ -32,7 +32,8 @@ public final class LegacyCatalogConverter {
     private static final Set<String> BLOCK_FIELDS = Set.of("actions", "reloading", "uses", "modifiers", "resources", "rollOptions", "rollTriggers",
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
             "damage", "alternateProfiles", "damageTypeChoice", "rest", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions", "conditionalRollOptions",
-            "hopeReward", "classResourceOnly");
+            "hopeReward", "classResourceOnly", "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "zeroHopeClearArmor",
+            "overflowHope", "criticalMelee");
     /** Legacy gated families that are their base family plus extra conditions, which every family converts the same way. */
     private static final Map<String, String> GATED_FAMILIES = Map.of("conditionalActions", "actions", "conditionalRollOptions", "rollOptions");
     private static final Map<String, String> RANGES = Map.of("melee", "melee", "very close", "veryClose", "veryclose", "veryClose",
@@ -42,7 +43,7 @@ public final class LegacyCatalogConverter {
             "defaultOn", "exclusive", "requiresEffect", "excludesEffect", "weapon", "weaponRange", "excludeRolls", "effect", "uses",
             "usesSource", "endEffect", "hostOwned", "consumeItem", "quantity", "proficiency", "hopeDie", "diceResource", "condition", "loadoutDomain",
             "required", "traitValue", "multiplier", "damageDie", "diceByLevel", "diceByFeature", "diceConditions", "magicOnly", "weaponRanges",
-            "ignoreDisadvantage");
+            "ignoreDisadvantage", "matchingDice");
     private static final Set<String> TRIGGER_FIELDS = Set.of("id", "label", "description", "on", "cost", "reroll", "when", "outcome",
             "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
@@ -318,6 +319,15 @@ public final class LegacyCatalogConverter {
                 rules.add(rule);
             }
         }
+        for (ObjectNode rule : armorStates(legacy, path, p, effects)) {
+            rule.put("id", unique(rule.path("id").asText(), ruleIds));
+            rules.add(rule);
+        }
+        if (legacy.has("criticalMelee"))
+            for (ObjectNode rule : criticalMelee(legacy.get("criticalMelee"), path + "/criticalMelee", p, effects)) {
+                rule.put("id", unique(rule.path("id").asText(), ruleIds));
+                rules.add(rule);
+            }
         if (legacy.has("classResourceOnly")) {
             if (!legacy.path("classResourceOnly").isBoolean()) p.add(path + "/classResourceOnly", "Expected a boolean.");
             else if (legacy.path("classResourceOnly").asBoolean()) {
@@ -1062,6 +1072,155 @@ public final class LegacyCatalogConverter {
         return rule;
     }
 
+    /**
+     * Armor-slot reactions. Half and held effects are derived effects active while enough Armor Slots are marked; the
+     * full effect starts once when the track becomes full; zero-Hope and overflow rules react to {@code track.changed}.
+     */
+    private static List<ObjectNode> armorStates(JsonNode legacy, String path, Problems p, ObjectNode effects) {
+        List<ObjectNode> rules = new ArrayList<>();
+        JsonNode marked = read("actor.armorTrack.marked"), capacity = read("actor.armorTrack.capacity");
+        ObjectNode hasSlots = RuleJson.JSON.createObjectNode();
+        hasSlots.putArray("gt").add(capacity).add(0);
+        if (legacy.has("armorHalfEffect")) {
+            ObjectNode twice = RuleJson.JSON.createObjectNode();
+            twice.putArray("multiply").add(marked).add(2);
+            ObjectNode half = RuleJson.JSON.createObjectNode();
+            half.putArray("gte").add(twice).add(capacity);
+            ObjectNode condition = RuleJson.JSON.createObjectNode();
+            condition.putArray("and").add(hasSlots.deepCopy()).add(half);
+            derivedArmorEffect(legacy.get("armorHalfEffect"), path + "/armorHalfEffect", p, effects, condition);
+        }
+        ObjectNode full = RuleJson.JSON.createObjectNode();
+        full.putArray("gte").add(marked).add(capacity);
+        if (legacy.has("armorFullHeldEffect")) {
+            ObjectNode condition = RuleJson.JSON.createObjectNode();
+            condition.putArray("and").add(hasSlots.deepCopy()).add(full.deepCopy());
+            derivedArmorEffect(legacy.get("armorFullHeldEffect"), path + "/armorFullHeldEffect", p, effects, condition);
+        }
+        if (legacy.has("armorFullEffect")) {
+            JsonNode effect = legacy.get("armorFullEffect");
+            String id = effect.isObject() ? declareEffect(effect, path + "/armorFullEffect", p, effects) : null;
+            if (!effect.isObject()) p.add(path + "/armorFullEffect", "Expected an effect.");
+            if (id != null) {
+                ObjectNode rule = trackChanged("armor-full", "armorTrack");
+                ArrayNode when = RuleJson.JSON.createArrayNode();
+                when.add(rule.at("/bindings/0/when"));
+                when.addObject().putArray("gt").add(read("event.after.capacity")).add(0);
+                when.addObject().putArray("gte").add(read("event.after.marked")).add(read("event.after.capacity"));
+                when.addObject().putArray("lt").add(read("event.before.marked")).add(read("event.before.capacity"));
+                when.addObject().putArray("eq").add(read("effects." + id)).add(0);
+                ((ObjectNode) rule.at("/bindings/0")).remove("when");
+                applyWhen(rule, when);
+                rule.putArray("do").addObject().put("op", "effect.start").put("effect", id).put("target", "actor");
+                String name = escape(effect.path("name").asText());
+                rule.putObject("ui").put("label", name).put("report", name + " started.");
+                rules.add(rule);
+            }
+        }
+        if (legacy.has("zeroHopeClearArmor")) {
+            JsonNode amount = amount(legacy.get("zeroHopeClearArmor"));
+            if (amount == null) p.add(path + "/zeroHopeClearArmor", "Expected a positive whole amount.");
+            else {
+                ObjectNode rule = trackChanged("zero-hope-clear-armor", "hope");
+                ArrayNode when = RuleJson.JSON.createArrayNode();
+                when.add(rule.at("/bindings/0/when"));
+                when.addObject().putArray("gt").add(read("event.before.value")).add(0);
+                when.addObject().putArray("eq").add(read("event.after.value")).add(0);
+                when.addObject().putArray("gt").add(marked.deepCopy()).add(0);
+                ((ObjectNode) rule.at("/bindings/0")).remove("when");
+                applyWhen(rule, when);
+                rule.putArray("do").addObject().put("op", "track.clear").put("track", "actor.armorTrack").put("as", "cleared").set("amount", amount);
+                rule.putObject("ui").put("label", "Clear Armor at 0 Hope").put("report", "Cleared {result.cleared} Armor Slots at 0 Hope.");
+                rules.add(rule);
+            }
+        }
+        if (legacy.has("overflowHope")) {
+            JsonNode amount = amount(legacy.get("overflowHope"));
+            if (amount == null) p.add(path + "/overflowHope", "Expected a positive whole amount.");
+            else {
+                ObjectNode rule = trackChanged("overflow-hope", "armorTrack");
+                ArrayNode when = RuleJson.JSON.createArrayNode();
+                when.add(rule.at("/bindings/0/when"));
+                when.addObject().putArray("eq").add(read("event.change")).add("clear");
+                ObjectNode cleared = RuleJson.JSON.createObjectNode();
+                cleared.putArray("subtract").add(read("event.before.marked")).add(read("event.after.marked"));
+                when.addObject().putArray("gt").add(read("event.requested")).add(cleared);
+                ((ObjectNode) rule.at("/bindings/0")).remove("when");
+                applyWhen(rule, when);
+                rule.putArray("do").addObject().put("op", "resource.gain").put("pool", "actor.hope").put("as", "gained").set("amount", amount);
+                rule.putObject("ui").put("label", "Overflow Hope").put("report", "Gained {result.gained} Hope from clearing more Armor Slots than were marked.");
+                rules.add(rule);
+            }
+        }
+        return rules;
+    }
+
+    private static void derivedArmorEffect(JsonNode effect, String path, Problems p, ObjectNode effects, ObjectNode condition) {
+        if (!effect.isObject()) { p.add(path, "Expected an effect."); return; }
+        ObjectNode copy = ((ObjectNode) effect).deepCopy();
+        copy.remove("until");
+        // The effect's own condition already requires a full track, so per-modifier armorFull gates are redundant.
+        for (JsonNode modifier : copy.path("modifiers")) if (modifier instanceof ObjectNode object) object.remove("armorFull");
+        String id = declareEffect(copy, path, p, effects);
+        if (id != null) ((ObjectNode) effects.get(id)).set("while", condition);
+    }
+
+    /** An automatic rule reacting to a change of the named actor track ({@code event.track}). */
+    private static ObjectNode trackChanged(String id, String track) {
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", id);
+        ObjectNode binding = rule.putArray("bindings").addObject().put("id", "changed").put("event", "track.changed")
+                .put("surface", "resource").put("mode", "automatic");
+        binding.putObject("when").putArray("eq").add(read("event.track")).add(track);
+        return rule;
+    }
+
+    /**
+     * A critical melee attack: an alternative roll reward (claim group {@code roll-reward}) that includes the base critical
+     * reward of 1 Hope and 1 cleared Stress plus the extra amounts, and extra proficiency carried to the next damage roll.
+     */
+    private static List<ObjectNode> criticalMelee(JsonNode legacy, String path, Problems p, ObjectNode effects) {
+        List<ObjectNode> rules = new ArrayList<>();
+        p.onlyFields(legacy, path, Set.of("hope", "stress", "proficiency"));
+        for (String field : List.of("hope", "stress", "proficiency"))
+            if (legacy.has(field) && (!legacy.get(field).isInt() || legacy.get(field).asInt() < 0 || legacy.get(field).asInt() > 10))
+                { p.add(path + "/" + field, "Expected a whole number from 0 to 10."); return rules; }
+        ArrayNode when = RuleJson.JSON.createArrayNode();
+        when.addObject().putArray("eq").add(read("event.check.kind")).add("attack");
+        when.addObject().putArray("eq").add(read("event.check.critical")).add(true);
+        when.addObject().putArray("eq").add(read("event.check.range")).add("melee");
+        int hope = 1 + legacy.path("hope").asInt(), stress = 1 + legacy.path("stress").asInt();
+        ObjectNode reward = RuleJson.JSON.createObjectNode().put("id", "critical-melee-reward");
+        ObjectNode binding = reward.putArray("bindings").addObject().put("id", "claim").put("event", "roll.finished")
+                .put("surface", "roll").put("mode", "button").put("claimGroup", "roll-reward").put("audience", "self");
+        binding.putObject("claimScope").put("recipients", "sourceActor");
+        applyWhen(reward, when.deepCopy());
+        ArrayNode steps = reward.putArray("do");
+        steps.addObject().put("op", "resource.gain").put("pool", "actor.hope").put("amount", hope).put("as", "hope");
+        steps.addObject().put("op", "track.clear").put("track", "actor.stress").put("amount", stress).put("as", "stress");
+        reward.putObject("ui").put("label", "Gain " + hope + " Hope and clear " + stress + " Stress")
+                .put("report", "Gained {result.hope} Hope and cleared {result.stress} Stress from a critical melee attack.");
+        rules.add(reward);
+        int proficiency = legacy.path("proficiency").asInt();
+        if (proficiency > 0) {
+            ObjectNode option = RuleJson.JSON.createObjectNode().put("id", "critical-melee").put("label", "Critical melee");
+            ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "critical-melee");
+            rule.putArray("bindings").addObject().put("id", "use").put("event", "roll.finished").put("surface", "roll").put("mode", "automatic");
+            applyWhen(rule, when);
+            List<ObjectNode> extra = new ArrayList<>();
+            carriedProficiency(option, "Critical melee: +" + proficiency + " proficiency", proficiency, effects, rule.putArray("do"), extra);
+            rule.putObject("ui").put("label", "Critical melee: +" + proficiency + " proficiency on damage");
+            rules.add(rule);
+            for (ObjectNode added : extra)
+                for (JsonNode op : added.path("do"))
+                    if ("effect.end".equals(op.path("op").asText()) && op.path("effect").asText().endsWith(" (pending damage)"))
+                        effects.fields().forEachRemaining(e -> {
+                            if (escape(op.path("effect").asText()).equals(e.getValue().path("label").asText())) ((ObjectNode) op).put("effect", e.getKey());
+                        });
+            rules.addAll(extra);
+        }
+        return rules;
+    }
+
     private static ObjectNode ruleShell(JsonNode legacy, String path, Problems p, String event, String surface, String mode) {
         String id = legacy.path("id").asText();
         if (!ID.matcher(id).matches()) { p.add(path + "/id", "Invalid rule ID: " + id); return null; }
@@ -1250,6 +1409,32 @@ public final class LegacyCatalogConverter {
                 discard.put("role", "disadvantage").put("as", "neutral");
                 from[0] = read("result.neutral");
                 binding.put("priority", -90);
+                edited = true;
+            }
+        }
+        if (option.has("matchingDice")) {
+            if (!option.path("matchingDice").asBoolean(false)) p.add(path + "/matchingDice", "Expected true.");
+            else if (!"damage".equals(roll)) p.add(path + "/matchingDice", "Matching dice apply to damage rolls.");
+            else {
+                // Doubles every kept damage die that shares its face with another, after other options add their dice.
+                ObjectNode where = RuleJson.JSON.createObjectNode();
+                ArrayNode all = where.putArray("and");
+                all.addObject().putArray("eq").add(read("die.role")).add("damage");
+                all.addObject().putArray("gt").add(read("die.matches")).add(0);
+                ObjectNode select = steps.addObject().put("op", "roll.selectDice");
+                select.set("from", from[0]);
+                select.set("where", where);
+                select.put("as", "matching");
+                ObjectNode total = steps.addObject().put("op", "roll.diceTotal");
+                total.set("from", from[0]);
+                total.set("dice", read("result.matching"));
+                total.put("as", "matchingTotal");
+                ObjectNode step = steps.addObject().put("op", "roll.contribute");
+                step.set("from", from[0]);
+                step.set("contribution", contribution(id + "-matching", "flat", "damage", label).set("value", read("result.matchingTotal")));
+                step.put("as", "matched");
+                from[0] = read("result.matched");
+                if (!binding.has("priority")) binding.put("priority", -80);
                 edited = true;
             }
         }

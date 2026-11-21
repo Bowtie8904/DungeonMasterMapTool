@@ -751,7 +751,7 @@ public final class RuleCompiler {
                 case "input" -> inputs.contains(parts[1]);
                 case "result" -> results.contains(parts[1]);
                 case "die" -> die && Set.of("id", "face", "sides", "kept", "origin", "poolId", "role",
-                        "previous", "editedBy", "contributionId", "sourceId").contains(parts[1]);
+                        "previous", "editedBy", "contributionId", "sourceId", "matches").contains(parts[1]);
                 case "source" -> Set.of("id", "instanceId", "name", "quantity").contains(parts[1])
                         || "attachedTo".equals(parts[1]) && decl.attachable() && parts.length == 3 && ATTACHED_TO_FACTS.contains(parts[2]);
                 case "gear" -> false;
