@@ -1516,6 +1516,75 @@ class OnlineSessionServerTest {
         assertEquals(409, stale.statusCode());
     }
 
+    private void automationCompendium() throws Exception {
+        compendiumDir = temp.resolve("automation-compendium");
+        java.nio.file.Files.createDirectories(compendiumDir);
+        for (String[] file : new String[][]{{"host-classes", "classes"}, {"consumables", "consumables"}, {"recipes", "rules"}})
+            try (var input = getClass().getResourceAsStream("/dmmt/automation/rewrite/" + file[0] + ".json")) {
+                java.nio.file.Files.write(compendiumDir.resolve(file[1] + ".json"), input.readAllBytes());
+            }
+    }
+
+    private HttpResponse<String> automationHttp(String cookie, String actorId, String body) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/automation/" + actorId
+                + (body == null ? "?surface=sheet" : ""))).header("Cookie", cookie);
+        if (body == null) request.GET();
+        else request.header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body));
+        return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    @Test
+    void automationEndpointsDescribeExecuteJournalAndRejectStaleOrForeignUse() throws Exception {
+        automationCompendium();
+        campaign.getActors().add(Campaign.Actor.builder().id("auto").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("foreign").name("Bo").ownerId("someone-else").build());
+        String sheet = """
+                {"name":"Ada","level":2,"hp":{"slots":6,"total":12,"on":2},"stress":{"slots":6,"total":12,"on":1},
+                 "armorTrack":{"slots":3,"total":12,"on":0},"hope":{"slots":6,"total":6,"on":1},
+                 "proficiency":{"slots":6,"total":6,"on":1},"traits":[],
+                 "features":[
+                   {"name":"Rally","text":"","automationSource":"classes:tester:features:rally","instanceId":"f-rally"},
+                   {"name":"Forage","text":"","automationSource":"classes:tester:features:forage","instanceId":"f-forage"}],
+                 "inventory":[]}""";
+        store.saveSheet(campaign.getId(), "auto", sheet);
+        store.saveSheet(campaign.getId(), "foreign", sheet);
+        String cookie = cookie();
+
+        var described = automationHttp(cookie, "auto", null);
+        assertEquals(200, described.statusCode(), described.body());
+        assertEquals(List.of("Forage", "Rally (1 Hope)"), MAPPER.readTree(described.body()).path("actions").findValuesAsText("label"));
+        var foreign = MAPPER.readTree(automationHttp(cookie, "foreign", null).body());
+        assertEquals(List.of("Rally (1 Hope)"), foreign.path("actions").findValuesAsText("label"));
+
+        String request = """
+                {"event":{"type":"action.request"},"request":{"requestId":"r1","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"f-rally","ruleId":"rally","bindingId":"sheet"}]}}""";
+        var executed = automationHttp(cookie, "auto", request);
+        assertEquals(200, executed.statusCode(), executed.body());
+        assertEquals(1, MAPPER.readTree(executed.body()).path("revision").asLong());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "auto"));
+        assertEquals(3, saved.path("hope").path("on").asInt());
+        assertEquals(executed.body(), automationHttp(cookie, "auto", request).body(), "repeated request IDs replay");
+        assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "auto")).path("hope").path("on").asInt());
+        assertEquals(409, automationHttp(cookie, "auto", request.replace("r1", "r2")).statusCode(), "stale revision");
+        String uri = "http://localhost:" + port + "/api/sheet/auto";
+        var loaded = MAPPER.readTree(sheetRead(cookie, "auto").body());
+        ObjectNode forged = (ObjectNode) loaded.path("sheet");
+        forged.withObject("/automationState").put("revision", 99).putObject("sources");
+        var put = http.send(HttpRequest.newBuilder(URI.create(uri)).header("Cookie", cookie)
+                .header("Content-Type", "application/json").header("If-Match", loaded.path("version").asText())
+                .PUT(HttpRequest.BodyPublishers.ofString(forged.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, put.statusCode(), put.body());
+        JsonNode kept = MAPPER.readTree(store.loadSheet(campaign.getId(), "auto")).path("automationState");
+        assertEquals(1, kept.path("revision").asLong(), "sheet saves cannot forge automation state");
+        assertTrue(kept.path("journal").size() > 0);
+        String forage = request.replace("r1", "f1").replace("\"rally\"", "\"forage\"").replace("f-rally", "f-forage");
+        assertEquals(403, automationHttp(cookie, "foreign", forage).statusCode(), "self-only actions stay with the owner");
+
+        java.nio.file.Files.delete(compendiumDir.resolve("rules.json"));
+        assertEquals(409, automationHttp(cookie, "auto", null).statusCode(), "missing recipes make automation unavailable");
+    }
+
     private HttpResponse<String> preferencesHttp(String cookie, String token, String body) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/preferences"));
         if (cookie != null) request.header("Cookie", cookie);

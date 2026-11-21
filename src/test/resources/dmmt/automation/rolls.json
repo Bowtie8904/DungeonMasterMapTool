@@ -1,0 +1,29 @@
+{
+  "roll": {
+    "id": "first",
+    "contributions": [
+      { "id": "a", "kind": "dice", "role": "weaponBase", "sourceId": "weapon-one", "label": "Any pool name", "dice": [
+        { "id": "a1", "sides": 8, "face": 8, "kept": true, "origin": "maximized" },
+        { "id": "a2", "sides": 8, "face": 3, "kept": true, "origin": "rolled" },
+        { "id": "a3", "sides": 8, "face": 1, "kept": false, "origin": "rolled" }
+      ] },
+      { "id": "b", "kind": "dice", "role": "weaponBase", "sourceId": "weapon-one", "label": "Second pool", "dice": [
+        { "id": "b1", "sides": 6, "face": 6, "kept": true, "origin": "rolled" },
+        { "id": "b2", "sides": 6, "face": 2, "kept": true, "origin": "rolled" }
+      ] },
+      { "id": "bonus", "kind": "flat", "role": "bonus", "sourceId": "weapon-one", "label": "Modifier", "value": 4 },
+      { "id": "double", "kind": "scale", "role": "multiplier", "sourceId": "custom-rule", "label": "A freely renamed multiplier", "of": ["a", "b", "bonus"], "factor": 2 }
+    ]
+  },
+  "total": 46,
+  "eligible": ["a1", "a2", "b1", "b2"],
+  "derivations": [
+    { "keep": ["a1", "b1", "b2"], "expected": 40 },
+    { "keep": ["a1", "b1"], "expected": 36 },
+    { "keep": ["b1", "b2"], "expected": 24 },
+    { "keep": ["a1", "a2", "b1", "b2"], "expected": 46 },
+    { "keep": ["a1", "a1"], "error": true },
+    { "keep": ["a3"], "error": true },
+    { "keep": ["unknown"], "error": true }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "format": "dmmap-daggerheart",
+  "version": 2,
+  "category": "consumables",
+  "label": "Rewrite conformance examples, not the live catalog",
+  "entries": [
+    {
+      "id": "minor-health-potion",
+      "name": "Minor Health Potion",
+      "rarity": "Common",
+      "text": "Clear 1d4 HP.",
+      "automation": {
+        "rules": [{
+          "id": "drink",
+          "bindings": [{ "id": "sheet", "event": "action.request", "surface": "sheet", "mode": "button" }],
+          "when": { "and": [
+            { "gt": [{ "read": "actor.hp.marked" }, 0] },
+            { "gt": [{ "read": "source.quantity" }, 0] }
+          ] },
+          "costs": [{ "op": "inventory.consume", "amount": 1 }],
+          "do": [
+            { "op": "dice.roll", "count": 1, "sides": 4, "as": "rolled" },
+            { "op": "track.clear", "track": "actor.hp", "amount": { "read": "result.rolled" }, "as": "cleared" }
+          ],
+          "ui": {
+            "label": "Drink {source.name}",
+            "report": "{actor.name} drank {source.name} and cleared {result.cleared} HP (rolled {result.rolled})."
+          }
+        }]
+      }
+    }
+  ]
+}

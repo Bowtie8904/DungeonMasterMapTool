@@ -1,0 +1,157 @@
+package dmmt.online.automation;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import java.util.HashSet;
+import java.util.Set;
+
+/**
+ * Declared effects and statistic modifiers. Effect instances live in the owning actor's {@code effects}
+ * array; every instance freezes its modifier values when it starts so later state changes cannot alter it.
+ */
+public final class RuleEffects {
+    private static final int MAX_INSTANCES = 256;
+
+    private RuleEffects() {}
+
+    /** Evaluates the program's passive modifiers whose conditions currently hold. */
+    public static ArrayNode passives(RuleCompiler.Program program, ObjectNode hostContext) {
+        ObjectNode context = RuleRuntime.context(program, null, hostContext);
+        ArrayNode out = RuleJson.JSON.createArrayNode();
+        for (JsonNode modifier : program.modifiers()) {
+            if (modifier.has("when") && !RuleExpression.bool(RuleExpression.evaluate(modifier.get("when"), context), "/modifiers/when"))
+                continue;
+            ObjectNode resolved = out.addObject().put("stat", modifier.path("stat").asText())
+                    .put("op", modifier.path("op").asText("add"))
+                    .put("value", RuleExpression.number(RuleExpression.evaluate(modifier.get("value"), context), "/modifiers/value"));
+            if (modifier.has("label")) resolved.put("label", RuleTemplate.render(modifier.path("label").asText(), context));
+            resolved.put("sourceInstanceId", context.path("source").path("instanceId").asText());
+        }
+        return out;
+    }
+
+    /** Returns the effects that survive {@code event}; manual effects (no {@code until}) always survive. */
+    public static ArrayNode expire(JsonNode effects, String event) {
+        if (!RuleCompiler.RESET_EVENTS.contains(event)) throw RuleJson.error("/event", "Unknown expiry event.");
+        ArrayNode kept = RuleJson.JSON.createArrayNode();
+        for (JsonNode effect : instances(effects, "/effects")) {
+            boolean ends = false;
+            for (JsonNode until : effect.path("until")) ends |= event.equals(until.asText());
+            if (!ends) kept.add(effect.deepCopy());
+        }
+        return kept;
+    }
+
+    /** Collects the frozen modifiers of every active effect instance. */
+    public static ArrayNode modifiers(JsonNode effects) {
+        ArrayNode out = RuleJson.JSON.createArrayNode();
+        for (JsonNode effect : instances(effects, "/effects"))
+            for (JsonNode modifier : effect.path("modifiers")) out.add(modifier.deepCopy());
+        return out;
+    }
+
+    /** Applies modifiers for {@code stat}: the last {@code set} replaces the base, then adds, then atLeast/atMost bounds. */
+    public static double stat(double base, String stat, Iterable<JsonNode> modifiers) {
+        double value = base, added = 0, floor = Double.NEGATIVE_INFINITY, ceiling = Double.POSITIVE_INFINITY;
+        for (JsonNode modifier : modifiers) {
+            if (!stat.equals(modifier.path("stat").asText())) continue;
+            double amount = RuleExpression.number(modifier.get("value"), "/modifiers/value");
+            switch (modifier.path("op").asText("add")) {
+                case "set" -> value = amount;
+                case "add" -> added += amount;
+                case "atLeast" -> floor = Math.max(floor, amount);
+                case "atMost" -> ceiling = Math.min(ceiling, amount);
+                default -> throw RuleJson.error("/modifiers/op", "Unknown modifier operation.");
+            }
+        }
+        return Math.min(ceiling, Math.max(floor, value + added));
+    }
+
+    static ObjectNode start(RuleCompiler.Program program, String effectId, String target, ObjectNode context) {
+        ObjectNode definition = program.effect(effectId);
+        ArrayNode list = owned(context, target);
+        String key = program.sourceId() + "#" + effectId;
+        String instanceId = context.path("source").path("instanceId").asText();
+        String stacking = definition.path("stacking").asText("replace");
+        int existing = 0, next = 1;
+        for (JsonNode effect : list) if (matches(effect, key, instanceId)) {
+            existing++;
+            String[] parts = effect.path("id").asText().split("/");
+            try { next = Math.max(next, Integer.parseInt(parts[parts.length - 1]) + 1); } catch (NumberFormatException ignored) {}
+        }
+        if ("unique".equals(stacking) && existing > 0) throw new RuleRuntime.Unavailable("effectActive", "This effect is already active.");
+        if ("replace".equals(stacking)) remove(list, key, instanceId);
+        if (list.size() >= MAX_INSTANCES) throw RuleJson.error("/effects", "Too many active effects.");
+        ObjectNode instance = RuleJson.JSON.createObjectNode()
+                .put("id", instanceId + "/" + effectId + "/" + next)
+                .put("effect", key)
+                .put("sourceInstanceId", instanceId)
+                .put("label", RuleTemplate.render(definition.path("label").asText(), context));
+        if (definition.has("text")) instance.put("text", RuleTemplate.render(definition.path("text").asText(), context));
+        instance.put("kind", definition.path("kind").asText("buff"));
+        if (definition.has("profile")) instance.set("profile", definition.get("profile").deepCopy());
+        ArrayNode until = instance.putArray("until");
+        definition.path("until").forEach(until::add);
+        ArrayNode modifiers = instance.putArray("modifiers");
+        for (JsonNode modifier : definition.path("modifiers")) {
+            ObjectNode frozen = modifiers.addObject().put("stat", modifier.path("stat").asText())
+                    .put("op", modifier.path("op").asText("add"))
+                    .put("value", RuleExpression.number(RuleExpression.evaluate(modifier.get("value"), context), "/modifiers/value"));
+            if (modifier.has("label")) frozen.put("label", RuleTemplate.render(modifier.path("label").asText(), context));
+        }
+        list.add(instance);
+        refreshCounts(program, context);
+        return instance.deepCopy();
+    }
+
+    static int end(RuleCompiler.Program program, String effectId, String target, ObjectNode context) {
+        program.effect(effectId);
+        int removed = remove(owned(context, target), program.sourceId() + "#" + effectId,
+                context.path("source").path("instanceId").asText());
+        refreshCounts(program, context);
+        return removed;
+    }
+
+    /** Exposes {@code effects.<id>} as this source instance's active instance count on the actor. */
+    static void refreshCounts(RuleCompiler.Program program, ObjectNode context) {
+        ObjectNode counts = context.putObject("effects");
+        JsonNode actorEffects = context.path("actor").path("effects");
+        if (!actorEffects.isMissingNode()) instances(actorEffects, "/actor/effects");
+        String instanceId = context.path("source").path("instanceId").asText();
+        program.effects().fieldNames().forEachRemaining(id -> {
+            int count = 0;
+            for (JsonNode effect : actorEffects) if (matches(effect, program.sourceId() + "#" + id, instanceId)) count++;
+            counts.put(id, count);
+        });
+    }
+
+    private static ArrayNode owned(ObjectNode context, String target) {
+        ObjectNode owner = RuleJson.object(context.path(target), "/" + target);
+        if (!owner.has("effects")) return owner.putArray("effects");
+        instances(owner.get("effects"), "/" + target + "/effects");
+        return (ArrayNode) owner.get("effects");
+    }
+
+    private static ArrayNode instances(JsonNode effects, String path) {
+        if (!effects.isArray() || effects.size() > MAX_INSTANCES) throw RuleJson.error(path, "Expected a bounded effect list.");
+        Set<String> ids = new HashSet<>();
+        for (JsonNode effect : effects) {
+            RuleJson.object(effect, path);
+            if (!ids.add(RuleJson.text(effect.get("id"), path + "/id"))) throw RuleJson.error(path, "Duplicate effect instance ID.");
+            if (effect.has("modifiers") && !effect.get("modifiers").isArray()) throw RuleJson.error(path + "/modifiers", "Expected a list.");
+        }
+        return (ArrayNode) effects;
+    }
+
+    private static boolean matches(JsonNode effect, String key, String instanceId) {
+        return key.equals(effect.path("effect").asText()) && instanceId.equals(effect.path("sourceInstanceId").asText());
+    }
+
+    private static int remove(ArrayNode list, String key, String instanceId) {
+        int removed = 0;
+        for (int i = list.size() - 1; i >= 0; i--) if (matches(list.get(i), key, instanceId)) { list.remove(i); removed++; }
+        return removed;
+    }
+}

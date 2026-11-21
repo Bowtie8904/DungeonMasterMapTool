@@ -1,0 +1,104 @@
+{
+  "state": { "tier": 2 },
+  "limits": {
+    "per-rest": { "max": 1, "resetOn": ["rest.short", "rest.long"] }
+  },
+  "effects": {
+    "guarded": {
+      "label": "{source.name}: guarded",
+      "text": "+{state.tier} Evasion until your next rest.",
+      "until": ["rest.short", "rest.long"],
+      "modifiers": [{ "stat": "evasion", "value": { "read": "state.tier" }, "label": "{source.name}" }]
+    },
+    "focus": {
+      "label": "Focus",
+      "stacking": "stack",
+      "modifiers": [{ "stat": "roll.attack", "value": 1 }]
+    },
+    "oath": {
+      "label": "Oath",
+      "kind": "debuff",
+      "stacking": "unique",
+      "until": ["scene.end"],
+      "modifiers": [{ "stat": "thresholds.major", "op": "atLeast", "value": 10 }]
+    },
+    "marked": { "label": "Marked by {source.name}", "kind": "debuff", "until": ["scene.end"] }
+  },
+  "modifiers": [
+    { "stat": "armorScore", "value": 1, "label": "{source.name}" },
+    { "stat": "trait.Agility", "value": { "read": "effects.focus" }, "when": { "gt": [{ "read": "effects.focus" }, 0] } }
+  ],
+  "rules": [
+    {
+      "id": "guard",
+      "bindings": [{ "id": "sheet", "event": "action.request", "surface": "sheet", "mode": "button" }],
+      "limitRef": "per-rest",
+      "do": [{ "op": "effect.start", "effect": "guarded", "target": "actor", "as": "started" }],
+      "ui": { "label": "Guard ({effects.guarded} active)", "report": "{result.started.label}" }
+    },
+    {
+      "id": "focus",
+      "bindings": [{ "id": "sheet", "event": "action.request", "surface": "sheet", "mode": "button" }],
+      "do": [{ "op": "effect.start", "effect": "focus", "target": "actor" }],
+      "ui": { "label": "Focus" }
+    },
+    {
+      "id": "oath",
+      "bindings": [{ "id": "sheet", "event": "action.request", "surface": "sheet", "mode": "button" }],
+      "do": [{ "op": "effect.start", "effect": "oath", "target": "actor" }],
+      "ui": { "label": "Swear an oath" }
+    },
+    {
+      "id": "release",
+      "bindings": [{ "id": "sheet", "event": "action.request", "surface": "sheet", "mode": "button" }],
+      "when": { "gt": [{ "read": "effects.focus" }, 0] },
+      "do": [{ "op": "effect.end", "effect": "focus", "target": "actor", "as": "ended" }],
+      "ui": { "label": "Release focus", "report": "Ended {result.ended} focus." }
+    },
+    {
+      "id": "refresh",
+      "bindings": [{ "id": "sheet", "event": "action.request", "surface": "sheet", "mode": "button" }],
+      "do": [{ "op": "limit.reset", "limit": "per-rest", "as": "was" }],
+      "ui": { "label": "Refresh", "report": "Reset {result.was} use." }
+    },
+    {
+      "id": "mark",
+      "bindings": [{ "id": "chat", "event": "action.request", "surface": "chat", "mode": "button", "claimGroup": "mark" }],
+      "do": [{ "op": "effect.start", "effect": "marked", "target": "recipient" }],
+      "ui": { "label": "Mark target" }
+    },
+    {
+      "id": "stance",
+      "bindings": [{ "id": "sheet", "event": "action.request", "surface": "sheet", "mode": "button" }],
+      "inputs": [{
+        "id": "pick",
+        "kind": "choice",
+        "label": "Choose a stance",
+        "options": [
+          { "id": "guard", "label": "Guard (tier {state.tier})" },
+          { "id": "focus", "label": "Focus" },
+          { "id": "veteran", "label": "Veteran", "when": { "gte": [{ "read": "state.tier" }, 3] } }
+        ]
+      }],
+      "do": [{ "op": "value", "value": { "read": "input.pick" }, "as": "picked" }],
+      "ui": { "label": "Stance", "report": "Chose {result.picked}." }
+    },
+    {
+      "id": "traits",
+      "bindings": [{ "id": "sheet", "event": "action.request", "surface": "sheet", "mode": "button" }],
+      "inputs": [{
+        "id": "traits",
+        "kind": "choice",
+        "count": 2,
+        "label": "Choose two traits",
+        "options": [
+          { "id": "agility", "label": "Agility" },
+          { "id": "strength", "label": "Strength" },
+          { "id": "finesse", "label": "Finesse" }
+        ]
+      }],
+      "do": [{ "op": "value", "value": { "size": { "read": "input.traits" } }, "as": "n" }],
+      "ui": { "label": "Train", "report": "Trained {result.n} traits." }
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "rules": [
+    {
+      "id": "hope-reward",
+      "bindings": [{
+        "id": "claim",
+        "event": "claim.accept",
+        "surface": "chat",
+        "mode": "button",
+        "claimGroup": "devout-reward"
+      }],
+      "do": [{
+        "op": "resource.gain",
+        "pool": "recipient.hope",
+        "amount": 2,
+        "as": "gained"
+      }],
+      "ui": {
+        "label": "Claim Hope",
+        "report": "{recipient.name} gained {result.gained} Hope."
+      }
+    },
+    {
+      "id": "stress-reward",
+      "bindings": [{
+        "id": "claim",
+        "event": "claim.accept",
+        "surface": "chat",
+        "mode": "button",
+        "claimGroup": "devout-reward"
+      }],
+      "do": [{
+        "op": "track.clear",
+        "track": "recipient.stress",
+        "amount": 1,
+        "as": "cleared"
+      }],
+      "ui": {
+        "label": "Clear Stress",
+        "report": "{recipient.name} cleared {result.cleared} Stress."
+      }
+    }
+  ]
+}

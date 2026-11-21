@@ -1,0 +1,49 @@
+{
+  "limits": { "once": { "max": 1, "resetOn": ["rest.long"] } },
+  "effects": {
+    "wildForm": { "label": "Wild form", "until": ["rest.long"], "stacking": "unique",
+      "profile": { "label": "Claws", "trait": "Instinct", "range": "melee", "damage": { "count": 2, "sides": 8, "flat": 1, "type": "physical" } },
+      "modifiers": [{ "stat": "evasion", "value": 1 }] }
+  },
+  "rules": [
+    {
+      "id": "fortify",
+      "bindings": [{ "id": "rest", "event": "downtime.move", "surface": "downtime", "mode": "button" }],
+      "ui": { "label": "Fortify ({actor.stress.capacity} stress)", "report": "Gained {result.slots} stress slot and {result.card.id}" },
+      "limitRef": "once",
+      "inputs": [{ "id": "card", "kind": "choice", "label": "Card", "optionsFrom": { "read": "event.offers" } }],
+      "do": [
+        { "op": "track.capacity", "track": "actor.stress", "by": 1, "as": "slots" },
+        { "op": "collection.add", "target": "actor", "collection": "vault", "item": { "object": { "id": { "read": "input.card" }, "quantity": 1 } }, "as": "card" }
+      ]
+    },
+    {
+      "id": "stow",
+      "bindings": [{ "id": "sheet", "event": "action.request", "surface": "sheet", "mode": "button" }],
+      "ui": { "label": "Stow", "report": "Stowed {result.item.id}" },
+      "do": [{ "op": "collection.remove", "target": "actor", "collection": "loadout", "item": "card-a", "as": "item" }]
+    },
+    {
+      "id": "refresh",
+      "bindings": [{ "id": "death", "event": "death.options", "surface": "death", "mode": "button", "audience": "party" }],
+      "ui": { "label": "Last stand", "report": "Restored {result.uses} use" },
+      "do": [
+        { "op": "limit.modify", "limit": "once", "by": 5, "as": "uses" },
+        { "op": "damage.deal", "to": "attacker", "amount": { "read": "actor.proficiency" }, "label": "Backlash from {source.name}" },
+        { "op": "countdown.start", "label": "Collapse", "value": 3 }
+      ]
+    },
+    {
+      "id": "shift",
+      "bindings": [{ "id": "sheet", "event": "action.request", "surface": "companion", "mode": "button" }],
+      "ui": { "label": "Shift", "report": "Shifted" },
+      "do": [{ "op": "effect.start", "effect": "wildForm", "target": "actor" }]
+    },
+    {
+      "id": "watch",
+      "bindings": [{ "id": "changed", "event": "track.changed", "surface": "resource", "mode": "automatic", "when": { "eq": [{ "read": "event.track" }, "stress"] } }],
+      "ui": { "label": "Watch", "report": "Stress changed" },
+      "do": [{ "op": "value", "value": 1, "as": "seen" }]
+    }
+  ]
+}
