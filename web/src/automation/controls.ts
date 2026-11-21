@@ -3,7 +3,7 @@ import { drawingId as randomId } from '../tools';
 
 export type RuleInput =
   | { id: string; kind: 'integer'; label: string; min: number; max: number }
-  | { id: string; kind: 'die.select'; label: string; count: number; default?: string[];
+  | { id: string; kind: 'die.select'; label: string; count: number; min?: number; default?: string[];
       choices: Array<{ id: string; label: string; sides: number; face: number }> }
   | { id: string; kind: 'choice'; label: string; count: number; options: Array<{ id: string; label: string }> }
   | { id: string; kind: 'allocation'; label: string; total: number; max: number; options: Array<{ id: string; label: string }> };
@@ -44,7 +44,7 @@ export interface ControlText {
   pending: string;
   failed: string;
   wholeNumber: (min: number, max: number) => string;
-  selectDice: (count: number) => string;
+  selectDice: (count: number, min?: number) => string;
   selectOptions: (count: number) => string;
   allocate: (total: number, max: number) => string;
 }
@@ -167,7 +167,8 @@ export function ruleControl(descriptor: RuleDescriptor, submit: (intent: RuleInt
         dialog.append(group);
         reads.push(() => {
           const selected = checks.filter(choice => choice.field.checked).map(choice => choice.id);
-          if (selected.length !== input.count) throw new Error(text.selectDice(input.count));
+          if (selected.length < (input.min ?? input.count) || selected.length > input.count)
+            throw new Error(text.selectDice(input.count, input.min));
           return [input.id, selected];
         });
       }

@@ -418,8 +418,12 @@ public final class RuleRuntime {
                 descriptor.put("total", total).put("max", max);
             } else {
                 int count = whole(input.path("count"), context, 1, 1024);
-                Set<String> eligible = StructuredRoll.ids(eval(input.path("eligible"), context), "/inputs/eligible", true);
-                ArrayNode all = StructuredRoll.dice(eval(input.path("from"), context), null, true);
+                int min = input.has("min") ? whole(input.path("min"), context, 0, count) : count;
+                JsonNode from = eval(input.path("from"), context);
+                Set<String> eligible = input.has("where")
+                        ? StructuredRoll.ids(StructuredRoll.select(from, die -> RuleExpression.bool(perDie(input.path("where"), die, context), "/inputs/where")), "/inputs/where", false)
+                        : StructuredRoll.ids(eval(input.path("eligible"), context), "/inputs/eligible", true);
+                ArrayNode all = StructuredRoll.dice(from, null, true);
                 ArrayNode choices = descriptor.putArray("choices");
                 List<JsonNode> sorted = new ArrayList<>();
                 for (JsonNode die : all) if (eligible.contains(die.path("id").asText())) {
@@ -431,12 +435,15 @@ public final class RuleRuntime {
                     sorted.add(die);
                 }
                 if (choices.size() != eligible.size()) throw RuleJson.error("/inputs/eligible", "Unknown, excluded or dropped eligible die.");
-                if (choices.size() < count) throw new Unavailable("selection", "Not enough eligible dice remain.");
+                if (choices.size() < Math.max(min, 1)) throw new Unavailable("selection", "Not enough eligible dice remain.");
+                // With a minimum, count is an upper bound capped by the dice actually available.
+                if (input.has("min")) count = Math.min(count, choices.size());
                 descriptor.put("count", count);
+                if (input.has("min")) descriptor.put("min", min);
                 if (input.has("default")) {
                     sorted.sort(Comparator.comparingInt(die -> die.path("face").asInt()));
                     ArrayNode defaults = descriptor.putArray("default");
-                    for (int i = 0; i < count; i++) defaults.add(sorted.get(i).path("id"));
+                    for (int i = 0; i < min; i++) defaults.add(sorted.get(i).path("id"));
                 }
             }
             out.add(descriptor);
@@ -510,7 +517,8 @@ public final class RuleRuntime {
                 Set<String> selected = StructuredRoll.ids(value, "/inputs/" + id, true);
                 Set<String> choices = new HashSet<>();
                 descriptor.path("choices").forEach(die -> choices.add(die.path("id").asText()));
-                if (selected.size() != descriptor.path("count").asInt() || !choices.containsAll(selected))
+                int most = descriptor.path("count").asInt(), least = descriptor.path("min").asInt(most);
+                if (selected.size() < least || selected.size() > most || value.size() != selected.size() || !choices.containsAll(selected))
                     throw RuleJson.error("/inputs/" + id, "Choose the required number of distinct eligible dice.");
             }
         }
@@ -776,6 +784,7 @@ public final class RuleRuntime {
                 rolls.add(record);
                 result = exploded;
             }
+            case "roll.diceTotal" -> result = RuleExpression.numeric(StructuredRoll.faceTotal(eval(op.path("from"), context), eval(op.path("dice"), context)), "/dice");
             case "roll.discard" -> result = StructuredRoll.discard(eval(op.path("from"), context), op.path("role").asText());
             case "roll.annotate" -> {
                 ObjectNode annotated = StructuredRoll.validate(eval(op.path("from"), context));

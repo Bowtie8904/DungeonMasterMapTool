@@ -199,6 +199,20 @@ public final class StructuredRoll {
         return ids;
     }
 
+    /** The summed current faces of the selected kept dice. */
+    public static int faceTotal(JsonNode original, JsonNode selection) {
+        ObjectNode roll = validate(original);
+        Set<String> wanted = ids(selection, "/roll/dice", true);
+        Set<String> found = new HashSet<>();
+        int total = 0;
+        for (ObjectNode[] entry : editableDice(roll)) if (wanted.contains(entry[1].path("id").asText())) {
+            found.add(entry[1].path("id").asText());
+            total += entry[1].path("face").asInt();
+        }
+        if (!found.containsAll(wanted)) throw RuleJson.error("/roll/dice", "Die selection contains an unknown, dropped, excluded or locked die.");
+        return total;
+    }
+
     /** Replaces selected faces, keeping prior faces and editing sources; unchanged faces are not recorded. */
     public static ObjectNode editFaces(JsonNode original, JsonNode selection, String sourceId, String origin,
                                        java.util.function.Function<ObjectNode, Integer> face) {

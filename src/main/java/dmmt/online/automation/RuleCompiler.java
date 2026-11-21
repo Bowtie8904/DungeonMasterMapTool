@@ -78,6 +78,7 @@ public final class RuleCompiler {
             Map.entry("roll.contribute", List.of("from", "contribution")),
             Map.entry("roll.annotate", List.of("from", "field", "value")),
             Map.entry("roll.discard", List.of("from", "role")),
+            Map.entry("roll.diceTotal", List.of("from", "dice")),
             Map.entry("plan.adjust", List.of("plan", "field", "by", "label")),
             Map.entry("event.block", List.of("reason")));
     /** Fields evaluated once per die with the {@code die} context root. */
@@ -620,8 +621,11 @@ public final class RuleCompiler {
                         RuleExpression.validate(input.path("max"), path + "/inputs/max");
                     }
                     case "die.select" -> {
-                        RuleJson.fields(input, path + "/inputs", "id", "kind", "from", "eligible", "count", "default", "label", "choiceLabel");
-                        for (String field : List.of("from", "eligible", "count")) RuleExpression.validate(input.path(field), path + "/inputs/" + field);
+                        RuleJson.fields(input, path + "/inputs", "id", "kind", "from", "eligible", "where", "count", "min", "default", "label", "choiceLabel");
+                        if (input.has("eligible") == input.has("where"))
+                            throw RuleJson.error(path + "/inputs", "Die selections need either eligible dice or a per-die where filter.");
+                        for (String field : List.of("from", "eligible", "where", "count", "min")) if (input.has(field) || !Set.of("eligible", "where", "min").contains(field))
+                            RuleExpression.validate(input.path(field), path + "/inputs/" + field);
                         if (input.has("default") && !"lowest".equals(input.path("default").asText()))
                             throw RuleJson.error(path + "/inputs/default", "Unknown die selection default.");
                         RuleTemplate.validate(RuleJson.text(input.path("choiceLabel"), path + "/inputs/choiceLabel"));
@@ -697,6 +701,8 @@ public final class RuleCompiler {
             for (String field : List.of("from", "eligible", "count", "min", "max", "optionsFrom", "total")) if (input.has(field))
                 references(RuleExpression.references(input.get(field)), args, decl, noVariables, noVariables, false, path + "/inputs/" + field);
             references(RuleTemplate.references(input.path("label").asText()), args, decl, noVariables, noVariables, false, path + "/inputs/label");
+            if (input.has("where"))
+                references(RuleExpression.references(input.get("where")), args, decl, noVariables, noVariables, true, path + "/inputs/where");
             if (input.has("choiceLabel"))
                 references(RuleTemplate.references(input.path("choiceLabel").asText()), args, decl, noVariables, noVariables, true, path + "/inputs/choiceLabel");
             for (JsonNode option : input.path("options")) {

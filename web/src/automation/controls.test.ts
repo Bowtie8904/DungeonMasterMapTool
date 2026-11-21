@@ -35,7 +35,7 @@ class Element {
 const text: ControlText = {
   cancel: 'Cancel', retry: 'Retry', pending: 'Applying', failed: 'Action failed',
   wholeNumber: (min, max) => `Choose a whole number from ${min} to ${max}.`,
-  selectDice: count => `Choose ${count} dice.`,
+  selectDice: (count, min) => min === undefined ? `Choose ${count} dice.` : `Choose ${min} to ${count} dice.`,
   selectOptions: count => `Choose ${count} option(s).`,
   allocate: (total, max) => `Distribute exactly ${total}, at most ${max} each.`,
 };
@@ -91,6 +91,23 @@ describe('generic rule controls', () => {
     reopened.all('button')[1].click();
     await settle();
     expect(submit).toHaveBeenCalledWith(expect.objectContaining({ inputs: { remove: ['die-a', 'die-b'] } }));
+  });
+
+  it('accepts any die count between the minimum and the maximum', async () => {
+    const body = dom();
+    const submit = vi.fn(async () => {});
+    const root = asElement(ruleControl({ ...descriptor, inputs: [{
+      id: 'reroll', kind: 'die.select', label: 'Reroll', count: 2, min: 1,
+      choices: [{ id: 'die-a', label: 'd8: 3', sides: 8, face: 3 }, { id: 'die-b', label: 'd6: 3', sides: 6, face: 3 }],
+    }] }, submit, text));
+    root.all('button')[0].click();
+    const dialog = body.all('dialog')[0];
+    dialog.all('button')[1].click();
+    expect(dialog.text).toContain('Choose 1 to 2 dice.');
+    dialog.all('input')[1].checked = true;
+    dialog.all('button')[1].click();
+    await settle();
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({ inputs: { reroll: ['die-b'] } }));
   });
 
   it('retains the request ID and inputs after an uncertain failure', async () => {

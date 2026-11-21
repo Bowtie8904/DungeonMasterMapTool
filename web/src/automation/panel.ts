@@ -13,7 +13,9 @@ export const CONTROL_TEXT: ControlText = {
   pending: 'Working…',
   failed: 'The action failed.',
   wholeNumber: (min, max) => `Enter a whole number from ${min} to ${max}.`,
-  selectDice: count => `Select exactly ${count} ${count === 1 ? 'die' : 'dice'}.`,
+  selectDice: (count, min) => min === undefined
+    ? `Select exactly ${count} ${count === 1 ? 'die' : 'dice'}.`
+    : `Select ${min} to ${count} dice.`,
   selectOptions: count => `Select exactly ${count} ${count === 1 ? 'option' : 'options'}.`,
   allocate: (total, max) => `Distribute exactly ${total}, at most ${max} each.`,
 };

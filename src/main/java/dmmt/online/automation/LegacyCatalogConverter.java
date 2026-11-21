@@ -46,7 +46,7 @@ public final class LegacyCatalogConverter {
             "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
             "chatBenefits", "allowSourceOwner", "loadoutDomain", "primaryWeapon", "anyWeapon", "advantage", "giveFear", "check", "choices",
-            "magicOnly", "weaponRanges");
+            "magicOnly", "weaponRanges", "addDice", "damageDice");
     private static final Set<String> MITIGATION_FIELDS = Set.of("id", "label", "description", "when", "cost", "negate", "halve", "reduce",
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
@@ -1434,6 +1434,67 @@ public final class LegacyCatalogConverter {
                         escape(trigger.path("label").asText(""))).put("count", 1).put("sides", 6).put("sign", 1));
                 step.put("as", "advantaged");
                 from = read("result.advantaged");
+            }
+        }
+        if (trigger.has("addDice")) {
+            String text = trigger.path("addDice").asText("");
+            String role = "damage".equals(trigger.path("on").asText()) ? "damage" : "modifier";
+            String label = escape(trigger.path("label").asText(""));
+            ObjectNode part = null;
+            if (text.matches("[1-9][0-9]?")) part = (ObjectNode) contribution(trigger.path("id").asText() + "-flat", "flat", role, label)
+                    .set("value", RuleJson.JSON.getNodeFactory().numberNode(Integer.parseInt(text)));
+            else {
+                JsonNode[] dice = diceTerms(text, path + "/addDice", p);
+                if (dice != null) {
+                    part = contribution(trigger.path("id").asText() + "-dice", "dice", role, label);
+                    part.set("count", dice[0]);
+                    part.set("sides", dice[1]);
+                }
+            }
+            if (part != null) {
+                ObjectNode step = steps.addObject().put("op", "roll.contribute");
+                step.set("from", from);
+                step.set("contribution", part);
+                step.put("as", "added");
+                from = read("result.added");
+                edited = true;
+            }
+        }
+        if (trigger.has("damageDice")) {
+            String mode = trigger.path("damageDice").asText();
+            if (!"damage".equals(trigger.path("on").asText())) p.add(path + "/damageDice", "Damage dice edits need damage rolls.");
+            else if (!Set.of("reroll", "double").contains(mode)) p.add(path + "/damageDice", "Unsupported damage dice edit: " + mode);
+            else {
+                boolean reroll = "reroll".equals(mode);
+                ObjectNode where = RuleJson.JSON.createObjectNode();
+                ArrayNode notDuality = where.putArray("and");
+                for (String role : List.of("hope", "fear", "advantage", "disadvantage"))
+                    notDuality.addObject().putArray("ne").add(read("die.role")).add(role);
+                ObjectNode input = rule.withArray("inputs").addObject().put("id", "dice").put("kind", "die.select")
+                        .put("label", reroll ? "Damage dice to reroll" : "Damage die to double").put("choiceLabel", "d{die.sides}: {die.face}");
+                input.set("from", read("event.roll"));
+                input.set("where", where);
+                input.put("count", reroll ? 32 : 1);
+                if (reroll) input.put("min", 1);
+                if (reroll) {
+                    ObjectNode step = steps.addObject().put("op", "roll.reroll");
+                    step.set("from", from);
+                    step.set("dice", read("input.dice"));
+                    step.put("choose", "new").put("as", "rerolledDamage");
+                    from = read("result.rerolledDamage");
+                } else {
+                    ObjectNode total = steps.addObject().put("op", "roll.diceTotal");
+                    total.set("from", from);
+                    total.set("dice", read("input.dice"));
+                    total.put("as", "doubled");
+                    ObjectNode step = steps.addObject().put("op", "roll.contribute");
+                    step.set("from", from);
+                    step.set("contribution", contribution(trigger.path("id").asText() + "-double", "flat", "damage",
+                            escape(trigger.path("label").asText(""))).set("value", read("result.doubled")));
+                    step.put("as", "doubledDamage");
+                    from = read("result.doubledDamage");
+                }
+                edited = true;
             }
         }
         if (edited) steps.addObject().put("op", "roll.publish").set("roll", from);

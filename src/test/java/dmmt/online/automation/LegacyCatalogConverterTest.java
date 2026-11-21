@@ -674,6 +674,47 @@ class LegacyCatalogConverterTest {
                 {"id":"b","name":"B","automation":{"damageTypeChoice":true}}"""));
         assertEquals(1, invalid.diagnostics().size(), invalid.diagnostics().toString());
     }
+    @Test
+    void triggerDiceAdditionsAndDamageDiceEditsConvert() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"edits","name":"Edits","automation":{"rollTriggers":[
+                  {"id":"poet","label":"Poet","on":"action","addDice":"1d4","cost":{"hope":1}},
+                  {"id":"bonus","label":"Bonus","on":"action","addDice":"2"},
+                  {"id":"volatile","label":"Volatile","on":"damage","damageDice":"reroll"},
+                  {"id":"twice","label":"Twice","on":"damage","damageDice":"double"}]}}"""));
+        block(result, 0);
+        RuleCompiler.Program program = program(result, 0);
+        String actor = "{\"hope\":{\"value\":2,\"max\":6},\"effects\":[]}";
+        ObjectNode action = context(program, actor, "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"action\",\"trait\":null},\"roll\":" + ROLL + "}");
+        JsonNode poet = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, action)),
+                List.of(new RuleRuntime.Intent("poet", "use", "fixture", 0, RuleJson.JSON.createObjectNode())), StructuredRollTest.faces(3))
+                .contexts().getFirst();
+        assertEquals(1 + 3, poet.at("/event/roll/total").asInt(), poet.toString());
+        assertEquals(1, poet.at("/actor/hope/value").asInt());
+        assertEquals(1 + 2, RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, action)), List.of(new RuleRuntime.Intent("bonus", "use", "fixture", 0, RuleJson.JSON.createObjectNode())), StructuredRollTest.noRandom()).contexts().getFirst().at("/event/roll/total").asInt());
+
+        String damageRoll = """
+                {"type":"roll.finished","check":{"kind":"damage","trait":null},"roll":{"id":"dmg","contributions":[
+                  {"id":"weapon","kind":"dice","role":"damage","sourceId":"weapon:axe","label":"Axe","dice":[
+                    {"id":"w1","sides":8,"face":3,"kept":true,"origin":"rolled"},{"id":"w2","sides":8,"face":5,"kept":true,"origin":"rolled"}]}]}}""";
+        ObjectNode damage = context(program, actor, damageRoll);
+        assertEquals(List.of("twice", "volatile"), available(program, damage, "roll"));
+        JsonNode rerolled = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, damage)),
+                List.of(new RuleRuntime.Intent("volatile", "use", "fixture", 0, (ObjectNode) RuleJson.parse("{\"dice\":[\"w1\"]}"))),
+                StructuredRollTest.faces(8)).contexts().getFirst().at("/event/roll");
+        assertEquals(8 + 5, rerolled.path("total").asInt(), rerolled.toString());
+        assertThrows(Exception.class, () -> RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, damage)),
+                List.of(new RuleRuntime.Intent("volatile", "use", "fixture", 0, (ObjectNode) RuleJson.parse("{\"dice\":[]}"))),
+                StructuredRollTest.noRandom()));
+        JsonNode doubled = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, damage)), List.of(new RuleRuntime.Intent("twice", "use", "fixture", 0, (ObjectNode) RuleJson.parse("{\"dice\":[\"w2\"]}"))), StructuredRollTest.noRandom()).contexts().getFirst().at("/event/roll");
+        assertEquals(3 + 5 + 5, doubled.path("total").asInt(), doubled.toString());
+        assertThrows(Exception.class, () -> RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, damage)), List.of(new RuleRuntime.Intent("twice", "use", "fixture", 0, (ObjectNode) RuleJson.parse("{\"dice\":[\"w1\",\"w2\"]}"))), StructuredRollTest.noRandom()));
+
+        var invalid = LegacyCatalogConverter.convert(catalog("""
+                {"id":"b","name":"B","automation":{"rollTriggers":[{"id":"x","label":"X","on":"action","damageDice":"double"}]}}"""));
+        assertEquals(1, invalid.diagnostics().size(), invalid.diagnostics().toString());
+    }
+
     private static JsonNode block(LegacyCatalogConverter.Result result, int entry) {
         assertEquals(result.blocks(), result.converted(), result.diagnostics().toString());
         return result.catalog().at("/entries/" + entry + "/automation");
