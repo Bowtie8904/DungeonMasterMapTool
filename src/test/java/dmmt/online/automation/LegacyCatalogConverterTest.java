@@ -599,6 +599,61 @@ class LegacyCatalogConverterTest {
         assertEquals(2, invalid.diagnostics().size(), invalid.diagnostics().toString());
     }
 
+    @Test
+    void scaledDiceRangeAndMagicFiltersConvert() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"t","name":"T","automation":{"rollOptions":[
+                  {"id":"rite","label":"Rite","roll":"damage","dice":"1d6","diceByLevel":{"5":"2d6","8":"3d6"},
+                   "diceConditions":[{"feature":"Last Stand","unmarkedHp":{"min":1,"max":1},"dieSize":8}]},
+                  {"id":"mark","label":"Mark","roll":"damage","dice":"@tierd4","diceByFeature":{"Ambush":"@tierd6","Backstab":"@tierd8"}},
+                  {"id":"spark","label":"Spark","roll":"damage","magicOnly":true,"value":2},
+                  {"id":"close","label":"Close","roll":"damage","weapon":"any","weaponRanges":["Melee","Very Close"],"value":1},
+                  {"id":"sure","label":"Sure","roll":"trait:Agility","ignoreDisadvantage":true}]}}"""));
+        RuleCompiler.Program program = program(result, 0);
+        String actor = "{\"stats\":{\"level\":%d,\"tier\":%d},\"features\":[%s],\"heritage\":[],\"hp\":{\"marked\":%d,\"capacity\":6},\"effects\":[]}";
+        String damage = "{\"type\":\"roll.prepare\",\"check\":{\"kind\":\"damage\",\"trait\":null%s},\"roll\":{\"id\":\"d\",\"contributions\":[{\"id\":\"base\",\"kind\":\"flat\",\"role\":\"damage\",\"sourceId\":\"core\",\"label\":\"Base\",\"value\":0}]}}";
+        java.util.function.BiFunction<ObjectNode, String, JsonNode> dice = (context, id) -> {
+            JsonNode roll = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context)),
+                    List.of(new RuleRuntime.Intent(id, "use", "fixture", 0, RuleJson.JSON.createObjectNode())), StructuredRollTest.faces(1, 1, 1, 1, 1))
+                    .contexts().getFirst().at("/event/roll/contributions/1/dice");
+            return roll;
+        };
+        assertEquals(1, dice.apply(context(program, actor.formatted(3, 1, "", 0), damage.formatted("")), "rite").size());
+        JsonNode five = dice.apply(context(program, actor.formatted(5, 2, "", 0), damage.formatted("")), "rite");
+        assertEquals(2, five.size());
+        assertEquals(6, five.at("/0/sides").asInt());
+        assertEquals(3, dice.apply(context(program, actor.formatted(9, 4, "", 0), damage.formatted("")), "rite").size());
+        JsonNode stand = dice.apply(context(program, actor.formatted(9, 4, "{\"label\":\"Last Stand\"}", 5), damage.formatted("")), "rite");
+        assertEquals(3, stand.size());
+        assertEquals(8, stand.at("/0/sides").asInt(), "The die size condition keeps the level-scaled count.");
+
+        JsonNode tiered = dice.apply(context(program, actor.formatted(5, 3, "{\"label\":\"Ambush\"},{\"label\":\"Backstab\"}", 0), damage.formatted("")), "mark");
+        assertEquals(3, tiered.size());
+        assertEquals(8, tiered.at("/0/sides").asInt(), "The last listed present feature wins.");
+
+        String plain = actor.formatted(1, 1, "", 0);
+        assertFalse(available(program, context(program, plain, damage.formatted(",\"damageType\":\"physical\"")), "roll").contains("spark"));
+        assertTrue(available(program, context(program, plain, damage.formatted(",\"damageType\":\"magic\"")), "roll").contains("spark"));
+        assertTrue(available(program, context(program, plain, damage.formatted(",\"spell\":true")), "roll").contains("spark"));
+        assertTrue(available(program, context(program, plain, damage.formatted(",\"weapon\":\"primary\",\"range\":\"veryClose\"")), "roll").contains("close"));
+        assertFalse(available(program, context(program, plain, damage.formatted(",\"weapon\":\"primary\",\"range\":\"far\"")), "roll").contains("close"));
+        assertFalse(available(program, context(program, plain, damage.formatted(",\"weapon\":\"primary\",\"range\":\"melee\",\"spell\":true")), "roll").contains("close"));
+
+        ObjectNode agility = context(program, plain, """
+                {"type":"roll.prepare","check":{"kind":"action","trait":"Agility"},"roll":{"id":"act","contributions":[
+                  {"id":"hope","kind":"dice","role":"hope","sourceId":"core","label":"Hope","dice":[{"id":"h","sides":12,"face":4,"kept":true,"origin":"rolled"}]},
+                  {"id":"dis","kind":"dice","role":"disadvantage","sourceId":"core","label":"Disadvantage","sign":-1,
+                   "dice":[{"id":"x","sides":6,"face":5,"kept":true,"origin":"rolled"}]}]}}""");
+        assertEquals(-90, block(result, 0).at("/rules/4/bindings/0/priority").asInt());
+        JsonNode neutral = run(program, agility, "sure").contexts().getFirst().at("/event/roll");
+        assertEquals(1, neutral.path("contributions").size(), neutral.toString());
+        assertEquals(4, neutral.path("total").asInt());
+
+        var invalid = LegacyCatalogConverter.convert(catalog("""
+                {"id":"b","name":"B","automation":{"rollOptions":[{"id":"x","label":"X","roll":"damage","diceByLevel":{"5":"2d6"}},
+                  {"id":"y","label":"Y","roll":"damage","weaponRanges":["Distant"]}]}}"""));
+        assertEquals(2, invalid.diagnostics().size(), invalid.diagnostics().toString());
+    }
     private static JsonNode block(LegacyCatalogConverter.Result result, int entry) {
         assertEquals(result.blocks(), result.converted(), result.diagnostics().toString());
         return result.catalog().at("/entries/" + entry + "/automation");

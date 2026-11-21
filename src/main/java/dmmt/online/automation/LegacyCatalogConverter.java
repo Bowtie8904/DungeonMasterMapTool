@@ -40,11 +40,13 @@ public final class LegacyCatalogConverter {
     private static final Set<String> OPTION_FIELDS = Set.of("id", "label", "description", "roll", "value", "dice", "advantage", "cost",
             "defaultOn", "exclusive", "requiresEffect", "excludesEffect", "weapon", "weaponRange", "excludeRolls", "effect", "uses",
             "usesSource", "endEffect", "hostOwned", "consumeItem", "quantity", "proficiency", "hopeDie", "diceResource", "condition", "loadoutDomain",
-            "required", "traitValue", "multiplier", "damageDie");
+            "required", "traitValue", "multiplier", "damageDie", "diceByLevel", "diceByFeature", "diceConditions", "magicOnly", "weaponRanges",
+            "ignoreDisadvantage");
     private static final Set<String> TRIGGER_FIELDS = Set.of("id", "label", "description", "on", "cost", "reroll", "when", "outcome",
             "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
-            "chatBenefits", "allowSourceOwner", "loadoutDomain", "primaryWeapon", "anyWeapon", "advantage", "giveFear", "check", "choices");
+            "chatBenefits", "allowSourceOwner", "loadoutDomain", "primaryWeapon", "anyWeapon", "advantage", "giveFear", "check", "choices",
+            "magicOnly", "weaponRanges");
     private static final Set<String> MITIGATION_FIELDS = Set.of("id", "label", "description", "when", "cost", "negate", "halve", "reduce",
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
@@ -817,7 +819,32 @@ public final class LegacyCatalogConverter {
         }
         if (legacy.has("uses") && !"source".equals(legacy.path("uses").asText()) && !legacy.path("uses").isObject())
             p.add(path + "/uses", "Per-rule use limits must reference the source budget.");
-        if (legacy.has("weaponRange")) when.addObject().putArray("eq").add(read("event.check.range")).add(legacy.path("weaponRange").asText());
+        if (legacy.has("weaponRange")) {
+            String range = RANGES.get(legacy.path("weaponRange").asText().toLowerCase(java.util.Locale.ROOT));
+            if (range == null) p.add(path + "/weaponRange", "Unknown range: " + legacy.path("weaponRange").asText());
+            else when.addObject().putArray("eq").add(read("event.check.range")).add(range);
+        }
+        if (legacy.has("weaponRanges")) {
+            // Only weapon attacks at one of the listed ranges; spells cast through a weapon never qualify.
+            JsonNode ranges = legacy.get("weaponRanges");
+            ObjectNode any = RuleJson.JSON.createObjectNode();
+            ArrayNode options = any.putArray("or");
+            if (!ranges.isArray() || ranges.isEmpty()) p.add(path + "/weaponRanges", "Expected a list of ranges.");
+            else for (JsonNode name : ranges) {
+                String range = RANGES.get(name.asText().toLowerCase(java.util.Locale.ROOT));
+                if (range == null) p.add(path + "/weaponRanges", "Unknown range: " + name.asText());
+                else options.addObject().putArray("eq").add(read("event.check.range")).add(range);
+            }
+            when.addObject().put("exists", "event.check.weapon");
+            when.addObject().set("not", flag("event.check.spell", true));
+            when.addObject().put("exists", "event.check.range");
+            when.add(any);
+        }
+        if (legacy.has("magicOnly")) {
+            if (!legacy.path("magicOnly").isBoolean()) p.add(path + "/magicOnly", "Expected a boolean.");
+            else if (legacy.path("magicOnly").asBoolean()) when.addObject().putArray("or")
+                    .add(flag("event.check.damageType", "magic")).add(flag("event.check.spell", true));
+        }
         if (legacy.has("loadoutDomain")) {
             JsonNode domain = legacy.get("loadoutDomain");
             p.onlyFields(domain, path + "/loadoutDomain", Set.of("domain", "min"));
@@ -848,6 +875,110 @@ public final class LegacyCatalogConverter {
     }
 
     private static ObjectNode read(String path) { return RuleJson.JSON.createObjectNode().put("read", path); }
+
+    /** True when an optional host-provided event value is present and equals {@code value}. */
+    private static ObjectNode flag(String path, Object value) {
+        ObjectNode both = RuleJson.JSON.createObjectNode();
+        ArrayNode and = both.putArray("and");
+        and.addObject().put("exists", path);
+        ArrayNode eq = and.addObject().putArray("eq").add(read(path));
+        if (value instanceof Boolean b) eq.add(b); else eq.add(value.toString());
+        return both;
+    }
+
+    /** True when the actor has a feature or heritage feature with this sheet name. */
+    private static ObjectNode hasFeature(String name) {
+        ObjectNode any = RuleJson.JSON.createObjectNode();
+        ArrayNode or = any.putArray("or");
+        for (String collection : List.of("actor.features", "actor.heritage")) {
+            ObjectNode pluck = RuleJson.JSON.createObjectNode();
+            pluck.putArray("pluck").add(read(collection)).add("label");
+            or.addObject().putArray("includes").add(pluck).add(name);
+        }
+        return any;
+    }
+
+    private static final Pattern SCALED_DICE = Pattern.compile("(@tier|[1-9][0-9]?)d([1-9][0-9]{0,2})");
+
+    /** {@code NdM} or tier-scaled {@code @tierdM} as count and sides expressions, or {@code null} after reporting a problem. */
+    private static JsonNode[] diceTerms(String text, String path, Problems p) {
+        var matcher = SCALED_DICE.matcher(text);
+        if (!matcher.matches()) { p.add(path, "Unsupported dice: " + text); return null; }
+        JsonNode count = "@tier".equals(matcher.group(1)) ? read("actor.stats.tier")
+                : RuleJson.JSON.getNodeFactory().numberNode(Integer.parseInt(matcher.group(1)));
+        return new JsonNode[]{ count, RuleJson.JSON.getNodeFactory().numberNode(Integer.parseInt(matcher.group(2))) };
+    }
+
+    private static JsonNode choose(JsonNode condition, JsonNode then, JsonNode otherwise) {
+        ObjectNode node = RuleJson.JSON.createObjectNode();
+        node.putArray("if").add(condition.deepCopy()).add(then.deepCopy()).add(otherwise.deepCopy());
+        return node;
+    }
+
+    /**
+     * An option's dice as count and sides expressions: the base dice, replaced by the highest reached
+     * {@code diceByLevel} threshold, then by the last present {@code diceByFeature} entry, then by matching
+     * {@code diceConditions} (whose {@code dieSize} replaces only the sides).
+     */
+    private static JsonNode[] optionDice(JsonNode option, String path, Problems p) {
+        JsonNode[] dice = diceTerms(option.path("dice").asText(""), path + "/dice", p);
+        if (dice == null) return null;
+        if (option.has("diceByLevel")) {
+            java.util.TreeMap<Integer, JsonNode[]> levels = new java.util.TreeMap<>();
+            option.get("diceByLevel").fields().forEachRemaining(entry -> {
+                if (!entry.getKey().matches("[1-9][0-9]?")) { p.add(path + "/diceByLevel", "Expected level thresholds: " + entry.getKey()); return; }
+                JsonNode[] terms = diceTerms(entry.getValue().asText(), path + "/diceByLevel/" + entry.getKey(), p);
+                if (terms != null) levels.put(Integer.parseInt(entry.getKey()), terms);
+            });
+            for (var level : levels.entrySet()) {
+                ObjectNode reached = RuleJson.JSON.createObjectNode();
+                reached.putArray("gte").add(read("actor.stats.level")).add(level.getKey());
+                dice = new JsonNode[]{ choose(reached, level.getValue()[0], dice[0]), choose(reached, level.getValue()[1], dice[1]) };
+            }
+        }
+        if (option.has("diceByFeature")) {
+            List<Map.Entry<String, JsonNode>> features = new ArrayList<>();
+            option.get("diceByFeature").fields().forEachRemaining(features::add);
+            for (var feature : features) {
+                JsonNode[] terms = diceTerms(feature.getValue().asText(), path + "/diceByFeature", p);
+                if (terms == null) continue;
+                ObjectNode has = hasFeature(feature.getKey());
+                dice = new JsonNode[]{ choose(has, terms[0], dice[0]), choose(has, terms[1], dice[1]) };
+            }
+        }
+        if (option.has("diceConditions")) {
+            JsonNode conditions = option.get("diceConditions");
+            if (!conditions.isArray()) { p.add(path + "/diceConditions", "Expected a list."); return dice; }
+            for (int i = 0; i < conditions.size(); i++) {
+                JsonNode condition = conditions.get(i);
+                String at = path + "/diceConditions/" + i;
+                p.onlyFields(condition, at, Set.of("feature", "unmarkedHp", "dice", "dieSize"));
+                ArrayNode all = RuleJson.JSON.createArrayNode();
+                if (condition.has("feature")) all.add(hasFeature(condition.path("feature").asText()));
+                JsonNode range = condition.path("unmarkedHp");
+                p.onlyFields(range.isMissingNode() ? RuleJson.JSON.createObjectNode() : range, at + "/unmarkedHp", Set.of("min", "max"));
+                for (String bound : List.of("min", "max")) {
+                    if (!range.has(bound)) continue;
+                    ObjectNode unmarked = RuleJson.JSON.createObjectNode();
+                    unmarked.putArray("subtract").add(read("actor.hp.capacity")).add(read("actor.hp.marked"));
+                    all.addObject().putArray("min".equals(bound) ? "gte" : "lte").add(unmarked).add(range.path(bound).asInt());
+                }
+                if (all.isEmpty()) { p.add(at, "Dice conditions need a feature or Hit Point condition."); continue; }
+                ObjectNode met = RuleJson.JSON.createObjectNode();
+                if (all.size() == 1) met = (ObjectNode) all.get(0); else met.set("and", all);
+                if (condition.has("dice")) {
+                    JsonNode[] terms = diceTerms(condition.path("dice").asText(), at + "/dice", p);
+                    if (terms != null) dice = new JsonNode[]{ choose(met, terms[0], dice[0]), choose(met, terms[1], dice[1]) };
+                }
+                if (condition.has("dieSize")) {
+                    if (!(condition.path("dieSize").isInt() && condition.path("dieSize").asInt() >= 2)) p.add(at + "/dieSize", "Expected a die size.");
+                    else dice = new JsonNode[]{ dice[0], choose(met, condition.get("dieSize"), dice[1]) };
+                }
+                if (!condition.has("dice") && !condition.has("dieSize")) p.add(at, "Dice conditions need dice or a die size.");
+            }
+        }
+        return dice;
+    }
 
     private static ObjectNode ruleShell(JsonNode legacy, String path, Problems p, String event, String surface, String mode) {
         String id = legacy.path("id").asText();
@@ -965,11 +1096,15 @@ public final class LegacyCatalogConverter {
                     .set("value", value), "value", quantity));
         }
         if (option.has("dice")) {
-            var matcher = DICE.matcher(option.path("dice").asText());
-            if (!matcher.matches()) p.add(path + "/dice", "Unsupported dice: " + option.path("dice").asText());
-            else parts.add(times(contribution(id + "-dice", "dice", role, label)
-                    .put("count", Integer.parseInt(matcher.group(1))).put("sides", Integer.parseInt(matcher.group(2))), "count", quantity));
-        }
+            JsonNode[] dice = optionDice(option, path, p);
+            if (dice != null) {
+                ObjectNode part = contribution(id + "-dice", "dice", role, label);
+                part.set("count", dice[0]);
+                part.set("sides", dice[1]);
+                parts.add(times(part, "count", quantity));
+            }
+        } else for (String scaled : List.of("diceByLevel", "diceByFeature", "diceConditions"))
+            if (option.has(scaled)) p.add(path + "/" + scaled, "Scaled dice need base dice.");
         if (option.has("advantage")) {
             String advantage = option.path("advantage").asText();
             if (!Set.of("advantage", "disadvantage").contains(advantage)) p.add(path + "/advantage", "Expected advantage or disadvantage.");
@@ -1023,6 +1158,18 @@ public final class LegacyCatalogConverter {
         if (proficiency > 0 && "damage".equals(roll)) {
             from[0] = addWeaponDice(steps, from[0], proficiency);
             edited = true;
+        }
+        if (option.has("ignoreDisadvantage")) {
+            if (!option.path("ignoreDisadvantage").asBoolean(false)) p.add(path + "/ignoreDisadvantage", "Expected true.");
+            else {
+                // Neutralises disadvantage only; it runs after other options have contributed their dice.
+                ObjectNode discard = steps.addObject().put("op", "roll.discard");
+                discard.set("from", from[0]);
+                discard.put("role", "disadvantage").put("as", "neutral");
+                from[0] = read("result.neutral");
+                binding.put("priority", -90);
+                edited = true;
+            }
         }
         if (edited) steps.addObject().put("op", "roll.publish").set("roll", from[0]);
         if (option.has("effect")) {

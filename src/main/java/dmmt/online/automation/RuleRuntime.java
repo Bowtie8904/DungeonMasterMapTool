@@ -776,6 +776,15 @@ public final class RuleRuntime {
                 rolls.add(record);
                 result = exploded;
             }
+            case "roll.discard" -> result = StructuredRoll.discard(eval(op.path("from"), context), op.path("role").asText());
+            case "roll.annotate" -> {
+                ObjectNode annotated = StructuredRoll.validate(eval(op.path("from"), context));
+                JsonNode value = eval(op.path("value"), context);
+                if (!value.isValueNode()) throw RuleJson.error("/value", "Roll metadata values must be scalars.");
+                ObjectNode metadata = annotated.has("metadata") ? (ObjectNode) annotated.get("metadata") : annotated.putObject("metadata");
+                metadata.set(op.path("field").asText(), value);
+                result = annotated;
+            }
             case "roll.contribute" -> {
                 ObjectNode part = op.path("contribution").deepCopy();
                 if (preview && "dice".equals(part.path("kind").asText()))

@@ -23,7 +23,7 @@ public final class RuleCompiler {
     static final Set<String> AUDIENCES = Set.of("self", "others", "party", "any");
     static final Set<String> CLAIM_RECIPIENTS = Set.of("otherPlayersCharacters", "playerCharacters", "sourceActor");
     /** Actor-owned lists that {@code collection.*} operations may change; each item is an object with an {@code id}. */
-    static final Set<String> COLLECTIONS = Set.of("inventory", "features", "loadout", "vault", "conditions", "companions");
+    static final Set<String> COLLECTIONS = Set.of("inventory", "features", "loadout", "vault", "heritage", "conditions", "companions");
     private static final Set<String> MODES = Set.of("button", "option", "automatic");
     private static final Set<String> TEXT_FIELDS = Set.of("label", "description", "report", "preview", "unavailable");
     private static final Set<String> COSTS = Set.of("resource.spend", "pool.spend", "track.mark", "inventory.consume");
@@ -76,6 +76,8 @@ public final class RuleCompiler {
             Map.entry("roll.addDice", List.of("from", "dice", "count")),
             Map.entry("roll.dropLowest", List.of("from", "dice", "count")),
             Map.entry("roll.contribute", List.of("from", "contribution")),
+            Map.entry("roll.annotate", List.of("from", "field", "value")),
+            Map.entry("roll.discard", List.of("from", "role")),
             Map.entry("plan.adjust", List.of("plan", "field", "by", "label")),
             Map.entry("event.block", List.of("reason")));
     /** Fields evaluated once per die with the {@code die} context root. */
@@ -806,6 +808,12 @@ public final class RuleCompiler {
         if ("roll.reroll".equals(op) && !Set.of("new", "higher").contains(operation.path("choose").asText()))
             throw RuleJson.error(path + "/choose", "Expected new or higher.");
         if ("roll.explode".equals(op)) RuleJson.integer(operation.get("maxDice"), path + "/maxDice", 1, 32);
+        if ("roll.annotate".equals(op)) {
+            RuleExpression.validate(operation.get("from"), path + "/from");
+            RuleJson.id(operation.get("field"), path + "/field");
+            RuleExpression.validate(operation.get("value"), path + "/value");
+            return;
+        }
         if ("roll.contribute".equals(op)) {
             RuleExpression.validate(operation.get("from"), path + "/from");
             validateContribution(operation.get("contribution"), path + "/contribution");

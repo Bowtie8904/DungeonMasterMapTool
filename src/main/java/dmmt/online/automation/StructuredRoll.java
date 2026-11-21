@@ -339,6 +339,24 @@ public final class StructuredRoll {
         return calculate(roll, false);
     }
 
+    /** Removes every contribution with {@code role} (and its dice); a roll left without contributions is rejected. */
+    public static ObjectNode discard(JsonNode original, String role) {
+        ObjectNode roll = validate(original);
+        ArrayNode kept = RuleJson.JSON.createArrayNode();
+        Set<String> removedDice = new HashSet<>();
+        for (JsonNode part : roll.path("contributions")) {
+            if (!role.equals(part.path("role").asText())) { kept.add(part); continue; }
+            for (JsonNode die : part.path("dice")) removedDice.add(die.path("id").asText());
+        }
+        if (kept.size() == roll.path("contributions").size()) return roll;
+        roll.set("contributions", kept);
+        if (roll.has("excludedDice")) {
+            ArrayNode excluded = RuleJson.JSON.createArrayNode();
+            for (JsonNode id : roll.path("excludedDice")) if (!removedDice.contains(id.asText())) excluded.add(id);
+            roll.set("excludedDice", excluded);
+        }
+        return calculate(roll, false);
+    }
     private static void record(ObjectNode die, String sourceId) {
         ArrayNode previous = die.has("previous") ? (ArrayNode) die.get("previous") : die.putArray("previous");
         ArrayNode editors = die.has("editedBy") ? (ArrayNode) die.get("editedBy") : die.putArray("editedBy");
