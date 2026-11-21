@@ -307,6 +307,9 @@ class LegacyCatalogConverterTest {
         String binding = switch (context.at("/event/type").asText()) {
             case "action.request" -> "sheet";
             case "downtime.move" -> "downtime";
+            case "rest.prepare" -> "rest";
+            case "rest.short" -> "rest-short";
+            case "rest.long" -> "rest-long";
             default -> "use";
         };
         List<RuleRuntime.Intent> intents = java.util.Arrays.stream(rules)
@@ -926,5 +929,117 @@ class LegacyCatalogConverterTest {
         assertThrows(IllegalArgumentException.class, () -> RuleDispatcher.executeClaims(
                 List.of(source), List.of(claimIntent("call-ride", "owner", null)), recipients,
                 new RuleDispatcher.ClaimLedger(0, java.util.Set.of()), RandomGenerator.getDefault()));
+    }
+
+    private static final String PREPARE = """
+            {"type":"rest.prepare","rest":{"kind":"%s","moves":2,"longMoves":0,
+             "adjustable":{"moves":{"min":0,"max":%d},"longMoves":{"min":0,"max":1}}}}""";
+
+    private static String move(String id, String rest, boolean ally, boolean adjustable) {
+        return """
+                {"type":"downtime.move","move":{"id":"%s","rest":"%s","long":false,"ally":%s,"bonus":0,"allies":0,
+                 "adjustable":%s}}""".formatted(id, rest, ally,
+                adjustable ? "{\"bonus\":{\"min\":-5,\"max\":5},\"allies\":{\"min\":0,\"max\":4}}" : "{}");
+    }
+
+    @Test
+    void restAllowancesPassivesAndMoveModifiersBecomeRestEventRules() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"camp","name":"Camp","automation":{"actions":[{"id":"ward","label":"Ward"}],"rest":{
+                  "extraMoves":1,"longMovesInShort":true,
+                  "passives":[
+                    {"id":"tea","label":"Tea","extraMoves":1,"consumeItem":true,"defaultOn":true},
+                    {"id":"pipe","label":"Pipe","move":"tend","bonus":2},
+                    {"id":"plate","label":"Plate","condition":"armorMarked","rest":"short","steps":[{"op":"clear","resource":"stress","amount":1}]},
+                    {"id":"idle","label":"Idle","condition":"noRecovery","minHope":1,"cost":{"hope":1},"castBeforeRest":"ward",
+                     "steps":[{"op":"clear","resource":"stress","amount":1}]},
+                    {"id":"share","label":"Share","chooseAlly":true,"steps":[{"op":"gain","resource":"hope","amount":1}]}],
+                  "modifiers":[{"move":"repair","repairAllies":1},
+                    {"move":"tend","target":"ally","bonus":1,"steps":[{"op":"clear","resource":"hp","amount":2}],"note":"Soothing."}]}}}"""));
+        JsonNode block = block(result, 0);
+        Map<String, JsonNode> rules = new java.util.HashMap<>();
+        for (JsonNode rule : block.path("rules")) rules.put(rule.path("id").asText(), rule);
+        assertEquals(java.util.Set.of("ward", "rest-moves", "rest-long-moves", "tea", "pipe", "plate", "idle", "share", "share-ally",
+                "move-repair", "move-tend"), rules.keySet());
+        assertEquals("option", rules.get("tea").at("/bindings/0/mode").asText());
+        assertTrue(rules.get("tea").at("/bindings/0/defaultOn").asBoolean());
+        assertEquals("inventory.consume", rules.get("tea").at("/costs/0/op").asText());
+        assertEquals(1, rules.get("plate").path("bindings").size());
+        assertEquals("rest.short", rules.get("plate").at("/bindings/0/event").asText());
+        assertEquals(2, rules.get("idle").path("bindings").size());
+        assertEquals("claim.offer", rules.get("share").at("/do/0/op").asText());
+        assertEquals("share-ally", rules.get("share-ally").at("/bindings/0/claimGroup").asText());
+        assertEquals("otherPlayersCharacters", rules.get("share-ally").at("/bindings/0/claimScope/recipients").asText());
+        assertEquals("recipient.hope", rules.get("share-ally").at("/do/0/pool").asText());
+        assertEquals("Soothing.", rules.get("move-tend").at("/ui/report").asText());
+
+        RuleCompiler.Program program = program(result, 0);
+        JsonNode shortRest = run(program, context(program, "{}", PREPARE.formatted("short", 8))).contexts().getFirst().at("/event/rest");
+        assertEquals(3, shortRest.path("moves").asInt());
+        assertEquals(1, shortRest.path("longMoves").asInt());
+        assertEquals(2, shortRest.path("adjustments").size());
+        assertEquals("Extra downtime moves", shortRest.at("/adjustments/1/label").asText());
+        JsonNode longRest = run(program, context(program, "{}", PREPARE.formatted("long", 2))).contexts().getFirst().at("/event/rest");
+        assertEquals(2, longRest.path("moves").asInt(), "Clamped to the plan's maximum.");
+        assertEquals(0, longRest.path("longMoves").asInt());
+
+        String actor = """
+                {"id":"me","name":"Ash","hope":{"value":2,"max":6},"stress":{"marked":3,"capacity":6},
+                 "hp":{"marked":4,"capacity":6},"armorTrack":{"marked":1,"capacity":3},"effects":[]}""";
+        ObjectNode tend = context(program, actor, move("tend", "short", true, true));
+        assertEquals(List.of("pipe"), available(program, tend, "downtime"));
+        ObjectNode tended = run(program, tend, "pipe").contexts().getFirst();
+        assertEquals(3, tended.at("/event/move/bonus").asInt());
+        assertEquals(2, tended.at("/actor/hp/marked").asInt());
+        assertEquals(1, run(program, context(program, actor, move("repair", "long", false, true))).contexts().getFirst()
+                .at("/event/move/allies").asInt());
+        assertEquals("planField", assertThrows(RuleRuntime.Unavailable.class,
+                () -> run(program, context(program, actor, move("tend", "short", false, false)), "pipe")).code());
+
+        ObjectNode rested = context(program, actor, """
+                {"type":"rest.short","rest":{"kind":"short","cleared":{"hitPoints":0,"stress":0,"armor":0}}}""");
+        assertEquals(List.of("idle", "plate", "share"), available(program, rested, "rest"));
+        ObjectNode idle = run(program, rested, "idle").contexts().getFirst();
+        assertEquals(1, idle.at("/actor/hope/value").asInt());
+        assertEquals(2, idle.at("/actor/stress/marked").asInt());
+        assertEquals("Share", run(program, rested, "share").contexts().getFirst().at("/outbox/0/label").asText());
+        ObjectNode recovered = context(program, actor.replace("\"armorTrack\":{\"marked\":1", "\"armorTrack\":{\"marked\":0"), """
+                {"type":"rest.long","rest":{"kind":"long","cleared":{"hitPoints":2,"stress":0,"armor":0}}}""");
+        assertEquals(List.of("share"), available(program, recovered, "rest"));
+
+        var invalid = LegacyCatalogConverter.convert(catalog("""
+                {"id":"x","name":"X","automation":{"rest":{"passives":[{"id":"p","label":"P","castBeforeRest":"nowhere",
+                  "steps":[{"op":"gain","resource":"hope","amount":1}]}]}}},
+                {"id":"y","name":"Y","automation":{"rest":{"passives":[{"id":"p","label":"P","move":"tend","condition":"noRecovery","bonus":1}]}}},
+                {"id":"z","name":"Z","automation":{"rest":{}}}"""));
+        assertEquals(0, invalid.converted());
+        var messages = invalid.diagnostics().stream().map(LegacyCatalogConverter.Diagnostic::message).toList();
+        assertTrue(messages.contains("Cast-before-rest must name an action of the same source: nowhere"), messages.toString());
+        assertTrue(messages.contains("Recovery is only known after the rest moves."), messages.toString());
+        assertTrue(messages.contains("A rest block needs allowances, passives or move modifiers."), messages.toString());
+    }
+
+    @Test
+    void effectGrantedRestAllowancesEndWhenALongMoveIsTakenDuringAShortRest() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"dream","name":"Dream","automation":{"actions":[{"id":"sleep","label":"Sleep","steps":[{"op":"effect","effect":{
+                  "name":"Restful","until":"rest","consumeLongRestMove":true,"rest":{"longMovesInShort":true}}}]}]}},
+                {"id":"empty","name":"Empty","automation":{}}"""));
+        assertEquals(2, result.converted(), result.diagnostics().toString());
+        assertFalse(result.catalog().at("/entries/1").has("automation"), "Empty legacy blocks convert to no automation.");
+        RuleCompiler.Program program = program(result, 0);
+        ObjectNode plain = context(program, "{\"effects\":[]}", "{\"type\":\"action.request\"}");
+        plain.set("event", RuleJson.parse(PREPARE.formatted("short", 8)));
+        assertEquals(0, run(program, plain).contexts().getFirst().at("/event/rest/longMoves").asInt());
+
+        plain.set("event", RuleJson.parse("{\"type\":\"action.request\"}"));
+        ObjectNode restful = run(program, plain, "sleep").contexts().getFirst();
+        restful.set("event", RuleJson.parse(PREPARE.formatted("short", 8)));
+        assertEquals(1, run(program, restful).contexts().getFirst().at("/event/rest/longMoves").asInt());
+
+        restful.set("event", RuleJson.parse(move("tend", "short", false, true).replace("\"long\":false", "\"long\":true")));
+        assertEquals(0, run(program, restful).contexts().getFirst().at("/actor/effects").size());
+        restful.set("event", RuleJson.parse(move("tend", "long", false, true).replace("\"long\":false", "\"long\":true")));
+        assertEquals(1, run(program, restful).contexts().getFirst().at("/actor/effects").size());
     }
 }

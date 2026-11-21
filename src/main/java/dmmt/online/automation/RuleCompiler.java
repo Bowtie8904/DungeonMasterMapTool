@@ -15,7 +15,7 @@ import java.util.Set;
 public final class RuleCompiler {
     public static final int FORMAT_VERSION = 2;
     private static final Set<String> EVENTS = Set.of("action.request", "roll.prepare", "roll.finished",
-            "damage.prepare", "damage.marks", "damage.applied", "claim.accept", "rest.short", "rest.long", "scene.end", "session.start",
+            "damage.prepare", "damage.marks", "damage.applied", "claim.accept", "rest.prepare", "rest.short", "rest.long", "scene.end", "session.start",
             "downtime.move", "death.options", "track.changed", "pool.changed", "equipment.changed", "effect.started",
             "effect.ended", "creation.apply");
     static final Set<String> SURFACES = Set.of("sheet", "chat", "roll", "damage", "effect", "resource", "rest",
@@ -74,7 +74,8 @@ public final class RuleCompiler {
             Map.entry("roll.explode", List.of("from", "dice", "when", "maxDice")),
             Map.entry("roll.addDice", List.of("from", "dice", "count")),
             Map.entry("roll.dropLowest", List.of("from", "dice", "count")),
-            Map.entry("roll.contribute", List.of("from", "contribution")));
+            Map.entry("roll.contribute", List.of("from", "contribution")),
+            Map.entry("plan.adjust", List.of("plan", "field", "by", "label")));
     /** Fields evaluated once per die with the {@code die} context root. */
     private static final Set<String> PER_DIE_FIELDS = Set.of("where", "face", "when");
     private static final Set<String> CONTRIBUTION_FIELDS = Set.of("id", "kind", "role", "label", "count", "sides",
@@ -611,7 +612,7 @@ public final class RuleCompiler {
                         references(RuleExpression.references(part.get(expression)), args, decl, inputs, results, usesDieContext, path + "/" + list + "/contribution/" + expression);
                 } else if (PER_DIE_FIELDS.contains(field) && op.path("op").asText().startsWith("roll.")) {
                     references(RuleExpression.references(op.path(field)), args, decl, inputs, results, true, path + "/" + list + "/" + field);
-                } else if (!Set.of("pool", "track", "slot", "role", "effect", "target", "owner", "limit", "choose", "maxDice", "collection", "to").contains(field)) {
+                } else if (!Set.of("pool", "track", "slot", "role", "effect", "target", "owner", "limit", "choose", "maxDice", "collection", "to", "plan", "field").contains(field)) {
                     references(RuleExpression.references(op.path(field)), args, decl, inputs, results, usesDieContext, path + "/" + list + "/" + field);
                 }
             }
@@ -674,6 +675,14 @@ public final class RuleCompiler {
             RuleExpression.validate(operation.get("from"), path + "/from");
             RuleExpression.validate(operation.get("to"), path + "/to");
             RuleTemplate.validate(RuleJson.text(operation.get("id"), path + "/id"));
+            RuleTemplate.validate(RuleJson.text(operation.get("label"), path + "/label"));
+            return;
+        }
+        if ("plan.adjust".equals(op)) {
+            if (!RuleJson.text(operation.get("plan"), path + "/plan").matches("event(\\.[a-zA-Z][a-zA-Z0-9_]*)+"))
+                throw RuleJson.error(path + "/plan", "Expected a host-provided event plan path such as event.rest.");
+            RuleJson.id(operation.get("field"), path + "/field");
+            RuleExpression.validate(operation.get("by"), path + "/by");
             RuleTemplate.validate(RuleJson.text(operation.get("label"), path + "/label"));
             return;
         }

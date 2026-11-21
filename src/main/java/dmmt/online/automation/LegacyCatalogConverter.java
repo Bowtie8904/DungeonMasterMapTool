@@ -31,7 +31,7 @@ public final class LegacyCatalogConverter {
     private static final List<String> FAMILIES = List.of("actions", "rollOptions", "rollTriggers", "conditionalRollTriggers", "mitigation");
     private static final Set<String> BLOCK_FIELDS = Set.of("actions", "uses", "modifiers", "resources", "rollOptions", "rollTriggers",
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
-            "damage", "alternateProfiles");
+            "damage", "alternateProfiles", "rest");
     private static final Map<String, String> RANGES = Map.of("melee", "melee", "very close", "veryClose", "veryclose", "veryClose",
             "close", "close", "far", "far", "very far", "veryFar", "veryfar", "veryFar");
     private static final Set<String> RESOURCE_FIELDS = Set.of("id", "label", "initial", "max", "resetOn");
@@ -57,7 +57,11 @@ public final class LegacyCatalogConverter {
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
-            "actions", "rollOptions", "rollTriggers", "mitigation");
+            "actions", "rollOptions", "rollTriggers", "mitigation", "rest", "consumeLongRestMove");
+    private static final Set<String> REST_FIELDS = Set.of("extraMoves", "longMovesInShort", "passives", "modifiers", "requiresEffect");
+    private static final Set<String> PASSIVE_FIELDS = Set.of("id", "label", "defaultOn", "condition", "steps", "extraMoves", "consumeItem",
+            "rest", "move", "bonus", "minHope", "cost", "chooseAlly", "hostOwned", "castBeforeRest", "requiresEffect", "excludesEffect");
+    private static final Set<String> MOVE_MODIFIER_FIELDS = Set.of("move", "rest", "target", "bonus", "steps", "note", "repairAllies");
     private static final Set<String> ROLLS = Set.of("attack", "damage", "spellcast", "action", "reaction");
     private static final List<String> TRAITS = List.of("Agility", "Strength", "Finesse", "Instinct", "Presence", "Knowledge");
     private static final Map<String, String> TRACKS = Map.of("hp", "actor.hp", "stress", "actor.stress", "armor", "actor.armorTrack");
@@ -106,11 +110,13 @@ public final class LegacyCatalogConverter {
             context.blocks++;
             List<Diagnostic> problems = new ArrayList<>();
             ObjectNode converted = convertBlock(node.get("automation"), path + "/automation", sourceId, problems, shared);
-            if (problems.isEmpty()) {
+            boolean empty = node.get("automation").isObject() && node.get("automation").isEmpty();
+            if (problems.isEmpty() && !empty) {
                 try { RuleCompiler.compile(sourceId, converted, recipes); }
                 catch (IllegalArgumentException ex) { problems.add(new Diagnostic(path + "/automation", sourceId, "Converted block rejected: " + ex.getMessage())); }
             }
-            if (problems.isEmpty()) { node.set("automation", converted); context.converted++; }
+            if (problems.isEmpty() && empty) { node.remove("automation"); context.converted++; }
+            else if (problems.isEmpty()) { node.set("automation", converted); context.converted++; }
             else { node.remove("automation"); context.diagnostics.addAll(problems); }
         }
         List<String> keys = new ArrayList<>();
@@ -195,9 +201,22 @@ public final class LegacyCatalogConverter {
             JsonNode list = legacy.path(family);
             for (int i = 0; i < list.size(); i++) queue.add(new Nested(family, list.get(i), path + "/" + family + "/" + i));
         }
+        if (legacy.has("rest")) queue.add(new Nested("rest", legacy.get("rest"), path + "/rest"));
         for (int n = 0; n < queue.size() && n < 256; n++) {
             Nested next = queue.get(n);
             JsonNode legacyRule = next.legacy();
+            if (Set.of("rest", "consumeLongRestMove").contains(next.family())) {
+                List<ObjectNode> restRules = "rest".equals(next.family())
+                        ? rest(legacyRule, next.path(), p, effects, pools, next.path().equals(path + "/rest") ? legacy : null, ruleIds)
+                        : List.of(consumeLongRestMove(legacyRule, next.path()));
+                for (ObjectNode rule : restRules) {
+                    rule.put("id", unique(rule.path("id").asText(), ruleIds));
+                    rules.add(rule);
+                }
+                queue.addAll(p.nested());
+                p.nested().clear();
+                continue;
+            }
             boolean usesBudget = limited && legacyRule.path("usesSource").asBoolean(true);
             ObjectNode rule = switch (next.family()) {
                 case "actions" -> action(legacyRule, next.path(), p, effects, pools, usesBudget);
@@ -613,6 +632,7 @@ public final class LegacyCatalogConverter {
         if (!ID.matcher(id).matches()) { p.add(path + "/id", "Invalid rule ID: " + id); return null; }
         ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", id);
         rule.putArray("bindings").addObject().put("id", "use").put("event", event).put("surface", surface).put("mode", mode);
+        rule.putObject("ui");
         return rule;
     }
 
@@ -1746,6 +1766,19 @@ public final class LegacyCatalogConverter {
                 p.nested().add(new Nested(family, granted, path + "/" + family + "/" + i));
             }
         }
+        if (effect.has("rest")) {
+            if (!effect.path("rest").isObject()) p.add(path + "/rest", "Expected a rest object.");
+            else {
+                ObjectNode granted = ((ObjectNode) effect.get("rest")).deepCopy();
+                if (!granted.has("requiresEffect")) granted.put("requiresEffect", name);
+                p.nested().add(new Nested("rest", granted, path + "/rest"));
+            }
+        }
+        if (effect.has("consumeLongRestMove")) {
+            if (!effect.path("consumeLongRestMove").isBoolean()) p.add(path + "/consumeLongRestMove", "Expected a boolean.");
+            else if (effect.path("consumeLongRestMove").asBoolean())
+                p.nested().add(new Nested("consumeLongRestMove", RuleJson.JSON.createObjectNode().put("effect", name), path + "/consumeLongRestMove"));
+        }
         if (effect.has("modifiers")) {
             ArrayNode modifiers = RuleJson.JSON.createArrayNode();
             JsonNode list = effect.get("modifiers");
@@ -1868,6 +1901,218 @@ public final class LegacyCatalogConverter {
             }
             node.forEach(child -> collectPools(child, shared));
         } else if (node.isArray()) node.forEach(child -> collectPools(child, shared));
+    }
+    /**
+     * Rest allowances, passives and move modifiers become rules on the generic rest events. {@code rest.prepare}
+     * publishes the adjustable rest plan ({@code event.rest}), {@code downtime.move} publishes the adjustable move plan
+     * ({@code event.move}) and {@code rest.short}/{@code rest.long} run after the moves with {@code event.rest.cleared}.
+     */
+    private static List<ObjectNode> rest(JsonNode rest, String path, Problems p, ObjectNode effects, Pools pools, JsonNode block,
+                                         Set<String> ruleIds) {
+        List<ObjectNode> out = new ArrayList<>();
+        if (!rest.isObject()) { p.add(path, "Expected a rest object."); return out; }
+        p.onlyFields(rest, path, REST_FIELDS);
+        ArrayNode effectGate = RuleJson.JSON.createArrayNode();
+        commonConditions(rest, path, p, effectGate);
+        if (rest.has("extraMoves")) {
+            int moves = rest.path("extraMoves").asInt(0);
+            if (!rest.path("extraMoves").isInt() || moves < 1 || moves > 8) p.add(path + "/extraMoves", "Expected 1-8 extra moves.");
+            else {
+                ObjectNode rule = restRule("rest-moves", "rest.prepare", "rest", "rest", "automatic");
+                applyWhen(rule, effectGate.deepCopy());
+                rule.putArray("do").add(planAdjust("event.rest", "moves", moves, "Extra downtime moves"));
+                out.add(rule);
+            }
+        }
+        if (rest.has("longMovesInShort")) {
+            if (!rest.path("longMovesInShort").isBoolean()) p.add(path + "/longMovesInShort", "Expected a boolean.");
+            else if (rest.path("longMovesInShort").asBoolean()) {
+                ObjectNode rule = restRule("rest-long-moves", "rest.prepare", "rest", "rest", "automatic");
+                ArrayNode when = effectGate.deepCopy();
+                when.addObject().putArray("eq").add(read("event.rest.kind")).add("short");
+                applyWhen(rule, when);
+                rule.putArray("do").add(planAdjust("event.rest", "longMoves", 1, "Long-rest move during a short rest"));
+                out.add(rule);
+            }
+        }
+        JsonNode passives = rest.path("passives");
+        if (rest.has("passives") && (!passives.isArray() || passives.size() > 16)) p.add(path + "/passives", "Expected up to 16 rest passives.");
+        else for (int i = 0; i < passives.size(); i++)
+            out.addAll(restPassive(passives.get(i), path + "/passives/" + i, p, effects, pools, block, effectGate, ruleIds));
+        JsonNode modifiers = rest.path("modifiers");
+        if (rest.has("modifiers") && (!modifiers.isArray() || modifiers.size() > 16)) p.add(path + "/modifiers", "Expected up to 16 move modifiers.");
+        else for (int i = 0; i < modifiers.size(); i++) {
+            ObjectNode rule = moveModifier(modifiers.get(i), path + "/modifiers/" + i, p, effects, pools, effectGate);
+            if (rule != null) out.add(rule);
+        }
+        if (out.isEmpty()) p.add(path, "A rest block needs allowances, passives or move modifiers.");
+        return out;
+    }
+
+    private static ObjectNode restRule(String id, String event, String bindingId, String surface, String mode) {
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", id);
+        rule.putArray("bindings").addObject().put("id", bindingId).put("event", event).put("surface", surface).put("mode", mode);
+        rule.putObject("ui");
+        return rule;
+    }
+
+    private static ObjectNode planAdjust(String plan, String field, Object by, String label) {
+        ObjectNode op = RuleJson.JSON.createObjectNode().put("op", "plan.adjust").put("plan", plan).put("field", field);
+        if (by instanceof JsonNode node) op.set("by", node);
+        else op.put("by", (Integer) by);
+        return op.put("label", label);
+    }
+
+    private static void restFilter(JsonNode legacy, String path, Problems p, String read, ArrayNode when) {
+        if (!legacy.has("rest")) return;
+        String kind = legacy.path("rest").asText();
+        if (!Set.of("short", "long").contains(kind)) p.add(path + "/rest", "Expected short or long.");
+        else when.addObject().putArray("eq").add(read(read)).add(kind);
+    }
+
+    private static List<ObjectNode> restPassive(JsonNode passive, String path, Problems p, ObjectNode effects, Pools pools,
+                                                JsonNode block, ArrayNode effectGate, Set<String> ruleIds) {
+        if (!passive.isObject()) { p.add(path, "Expected a passive object."); return List.of(); }
+        p.onlyFields(passive, path, PASSIVE_FIELDS);
+        hostOwned(passive, path, p);
+        String id = passive.path("id").asText();
+        if (!ID.matcher(id).matches()) { p.add(path + "/id", "Invalid passive ID: " + id); return List.of(); }
+        boolean prepare = passive.has("extraMoves"), move = passive.has("move");
+        if (prepare && move) p.add(path, "A passive either adds moves or improves one move.");
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", id);
+        ArrayNode bindings = rule.putArray("bindings");
+        String kind = passive.path("rest").asText("");
+        if (prepare) bindings.addObject().put("id", "rest").put("event", "rest.prepare").put("surface", "rest");
+        else if (move) bindings.addObject().put("id", "downtime").put("event", "downtime.move").put("surface", "downtime");
+        else for (String rest : List.of("short", "long"))
+            if (kind.isEmpty() || kind.equals(rest))
+                bindings.addObject().put("id", "rest-" + rest).put("event", "rest." + rest).put("surface", "rest");
+        if (bindings.isEmpty()) { p.add(path + "/rest", "Expected short or long."); return List.of(); }
+        for (JsonNode binding : bindings) {
+            ((ObjectNode) binding).put("mode", "option");
+            if (passive.has("defaultOn")) {
+                if (!passive.path("defaultOn").isBoolean()) p.add(path + "/defaultOn", "Expected a boolean.");
+                ((ObjectNode) binding).put("defaultOn", passive.path("defaultOn").asBoolean());
+            }
+        }
+        labels(passive, path, p, rule);
+        ArrayNode when = effectGate.deepCopy();
+        commonConditions(passive, path, p, when);
+        if (prepare) restFilter(passive, path, p, "event.rest.kind", when);
+        if (move) {
+            restFilter(passive, path, p, "event.move.rest", when);
+            when.addObject().putArray("eq").add(read("event.move.id")).add(passive.path("move").asText());
+        }
+        if (passive.has("minHope")) {
+            if (!passive.path("minHope").isInt() || passive.path("minHope").asInt() < 1) p.add(path + "/minHope", "Expected a positive whole number.");
+            else when.addObject().putArray("gte").add(read("actor.hope.value")).add(passive.path("minHope").asInt());
+        }
+        if (passive.has("condition")) {
+            String condition = passive.path("condition").asText();
+            switch (condition) {
+                case "armorMarked" -> when.addObject().putArray("gt").add(read("actor.armorTrack.marked")).add(0);
+                case "noArmorMarked" -> when.addObject().putArray("eq").add(read("actor.armorTrack.marked")).add(0);
+                case "noRecovery" -> {
+                    if (prepare || move) p.add(path + "/condition", "Recovery is only known after the rest moves.");
+                    ObjectNode cleared = RuleJson.JSON.createObjectNode();
+                    cleared.putArray("add").add(read("event.rest.cleared.hitPoints")).add(read("event.rest.cleared.stress"));
+                    when.addObject().putArray("eq").add(cleared).add(0);
+                }
+                default -> p.add(path + "/condition", "Unsupported rest condition: " + condition);
+            }
+        }
+        if (passive.has("castBeforeRest")) {
+            String action = passive.path("castBeforeRest").asText();
+            boolean found = false;
+            if (block != null) for (JsonNode candidate : block.path("actions")) found |= action.equals(candidate.path("id").asText());
+            if (!found) p.add(path + "/castBeforeRest", "Cast-before-rest must name an action of the same source: " + action);
+        }
+        applyWhen(rule, when);
+        if (passive.has("cost")) costs(passive.get("cost"), path + "/cost", p, pools, rule);
+        if (passive.has("consumeItem")) {
+            if (!passive.path("consumeItem").isBoolean()) p.add(path + "/consumeItem", "Expected a boolean.");
+            else if (passive.path("consumeItem").asBoolean()) {
+                ArrayNode costs = rule.has("costs") ? (ArrayNode) rule.get("costs") : rule.putArray("costs");
+                costs.addObject().put("op", "inventory.consume").put("amount", 1);
+            }
+        }
+        ArrayNode steps = rule.putArray("do");
+        String label = escape(passive.path("label").asText(id));
+        if (prepare) {
+            JsonNode extra = passive.path("extraMoves");
+            if (!extra.isInt() || extra.asInt() < 1 || extra.asInt() > 8) p.add(path + "/extraMoves", "Expected 1-8 extra moves.");
+            else steps.add(planAdjust("event.rest", "moves", extra.asInt(), label));
+        }
+        if (move && passive.has("bonus")) {
+            JsonNode bonus = signed(passive.path("bonus"));
+            if (bonus == null) p.add(path + "/bonus", "Expected a whole-number move bonus.");
+            else steps.add(planAdjust("event.move", "bonus", bonus, label));
+        }
+        List<ObjectNode> out = new ArrayList<>(List.of(rule));
+        if (passive.has("chooseAlly") && !passive.path("chooseAlly").isBoolean()) p.add(path + "/chooseAlly", "Expected a boolean.");
+        JsonNode list = passive.path("steps");
+        if (passive.path("chooseAlly").asBoolean(false)) {
+            // The chosen ally claims the benefit from a one-claim offer; the passive's steps apply to that recipient.
+            String group = id + "-ally";
+            ObjectNode claim = RuleJson.JSON.createObjectNode().put("id", group);
+            claim.putArray("bindings").addObject().put("id", "claim").put("event", "claim.accept").put("surface", "chat")
+                    .put("mode", "button").put("claimGroup", group).put("audience", "others")
+                    .putObject("claimScope").put("recipients", "otherPlayersCharacters");
+            ArrayNode granted = claim.putArray("do");
+            for (int s = 0; s < list.size(); s++) step(list.get(s), path + "/steps/" + s, p, granted, effects, pools, "recipient");
+            if (granted.isEmpty()) p.add(path + "/steps", "An ally benefit needs at least one step.");
+            claim.putObject("ui").put("label", label).put("report", "{recipient.name} accepted " + label + ".");
+            steps.addObject().put("op", "claim.offer").put("group", group).put("label", label).put("limit", 1);
+            out.add(claim);
+            return out;
+        }
+        for (int s = 0; s < list.size(); s++) step(list.get(s), path + "/steps/" + s, p, steps, effects, pools);
+        if (steps.isEmpty() && !rule.has("costs")) p.add(path, "A rest passive needs an effect.");
+        return out;
+    }
+
+    private static ObjectNode moveModifier(JsonNode modifier, String path, Problems p, ObjectNode effects, Pools pools, ArrayNode effectGate) {
+        if (!modifier.isObject()) { p.add(path, "Expected a move modifier object."); return null; }
+        p.onlyFields(modifier, path, MOVE_MODIFIER_FIELDS);
+        String move = modifier.path("move").asText("");
+        if (!ID.matcher(move).matches()) { p.add(path + "/move", "Expected a downtime move ID."); return null; }
+        ObjectNode rule = restRule("move-" + move, "downtime.move", "downtime", "downtime", "automatic");
+        ArrayNode when = effectGate.deepCopy();
+        when.addObject().putArray("eq").add(read("event.move.id")).add(move);
+        restFilter(modifier, path, p, "event.move.rest", when);
+        if (modifier.has("target")) {
+            if (!"ally".equals(modifier.path("target").asText())) p.add(path + "/target", "Expected ally.");
+            else when.addObject().putArray("eq").add(read("event.move.ally")).add(true);
+        }
+        applyWhen(rule, when);
+        ArrayNode steps = rule.putArray("do");
+        for (String field : List.of("bonus", "repairAllies")) {
+            if (!modifier.has(field)) continue;
+            JsonNode by = signed(modifier.path(field));
+            if (by == null) p.add(path + "/" + field, "Expected a whole number.");
+            else steps.add(planAdjust("event.move", "bonus".equals(field) ? "bonus" : "allies", by,
+                    "bonus".equals(field) ? "Move bonus" : "Additional allies"));
+        }
+        JsonNode list = modifier.path("steps");
+        for (int s = 0; s < list.size(); s++) step(list.get(s), path + "/steps/" + s, p, steps, effects, pools);
+        if (modifier.has("note")) ((ObjectNode) rule.get("ui")).put("report", escape(modifier.path("note").asText()));
+        if (steps.isEmpty()) p.add(path, "A move modifier needs a bonus, ally count or steps.");
+        return rule;
+    }
+
+    /** Ends the granting effect once its holder uses a long-rest move during a short rest. */
+    private static ObjectNode consumeLongRestMove(JsonNode legacy, String path) {
+        String effect = legacy.path("effect").asText();
+        ObjectNode rule = restRule("end-" + slug(effect), "downtime.move", "downtime", "downtime", "automatic");
+        ArrayNode when = RuleJson.JSON.createArrayNode();
+        ObjectNode pluck = RuleJson.JSON.createObjectNode();
+        pluck.putArray("pluck").add(read("actor.effects")).add("label");
+        when.addObject().putArray("includes").add(pluck).add(effect);
+        when.addObject().putArray("eq").add(read("event.move.long")).add(true);
+        when.addObject().putArray("eq").add(read("event.move.rest")).add("short");
+        applyWhen(rule, when);
+        rule.putArray("do").addObject().put("op", "effect.end").put("effect", effect).put("target", "actor");
+        return rule;
     }
 
     /** A legacy rule still to convert; effect-granted rules are queued with the granting effect as a condition. */

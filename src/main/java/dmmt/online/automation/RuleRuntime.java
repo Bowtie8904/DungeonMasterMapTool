@@ -826,6 +826,24 @@ public final class RuleRuntime {
                         RuleTemplate.render(op.path("label").asText(), context));
                 result = adjusted.get("marks");
             }
+            case "plan.adjust" -> {
+                String path = op.path("plan").asText();
+                JsonNode found = RuleExpression.read(context, path);
+                String field = op.path("field").asText();
+                if (!(found instanceof ObjectNode plan) || !plan.path("adjustable").path(field).isObject())
+                    throw new Unavailable("planField", "This event does not allow adjusting " + field + ".");
+                JsonNode bounds = plan.path("adjustable").path(field);
+                int min = bounds.path("min").asInt(0);
+                int max = bounds.path("max").asInt(1000);
+                int current = plan.path(field).asInt(0);
+                int next = Math.max(min, Math.min(max, current + whole(op.path("by"), context, -1000, 1000)));
+                plan.put(field, next);
+                ArrayNode adjustments = plan.has("adjustments") && plan.get("adjustments").isArray()
+                        ? (ArrayNode) plan.get("adjustments") : plan.putArray("adjustments");
+                adjustments.addObject().put("field", field).put("by", next - current).put("sourceId", program.sourceId())
+                        .put("label", RuleTemplate.render(op.path("label").asText(), context));
+                result = RuleExpression.numeric(next, "/result");
+            }
             case "marks.publish" -> {
                 ObjectNode marks = StructuredDamage.validatePlan(eval(op.path("marks"), context));
                 if (!context.path("event").isObject()) throw RuleJson.error("/marks", "Marks can only be published during an event.");
