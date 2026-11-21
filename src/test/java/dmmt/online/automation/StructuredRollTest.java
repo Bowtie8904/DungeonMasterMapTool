@@ -93,6 +93,22 @@ class StructuredRollTest {
     }
 
     @Test
+    void scaleOfAllMultipliesTheWholeEarlierRoll() throws Exception {
+        ObjectNode plan = (ObjectNode) RuleJson.parse("""
+                {"id":"roll","contributions":[
+                  {"id":"bonus","kind":"flat","role":"bonus","sourceId":"weapon","label":"Flat","value":4},
+                  {"id":"half","kind":"scale","role":"scale","sourceId":"other","label":"Half","of":["bonus"],"factor":2},
+                  {"id":"extra","kind":"flat","role":"bonus","sourceId":"weapon","label":"Extra","value":1},
+                  {"id":"triple","kind":"scale","role":"multiplier","sourceId":"other","label":"Triple","of":"all","factor":3}
+                ]}
+                """);
+        ObjectNode roll = StructuredRoll.resolve(plan, RuleJson.JSON.createObjectNode(), faces());
+        assertEquals((4 + 4 + 1) * 3, roll.path("total").asInt(), roll.toString());
+        assertEquals("all", roll.path("contributions").get(3).path("of").asText());
+        StructuredRoll.validate(roll);
+    }
+
+    @Test
     void resolvesMixedPoolsKeptFacesAndMaximizedDiceFromExpressions() throws Exception {
         ObjectNode plan = (ObjectNode) RuleJson.parse("""
                 {"id":"roll","contributions":[

@@ -58,6 +58,17 @@ describe('host/browser structured roll conformance', () => {
     ] });
     expect(roll.total).toBe(6);
   });
+  it('scales the whole earlier roll when a scale names all contributions', () => {
+    const roll = resolveRoll({ id: 'all', contributions: [
+      { id: 'bonus', kind: 'flat', role: 'bonus', sourceId: 'weapon', label: 'Flat', value: 4 },
+      { id: 'half', kind: 'scale', role: 'scale', sourceId: 'other', label: 'Half', of: ['bonus'], factor: 2 },
+      { id: 'extra', kind: 'flat', role: 'bonus', sourceId: 'weapon', label: 'Extra', value: 1 },
+      { id: 'triple', kind: 'scale', role: 'multiplier', sourceId: 'other', label: 'Triple', of: 'all', factor: 3 },
+    ] });
+    expect(roll.total).toBe((4 + 4 + 1) * 3);
+    expect(roll.contributions[3]).toMatchObject({ of: 'all' });
+    expect(resolveRoll(roll).total).toBe(27);
+  });
   it('preserves generic roll metadata through validation and derivation', () => {
     const roll = { ...structuredClone(rolls.roll), metadata: { kind: 'reaction', trait: 'Agility', difficulty: 12 } };
     expect(resolveRoll(roll).metadata).toEqual(roll.metadata);

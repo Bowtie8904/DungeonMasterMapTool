@@ -39,11 +39,12 @@ public final class LegacyCatalogConverter {
     private static final Set<String> RESOURCE_FIELDS = Set.of("id", "label", "initial", "max", "resetOn");
     private static final Set<String> OPTION_FIELDS = Set.of("id", "label", "description", "roll", "value", "dice", "advantage", "cost",
             "defaultOn", "exclusive", "requiresEffect", "excludesEffect", "weapon", "weaponRange", "excludeRolls", "effect", "uses",
-            "usesSource", "endEffect", "hostOwned", "consumeItem", "quantity", "proficiency", "hopeDie", "diceResource", "condition", "loadoutDomain");
+            "usesSource", "endEffect", "hostOwned", "consumeItem", "quantity", "proficiency", "hopeDie", "diceResource", "condition", "loadoutDomain",
+            "required", "traitValue", "multiplier", "damageDie");
     private static final Set<String> TRIGGER_FIELDS = Set.of("id", "label", "description", "on", "cost", "reroll", "when", "outcome",
             "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
-            "chatBenefits", "allowSourceOwner", "loadoutDomain");
+            "chatBenefits", "allowSourceOwner", "loadoutDomain", "primaryWeapon", "anyWeapon");
     private static final Set<String> MITIGATION_FIELDS = Set.of("id", "label", "description", "when", "cost", "negate", "halve", "reduce",
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
@@ -847,6 +848,17 @@ public final class LegacyCatalogConverter {
         if (option.has("defaultOn")) binding.put("defaultOn", option.path("defaultOn").asBoolean());
         if (option.has("exclusive")) binding.put("exclusiveGroup", slug(option.path("exclusive").asText()));
         ArrayNode when = RuleJson.JSON.createArrayNode();
+        if (option.has("required")) {
+            // A required option is not a choice: it applies (and is paid) on every matching roll with this source.
+            if (!option.path("required").isBoolean()) p.add(path + "/required", "Expected a boolean.");
+            else if (option.path("required").asBoolean()) {
+                binding.put("mode", "automatic");
+                binding.remove("defaultOn");
+                binding.remove("exclusiveGroup");
+                if (p.sourceId().startsWith("weapons:"))
+                    when.addObject().putArray("eq").add(read("event.check.weaponSource")).add(read("source.instanceId"));
+            }
+        }
         String roll = option.path("roll").asText("");
         if (!roll.isEmpty()) rollCondition(roll, path + "/roll", p, when);
         String weapon = option.path("weapon").asText("");
@@ -935,6 +947,22 @@ public final class LegacyCatalogConverter {
             else parts.add(contribution(id + "-" + advantage, "dice", advantage, label)
                     .put("count", 1).put("sides", 6).put("sign", "advantage".equals(advantage) ? 1 : -1));
         }
+        if (option.has("traitValue")) {
+            String trait = option.path("traitValue").asText();
+            if (!TRAITS.contains(trait)) p.add(path + "/traitValue", "Unknown trait: " + trait);
+            else parts.add((ObjectNode) contribution(id + "-trait", "flat", "damage".equals(roll) ? "damage" : "modifier", label)
+                    .set("value", read("actor.stats.trait." + trait)));
+        }
+        if (option.has("multiplier")) {
+            JsonNode factor = option.get("multiplier");
+            if (!(factor.isInt() && factor.asInt() >= 2 && factor.asInt() <= 10)) p.add(path + "/multiplier", "Expected a whole multiplier from 2 to 10.");
+            else {
+                // Multipliers scale everything else on the roll, so they apply last and never stack with each other.
+                parts.add(contribution(id + "-multiplier", "scale", "multiplier", label).put("of", "all").put("factor", factor.asInt()));
+                binding.put("priority", -100);
+                if (!option.has("exclusive")) binding.put("exclusiveGroup", "roll-multiplier");
+            }
+        }
         JsonNode[] from = { read("event.roll") };
         for (int i = 0; i < parts.size(); i++) {
             String slot = "roll" + (i + 1);
@@ -973,7 +1001,19 @@ public final class LegacyCatalogConverter {
             if (effect != null) steps.addObject().put("op", "effect.start").put("effect", effect).put("target", "actor");
         }
         if (proficiency > 0 && "attack".equals(roll)) carriedProficiency(option, label, proficiency, effects, steps, extra);
+        if (option.has("damageDie")) {
+            JsonNode sides = option.get("damageDie");
+            if (!(sides.isInt() && sides.asInt() >= 2 && sides.asInt() <= 1000)) p.add(path + "/damageDie", "Expected a die size from 2 to 1000.");
+            else if (!"attack".equals(roll)) p.add(path + "/damageDie", "Damage die sizes are chosen on the attack roll.");
+            else carriedDamageDie(option, label, sides.asInt(), effects, steps, extra);
+        }
         endEffect(option, steps);
+        if ("automatic".equals(binding.path("mode").asText()) && rule.has("costs")) {
+            // Automatic rules have no choice to pay for, so a required option pays as its first steps.
+            ArrayNode paid = (ArrayNode) rule.remove("costs");
+            paid.addAll(steps);
+            steps = paid;
+        }
         if (!steps.isEmpty()) rule.set("do", steps);
         labels(option, path, p, rule);
         return rule;
@@ -1015,9 +1055,37 @@ public final class LegacyCatalogConverter {
      */
     private static void carriedProficiency(JsonNode option, String label, int proficiency, ObjectNode effects, ArrayNode steps,
                                            List<ObjectNode> extra) {
+        carried(option, "proficiency", label, effects, steps, extra, true, (damageSteps, from) -> addWeaponDice(damageSteps, from, proficiency));
+    }
+
+    /** Resizes the attacking weapon's base damage dice on the next damage roll. */
+    private static void carriedDamageDie(JsonNode option, String label, int sides, ObjectNode effects, ArrayNode steps,
+                                         List<ObjectNode> extra) {
+        carried(option, "damage-die", label, effects, steps, extra, false, (damageSteps, from) -> {
+            ObjectNode where = RuleJson.JSON.createObjectNode();
+            where.putArray("eq").add(read("die.sourceId")).add(read("event.check.weaponSourceId"));
+            ObjectNode select = damageSteps.addObject().put("op", "roll.selectDice");
+            select.set("from", from);
+            select.set("where", where);
+            select.put("as", "weaponDice");
+            ObjectNode resize = damageSteps.addObject().put("op", "roll.resize");
+            resize.set("from", from.deepCopy());
+            resize.set("dice", read("result.weaponDice"));
+            resize.put("sides", sides).put("as", "resized");
+            return read("result.resized");
+        });
+    }
+
+    /**
+     * An attack-roll option whose benefit lands on the following damage roll: choosing it starts a pending effect that
+     * the next weapon damage roll consumes, and a failed attack discards.
+     */
+    private static void carried(JsonNode option, String suffix, String label, ObjectNode effects, ArrayNode steps,
+                                List<ObjectNode> extra, boolean proficiencyDice,
+                                java.util.function.BiFunction<ArrayNode, JsonNode, JsonNode> edit) {
         Set<String> used = new HashSet<>();
         effects.fieldNames().forEachRemaining(used::add);
-        String effect = unique(slug(option.path("id").asText() + "-proficiency"), used);
+        String effect = unique(slug(option.path("id").asText() + "-" + suffix), used);
         String pending = option.path("label").asText() + " (pending damage)";
         ObjectNode declared = effects.putObject(effect).put("label", escape(pending)).put("kind", "buff");
         declared.putArray("until").add("scene.end");
@@ -1029,11 +1097,12 @@ public final class LegacyCatalogConverter {
         damage.putArray("bindings").addObject().put("id", "use").put("event", "roll.finished").put("surface", "roll").put("mode", "automatic");
         ArrayNode when = RuleJson.JSON.createArrayNode();
         when.addObject().putArray("eq").add(read("event.check.kind")).add("damage");
-        weaponDiceConditions(when);
+        if (proficiencyDice) weaponDiceConditions(when);
+        else when.addObject().put("exists", "event.check.weaponSourceId");
         when.add(active.deepCopy());
         applyWhen(damage, when);
         ArrayNode damageSteps = damage.putArray("do");
-        JsonNode roll = addWeaponDice(damageSteps, read("event.roll"), proficiency);
+        JsonNode roll = edit.apply(damageSteps, read("event.roll"));
         damageSteps.addObject().put("op", "roll.publish").set("roll", roll);
         damageSteps.addObject().put("op", "effect.end").put("effect", pending).put("target", "actor");
         damage.putObject("ui").put("label", label);
@@ -1125,6 +1194,7 @@ public final class LegacyCatalogConverter {
         if (trigger.path("failedOnly").asBoolean(false)) when.addObject().putArray("eq").add(read("event.check.outcome")).add("failure");
         if (trigger.path("criticalOnly").asBoolean(false)) when.addObject().putArray("eq").add(read("event.check.critical")).add(true);
         if (trigger.path("weaponAttack").asBoolean(false)) when.addObject().put("exists", "event.check.weapon");
+        if (trigger.path("primaryWeapon").asBoolean(false)) when.addObject().putArray("eq").add(read("event.check.weapon")).add("primary");
         commonConditions(trigger, path, p, when);
         sentRollConditions(trigger, when);
         applyWhen(rule, when);

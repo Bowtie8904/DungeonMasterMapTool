@@ -21,7 +21,7 @@ interface Contribution {
 export type RollContribution = Contribution & (
   { kind: 'dice'; dice: StoredDie[]; sign?: -1 | 1; poolId?: string; poolDieId?: string; editable?: boolean } |
   { kind: 'flat'; value: number } |
-  { kind: 'scale'; of: string[]; factor: number }
+  { kind: 'scale'; of: string[] | 'all'; factor: number }
 );
 export interface StoredRoll {
   id: string;
@@ -121,7 +121,8 @@ export function resolveRoll(input: unknown, checkTotals = true): StoredRoll & { 
       sum = numeric(part.value, path);
       contribution = { ...base, kind: 'flat', value: sum };
     } else {
-      const dependencies = ids(part.of, `${path}/of`);
+      const all = part.of === 'all';
+      const dependencies = all ? [...totals.keys()] : ids(part.of, `${path}/of`);
       if (!dependencies.length) fail(path, 'A scale contribution needs dependencies.');
       let subtotal = 0;
       for (const dependency of dependencies) {
@@ -132,7 +133,7 @@ export function resolveRoll(input: unknown, checkTotals = true): StoredRoll & { 
       const factor = numeric(part.factor, path);
       if (factor < 0) fail(path, 'Scale factor cannot be negative.');
       sum = subtotal * (factor - 1);
-      contribution = { ...base, kind: 'scale', of: dependencies, factor };
+      contribution = { ...base, kind: 'scale', of: all ? 'all' : dependencies, factor };
     }
     numeric(sum, path);
     if (checkTotals && part.total !== undefined && part.total !== sum) fail(path, 'Stored contribution total does not match its provenance.');

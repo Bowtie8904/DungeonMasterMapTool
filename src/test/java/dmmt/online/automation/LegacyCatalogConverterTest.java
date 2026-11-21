@@ -460,6 +460,64 @@ class LegacyCatalogConverterTest {
         assertEquals(List.of(), available(program, context(program, actor.formatted(0, 0, 0), action), "roll"));
     }
 
+    @Test
+    void traitMultiplierDamageDieRequiredAndWeaponTriggerOptionsConvert() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"t","name":"T","automation":{
+                  "rollOptions":[{"id":"brute","label":"Brute","roll":"damage","traitValue":"Strength"},
+                    {"id":"double","label":"Double","roll":"damage","multiplier":2},
+                    {"id":"big","label":"Big","roll":"attack","damageDie":12}],
+                  "rollTriggers":[{"id":"main","label":"Main","primaryWeapon":true,"steps":[{"op":"gain","resource":"hope","amount":1}]},
+                    {"id":"any","label":"Any","anyWeapon":true,"steps":[{"op":"gain","resource":"hope","amount":1}]}]}}"""));
+        JsonNode rules = block(result, 0).path("rules");
+        assertEquals("all", rules.at("/1/do/0/contribution/of").asText(), rules.toString());
+        assertEquals(-100, rules.at("/1/bindings/0/priority").asInt());
+        RuleCompiler.Program program = program(result, 0);
+        String damageRoll = """
+                {"id":"dmg","contributions":[{"id":"weapon","kind":"dice","role":"damage","sourceId":"weapon:axe","label":"Axe",
+                  "dice":[{"id":"w1","sides":8,"face":3,"kept":true,"origin":"rolled"}]}]}""";
+        String actor = "{\"hope\":{\"value\":0,\"max\":6},\"stats\":{\"trait\":{\"Strength\":2}},\"effects\":[]}";
+        ObjectNode damage = context(program, actor, """
+                {"type":"roll.prepare","check":{"kind":"damage","weaponSourceId":"weapon:axe","fixedDice":false},"roll":%s}""".formatted(damageRoll));
+        assertEquals((3 + 2) * 2, run(program, damage, "double", "brute").contexts().getFirst().at("/event/roll/total").asInt());
+
+        ObjectNode attack = context(program, actor, """
+                {"type":"roll.prepare","check":{"kind":"attack","weaponSourceId":"weapon:axe"},"roll":%s}""".formatted(ROLL));
+        ObjectNode marked = run(program, attack, "big").contexts().getFirst();
+        assertEquals(1, marked.at("/actor/effects").size(), marked.toString());
+        ObjectNode finished = marked.deepCopy();
+        finished.set("event", RuleJson.parse("""
+                {"type":"roll.finished","check":{"kind":"damage","weaponSourceId":"weapon:axe","fixedDice":false},"roll":%s}""".formatted(damageRoll)));
+        JsonNode resized = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, finished)), List.of(),
+                StructuredRollTest.faces(11)).contexts().getFirst().at("/event/roll");
+        assertEquals(12, resized.at("/contributions/0/dice/0/sides").asInt(), resized.toString());
+        assertEquals(11, resized.path("total").asInt());
+
+        String finishedAttack = "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"attack\",\"weapon\":\"%s\",\"outcome\":\"success\"},\"roll\":" + ROLL + "}";
+        assertEquals(List.of("any", "main"), available(program, context(program, actor, finishedAttack.formatted("primary")), "roll"));
+        assertEquals(List.of("any"), available(program, context(program, actor, finishedAttack.formatted("secondary")), "roll"));
+
+        var weapons = LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"weapons","label":"Fixture","entries":[
+                  {"id":"pain","name":"Pain","automation":{"rollOptions":[
+                    {"id":"painful","label":"Painful","roll":"attack","required":true,"defaultOn":true,"cost":{"stress":1},"value":1}]}}]}""");
+        JsonNode painful = block(weapons, 0).at("/rules/0");
+        assertEquals("automatic", painful.at("/bindings/0/mode").asText(), painful.toString());
+        assertFalse(painful.at("/bindings/0").has("defaultOn"));
+        RuleCompiler.Program pain = program(weapons, 0);
+        String stressed = "{\"stress\":{\"marked\":0,\"capacity\":6},\"effects\":[]}";
+        String own = "{\"type\":\"roll.prepare\",\"check\":{\"kind\":\"attack\",\"weaponSource\":\"%s\"},\"roll\":" + ROLL + "}";
+        ObjectNode paid = run(pain, context(pain, stressed, own.formatted("fixture"))).contexts().getFirst();
+        assertEquals(1, paid.at("/actor/stress/marked").asInt(), paid.toString());
+        assertEquals(2, paid.at("/event/roll/total").asInt());
+        ObjectNode other = run(pain, context(pain, stressed, own.formatted("other"))).contexts().getFirst();
+        assertEquals(0, other.at("/actor/stress/marked").asInt(), "Only rolls with this weapon pay.");
+
+        var invalid = LegacyCatalogConverter.convert(catalog("""
+                {"id":"b","name":"B","automation":{"rollOptions":[{"id":"x","label":"X","roll":"damage","multiplier":1,"damageDie":8,"traitValue":"Luck"}]}}"""));
+        assertEquals(3, invalid.diagnostics().size(), invalid.diagnostics().toString());
+    }
+
     private static JsonNode block(LegacyCatalogConverter.Result result, int entry) {
         assertEquals(result.blocks(), result.converted(), result.diagnostics().toString());
         return result.catalog().at("/entries/" + entry + "/automation");

@@ -910,7 +910,7 @@ public final class RuleCompiler {
             if (!allowed.contains(field)) throw RuleJson.error(path + "/" + field, "Field is not valid for this contribution kind.");
         });
         for (String field : required) if (!part.has(field)) throw RuleJson.error(path + "/" + field, "Missing contribution field.");
-        if (part.has("of")) StructuredRoll.ids(part.get("of"), path + "/of", true);
+        if (part.has("of") && !StructuredRoll.scalesAll(part.get("of"))) StructuredRoll.ids(part.get("of"), path + "/of", true);
         for (String field : List.of("count", "sides", "keepHighest", "maximize", "value", "factor"))
             if (part.has(field)) RuleExpression.validate(part.get(field), path + "/" + field);
         if (part.has("sign")) {

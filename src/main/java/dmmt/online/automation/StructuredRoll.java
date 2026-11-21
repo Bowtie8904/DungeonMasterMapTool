@@ -277,6 +277,11 @@ public final class StructuredRoll {
      */
     public static ObjectNode contribute(JsonNode original, ObjectNode definition, JsonNode context, RandomGenerator random) {
         ObjectNode roll = validate(original);
+        if ("scale".equals(definition.path("kind").asText())) {
+            // Scales roll nothing; they are validated against the earlier contributions they scale.
+            ((ArrayNode) roll.path("contributions")).add(definition.deepCopy());
+            return calculate(roll, false);
+        }
         int used = 0;
         for (JsonNode part : roll.path("contributions")) used += part.path("dice").size();
         ObjectNode plan = RuleJson.JSON.createObjectNode().put("id", roll.path("id").asText());
@@ -346,6 +351,12 @@ public final class StructuredRoll {
         for (int i = 0; i < dice.size(); i++) if (id.equals(dice.get(i).path("id").asText())) return i;
         return -1;
     }
+
+    /** {@code "of": "all"} scales the running total of every earlier contribution, including earlier scale adjustments. */
+    static boolean scalesAll(JsonNode of) {
+        return of.isTextual() && "all".equals(of.asText());
+    }
+
     static Set<String> ids(JsonNode values, String path, boolean required) {
         if (!required && values.isMissingNode()) return new LinkedHashSet<>();
         if (!values.isArray() || values.size() > 1024) throw RuleJson.error(path, "Expected a bounded list of die IDs.");
@@ -427,7 +438,9 @@ public final class StructuredRoll {
                 }
             } else if ("flat".equals(kind)) value = RuleExpression.number(part.get("value"), path + "/value");
             else {
-                Set<String> dependencies = ids(part.path("of"), path + "/of", true);
+                Set<String> dependencies;
+                if (scalesAll(part.path("of"))) dependencies = new LinkedHashSet<>(totals.keySet());
+                else dependencies = ids(part.path("of"), path + "/of", true);
                 if (dependencies.isEmpty()) throw RuleJson.error(path + "/of", "A scale contribution needs dependencies.");
                 double subtotal = 0;
                 for (String dependency : dependencies) {
