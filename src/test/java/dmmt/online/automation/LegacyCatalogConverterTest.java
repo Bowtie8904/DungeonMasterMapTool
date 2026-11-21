@@ -1088,4 +1088,64 @@ class LegacyCatalogConverterTest {
                 {"id":"y","name":"Y","automation":{"attach":{"to":"armor","requires":{"range":"Far"}}}}"""));
         assertEquals(0, invalid.converted());
     }
+
+    @Test
+    void reloadingWeaponsCheckAfterAttacksBlockWhileUnloadedAndReloadForStress() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"gun","name":"Gun","automation":{"reloading":{"dice":"1d6","fail":1}}}"""));
+        block(result, 0);
+        RuleCompiler.Program program = program(result, 0);
+        String loaded = "{\"effects\":[],\"stress\":{\"marked\":0,\"capacity\":6}}";
+        String attack = "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"attack\",\"weaponSource\":\"fixture\"}}";
+        var safe = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context(program, loaded, attack))),
+                List.of(), StructuredRollTest.faces(4));
+        assertEquals(0, safe.contexts().getFirst().at("/actor/effects").size());
+        assertEquals("Reloading d6: 4 (unloads on 1).", safe.actions().getFirst().report());
+        var failed = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context(program, loaded, attack))),
+                List.of(), StructuredRollTest.faces(1));
+        JsonNode unloadedActor = failed.contexts().getFirst().get("actor");
+        assertEquals("Fixture: Unloaded", unloadedActor.at("/effects/0/label").asText());
+        String other = "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"attack\",\"weaponSource\":\"other\"}}";
+        assertTrue(RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context(program, loaded, other))),
+                List.of(), StructuredRollTest.noRandom()).actions().isEmpty(), "Attacks with other weapons are not checked.");
+        String spell = "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"attack\"}}";
+        assertTrue(RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context(program, loaded, spell))),
+                List.of(), StructuredRollTest.noRandom()).actions().isEmpty(), "Attacks without a weapon are not checked.");
+        String reroll = "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"attack\",\"weaponSource\":\"fixture\",\"reroll\":true}}";
+        assertTrue(RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context(program, loaded, reroll))),
+                List.of(), StructuredRollTest.noRandom()).actions().isEmpty(), "Rerolls do not check again.");
+
+        String prepare = "{\"type\":\"roll.prepare\",\"check\":{\"kind\":\"attack\",\"weaponSource\":\"fixture\"}}";
+        var blocked = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program,
+                context(program, unloadedActor.toString(), prepare))), List.of(), StructuredRollTest.noRandom());
+        assertEquals("Fixture is unloaded. Reload it first.", blocked.contexts().getFirst().at("/event/blocked/0/reason").asText());
+        var open = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program,
+                context(program, loaded, prepare))), List.of(), StructuredRollTest.noRandom());
+        assertTrue(open.contexts().getFirst().at("/event/blocked").isMissingNode(), "Loaded weapons are not blocked.");
+
+        String request = "{\"type\":\"action.request\"}";
+        assertEquals(List.of(), available(program, context(program, loaded, request), "sheet"));
+        ObjectNode unloadedContext = context(program, unloadedActor.toString(), request);
+        assertEquals(List.of("reload"), available(program, unloadedContext, "sheet"));
+        JsonNode reloaded = run(program, unloadedContext, "reload").contexts().getFirst().get("actor");
+        assertEquals(0, reloaded.path("effects").size());
+        assertEquals(1, reloaded.at("/stress/marked").asInt());
+
+        var invalid = LegacyCatalogConverter.convert(catalog("""
+                {"id":"x","name":"X","automation":{"reloading":{"dice":"2d6"}}},
+                {"id":"y","name":"Y","automation":{"reloading":{"dice":"1d6","fail":7}}}"""));
+        assertEquals(0, invalid.converted());
+    }
+
+    @Test
+    void conditionalStepsSkipWhenFalseAndCannotNameResults() throws Exception {
+        String base = """
+                {"rules":[{"id":"r","bindings":[{"id":"b","event":"action.request","surface":"sheet","mode":"button"}],
+                  "ui":{"label":"Go"},"do":[%s]}]}""";
+        RuleCompiler.compile("s", RuleJson.parse(base.formatted(
+                "{\"op\":\"resource.gain\",\"pool\":\"actor.hope\",\"amount\":1,\"if\":{\"eq\":[1,1]}}")), RuleJson.parse(LegacyCatalogConverter.EMPTY_RECIPES));
+        var error = org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class, () -> RuleCompiler.compile("s", RuleJson.parse(base.formatted(
+                "{\"op\":\"dice.roll\",\"count\":1,\"sides\":6,\"as\":\"x\",\"if\":{\"eq\":[1,1]}}")), RuleJson.parse(LegacyCatalogConverter.EMPTY_RECIPES)));
+        assertTrue(error.getMessage().contains("conditional step"), error.getMessage());
+    }
 }

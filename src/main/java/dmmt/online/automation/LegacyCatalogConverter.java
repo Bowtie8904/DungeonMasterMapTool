@@ -29,7 +29,7 @@ public final class LegacyCatalogConverter {
 
     private static final Pattern ID = Pattern.compile("[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}");
     private static final List<String> FAMILIES = List.of("actions", "rollOptions", "rollTriggers", "conditionalRollTriggers", "mitigation");
-    private static final Set<String> BLOCK_FIELDS = Set.of("actions", "uses", "modifiers", "resources", "rollOptions", "rollTriggers",
+    private static final Set<String> BLOCK_FIELDS = Set.of("actions", "reloading", "uses", "modifiers", "resources", "rollOptions", "rollTriggers",
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
             "damage", "alternateProfiles", "rest", "attach");
     private static final Map<String, String> RANGES = Map.of("melee", "melee", "very close", "veryClose", "veryclose", "veryClose",
@@ -272,6 +272,11 @@ public final class LegacyCatalogConverter {
                 rules.add(rule);
             }
         }
+        if (legacy.has("reloading"))
+            for (ObjectNode rule : reloading(legacy.get("reloading"), path + "/reloading", p, effects)) {
+                rule.put("id", unique(rule.path("id").asText(), ruleIds));
+                rules.add(rule);
+            }
         if (legacy.has("alternateProfiles")) {
             ArrayNode profiles = profiles(legacy.get("alternateProfiles"), path + "/alternateProfiles", p);
             if (!profiles.isEmpty()) out.set("profiles", profiles);
@@ -379,6 +384,68 @@ public final class LegacyCatalogConverter {
         } else if (node.isArray()) node.forEach(LegacyCatalogConverter::retarget);
     }
 
+    /**
+     * A reloading check becomes three rules over one declared per-weapon effect: an automatic post-attack die roll that
+     * starts the effect on the failing face, an automatic {@code event.block} of attacks with this weapon while the
+     * effect is active, and a Stress-paid button that ends it.
+     */
+    private static List<ObjectNode> reloading(JsonNode legacy, String path, Problems p, ObjectNode effects) {
+        if (!legacy.isObject()) { p.add(path, "Expected a reloading object."); return List.of(); }
+        p.onlyFields(legacy, path, Set.of("dice", "fail"));
+        var dice = DICE.matcher(legacy.path("dice").asText("1d6"));
+        if (!dice.matches() || !"1".equals(dice.group(1)) || Integer.parseInt(dice.group(2)) < 2) {
+            p.add(path + "/dice", "Expected one die such as 1d6.");
+            return List.of();
+        }
+        int sides = Integer.parseInt(dice.group(2));
+        JsonNode failNode = legacy.has("fail") ? legacy.get("fail") : RuleJson.JSON.getNodeFactory().numberNode(1);
+        if (!failNode.isInt() || failNode.asInt() < 1 || failNode.asInt() > sides) {
+            p.add(path + "/fail", "Expected a face from 1 to " + sides + ".");
+            return List.of();
+        }
+        int fail = failNode.asInt();
+        Set<String> used = new HashSet<>();
+        effects.fieldNames().forEachRemaining(used::add);
+        String effect = unique("unloaded", used);
+        effects.putObject(effect).put("label", "{source.name}: Unloaded").put("kind", "debuff")
+                .put("text", "You must mark a Stress to reload {source.name} before you can fire it again.");
+        java.util.function.Supplier<ArrayNode> attackWithThis = () -> {
+            ArrayNode when = RuleJson.JSON.createArrayNode();
+            when.addObject().putArray("eq").add(read("event.check.kind")).add("attack");
+            when.addObject().put("exists", "event.check.weaponSource");
+            when.addObject().putArray("eq").add(read("event.check.weaponSource")).add(read("source.instanceId"));
+            return when;
+        };
+        ObjectNode unloaded = RuleJson.JSON.createObjectNode();
+        unloaded.putArray("gt").add(read("effects." + effect)).add(0);
+
+        ObjectNode block = restRule("reloading-block", "roll.prepare", "use", "roll", "automatic");
+        ArrayNode blockWhen = attackWithThis.get();
+        blockWhen.add(unloaded.deepCopy());
+        applyWhen(block, blockWhen);
+        block.putArray("do").addObject().put("op", "event.block").put("reason", "{source.name} is unloaded. Reload it first.");
+
+        ObjectNode check = restRule("reloading-check", "roll.finished", "use", "roll", "automatic");
+        ArrayNode checkWhen = attackWithThis.get();
+        ObjectNode reroll = RuleJson.JSON.createObjectNode();
+        reroll.putObject("not").put("exists", "event.check.reroll");
+        checkWhen.add(reroll);
+        applyWhen(check, checkWhen);
+        ArrayNode steps = check.putArray("do");
+        steps.addObject().put("op", "dice.roll").put("count", 1).put("sides", sides).put("as", "check");
+        ObjectNode start = steps.addObject().put("op", "effect.start").put("effect", effect).put("target", "actor");
+        start.putObject("if").putArray("eq").add(read("result.check")).add(fail);
+        check.putObject("ui").put("report", "Reloading d" + sides + ": {result.check} (unloads on " + fail + ").");
+
+        ObjectNode reload = RuleJson.JSON.createObjectNode().put("id", "reload");
+        reload.putArray("bindings").addObject().put("id", "sheet").put("event", "action.request").put("surface", "sheet").put("mode", "button");
+        reload.set("when", unloaded);
+        reload.putArray("costs").addObject().put("op", "track.mark").put("track", "actor.stress").put("amount", 1);
+        reload.putArray("do").addObject().put("op", "effect.end").put("effect", effect).put("target", "actor");
+        reload.putObject("ui").put("label", "Reload").put("description", "Mark a Stress to reload {source.name}.")
+                .put("unavailable", "{source.name} is already loaded.").put("report", "Reloaded {source.name}.");
+        return List.of(block, check, reload);
+    }
     /**
      * Weapon damage dice handling becomes an automatic edit of the finished damage roll made with this source. The host
      * marks the weapon's base dice with {@code sourceId = source.id} and supplies {@code event.check.weaponSource}.

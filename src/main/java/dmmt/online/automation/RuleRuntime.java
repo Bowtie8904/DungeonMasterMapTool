@@ -204,7 +204,10 @@ public final class RuleRuntime {
             next.set("die", selected.deepCopy());
         }
         List<ObjectNode> published = new ArrayList<>(), rolls = new ArrayList<>();
-        for (JsonNode step : rule.path("do")) operation(program, step, next, random, preview, published, rolls);
+        for (JsonNode step : rule.path("do")) {
+            if (step.has("if") && !RuleExpression.bool(RuleExpression.evaluate(step.get("if"), next), "/do/if")) continue;
+            operation(program, step, next, random, preview, published, rolls);
+        }
         String text = preview && rule.path("ui").has("preview") ? "preview" : "report";
         String report = rule.path("ui").has(text) ? RuleTemplate.render(rule.path("ui").path(text).asText(), next) : "";
         next.remove("die");
@@ -825,6 +828,15 @@ public final class RuleRuntime {
                         RuleTemplate.render(op.path("id").asText(), context), program.sourceId(),
                         RuleTemplate.render(op.path("label").asText(), context));
                 result = adjusted.get("marks");
+            }
+            case "event.block" -> {
+                if (!(context.path("event") instanceof ObjectNode event)) throw RuleJson.error("/event", "Only events can be blocked.");
+                ArrayNode blocked = event.has("blocked") && event.get("blocked").isArray()
+                        ? (ArrayNode) event.get("blocked") : event.putArray("blocked");
+                String reason = RuleTemplate.render(op.path("reason").asText(), context);
+                blocked.addObject().put("sourceId", program.sourceId())
+                        .put("sourceInstanceId", context.path("source").path("instanceId").asText()).put("reason", reason);
+                result = RuleJson.JSON.getNodeFactory().textNode(reason);
             }
             case "plan.adjust" -> {
                 String path = op.path("plan").asText();

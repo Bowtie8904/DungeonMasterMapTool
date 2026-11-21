@@ -75,7 +75,8 @@ public final class RuleCompiler {
             Map.entry("roll.addDice", List.of("from", "dice", "count")),
             Map.entry("roll.dropLowest", List.of("from", "dice", "count")),
             Map.entry("roll.contribute", List.of("from", "contribution")),
-            Map.entry("plan.adjust", List.of("plan", "field", "by", "label")));
+            Map.entry("plan.adjust", List.of("plan", "field", "by", "label")),
+            Map.entry("event.block", List.of("reason")));
     /** Fields evaluated once per die with the {@code die} context root. */
     private static final Set<String> PER_DIE_FIELDS = Set.of("where", "face", "when");
     private static final Set<String> CONTRIBUTION_FIELDS = Set.of("id", "kind", "role", "label", "count", "sides",
@@ -667,7 +668,7 @@ public final class RuleCompiler {
         Set<String> results = new HashSet<>();
         for (String list : List.of("costs", "do")) for (JsonNode op : rule.path(list)) {
             for (String field : OPERATIONS.get(op.path("op").asText())) if (op.has(field)) {
-                if (Set.of("id", "label").contains(field)) {
+                if (Set.of("id", "label", "reason").contains(field)) {
                     references(RuleTemplate.references(op.path(field).asText()), args, decl, inputs, results, usesDieContext, path + "/" + list + "/" + field);
                 } else if ("contribution".equals(field)) {
                     JsonNode part = op.path(field);
@@ -680,6 +681,8 @@ public final class RuleCompiler {
                     references(RuleExpression.references(op.path(field)), args, decl, inputs, results, usesDieContext, path + "/" + list + "/" + field);
                 }
             }
+            if (op.has("if"))
+                references(RuleExpression.references(op.get("if")), args, decl, inputs, results, usesDieContext, path + "/" + list + "/if");
             if (op.has("as")) results.add(op.path("as").asText());
         }
         rule.path("ui").fields().forEachRemaining(field -> {
@@ -719,7 +722,13 @@ public final class RuleCompiler {
         List<String> allowed = new ArrayList<>(fields);
         allowed.add("op");
         allowed.add("as");
+        if (!cost) allowed.add("if");
         RuleJson.fields(operation, path, allowed.toArray(String[]::new));
+        if (operation.has("if")) {
+            if (operation.has("as"))
+                throw RuleJson.error(path + "/as", "A conditional step cannot name a result; later steps could read a skipped value.");
+            RuleExpression.validate(operation.get("if"), path + "/if");
+        }
         for (String field : fields) if (!operation.has(field)
                 && !("pool.roll".equals(op) && "keepHighest".equals(field))
                 && !"owner".equals(field)
@@ -742,6 +751,10 @@ public final class RuleCompiler {
             RuleExpression.validate(operation.get("to"), path + "/to");
             RuleTemplate.validate(RuleJson.text(operation.get("id"), path + "/id"));
             RuleTemplate.validate(RuleJson.text(operation.get("label"), path + "/label"));
+            return;
+        }
+        if ("event.block".equals(op)) {
+            RuleTemplate.validate(RuleJson.text(operation.get("reason"), path + "/reason"));
             return;
         }
         if ("plan.adjust".equals(op)) {
