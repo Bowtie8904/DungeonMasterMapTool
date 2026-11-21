@@ -39,7 +39,7 @@ public final class LegacyCatalogConverter {
             "defaultOn", "exclusive", "requiresEffect", "excludesEffect", "weapon", "weaponRange", "excludeRolls", "effect", "uses",
             "usesSource", "endEffect", "hostOwned", "consumeItem");
     private static final Set<String> TRIGGER_FIELDS = Set.of("id", "label", "description", "on", "cost", "reroll", "when", "outcome",
-            "audience", "damage", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
+            "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned");
     private static final Set<String> MITIGATION_FIELDS = Set.of("id", "label", "description", "when", "cost", "negate", "halve", "reduce",
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
@@ -52,7 +52,7 @@ public final class LegacyCatalogConverter {
     private static final Pattern ACTION_DAMAGE = Pattern.compile("(?i)(\\d*)d(\\d+)(?:([+-])(\\d+))?");
     private static final Set<String> ACTION_FIELDS = Set.of("id", "label", "description", "cost", "steps", "report", "damage",
             "requiresEffect", "excludesEffect", "endEffect", "uses", "usesSource", "actionRoll", "target",
-            "excludeSourceActor", "hostOwned", "selectAmount");
+            "excludeSourceActor", "hostOwned", "selectAmount", "timing", "sendRoll");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
             "actions", "rollOptions", "rollTriggers", "mitigation");
     private static final Set<String> ROLLS = Set.of("attack", "damage", "spellcast", "action", "reaction");
@@ -655,6 +655,7 @@ public final class LegacyCatalogConverter {
         if (trigger.path("criticalOnly").asBoolean(false)) when.addObject().putArray("eq").add(read("event.check.critical")).add(true);
         if (trigger.path("weaponAttack").asBoolean(false)) when.addObject().put("exists", "event.check.weapon");
         commonConditions(trigger, path, p, when);
+        sentRollConditions(trigger, when);
         applyWhen(rule, when);
         if (trigger.has("cost")) costs(trigger.get("cost"), path + "/cost", p, pools, rule);
         if (limited) rule.put("limitRef", "uses");
@@ -683,7 +684,8 @@ public final class LegacyCatalogConverter {
         }
         if (edited) steps.addObject().put("op", "roll.publish").set("roll", from);
         if (trigger.has("damage"))
-            actionDamage(trigger.get("damage"), path + "/damage", trigger, p, steps, read("event.check.critical"),             "triggerDamage");
+            actionDamage(trigger.get("damage"), path + "/damage", trigger, p, steps, read("event.check.critical"), "triggerDamage");
+        if (trigger.has("sendRoll")) sentRoll(trigger.get("sendRoll"), path + "/sendRoll", trigger, p, steps);
                     JsonNode extra = trigger.path("steps");
         for (int i = 0; i < extra.size(); i++) step(extra.get(i), path + "/steps/" + i, p, steps, effects, pools);
         endEffect(trigger, steps);
@@ -692,6 +694,7 @@ public final class LegacyCatalogConverter {
         report(trigger, path, p, ui);
         if (trigger.has("damage"))
             ui.put("report", "Damage total: {result.triggerDamage.total}." + (ui.has("report") ? " " + ui.path("report").asText() : ""));
+        sentRollReport(trigger, ui);
         return rule;
     }
 
@@ -1080,6 +1083,11 @@ public final class LegacyCatalogConverter {
         rule.put("id", id);
         ObjectNode binding = rule.putArray("bindings").addObject()
                 .put("id", "sheet").put("event", "action.request").put("surface", "sheet").put("mode", "button");
+        if (action.has("timing")) {
+            if (!Set.of("downtime", "rest").contains(action.path("timing").asText()))
+                p.add(path + "/timing", "Unsupported action timing: " + action.path("timing").asText());
+            else binding.put("id", "downtime").put("event", "downtime.move").put("surface", "downtime");
+        }
         String operationTarget = "actor";
         if (action.has("target")) {
             if (!action.path("target").isTextual()) p.add(path + "/target", "Expected a supported target mode.");
@@ -1111,6 +1119,7 @@ public final class LegacyCatalogConverter {
                 || "spellcast".equals(damage.path("count").asText());
         if (usesSpellcastTrait)
             when.addObject().put("exists", "actor.spellcastTrait.value");
+        sentRollConditions(action, when);
         applyWhen(rule, when);
         if (action.has("cost")) costs(action.get("cost"), path + "/cost", p, pools, rule);
         if (action.has("selectAmount")) selectAmount(action.get("selectAmount"), path + "/selectAmount", p, pools, rule);
@@ -1118,6 +1127,7 @@ public final class LegacyCatalogConverter {
         ArrayNode steps = RuleJson.JSON.createArrayNode();
         if (action.has("actionRoll")) actionRoll(action.get("actionRoll"), path + "/actionRoll", action, p, steps);
         if (action.has("damage")) actionDamage(action.get("damage"), path + "/damage", action, p, steps);
+        if (action.has("sendRoll")) sentRoll(action.get("sendRoll"), path + "/sendRoll", action, p, steps);
         JsonNode list = action.path("steps");
         for (int i = 0; i < list.size(); i++) step(list.get(i), path + "/steps/" + i, p, steps, effects, pools, operationTarget);
         endEffect(action, steps, operationTarget);
@@ -1132,9 +1142,89 @@ public final class LegacyCatalogConverter {
             else if (action.has("damage")) ui.put("report", "Damage total: {result.actionDamage.total}.");
         }
         report(action, path, p, ui);
+        sentRollReport(action, ui);
         return rule;
     }
 
+    private static final Pattern SENT_ROLL = Pattern.compile("(?:(\\d{1,2})|@([A-Za-z_]+?))(?:d(\\d{1,4})(?:kh(\\d{1,2}))?)?");
+
+    /** Legacy dice that need a positive Spellcast trait are only offered when the actor has one. */
+    private static void sentRollConditions(JsonNode legacy, ArrayNode when) {
+        if (!legacy.path("sendRoll").path("dice").asText("").contains("@spellcast")) return;
+        when.addObject().put("exists", "actor.spellcastTrait.value");
+        when.addObject().putArray("gte").add(read("actor.stats.spellcast.base")).add(1);
+    }
+
+    /** The sent roll total, ahead of any authored report; a legacy {@code {result}} placeholder names that total. */
+    private static void sentRollReport(JsonNode legacy, ObjectNode ui) {
+        if (!legacy.has("sendRoll")) return;
+        String total = "{result.sentRoll.total}";
+        String label = escape(legacy.path("sendRoll").path("label").asText("Roll"));
+        String authored = ui.has("report") ? " " + ui.path("report").asText().replace("{{result}}", total) : "";
+        ui.put("report", label + ": " + total + "." + authored);
+    }
+
+    /**
+     * A standalone host roll such as a reaction or Evasion die: a fixed or computed number of dice (optionally keeping
+     * the highest), a bare computed value, and an optional Evasion base. Computed counts never go below zero.
+     */
+    private static void sentRoll(JsonNode legacy, String path, JsonNode action, Problems p, ArrayNode steps) {
+        p.onlyFields(legacy, path, Set.of("dice", "label", "base"));
+        String label = legacy.path("label").asText("");
+        if (label.isBlank()) { p.add(path + "/label", "Sent rolls need a label."); return; }
+        if (legacy.has("base") && !"evasion".equals(legacy.path("base").asText())) {
+            p.add(path + "/base", "Unsupported roll base: " + legacy.path("base").asText());
+            return;
+        }
+        var matcher = SENT_ROLL.matcher(legacy.path("dice").asText("").trim());
+        if (!matcher.matches() || matcher.group(1) != null && matcher.group(3) == null) {
+            p.add(path + "/dice", "Expected dice such as 1d6, @tier, @total_proficiencyd6 or @Agilityd6kh1.");
+            return;
+        }
+        JsonNode count;
+        if (matcher.group(1) != null) count = RuleJson.JSON.getNodeFactory().numberNode(Integer.parseInt(matcher.group(1)));
+        else {
+            String token = matcher.group(2).toLowerCase(Locale.ROOT);
+            String trait = trait(token);
+            JsonNode value = trait != null ? read("actor.stats.trait." + trait) : computed("@" + token);
+            if (value == null) { p.add(path + "/dice", "Unsupported computed dice count: @" + matcher.group(2)); return; }
+            ObjectNode bounded = RuleJson.JSON.createObjectNode();
+            bounded.putArray("max").add(0).add(value);
+            count = bounded;
+        }
+        String id = slug(action.path("id").asText("action"));
+        ObjectNode plan = RuleJson.JSON.createObjectNode().put("id", slug(id + "-roll"));
+        ArrayNode contributions = plan.putArray("contributions");
+        if (legacy.has("base")) contributions.addObject().put("id", slug(id + "-roll-evasion")).put("kind", "flat")
+                .put("role", "roll").put("sourceId", "core").put("label", "Evasion").set("value", read("actor.stats.evasion"));
+        if (matcher.group(3) == null) {
+            contributions.addObject().put("id", slug(id + "-roll-value")).put("kind", "flat").put("role", "roll")
+                    .put("sourceId", "core").put("label", label).set("value", count);
+        } else {
+            int sides = Integer.parseInt(matcher.group(3));
+            if (sides < 2 || sides > 1000 || count.isInt() && count.asInt() < 1) {
+                p.add(path + "/dice", "Dice exceed the supported bounds.");
+                return;
+            }
+            ObjectNode dice = contributions.addObject().put("id", slug(id + "-roll-dice")).put("kind", "dice").put("role", "roll")
+                    .put("sourceId", "core").put("label", label);
+            dice.set("count", count);
+            dice.put("sides", sides);
+            if (matcher.group(4) != null) {
+                int keep = Integer.parseInt(matcher.group(4));
+                if (keep < 1) { p.add(path + "/dice", "Keep at least one die."); return; }
+                ObjectNode kept = RuleJson.JSON.createObjectNode();
+                kept.putArray("min").add(keep).add(count.deepCopy());
+                dice.set("keepHighest", count.isInt() ? RuleJson.JSON.getNodeFactory().numberNode(Math.min(keep, count.asInt())) : kept);
+            }
+        }
+        plan.putObject("metadata").put("kind", "roll").put("label", label);
+        ObjectNode planExpression = RuleJson.JSON.createObjectNode();
+        planExpression.set("literal", plan);
+        ObjectNode resolve = steps.addObject().put("op", "roll.resolve");
+        resolve.set("plan", planExpression);
+        resolve.put("as", "sentRoll");
+    }
     /** A player-chosen whole amount, bounded by what the named resource can currently pay; {@code @amount} reads it. */
     private static void selectAmount(JsonNode legacy, String path, Problems p, Pools pools, ObjectNode rule) {
         p.onlyFields(legacy, path, Set.of("resource", "label", "min", "heal"));

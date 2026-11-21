@@ -71,9 +71,20 @@ describe('automation panel', () => {
     button.click();
     await settle();
     await settle();
-    expect(submit).toHaveBeenCalledWith('a1', expect.objectContaining({ sourceInstanceId: 'f-rally', ruleId: 'rally', bindingId: 'use', expectedRevision: 4 }));
+    expect(submit).toHaveBeenCalledWith('a1', expect.objectContaining({ sourceInstanceId: 'f-rally', ruleId: 'rally', bindingId: 'use', expectedRevision: 4 }), 'action.request');
     expect(fetchActions).toHaveBeenCalledTimes(2);
     expect(fake(panel).text).toContain('Roll total: 14.');
+  });
+
+  it('describes and submits on the configured surface and event', async () => {
+    const fetchActions = vi.fn(async (): Promise<DescribedActions> => ({ revision: 1, actions: [action({ revision: 1 })] }));
+    const submit = vi.fn(async () => ({ actions: [] }));
+    const panel = automationPanel('a1', 'downtime', 'Downtime', fetchActions, submit, 'downtime.move');
+    await settle();
+    fake(panel).all('button')[0].click();
+    await settle();
+    expect(fetchActions).toHaveBeenCalledWith('a1', 'downtime', 'downtime.move');
+    expect(submit).toHaveBeenCalledWith('a1', expect.objectContaining({ ruleId: 'rally' }), 'downtime.move');
   });
 
   it('shows host failures instead of hiding them', async () => {

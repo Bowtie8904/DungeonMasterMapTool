@@ -1627,7 +1627,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   function charPage(): HTMLElement {
     featurePage = el('div', {}, featurePanel());
     if (!opts.actorId || opts.readOnly?.()) return featurePage;
-    return el('div', {}, automationPanel(opts.actorId), featurePage);
+    return el('div', {}, automationPanel(opts.actorId),
+      automationPanel(opts.actorId, 'downtime', 'Downtime', undefined, undefined, 'downtime.move'), featurePage);
   }
 
   function characterFeatureCard(f: Feature, children: Feature[] = [], quick = false): HTMLElement {

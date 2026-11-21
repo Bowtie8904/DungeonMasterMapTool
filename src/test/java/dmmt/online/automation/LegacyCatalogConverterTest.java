@@ -304,7 +304,11 @@ class LegacyCatalogConverterTest {
     }
 
     private static RuleDispatcher.EventResolution run(RuleCompiler.Program program, ObjectNode context, String... rules) {
-        String binding = "action.request".equals(context.at("/event/type").asText()) ? "sheet" : "use";
+        String binding = switch (context.at("/event/type").asText()) {
+            case "action.request" -> "sheet";
+            case "downtime.move" -> "downtime";
+            default -> "use";
+        };
         List<RuleRuntime.Intent> intents = java.util.Arrays.stream(rules)
                 .map(rule -> new RuleRuntime.Intent(rule, binding, "fixture", context.path("revision").asLong(), RuleJson.JSON.createObjectNode())).toList();
         return RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context)), intents, RandomGenerator.getDefault());
@@ -342,6 +346,58 @@ class LegacyCatalogConverterTest {
         program(spending, 0);
         assertFalse(LegacyCatalogConverter.convert(catalog("""
                 {"id":"pact","name":"Pact","automation":{"actions":[{"id":"call","label":"Call","cost":{"favor":2}}]}}""")).diagnostics().isEmpty());
+    }
+
+    @Test
+    void timedActionsBecomeDowntimeMoveButtons() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"bedroll","name":"Bedroll","automation":{"actions":[
+                  {"id":"rest","label":"Clear Stress","timing":"rest","steps":[{"op":"clear","resource":"stress","amount":1}]},
+                  {"id":"later","label":"Later","timing":"downtime"}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        JsonNode binding = block(result, 0).at("/rules/0/bindings/0");
+        assertEquals("downtime.move", binding.path("event").asText());
+        assertEquals("downtime", binding.path("surface").asText());
+        RuleCompiler.Program program = program(result, 0);
+        ObjectNode downtime = context(program, "{\"stress\":{\"marked\":2,\"capacity\":6}}", "{\"type\":\"downtime.move\"}");
+        assertEquals(List.of("later", "rest"), available(program, downtime, "downtime"));
+        assertEquals(List.of(), available(program, context(program, "{}", "{\"type\":\"action.request\"}"), "sheet"));
+        assertEquals(1, run(program, downtime, "rest").contexts().getFirst().at("/actor/stress/marked").asInt());
+        assertFalse(LegacyCatalogConverter.convert(catalog("""
+                {"id":"x","name":"X","automation":{"actions":[{"id":"a","label":"A","timing":"combat"}]}}""")).diagnostics().isEmpty());
+    }
+
+    @Test
+    void sentRollsBecomeHostResolvedPlansWithComputedCountsAndEvasionBase() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"guard","name":"Guard","automation":{"actions":[
+                  {"id":"dodge","label":"Dodge","sendRoll":{"dice":"@Agilityd6kh1","base":"evasion","label":"Dodge: Evasion"}},
+                  {"id":"keen","label":"Keen","sendRoll":{"dice":"@tier","base":"evasion","label":"Keen"}},
+                  {"id":"commune","label":"Commune","sendRoll":{"dice":"@spellcastd6","label":"Commune"}}],
+                 "conditionalRollTriggers":[{"id":"stress","label":"Stress","successIfKnown":true,
+                  "sendRoll":{"dice":"@total_proficiencyd4kh1","label":"Target Stress"},"report":{"text":"The target marks {result} Stress."}}]}}"""));
+        JsonNode block = block(result, 0);
+        assertEquals("Dodge: Evasion: {result.sentRoll.total}.", block.at("/rules/0/ui/report").asText());
+        assertEquals("Target Stress: {result.sentRoll.total}. The target marks {result.sentRoll.total} Stress.",
+                block.at("/rules/3/ui/report").asText());
+        RuleCompiler.Program program = program(result, 0);
+        String actor = "{\"stats\":{\"evasion\":10,\"tier\":3,\"spellcast\":{\"base\":0},\"trait\":{\"Agility\":2}}}";
+        ObjectNode context = context(program, actor, "{\"type\":\"action.request\"}");
+        JsonNode dodge = run(program, context, "dodge").actions().getFirst().diceRolls().getFirst();
+        assertEquals(10, dodge.at("/contributions/0/value").asInt());
+        assertEquals(2, dodge.at("/contributions/1/dice").size());
+        assertEquals(1, java.util.stream.StreamSupport.stream(dodge.at("/contributions/1/dice").spliterator(), false)
+                .filter(die -> die.path("kept").asBoolean()).count());
+        JsonNode keen = run(program, context, "keen").actions().getFirst().diceRolls().getFirst();
+        assertEquals(13, keen.path("total").asInt());
+        assertFalse(available(program, context, "sheet").contains("commune"));
+        ObjectNode none = context(program, "{\"stats\":{\"evasion\":10,\"trait\":{\"Agility\":-1}}}", "{\"type\":\"action.request\"}");
+        JsonNode empty = run(program, none, "dodge").actions().getFirst().diceRolls().getFirst();
+        assertEquals(10, empty.path("total").asInt());
+        assertFalse(LegacyCatalogConverter.convert(catalog("""
+                {"id":"x","name":"X","automation":{"actions":[{"id":"a","label":"A","sendRoll":{"dice":"@unknownd6","label":"A"}}]}}""")).diagnostics().isEmpty());
+        assertFalse(LegacyCatalogConverter.convert(catalog("""
+                {"id":"x","name":"X","automation":{"actions":[{"id":"a","label":"A","sendRoll":{"dice":"1d6","base":"armor","label":"A"}}]}}""")).diagnostics().isEmpty());
     }
 
     @Test

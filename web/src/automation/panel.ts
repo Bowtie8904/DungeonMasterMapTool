@@ -70,7 +70,7 @@ function actionReports(response: unknown): string[] {
  */
 export function automationPanel(actorId: string, surface = 'sheet', title = 'Actions',
   fetchActions: typeof describeAutomation = describeAutomation,
-  submit: typeof executeAutomation = executeAutomation): HTMLElement {
+  submit: typeof executeAutomation = executeAutomation, event = 'action.request'): HTMLElement {
   const list = el('div', { class: 'acts automation-actions' });
   const status = el('div', { class: 'error' });
   status.setAttribute('role', 'alert');
@@ -82,11 +82,11 @@ export function automationPanel(actorId: string, surface = 'sheet', title = 'Act
   const load = async (): Promise<void> => {
     const current = ++generation;
     try {
-      const described = await fetchActions(actorId, surface);
+      const described = await fetchActions(actorId, surface, event);
       if (current !== generation) return;
       const buttons = (described?.actions ?? []).filter(action => action.mode === 'button');
       list.replaceChildren(...buttons.map(action => ruleControl({ ...action, revision: described!.revision }, async intent => {
-        const result = await submit(actorId, intent);
+        const result = await submit(actorId, intent, event);
         output.textContent = actionReports(result).join('\n');
         void load();
       }, CONTROL_TEXT)));

@@ -51,7 +51,7 @@ public final class StructuredRoll {
                 RuleJson.fields(part, path, "id", "kind", "role", "sourceId", "label", "count", "sides", "keepHighest", "maximize", "sign", "editable");
                 int count = RuleJson.integer(RuleExpression.evaluate(part.path("count"), context), path + "/count", 0, 1024);
                 int sides = RuleJson.integer(RuleExpression.evaluate(part.path("sides"), context), path + "/sides", 2, 1000);
-                int keep = part.has("keepHighest") ? RuleJson.integer(RuleExpression.evaluate(part.get("keepHighest"), context), path + "/keepHighest", 1, count) : count;
+                int keep = part.has("keepHighest") ? RuleJson.integer(RuleExpression.evaluate(part.get("keepHighest"), context), path + "/keepHighest", Math.min(1, count), count) : count;
                 int maximize = part.has("maximize") ? RuleJson.integer(RuleExpression.evaluate(part.get("maximize"), context), path + "/maximize", 0, count) : 0;
                 diceCount += count;
                 if (diceCount > budget) throw RuleJson.error(path, "Roll plan exceeds its dice limit.");
