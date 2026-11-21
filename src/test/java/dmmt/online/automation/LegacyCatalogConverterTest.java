@@ -364,6 +364,51 @@ class LegacyCatalogConverterTest {
         assertEquals(List.of("Elemental Aura"), sheet.at("/automationState/effects").findValuesAsText("label"), "severe damage ends the channel");
     }
 
+    @Test
+    void sourceSevereAndIncomingDamageEndingsBecomeAutomaticDamageRules() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"a","name":"A","automation":{"actions":[{"id":"use","label":"Storm","steps":[{"op":"effect","effect":{"name":"Storm","endOnSourceSevere":true}}]}]}},
+                {"id":"b","name":"B","automation":{"actions":[{"id":"use","label":"Cloak","steps":[{"op":"effect","effect":{"name":"Cloak","endAfterIncomingDamage":true}}]}]}},
+                {"id":"c","name":"C","automation":{"actions":[{"id":"use","label":"Both","steps":[{"op":"effect","effect":{"name":"Both","endOnDamage":2,"endOnSourceSevere":true}}]}]}}"""));
+        assertEquals(2, result.converted(), result.diagnostics().toString());
+        JsonNode storm = result.catalog().at("/entries/0/automation/rules/1");
+        assertEquals("damage.applied", storm.at("/bindings/0/event").asText());
+        assertTrue(storm.path("when").toString().contains("{\"gte\":[{\"read\":\"event.applied.severity\"},3]}"), storm.toString());
+        assertEquals("storm", storm.at("/do/0/effect").asText());
+        JsonNode cloak = result.catalog().at("/entries/1/automation/rules/1");
+        assertTrue(cloak.path("when").toString().contains("{\"gte\":[{\"read\":\"event.applied.incoming\"},1]}"), cloak.toString());
+        assertTrue(result.diagnostics().stream().anyMatch(d -> d.path().endsWith("/endOnSourceSevere") && d.message().contains("only one")));
+    }
+
+    @Test
+    void keptEffectsSkipTheirNextDamageEndingThroughDeclaredState() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"a","name":"A","automation":{"actions":[{"id":"use","label":"Shell","steps":[{"op":"effect","effect":{"name":"Shell","endAfterIncomingDamage":true,
+                "mitigation":[{"id":"keep","label":"Keep the shell","cost":{"hope":1},"preserveAfterIncomingDamage":"Shell"}]}}]}]}}"""));
+        JsonNode automation = block(result, 0);
+        assertFalse(automation.at("/state/keep-shell").asBoolean(true), automation.toString());
+        JsonNode keep = null, ending = null;
+        for (JsonNode rule : automation.path("rules")) {
+            if ("damage.prepare".equals(rule.at("/bindings/0/event").asText())) keep = rule;
+            if ("damage.applied".equals(rule.at("/bindings/0/event").asText())) ending = rule;
+        }
+        assertNotNull(keep, automation.toString());
+        assertEquals("state.set", ending.at("/do/1/op").asText(), automation.toString());
+        assertEquals("state.set", keep.at("/do/0/op").asText());
+        RuleCompiler.Program program = program(result, 0);
+        String effect = "{\"effects\":[{\"id\":\"fixture/shell/1\",\"effect\":\"" + program.sourceId() + "#shell\",\"sourceInstanceId\":\"fixture\",\"label\":\"Shell\"}]}";
+        String event = "{\"type\":\"damage.applied\",\"applied\":{\"severity\":2,\"incoming\":2,\"amount\":6}}";
+        ObjectNode kept = context(program, effect, event);
+        kept.putObject("state").put("keep-shell", true);
+        ObjectNode after = run(program, kept).contexts().get(0);
+        assertEquals(1, after.at("/actor/effects").size(), after.toString());
+        assertFalse(after.at("/state/keep-shell").asBoolean(true));
+        ObjectNode ended = run(program, context(program, effect, event)).contexts().get(0);
+        assertEquals(0, ended.at("/actor/effects").size(), ended.toString());
+        var invalid = LegacyCatalogConverter.convert(catalog("""
+                {"id":"b","name":"B","automation":{"mitigation":[{"id":"keep","label":"Keep","negate":true,"preserveAfterIncomingDamage":"Shell"}]}}"""));
+        assertTrue(invalid.diagnostics().stream().anyMatch(d -> d.message().contains("Keeping an effect")), invalid.diagnostics().toString());
+    }
     private static JsonNode block(LegacyCatalogConverter.Result result, int entry) {
         assertEquals(result.blocks(), result.converted(), result.diagnostics().toString());
         return result.catalog().at("/entries/" + entry + "/automation");

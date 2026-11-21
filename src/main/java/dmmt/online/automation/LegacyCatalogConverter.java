@@ -45,7 +45,7 @@ public final class LegacyCatalogConverter {
     private static final Set<String> MITIGATION_FIELDS = Set.of("id", "label", "description", "when", "cost", "negate", "halve", "reduce",
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
-            "markedHpOnly", "finalSevere", "markStress", "gainHope", "clearStress", "gainTokens", "armorCost", "followUp", "hiddenRoll", "consumeItem");
+            "markedHpOnly", "finalSevere", "markStress", "gainHope", "clearStress", "gainTokens", "armorCost", "followUp", "hiddenRoll", "consumeItem", "preserveAfterIncomingDamage");
     private static final List<String> MARKS_FIELDS = List.of("severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor");
     private static final List<String> PREPARE_FIELDS = List.of("negate", "halve", "reduce");
     private static final List<String> SEVERITIES = List.of("minor", "major", "severe", "massive");
@@ -58,7 +58,7 @@ public final class LegacyCatalogConverter {
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
-            "actions", "rollOptions", "rollTriggers", "mitigation", "rest", "consumeLongRestMove", "group", "endOnDamage", "damage");
+            "actions", "rollOptions", "rollTriggers", "mitigation", "rest", "consumeLongRestMove", "group", "endOnDamage", "endOnSourceSevere", "endAfterIncomingDamage", "damage");
     private static final Set<String> REST_FIELDS = Set.of("extraMoves", "longMovesInShort", "passives", "modifiers", "requiresEffect");
     private static final Set<String> PASSIVE_FIELDS = Set.of("id", "label", "defaultOn", "condition", "steps", "extraMoves", "consumeItem",
             "rest", "move", "bonus", "minHope", "cost", "chooseAlly", "hostOwned", "castBeforeRest", "requiresEffect", "excludesEffect");
@@ -259,6 +259,7 @@ public final class LegacyCatalogConverter {
             queue.addAll(p.nested());
             p.nested().clear();
         }
+        keepEffects(rules, path, p, out);
         for (JsonNode rule : rules) for (JsonNode op : rule.path("do")) {
             if (!"effect.end".equals(op.path("op").asText())) continue;
             String label = escape(op.path("effect").asText());
@@ -1176,8 +1177,13 @@ public final class LegacyCatalogConverter {
         JsonNode roll = mitigation.path("roll");
         boolean rolled = mitigation.has("roll"), rollHits = rolled && roll.has("success");
         boolean marks = MARKS_FIELDS.stream().anyMatch(mitigation::has);
+        boolean preserve = mitigation.has("preserveAfterIncomingDamage");
         boolean prepare = PREPARE_FIELDS.stream().anyMatch(mitigation::has) || (rolled && !rollHits);
         if (marks && prepare) { p.add(path, "A damage option cannot change both the damage amount and the marks plan."); return null; }
+        if (preserve && (marks || prepare || !mitigation.path("preserveAfterIncomingDamage").isTextual())) {
+            p.add(path + "/preserveAfterIncomingDamage", "Keeping an effect needs its name and cannot change the damage itself."); return null;
+        }
+        prepare |= preserve;
         if (rollHits && !marks) { p.add(path + "/roll", "Success rolls need a severity, Hit Point or saved Armor change to scale."); return null; }
         String stage = marks ? "marks" : prepare ? "prepare" : "applied";
         boolean passive = mitigation.path("passive").asBoolean(false);
@@ -1212,7 +1218,11 @@ public final class LegacyCatalogConverter {
         ArrayNode steps = rule.putArray("do");
         String id = slug(mitigation.path("id").asText()), label = escape(mitigation.path("label").asText(""));
         switch (stage) {
-            case "prepare" -> prepareSteps(mitigation, path, p, steps, id, label);
+            case "prepare" -> {
+                // Chosen while damage is prepared so the automatic ending, which runs before selected options, already sees it.
+                if (preserve) steps.addObject().put("op", "state.set").put("slot", keepSlot(mitigation.path("preserveAfterIncomingDamage").asText())).put("value", true);
+                else prepareSteps(mitigation, path, p, steps, id, label);
+            }
             case "marks" -> marksSteps(mitigation, path, p, steps, id, label);
             default -> {}
         }
@@ -1958,6 +1968,17 @@ public final class LegacyCatalogConverter {
             if (!severity.isInt() || severity.asInt() < 1 || severity.asInt() > 4) p.add(path + "/endOnDamage", "Expected a severity from 1 to 4.");
             else p.nested().add(new Nested("endOnDamage", RuleJson.JSON.createObjectNode().put("effect", name).put("severity", severity.asInt()), path + "/endOnDamage"));
         }
+        // Legacy "source severe" excluded effects granted by another actor; converted effects always belong to their starter.
+        String[][] ends = {{"endOnSourceSevere", "severity", "3"}, {"endAfterIncomingDamage", "incoming", "1"}};
+        for (String[] end : ends) {
+            if (!effect.has(end[0])) continue;
+            if (!effect.path(end[0]).asBoolean(false)) { p.add(path + "/" + end[0], "Expected true."); continue; }
+            if (effect.has("endOnDamage") || effect.has("endOnSourceSevere") && effect.has("endAfterIncomingDamage")) {
+                p.add(path + "/" + end[0], "An effect can declare only one damage ending."); continue;
+            }
+            p.nested().add(new Nested("endOnDamage", RuleJson.JSON.createObjectNode().put("effect", name).put("field", end[1])
+                    .put("severity", Integer.parseInt(end[2])), path + "/" + end[0]));
+        }
         if (effect.has("damage")) {
             ObjectNode granted = RuleJson.JSON.createObjectNode().put("effect", name);
             granted.set("damage", effect.get("damage").deepCopy());
@@ -2359,14 +2380,36 @@ public final class LegacyCatalogConverter {
         if (id != null) ((ObjectNode) effects.get(id)).set("while", condition);
     }
 
-    /** Ends the effect once applied damage reaches the given severity (1 minor ... 4 massive). */
+    private static String keepSlot(String effect) { String slot = "keep-" + slug(effect); return slot.substring(0, Math.min(64, slot.length())); }
+
+    /** A kept effect survives its next damage ending: the ending skips while the keep slot is set and then clears it. */
+    private static void keepEffects(ArrayNode rules, String path, Problems p, ObjectNode out) {
+        for (JsonNode rule : rules) for (JsonNode op : rule.path("do")) {
+            if (!"state.set".equals(op.path("op").asText()) || !op.path("slot").asText().startsWith("keep-")) continue;
+            String slot = op.path("slot").asText();
+            ObjectNode ending = null;
+            for (JsonNode candidate : rules) {
+                JsonNode first = candidate.path("do").path(0);
+                if ("damage.applied".equals(candidate.path("bindings").path(0).path("event").asText()) && "effect.end".equals(first.path("op").asText())
+                        && slot.equals(keepSlot(first.path("effect").asText()))) ending = (ObjectNode) candidate;
+            }
+            if (ending == null) { p.add(path, "Keeping an effect needs the same source to end it after damage."); continue; }
+            ObjectNode state = out.has("state") ? (ObjectNode) out.get("state") : out.putObject("state");
+            if (state.has(slot)) continue;
+            state.put(slot, false);
+            ((ObjectNode) ending.path("do").get(0)).putObject("if").set("not", read("state." + slot));
+            ((ArrayNode) ending.get("do")).addObject().put("op", "state.set").put("slot", slot).put("value", false);
+        }
+    }
+
+    /** Ends the effect once applied damage reaches the given final (or, for {@code field: incoming}, pre-armor) severity (1 minor ... 4 massive). */
     private static ObjectNode endOnDamage(JsonNode legacy) {
         String effect = legacy.path("effect").asText();
         ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "end-" + slug(effect));
         rule.putArray("bindings").addObject().put("id", "use").put("event", "damage.applied").put("surface", "damage").put("mode", "automatic");
         ArrayNode when = RuleJson.JSON.createArrayNode();
         when.add(labelPresent(effect));
-        when.addObject().putArray("gte").add(read("event.applied.severity")).add(legacy.path("severity").asInt());
+        when.addObject().putArray("gte").add(read("event.applied." + legacy.path("field").asText("severity"))).add(legacy.path("severity").asInt());
         applyWhen(rule, when);
         rule.putArray("do").addObject().put("op", "effect.end").put("effect", effect).put("target", "actor");
         rule.putObject("ui").put("label", escape(effect) + " ends");
