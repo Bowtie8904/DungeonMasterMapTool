@@ -64,7 +64,7 @@ public final class LegacyCatalogConverter {
     private static final Set<String> ACTION_FIELDS = Set.of("id", "label", "description", "cost", "steps", "report", "damage",
             "requiresEffect", "excludesEffect", "endEffect", "uses", "usesSource", "actionRoll", "target",
             "excludeSourceActor", "hostOwned", "selectAmount", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
-            "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime");
+            "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime", "table");
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
@@ -2305,6 +2305,7 @@ public final class LegacyCatalogConverter {
         else noChoices(action, path, p);
         JsonNode list = action.has("check") ? RuleJson.JSON.missingNode() : action.path("steps");
         for (int i = 0; i < list.size(); i++) step(list.get(i), path + "/steps/" + i, p, steps, effects, pools, operationTarget);
+        if (action.has("table")) actionTable(action.get("table"), path + "/table", p, steps, effects, pools, operationTarget);
         endEffect(action, steps, operationTarget);
         if (transfer) steps.addObject().put("op", "resource.gain").put("pool", "recipient.hope").set("amount", read("input.amount"));
         if (action.has("refreshUses")) {
@@ -2327,6 +2328,7 @@ public final class LegacyCatalogConverter {
                 ui.put("report", "Roll total: {result.actionRoll.total}. Damage total: {result.actionDamage.total}.");
             else if (action.has("actionRoll")) ui.put("report", "Roll total: {result.actionRoll.total}.");
             else if (action.has("damage")) ui.put("report", "Damage total: {result.actionDamage.total}.");
+            else if (action.has("table")) ui.put("report", "{source.name}: rolled {result.table.faces|list}. {result.table.outcomes|list}");
         }
         report(action, path, p, ui);
         sentRollReport(action, ui);
@@ -2335,6 +2337,61 @@ public final class LegacyCatalogConverter {
     }
 
     private static final Pattern CHECK_DIE = Pattern.compile("1?d(\\d{1,3})");
+
+    /**
+     * A one-die outcome table whose {@code min}/{@code max} face ranges cover the die exactly. It becomes a
+     * {@code dice.table} roll listing each face's outcome text, followed by every outcome's steps gated with {@code if}
+     * on the rolled face.
+     */
+    private static void actionTable(JsonNode table, String at, Problems p, ArrayNode steps, ObjectNode effects, Pools pools, String target) {
+        if (!table.isObject()) { p.add(at, "Expected a table object."); return; }
+        p.onlyFields(table, at, Set.of("dice", "outcomes"));
+        var die = CHECK_DIE.matcher(table.path("dice").asText(""));
+        int sides = die.matches() ? Integer.parseInt(die.group(1)) : 0;
+        if (sides < 2 || sides > 100) { p.add(at + "/dice", "Expected one die with 2 to 100 sides."); return; }
+        JsonNode outcomes = table.path("outcomes");
+        if (!outcomes.isArray() || outcomes.isEmpty()) { p.add(at + "/outcomes", "Expected outcomes."); return; }
+        String[] texts = new String[sides];
+        ObjectNode face = RuleJson.JSON.createObjectNode();
+        face.putArray("at").add(read("result.table.faces")).add(0);
+        ArrayNode gated = RuleJson.JSON.createArrayNode();
+        int next = 1;
+        for (int i = 0; i < outcomes.size(); i++) {
+            JsonNode outcome = outcomes.get(i);
+            String path = at + "/outcomes/" + i;
+            p.onlyFields(outcome, path, Set.of("min", "max", "text", "steps"));
+            int min = outcome.path("min").asInt(0), max = outcome.has("max") ? outcome.path("max").asInt(0) : min;
+            if (!outcome.path("min").isInt() || min != next || max < min || max > sides) {
+                p.add(path, "Outcome ranges must cover the die in order without gaps.");
+                return;
+            }
+            next = max + 1;
+            String text = outcome.path("text").asText("");
+            if (text.isBlank()) { p.add(path + "/text", "Outcomes need a text."); return; }
+            for (int f = min; f <= max; f++) texts[f - 1] = escape(text);
+            ArrayNode converted = RuleJson.JSON.createArrayNode();
+            JsonNode list = outcome.path("steps");
+            for (int s = 0; s < list.size(); s++) step(list.get(s), path + "/steps/" + s, p, converted, effects, pools, target);
+            ObjectNode in = RuleJson.JSON.createObjectNode();
+            if (min == max) in.putArray("eq").add(face.deepCopy()).add(min);
+            else {
+                ArrayNode both = in.putArray("and");
+                both.addObject().putArray("gte").add(face.deepCopy()).add(min);
+                both.addObject().putArray("lte").add(face.deepCopy()).add(max);
+            }
+            for (JsonNode op : converted) {
+                if (op.has("as")) { p.add(path + "/steps", "Table outcome steps cannot roll amounts."); return; }
+                ((ObjectNode) op).set("if", in.deepCopy());
+                gated.add(op);
+            }
+        }
+        if (next != sides + 1) { p.add(at + "/outcomes", "Outcome ranges must cover the die in order without gaps."); return; }
+        ObjectNode roll = steps.addObject().put("op", "dice.table").put("count", 1);
+        ArrayNode labels = roll.putArray("outcomes");
+        for (String text : texts) labels.add(text);
+        roll.put("as", "table");
+        steps.addAll(gated);
+    }
     private static final List<String> FORAGED = List.of("foraged-food", "foraged-relic", "foraged-rune", "foraged-vial", "foraged-charm");
     private static final Pattern CATALOG_ID = Pattern.compile("[a-z0-9][a-z0-9-]{0,63}");
 
@@ -2882,6 +2939,12 @@ public final class LegacyCatalogConverter {
             }
             case "gain" -> {
                 if ("hope".equals(resource)) out.addObject().put("op", "resource.gain").put("pool", operationTarget + ".hope").set("amount", value);
+                else if ("scars".equals(resource) && !pools.has(resource)) {
+                    // Scars take Hope slots, so a gain never exceeds the Hope slots still available.
+                    ObjectNode capped = RuleJson.JSON.createObjectNode();
+                    capped.putArray("min").add(value).add(read(operationTarget + ".hope.max"));
+                    out.addObject().put("op", "resource.gain").put("pool", operationTarget + ".scars").set("amount", capped);
+                }
                 else if (pools.has(resource)) {
                     ObjectNode converted = out.addObject().put("op", "pool.gain").put("pool", resource);
                     if ("recipient".equals(operationTarget)) converted.put("owner", "recipient");

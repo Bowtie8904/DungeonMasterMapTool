@@ -102,8 +102,9 @@ public final class SheetProjection {
         path(fact.get("path"), at + "/path");
         switch (kind) {
             case "value" -> {
-                RuleJson.fields(fact, at, "kind", "path", "writable", "min", "max");
+                RuleJson.fields(fact, at, "kind", "path", "writable", "min", "max", "default");
                 bounds(fact, at);
+                if (fact.has("default") && !fact.get("default").isValueNode()) throw RuleJson.error(at + "/default", "Expected a plain default value.");
             }
             case "object" -> {
                 RuleJson.fields(fact, at, "kind", "path", "fields", "writable", "atLeast", "max");
@@ -208,7 +209,10 @@ public final class SheetProjection {
             JsonNode fact = entry.getValue();
             JsonNode value = get(sheet, fact.path("path").asText());
             switch (fact.path("kind").asText()) {
-                case "value" -> { if (value.isNumber() || value.isTextual() || value.isBoolean()) actor.set(entry.getKey(), value.deepCopy()); }
+                case "value" -> {
+                    if (value.isNumber() || value.isTextual() || value.isBoolean()) actor.set(entry.getKey(), value.deepCopy());
+                    else if (fact.has("default")) actor.set(entry.getKey(), fact.get("default").deepCopy());
+                }
                 case "object" -> {
                     if (!value.isObject()) return;
                     ObjectNode projected = actor.putObject(entry.getKey());

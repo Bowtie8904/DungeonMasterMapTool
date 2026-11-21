@@ -1149,6 +1149,52 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void actionTablesGateOutcomeStepsByTheRolledFace() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"sap","name":"Sap","automation":{"actions":[{"id":"drink","label":"Drink","table":{"dice":"1d6","outcomes":[
+                  {"min":1,"text":"Gain a scar.","steps":[{"op":"gain","resource":"scars","amount":1}]},
+                  {"min":2,"max":4,"text":"Clear 3 Stress.","steps":[{"op":"clear","resource":"stress","amount":3}]},
+                  {"min":5,"max":6,"text":"Clear 2 HP.","steps":[{"op":"clear","resource":"hp","amount":2}]}]}}]}},
+                {"id":"gap","name":"Gap","automation":{"actions":[{"id":"use","label":"Use","table":{"dice":"1d6","outcomes":[
+                  {"min":1,"max":2,"text":"A"},{"min":4,"max":6,"text":"B"}]}}]}}"""));
+        assertEquals(1, result.converted(), result.diagnostics().toString());
+        assertTrue(result.diagnostics().toString().toLowerCase().contains("gap"), result.diagnostics().toString());
+        JsonNode table = result.catalog().at("/entries/0/automation/rules/0/do/0");
+        assertEquals("dice.table", table.path("op").asText());
+        assertEquals(6, table.path("outcomes").size());
+        assertEquals("Clear 3 Stress.", table.at("/outcomes/3").asText());
+
+        RuleCompiler.Program program = RuleCatalog.compile(result.catalog().toString(), LegacyCatalogConverter.EMPTY_RECIPES).get(0).program();
+        String actor = """
+                {"hope":{"value":1,"max":1},"scars":0,"hp":{"marked":4,"capacity":6},"stress":{"marked":5,"capacity":6}}""";
+        java.util.Set<Integer> seen = new java.util.HashSet<>();
+        for (int seed = 0; seed < 300 && seen.size() < 6; seed++) {
+            var resolution = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program,
+                            context(program, actor, "{\"type\":\"action.request\"}"))),
+                    List.of(new RuleRuntime.Intent("drink", "sheet", "fixture", 0, RuleJson.JSON.createObjectNode())),
+                    new java.util.Random(seed));
+            ObjectNode out = resolution.contexts().getFirst();
+            String report = resolution.actions().getFirst().report();
+            int face = Integer.parseInt(report.replaceAll("^Fixture: rolled (\\d+)\\..*$", "$1"));
+            seen.add(face);
+            assertEquals(face == 1 ? 1 : 0, out.at("/actor/scars").asInt(), report);
+            assertEquals(face >= 2 && face <= 4 ? 2 : 5, out.at("/actor/stress/marked").asInt(), report);
+            assertEquals(face >= 5 ? 2 : 4, out.at("/actor/hp/marked").asInt(), report);
+        }
+        assertEquals(6, seen.size());
+
+        String full = """
+                {"hope":{"value":0,"max":0},"scars":6,"hp":{"marked":0,"capacity":6},"stress":{"marked":0,"capacity":6}}""";
+        for (int seed = 0; seed < 300; seed++) {
+            var resolution = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program,
+                            context(program, full, "{\"type\":\"action.request\"}"))),
+                    List.of(new RuleRuntime.Intent("drink", "sheet", "fixture", 0, RuleJson.JSON.createObjectNode())),
+                    new java.util.Random(seed));
+            assertEquals(6, resolution.contexts().getFirst().at("/actor/scars").asInt());
+        }
+    }
+
+    @Test
     void downtimeCraftingAndTablesBecomeGrantsAndTableRolls() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"recipe","name":"Recipe","automation":{"actions":[
