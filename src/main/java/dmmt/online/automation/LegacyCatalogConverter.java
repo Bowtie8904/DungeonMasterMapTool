@@ -70,7 +70,7 @@ public final class LegacyCatalogConverter {
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
             "actions", "rollOptions", "rollTriggers", "mitigation", "rest", "consumeLongRestMove", "group", "endOnDamage", "endOnSourceSevere", "endAfterIncomingDamage", "damage",
-            "unique", "exclusiveSource", "endOnMarkedHp", "endOnDealtDamage", "endOnAttack", "endOnAction", "lifeWard");
+            "unique", "exclusiveSource", "endOnMarkedHp", "endOnDealtDamage", "endOnAttack", "endOnAction", "lifeWard", "tokenResource");
     private static final Set<String> REST_FIELDS = Set.of("extraMoves", "longMovesInShort", "passives", "modifiers", "requiresEffect");
     private static final Set<String> PASSIVE_FIELDS = Set.of("id", "label", "defaultOn", "condition", "steps", "extraMoves", "consumeItem",
             "rest", "move", "bonus", "minHope", "cost", "chooseAlly", "hostOwned", "castBeforeRest", "requiresEffect", "excludesEffect");
@@ -360,6 +360,7 @@ public final class LegacyCatalogConverter {
             }
         }
         if (legacy.has("manual")) manualNotes(legacy.get("manual"), path + "/manual", p, rules);
+        tokenEnds(effects, path, p, pools);
         if (!pools.local().isEmpty()) out.set("pools", pools.local());
         if (!effects.isEmpty()) out.set("effects", effects);
         if (!rules.isEmpty()) out.set("rules", rules);
@@ -3009,6 +3010,17 @@ public final class LegacyCatalogConverter {
         }
     }
 
+    /** A token effect ({@code tokenResource}) ends as soon as its pool of tokens is empty. */
+    private static void tokenEnds(ObjectNode effects, String path, Problems p, Pools pools) {
+        effects.fields().forEachRemaining(entry -> {
+            if (!(entry.getValue() instanceof ObjectNode effect) || !effect.has("tokenResource")) return;
+            String pool = effect.remove("tokenResource").asText();
+            if (!pools.has(pool)) { p.add(path + "/tokenResource", "Unknown token resource: " + pool); return; }
+            if (effect.has("while")) { p.add(path + "/tokenResource", "A conditional effect cannot also end when its tokens run out."); return; }
+            effect.putObject("endWhen").putArray("lte").add(read("actor.pools." + pool + ".value")).add(0);
+        });
+    }
+
     private static String declareEffect(JsonNode effect, String path, Problems p, ObjectNode effects) {
         p.onlyFields(effect, path, EFFECT_FIELDS);
         String name = effect.path("name").asText("");
@@ -3040,6 +3052,11 @@ public final class LegacyCatalogConverter {
         if (effect.has("exclusiveSource")) {
             if (!effect.path("exclusiveSource").isBoolean()) p.add(path + "/exclusiveSource", "Expected a boolean.");
             else if (effect.path("exclusiveSource").asBoolean()) declared.put("singleHolder", true);
+        }
+        if (effect.has("tokenResource")) {
+            if (!effect.path("tokenResource").isTextual() || effect.path("tokenResource").asText().isBlank())
+                p.add(path + "/tokenResource", "Expected a resource ID.");
+            else declared.put("tokenResource", effect.path("tokenResource").asText());
         }
         if (effect.has("lifeWard")) {
             if (!effect.path("lifeWard").asBoolean(false)) p.add(path + "/lifeWard", "Expected true.");

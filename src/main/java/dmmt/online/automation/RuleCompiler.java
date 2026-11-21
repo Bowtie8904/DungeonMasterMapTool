@@ -333,7 +333,16 @@ public final class RuleCompiler {
     private static void validateEffect(String id, JsonNode effect, ObjectNode state, ObjectNode effects) {
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(id), "/automation/effects");
         String path = "/automation/effects/" + id;
-        RuleJson.fields(effect, path,         "label", "text", "kind", "until", "stacking", "modifiers", "profile", "while", "exclusiveGroup", "singleHolder");
+        RuleJson.fields(effect, path,         "label", "text", "kind", "until", "stacking", "modifiers", "profile", "while", "endWhen", "exclusiveGroup", "singleHolder");
+        if (effect.has("endWhen")) {
+            if (effect.has("while")) throw RuleJson.error(path + "/endWhen", "A derived effect (with while) cannot also declare endWhen.");
+            RuleExpression.validate(effect.get("endWhen"), path + "/endWhen");
+            for (String ref : RuleExpression.references(effect.get("endWhen"))) {
+                String root = ref.split("\\.")[0];
+                if (!Set.of("source", "actor", "state").contains(root) || "state".equals(root) && !state.has(ref.split("\\.")[1]))
+                    throw RuleJson.error(path + "/endWhen", "An effect end condition may only read source, actor and declared state: " + ref);
+            }
+        }
         if (effect.has("while")) {
                     for (String field : List.of("until", "stacking", "exclusiveGroup", "singleHolder"))
                 if (effect.has(field)) throw RuleJson.error(path + "/" + field, "A derived effect (with while) is active exactly while its condition holds; it cannot also declare " + field + ".");

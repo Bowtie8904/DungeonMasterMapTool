@@ -164,6 +164,20 @@ public final class RuleEffects {
         return removed;
     }
 
+    /** Ends this source's active actor effect instances whose {@code endWhen} condition now holds. */
+    static void settle(RuleCompiler.Program program, ObjectNode context) {
+        boolean ended = false;
+        var definitions = program.effects().fields();
+        while (definitions.hasNext()) {
+            var definition = definitions.next();
+            if (!definition.getValue().has("endWhen") || context.path("effects").path(definition.getKey()).asInt() == 0) continue;
+            if (RuleExpression.bool(RuleExpression.evaluate(definition.getValue().get("endWhen"), context), "/effects/" + definition.getKey() + "/endWhen"))
+                ended |= remove(owned(context, "actor"), program.sourceId() + "#" + definition.getKey(),
+                        context.path("source").path("instanceId").asText()) > 0;
+        }
+        if (ended) refreshCounts(program, context);
+    }
+
     /** Exposes {@code effects.<id>} as this source instance's active instance count on the actor. */
     static void refreshCounts(RuleCompiler.Program program, ObjectNode context) {
         ObjectNode counts = context.putObject("effects");

@@ -1658,6 +1658,38 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void tokenEffectsEndWhenTheirTokensRunOut() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"skin","name":"Skin","automation":{"resources":[{"id":"thorns","label":"Thorns","initial":0,"resetOn":"rest"}],
+                  "actions":[{"id":"cast","label":"Sprout","steps":[{"op":"gain","resource":"thorns","amount":2},
+                    {"op":"effect","effect":{"name":"Thorn Skin","until":"rest","tokenResource":"thorns"}}]}],
+                  "mitigation":[{"id":"thorns","label":"Thorns","quantity":true,"roll":{"count":"quantity","sides":6},"cost":{"thorns":1}}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        assertEquals("{\"lte\":[{\"read\":\"actor.pools.thorns.value\"},0]}", block(result, 0).at("/effects/thorn-skin/endWhen").toString());
+        RuleCompiler.Program program = program(result, 0);
+        ObjectNode cast = run(program, context(program, "{\"effects\":[]}", "{\"type\":\"action.request\"}"), "cast").contexts().getFirst();
+        assertEquals(1, cast.at("/actor/effects").size(), cast.toString());
+
+        String damage = """
+                {"type":"damage.prepare","damageType":"physical","thresholds":{"major":5,"severe":10},
+                 "damage":{"id":"hit","stage":"preSeverity","baseAmount":9,"amount":9,"adjustments":[]}}""";
+        ObjectNode actor = cast;
+        for (int remaining = 1; remaining >= 0; remaining--) {
+            ObjectNode hit = context(program, actor.get("actor").toString(), damage);
+            actor = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, hit)),
+                    List.of(new RuleRuntime.Intent("thorns", "use", "fixture", 0, (ObjectNode) RuleJson.parse("{\"quantity\":1}"))),
+                    StructuredRollTest.faces(3)).contexts().getFirst();
+            assertEquals(remaining, actor.at("/actor/pools/thorns/value").asInt(), actor.toString());
+            assertEquals(remaining, actor.at("/actor/effects").size(), "The effect ends with its last token.");
+        }
+
+        var unknown = LegacyCatalogConverter.convert(catalog("""
+                {"id":"bad","name":"Bad","automation":{"actions":[{"id":"cast","label":"Cast","steps":[
+                  {"op":"effect","effect":{"name":"Ward","tokenResource":"missing"}}]}]}}"""));
+        assertTrue(unknown.diagnostics().toString().contains("Unknown token resource"), unknown.diagnostics().toString());
+    }
+
+    @Test
     void effectGrantedRulesRequireTheirEffectAndCanEndIt() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"rager","name":"Rager","automation":{"actions":[{"id":"rage","label":"Rage","steps":[{"op":"effect","effect":{

@@ -208,6 +208,7 @@ public final class RuleRuntime {
             if (step.has("if") && !RuleExpression.bool(RuleExpression.evaluate(step.get("if"), next), "/do/if")) continue;
             operation(program, step, next, random, preview, published, rolls);
         }
+        RuleEffects.settle(program, next);
         String text = preview && rule.path("ui").has("preview") ? "preview" : "report";
         String report = rule.path("ui").has(text) ? RuleTemplate.render(rule.path("ui").path(text).asText(), next) : "";
         next.remove("die");
