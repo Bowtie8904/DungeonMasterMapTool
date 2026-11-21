@@ -31,7 +31,7 @@ public final class LegacyCatalogConverter {
     private static final List<String> FAMILIES = List.of("actions", "rollOptions", "rollTriggers", "conditionalRollTriggers", "mitigation");
     private static final Set<String> BLOCK_FIELDS = Set.of("actions", "reloading", "uses", "modifiers", "resources", "rollOptions", "rollTriggers",
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
-            "damage", "alternateProfiles", "rest", "attach");
+            "damage", "alternateProfiles", "rest", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit");
     private static final Map<String, String> RANGES = Map.of("melee", "melee", "very close", "veryClose", "veryclose", "veryClose",
             "close", "close", "far", "far", "very far", "veryFar", "veryfar", "veryFar");
     private static final Set<String> RESOURCE_FIELDS = Set.of("id", "label", "initial", "max", "resetOn");
@@ -53,11 +53,12 @@ public final class LegacyCatalogConverter {
     private static final Pattern ACTION_DAMAGE = Pattern.compile("(?i)(\\d*)d(\\d+)(?:([+-])(\\d+))?");
     private static final Set<String> ACTION_FIELDS = Set.of("id", "label", "description", "cost", "steps", "report", "damage",
             "requiresEffect", "excludesEffect", "endEffect", "uses", "usesSource", "actionRoll", "target",
-            "excludeSourceActor", "hostOwned", "selectAmount", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount");
+            "excludeSourceActor", "hostOwned", "selectAmount", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
+            "channel", "aura");
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
-            "actions", "rollOptions", "rollTriggers", "mitigation", "rest", "consumeLongRestMove");
+            "actions", "rollOptions", "rollTriggers", "mitigation", "rest", "consumeLongRestMove", "group", "endOnDamage", "damage");
     private static final Set<String> REST_FIELDS = Set.of("extraMoves", "longMovesInShort", "passives", "modifiers", "requiresEffect");
     private static final Set<String> PASSIVE_FIELDS = Set.of("id", "label", "defaultOn", "condition", "steps", "extraMoves", "consumeItem",
             "rest", "move", "bonus", "minHope", "cost", "chooseAlly", "hostOwned", "castBeforeRest", "requiresEffect", "excludesEffect");
@@ -193,10 +194,17 @@ public final class LegacyCatalogConverter {
             for (int i = 0; i < list.size(); i++) modifier(list.get(i), path + "/modifiers/" + i, p, modifiers);
             if (!modifiers.isEmpty()) out.set("modifiers", modifiers);
         }
+        if (legacy.has("grantsFeatures")) grants(legacy, path, p, out);
+        else if (legacy.has("groupGrantedFeatures")) p.add(path + "/groupGrantedFeatures", "Grouping needs granted features.");
         ArrayNode rules = RuleJson.JSON.createArrayNode();
         ObjectNode effects = RuleJson.JSON.createObjectNode();
         Set<String> ruleIds = new HashSet<>();
         List<Nested> queue = new ArrayList<>();
+        if (legacy.has("channelBenefit")) {
+            channelBenefit(legacy.get("channelBenefit"), path + "/channelBenefit", p, effects);
+            queue.addAll(p.nested());
+            p.nested().clear();
+        }
         List<ObjectNode> extra = new ArrayList<>();
         for (String family : FAMILIES) {
             JsonNode list = legacy.path(family);
@@ -206,10 +214,13 @@ public final class LegacyCatalogConverter {
         for (int n = 0; n < queue.size() && n < 256; n++) {
             Nested next = queue.get(n);
             JsonNode legacyRule = next.legacy();
-            if (Set.of("rest", "consumeLongRestMove").contains(next.family())) {
-                List<ObjectNode> restRules = "rest".equals(next.family())
-                        ? rest(legacyRule, next.path(), p, effects, pools, next.path().equals(path + "/rest") ? legacy : null, ruleIds)
-                        : List.of(consumeLongRestMove(legacyRule, next.path()));
+            if (Set.of("rest", "consumeLongRestMove", "endOnDamage", "effectDamage").contains(next.family())) {
+                List<ObjectNode> restRules = switch (next.family()) {
+                    case "rest" -> rest(legacyRule, next.path(), p, effects, pools, next.path().equals(path + "/rest") ? legacy : null, ruleIds);
+                    case "endOnDamage" -> List.of(endOnDamage(legacyRule));
+                    case "effectDamage" -> effectDamage(legacyRule, next.path(), p);
+                    default -> List.of(consumeLongRestMove(legacyRule, next.path()));
+                };
                 for (ObjectNode rule : restRules) {
                     rule.put("id", unique(rule.path("id").asText(), ruleIds));
                     rules.add(rule);
@@ -1553,6 +1564,15 @@ public final class LegacyCatalogConverter {
         if (usesSpellcastTrait)
             when.addObject().put("exists", "actor.spellcastTrait.value");
         sentRollConditions(action, when);
+        if (action.has("channel") && (!action.path("channel").isTextual() || action.path("channel").asText().isBlank()))
+            p.add(path + "/channel", "Expected an element name.");
+        boolean aura = action.has("aura");
+        if (aura && !action.path("aura").asBoolean(false)) p.add(path + "/aura", "Expected true.");
+        if (aura) {
+            ObjectNode pluck = RuleJson.JSON.createObjectNode();
+            pluck.putArray("pluck").add(read("actor.effects")).add("group");
+            when.addObject().putArray("includes").add(pluck).add("channel");
+        }
         applyWhen(rule, when);
         if (action.has("cost")) costs(action.get("cost"), path + "/cost", p, pools, rule);
         if (action.has("selectAmount")) selectAmount(action.get("selectAmount"), path + "/selectAmount", p, pools, rule);
@@ -1561,6 +1581,12 @@ public final class LegacyCatalogConverter {
         if (action.has("actionRoll")) actionRoll(action.get("actionRoll"), path + "/actionRoll", action, p, steps);
         if (action.has("damage")) actionDamage(action.get("damage"), path + "/damage", action, p, steps);
         if (action.has("sendRoll")) sentRoll(action.get("sendRoll"), path + "/sendRoll", action, p, steps);
+        if (aura) {
+            ObjectNode marker = RuleJson.JSON.createObjectNode().put("name", label).put("kind", "buff").put("until", "rest")
+                    .put("text", "Active with the element currently channeled.");
+            String effect = declareEffect(marker, path + "/aura", p, effects);
+            if (effect != null) steps.addObject().put("op", "effect.start").put("effect", effect).put("target", "actor");
+        }
         JsonNode list = action.path("steps");
         for (int i = 0; i < list.size(); i++) step(list.get(i), path + "/steps/" + i, p, steps, effects, pools, operationTarget);
         endEffect(action, steps, operationTarget);
@@ -1568,6 +1594,7 @@ public final class LegacyCatalogConverter {
         ObjectNode ui = rule.putObject("ui");
         ui.put("label", escape(label));
         if (action.has("description")) ui.put("description", escape(action.path("description").asText()));
+        if (aura) ui.put("unavailable", "Channel an element first.");
         if (!action.has("report")) {
             if (action.has("actionRoll") && action.has("damage"))
                 ui.put("report", "Roll total: {result.actionRoll.total}. Damage total: {result.actionDamage.total}.");
@@ -1921,6 +1948,21 @@ public final class LegacyCatalogConverter {
             if (resets == null) p.add(path + "/until", "Unsupported effect duration: " + until);
             else resets.forEach(declared.putArray("until")::add);
         }
+        if (effect.has("group")) {
+            String group = slug(effect.path("group").asText(""));
+            if (!effect.path("group").isTextual() || group.equals("item")) p.add(path + "/group", "Expected a group name.");
+            else declared.put("exclusiveGroup", group);
+        }
+        if (effect.has("endOnDamage")) {
+            JsonNode severity = effect.get("endOnDamage");
+            if (!severity.isInt() || severity.asInt() < 1 || severity.asInt() > 4) p.add(path + "/endOnDamage", "Expected a severity from 1 to 4.");
+            else p.nested().add(new Nested("endOnDamage", RuleJson.JSON.createObjectNode().put("effect", name).put("severity", severity.asInt()), path + "/endOnDamage"));
+        }
+        if (effect.has("damage")) {
+            ObjectNode granted = RuleJson.JSON.createObjectNode().put("effect", name);
+            granted.set("damage", effect.get("damage").deepCopy());
+            p.nested().add(new Nested("effectDamage", granted, path + "/damage"));
+        }
         for (String family : FAMILIES) {
             JsonNode list = effect.path(family);
             for (int i = 0; i < list.size(); i++) {
@@ -2262,6 +2304,96 @@ public final class LegacyCatalogConverter {
         if (modifier.has("note")) ((ObjectNode) rule.get("ui")).put("report", escape(modifier.path("note").asText()));
         if (steps.isEmpty()) p.add(path, "A move modifier needs a bonus, ally count or steps.");
         return rule;
+    }
+
+    /** Sheet metadata: the features acquired with this source, optionally shown grouped beneath it. */
+    private static void grants(JsonNode legacy, String path, Problems p, ObjectNode out) {
+        JsonNode names = legacy.get("grantsFeatures");
+        if (!names.isArray() || names.isEmpty() || names.size() > 16) { p.add(path + "/grantsFeatures", "Expected 1-16 feature names."); return; }
+        ObjectNode grants = out.putObject("grants");
+        ArrayNode features = grants.putArray("features");
+        for (int i = 0; i < names.size(); i++) {
+            if (!names.get(i).isTextual() || names.get(i).asText().isBlank()) p.add(path + "/grantsFeatures/" + i, "Expected a feature name.");
+            else features.add(names.get(i).asText());
+        }
+        JsonNode grouped = legacy.path("groupGrantedFeatures");
+        if (legacy.has("groupGrantedFeatures") && !grouped.isBoolean()) p.add(path + "/groupGrantedFeatures", "Expected a boolean.");
+        grants.put("display", grouped.asBoolean(false) ? "grouped" : "separate");
+    }
+
+    private static ObjectNode labelPresent(String label) {
+        ObjectNode pluck = RuleJson.JSON.createObjectNode();
+        pluck.putArray("pluck").add(read("actor.effects")).add("label");
+        ObjectNode includes = RuleJson.JSON.createObjectNode();
+        includes.putArray("includes").add(pluck).add(label);
+        return includes;
+    }
+
+    /**
+     * A channel benefit is a derived effect: active exactly while the actor has the channel effect it names. An aura
+     * benefit ("Name: Element") is active while the "Name" marker effect and the "Channeling: Element" effect are both
+     * active, which is how the legacy catalog pairs an aura with the element currently channeled.
+     */
+    private static void channelBenefit(JsonNode legacy, String path, Problems p, ObjectNode effects) {
+        p.onlyFields(legacy, path, Set.of("element", "effect"));
+        JsonNode effect = legacy.path("effect");
+        if (!effect.isObject()) { p.add(path + "/effect", "Expected an effect."); return; }
+        String element = legacy.path("element").asText("");
+        String name = effect.path("name").asText("");
+        ObjectNode condition;
+        if ("aura".equals(element)) {
+            int split = name.indexOf(": ");
+            if (split <= 0) { p.add(path + "/effect/name", "Aura benefits are named \"Aura: Element\"."); return; }
+            ObjectNode both = RuleJson.JSON.createObjectNode();
+            both.putArray("and").add(labelPresent(name.substring(0, split))).add(labelPresent("Channeling: " + name.substring(split + 2)));
+            condition = both;
+        } else {
+            String required = effect.path("requiresEffect").asText("");
+            if (element.isBlank() || required.isBlank()) { p.add(path, "Channel benefits need an element and the channel effect they require."); return; }
+            condition = labelPresent(required);
+        }
+        ObjectNode copy = ((ObjectNode) effect).deepCopy();
+        copy.remove("requiresEffect");
+        copy.remove("until");
+        String id = declareEffect(copy, path + "/effect", p, effects);
+        if (id != null) ((ObjectNode) effects.get(id)).set("while", condition);
+    }
+
+    /** Ends the effect once applied damage reaches the given severity (1 minor ... 4 massive). */
+    private static ObjectNode endOnDamage(JsonNode legacy) {
+        String effect = legacy.path("effect").asText();
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "end-" + slug(effect));
+        rule.putArray("bindings").addObject().put("id", "use").put("event", "damage.applied").put("surface", "damage").put("mode", "automatic");
+        ArrayNode when = RuleJson.JSON.createArrayNode();
+        when.add(labelPresent(effect));
+        when.addObject().putArray("gte").add(read("event.applied.severity")).add(legacy.path("severity").asInt());
+        applyWhen(rule, when);
+        rule.putArray("do").addObject().put("op", "effect.end").put("effect", effect).put("target", "actor");
+        rule.putObject("ui").put("label", escape(effect) + " ends");
+        return rule;
+    }
+
+    /** An effect that adds weapon damage dice: each Proficiency-scaled weapon damage roll gains the dice while it is active. */
+    private static List<ObjectNode> effectDamage(JsonNode legacy, String path, Problems p) {
+        JsonNode damage = legacy.path("damage");
+        p.onlyFields(damage, path, Set.of("extraDice", "dropLowest", "proficiencyOnly"));
+        int extra = damage.path("extraDice").asInt(-1);
+        if (!damage.path("extraDice").isInt() || extra < 1 || extra > 32) { p.add(path + "/extraDice", "Expected 1-32 extra dice."); return List.of(); }
+        if (damage.path("dropLowest").asInt(0) != 0) { p.add(path + "/dropLowest", "Effects cannot drop damage dice."); return List.of(); }
+        if (!damage.path("proficiencyOnly").asBoolean(false)) { p.add(path + "/proficiencyOnly", "Effect damage dice apply only to Proficiency-scaled weapons."); return List.of(); }
+        String effect = legacy.path("effect").asText();
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", slug(effect) + "-damage");
+        rule.putArray("bindings").addObject().put("id", "use").put("event", "roll.finished").put("surface", "roll").put("mode", "automatic");
+        ArrayNode when = RuleJson.JSON.createArrayNode();
+        when.addObject().putArray("eq").add(read("event.check.kind")).add("damage");
+        weaponDiceConditions(when);
+        when.add(labelPresent(effect));
+        applyWhen(rule, when);
+        ArrayNode steps = rule.putArray("do");
+        JsonNode roll = addWeaponDice(steps, read("event.roll"), extra);
+        steps.addObject().put("op", "roll.publish").set("roll", roll);
+        rule.putObject("ui").put("label", escape(effect));
+        return List.of(rule);
     }
 
     /** Ends the granting effect once its holder uses a long-rest move during a short rest. */

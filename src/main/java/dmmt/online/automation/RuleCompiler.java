@@ -131,6 +131,10 @@ public final class RuleCompiler {
         /** The attachment declaration, or {@code null} when the source is not attached to gear. */
         public ObjectNode attachment() { return attachment == null ? null : attachment.deepCopy(); }
         private Program withAttachment(ObjectNode declaration) { attachment = declaration == null ? null : declaration.deepCopy(); return this; }
+        private ObjectNode grants;
+        /** Features granted alongside this source ({@code features}, {@code display}), or {@code null}. Sheet metadata only. */
+        public ObjectNode grants() { return grants == null ? null : grants.deepCopy(); }
+        private Program withGrants(ObjectNode declaration) { grants = declaration == null ? null : declaration.deepCopy(); return this; }
 
         /**
          * Reasons this source cannot be attached to the described gear, in declaration order; empty when it may attach.
@@ -181,7 +185,8 @@ public final class RuleCompiler {
     public static Program compile(String sourceId, JsonNode automation, JsonNode recipeDocument) {
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(sourceId), "/sourceId");
         RuleJson.checkTree(automation, "/automation", 0, new int[]{0});
-        RuleJson.fields(automation, "/automation", "state", "limits", "pools", "effects", "modifiers", "profiles", "rules", "attachment");
+        RuleJson.fields(automation, "/automation", "state", "limits", "pools", "effects", "modifiers", "profiles", "rules", "attachment", "grants");
+        ObjectNode grants = automation.has("grants") ? grants(automation.get("grants")) : null;
         ObjectNode attachment = automation.has("attachment") ? attachment(automation.get("attachment")) : null;
         ObjectNode state = automation.has("state") ? RuleJson.object(automation.get("state"), "/automation/state") : RuleJson.JSON.createObjectNode();
         state.fieldNames().forEachRemaining(slot -> slot(slot, "/automation/state"));
@@ -218,10 +223,12 @@ public final class RuleCompiler {
         Decl decl = new Decl(state, limits, pools, effects, attachment != null);
         ArrayNode profiles = automation.has("profiles") ? profileList(automation.get("profiles")) : RuleJson.JSON.createArrayNode();
         JsonNode definitions = automation.path("rules");
-        if (definitions.isMissingNode() && (!modifiers.isEmpty() || !pools.isEmpty() || !profiles.isEmpty() || attachment != null))
-            return new Program(sourceId, decl, modifiers, Map.of()).withProfiles(profiles).withAttachment(attachment);
+        boolean derived = false;
+        for (JsonNode effect : effects) derived |= effect.has("while");
+        if (definitions.isMissingNode() && (!modifiers.isEmpty() || !pools.isEmpty() || !profiles.isEmpty() || attachment != null || grants != null || derived))
+            return new Program(sourceId, decl, modifiers, Map.of()).withProfiles(profiles).withAttachment(attachment).withGrants(grants);
         if (!definitions.isArray() || definitions.isEmpty() || definitions.size() > 256)
-            throw RuleJson.error("/automation/rules", "Expected 1-256 rules (or only passive modifiers, pools, profiles and an attachment).");
+            throw RuleJson.error("/automation/rules", "Expected 1-256 rules (or only passive modifiers, pools, profiles, derived effects, grants and an attachment).");
         Map<String, ObjectNode> expanded = new LinkedHashMap<>();
         int[] expandedNodes = {0};
         Set<String> localIds = new HashSet<>();
@@ -252,7 +259,21 @@ public final class RuleCompiler {
             if ("claim.offer".equals(operation.path("op").asText()) && !claimGroups.contains(operation.path("group").asText()))
                 throw RuleJson.error("/automation/rules/" + rule.path("id").asText() + "/do",
                         "A claim offer must name a claim group declared by this source: " + operation.path("group").asText());
-        return new Program(sourceId, decl, modifiers, expanded).withProfiles(profiles).withAttachment(attachment);
+        return new Program(sourceId, decl, modifiers, expanded).withProfiles(profiles).withAttachment(attachment).withGrants(grants);
+    }
+
+    /** Sheet metadata: features the character gains together with this source, and whether they display grouped under it. */
+    private static ObjectNode grants(JsonNode declaration) {
+        String path = "/automation/grants";
+        RuleJson.fields(declaration, path, "features", "display");
+        JsonNode features = declaration.path("features");
+        if (!features.isArray() || features.isEmpty() || features.size() > 16) throw RuleJson.error(path + "/features", "Expected 1-16 feature names.");
+        Set<String> names = new HashSet<>();
+        for (int i = 0; i < features.size(); i++)
+            if (!names.add(RuleJson.text(features.get(i), path + "/features/" + i))) throw RuleJson.error(path + "/features/" + i, "Duplicate feature name.");
+        if (declaration.has("display") && !Set.of("grouped", "separate").contains(declaration.path("display").asText()))
+            throw RuleJson.error(path + "/display", "Expected grouped or separate.");
+        return (ObjectNode) declaration.deepCopy();
     }
 
     private static final Set<String> GEAR_FACTS = Set.of("kind", "name", "range", "damageType", "hasFeature", "generated", "hasTraitAttachment");
@@ -296,7 +317,18 @@ public final class RuleCompiler {
     private static void validateEffect(String id, JsonNode effect, ObjectNode state, ObjectNode effects) {
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(id), "/automation/effects");
         String path = "/automation/effects/" + id;
-        RuleJson.fields(effect, path, "label", "text", "kind", "until", "stacking", "modifiers", "profile");
+        RuleJson.fields(effect, path, "label", "text", "kind", "until", "stacking", "modifiers", "profile", "while", "exclusiveGroup");
+        if (effect.has("while")) {
+            for (String field : List.of("until", "stacking", "exclusiveGroup"))
+                if (effect.has(field)) throw RuleJson.error(path + "/" + field, "A derived effect (with while) is active exactly while its condition holds; it cannot also declare " + field + ".");
+            RuleExpression.validate(effect.get("while"), path + "/while");
+            for (String ref : RuleExpression.references(effect.get("while"))) {
+                String root = ref.split("\\.")[0];
+                if (!Set.of("source", "actor", "state").contains(root) || "state".equals(root) && !state.has(ref.split("\\.")[1]))
+                    throw RuleJson.error(path + "/while", "A derived effect condition may only read source, actor and declared state: " + ref);
+            }
+        }
+        if (effect.has("exclusiveGroup")) RuleJson.id(effect.get("exclusiveGroup"), path + "/exclusiveGroup");
         for (String text : List.of("label", "text")) if (effect.has(text) || "label".equals(text)) {
             String template = RuleJson.text(effect.get(text), path + "/" + text);
             RuleTemplate.validate(template);
@@ -801,6 +833,8 @@ public final class RuleCompiler {
             else if ("effect".equals(field)) {
                 if (!decl.effects().has(RuleJson.text(value, path + "/effect")))
                     throw RuleJson.error(path + "/effect", "Undeclared effect: " + value.asText());
+                if (decl.effects().get(value.asText()).has("while"))
+                    throw RuleJson.error(path + "/effect", "A derived effect follows its while condition and cannot be started or ended: " + value.asText());
             } else if ("target".equals(field)) {
                 if (!Set.of("actor", "recipient").contains(value.asText()))
                     throw RuleJson.error(path + "/target", "Expected actor or recipient.");

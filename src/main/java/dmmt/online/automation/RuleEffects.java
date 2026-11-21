@@ -32,6 +32,40 @@ public final class RuleEffects {
         return out;
     }
 
+    /**
+     * Instances of the program's derived effects (declared with {@code while}) whose condition currently holds. They are
+     * never stored: the host recomputes them from the persisted actor, marks them {@code derived} and adds them to the
+     * projected actor so their modifiers, labels and counts apply exactly while the condition holds.
+     */
+    public static ArrayNode derived(RuleCompiler.Program program, ObjectNode hostContext) {
+        ObjectNode context = RuleRuntime.context(program, null, hostContext);
+        ArrayNode out = RuleJson.JSON.createArrayNode();
+        String instanceId = context.path("source").path("instanceId").asText();
+        program.effects().fields().forEachRemaining(entry -> {
+            JsonNode definition = entry.getValue();
+            if (!definition.has("while")) return;
+            if (!RuleExpression.bool(RuleExpression.evaluate(definition.get("while"), context), "/effects/" + entry.getKey() + "/while")) return;
+            ObjectNode instance = out.addObject()
+                    .put("id", instanceId + "/" + entry.getKey() + "/derived")
+                    .put("effect", program.sourceId() + "#" + entry.getKey())
+                    .put("sourceInstanceId", instanceId)
+                    .put("label", RuleTemplate.render(definition.path("label").asText(), context));
+            if (definition.has("text")) instance.put("text", RuleTemplate.render(definition.path("text").asText(), context));
+            instance.put("kind", definition.path("kind").asText("buff")).put("derived", true);
+            if (definition.has("profile")) instance.set("profile", definition.get("profile").deepCopy());
+            instance.putArray("until");
+            freeze(definition, context, instance.putArray("modifiers"));
+        });
+        return out;
+    }
+
+    /** Removes derived instances so only started effects are persisted. */
+    public static ArrayNode stored(JsonNode effects) {
+        ArrayNode kept = RuleJson.JSON.createArrayNode();
+        for (JsonNode effect : effects) if (!effect.path("derived").asBoolean()) kept.add(effect.deepCopy());
+        return kept;
+    }
+
     /** Returns the effects that survive {@code event}; manual effects (no {@code until}) always survive. */
     public static ArrayNode expire(JsonNode effects, String event) {
         if (!RuleCompiler.RESET_EVENTS.contains(event)) throw RuleJson.error("/event", "Unknown expiry event.");
@@ -83,6 +117,10 @@ public final class RuleEffects {
         }
         if ("unique".equals(stacking) && existing > 0) throw new RuleRuntime.Unavailable("effectActive", "This effect is already active.");
         if ("replace".equals(stacking)) remove(list, key, instanceId);
+        String group = definition.path("exclusiveGroup").asText("");
+        if (!group.isEmpty())
+            for (int i = list.size() - 1; i >= 0; i--)
+                if (group.equals(list.get(i).path("group").asText()) && !list.get(i).path("derived").asBoolean()) list.remove(i);
         if (list.size() >= MAX_INSTANCES) throw RuleJson.error("/effects", "Too many active effects.");
         ObjectNode instance = RuleJson.JSON.createObjectNode()
                 .put("id", instanceId + "/" + effectId + "/" + next)
@@ -91,19 +129,23 @@ public final class RuleEffects {
                 .put("label", RuleTemplate.render(definition.path("label").asText(), context));
         if (definition.has("text")) instance.put("text", RuleTemplate.render(definition.path("text").asText(), context));
         instance.put("kind", definition.path("kind").asText("buff"));
+        if (!group.isEmpty()) instance.put("group", group);
         if (definition.has("profile")) instance.set("profile", definition.get("profile").deepCopy());
         ArrayNode until = instance.putArray("until");
         definition.path("until").forEach(until::add);
-        ArrayNode modifiers = instance.putArray("modifiers");
+        freeze(definition, context, instance.putArray("modifiers"));
+        list.add(instance);
+        refreshCounts(program, context);
+        return instance.deepCopy();
+    }
+
+    private static void freeze(JsonNode definition, ObjectNode context, ArrayNode modifiers) {
         for (JsonNode modifier : definition.path("modifiers")) {
             ObjectNode frozen = modifiers.addObject().put("stat", modifier.path("stat").asText())
                     .put("op", modifier.path("op").asText("add"))
                     .put("value", RuleExpression.number(RuleExpression.evaluate(modifier.get("value"), context), "/modifiers/value"));
             if (modifier.has("label")) frozen.put("label", RuleTemplate.render(modifier.path("label").asText(), context));
         }
-        list.add(instance);
-        refreshCounts(program, context);
-        return instance.deepCopy();
     }
 
     static int end(RuleCompiler.Program program, String effectId, String target, ObjectNode context) {

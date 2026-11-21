@@ -77,6 +77,9 @@ public final class AutomationHost {
         ObjectNode result = RuleJson.JSON.createObjectNode();
         result.put("revision", revision(copy));
         result.set("actions", visible);
+        ArrayNode derived = result.putArray("derivedEffects");
+        for (JsonNode effect : actor(pack, copy, projection.state(copy), event).path("effects"))
+            if (effect.path("derived").asBoolean()) derived.add(effect);
         ArrayNode profiles = result.putArray("profiles");
         for (SheetProjection.SourceElement element : projection.sources(copy)) {
             RuleCompiler.Program program = pack.programs().get(element.sourceId());
@@ -153,7 +156,7 @@ public final class AutomationHost {
             }
             for (JsonNode request2 : context.path("outbox")) outbox.add(request2);
         }
-        if (!resolution.actions().isEmpty()) projection.write(working, before, actor);
+        if (!resolution.actions().isEmpty()) projection.write(working, before, persisted(actor));
         for (SheetProjection.SourceElement element : emptied) remove(working, element);
 
         ObjectNode response = RuleJson.JSON.createObjectNode();
@@ -199,7 +202,7 @@ public final class AutomationHost {
             }
         }
         if (!changed) return false;
-        projection.write(working, projection.actor(working), actor);
+        projection.write(working, projection.actor(working), persisted(actor));
         state = projection.state(working);
         state.put("revision", state.path("revision").asLong() + 1);
         replace(sheet, working);
@@ -227,14 +230,28 @@ public final class AutomationHost {
         ObjectNode base = actor.deepCopy();
         base.set("stats", projection.stats(actor, List.of()));
         List<JsonNode> modifiers = new ArrayList<>();
+        ArrayNode derived = RuleJson.JSON.createArrayNode();
         for (SheetProjection.SourceElement element : projection.sources(sheet)) {
             RuleCompiler.Program program = pack.programs().get(element.sourceId());
-            if (program == null || program.modifiers().isEmpty()) continue;
-            RuleEffects.passives(program, context(state, element, base, event)).forEach(modifiers::add);
+            if (program == null) continue;
+            if (!program.modifiers().isEmpty()) RuleEffects.passives(program, context(state, element, base, event)).forEach(modifiers::add);
+            derived.addAll(RuleEffects.derived(program, context(state, element, base, event)));
+        }
+        if (!derived.isEmpty()) {
+            ArrayNode effects = actor.path("effects").isArray() ? (ArrayNode) actor.get("effects") : actor.putArray("effects");
+            effects.addAll(derived);
         }
         if (actor.path("effects").isArray()) RuleEffects.modifiers(actor.get("effects")).forEach(modifiers::add);
         actor.set("stats", projection.stats(actor, modifiers));
         return actor;
+    }
+
+    /** The actor without derived effect instances, which are recomputed on every projection and never stored. */
+    private static ObjectNode persisted(ObjectNode actor) {
+        if (!actor.path("effects").isArray()) return actor;
+        ObjectNode copy = actor.deepCopy();
+        copy.set("effects", RuleEffects.stored(actor.get("effects")));
+        return copy;
     }
 
     private static ObjectNode context(ObjectNode state, SheetProjection.SourceElement element, ObjectNode actor, ObjectNode event) {

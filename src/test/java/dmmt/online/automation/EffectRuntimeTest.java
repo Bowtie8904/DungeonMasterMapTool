@@ -95,6 +95,47 @@ class EffectRuntimeTest {
     }
 
     @Test
+    void derivedEffectsFollowTheirConditionAndExclusiveGroupsReplaceAcrossSources() throws Exception {
+        String rules = """
+                {"effects":{
+                   "stance":{"label":"Stance","kind":"buff","exclusiveGroup":"stance"},
+                   "boost":{"label":"Boost","kind":"buff","while":{"includes":[{"pluck":[{"read":"actor.effects"},"label"]},"Stance"]},
+                            "modifiers":[{"stat":"evasion","value":1}]}},
+                 "grants":{"features":["A","B"],"display":"grouped"},
+                 "rules":[{"id":"take","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                           "do":[{"op":"effect.start","effect":"stance","target":"actor"}],"ui":{"label":"Take"}}]}""";
+        ObjectNode recipes = fixture("rewrite/recipes");
+        RuleCompiler.Program program = RuleCompiler.compile("features:x", RuleJson.parse(rules), recipes);
+        assertEquals("[\"A\",\"B\"]", program.grants().path("features").toString());
+        ObjectNode context = context();
+        context.withObject("/source").put("id", "features:x");
+        context.withObject("/actor").putArray("effects");
+        assertTrue(RuleEffects.derived(program, context).isEmpty());
+
+        ObjectNode other = (ObjectNode) RuleJson.parse("{\"id\":\"y/stance/1\",\"effect\":\"features:y#stance\",\"sourceInstanceId\":\"y\",\"label\":\"Old\",\"group\":\"stance\",\"modifiers\":[]}");
+        context.withObject("/actor").putArray("effects").add(other);
+        ObjectNode after = run(program, "take", context, "{}").context();
+        assertEquals(List.of("Stance"), after.path("actor").path("effects").findValuesAsText("label"), "a group replaces effects from any source");
+        ArrayNode derived = RuleEffects.derived(program, after);
+        assertEquals("inst-1/boost/derived", derived.get(0).path("id").asText());
+        assertTrue(derived.get(0).path("derived").asBoolean());
+        ArrayNode all = ((ArrayNode) after.path("actor").path("effects")).deepCopy().addAll(derived);
+        assertEquals(1, RuleEffects.stored(all).size());
+
+        for (String bad : List.of(
+                "\"while\":true,\"until\":[\"rest.short\"]",
+                "\"while\":true,\"exclusiveGroup\":\"x\"",
+                "\"while\":{\"read\":\"event.type\"}",
+                "\"exclusiveGroup\":\"Not An Id\""))
+            assertThrows(IllegalArgumentException.class, () -> RuleCompiler.compile("features:x", RuleJson.parse(
+                    "{\"effects\":{\"e\":{\"label\":\"E\"," + bad + "}}}"), recipes), bad);
+        assertThrows(IllegalArgumentException.class, () -> RuleCompiler.compile("features:x", RuleJson.parse(
+                rules.replace("\"effect\":\"stance\"", "\"effect\":\"boost\"")), recipes), "derived effects cannot be started");
+        assertThrows(IllegalArgumentException.class, () -> RuleCompiler.compile("features:x", RuleJson.parse(
+                rules.replace("\"display\":\"grouped\"", "\"display\":\"stacked\"")), recipes));
+    }
+
+    @Test
     void expiryPassivesAndStatisticComposition() throws Exception {
         RuleCompiler.Program program = program();
         ObjectNode state = run(program, "guard", context(), "{}").context();

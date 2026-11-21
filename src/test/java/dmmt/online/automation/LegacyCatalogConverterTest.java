@@ -286,6 +286,84 @@ class LegacyCatalogConverterTest {
         assertTrue(Files.readString(legacy.resolve("classes.json")).contains("\"version\":1"));
     }
 
+    @Test
+    void channelsDeriveBenefitsAurasAndEndOnSevereDamageThroughTheHost() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"warden","name":"Warden","features":[
+                  {"name":"Elemental Incarnation","automation":{"grantsFeatures":["Elemental Incarnation: Fire","Elemental Incarnation: Air"],"groupGrantedFeatures":true}},
+                  {"name":"Elemental Incarnation: Fire","automation":{"actions":[{"id":"channel","label":"Channel Fire","channel":"Fire","cost":{"stress":1},
+                    "steps":[{"op":"effect","effect":{"name":"Channeling: Fire","kind":"buff","group":"channel","until":"rest","endOnDamage":3}}]}]}},
+                  {"name":"Elemental Incarnation: Air","automation":{"actions":[{"id":"channel","label":"Channel Air","channel":"Air","cost":{"stress":1},
+                    "steps":[{"op":"effect","effect":{"name":"Channeling: Air","kind":"buff","group":"channel","until":"rest","endOnDamage":3}}]}]}},
+                  {"name":"Elemental Dominion: Air","automation":{"channelBenefit":{"element":"Air","effect":{"name":"Elemental Dominion: Air","kind":"buff",
+                    "requiresEffect":"Channeling: Air","modifiers":[{"stat":"evasion","value":1}]}}}},
+                  {"name":"Elemental Dominion: Fire","automation":{"channelBenefit":{"element":"Fire","effect":{"name":"Elemental Dominion: Fire","kind":"buff",
+                    "requiresEffect":"Channeling: Fire","damage":{"extraDice":1,"dropLowest":0,"proficiencyOnly":true}}}}},
+                  {"name":"Elemental Aura","automation":{"uses":{"max":1,"per":"rest"},"actions":[{"id":"use","label":"Elemental Aura","aura":true}]}},
+                  {"name":"Elemental Aura: Air","automation":{"channelBenefit":{"element":"aura","effect":{"name":"Elemental Aura: Air","kind":"buff","until":"rest"}}}}
+                ]}"""));
+        assertEquals(result.blocks(), result.converted(), result.diagnostics().toString());
+        JsonNode features = result.catalog().at("/entries/0/features");
+        assertEquals("{\"features\":[\"Elemental Incarnation: Fire\",\"Elemental Incarnation: Air\"],\"display\":\"grouped\"}",
+                features.at("/0/automation/grants").toString());
+        assertEquals("channel", features.at("/1/automation/effects/channeling-fire/exclusiveGroup").asText());
+        assertTrue(features.at("/3/automation/effects/elemental-dominion-air").has("while"));
+        assertTrue(features.at("/4/automation/rules").findValuesAsText("id").contains("elemental-dominion-fire-damage"));
+
+        var pack = AutomationHost.compile("test", Map.of("classes", result.catalog().toString()), LegacyCatalogConverter.EMPTY_RECIPES);
+        String[] names = {"fire", "air", "dominion-air", "dominion-fire", "aura", "aura-air"};
+        ObjectNode sheet = (ObjectNode) RuleJson.parse("""
+                {"name":"Ada","level":1,"evasion":10,"hp":{"slots":6,"total":6,"on":0},"stress":{"slots":6,"total":6,"on":0},
+                 "armorTrack":{"slots":3,"total":3,"on":0},"hope":{"slots":6,"total":6,"on":2},"proficiency":{"slots":6,"total":6,"on":1},
+                 "traits":[],"features":[],"heritage":[],"loadout":[],"vault":[],"inventory":[],"activeWeapons":[]}""");
+        for (int i = 0; i < names.length; i++)
+            ((ArrayNode) sheet.get("features")).addObject().put("name", names[i]).put("text", "")
+                    .put("automationSource", "classes:warden:features:" + result.assignedIds().get("/entries/0/features/" + (i + 1)))
+                    .put("instanceId", "f-" + names[i]);
+        AutomationHost host = AutomationHost.bundled();
+        ObjectNode action = RuleJson.JSON.createObjectNode().put("type", "action.request");
+        java.util.function.Function<ObjectNode, Map<String, Boolean>> available = described -> {
+            Map<String, Boolean> map = new java.util.TreeMap<>();
+            for (JsonNode item : described.path("actions")) map.put(item.path("label").asText(), item.path("available").asBoolean());
+            return map;
+        };
+        java.util.function.Function<ObjectNode, List<String>> derived = described ->
+                described.path("derivedEffects").findValuesAsText("label").stream().sorted().toList();
+        java.util.function.BiFunction<String, String, ObjectNode> request = (instance, rule) -> {
+            ObjectNode built = RuleJson.JSON.createObjectNode().put("requestId", instance + host.revision(sheet)).put("expectedRevision", host.revision(sheet));
+            built.putArray("selections").addObject().put("sourceInstanceId", instance).put("ruleId", rule).put("bindingId", "sheet");
+            return built;
+        };
+
+        ObjectNode before = host.describe(pack, sheet, action, "sheet", "self");
+        assertFalse(available.apply(before).get("Elemental Aura"), "the aura needs an active channel");
+        assertEquals(List.of(), derived.apply(before));
+
+        host.execute(pack, sheet, action, request.apply("f-air", "channel"), "self", null);
+        host.execute(pack, sheet, action, request.apply("f-aura", "use"), "self", null);
+        ObjectNode air = host.describe(pack, sheet, action, "sheet", "self");
+        assertEquals(List.of("Elemental Aura: Air", "Elemental Dominion: Air"), derived.apply(air));
+        assertEquals(1, air.at("/derivedEffects").findValues("modifiers").stream().mapToInt(JsonNode::size).sum());
+        assertEquals(List.of("Channeling: Air", "Elemental Aura"), sheet.at("/automationState/effects").findValuesAsText("label"),
+                "derived effects are never persisted");
+
+        host.execute(pack, sheet, action, request.apply("f-fire", "channel"), "self", null);
+        assertEquals(List.of("Elemental Aura", "Channeling: Fire"), sheet.at("/automationState/effects").findValuesAsText("label"),
+                "a new channel replaces the previous one");
+        assertEquals(List.of("Elemental Dominion: Fire"), derived.apply(host.describe(pack, sheet, action, "sheet", "self")));
+
+        ObjectNode damage = RuleJson.JSON.createObjectNode().put("type", "damage.applied");
+        damage.putObject("applied").put("severity", 2);
+        ObjectNode none = RuleJson.JSON.createObjectNode().put("requestId", "d1").put("expectedRevision", host.revision(sheet));
+        none.putArray("selections");
+        host.execute(pack, sheet, damage, none, "self", null);
+        assertTrue(sheet.at("/automationState/effects").findValuesAsText("label").contains("Channeling: Fire"), "major damage keeps the channel");
+        damage.with("applied").put("severity", 3);
+        none.put("requestId", "d2").put("expectedRevision", host.revision(sheet));
+        host.execute(pack, sheet, damage, none, "self", null);
+        assertEquals(List.of("Elemental Aura"), sheet.at("/automationState/effects").findValuesAsText("label"), "severe damage ends the channel");
+    }
+
     private static JsonNode block(LegacyCatalogConverter.Result result, int entry) {
         assertEquals(result.blocks(), result.converted(), result.diagnostics().toString());
         return result.catalog().at("/entries/" + entry + "/automation");
