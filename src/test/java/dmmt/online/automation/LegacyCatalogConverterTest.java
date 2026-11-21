@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.nio.file.Files;
@@ -356,6 +357,70 @@ class LegacyCatalogConverterTest {
                 "{\"type\":\"action.request\"}");
         ObjectNode after = run(program, context, "clear").contexts().getFirst();
         assertEquals(0, after.at("/actor/pools/tokens/value").asInt());
+    }
+
+    @Test
+    void weaponDamageHandlingBecomesAutomaticEditsOfTheSourceDamageDice() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"heavy","name":"Heavy","automation":{"damage":{"extraDice":1,"dropLowest":1},
+                  "alternateProfiles":[{"label":"Versatile","trait":"Strength","range":"Very Close","damage":"1d8+3","damageType":"phys"}]}},
+                {"id":"brutal","name":"Brutal","automation":{"damage":{"extraDice":0,"dropLowest":0,"explode":"once","label":"Brutal"}}},
+                {"id":"serrated","name":"Serrated","automation":{"damage":{"onesAs":8,"label":"Serrated"}}},
+                {"id":"rampage","name":"Rampage","automation":{"damage":{"onesBonus":10,"proficiencyOnly":true,"label":"Rampage"}}},
+                {"id":"recursive","name":"Recursive","automation":{"damage":{"explode":"repeat","label":"Recursive"}}}"""));
+        JsonNode heavy = block(result, 0);
+        assertEquals("automatic", heavy.at("/rules/0/bindings/0/mode").asText());
+        assertEquals("roll.finished", heavy.at("/rules/0/bindings/0/event").asText());
+        assertEquals("{\"id\":\"versatile\",\"label\":\"Versatile\",\"trait\":\"Strength\",\"range\":\"veryClose\","
+                + "\"damage\":{\"sides\":8,\"flat\":3,\"type\":\"physical\"}}", heavy.at("/profiles/0").toString());
+        assertEquals("Versatile", program(result, 0).profiles().at("/0/label").asText());
+
+        assertEquals(8, weaponRoll(program(result, 0), "{\"weaponSource\":\"fixture\"}", 10,
+                StructuredRollTest.faces(1), 3, 5).path("total").asInt(), "The added die is the lowest and is dropped.");
+        assertEquals(14, weaponRoll(program(result, 1), "{\"weaponSource\":\"fixture\"}", 6,
+                StructuredRollTest.faces(6), 6, 2).path("total").asInt(), "Brutal dice explode only once.");
+        assertEquals(6 + 6 + 6 + 2, weaponRoll(program(result, 4), "{\"weaponSource\":\"fixture\"}", 6,
+                StructuredRollTest.faces(6, 6, 2), 6).path("total").asInt(), "Recursive dice keep exploding.");
+        assertEquals(1 + 4 + 7, weaponRoll(program(result, 2), "{\"weaponSource\":\"fixture\"}", 8,
+                StructuredRollTest.noRandom(), 1, 4).path("total").asInt());
+        assertEquals(5 + 4 + 9, weaponRoll(program(result, 3), "{\"weaponSource\":\"fixture\",\"fixedDice\":false}", 6,
+                StructuredRollTest.faces(4, 9), 1, 1, 3).path("total").asInt());
+        assertEquals(5, weaponRoll(program(result, 3), "{\"weaponSource\":\"fixture\",\"fixedDice\":true}", 6,
+                StructuredRollTest.noRandom(), 1, 1, 3).path("total").asInt(), "Fixed dice ignore proficiency-only handling.");
+        assertEquals(3, weaponRoll(program(result, 2), "{\"weaponSource\":\"other\"}", 8,
+                StructuredRollTest.noRandom(), 1, 2).path("total").asInt(), "Other weapons are untouched.");
+    }
+
+    @Test
+    void weaponDamageAndProfilesRejectUnsupportedShapes() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"bad","name":"Bad","automation":{"damage":{"explode":"twice","onesAs":1},
+                  "alternateProfiles":[{"label":"Odd","range":"Distant","damage":"lots"}]}}"""));
+        assertEquals(0, result.converted());
+        String problems = result.diagnostics().toString();
+        assertTrue(problems.contains("/damage/explode"), problems);
+        assertTrue(problems.contains("/damage/onesAs"), problems);
+        assertTrue(problems.contains("/alternateProfiles/0/range"), problems);
+        assertTrue(problems.contains("/alternateProfiles/0/damage"), problems);
+    }
+
+    private static JsonNode weaponRoll(RuleCompiler.Program program, String check, int sides, java.util.Random random,
+                                       int... faces) throws Exception {
+        ArrayNode dice = RuleJson.JSON.createArrayNode();
+        for (int i = 0; i < faces.length; i++)
+            dice.addObject().put("id", "w" + i).put("sides", sides).put("face", faces[i]).put("kept", true).put("origin", "rolled");
+        ObjectNode roll = (ObjectNode) RuleJson.parse("""
+                {"id":"hit","contributions":[{"id":"weapon","kind":"dice","role":"damage","sourceId":"%s","label":"Weapon","dice":[]},
+                  {"id":"bonus","kind":"flat","role":"modifier","sourceId":"core","label":"Bonus","value":0}]}""".formatted(program.sourceId()));
+        ((ObjectNode) roll.at("/contributions/0")).set("dice", dice);
+        ObjectNode checkNode = (ObjectNode) RuleJson.parse(check);
+        checkNode.put("kind", "damage");
+        ObjectNode event = RuleJson.JSON.createObjectNode().put("type", "roll.finished");
+        event.set("check", checkNode);
+        event.set("roll", StructuredRoll.validate(roll));
+        ObjectNode context = context(program, "{}", event.toString());
+        var resolution = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context)), List.of(), random);
+        return resolution.contexts().getFirst().at("/event/roll");
     }
 
     @Test

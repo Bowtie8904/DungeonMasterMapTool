@@ -62,7 +62,7 @@ describe('automation panel', () => {
   it('renders configured labels, submits intents and refreshes', async () => {
     let revision = 4;
     const fetchActions = vi.fn(async (): Promise<DescribedActions> => ({ revision, actions: [action({ revision })] }));
-    const submit = vi.fn(async (_actor: string, intent: RuleIntent) => { revision += 1; return intent; });
+    const submit = vi.fn(async (_actor: string, _intent: RuleIntent) => { revision += 1; return { actions: [{ report: 'Roll total: 14.' }] }; });
     const panel = automationPanel('a1', 'sheet', 'Actions', fetchActions, submit);
     await settle();
     const button = fake(panel).all('button')[0];
@@ -73,6 +73,7 @@ describe('automation panel', () => {
     await settle();
     expect(submit).toHaveBeenCalledWith('a1', expect.objectContaining({ sourceInstanceId: 'f-rally', ruleId: 'rally', bindingId: 'use', expectedRevision: 4 }));
     expect(fetchActions).toHaveBeenCalledTimes(2);
+    expect(fake(panel).text).toContain('Roll total: 14.');
   });
 
   it('shows host failures instead of hiding them', async () => {

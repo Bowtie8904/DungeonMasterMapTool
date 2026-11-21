@@ -36,6 +36,8 @@ const text: ControlText = {
   cancel: 'Cancel', retry: 'Retry', pending: 'Applying', failed: 'Action failed',
   wholeNumber: (min, max) => `Choose a whole number from ${min} to ${max}.`,
   selectDice: count => `Choose ${count} dice.`,
+  selectOptions: count => `Choose ${count} option(s).`,
+  allocate: (total, max) => `Distribute exactly ${total}, at most ${max} each.`,
 };
 const descriptor: RuleDescriptor = {
   sourceId: 'custom:rule', sourceInstanceId: 'instance-1', ruleId: 'continue', bindingId: 'result',
@@ -143,6 +145,55 @@ describe('generic rule controls', () => {
     dialog.all('button')[1].click();
     await settle();
     expect(submit).toHaveBeenCalledWith(expect.objectContaining({ inputs: { amount: 3 } }));
+  });
+
+  it('renders single choices as radios submitting one ID and multi choices as an exact-size list', async () => {
+    const body = dom();
+    const submit = vi.fn(async () => {});
+    const root = asElement(ruleControl({ ...descriptor, inputs: [
+      { id: 'stance', kind: 'choice', label: 'Stance', count: 1, options: [{ id: 'guard', label: 'Guard' }, { id: 'focus', label: 'Focus' }] },
+      { id: 'traits', kind: 'choice', label: 'Traits', count: 2,
+        options: [{ id: 'agility', label: 'Agility' }, { id: 'strength', label: 'Strength' }, { id: 'finesse', label: 'Finesse' }] },
+    ] }, submit, text));
+    root.all('button')[0].click();
+    const dialog = body.all('dialog')[0];
+    const inputs = dialog.all('input');
+    expect(inputs.map(input => input.type)).toEqual(['radio', 'radio', 'checkbox', 'checkbox', 'checkbox']);
+    inputs[1].checked = true;
+    inputs[2].checked = true;
+    dialog.all('button')[1].click();
+    expect(dialog.text).toContain('Choose 2 option(s).');
+    expect(submit).not.toHaveBeenCalled();
+    inputs[4].checked = true;
+    dialog.all('button')[1].click();
+    await settle();
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({ inputs: { stance: 'focus', traits: ['agility', 'finesse'] } }));
+  });
+
+  it('allocates an exact total with per-option maxima and omits zero entries', async () => {
+    const body = dom();
+    const submit = vi.fn(async () => {});
+    const root = asElement(ruleControl({ ...descriptor, inputs: [
+      { id: 'split', kind: 'allocation', label: 'Distribute', total: 3, max: 2,
+        options: [{ id: 'armor', label: 'Armor' }, { id: 'hope', label: 'Hope' }, { id: 'stress', label: 'Stress' }] },
+    ] }, submit, text));
+    root.all('button')[0].click();
+    const dialog = body.all('dialog')[0];
+    const inputs = dialog.all('input');
+    expect(inputs.map(input => input.type)).toEqual(['number', 'number', 'number']);
+    for (const [armor, hope] of [['3', '0'], ['1', '1'], ['1.5', '1.5']]) {
+      inputs[0].value = armor;
+      inputs[1].value = hope;
+      dialog.all('button')[1].click();
+      expect(submit).not.toHaveBeenCalled();
+      expect(dialog.text).toContain('Distribute exactly 3, at most 2 each.');
+    }
+    inputs[0].value = '2';
+    inputs[1].value = '0';
+    inputs[2].value = '1';
+    dialog.all('button')[1].click();
+    await settle();
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({ inputs: { split: { armor: 2, stress: 1 } } }));
   });
 
   it('sends the stable per-die identity rather than relying on its face or array position', async () => {

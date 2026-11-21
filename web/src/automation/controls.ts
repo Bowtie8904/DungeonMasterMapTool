@@ -4,7 +4,9 @@ import { drawingId as randomId } from '../tools';
 export type RuleInput =
   | { id: string; kind: 'integer'; label: string; min: number; max: number }
   | { id: string; kind: 'die.select'; label: string; count: number; default?: string[];
-      choices: Array<{ id: string; label: string; sides: number; face: number }> };
+      choices: Array<{ id: string; label: string; sides: number; face: number }> }
+  | { id: string; kind: 'choice'; label: string; count: number; options: Array<{ id: string; label: string }> }
+  | { id: string; kind: 'allocation'; label: string; total: number; max: number; options: Array<{ id: string; label: string }> };
 
 export interface RuleDescriptor {
   sourceId: string;
@@ -33,7 +35,7 @@ export interface RuleIntent {
   ruleId: string;
   bindingId: string;
   expectedRevision: number;
-  inputs: Record<string, number | string[]>;
+  inputs: Record<string, number | string | string[] | Record<string, number>>;
 }
 
 export interface ControlText {
@@ -43,6 +45,8 @@ export interface ControlText {
   failed: string;
   wholeNumber: (min: number, max: number) => string;
   selectDice: (count: number) => string;
+  selectOptions: (count: number) => string;
+  allocate: (total: number, max: number) => string;
 }
 
 /** Renders host-described buttons only; roll options belong to the enclosing roll transaction. */
@@ -101,10 +105,47 @@ export function ruleControl(descriptor: RuleDescriptor, submit: (intent: RuleInt
     activeDialog = dialog;
     button.disabled = true;
     const fields: HTMLInputElement[] = [];
-    const reads: Array<() => [string, number | string[]]> = [];
+    const reads: Array<() => [string, RuleIntent['inputs'][string]]> = [];
     dialog.append(el('h4', {}, descriptor.label));
     for (const input of definitions) {
-      if (input.kind === 'integer') {
+      if (input.kind === 'choice') {
+        const single = input.count === 1;
+        const group = el('fieldset', {}, el('legend', {}, input.label));
+        const name = `choice-${randomId()}`;
+        const checks = input.options.map(option => {
+          const field = el('input', { type: single ? 'radio' : 'checkbox', name });
+          fields.push(field);
+          group.append(el('label', {}, field, option.label));
+          return { field, id: option.id };
+        });
+        dialog.append(group);
+        reads.push(() => {
+          const selected = checks.filter(option => option.field.checked).map(option => option.id);
+          if (selected.length !== input.count) throw new Error(text.selectOptions(input.count));
+          return [input.id, single ? selected[0] : selected];
+        });
+      } else if (input.kind === 'allocation') {
+        const group = el('fieldset', {}, el('legend', {}, input.label));
+        const amounts = input.options.map(option => {
+          const field = el('input', { type: 'number', min: '0', max: String(input.max), step: '1', value: '0', ariaLabel: option.label });
+          fields.push(field);
+          group.append(el('label', {}, option.label, field));
+          return { field, id: option.id };
+        });
+        dialog.append(group);
+        reads.push(() => {
+          const allocation: Record<string, number> = {};
+          let sum = 0;
+          for (const { field, id } of amounts) {
+            const value = field.valueAsNumber;
+            if (!Number.isSafeInteger(value) || value < 0 || value > input.max) throw new Error(text.allocate(input.total, input.max));
+            if (value) allocation[id] = value;
+            sum += value;
+          }
+          if (sum !== input.total) throw new Error(text.allocate(input.total, input.max));
+          return [input.id, allocation];
+        });
+      } else if (input.kind === 'integer') {
         const field = el('input', { type: 'number', min: String(input.min), max: String(input.max), step: '1',
           value: String(input.min), ariaLabel: input.label });
         fields.push(field);

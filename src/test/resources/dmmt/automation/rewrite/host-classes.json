@@ -46,6 +46,7 @@
           "id": "steady",
           "name": "Steady",
           "automation": {
+            "profiles": [{ "id": "thrown", "label": "Thrown", "trait": "Finesse", "range": "far", "damage": { "sides": 6, "flat": 1 } }],
             "rules": [{
               "id": "steady",
               "bindings": [{ "id": "auto", "event": "action.request", "surface": "sheet", "mode": "automatic" }],

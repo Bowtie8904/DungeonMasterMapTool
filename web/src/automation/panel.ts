@@ -53,6 +53,17 @@ export async function executeAutomation(actorId: string, intent: RuleIntent, eve
   return response.json();
 }
 
+function actionReports(response: unknown): string[] {
+  if (!response || typeof response !== 'object' || Array.isArray(response)) return [];
+  const actions = (response as Record<string, unknown>).actions;
+  if (!Array.isArray(actions)) return [];
+  return actions.flatMap(action => {
+    if (!action || typeof action !== 'object' || Array.isArray(action)) return [];
+    const report = (action as Record<string, unknown>).report;
+    return typeof report === 'string' && report.trim() ? [report] : [];
+  });
+}
+
 /**
  * Renders every independent button the host describes for this actor and surface. The panel stays hidden while the
  * host has no automation pack or no visible actions, and refreshes itself after each completed action.
@@ -63,8 +74,10 @@ export function automationPanel(actorId: string, surface = 'sheet', title = 'Act
   const list = el('div', { class: 'acts automation-actions' });
   const status = el('div', { class: 'error' });
   status.setAttribute('role', 'alert');
+  const output = el('div', { class: 'automation-result' });
+  output.setAttribute('role', 'status');
   const root = el('div', { class: 'card automation-panel', hidden: true },
-    el('h3', { class: 'card-zone-header' }, title), list, status);
+    el('h3', { class: 'card-zone-header' }, title), list, output, status);
   let generation = 0;
   const load = async (): Promise<void> => {
     const current = ++generation;
@@ -73,11 +86,12 @@ export function automationPanel(actorId: string, surface = 'sheet', title = 'Act
       if (current !== generation) return;
       const buttons = (described?.actions ?? []).filter(action => action.mode === 'button');
       list.replaceChildren(...buttons.map(action => ruleControl({ ...action, revision: described!.revision }, async intent => {
-        await submit(actorId, intent);
+        const result = await submit(actorId, intent);
+        output.textContent = actionReports(result).join('\n');
         void load();
       }, CONTROL_TEXT)));
       status.textContent = '';
-      root.hidden = buttons.length === 0;
+      root.hidden = buttons.length === 0 && !output.textContent;
     } catch (failure) {
       if (current !== generation) return;
       status.textContent = failure instanceof Error ? failure.message : CONTROL_TEXT.failed;

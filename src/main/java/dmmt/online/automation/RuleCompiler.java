@@ -69,6 +69,8 @@ public final class RuleCompiler {
             Map.entry("roll.reroll", List.of("from", "dice", "choose")),
             Map.entry("roll.setFaces", List.of("from", "dice", "face")),
             Map.entry("roll.explode", List.of("from", "dice", "when", "maxDice")),
+            Map.entry("roll.addDice", List.of("from", "dice", "count")),
+            Map.entry("roll.dropLowest", List.of("from", "dice", "count")),
             Map.entry("roll.contribute", List.of("from", "contribution")));
     /** Fields evaluated once per die with the {@code die} context root. */
     private static final Set<String> PER_DIE_FIELDS = Set.of("where", "face", "when");
@@ -95,6 +97,7 @@ public final class RuleCompiler {
         private final ObjectNode effects;
         private final ArrayNode modifiers;
         private final Map<String, ObjectNode> rules;
+        private ArrayNode profiles = RuleJson.JSON.createArrayNode();
 
         private Program(String sourceId, Decl decl, ArrayNode modifiers, Map<String, ObjectNode> rules) {
             this.sourceId = sourceId;
@@ -114,6 +117,9 @@ public final class RuleCompiler {
         ObjectNode pools() { return pools.deepCopy(); }
         ObjectNode effects() { return effects.deepCopy(); }
         ArrayNode modifiers() { return modifiers.deepCopy(); }
+        /** Additional attack profiles the source offers while it is active. */
+        public ArrayNode profiles() { return profiles.deepCopy(); }
+        private Program withProfiles(ArrayNode list) { profiles = list.deepCopy(); return this; }
         ObjectNode effect(String id) {
             JsonNode effect = effects.get(id);
             if (effect == null) throw RuleJson.error("/effect", "Unknown effect: " + id);
@@ -145,7 +151,7 @@ public final class RuleCompiler {
     public static Program compile(String sourceId, JsonNode automation, JsonNode recipeDocument) {
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(sourceId), "/sourceId");
         RuleJson.checkTree(automation, "/automation", 0, new int[]{0});
-        RuleJson.fields(automation, "/automation", "state", "limits", "pools", "effects", "modifiers", "rules");
+        RuleJson.fields(automation, "/automation", "state", "limits", "pools", "effects", "modifiers", "profiles", "rules");
         ObjectNode state = automation.has("state") ? RuleJson.object(automation.get("state"), "/automation/state") : RuleJson.JSON.createObjectNode();
         state.fieldNames().forEachRemaining(slot -> slot(slot, "/automation/state"));
         ObjectNode pools = automation.has("pools") ? RuleJson.object(automation.get("pools"), "/automation/pools") : RuleJson.JSON.createObjectNode();
@@ -179,10 +185,12 @@ public final class RuleCompiler {
         effects.fields().forEachRemaining(field -> validateEffect(field.getKey(), field.getValue(), state, effects));
         ArrayNode modifiers = automation.has("modifiers") ? modifierList(automation.get("modifiers"), "/automation/modifiers", state) : RuleJson.JSON.createArrayNode();
         Decl decl = new Decl(state, limits, pools, effects);
+        ArrayNode profiles = automation.has("profiles") ? profileList(automation.get("profiles")) : RuleJson.JSON.createArrayNode();
         JsonNode definitions = automation.path("rules");
-        if (definitions.isMissingNode() && (!modifiers.isEmpty() || !pools.isEmpty())) return new Program(sourceId, decl, modifiers, Map.of());
+        if (definitions.isMissingNode() && (!modifiers.isEmpty() || !pools.isEmpty() || !profiles.isEmpty()))
+            return new Program(sourceId, decl, modifiers, Map.of()).withProfiles(profiles);
         if (!definitions.isArray() || definitions.isEmpty() || definitions.size() > 256)
-            throw RuleJson.error("/automation/rules", "Expected 1-256 rules (or only passive modifiers and pools).");
+            throw RuleJson.error("/automation/rules", "Expected 1-256 rules (or only passive modifiers, pools and profiles).");
         Map<String, ObjectNode> expanded = new LinkedHashMap<>();
         int[] expandedNodes = {0};
         Set<String> localIds = new HashSet<>();
@@ -206,7 +214,7 @@ public final class RuleCompiler {
             } else addRule(expanded, RuleJson.object(definition, path).deepCopy(), RuleJson.JSON.createObjectNode(), decl, path, expandedNodes);
         }
         if (expanded.size() > 256) throw RuleJson.error("/automation/rules", "Expanded rules exceed the limit.");
-        return new Program(sourceId, decl, modifiers, expanded);
+        return new Program(sourceId, decl, modifiers, expanded).withProfiles(profiles);
     }
 
     private static void validateEffect(String id, JsonNode effect, ObjectNode state, ObjectNode effects) {
@@ -233,9 +241,29 @@ public final class RuleCompiler {
         }
     }
 
-    /** An alternate attack profile (beastform, companion, unarmed) that replaces the actor's weapon while the effect lasts. */
+    private static ArrayNode profileList(JsonNode list) {
+        if (!list.isArray() || list.isEmpty() || list.size() > 8) throw RuleJson.error("/automation/profiles", "Expected 1-8 attack profiles.");
+        Set<String> ids = new HashSet<>();
+        for (int i = 0; i < list.size(); i++) {
+            String path = "/automation/profiles/" + i;
+            if (!ids.add(RuleJson.id(list.get(i).path("id"), path + "/id"))) throw RuleJson.error(path + "/id", "Duplicate profile ID.");
+            RuleJson.fields(list.get(i), path, "id", "label", "trait", "range", "damage");
+            validateProfileBody(list.get(i), path);
+        }
+        return (ArrayNode) list.deepCopy();
+    }
+
     private static void validateProfile(JsonNode profile, String path) {
         RuleJson.fields(profile, path, "label", "trait", "range", "damage");
+        validateProfileBody(profile, path);
+    }
+
+    /**
+     * An attack profile: on an effect it replaces the actor's weapon while the effect lasts (beastform, companion,
+     * unarmed); in a source's {@code profiles} it is an additional way to attack with that source. Damage {@code count}
+     * defaults to the actor's proficiency and {@code type} to the source's own damage type.
+     */
+    private static void validateProfileBody(JsonNode profile, String path) {
         RuleJson.text(profile.get("label"), path + "/label");
         if (profile.has("trait") && !Set.of("Agility", "Strength", "Finesse", "Instinct", "Presence", "Knowledge").contains(profile.path("trait").asText()))
             throw RuleJson.error(path + "/trait", "Unknown trait.");
@@ -244,7 +272,7 @@ public final class RuleCompiler {
         if (profile.has("damage")) {
             JsonNode damage = profile.get("damage");
             RuleJson.fields(damage, path + "/damage", "count", "sides", "flat", "type");
-            RuleJson.integer(damage.get("count"), path + "/damage/count", 1, 32);
+            if (damage.has("count")) RuleJson.integer(damage.get("count"), path + "/damage/count", 1, 32);
             RuleJson.integer(damage.get("sides"), path + "/damage/sides", 2, 100);
             if (damage.has("flat")) RuleJson.integer(damage.get("flat"), path + "/damage/flat", -100, 100);
             if (damage.has("type") && !Set.of("physical", "magic").contains(damage.path("type").asText()))

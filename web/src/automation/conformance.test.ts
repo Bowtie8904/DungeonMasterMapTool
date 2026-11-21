@@ -51,6 +51,19 @@ describe('host/browser structured roll conformance', () => {
     }
     expect(rolls.roll).toEqual(original);
   });
+  it('preserves flat damage when a scaled dice contribution resolves to zero', () => {
+    const roll = resolveRoll({ id: 'zero', contributions: [
+      { id: 'scaled', kind: 'dice', role: 'damage', sourceId: 'feature', label: 'Scaled', dice: [] },
+      { id: 'flat', kind: 'flat', role: 'damage', sourceId: 'feature', label: 'Bonus', value: 6 },
+    ] });
+    expect(roll.total).toBe(6);
+  });
+  it('preserves generic roll metadata through validation and derivation', () => {
+    const roll = { ...structuredClone(rolls.roll), metadata: { kind: 'reaction', trait: 'Agility', difficulty: 12 } };
+    expect(resolveRoll(roll).metadata).toEqual(roll.metadata);
+    expect(deriveRoll(roll, rolls.eligible, rolls.derivations[0].keep).metadata).toEqual(roll.metadata);
+    expect(() => resolveRoll({ ...roll, metadata: [] })).toThrow();
+  });
   it('renaming every row never changes the damage', () => {
     const renamed = structuredClone(rolls.roll);
     renamed.contributions.forEach(part => { part.label = 'Different name'; });
@@ -70,5 +83,23 @@ describe('host/browser structured roll conformance', () => {
     roll.contributions.push({ id: 'penalty', kind: 'dice', role: 'bonus', sourceId: 'other', label: 'Penalty', sign: -1,
       dice: [{ id: 'penalty1', sides: 6, face: 5, kept: true, origin: 'stored' }] });
     expect(deriveRoll(roll, rolls.eligible, rolls.derivations[0].keep).total).toBe(35);
+  });
+  it('accepts host-edited dice with bounded history and rejects forged history', () => {
+    const roll = structuredClone(rolls.roll);
+    roll.contributions.push({ id: 'smite', kind: 'dice', role: 'damage', sourceId: 'features:smite', label: 'Smite', editable: false,
+      dice: [{ id: 'smite1', sides: 6, face: 6, kept: true, origin: 'rerolled', previous: [2], editedBy: ['features:lucky'] },
+        { id: 'smite1.x1', sides: 6, face: 3, kept: true, origin: 'exploded', editedBy: ['features:brutal'] }] });
+    const resolved = resolveRoll(roll, false);
+    expect(resolved.total).toBe(46 + 9);
+    const smite = resolved.contributions.at(-1);
+    expect(smite?.kind === 'dice' && smite.dice[0].previous).toEqual([2]);
+    const forged = structuredClone(roll);
+    const part = forged.contributions.at(-1);
+    if (part?.kind === 'dice') part.dice[0].previous = [7];
+    expect(() => resolveRoll(forged, false)).toThrow();
+    const unknown = structuredClone(roll) as unknown as { contributions: Array<{ dice?: Array<{ origin: string }> }> };
+    const dice = unknown.contributions.at(-1)?.dice;
+    if (dice) dice[0].origin = 'wished';
+    expect(() => resolveRoll(unknown, false)).toThrow();
   });
 });

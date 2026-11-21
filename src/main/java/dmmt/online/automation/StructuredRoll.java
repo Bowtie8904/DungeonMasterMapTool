@@ -254,7 +254,10 @@ public final class StructuredRoll {
         return calculate(roll, false);
     }
 
-    /** Appends one host-resolved contribution after the roll; its ID must be new. */
+    /**
+     * Appends one host-resolved contribution after the roll; its ID must be new. A contribution of zero dice or a zero
+     * flat value changes nothing and is not recorded.
+     */
     public static ObjectNode contribute(JsonNode original, ObjectNode definition, JsonNode context, RandomGenerator random) {
         ObjectNode roll = validate(original);
         int used = 0;
@@ -262,7 +265,55 @@ public final class StructuredRoll {
         ObjectNode plan = RuleJson.JSON.createObjectNode().put("id", roll.path("id").asText());
         plan.putArray("contributions").add(definition);
         JsonNode part = resolve(plan, context, random, Math.max(0, 1024 - used)).path("contributions").get(0);
-        ((ArrayNode) roll.path("contributions")).add(part);
+        boolean empty = "dice".equals(part.path("kind").asText()) && part.path("dice").isEmpty()
+                || "flat".equals(part.path("kind").asText()) && part.path("value").isNumber() && part.path("value").asDouble() == 0;
+        if (!empty) ((ArrayNode) roll.path("contributions")).add(part);
+        return calculate(roll, false);
+    }
+
+    /**
+     * Rolls {@code count} more dice into the contribution of the first selected die, with that die's sides. An empty
+     * selection or a zero count changes nothing.
+     */
+    public static ObjectNode addDice(JsonNode original, JsonNode selection, int count, String sourceId, RandomGenerator random) {
+        ObjectNode roll = validate(original);
+        Set<String> wanted = ids(selection, "/roll/dice", true);
+        if (wanted.isEmpty() || count == 0) return roll;
+        ObjectNode[] first = null;
+        for (ObjectNode[] entry : editableDice(roll)) if (wanted.contains(entry[1].path("id").asText())) { first = entry; break; }
+        if (first == null) throw RuleJson.error("/roll/dice", "Die selection contains an unknown, dropped, excluded or locked die.");
+        int total = 0;
+        Set<String> used = new HashSet<>();
+        for (JsonNode part : roll.path("contributions")) for (JsonNode die : part.path("dice")) { total++; used.add(die.path("id").asText()); }
+        if (total + count > 1024) throw RuleJson.error("/roll", "Roll exceeds its dice limit.");
+        if (random == null) throw RuleJson.error("/dice", "Host random generator is required.");
+        ArrayNode dice = (ArrayNode) first[0].path("dice");
+        String contribution = first[0].path("id").asText();
+        int sides = first[1].path("sides").asInt(), n = 1;
+        for (int i = 0; i < count; i++) {
+            while (used.contains(contribution + ".a" + n)) n++;
+            String id = contribution + ".a" + n;
+            used.add(id);
+            ObjectNode extra = dice.addObject().put("id", id).put("sides", sides).put("face", random.nextInt(sides) + 1)
+                    .put("kept", true).put("origin", "added");
+            extra.putArray("editedBy").add(sourceId);
+        }
+        return calculate(roll, false);
+    }
+
+    /** Excludes the {@code count} lowest selected dice (earlier dice first on ties); a count above the selection excludes all of it. */
+    public static ObjectNode dropLowest(JsonNode original, JsonNode selection, int count) {
+        ObjectNode roll = validate(original);
+        Set<String> wanted = ids(selection, "/roll/dice", true);
+        List<ObjectNode> chosen = new ArrayList<>();
+        for (ObjectNode[] entry : editableDice(roll)) if (wanted.contains(entry[1].path("id").asText())) chosen.add(entry[1]);
+        if (chosen.size() != wanted.size()) throw RuleJson.error("/roll/dice", "Die selection contains an unknown, dropped, excluded or locked die.");
+        if (count == 0 || chosen.isEmpty()) return roll;
+        chosen.sort(Comparator.comparingInt(die -> die.path("face").asInt()));
+        Set<String> excluded = ids(roll.path("excludedDice"), "/roll/excludedDice", false);
+        for (int i = 0; i < Math.min(count, chosen.size()); i++) excluded.add(chosen.get(i).path("id").asText());
+        ArrayNode removed = roll.putArray("excludedDice");
+        excluded.forEach(removed::add);
         return calculate(roll, false);
     }
 
@@ -341,7 +392,7 @@ public final class StructuredRoll {
                     int face = RuleJson.integer(die.get("face"), diePath + "/face", 1, sides);
                     boolean kept = RuleExpression.bool(die.get("kept"), diePath + "/kept");
                     String origin = RuleJson.text(die.get("origin"), diePath + "/origin");
-                    if (!Set.of("rolled", "maximized", "stored", "rerolled", "set", "exploded").contains(origin))
+                    if (!Set.of("rolled", "maximized", "stored", "rerolled", "set", "exploded", "added").contains(origin))
                         throw RuleJson.error(diePath + "/origin", "Unknown die provenance.");
                     for (String history : List.of("previous", "editedBy")) {
                         if (!die.has(history)) continue;

@@ -30,7 +30,10 @@ public final class LegacyCatalogConverter {
     private static final Pattern ID = Pattern.compile("[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}");
     private static final List<String> FAMILIES = List.of("actions", "rollOptions", "rollTriggers", "conditionalRollTriggers", "mitigation");
     private static final Set<String> BLOCK_FIELDS = Set.of("actions", "uses", "modifiers", "resources", "rollOptions", "rollTriggers",
-            "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt");
+            "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
+            "damage", "alternateProfiles");
+    private static final Map<String, String> RANGES = Map.of("melee", "melee", "very close", "veryClose", "veryclose", "veryClose",
+            "close", "close", "far", "far", "very far", "veryFar", "veryfar", "veryFar");
     private static final Set<String> RESOURCE_FIELDS = Set.of("id", "label", "initial", "max", "resetOn");
     private static final Set<String> OPTION_FIELDS = Set.of("id", "label", "description", "roll", "value", "dice", "advantage", "cost",
             "defaultOn", "exclusive", "requiresEffect", "excludesEffect", "weapon", "weaponRange", "excludeRolls", "effect", "uses",
@@ -231,10 +234,172 @@ public final class LegacyCatalogConverter {
             }
         } else for (String flag : List.of("automaticRestUse", "automaticRestUseOnAttempt"))
             if (legacy.has(flag)) p.add(path + "/" + flag, "Automatic use consumption needs a spellcast difficulty.");
+        if (legacy.has("damage")) {
+            ObjectNode rule = weaponDamage(legacy.get("damage"), path + "/damage", p);
+            if (rule != null) {
+                rule.put("id", unique(rule.path("id").asText(), ruleIds));
+                rules.add(rule);
+            }
+        }
+        if (legacy.has("alternateProfiles")) {
+            ArrayNode profiles = profiles(legacy.get("alternateProfiles"), path + "/alternateProfiles", p);
+            if (!profiles.isEmpty()) out.set("profiles", profiles);
+        }
         if (!pools.local().isEmpty()) out.set("pools", pools.local());
         if (!effects.isEmpty()) out.set("effects", effects);
         if (!rules.isEmpty()) out.set("rules", rules);
         else if (limited) p.add(path + "/uses", "A use limit without rules has nothing to limit.");
+        return out;
+    }
+
+    /**
+     * Weapon damage dice handling becomes an automatic edit of the finished damage roll made with this source. The host
+     * marks the weapon's base dice with {@code sourceId = source.id} and supplies {@code event.check.weaponSource}.
+     */
+    private static ObjectNode weaponDamage(JsonNode damage, String path, Problems p) {
+        if (!damage.isObject()) { p.add(path, "Expected a damage object."); return null; }
+        p.onlyFields(damage, path, Set.of("extraDice", "dropLowest", "explode", "onesAs", "maximumOnes", "onesBonus",
+                "proficiencyOnly", "label"));
+        for (String field : List.of("extraDice", "dropLowest"))
+            if (damage.has(field) && !(damage.path(field).isInt() && damage.path(field).asInt() >= 0 && damage.path(field).asInt() <= 32))
+                p.add(path + "/" + field, "Expected a whole number from 0 to 32.");
+        for (String field : List.of("onesAs", "onesBonus"))
+            if (damage.has(field) && !(damage.path(field).isInt() && damage.path(field).asInt() >= 2 && damage.path(field).asInt() <= 100))
+                p.add(path + "/" + field, "Expected a whole number from 2 to 100.");
+        String explode = damage.path("explode").asText("");
+        if (!explode.isEmpty() && !Set.of("once", "repeat").contains(explode)) p.add(path + "/explode", "Unsupported explode mode: " + explode);
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "weapon-damage");
+        rule.putArray("bindings").addObject().put("id", "use").put("event", "roll.finished").put("surface", "roll").put("mode", "automatic");
+        ArrayNode when = RuleJson.JSON.createArrayNode();
+        when.addObject().putArray("eq").add(read("event.check.kind")).add("damage");
+        when.addObject().putArray("eq").add(read("event.check.weaponSource")).add(read("source.instanceId"));
+        if (damage.path("proficiencyOnly").asBoolean(false))
+            when.addObject().putArray("eq").add(read("event.check.fixedDice")).add(false);
+        applyWhen(rule, when);
+        ArrayNode steps = rule.putArray("do");
+        String label = escape(damage.path("label").asText("Weapon damage"));
+        JsonNode[] from = { read("event.roll") };
+        int[] slot = { 0 };
+        java.util.function.Function<ObjectNode, String> select = where -> {
+            String as = "dice" + (++slot[0]);
+            ObjectNode step = steps.addObject().put("op", "roll.selectDice");
+            step.set("from", from[0].deepCopy());
+            step.set("where", where);
+            step.put("as", as);
+            return as;
+        };
+        java.util.function.Supplier<ObjectNode> weaponDice = () -> {
+            ObjectNode where = RuleJson.JSON.createObjectNode();
+            where.putArray("eq").add(read("die.sourceId")).add(read("source.id"));
+            return where;
+        };
+        java.util.function.BiConsumer<ObjectNode, String> edit = (step, as) -> {
+            step.set("from", from[0].deepCopy());
+            step.put("as", as);
+            from[0] = read("result." + as);
+        };
+        int extra = damage.path("extraDice").asInt(0), drop = damage.path("dropLowest").asInt(0);
+        if (extra > 0) {
+            String dice = select.apply(weaponDice.get());
+            ObjectNode step = steps.addObject().put("op", "roll.addDice");
+            step.set("dice", read("result." + dice));
+            step.put("count", extra);
+            edit.accept(step, "added");
+        }
+        if (drop > 0) {
+            String dice = select.apply(weaponDice.get());
+            ObjectNode step = steps.addObject().put("op", "roll.dropLowest");
+            step.set("dice", read("result." + dice));
+            step.put("count", drop);
+            edit.accept(step, "dropped");
+        }
+        if (!explode.isEmpty()) {
+            String dice = select.apply(weaponDice.get());
+            ObjectNode step = steps.addObject().put("op", "roll.explode");
+            step.set("dice", read("result." + dice));
+            ObjectNode test = RuleJson.JSON.createObjectNode();
+            ArrayNode all = test.putArray("and");
+            all.addObject().putArray("eq").add(read("die.face")).add(read("die.sides"));
+            if ("once".equals(explode)) all.addObject().putArray("ne").add(read("die.origin")).add("exploded");
+            step.set("when", test);
+            step.put("maxDice", 32);
+            edit.accept(step, "exploded");
+        }
+        java.util.function.Supplier<ObjectNode> weaponOnes = () -> {
+            ObjectNode where = RuleJson.JSON.createObjectNode();
+            ArrayNode all = where.putArray("and");
+            all.addObject().putArray("eq").add(read("die.sourceId")).add(read("source.id"));
+            all.addObject().putArray("eq").add(read("die.face")).add(1);
+            return where;
+        };
+        if (damage.path("maximumOnes").asBoolean(false)) {
+            String dice = select.apply(weaponOnes.get());
+            ObjectNode step = steps.addObject().put("op", "roll.setFaces");
+            step.set("dice", read("result." + dice));
+            step.set("face", read("die.sides"));
+            edit.accept(step, "maximized");
+        }
+        if (damage.has("onesAs")) {
+            String dice = select.apply(weaponOnes.get());
+            ObjectNode value = RuleJson.JSON.createObjectNode();
+            ObjectNode size = RuleJson.JSON.createObjectNode().set("size", read("result." + dice));
+            value.putArray("multiply").add(damage.path("onesAs").asInt() - 1).add(size);
+            ObjectNode step = steps.addObject().put("op", "roll.contribute");
+            step.set("contribution", contribution("weapon-ones-as", "flat", "damage", label).set("value", value));
+            edit.accept(step, "onesAs");
+        }
+        if (damage.has("onesBonus")) {
+            String dice = select.apply(weaponOnes.get());
+            ObjectNode step = steps.addObject().put("op", "roll.contribute");
+            ObjectNode contribution = contribution("weapon-ones-bonus", "dice", "damage", label).put("sides", damage.path("onesBonus").asInt());
+            contribution.set("count", RuleJson.JSON.createObjectNode().set("size", read("result." + dice)));
+            step.set("contribution", contribution);
+            edit.accept(step, "onesBonus");
+        }
+        if (slot[0] == 0) { p.add(path, "Weapon damage handling changes nothing."); return null; }
+        steps.addObject().put("op", "roll.publish").set("roll", from[0]);
+        rule.putObject("ui").put("label", label);
+        return rule;
+    }
+
+    /** Additional ways to attack with a source; a profile without a dice count uses the actor's proficiency. */
+    private static ArrayNode profiles(JsonNode list, String path, Problems p) {
+        ArrayNode out = RuleJson.JSON.createArrayNode();
+        if (!list.isArray() || list.isEmpty() || list.size() > 8) { p.add(path, "Expected one to eight profiles."); return out; }
+        Set<String> ids = new HashSet<>();
+        for (int i = 0; i < list.size(); i++) {
+            JsonNode legacy = list.get(i);
+            String at = path + "/" + i;
+            p.onlyFields(legacy, at, Set.of("label", "trait", "range", "damage", "damageType"));
+            String label = legacy.path("label").asText("");
+            if (label.isBlank()) { p.add(at + "/label", "Profiles need a label."); continue; }
+            ObjectNode profile = RuleJson.JSON.createObjectNode().put("id", unique(slug(label), ids)).put("label", escape(label));
+            if (legacy.has("trait")) {
+                String trait = legacy.path("trait").asText();
+                if (!TRAITS.contains(trait)) p.add(at + "/trait", "Unknown trait: " + trait);
+                else profile.put("trait", trait);
+            }
+            if (legacy.has("range")) {
+                String range = RANGES.get(legacy.path("range").asText().toLowerCase(java.util.Locale.ROOT));
+                if (range == null) p.add(at + "/range", "Unknown range: " + legacy.path("range").asText());
+                else profile.put("range", range);
+            }
+            var matcher = java.util.regex.Pattern.compile("d(\\d+)\\s*(?:([+-])\\s*(\\d+))?")
+                    .matcher(legacy.path("damage").asText("").trim().replaceFirst("^\\d*", ""));
+            if (!matcher.matches()) { p.add(at + "/damage", "Unsupported profile damage: " + legacy.path("damage").asText()); continue; }
+            ObjectNode damage = profile.putObject("damage").put("sides", Integer.parseInt(matcher.group(1)));
+            if (matcher.group(3) != null) damage.put("flat", ("-".equals(matcher.group(2)) ? -1 : 1) * Integer.parseInt(matcher.group(3)));
+            if (legacy.has("damageType")) {
+                String type = switch (legacy.path("damageType").asText()) {
+                    case "phys", "physical" -> "physical";
+                    case "mag", "magic" -> "magic";
+                    default -> null;
+                };
+                if (type == null) p.add(at + "/damageType", "Unknown damage type: " + legacy.path("damageType").asText());
+                else damage.put("type", type);
+            }
+            out.add(profile);
+        }
         return out;
     }
 

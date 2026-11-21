@@ -108,6 +108,8 @@ versions change. Older clients can continue reading catalog files and saved shee
 
 ## Automation block
 
+This guide describes the **current live** format. The [Online Play automation rewrite](ONLINE_AUTOMATION_PLAN.md#implementation-status) now has an isolated compiler/runtime and executable candidate JSON fixtures, but production integration and full conversion are unfinished. Its format-2 examples must not replace the live catalogs yet. The release remains one replacement format and engine, with a one-time conversion rather than parallel legacy execution.
+
 ### Active-loadout conditional modifiers
 
 `conditionalModifiers` contains passive modifiers with `loadoutDomain: {domain, min}`.

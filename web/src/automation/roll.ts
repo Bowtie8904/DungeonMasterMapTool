@@ -5,8 +5,12 @@ export interface StoredDie {
   sides: number;
   face: number;
   kept: boolean;
-  origin: 'rolled' | 'maximized' | 'stored';
+  origin: DieOrigin;
+  previous?: number[];
+  editedBy?: string[];
 }
+export type DieOrigin = 'rolled' | 'maximized' | 'stored' | 'rerolled' | 'set' | 'exploded';
+const ORIGINS: readonly string[] = ['rolled', 'maximized', 'stored', 'rerolled', 'set', 'exploded'];
 interface Contribution {
   id: string;
   role: string;
@@ -15,13 +19,14 @@ interface Contribution {
   total?: number;
 }
 export type RollContribution = Contribution & (
-  { kind: 'dice'; dice: StoredDie[]; sign?: -1 | 1 } |
+  { kind: 'dice'; dice: StoredDie[]; sign?: -1 | 1; poolId?: string; poolDieId?: string; editable?: boolean } |
   { kind: 'flat'; value: number } |
   { kind: 'scale'; of: string[]; factor: number }
 );
 export interface StoredRoll {
   id: string;
   contributions: RollContribution[];
+  metadata?: Record<string, unknown>;
   excludedDice?: string[];
   total?: number;
 }
@@ -56,7 +61,9 @@ function ids(value: unknown, path: string): string[] {
 
 export function resolveRoll(input: unknown, checkTotals = true): StoredRoll & { total: number } {
   checkJson(input);
-  const roll = object(input, '/roll', ['id', 'contributions', 'excludedDice', 'total']);
+  const roll = object(input, '/roll', ['id', 'contributions', 'metadata', 'excludedDice', 'total']);
+  if (roll.metadata !== undefined && (!roll.metadata || typeof roll.metadata !== 'object' || Array.isArray(roll.metadata)))
+    fail('/roll/metadata', 'Expected an object.');
   const parts = roll.contributions;
   if (!Array.isArray(parts) || !parts.length || parts.length > 256) fail('/roll/contributions', 'Expected 1-256 contributions.');
   const excluded = new Set(roll.excludedDice === undefined ? [] : ids(roll.excludedDice, '/roll/excludedDice'));
@@ -66,9 +73,9 @@ export function resolveRoll(input: unknown, checkTotals = true): StoredRoll & { 
   parts.forEach((value, i) => {
     const path = `/roll/contributions/${i}`;
     const common = ['id', 'kind', 'role', 'sourceId', 'label', 'total'];
-    const candidate = object(value, path, [...common, 'dice', 'sign', 'value', 'of', 'factor']);
+    const candidate = object(value, path, [...common, 'dice', 'sign', 'poolId', 'poolDieId', 'editable', 'value', 'of', 'factor']);
     const kind = candidate.kind;
-    const fields = kind === 'dice' ? ['dice', 'sign'] : kind === 'flat' ? ['value'] : kind === 'scale' ? ['of', 'factor'] : fail(path, 'Unknown contribution kind.');
+    const fields = kind === 'dice' ? ['dice', 'sign', 'poolId', 'poolDieId', 'editable'] : kind === 'flat' ? ['value'] : kind === 'scale' ? ['of', 'factor'] : fail(path, 'Unknown contribution kind.');
     const part = object(value, path, [...common, ...fields]);
     const partId = id(part.id, `${path}/id`);
     if (totals.has(partId)) fail(path, 'Duplicate contribution ID.');
@@ -77,24 +84,39 @@ export function resolveRoll(input: unknown, checkTotals = true): StoredRoll & { 
     let contribution: RollContribution;
     let sum = 0;
     if (kind === 'dice') {
-      if (!Array.isArray(part.dice) || !part.dice.length || part.dice.length > 1024) fail(path, 'Expected 1-1024 dice.');
+      if (!Array.isArray(part.dice) || part.dice.length > 1024) fail(path, 'Expected 0-1024 dice.');
+      if (part.poolId !== undefined) id(part.poolId, `${path}/poolId`);
+      if (part.poolDieId !== undefined && part.poolId === undefined) fail(`${path}/poolDieId`, 'A pool die reference requires a pool ID.');
+      if (part.poolDieId !== undefined) id(part.poolDieId, `${path}/poolDieId`);
+      if (part.editable !== undefined && typeof part.editable !== 'boolean') fail(`${path}/editable`, 'Expected a boolean.');
       const sign = part.sign === undefined ? 1 : integer(part.sign, path, -1, 1);
       if (sign !== -1 && sign !== 1) fail(path, 'Dice sign must be -1 or 1.');
       const dice: StoredDie[] = part.dice.map((item, j) => {
-        const dp = `${path}/dice/${j}`, die = object(item, dp, ['id', 'sides', 'face', 'kept', 'origin']);
+        const dp = `${path}/dice/${j}`, die = object(item, dp, ['id', 'sides', 'face', 'kept', 'origin', 'previous', 'editedBy']);
         const dieId = id(die.id, `${dp}/id`);
         if (allDice.has(dieId) || allDice.size >= 1024) fail(dp, 'Duplicate die ID or too many dice.');
         allDice.add(dieId);
         const sides = integer(die.sides, dp, 2, 1000), face = integer(die.face, dp, 1, sides);
         if (typeof die.kept !== 'boolean') fail(dp, 'Expected a boolean.');
         const origin = die.origin;
-        if (origin !== 'rolled' && origin !== 'maximized' && origin !== 'stored') fail(dp, 'Unknown die provenance.');
+        if (typeof origin !== 'string' || !ORIGINS.includes(origin)) fail(dp, 'Unknown die provenance.');
+        const history: Pick<StoredDie, 'previous' | 'editedBy'> = {};
+        for (const key of ['previous', 'editedBy'] as const) {
+          const items = die[key];
+          if (items === undefined) continue;
+          if (!Array.isArray(items) || items.length > 32) fail(`${dp}/${key}`, 'Expected at most 32 edits.');
+          if (key === 'previous') history.previous = items.map((v, k) => integer(v, `${dp}/previous/${k}`, 1, sides));
+          else history.editedBy = items.map((v, k) => id(v, `${dp}/editedBy/${k}`));
+        }
         if (origin === 'maximized' && face !== sides) fail(dp, 'A maximized die must show its maximum.');
         if (die.kept) keptDice.add(dieId);
         if (die.kept && !excluded.has(dieId)) sum += sign * face;
-        return { id: dieId, sides, face, kept: die.kept, origin };
+        return { id: dieId, sides, face, kept: die.kept, origin: origin as DieOrigin, ...history };
       });
-      contribution = { ...base, kind: 'dice', dice, ...(part.sign === undefined ? {} : { sign }) };
+      contribution = { ...base, kind: 'dice', dice, ...(part.sign === undefined ? {} : { sign }),
+        ...(part.poolId === undefined ? {} : { poolId: part.poolId as string }),
+        ...(part.poolDieId === undefined ? {} : { poolDieId: part.poolDieId as string }),
+        ...(part.editable === undefined ? {} : { editable: part.editable as boolean }) };
     } else if (kind === 'flat') {
       sum = numeric(part.value, path);
       contribution = { ...base, kind: 'flat', value: sum };
@@ -120,7 +142,9 @@ export function resolveRoll(input: unknown, checkTotals = true): StoredRoll & { 
   });
   if ([...excluded].some(die => !keptDice.has(die))) fail('/roll/excludedDice', 'Only original kept dice can be excluded.');
   if (checkTotals && roll.total !== undefined && roll.total !== total) fail('/roll/total', 'Stored total does not match its provenance.');
-  return { id: id(roll.id, '/roll/id'), contributions, ...(roll.excludedDice === undefined ? {} : { excludedDice: [...excluded] }), total };
+  return { id: id(roll.id, '/roll/id'), contributions,
+    ...(roll.metadata === undefined ? {} : { metadata: structuredClone(roll.metadata as Record<string, unknown>) }),
+    ...(roll.excludedDice === undefined ? {} : { excludedDice: [...excluded] }), total };
 }
 
 export function rollDice(roll: StoredRoll, role?: string, keptOnly = true): Array<StoredDie & { poolId: string; role: string }> {

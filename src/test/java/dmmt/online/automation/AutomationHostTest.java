@@ -1,5 +1,6 @@
 package dmmt.online.automation;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 
@@ -59,6 +60,11 @@ class AutomationHostTest {
         assertEquals(List.of("Forage", "Rally (1 Hope)", "Drink Minor Health Potion"), labels(HOST.describe(pack, sheet, action(), "sheet", "self")));
         assertEquals(List.of("Rally (1 Hope)"), labels(HOST.describe(pack, sheet, action(), "sheet", "other")));
         assertEquals(List.of(), labels(HOST.describe(pack, sheet, action(), "sheet", "dm")));
+        JsonNode profile = HOST.describe(pack, sheet, action(), "sheet", "self").path("profiles").get(0);
+        assertEquals("f-steady", profile.path("sourceInstanceId").asText());
+        assertEquals("Steady", profile.path("sourceName").asText());
+        assertEquals("thrown", profile.path("id").asText());
+        assertEquals(6, profile.at("/damage/sides").asInt());
         assertEquals(sheet(), sheet, "describing must not change the sheet");
     }
 

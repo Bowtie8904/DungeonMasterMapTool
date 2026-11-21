@@ -4,7 +4,7 @@ export type Context = { [key: string]: Json };
 const roots = new Set(['source', 'actor', 'recipient', 'event', 'state', 'input', 'die', 'result', 'args']);
 const reserved = new Set(['__proto__', 'constructor', 'prototype']);
 const unary = new Set(['not', 'floor', 'ceil', 'negate', 'size']);
-const binary = new Set(['subtract', 'divide', 'eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'includes']);
+const binary = new Set(['subtract', 'divide', 'eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'includes', 'pluck']);
 const many = new Set(['add', 'multiply', 'min', 'max', 'and', 'or']);
 
 function fail(path: string, message: string): never { throw new Error(`${path}: ${message}`); }
@@ -58,6 +58,16 @@ export function validateExpression(expression: unknown): asserts expression is J
     if (Array.isArray(node) || Object.keys(node).length !== 1) fail(path, 'An expression must be a scalar or one operator.');
     const [op, arg] = Object.entries(node)[0];
     if (op === 'literal') return;
+    if (op === 'object') {
+      if (arg === null || typeof arg !== 'object' || Array.isArray(arg)) fail(`${path}/object`, 'Expected 1-16 fields.');
+      const entries = Object.entries(arg);
+      if (entries.length < 1 || entries.length > 16) fail(`${path}/object`, 'Expected 1-16 fields.');
+      for (const [key, value] of entries) {
+        if (!/^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}$/.test(key) || ['read', 'exists', 'literal'].includes(key)) fail(`${path}/object`, 'Invalid field name.');
+        validate(value, `${path}/object/${key}`);
+      }
+      return;
+    }
     if (op === 'read' || op === 'exists') {
       if (typeof arg !== 'string') fail(path, 'Expected a context path.');
       validateRead(arg);
@@ -96,6 +106,7 @@ export function evaluate(expression: Json, context: Context): Json {
     if (node === null || typeof node !== 'object' || Array.isArray(node)) return node;
     const [op, arg] = Object.entries(node)[0];
     if (op === 'literal') return structuredClone(arg);
+    if (op === 'object') return Object.fromEntries(Object.entries(arg as Record<string, Json>).map(([k, v]) => [k, evalNode(v)]));
     if (op === 'read') return structuredClone(read(context, String(arg)));
     if (op === 'exists') return find(context, String(arg)) !== undefined;
     const operands = Array.isArray(arg) ? arg : [];
@@ -117,6 +128,11 @@ export function evaluate(expression: Json, context: Context): Json {
     const values = operands.map(evalNode);
     if (op === 'eq') return equal(values[0], values[1]);
     if (op === 'ne') return !equal(values[0], values[1]);
+    if (op === 'pluck') {
+      if (!Array.isArray(values[0]) || typeof values[1] !== 'string') fail('/expression', 'pluck requires a collection and a field name.');
+      const field = values[1] as string;
+      return (values[0] as Json[]).flatMap(v => v !== null && typeof v === 'object' && !Array.isArray(v) && Object.hasOwn(v, field) ? [structuredClone((v as Record<string, Json>)[field])] : []);
+    }
     if (op === 'includes') {
       if (!Array.isArray(values[0])) fail('/expression', 'includes requires a collection.');
       return values[0].some(v => equal(v, values[1]));

@@ -20,6 +20,21 @@ The **Online Play** tab (next to DM Link) lets you host an optional, DM-controll
 who join from a browser. **It is not DM control** (that is DM Link below); players get restricted access.
 Nothing starts until you click **Start online session**, so offline play and the second-screen view are unchanged.
 
+**Automation rewrite (in development, not enabled in live play):** The replacement now has a generic
+rule compiler, isolated host resolver, configurable text/choice controls, structured saved-roll calculations,
+numeric and individually identified dice pools with per-die controls. Executable JSON examples cover Deathrun,
+a mechanically different homebrew copy, a healing potion, and Prayer-Dice-shaped pool rules that contribute a
+stored die to a derived roll result or reduce pre-severity damage, a separately costed ward, and a shared
+Favor pool. The isolated host can now stage grouped event actions with automatic rules, selected buttons/options,
+aggregate cost/use-limit preflight and exclusive option groups; resolve configurable damage thresholds, armor
+spending and bounded HP marks; and apply recipient-targeted actions guarded by a per-recipient claim ledger.
+Independent fixtures exercise offline recipients and stale claim revisions.
+The live catalogs and gameplay still use the existing implementation: full catalog conversion, production
+integration, authoritative journaled commits and backed-up saved-game conversion are required before the single
+coordinated replacement. A generic sheet *Automation* panel appears only once converted catalogs are installed; the
+one-time `LegacyCatalogConverter` writes converted copies and a coverage report to a separate staging directory; the current dry run converts 516 of 1,084 blocks (47.6%), including legacy target modes, conditional roll triggers, fixed-trait/highest-trait/traitless/spellcast-trait action rolls and direct or triggered fixed, proficiency-scaled or spellcast-scaled damage rolls. Generic single-target and fan-out dispatch is covered by independent fixtures, but target picking and atomic multi-sheet persistence are not yet integrated into the live endpoint or UI.
+See the [rewrite design and implementation status](docs/ONLINE_AUTOMATION_PLAN.md#implementation-status).
+
 **Custom effects (partial implementation):** While hosting, the **Custom effects** tool on the right-hand tool rail (below Handouts) opens a dialog that lets the DM
 select saved player characters, compose stat or roll modifiers, optional roll bonuses, damage mitigation,
 resource actions and visible narrative rules, and remove individual DM-managed effects. Passive and selectable

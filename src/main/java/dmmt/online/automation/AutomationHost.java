@@ -77,6 +77,16 @@ public final class AutomationHost {
         ObjectNode result = RuleJson.JSON.createObjectNode();
         result.put("revision", revision(copy));
         result.set("actions", visible);
+        ArrayNode profiles = result.putArray("profiles");
+        for (SheetProjection.SourceElement element : projection.sources(copy)) {
+            RuleCompiler.Program program = pack.programs().get(element.sourceId());
+            if (program == null) continue;
+            for (JsonNode profile : program.profiles()) {
+                ObjectNode item = profiles.addObject().put("sourceId", element.sourceId())
+                        .put("sourceInstanceId", element.instanceId()).put("sourceName", element.name());
+                item.setAll((ObjectNode) profile);
+            }
+        }
         return result;
     }
 
