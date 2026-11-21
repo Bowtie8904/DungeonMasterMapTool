@@ -330,9 +330,9 @@ public final class RuleCompiler {
     private static void validateEffect(String id, JsonNode effect, ObjectNode state, ObjectNode effects) {
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(id), "/automation/effects");
         String path = "/automation/effects/" + id;
-        RuleJson.fields(effect, path, "label", "text", "kind", "until", "stacking", "modifiers", "profile", "while", "exclusiveGroup");
+        RuleJson.fields(effect, path,         "label", "text", "kind", "until", "stacking", "modifiers", "profile", "while", "exclusiveGroup", "singleHolder");
         if (effect.has("while")) {
-            for (String field : List.of("until", "stacking", "exclusiveGroup"))
+                    for (String field : List.of("until", "stacking", "exclusiveGroup", "singleHolder"))
                 if (effect.has(field)) throw RuleJson.error(path + "/" + field, "A derived effect (with while) is active exactly while its condition holds; it cannot also declare " + field + ".");
             RuleExpression.validate(effect.get("while"), path + "/while");
             for (String ref : RuleExpression.references(effect.get("while"))) {
@@ -351,8 +351,9 @@ public final class RuleCompiler {
         }
         if (effect.has("kind") && !Set.of("buff", "debuff").contains(effect.path("kind").asText()))
             throw RuleJson.error(path + "/kind", "Expected buff or debuff.");
-        if (effect.has("stacking") && !Set.of("replace", "stack", "unique").contains(effect.path("stacking").asText()))
-            throw RuleJson.error(path + "/stacking", "Expected replace, stack or unique.");
+        if (effect.has("stacking") && !Set.of("replace", "replaceAnySource", "stack", "unique").contains(effect.path("stacking").asText()))
+            throw RuleJson.error(path + "/stacking", "Expected replace, replaceAnySource, stack or unique.");
+        if (effect.has("singleHolder") && !effect.get("singleHolder").isBoolean()) throw RuleJson.error(path + "/singleHolder", "Expected a boolean.");
         if (effect.has("until")) resetEvents(effect.get("until"), path + "/until");
         if (effect.has("profile")) validateProfile(effect.get("profile"), path + "/profile");
         if (effect.has("modifiers")) {

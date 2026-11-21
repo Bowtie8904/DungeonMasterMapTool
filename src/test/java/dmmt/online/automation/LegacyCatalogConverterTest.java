@@ -875,6 +875,33 @@ class LegacyCatalogConverterTest {
         assertEquals("Gave 2 Hope to Mira.", resolved.actions().getFirst().action().report());
     }
 
+    @Test
+    void effectRollBonusesAndDamageEndingsBecomeEffectRules() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"t","name":"T","automation":{"actions":[{"id":"drink","label":"Drink","steps":[
+                  {"op":"effect","effect":{"name":"Stride","until":"manual","unique":true,"exclusiveSource":true,"endOnMarkedHp":true,"endOnDealtDamage":true,
+                    "modifiers":[{"roll":"trait:Agility","value":1,"consume":true}]}}]}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        JsonNode automation = block(result, 0);
+        assertEquals("replaceAnySource", automation.at("/effects/stride/stacking").asText(), automation.toString());
+        assertTrue(automation.at("/effects/stride/singleHolder").asBoolean(), automation.toString());
+        String rules = automation.path("rules").toString();
+        assertTrue(rules.contains("\"event.applied.hitPoints\""), rules);
+        assertTrue(rules.contains("\"roll.finished\""), rules);
+
+        RuleCompiler.Program program = program(result, 0);
+        String actor = "{\"id\":\"ari\",\"stats\":{\"level\":1,\"tier\":1},\"features\":[],\"heritage\":[],\"effects\":[]}";
+        ObjectNode started = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context(program, actor, "{\"type\":\"action.request\"}"))),
+                List.of(new RuleRuntime.Intent("drink", "sheet", "fixture", 0, RuleJson.JSON.createObjectNode())), StructuredRollTest.noRandom()).contexts().getFirst();
+        assertEquals("effect.endElsewhere", started.at("/outbox/0/kind").asText(), started.toString());
+        assertEquals("ari", started.at("/outbox/0/holder").asText(), started.toString());
+        String prepare = "{\"type\":\"roll.prepare\",\"check\":{\"kind\":\"action\",\"trait\":\"Agility\"},\"roll\":{\"id\":\"d\",\"contributions\":[{\"id\":\"base\",\"kind\":\"flat\",\"role\":\"modifier\",\"sourceId\":\"core\",\"label\":\"Base\",\"value\":0}]}}";
+        ObjectNode rolled = context(program, started.path("actor").toString(), prepare);
+        JsonNode after = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, rolled)), List.of(), StructuredRollTest.noRandom()).contexts().getFirst();
+        assertEquals(1, after.at("/event/roll/total").asInt(), after.toString());
+        assertEquals(0, after.at("/actor/effects").size(), "The used-up bonus ends its effect.");
+    }
+
     private static JsonNode block(LegacyCatalogConverter.Result result, int entry) {
         assertEquals(result.blocks(), result.converted(), result.diagnostics().toString());
         return result.catalog().at("/entries/" + entry + "/automation");

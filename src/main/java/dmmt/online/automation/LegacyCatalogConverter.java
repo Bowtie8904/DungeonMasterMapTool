@@ -66,7 +66,8 @@ public final class LegacyCatalogConverter {
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
-            "actions", "rollOptions", "rollTriggers", "mitigation", "rest", "consumeLongRestMove", "group", "endOnDamage", "endOnSourceSevere", "endAfterIncomingDamage", "damage");
+            "actions", "rollOptions", "rollTriggers", "mitigation", "rest", "consumeLongRestMove", "group", "endOnDamage", "endOnSourceSevere", "endAfterIncomingDamage", "damage",
+            "unique", "exclusiveSource", "endOnMarkedHp", "endOnDealtDamage");
     private static final Set<String> REST_FIELDS = Set.of("extraMoves", "longMovesInShort", "passives", "modifiers", "requiresEffect");
     private static final Set<String> PASSIVE_FIELDS = Set.of("id", "label", "defaultOn", "condition", "steps", "extraMoves", "consumeItem",
             "rest", "move", "bonus", "minHope", "cost", "chooseAlly", "hostOwned", "castBeforeRest", "requiresEffect", "excludesEffect");
@@ -225,10 +226,11 @@ public final class LegacyCatalogConverter {
         for (int n = 0; n < queue.size() && n < 256; n++) {
             Nested next = queue.get(n);
             JsonNode legacyRule = next.legacy();
-            if (Set.of("rest", "consumeLongRestMove", "endOnDamage", "effectDamage").contains(next.family())) {
+            if (Set.of("rest", "consumeLongRestMove", "endOnDamage", "endOnDealtDamage", "effectDamage").contains(next.family())) {
                 List<ObjectNode> restRules = switch (next.family()) {
                     case "rest" -> rest(legacyRule, next.path(), p, effects, pools, next.path().equals(path + "/rest") ? legacy : null, ruleIds);
                     case "endOnDamage" -> List.of(endOnDamage(legacyRule));
+                    case "endOnDealtDamage" -> List.of(endOnDealtDamage(legacyRule));
                     case "effectDamage" -> effectDamage(legacyRule, next.path(), p);
                     default -> List.of(consumeLongRestMove(legacyRule, next.path()));
                 };
@@ -1263,7 +1265,8 @@ public final class LegacyCatalogConverter {
                 binding.put("mode", "automatic");
                 binding.remove("defaultOn");
                 binding.remove("exclusiveGroup");
-                if (p.sourceId().startsWith("weapons:"))
+                // Effect-granted bonuses follow the effect holder (possibly an ally), not rolls with this weapon.
+                if (p.sourceId().startsWith("weapons:") && !option.has("requiresEffect"))
                     when.addObject().putArray("eq").add(read("event.check.weaponSource")).add(read("source.instanceId"));
             }
         }
@@ -2731,6 +2734,23 @@ public final class LegacyCatalogConverter {
             if (!effect.path("group").isTextual() || group.equals("item")) p.add(path + "/group", "Expected a group name.");
             else declared.put("exclusiveGroup", group);
         }
+        if (effect.has("unique")) {
+            if (!effect.path("unique").isBoolean()) p.add(path + "/unique", "Expected a boolean.");
+            else if (effect.path("unique").asBoolean()) declared.put("stacking", "replaceAnySource");
+        }
+        if (effect.has("exclusiveSource")) {
+            if (!effect.path("exclusiveSource").isBoolean()) p.add(path + "/exclusiveSource", "Expected a boolean.");
+            else if (effect.path("exclusiveSource").asBoolean()) declared.put("singleHolder", true);
+        }
+        if (effect.has("endOnMarkedHp")) {
+            if (!effect.path("endOnMarkedHp").asBoolean(false)) p.add(path + "/endOnMarkedHp", "Expected true.");
+            else p.nested().add(new Nested("endOnDamage", RuleJson.JSON.createObjectNode().put("effect", name).put("field", "hitPoints")
+                    .put("severity", 1), path + "/endOnMarkedHp"));
+        }
+        if (effect.has("endOnDealtDamage")) {
+            if (!effect.path("endOnDealtDamage").asBoolean(false)) p.add(path + "/endOnDealtDamage", "Expected true.");
+            else p.nested().add(new Nested("endOnDealtDamage", RuleJson.JSON.createObjectNode().put("effect", name), path + "/endOnDealtDamage"));
+        }
         if (effect.has("endOnDamage")) {
             JsonNode severity = effect.get("endOnDamage");
             if (!severity.isInt() || severity.asInt() < 1 || severity.asInt() > 4) p.add(path + "/endOnDamage", "Expected a severity from 1 to 4.");
@@ -2777,7 +2797,26 @@ public final class LegacyCatalogConverter {
         if (effect.has("modifiers")) {
             ArrayNode modifiers = RuleJson.JSON.createArrayNode();
             JsonNode list = effect.get("modifiers");
-            for (int i = 0; i < list.size(); i++) modifier(list.get(i), path + "/modifiers/" + i, p, modifiers, false);
+            boolean allConsumed = true;
+            for (JsonNode modifier : list) allConsumed &= modifier.path("consume").asBoolean(false);
+            for (int i = 0; i < list.size(); i++) {
+                JsonNode modifier = list.get(i);
+                String roll = modifier.path("roll").asText(null);
+                boolean consume = modifier.path("consume").asBoolean(false);
+                // Roll bonuses with dice, trait filters or a single use become automatic roll options granted by the effect.
+                if (roll != null && (consume || modifier.has("dice") || !ROLLS.contains(roll))) {
+                    p.onlyFields(modifier, path + "/modifiers/" + i, Set.of("roll", "value", "dice", "consume"));
+                    if (consume && !allConsumed) { p.add(path + "/modifiers/" + i + "/consume", "A used-up roll bonus ends its effect, so every modifier of that effect must be used up together."); continue; }
+                    ObjectNode option = RuleJson.JSON.createObjectNode().put("id", "bonus-" + i).put("label", name).put("roll", roll).put("required", true);
+                    if (modifier.has("value")) option.set("value", modifier.get("value").deepCopy());
+                    if (modifier.has("dice")) option.set("dice", modifier.get("dice").deepCopy());
+                    option.put("requiresEffect", name);
+                    if (consume) option.put("endEffect", name);
+                    p.nested().add(new Nested("rollOptions", option, path + "/modifiers/" + i));
+                    continue;
+                }
+                modifier(modifier, path + "/modifiers/" + i, p, modifiers, false);
+            }
             declared.set("modifiers", modifiers);
         }
         return id;
@@ -3244,6 +3283,20 @@ public final class LegacyCatalogConverter {
     }
 
     /** Ends the effect once applied damage reaches the given final (or, for {@code field: incoming}, pre-armor) severity (1 minor ... 4 massive). */
+    /** Ends an effect once its holder rolls damage. */
+    private static ObjectNode endOnDealtDamage(JsonNode legacy) {
+        String effect = legacy.path("effect").asText();
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "end-" + slug(effect) + "-on-damage");
+        rule.putArray("bindings").addObject().put("id", "use").put("event", "roll.finished").put("surface", "roll").put("mode", "automatic");
+        ArrayNode when = RuleJson.JSON.createArrayNode();
+        when.addObject().putArray("eq").add(read("event.check.kind")).add("damage");
+        when.add(labelPresent(effect));
+        applyWhen(rule, when);
+        rule.putArray("do").addObject().put("op", "effect.end").put("effect", effect).put("target", "actor");
+        rule.putObject("ui").put("label", escape(effect) + " ends");
+        return rule;
+    }
+
     private static ObjectNode endOnDamage(JsonNode legacy) {
         String effect = legacy.path("effect").asText();
         ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "end-" + slug(effect));

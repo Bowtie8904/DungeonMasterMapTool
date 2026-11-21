@@ -117,6 +117,8 @@ public final class RuleEffects {
         }
         if ("unique".equals(stacking) && existing > 0) throw new RuleRuntime.Unavailable("effectActive", "This effect is already active.");
         if ("replace".equals(stacking)) remove(list, key, instanceId);
+        if ("replaceAnySource".equals(stacking)) for (int i = list.size() - 1; i >= 0; i--)
+            if (key.equals(list.get(i).path("effect").asText()) && !list.get(i).path("derived").asBoolean()) list.remove(i);
         String group = definition.path("exclusiveGroup").asText("");
         if (!group.isEmpty())
             for (int i = list.size() - 1; i >= 0; i--)
@@ -135,6 +137,12 @@ public final class RuleEffects {
         definition.path("until").forEach(until::add);
         freeze(definition, context, instance.putArray("modifiers"));
         list.add(instance);
+        if (definition.path("singleHolder").asBoolean(false)) {
+            ArrayNode outbox = context.has("outbox") ? (ArrayNode) context.get("outbox") : context.putArray("outbox");
+            if (outbox.size() >= 32) throw RuleJson.error("/outbox", "Too many host requests.");
+            outbox.addObject().put("kind", "effect.endElsewhere").put("sourceInstanceId", instanceId).put("effect", key)
+                    .put("holder", context.path(target).path("id").asText()).put("label", instance.path("label").asText());
+        }
         refreshCounts(program, context);
         return instance.deepCopy();
     }
