@@ -884,15 +884,18 @@ public final class RuleRuntime {
                 result = RuleExpression.numeric(usage.path(limit).asInt(), "/result");
                 usage.put(limit, 0);
             }
-            case "damage.reduce" -> {
+            case "damage.reduce", "damage.increase" -> {
                 int amount = whole(op.path("amount"), context, 0, 1_000_000);
                 String id = RuleTemplate.render(op.path("id").asText(), context);
                 String label = RuleTemplate.render(op.path("label").asText(), context);
-                ObjectNode reduction = StructuredDamage.reduce(eval(op.path("from"), context), amount, id,
-                        program.sourceId(), label);
-                if (reduction.path("adjustment").path("applied").asInt() == 0)
-                    throw new Unavailable("noBenefit", "This action would not reduce any damage.");
-                result = reduction;
+                boolean increase = "damage.increase".equals(kind);
+                ObjectNode adjustment = increase
+                        ? StructuredDamage.increase(eval(op.path("from"), context), amount, id, program.sourceId(), label)
+                        : StructuredDamage.reduce(eval(op.path("from"), context), amount, id, program.sourceId(), label);
+                if (adjustment.path("adjustment").path("applied").asInt() == 0)
+                    throw new Unavailable("noBenefit", increase ? "This action would not increase any damage."
+                            : "This action would not reduce any damage.");
+                result = adjustment;
             }
             case "damage.publish" -> {
                 ObjectNode damage = StructuredDamage.validate(eval(op.path("damage"), context));

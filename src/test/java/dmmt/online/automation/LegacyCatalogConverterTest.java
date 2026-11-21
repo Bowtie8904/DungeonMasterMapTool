@@ -1617,6 +1617,47 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void mitigationIncreasesRecoveriesQuantitiesAndTableReactionsConvert() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"edge","name":"Edge","automation":{"resources":[{"id":"thorns","label":"Thorns","initial":0,"resetOn":"rest"}],"mitigation":[
+                  {"id":"frail","label":"Frail","passive":true,"when":{"type":"magic"},"double":true},
+                  {"id":"recover","label":"Not Done","passive":true,"when":{"severity":["severe"]},"finalSevere":true,"recoveryChoice":true},
+                  {"id":"reflect","label":"Reflect","when":{"markingHp":true},"cost":{"stress":1},"reflectHp":true},
+                  {"id":"braced","label":"Braced: attacker marks a Hit Point","cost":{"stress":2}},
+                  {"id":"thorns","label":"Thorns","quantity":true,"roll":{"count":"quantity","sides":6},"cost":{"thorns":1}}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        JsonNode block = block(result, 0);
+        assertEquals("button", block.at("/rules/1/bindings/0/mode").asText());
+        assertEquals("{source.name}: the attacker marks {event.applied.hitPoints} Hit Points.", block.at("/rules/2/ui/report").asText());
+        assertEquals("Braced: attacker marks a Hit Point.", block.at("/rules/3/ui/report").asText());
+        RuleCompiler.Program program = program(result, 0);
+
+        String actor = "{\"hope\":{\"value\":1,\"max\":6},\"stress\":{\"marked\":3,\"capacity\":6},\"pools\":{\"thorns\":{\"value\":3}},\"effects\":[]}";
+        ObjectNode magic = context(program, actor, """
+                {"type":"damage.prepare","damageType":"magic","thresholds":{"major":5,"severe":10},
+                 "damage":{"id":"hit","stage":"preSeverity","baseAmount":7,"amount":7,"adjustments":[]}}""");
+        ObjectNode doubled = run(program, magic).contexts().getFirst();
+        assertEquals(14, doubled.at("/event/damage/amount").asInt(), doubled.toString());
+        assertTrue(doubled.at("/event/damage/adjustments/0/increase").asBoolean());
+
+        var thorns = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, magic)),
+                List.of(new RuleRuntime.Intent("thorns", "use", "fixture", 0, (ObjectNode) RuleJson.parse("{\"quantity\":2}"))),
+                StructuredRollTest.faces(4, 4));
+        ObjectNode spent = thorns.contexts().getFirst();
+        assertEquals(1, spent.at("/actor/pools/thorns/value").asInt(), spent.toString());
+        assertEquals(6, spent.at("/event/damage/amount").asInt(), "Doubled to 14, then two d6 of 4 each.");
+
+        ObjectNode applied = context(program, actor, "{\"type\":\"damage.applied\",\"applied\":{\"severity\":3,\"incoming\":3,\"hitPoints\":3,\"amount\":12}}");
+        for (String[] pick : new String[][]{{"hope", "/actor/hope/value", "2"}, {"stress", "/actor/stress/marked", "2"}}) {
+            var recovered = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, applied)),
+                    List.of(new RuleRuntime.Intent("recover", "use", "fixture", 0, (ObjectNode) RuleJson.parse("{\"recovery\":\"" + pick[0] + "\"}"))),
+                    RandomGenerator.getDefault());
+            ObjectNode after = recovered.contexts().getFirst();
+            assertEquals(Integer.parseInt(pick[2]), after.at(pick[1]).asInt(), after.toString());
+        }
+    }
+
+    @Test
     void effectGrantedRulesRequireTheirEffectAndCanEndIt() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"rager","name":"Rager","automation":{"actions":[{"id":"rage","label":"Rage","steps":[{"op":"effect","effect":{

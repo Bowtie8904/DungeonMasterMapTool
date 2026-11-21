@@ -214,6 +214,23 @@ class StructuredDamageTest {
     }
 
     @Test
+    void increasesComposeWithReductionsAndForgedIncreasesAreRejected() throws Exception {
+        ObjectNode initial = (ObjectNode) RuleJson.parse("""
+                {"id":"damage-3","stage":"preSeverity","baseAmount":7,"amount":7,"adjustments":[]}
+                """);
+        ObjectNode doubled = StructuredDamage.increase(initial, 7, "frail", "features:frail", "Frail");
+        ObjectNode reduced = StructuredDamage.reduce(doubled.path("damage"), 4, "ward", "features:ward", "Ward");
+        ObjectNode damage = (ObjectNode) reduced.path("damage");
+        assertEquals(10, damage.path("amount").asInt());
+        assertTrue(damage.at("/adjustments/0/increase").asBoolean());
+        assertEquals(damage, StructuredDamage.validate(damage));
+
+        ObjectNode forged = damage.deepCopy();
+        ((ObjectNode) forged.at("/adjustments/0")).remove("increase");
+        assertThrows(IllegalArgumentException.class, () -> StructuredDamage.validate(forged));
+    }
+
+    @Test
     void configuredDamageResolutionAppliesSeverityArmorAndBoundedHitPointMarks() throws Exception {
         RuleCompiler.Program program = program();
         ObjectNode before = (ObjectNode) RuleJson.parse("""

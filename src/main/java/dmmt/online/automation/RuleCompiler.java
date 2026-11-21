@@ -53,6 +53,7 @@ public final class RuleCompiler {
             Map.entry("roll.publish", List.of("roll")),
             Map.entry("damage.publish", List.of("damage")),
             Map.entry("damage.reduce", List.of("from", "amount", "id", "label")),
+            Map.entry("damage.increase", List.of("from", "amount", "id", "label")),
             Map.entry("damage.resolve", List.of("from", "thresholds", "armor", "hitPoints")),
             Map.entry("damage.assess", List.of("from", "type", "thresholds", "massive", "armor", "hitPoints")),
             Map.entry("damage.adjust", List.of("from", "field", "to", "id", "label")),
@@ -918,7 +919,7 @@ public final class RuleCompiler {
             }
             else if ("group".equals(field) && "claim.offer".equals(op)) RuleJson.id(value, path + "/group");
             else if ("resource".equals(field) && Set.of("table.gain", "table.spend").contains(op)) RuleJson.id(value, path + "/resource");
-            else if (Set.of("id", "label").contains(field) && Set.of("damage.reduce", "damage.deal", "countdown.start", "claim.offer", "table.gain", "table.spend").contains(op))
+            else if (Set.of("id", "label").contains(field) && Set.of("damage.reduce", "damage.increase", "damage.deal", "countdown.start", "claim.offer", "table.gain", "table.spend").contains(op))
                 RuleTemplate.validate(RuleJson.text(value, path + "/" + field));
             else if (Set.of("choose", "maxDice").contains(field)) continue;
             else if ("dieId".equals(field)) RuleExpression.validate(value, path + "/" + field);

@@ -22,7 +22,7 @@ public final class StructuredDamage {
         if (!"preSeverity".equals(RuleJson.text(damage.get("stage"), "/damage/stage")))
             throw RuleJson.error("/damage/stage", "Expected the preSeverity stage.");
         int baseAmount = RuleJson.integer(damage.get("baseAmount"), "/damage/baseAmount", 0, MAX_AMOUNT);
-        int amount = RuleJson.integer(damage.get("amount"), "/damage/amount", 0, baseAmount);
+        int amount = RuleJson.integer(damage.get("amount"), "/damage/amount", 0, MAX_AMOUNT);
         if (!damage.has("adjustments")) damage.putArray("adjustments");
         JsonNode adjustments = damage.get("adjustments");
         if (!adjustments.isArray() || adjustments.size() > MAX_ADJUSTMENTS)
@@ -33,16 +33,19 @@ public final class StructuredDamage {
         for (int i = 0; i < adjustments.size(); i++) {
             String path = "/damage/adjustments/" + i;
             JsonNode adjustment = adjustments.get(i);
-            RuleJson.fields(adjustment, path, "id", "sourceId", "label", "requested", "applied", "before", "after");
+            RuleJson.fields(adjustment, path, "id", "sourceId", "label", "requested", "applied", "before", "after", "increase");
             String id = RuleJson.id(adjustment.get("id"), path + "/id");
             if (!ids.add(id)) throw RuleJson.error(path + "/id", "Duplicate damage adjustment ID.");
             RuleJson.id(adjustment.get("sourceId"), path + "/sourceId");
             RuleJson.text(adjustment.get("label"), path + "/label");
             int requested = RuleJson.integer(adjustment.get("requested"), path + "/requested", 0, MAX_AMOUNT);
             int applied = RuleJson.integer(adjustment.get("applied"), path + "/applied", 0, requested);
-            int before = RuleJson.integer(adjustment.get("before"), path + "/before", 0, baseAmount);
-            int after = RuleJson.integer(adjustment.get("after"), path + "/after", 0, baseAmount);
-            if (before != expectedBefore || applied != Math.min(requested, before) || after != before - applied)
+            int before = RuleJson.integer(adjustment.get("before"), path + "/before", 0, MAX_AMOUNT);
+            int after = RuleJson.integer(adjustment.get("after"), path + "/after", 0, MAX_AMOUNT);
+            boolean increase = adjustment.has("increase");
+            if (increase && !adjustment.get("increase").asBoolean(false)) throw RuleJson.error(path + "/increase", "Expected true when present.");
+            if (before != expectedBefore || applied != Math.min(requested, increase ? MAX_AMOUNT - before : before)
+                    || after != (increase ? before + applied : before - applied))
                 throw RuleJson.error(path, "Damage adjustment does not match the ordered reduction history.");
             expectedBefore = after;
         }
@@ -52,6 +55,15 @@ public final class StructuredDamage {
     }
 
     static ObjectNode reduce(JsonNode value, int requested, String id, String sourceId, String label) {
+        return adjust(value, requested, id, sourceId, label, false);
+    }
+
+    static ObjectNode increase(JsonNode value, int requested, String id, String sourceId, String label) {
+        return adjust(value, requested, id, sourceId, label, true);
+    }
+
+    private static ObjectNode adjust(JsonNode value, int requested, String id, String sourceId, String label,
+                                     boolean increase) {
         ObjectNode damage = validate(value);
         RuleJson.integer(RuleJson.JSON.getNodeFactory().numberNode(requested), "/reduction/requested", 0, MAX_AMOUNT);
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(id), "/reduction/id");
@@ -65,11 +77,12 @@ public final class StructuredDamage {
             throw RuleJson.error("/damage/adjustments", "Too many damage adjustments.");
 
         int before = damage.path("amount").asInt();
-        int applied = Math.min(requested, before);
-        int after = before - applied;
+        int applied = Math.min(requested, increase ? MAX_AMOUNT - before : before);
+        int after = increase ? before + applied : before - applied;
         ObjectNode adjustment = RuleJson.JSON.createObjectNode().put("id", id).put("sourceId", sourceId)
                 .put("label", label).put("requested", requested).put("applied", applied)
                 .put("before", before).put("after", after);
+        if (increase) adjustment.put("increase", true);
         adjustments.add(adjustment.deepCopy());
         damage.put("amount", after);
         validate(damage);

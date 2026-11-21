@@ -54,9 +54,10 @@ public final class LegacyCatalogConverter {
     private static final Set<String> MITIGATION_FIELDS = Set.of("id", "label", "description", "when", "cost", "negate", "halve", "reduce",
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
-            "markedHpOnly", "finalSevere", "markStress", "gainHope", "giveFear", "clearStress", "gainTokens", "armorCost", "followUp", "hiddenRoll", "consumeItem", "preserveAfterIncomingDamage", "loadoutDomain");
+            "markedHpOnly", "finalSevere", "markStress", "gainHope", "giveFear", "clearStress", "gainTokens", "armorCost", "followUp", "hiddenRoll", "consumeItem", "preserveAfterIncomingDamage", "loadoutDomain",
+            "double", "recoveryChoice", "reflectHp", "quantity");
     private static final List<String> MARKS_FIELDS = List.of("severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor");
-    private static final List<String> PREPARE_FIELDS = List.of("negate", "halve", "reduce");
+    private static final List<String> PREPARE_FIELDS = List.of("negate", "halve", "reduce", "double");
     private static final List<String> SEVERITIES = List.of("minor", "major", "severe", "massive");
     private static final Pattern DICE = Pattern.compile("([1-9][0-9]?)d([1-9][0-9]{0,2})");
     private static final Pattern ACTION_DAMAGE = Pattern.compile("(?i)(\\d*)d(\\d+)(?:([+-])(\\d+))?");
@@ -1859,7 +1860,9 @@ public final class LegacyCatalogConverter {
         prepare |= preserve;
         if (rollHits && !marks) { p.add(path + "/roll", "Success rolls need a severity, Hit Point or saved Armor change to scale."); return null; }
         String stage = marks ? "marks" : prepare ? "prepare" : "applied";
-        boolean passive = mitigation.path("passive").asBoolean(false);
+        // A recovery choice needs the player's pick, so it is offered as a button even when the legacy option was passive.
+        boolean recovery = mitigation.path("recoveryChoice").asBoolean(false);
+        boolean passive = mitigation.path("passive").asBoolean(false) && !recovery;
         ObjectNode rule = ruleShell(mitigation, path, p, "damage." + stage, "damage", passive ? "automatic" : "button");
         if (rule == null) return null;
         ArrayNode when = RuleJson.JSON.createArrayNode();
@@ -1877,11 +1880,13 @@ public final class LegacyCatalogConverter {
             else when.addObject().putArray("gte").add(read("event.applied.severity")).add(3);
         }
         commonConditions(mitigation, path, p, when);
+        boolean quantity = mitigationQuantity(mitigation, path, p, pools, rule, when);
         applyWhen(rule, when);
         if (mitigation.has("cost")) {
             if ("marks".equals(stage) && (mitigation.get("cost").has("hp") || mitigation.get("cost").has("armor")))
                 p.add(path + "/cost", "Marks-stage options cannot pay with the tracks the damage is about to mark.");
             costs(mitigation.get("cost"), path + "/cost", p, pools, rule);
+            if (quantity) for (JsonNode cost : rule.path("costs")) times((ObjectNode) cost, "amount", read("input.quantity"));
         }
         if (limited) rule.put("limitRef", "uses");
         if (mitigation.has("defaultOn")) {
@@ -1894,12 +1899,13 @@ public final class LegacyCatalogConverter {
             case "prepare" -> {
                 // Chosen while damage is prepared so the automatic ending, which runs before selected options, already sees it.
                 if (preserve) steps.addObject().put("op", "state.set").put("slot", keepSlot(mitigation.path("preserveAfterIncomingDamage").asText())).put("value", true);
-                else prepareSteps(mitigation, path, p, steps, id, label);
+                else prepareSteps(mitigation, path, p, steps, id, label, quantity);
             }
-            case "marks" -> marksSteps(mitigation, path, p, steps, id, label);
+            case "marks" -> marksSteps(mitigation, path, p, steps, id, label, quantity);
             default -> {}
         }
         appliedSteps(mitigation, path, p, pools, steps, stage);
+        if (recovery) recoveryChoice(path, p, rule, steps, stage);
         if (mitigation.has("effect")) {
             String effect = declareEffect(mitigation.get("effect"), path + "/effect", p, effects);
             if (effect != null) steps.addObject().put("op", "effect.start").put("effect", effect).put("target", "actor");
@@ -1907,6 +1913,12 @@ public final class LegacyCatalogConverter {
         endEffect(mitigation, steps);
         ObjectNode ui = labels(mitigation, path, p, rule);
         report(mitigation, path, p, ui);
+        if (mitigation.path("reflectHp").asBoolean(false)) {
+            if (!"applied".equals(stage)) p.add(path + "/reflectHp", "Reflected Hit Points are only known once damage is applied.");
+            else if (!ui.has("report")) ui.put("report", "{source.name}: the attacker marks {event.applied.hitPoints} Hit Points.");
+        }
+        // A paid option without a mechanical change is a table-resolved reaction; its report tells the table what happened.
+        if (steps.isEmpty() && !ui.has("report") && rule.has("costs") && !label.isBlank()) ui.put("report", label + ".");
         if (mitigation.has("followUp")) {
             JsonNode follow = mitigation.get("followUp");
             p.onlyFields(follow, path + "/followUp", Set.of("dice", "text"));
@@ -1922,6 +1934,45 @@ public final class LegacyCatalogConverter {
         }
         if (steps.isEmpty() && !ui.has("report")) p.add(path, "Damage option has no supported mechanical effect.");
         return rule;
+    }
+
+    /**
+     * A legacy {@code quantity: true} spends several units of the option's single resource cost; the count becomes a bounded
+     * integer input that multiplies the cost and can drive the roll count.
+     */
+    private static boolean mitigationQuantity(JsonNode mitigation, String path, Problems p, Pools pools, ObjectNode rule, ArrayNode when) {
+        if (!mitigation.has("quantity")) return false;
+        JsonNode cost = mitigation.path("cost");
+        if (!mitigation.path("quantity").asBoolean(false) || !cost.isObject() || cost.size() != 1) {
+            p.add(path + "/quantity", "Quantities need exactly one resource cost to multiply."); return false;
+        }
+        String resource = cost.fieldNames().next();
+        JsonNode max = available(resource, pools);
+        if (max == null) { p.add(path + "/quantity", "Quantities need a known resource: " + resource); return false; }
+        if (!cost.path(resource).isInt() || cost.path(resource).asInt() < 1) { p.add(path + "/cost", "Expected a positive whole cost per unit."); return false; }
+        int per = cost.path(resource).asInt();
+        if (per > 1) {
+            ObjectNode divided = RuleJson.JSON.createObjectNode();
+            divided.putArray("divide").add(max).add(per);
+            max = RuleJson.JSON.createObjectNode().set("floor", divided);
+        }
+        ObjectNode input = rule.withArray("inputs").addObject().put("id", "quantity").put("kind", "integer")
+                .put("label", "How many to spend").put("min", 1);
+        input.set("max", max);
+        when.addObject().putArray("gte").add(max.deepCopy()).add(1);
+        return true;
+    }
+
+    private static void recoveryChoice(String path, Problems p, ObjectNode rule, ArrayNode steps, String stage) {
+        if (!"applied".equals(stage)) { p.add(path + "/recoveryChoice", "Recovery choices react to applied damage."); return; }
+        ArrayNode options = rule.withArray("inputs").addObject().put("id", "recovery").put("kind", "choice")
+                .put("label", "Choose your recovery").putArray("options");
+        options.addObject().put("id", "hope").put("label", "Gain 1 Hope");
+        options.addObject().put("id", "stress").put("label", "Clear 1 Stress");
+        ObjectNode hope = steps.addObject().put("op", "resource.gain").put("pool", "actor.hope").put("amount", 1);
+        hope.putObject("if").putArray("eq").add(read("input.recovery")).add("hope");
+        ObjectNode stress = steps.addObject().put("op", "track.clear").put("track", "actor.stress").put("amount", 1);
+        stress.putObject("if").putArray("eq").add(read("input.recovery")).add("stress");
     }
 
     /** Stage-specific conditions; the marks stage reads the assessed plan and the applied stage the committed summary. */
@@ -1979,18 +2030,19 @@ public final class LegacyCatalogConverter {
         }
     }
 
-    private static void prepareSteps(JsonNode mitigation, String path, Problems p, ArrayNode steps, String id, String label) {
+    private static void prepareSteps(JsonNode mitigation, String path, Problems p, ArrayNode steps, String id, String label, boolean quantity) {
+        boolean doubled = mitigation.path("double").asBoolean(false);
         int kinds = (mitigation.path("negate").asBoolean(false) ? 1 : 0) + (mitigation.path("halve").asBoolean(false) ? 1 : 0)
-                + (mitigation.has("reduce") ? 1 : 0) + (mitigation.has("roll") ? 1 : 0);
-        if (kinds != 1) { p.add(path, "Expected exactly one of negate, halve, reduce or a rolled reduction."); return; }
+                + (mitigation.has("reduce") ? 1 : 0) + (mitigation.has("roll") ? 1 : 0) + (doubled ? 1 : 0);
+        if (kinds != 1) { p.add(path, "Expected exactly one of negate, halve, double, reduce or a rolled reduction."); return; }
         JsonNode amount;
-        if (mitigation.path("negate").asBoolean(false)) amount = read("event.damage.amount");
+        if (doubled || mitigation.path("negate").asBoolean(false)) amount = read("event.damage.amount");
         else if (mitigation.path("halve").asBoolean(false)) {
             ObjectNode half = RuleJson.JSON.createObjectNode();
             half.putArray("divide").add(read("event.damage.amount")).add(2);
             amount = RuleJson.JSON.createObjectNode().set("floor", half);
         } else if (mitigation.has("roll")) {
-            JsonNode count = rollCount(mitigation.get("roll"), path + "/roll", p, false);
+            JsonNode count = rollCount(mitigation.get("roll"), path + "/roll", p, false, quantity);
             if (count == null) return;
             steps.addObject().put("op", "dice.roll").put("sides", mitigation.get("roll").path("sides").asInt()).put("as", "reduction").set("count", count);
             amount = read("result.reduction");
@@ -1998,14 +2050,14 @@ public final class LegacyCatalogConverter {
             amount = amount(mitigation.path("reduce"));
             if (amount == null) { p.add(path + "/reduce", "Expected a positive whole reduction or a supported computed value."); return; }
         }
-        ObjectNode reduce = steps.addObject().put("op", "damage.reduce");
+        ObjectNode reduce = steps.addObject().put("op", doubled ? "damage.increase" : "damage.reduce");
         reduce.set("from", read("event.damage"));
         reduce.set("amount", amount);
         reduce.put("id", id).put("label", label).put("as", "reduced");
         steps.addObject().put("op", "damage.publish").set("damage", read("result.reduced.damage"));
     }
 
-    private static JsonNode rollCount(JsonNode roll, String path, Problems p, boolean marks) {
+    private static JsonNode rollCount(JsonNode roll, String path, Problems p, boolean marks, boolean quantity) {
         p.onlyFields(roll, path, Set.of("count", "sides", "success", "each"));
         int sides = roll.path("sides").asInt();
         if (!roll.path("sides").isInt() || sides < 2 || sides > 1000) { p.add(path + "/sides", "Expected 2 to 1000 sides."); return null; }
@@ -2014,6 +2066,7 @@ public final class LegacyCatalogConverter {
         }
         JsonNode count = roll.path("count");
         if (!roll.has("count")) return RuleJson.JSON.getNodeFactory().numberNode(1);
+        if (quantity && "quantity".equals(count.asText())) return read("input.quantity");
         if (marks && "hp".equals(count.asText())) {
             ObjectNode atLeastOne = RuleJson.JSON.createObjectNode();
             atLeastOne.putArray("max").add(1).add(read("event.marks.hitPoints.wouldMark"));
@@ -2025,11 +2078,11 @@ public final class LegacyCatalogConverter {
     }
 
     /** Ordered marks-plan changes; every numeric change scales with the success roll when one is written. */
-    private static void marksSteps(JsonNode mitigation, String path, Problems p, ArrayNode steps, String id, String label) {
+    private static void marksSteps(JsonNode mitigation, String path, Problems p, ArrayNode steps, String id, String label, boolean quantity) {
         JsonNode scale = null;
         if (mitigation.has("roll")) {
             JsonNode roll = mitigation.get("roll");
-            JsonNode count = rollCount(roll, path + "/roll", p, true);
+            JsonNode count = rollCount(roll, path + "/roll", p, true, quantity);
             if (count == null) return;
             steps.addObject().put("op", "dice.hits").put("sides", roll.path("sides").asInt()).put("atLeast", roll.path("success").asInt())
                     .put("as", "hits").set("count", count);
