@@ -37,11 +37,17 @@ public final class RuleDispatcher {
         }
     }
 
-    public record ClaimLedger(long revision, Set<ClaimKey> claims) {
+    /** Claims taken so far plus optional per-group claim limits recorded from {@code claim.offer} host requests. */
+    public record ClaimLedger(long revision, Set<ClaimKey> claims, Map<String, Integer> limits) {
         public ClaimLedger {
             if (revision < 0) throw RuleJson.error("/claimRevision", "Expected a nonnegative claim revision.");
             claims = Set.copyOf(claims);
+            limits = Map.copyOf(limits == null ? Map.of() : limits);
+            for (Map.Entry<String, Integer> limit : limits.entrySet())
+                if (limit.getValue() == null || limit.getValue() < 0)
+                    throw RuleJson.error("/claimLimits/" + limit.getKey(), "Expected a nonnegative claim limit.");
         }
+        public ClaimLedger(long revision, Set<ClaimKey> claims) { this(revision, claims, Map.of()); }
     }
 
     public record RecipientCandidate(String actorId, ObjectNode snapshot, long revision) {
@@ -344,6 +350,7 @@ public final class RuleDispatcher {
         Set<ClaimKey> addedClaims = new HashSet<>();
         Set<ActionKey> selectedKeys = new HashSet<>();
         Set<String> exclusiveGroups = new HashSet<>();
+        Set<String> selfClaims = new HashSet<>();
         List<Invocation> invocations = new ArrayList<>();
         for (ClaimIntent claimIntent : selections) {
             if (claimIntent == null) throw RuleJson.error("/claims", "A claim selection is missing.");
@@ -355,15 +362,20 @@ public final class RuleDispatcher {
             if (recipient == null) throw new RuleRuntime.Unavailable("recipient", "This recipient is no longer eligible.");
             if (claimIntent.expectedRecipientRevision() != recipient.revision())
                 throw new RuleRuntime.Unavailable("staleRecipient", "The recipient sheet changed. Refresh the available actions.");
-            JsonNode ownerId = snapshot.actor().get("id");
-            if (ownerId != null && claimIntent.recipientId().equals(ownerId.asText()))
-                throw RuleJson.error("/claims/recipientId", "A cross-actor claim must target another actor.");
-
             RuleRuntime.Intent intent = claimIntent.action();
             if (intent.expectedRevision() != snapshot.revision())
                 throw new RuleRuntime.Unavailable("stale", "This action is stale. Use its latest state.");
             ObjectNode rule = candidate.program().rule(intent.ruleId());
             JsonNode binding = binding(rule, intent.bindingId());
+            JsonNode ownerId = snapshot.actor().get("id");
+            boolean self = ownerId != null && claimIntent.recipientId().equals(ownerId.asText());
+            String recipients = binding.path("claimScope").path("recipients").asText("otherPlayersCharacters");
+            boolean excludeSource = binding.path("claimScope").path("excludeSource").asBoolean(false);
+            if ("sourceActor".equals(recipients) && !self)
+                throw new RuleRuntime.Unavailable("recipient", "Only the source actor may claim this.");
+            if (self && ("otherPlayersCharacters".equals(recipients) || excludeSource))
+                throw RuleJson.error("/claims/recipientId", "A cross-actor claim must target another actor.");
+            if (self) selfClaims.add(claimIntent.recipientId());
             if (binding.has("targetSelection"))
                 throw RuleJson.error("/claims", "Targeted actions require executeTargets.");
             String group = RuleJson.id(binding.get("claimGroup"), "/binding/claimGroup");
@@ -376,6 +388,12 @@ public final class RuleDispatcher {
             ClaimKey claimKey = new ClaimKey(group, claimIntent.recipientId());
             if (ledger.claims().contains(claimKey) || !addedClaims.add(claimKey))
                 throw new RuleRuntime.Unavailable("claimed", "This recipient has already claimed this group.");
+            Integer limit = ledger.limits().get(group);
+            if (limit != null) {
+                long taken = ledger.claims().stream().filter(item -> item.group().equals(group)).count()
+                        + addedClaims.stream().filter(item -> item.group().equals(group)).count();
+                if (taken > limit) throw new RuleRuntime.Unavailable("claimLimit", "No claims remain for this offer.");
+            }
             ActionKey key = new ActionKey(intent.sourceInstanceId(), intent.ruleId(), intent.bindingId(), intent.eachId(),
                     claimIntent.recipientId());
             if (!selectedKeys.add(key)) throw RuleJson.error("/claims", "A binding cannot be selected more than once.");
@@ -397,7 +415,8 @@ public final class RuleDispatcher {
             String recipientId = invocation.recipientId();
             ObjectNode context = invocation.candidate().context();
             context.set("actor", snapshot.actor().deepCopy());
-            context.set("recipient", recipientsById.get(recipientId).snapshot());
+            context.set("recipient", selfClaims.contains(recipientId) ? snapshot.actor().deepCopy()
+                    : recipientsById.get(recipientId).snapshot());
             context.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             RuleRuntime.Prepared next = RuleRuntime.preflight(invocation.candidate().program(), invocation.intent(), context);
             checkedClaims.add(new PreparedClaim(next, recipientId, invocation.claimGroup()));
@@ -410,14 +429,18 @@ public final class RuleDispatcher {
             String instanceId = item.intent().sourceInstanceId();
             String recipientId = checked.recipientId();
             ObjectNode context = workingContexts.get(instanceId).deepCopy();
+            boolean self = selfClaims.contains(recipientId);
             context.set("actor", sharedActor.deepCopy());
-            context.set("recipient", workingRecipients.get(recipientId).deepCopy());
+            context.set("recipient", self ? sharedActor.deepCopy() : workingRecipients.get(recipientId).deepCopy());
             context.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             RuleRuntime.Prepared next = RuleRuntime.reserveCosts(
                     byInstance.get(instanceId).program(), item, context);
             workingContexts.put(instanceId, next.context().deepCopy());
-            sharedActor = next.context().path("actor").deepCopy();
-            workingRecipients.put(recipientId, next.context().path("recipient").deepCopy());
+            if (self) sharedActor = selfResult(sharedActor, next.context());
+            else {
+                sharedActor = next.context().path("actor").deepCopy();
+                workingRecipients.put(recipientId, next.context().path("recipient").deepCopy());
+            }
             prepared.add(new PreparedClaim(next, recipientId, checked.claimGroup()));
         }
 
@@ -427,16 +450,20 @@ public final class RuleDispatcher {
             String instanceId = item.intent().sourceInstanceId();
             ObjectNode current = item.context().deepCopy();
             mergeTransactionState(current, workingContexts.get(instanceId));
+            boolean self = selfClaims.contains(claim.recipientId());
             current.set("actor", sharedActor.deepCopy());
-            current.set("recipient", workingRecipients.get(claim.recipientId()).deepCopy());
+            current.set("recipient", self ? sharedActor.deepCopy() : workingRecipients.get(claim.recipientId()).deepCopy());
             current.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             RuleRuntime.Prepared executable = new RuleRuntime.Prepared(item.intent(), current, snapshot.revision());
             RuleRuntime.Resolution resolution = RuleRuntime.executePrepared(
                     byInstance.get(instanceId).program(), executable, random, false);
             ObjectNode nextContext = resolution.context();
-            sharedActor = nextContext.path("actor").deepCopy();
+            if (self) sharedActor = selfResult(sharedActor, nextContext);
+            else {
+                sharedActor = nextContext.path("actor").deepCopy();
+                workingRecipients.put(claim.recipientId(), nextContext.path("recipient").deepCopy());
+            }
             workingContexts.put(instanceId, nextContext);
-            workingRecipients.put(claim.recipientId(), nextContext.path("recipient").deepCopy());
             ActionResult action = new ActionResult(instanceId, item.intent().ruleId(), item.intent().bindingId(),
                     resolution.report(), resolution.publishedRolls(), resolution.diceRolls());
             actionResults.add(new ClaimActionResult(action, claim.recipientId(), claim.claimGroup()));
@@ -453,7 +480,8 @@ public final class RuleDispatcher {
             updatedSources.add(context);
         }
         List<String> recipientIds = new ArrayList<>();
-        for (ClaimKey key : addedClaims) if (!recipientIds.contains(key.recipientId())) recipientIds.add(key.recipientId());
+        for (ClaimKey key : addedClaims)
+            if (!selfClaims.contains(key.recipientId()) && !recipientIds.contains(key.recipientId())) recipientIds.add(key.recipientId());
         recipientIds.sort(String::compareTo);
         List<RecipientUpdate> updatedRecipients = new ArrayList<>();
         for (String recipientId : recipientIds) {
@@ -463,8 +491,22 @@ public final class RuleDispatcher {
         }
         Set<ClaimKey> allClaims = new HashSet<>(ledger.claims());
         allClaims.addAll(addedClaims);
-        ClaimLedger updatedLedger = new ClaimLedger(ledger.revision() + (addedClaims.isEmpty() ? 0 : 1), allClaims);
+        ClaimLedger updatedLedger = new ClaimLedger(ledger.revision() + (addedClaims.isEmpty() ? 0 : 1), allClaims, ledger.limits());
         return new ClaimResolution(updatedSources, updatedRecipients, updatedLedger, actionResults);
+    }
+
+    /**
+     * Folds a self-claim back into the shared actor: the source actor is both {@code actor} and {@code recipient}, so
+     * at most one of the two views may change.
+     */
+    private static ObjectNode selfResult(ObjectNode before, ObjectNode context) {
+        JsonNode actor = context.path("actor");
+        JsonNode recipient = context.path("recipient");
+        boolean actorChanged = !before.equals(actor);
+        boolean recipientChanged = !before.equals(recipient);
+        if (actorChanged && recipientChanged && !actor.equals(recipient))
+            throw new RuleRuntime.Unavailable("selfClaim", "The source actor cannot claim this for itself.");
+        return (recipientChanged ? recipient : actor).deepCopy();
     }
 
     /**

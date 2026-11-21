@@ -776,4 +776,79 @@ class LegacyCatalogConverterTest {
             assertEquals(1, after.at("/usage/uses").asInt());
         }
     }
+
+    private static RuleDispatcher.ClaimIntent claimIntent(String rule, String recipient, ObjectNode inputs) {
+        return claimIntent(rule, recipient, inputs, 0);
+    }
+
+    private static RuleDispatcher.ClaimIntent claimIntent(String rule, String recipient, ObjectNode inputs, long revision) {
+        return new RuleDispatcher.ClaimIntent(new RuleRuntime.Intent(rule, "claim", "fixture", 0,
+                inputs == null ? RuleJson.JSON.createObjectNode() : inputs), recipient, 0, revision);
+    }
+
+    @Test
+    void chatBenefitsBecomeScopedClaimRulesWithOffers() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"boon","name":"Boon","automation":{"actions":[
+                  {"id":"inspire","label":"Inspire","chatBenefits":[
+                    {"id":"hope","label":"Gain Hope","exclusiveClaim":true,"cost":{"stress":1},
+                     "steps":[{"op":"gain","resource":"hope","amount":1}],"report":{"text":"Onward!"}},
+                    {"id":"rest","label":"Breathe","sourceOnly":true,"steps":[{"op":"clear","resource":"stress","amount":1}]}]},
+                  {"id":"share","label":"Share","allowSourceOwner":true,"chatBenefits":[
+                    {"id":"transfer","label":"Transfer Stress","transferStress":true,"steps":[]}]},
+                  {"id":"call","label":"Call","excludeSourceActor":true,"benefitsPerAmount":true,
+                   "selectAmount":{"resource":"hope","label":"Hope"},"chatBenefits":[
+                    {"id":"ride","label":"Ride","steps":[{"op":"gain","resource":"hope","amount":1}]}]}]}}"""));
+        var blast = LegacyCatalogConverter.convert(catalog("""
+                {"id":"blast","name":"Blast","automation":{"actions":[{"id":"blast","label":"Blast","chatBenefits":[{"id":"x","label":"X","featureAction":"Go","steps":[]}]}]}}"""));
+        assertTrue(blast.diagnostics().stream().anyMatch(d -> d.path().endsWith("/featureAction")), blast.diagnostics().toString());
+        JsonNode block = block(result, 0);
+        JsonNode rules = block.path("rules");
+        assertEquals("claim.offer", rules.at("/0/do/0/op").asText());
+        assertEquals("inspire-claims", rules.at("/0/do/0/group").asText());
+        assertEquals(1, rules.at("/0/do/0/limit").asInt());
+        assertEquals("others", rules.at("/1/bindings/0/audience").asText());
+        assertEquals("{recipient.name} claimed Gain Hope. Onward!", rules.at("/1/ui/report").asText());
+        assertEquals("sourceActor", rules.at("/2/bindings/0/claimScope/recipients").asText());
+        assertEquals("playerCharacters", rules.at("/4/bindings/0/claimScope/recipients").asText());
+        assertTrue(rules.at("/6/bindings/0/claimScope/excludeSource").asBoolean());
+        assertEquals("input.amount", rules.at("/5/do/0/limit/subtract/0/read").asText(), rules.get(5).toString());
+
+        RuleCompiler.Program program = program(result, 0);
+        ObjectNode context = context(program, """
+                {"id":"owner","name":"Ash","hope":{"value":2,"max":6},"stress":{"marked":3,"capacity":6}}""",
+                "{\"type\":\"action.request\"}");
+        JsonNode offer = run(program, context, "inspire").contexts().getFirst().path("outbox").get(0);
+        assertEquals("Inspire", offer.path("label").asText());
+        assertEquals(1, offer.path("limit").asInt());
+
+        ObjectNode claim = context.deepCopy();
+        claim.set("event", RuleJson.parse("{\"type\":\"claim.accept\",\"id\":\"c\"}"));
+        var source = new RuleDispatcher.Candidate(program, claim);
+        var recipients = List.of(new RuleDispatcher.RecipientCandidate("owner", (ObjectNode) claim.path("actor").deepCopy(), 0),
+                new RuleDispatcher.RecipientCandidate("mira", (ObjectNode) RuleJson.parse("""
+                        {"id":"mira","name":"Mira","hope":{"value":1,"max":6},"stress":{"marked":4,"capacity":6}}"""), 0));
+        var ledger = new RuleDispatcher.ClaimLedger(0, java.util.Set.of(), Map.of("inspire-claims", 1));
+        var gained = RuleDispatcher.executeClaims(List.of(source), List.of(claimIntent("inspire-hope", "mira", null)),
+                recipients, ledger, RandomGenerator.getDefault());
+        assertEquals(2, gained.recipients().getFirst().snapshot().at("/hope/value").asInt());
+        assertEquals(5, gained.recipients().getFirst().snapshot().at("/stress/marked").asInt());
+        assertEquals("Mira claimed Gain Hope. Onward!", gained.actions().getFirst().action().report());
+        assertEquals("claimLimit", assertThrows(RuleRuntime.Unavailable.class, () -> RuleDispatcher.executeClaims(
+                List.of(source), List.of(claimIntent("inspire-rest", "owner", null, gained.ledger().revision())), recipients, gained.ledger(),
+                RandomGenerator.getDefault())).code());
+        var self = RuleDispatcher.executeClaims(List.of(source), List.of(claimIntent("inspire-rest", "owner", null)),
+                recipients, new RuleDispatcher.ClaimLedger(0, java.util.Set.of()), RandomGenerator.getDefault());
+        assertEquals(2, self.sourceContexts().getFirst().at("/actor/stress/marked").asInt());
+
+        var moved = RuleDispatcher.executeClaims(List.of(source), List.of(claimIntent("share-transfer", "mira",
+                (ObjectNode) RuleJson.parse("{\"amount\":2}"))), recipients, new RuleDispatcher.ClaimLedger(0, java.util.Set.of()),
+                RandomGenerator.getDefault());
+        assertEquals(2, moved.recipients().getFirst().snapshot().at("/stress/marked").asInt());
+        assertEquals(5, moved.sourceContexts().getFirst().at("/actor/stress/marked").asInt());
+        assertEquals(4, moved.sourceContexts().getFirst().at("/actor/hope/value").asInt());
+        assertThrows(IllegalArgumentException.class, () -> RuleDispatcher.executeClaims(
+                List.of(source), List.of(claimIntent("call-ride", "owner", null)), recipients,
+                new RuleDispatcher.ClaimLedger(0, java.util.Set.of()), RandomGenerator.getDefault()));
+    }
 }

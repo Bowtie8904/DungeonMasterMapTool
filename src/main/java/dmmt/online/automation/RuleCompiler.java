@@ -21,6 +21,7 @@ public final class RuleCompiler {
     static final Set<String> SURFACES = Set.of("sheet", "chat", "roll", "damage", "effect", "resource", "rest",
             "death", "downtime", "creation", "companion");
     static final Set<String> AUDIENCES = Set.of("self", "others", "party", "any");
+    static final Set<String> CLAIM_RECIPIENTS = Set.of("otherPlayersCharacters", "playerCharacters", "sourceActor");
     /** Actor-owned lists that {@code collection.*} operations may change; each item is an object with an {@code id}. */
     static final Set<String> COLLECTIONS = Set.of("inventory", "features", "loadout", "vault", "conditions", "companions");
     private static final Set<String> MODES = Set.of("button", "option", "automatic");
@@ -65,6 +66,7 @@ public final class RuleCompiler {
             Map.entry("collection.remove", List.of("target", "collection", "item")),
             Map.entry("damage.deal", List.of("to", "amount", "label")),
             Map.entry("countdown.start", List.of("label", "value")),
+            Map.entry("claim.offer", List.of("group", "label", "limit")),
             Map.entry("roll.selectDice", List.of("from", "where")),
             Map.entry("roll.reroll", List.of("from", "dice", "choose")),
             Map.entry("roll.setFaces", List.of("from", "dice", "face")),
@@ -214,6 +216,13 @@ public final class RuleCompiler {
             } else addRule(expanded, RuleJson.object(definition, path).deepCopy(), RuleJson.JSON.createObjectNode(), decl, path, expandedNodes);
         }
         if (expanded.size() > 256) throw RuleJson.error("/automation/rules", "Expanded rules exceed the limit.");
+        Set<String> claimGroups = new HashSet<>();
+        for (ObjectNode rule : expanded.values()) for (JsonNode binding : rule.path("bindings"))
+            if (binding.has("claimGroup")) claimGroups.add(binding.path("claimGroup").asText());
+        for (ObjectNode rule : expanded.values()) for (JsonNode operation : rule.path("do"))
+            if ("claim.offer".equals(operation.path("op").asText()) && !claimGroups.contains(operation.path("group").asText()))
+                throw RuleJson.error("/automation/rules/" + rule.path("id").asText() + "/do",
+                        "A claim offer must name a claim group declared by this source: " + operation.path("group").asText());
         return new Program(sourceId, decl, modifiers, expanded).withProfiles(profiles);
     }
 
@@ -420,7 +429,7 @@ public final class RuleCompiler {
         boolean usesDieContext = false;
         for (JsonNode binding : bindings) {
             RuleJson.fields(binding, path + "/bindings", "id", "event", "surface", "mode", "when", "group",
-                    "defaultOn", "forEach", "exclusiveGroup", "priority", "claimGroup", "audience", "targetSelection");
+                    "defaultOn", "forEach", "exclusiveGroup", "priority", "claimGroup", "claimScope", "audience", "targetSelection");
             if (!bindingIds.add(RuleJson.id(binding.path("id"), path + "/bindings/id"))) throw RuleJson.error(path, "Duplicate binding ID.");
             if (!EVENTS.contains(binding.path("event").asText())) throw RuleJson.error(path + "/bindings/event", "Unknown event.");
             if (!SURFACES.contains(binding.path("surface").asText())) throw RuleJson.error(path + "/bindings/surface", "Unknown surface.");
@@ -441,6 +450,18 @@ public final class RuleCompiler {
                 RuleJson.id(binding.get("claimGroup"), path + "/bindings/claimGroup");
                 if (!Set.of("button", "option").contains(binding.path("mode").asText()))
                     throw RuleJson.error(path + "/bindings/claimGroup", "Claim groups require a selected button or option.");
+            }
+            if (binding.has("claimScope")) {
+                JsonNode scope = binding.get("claimScope");
+                String scopePath = path + "/bindings/claimScope";
+                if (!binding.has("claimGroup")) throw RuleJson.error(scopePath, "A claim scope requires a claim group.");
+                RuleJson.fields(scope, scopePath, "recipients", "excludeSource");
+                if (!CLAIM_RECIPIENTS.contains(scope.path("recipients").asText()))
+                    throw RuleJson.error(scopePath + "/recipients", "Expected otherPlayersCharacters, playerCharacters or sourceActor.");
+                if (scope.has("excludeSource") && !scope.path("excludeSource").isBoolean())
+                    throw RuleJson.error(scopePath + "/excludeSource", "Expected a boolean.");
+                if ("sourceActor".equals(scope.path("recipients").asText()) && scope.path("excludeSource").asBoolean(false))
+                    throw RuleJson.error(scopePath + "/excludeSource", "A source-actor claim cannot exclude the source.");
             }
             if (binding.has("targetSelection")) {
                 JsonNode targets = binding.get("targetSelection");
@@ -634,7 +655,8 @@ public final class RuleCompiler {
         for (String field : fields) if (!operation.has(field)
                 && !("pool.roll".equals(op) && "keepHighest".equals(field))
                 && !"owner".equals(field)
-                && !("damage.resolve".equals(op) && "armor".equals(field)))
+                && !("damage.resolve".equals(op) && "armor".equals(field))
+                && !("claim.offer".equals(op) && "limit".equals(field)))
             throw RuleJson.error(path + "/" + field, "Missing operation field.");
         if (operation.has("as")) slot(RuleJson.text(operation.get("as"), path + "/as"), path + "/as");
         if ("damage.resolve".equals(op)) {
@@ -703,7 +725,7 @@ public final class RuleCompiler {
                 String poolId = operation.path("pool").asText();
                 if (!pools.has(poolId) || !"actor".equals(pools.path(poolId).path("scope").asText()))
                     throw RuleJson.error(path + "/owner", "Only declared actor-scoped pools can select an owner.");
-            } else if ("limit".equals(field)) {
+            } else if ("limit".equals(field) && !"claim.offer".equals(op)) {
                 if (!decl.limits().has(RuleJson.text(value, path + "/limit")))
                     throw RuleJson.error(path + "/limit", "Undeclared use budget: " + value.asText());
             }
@@ -715,7 +737,8 @@ public final class RuleCompiler {
                 if (!Set.of("actor", "recipient", "attacker").contains(value.asText()))
                     throw RuleJson.error(path + "/to", "Expected actor, recipient or attacker.");
             }
-            else if (Set.of("id", "label").contains(field) && Set.of("damage.reduce", "damage.deal", "countdown.start").contains(op))
+            else if ("group".equals(field) && "claim.offer".equals(op)) RuleJson.id(value, path + "/group");
+            else if (Set.of("id", "label").contains(field) && Set.of("damage.reduce", "damage.deal", "countdown.start", "claim.offer").contains(op))
                 RuleTemplate.validate(RuleJson.text(value, path + "/" + field));
             else if (Set.of("choose", "maxDice").contains(field)) continue;
             else if ("dieId".equals(field)) RuleExpression.validate(value, path + "/" + field);

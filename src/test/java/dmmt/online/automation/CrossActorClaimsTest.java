@@ -94,4 +94,69 @@ class CrossActorClaimsTest {
                         result.ledger(), RandomGenerator.getDefault()));
         assertEquals("staleClaim", stale.code());
     }
+
+    private static final String OFFER = """
+            {"rules":[
+              {"id":"offer","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+               "do":[{"op":"claim.offer","group":"boons","label":"{source.name} offers a boon","limit":{"subtract":[{"read":"input.amount"},1]}}],
+               "inputs":[{"id":"amount","kind":"integer","label":"Amount","min":1,"max":3}],
+               "ui":{"label":"Offer"}},
+              {"id":"party-hope","bindings":[{"id":"claim","event":"claim.accept","surface":"chat","mode":"button",
+                "claimGroup":"boons","claimScope":{"recipients":"playerCharacters"}}],
+               "do":[{"op":"resource.gain","pool":"recipient.hope","amount":1}],
+               "ui":{"label":"Gain Hope","report":"{recipient.name} gained Hope."}},
+              {"id":"source-stress","bindings":[{"id":"claim","event":"claim.accept","surface":"chat","mode":"button",
+                "claimGroup":"boons","claimScope":{"recipients":"sourceActor"}}],
+               "do":[{"op":"track.clear","track":"recipient.stress","amount":1}],
+               "ui":{"label":"Clear Stress","report":"{recipient.name} cleared Stress."}}
+            ]}""";
+
+    @Test
+    void claimOffersPublishLimitsAndScopesAllowSourceSelfClaims() throws Exception {
+        RuleCompiler.Program program = RuleCompiler.compile("features:offer", RuleJson.parse(OFFER), fixture("rewrite/recipes"));
+        ObjectNode context = (ObjectNode) RuleJson.parse("""
+                {"source":{"id":"features:offer","instanceId":"devout-instance","name":"Beacon"},
+                 "actor":{"id":"owner","name":"Ash","hope":{"value":3,"max":6},"stress":{"marked":2,"capacity":6}},
+                 "revision":0,"event":{"type":"action.request","id":"use-1"}}
+                """);
+        RuleDispatcher.EventResolution offered = RuleDispatcher.executeEvent(
+                List.of(new RuleDispatcher.Candidate(program, context)),
+                List.of(new RuleRuntime.Intent("offer", "sheet", "devout-instance", 0,
+                        (ObjectNode) RuleJson.parse("{\"amount\":2}"))), RandomGenerator.getDefault());
+        var request = offered.contexts().getFirst().path("outbox").get(0);
+        assertEquals("claim.offer", request.path("kind").asText());
+        assertEquals("boons", request.path("group").asText());
+        assertEquals("Beacon offers a boon", request.path("label").asText());
+        assertEquals(1, request.path("limit").asInt());
+
+        ObjectNode claimContext = context.deepCopy();
+        claimContext.set("event", RuleJson.parse("{\"type\":\"claim.accept\",\"id\":\"claim-1\"}"));
+        RuleDispatcher.Candidate source = new RuleDispatcher.Candidate(program, claimContext);
+        RuleDispatcher.ClaimLedger ledger = new RuleDispatcher.ClaimLedger(0, Set.of(), java.util.Map.of("boons", 1));
+        List<RuleDispatcher.RecipientCandidate> recipients = List.of(
+                new RuleDispatcher.RecipientCandidate("owner", claimContext.path("actor").deepCopy(), 0),
+                new RuleDispatcher.RecipientCandidate("recipient-a", recipient("recipient-a", "Mira", 1, 2), 4));
+
+        RuleDispatcher.ClaimResolution self = RuleDispatcher.executeClaims(List.of(source),
+                List.of(claim("source-stress", "owner", 0, 0)), recipients, ledger, RandomGenerator.getDefault());
+        assertTrue(self.recipients().isEmpty());
+        assertEquals(1, self.sourceContexts().getFirst().path("actor").path("stress").path("marked").asInt());
+        assertEquals("Ash cleared Stress.", self.actions().getFirst().action().report());
+        assertEquals(java.util.Map.of("boons", 1), self.ledger().limits());
+
+        RuleRuntime.Unavailable limit = assertThrows(RuleRuntime.Unavailable.class, () -> RuleDispatcher.executeClaims(
+                List.of(source), List.of(claim("party-hope", "recipient-a", 4, 1)), recipients, self.ledger(),
+                RandomGenerator.getDefault()));
+        assertEquals("claimLimit", limit.code());
+        RuleRuntime.Unavailable scope = assertThrows(RuleRuntime.Unavailable.class, () -> RuleDispatcher.executeClaims(
+                List.of(source), List.of(claim("source-stress", "recipient-a", 4, 0)), recipients, ledger,
+                RandomGenerator.getDefault()));
+        assertEquals("recipient", scope.code());
+        RuleDispatcher.ClaimResolution party = RuleDispatcher.executeClaims(List.of(source),
+                List.of(claim("party-hope", "owner", 0, 0)), recipients, ledger, RandomGenerator.getDefault());
+        assertEquals(4, party.sourceContexts().getFirst().path("actor").path("hope").path("value").asInt());
+
+        assertThrows(IllegalArgumentException.class, () -> RuleCompiler.compile("features:offer",
+                RuleJson.parse(OFFER.replace("\"group\":\"boons\"", "\"group\":\"other\"")), fixture("rewrite/recipes")));
+    }
 }

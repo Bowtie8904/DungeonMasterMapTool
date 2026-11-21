@@ -40,7 +40,8 @@ public final class LegacyCatalogConverter {
             "usesSource", "endEffect", "hostOwned", "consumeItem");
     private static final Set<String> TRIGGER_FIELDS = Set.of("id", "label", "description", "on", "cost", "reroll", "when", "outcome",
             "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
-            "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned");
+            "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
+            "chatBenefits", "allowSourceOwner");
     private static final Set<String> MITIGATION_FIELDS = Set.of("id", "label", "description", "when", "cost", "negate", "halve", "reduce",
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
@@ -52,7 +53,9 @@ public final class LegacyCatalogConverter {
     private static final Pattern ACTION_DAMAGE = Pattern.compile("(?i)(\\d*)d(\\d+)(?:([+-])(\\d+))?");
     private static final Set<String> ACTION_FIELDS = Set.of("id", "label", "description", "cost", "steps", "report", "damage",
             "requiresEffect", "excludesEffect", "endEffect", "uses", "usesSource", "actionRoll", "target",
-            "excludeSourceActor", "hostOwned", "selectAmount", "timing", "sendRoll");
+            "excludeSourceActor", "hostOwned", "selectAmount", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount");
+    private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
+            "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
             "actions", "rollOptions", "rollTriggers", "mitigation");
     private static final Set<String> ROLLS = Set.of("attack", "damage", "spellcast", "action", "reaction");
@@ -214,6 +217,8 @@ public final class LegacyCatalogConverter {
                 }
             }
             rules.add(rule);
+            if (!Set.of("rollOptions", "mitigation").contains(next.family()))
+                for (ObjectNode benefit : chatBenefits(legacyRule, next.path(), p, effects, pools, rule, ruleIds)) rules.add(benefit);
             queue.addAll(p.nested());
             p.nested().clear();
         }
@@ -450,6 +455,100 @@ public final class LegacyCatalogConverter {
             else p.add(at, "Custom resource cost needs a declared pool: " + entry.getKey());
         });
         if (!costs.isEmpty()) rule.set("costs", costs);
+    }
+
+    /**
+     * Chat benefits become one claim rule per benefit plus a {@code claim.offer} step on the offering rule. The offer
+     * is scoped to the offering source instance; each recipient may claim once per offer, and exclusive benefits or
+     * per-amount offers publish a claim limit.
+     */
+    private static List<ObjectNode> chatBenefits(JsonNode legacy, String path, Problems p, ObjectNode effects, Pools pools,
+                                                 ObjectNode parent, Set<String> ruleIds) {
+        for (String flag : List.of("allowSourceOwner", "benefitsPerAmount", "excludeSourceActor"))
+            if (legacy.has(flag) && !legacy.path(flag).isBoolean()) p.add(path + "/" + flag, "Expected a boolean.");
+        if (!legacy.has("chatBenefits")) return List.of();
+        JsonNode list = legacy.get("chatBenefits");
+        if (!list.isArray() || list.isEmpty() || list.size() > 16) {
+            p.add(path + "/chatBenefits", "Expected 1-16 chat benefits.");
+            return List.of();
+        }
+        boolean party = legacy.path("allowSourceOwner").asBoolean(false);
+        boolean excludeSource = legacy.path("excludeSourceActor").asBoolean(false) && !legacy.has("target");
+        String group = parent.path("id").asText() + "-claims";
+        boolean exclusive = false;
+        List<ObjectNode> out = new ArrayList<>();
+        for (int i = 0; i < list.size(); i++) {
+            JsonNode benefit = list.get(i);
+            String at = path + "/chatBenefits/" + i;
+            if (!benefit.isObject()) { p.add(at, "Expected a benefit object."); continue; }
+            p.onlyFields(benefit, at, BENEFIT_FIELDS);
+            String id = benefit.path("id").asText();
+            if (!ID.matcher(id).matches()) { p.add(at + "/id", "Invalid benefit ID: " + id); continue; }
+            String label = benefit.path("label").asText("");
+            if (label.isBlank()) p.add(at + "/label", "Benefits need a label.");
+            for (String flag : List.of("exclusiveClaim", "sourceOnly", "transferStress"))
+                if (benefit.has(flag) && !benefit.path(flag).isBoolean()) p.add(at + "/" + flag, "Expected a boolean.");
+            exclusive |= benefit.path("exclusiveClaim").asBoolean(false);
+            if (benefit.has("featureAction"))
+                p.add(at + "/featureAction", "Opening a granted feature action after a claim is not supported.");
+            boolean sourceOnly = benefit.path("sourceOnly").asBoolean(false);
+            String recipients = sourceOnly ? "sourceActor" : party ? "playerCharacters" : "otherPlayersCharacters";
+            ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", unique(parent.path("id").asText() + "-" + id, ruleIds));
+            ObjectNode binding = rule.putArray("bindings").addObject().put("id", "claim").put("event", "claim.accept")
+                    .put("surface", "chat").put("mode", "button").put("claimGroup", group)
+                    .put("audience", sourceOnly ? "self" : party ? "party" : "others");
+            ObjectNode scope = binding.putObject("claimScope").put("recipients", recipients);
+            if (excludeSource && !sourceOnly) scope.put("excludeSource", true);
+            ArrayNode steps = rule.putArray("do");
+            if (benefit.has("cost")) {
+                if (!benefit.path("cost").isObject()) p.add(at + "/cost", "Expected a cost object.");
+                else benefit.get("cost").fields().forEachRemaining(entry -> {
+                    JsonNode amount = amount(entry.getValue());
+                    if (amount == null) p.add(at + "/cost/" + entry.getKey(), "Expected a positive whole cost.");
+                    else if ("hope".equals(entry.getKey()))
+                        steps.addObject().put("op", "resource.spend").put("pool", "recipient.hope").set("amount", amount);
+                    else if (TRACKS.containsKey(entry.getKey()))
+                        steps.addObject().put("op", "track.mark").put("track", TRACKS.get(entry.getKey()).replaceFirst("^actor\\.", "recipient."))
+                                .set("amount", amount);
+                    else p.add(at + "/cost/" + entry.getKey(), "Claim costs support Hope, Stress, Hit Points and Armor.");
+                });
+            }
+            if (benefit.path("transferStress").asBoolean(false)) {
+                ObjectNode free = RuleJson.JSON.createObjectNode();
+                free.putArray("subtract").add(read("actor.stress.capacity")).add(read("actor.stress.marked"));
+                ObjectNode max = RuleJson.JSON.createObjectNode();
+                max.putArray("min").add(read("recipient.stress.marked")).add(free);
+                ObjectNode input = rule.putArray("inputs").addObject().put("id", "amount").put("kind", "integer")
+                        .put("label", "Stress to transfer").put("min", 1);
+                input.set("max", max);
+                steps.addObject().put("op", "track.clear").put("track", "recipient.stress").set("amount", read("input.amount"));
+                steps.addObject().put("op", "track.mark").put("track", "actor.stress").set("amount", read("input.amount"));
+                steps.addObject().put("op", "resource.gain").put("pool", "actor.hope").set("amount", read("input.amount"));
+            }
+            JsonNode legacySteps = benefit.path("steps");
+            for (int s = 0; s < legacySteps.size(); s++)
+                step(legacySteps.get(s), at + "/steps/" + s, p, steps, effects, pools, "recipient");
+            if (steps.isEmpty()) p.add(at + "/steps", "Benefits need at least one effect.");
+            ObjectNode ui = rule.putObject("ui").put("label", escape(label));
+            ObjectNode extra = RuleJson.JSON.createObjectNode();
+            report(benefit, at, p, extra);
+            String claimed = "{recipient.name} claimed " + escape(label) + ".";
+            if (benefit.path("transferStress").asBoolean(false))
+                claimed = "{recipient.name} transferred {input.amount} Stress to {actor.name}.";
+            ui.put("report", claimed + (extra.has("report") ? " " + extra.path("report").asText() : ""));
+            out.add(rule);
+        }
+        ArrayNode parentSteps = parent.has("do") ? (ArrayNode) parent.get("do") : parent.putArray("do");
+        ObjectNode offer = parentSteps.addObject().put("op", "claim.offer").put("group", group)
+                .put("label", parent.path("ui").path("label").asText("Benefits"));
+        if (exclusive) offer.put("limit", 1);
+        else if (legacy.path("benefitsPerAmount").asBoolean(false) && legacy.has("selectAmount")) {
+            ObjectNode limit = RuleJson.JSON.createObjectNode();
+            limit.putArray("subtract").add(read("input.amount")).add(1);
+            offer.set("limit", limit);
+        } else if (legacy.path("benefitsPerAmount").asBoolean(false))
+            p.add(path + "/benefitsPerAmount", "Per-amount benefits need a selected amount.");
+        return out;
     }
 
     private static void rollCondition(String roll, String path, Problems p, ArrayNode when) {
@@ -1109,7 +1208,8 @@ public final class LegacyCatalogConverter {
                     operationTarget = "recipient";
                 }
             }
-        } else if (action.has("excludeSourceActor")) p.add(path + "/excludeSourceActor", "Source exclusion requires a target mode.");
+        } else if (action.has("excludeSourceActor") && !action.has("chatBenefits") && !action.has("benefitsPerAmount"))
+            p.add(path + "/excludeSourceActor", "Source exclusion requires a target mode or chat benefits.");
         if (action.has("hostOwned") && !action.path("hostOwned").isBoolean())
             p.add(path + "/hostOwned", "Expected a boolean.");
         ArrayNode when = RuleJson.JSON.createArrayNode();

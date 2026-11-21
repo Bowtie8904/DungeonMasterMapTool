@@ -68,6 +68,7 @@ public final class RuleRuntime {
         if (binding.has("defaultOn")) description.set("defaultOn", binding.get("defaultOn"));
         if (binding.has("exclusiveGroup")) description.set("exclusiveGroup", binding.get("exclusiveGroup"));
         if (binding.has("claimGroup")) description.set("claimGroup", binding.get("claimGroup"));
+        if (binding.has("claimScope")) description.set("claimScope", binding.get("claimScope"));
         if (binding.has("targetSelection")) description.set("targetSelection", describeTargets(binding, context));
         description.put("audience", binding.path("audience").asText("self"));
         description.put("priority", binding.path("priority").asInt());
@@ -871,7 +872,7 @@ public final class RuleRuntime {
                     result = list.remove(index);
                 }
             }
-            case "damage.deal", "countdown.start" -> {
+            case "damage.deal", "countdown.start", "claim.offer" -> {
                 ArrayNode outbox = context.has("outbox") ? (ArrayNode) context.get("outbox") : context.putArray("outbox");
                 if (outbox.size() >= 32) throw RuleJson.error("/outbox", "Too many host requests.");
                 ObjectNode request = outbox.addObject().put("kind", kind)
@@ -879,6 +880,10 @@ public final class RuleRuntime {
                         .put("label", RuleTemplate.render(op.path("label").asText(), context));
                 if ("damage.deal".equals(kind)) request.put("to", op.path("to").asText())
                         .put("amount", whole(op.path("amount"), context, 0, 1_000_000));
+                else if ("claim.offer".equals(kind)) {
+                    request.put("group", op.path("group").asText());
+                    if (op.has("limit")) request.put("limit", whole(op.path("limit"), context, 0, 64));
+                }
                 else request.put("value", whole(op.path("value"), context, 1, 1000));
                 result = request.deepCopy();
             }
