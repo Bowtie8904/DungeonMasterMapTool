@@ -114,6 +114,21 @@ class RollEditRuntimeTest {
     }
 
     @Test
+    void resizeRerollsSelectedDiceWithNewSidesAndKeepsHistory() throws Exception {
+        var result = run("grow-hope", context(), faces(17));
+        JsonNode die = die(result.publishedRolls().getFirst(), "h1");
+        assertEquals(20, die.path("sides").asInt());
+        assertEquals(17, die.path("face").asInt());
+        assertEquals("resized", die.path("origin").asText());
+        assertEquals("[2]", die.path("previous").toString());
+        assertDoesNotThrow(() -> StructuredRoll.validate(result.publishedRolls().getFirst()));
+        assertEquals("[17]", result.diceRolls().getFirst().path("faces").toString());
+        var intent = new RuleRuntime.Intent("grow-hope", "result", "inst-1", 0, (ObjectNode) RuleJson.parse("{}"));
+        assertEquals("randomPreview", assertThrows(RuleRuntime.Unavailable.class,
+                () -> RuleRuntime.preview(program(), intent, context())).code());
+    }
+
+    @Test
     void editedRollsRevalidateAndRejectForgedHistory() throws Exception {
         JsonNode roll = run("reroll-low", context(), faces(5)).publishedRolls().getFirst();
         assertDoesNotThrow(() -> StructuredRoll.validate(roll));

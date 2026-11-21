@@ -70,6 +70,7 @@ public final class RuleCompiler {
             Map.entry("roll.selectDice", List.of("from", "where")),
             Map.entry("roll.reroll", List.of("from", "dice", "choose")),
             Map.entry("roll.setFaces", List.of("from", "dice", "face")),
+            Map.entry("roll.resize", List.of("from", "dice", "sides")),
             Map.entry("roll.explode", List.of("from", "dice", "when", "maxDice")),
             Map.entry("roll.addDice", List.of("from", "dice", "count")),
             Map.entry("roll.dropLowest", List.of("from", "dice", "count")),

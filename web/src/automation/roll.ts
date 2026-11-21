@@ -9,8 +9,8 @@ export interface StoredDie {
   previous?: number[];
   editedBy?: string[];
 }
-export type DieOrigin = 'rolled' | 'maximized' | 'stored' | 'rerolled' | 'set' | 'exploded';
-const ORIGINS: readonly string[] = ['rolled', 'maximized', 'stored', 'rerolled', 'set', 'exploded'];
+export type DieOrigin = 'rolled' | 'maximized' | 'stored' | 'rerolled' | 'set' | 'exploded' | 'added' | 'resized';
+const ORIGINS: readonly string[] = ['rolled', 'maximized', 'stored', 'rerolled', 'set', 'exploded', 'added', 'resized'];
 interface Contribution {
   id: string;
   role: string;
@@ -105,7 +105,7 @@ export function resolveRoll(input: unknown, checkTotals = true): StoredRoll & { 
           const items = die[key];
           if (items === undefined) continue;
           if (!Array.isArray(items) || items.length > 32) fail(`${dp}/${key}`, 'Expected at most 32 edits.');
-          if (key === 'previous') history.previous = items.map((v, k) => integer(v, `${dp}/previous/${k}`, 1, sides));
+          if (key === 'previous') history.previous = items.map((v, k) => integer(v, `${dp}/previous/${k}`, 1, origin === 'resized' ? 1000 : sides));
           else history.editedBy = items.map((v, k) => id(v, `${dp}/editedBy/${k}`));
         }
         if (origin === 'maximized' && face !== sides) fail(dp, 'A maximized die must show its maximum.');

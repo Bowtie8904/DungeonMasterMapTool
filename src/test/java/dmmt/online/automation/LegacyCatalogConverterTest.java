@@ -511,6 +511,82 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void rollOptionQuantitiesResizedHopeDiceAndProficiencyDice() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"surge","name":"Surge","automation":{"rollOptions":[
+                  {"id":"pour","label":"Pour Hope","roll":"damage","dice":"1d6","value":1,"diceResource":"hope-dice","cost":{"hope":1},
+                   "quantity":{"resource":"hope","label":"Hope","max":3},"condition":{"unmarkedHp":{"max":2}}},
+                  {"id":"vast","label":"Vast Hope","roll":"action","hopeDie":20},
+                  {"id":"heavy","label":"Heavy","roll":"damage","proficiency":1},
+                  {"id":"mark","label":"Mark","roll":"attack","proficiency":2}]}}"""));
+        JsonNode rules = block(result, 0).path("rules");
+        assertEquals("hope-dice", rules.at("/0/do/1/contribution/role").asText());
+        assertEquals("input.quantity", rules.at("/0/costs/0/amount/multiply/1/read").asText());
+        RuleCompiler.Program program = program(result, 0);
+
+        String damageRoll = """
+                {"id":"dmg","contributions":[{"id":"weapon","kind":"dice","role":"damage","sourceId":"weapon:axe","label":"Axe",
+                  "dice":[{"id":"w1","sides":8,"face":3,"kept":true,"origin":"rolled"}]}]}""";
+        String wounded = "{\"hope\":{\"value\":5,\"max\":6},\"hp\":{\"marked\":5,\"capacity\":6},\"effects\":[]}";
+        ObjectNode damage = context(program, wounded, """
+                {"type":"roll.prepare","check":{"kind":"damage","weaponSourceId":"weapon:axe","fixedDice":false},"roll":%s}""".formatted(damageRoll));
+        assertEquals(List.of("heavy", "pour"), available(program, damage, "roll"));
+        ObjectNode healthy = context(program, "{\"hope\":{\"value\":5,\"max\":6},\"hp\":{\"marked\":0,\"capacity\":6},\"effects\":[]}",
+                damage.path("event").toString());
+        assertFalse(available(program, healthy, "roll").contains("pour"), "Too much unmarked HP.");
+
+        var intent = new RuleRuntime.Intent("pour", "use", "fixture", 0, (ObjectNode) RuleJson.parse("{\"quantity\":3}"));
+        var poured = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, damage)), List.of(intent), StructuredRollTest.faces(1, 2, 3));
+        ObjectNode after = poured.contexts().getFirst();
+        assertEquals(2, after.at("/actor/hope/value").asInt());
+        JsonNode roll = after.at("/event/roll");
+        assertEquals(3 + 3 + (1 + 2 + 3), roll.path("total").asInt());
+        assertThrows(Exception.class, () -> RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, damage)),
+                List.of(new RuleRuntime.Intent("pour", "use", "fixture", 0, (ObjectNode) RuleJson.parse("{\"quantity\":4}"))),
+                RandomGenerator.getDefault()));
+
+        JsonNode heavy = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, damage)),
+                List.of(new RuleRuntime.Intent("heavy", "use", "fixture", 0, RuleJson.JSON.createObjectNode())),
+                StructuredRollTest.faces(7)).contexts().getFirst().at("/event/roll");
+        assertEquals(3 + 7, heavy.path("total").asInt());
+        ObjectNode fixed = context(program, wounded, """
+                {"type":"roll.prepare","check":{"kind":"damage","weaponSourceId":"weapon:axe","fixedDice":true},"roll":%s}""".formatted(damageRoll));
+        assertFalse(available(program, fixed, "roll").contains("heavy"));
+
+        ObjectNode action = context(program, wounded, """
+                {"type":"roll.prepare","check":{"kind":"action","trait":"Agility"},"roll":%s}""".formatted("""
+                {"id":"act","contributions":[{"id":"hope","kind":"dice","role":"hope","sourceId":"core","label":"Hope",
+                  "dice":[{"id":"h","sides":12,"face":4,"kept":true,"origin":"rolled"}]},
+                 {"id":"fear","kind":"dice","role":"fear","sourceId":"core","label":"Fear",
+                  "dice":[{"id":"f","sides":12,"face":5,"kept":true,"origin":"rolled"}]}]}"""));
+        JsonNode vast = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, action)),
+                List.of(new RuleRuntime.Intent("vast", "use", "fixture", 0, RuleJson.JSON.createObjectNode())),
+                StructuredRollTest.faces(18)).contexts().getFirst().at("/event/roll");
+        assertEquals(20, vast.at("/contributions/0/dice/0/sides").asInt());
+        assertEquals(18, vast.at("/contributions/0/dice/0/face").asInt());
+        assertEquals(12, vast.at("/contributions/1/dice/0/sides").asInt());
+
+        ObjectNode attack = context(program, wounded, """
+                {"type":"roll.prepare","check":{"kind":"attack","weaponSourceId":"weapon:axe"},"roll":%s}""".formatted(ROLL));
+        ObjectNode marked = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, attack)),
+                List.of(new RuleRuntime.Intent("mark", "use", "fixture", 0, RuleJson.JSON.createObjectNode())),
+                RandomGenerator.getDefault()).contexts().getFirst();
+        assertEquals(1, marked.at("/actor/effects").size());
+        ObjectNode finished = marked.deepCopy();
+        finished.set("event", RuleJson.parse("""
+                {"type":"roll.finished","check":{"kind":"damage","weaponSourceId":"weapon:axe","fixedDice":false},"roll":%s}""".formatted(damageRoll)));
+        ObjectNode carried = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, finished)), List.of(),
+                StructuredRollTest.faces(4, 5)).contexts().getFirst();
+        assertEquals(3 + 4 + 5, carried.at("/event/roll/total").asInt());
+        assertEquals(0, carried.at("/actor/effects").size(), "The pending bonus is spent.");
+        ObjectNode missed = marked.deepCopy();
+        missed.set("event", RuleJson.parse("""
+                {"type":"roll.finished","check":{"kind":"attack","outcome":"failure","weaponSourceId":"weapon:axe"},"roll":%s}""".formatted(ROLL)));
+        assertEquals(0, RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, missed)), List.of(),
+                StructuredRollTest.noRandom()).contexts().getFirst().at("/actor/effects").size(), "A miss discards the bonus.");
+    }
+
+    @Test
     void rollTriggersRerollAddStepsAndRespectCriticalAndWeaponFilters() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"seer","name":"Seer","automation":{"uses":{"max":2,"per":"session"},"rollTriggers":[

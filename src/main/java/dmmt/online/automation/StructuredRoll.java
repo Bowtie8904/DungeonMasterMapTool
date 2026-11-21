@@ -219,6 +219,23 @@ public final class StructuredRoll {
         return calculate(roll, false);
     }
 
+    /** Changes each selected die to {@code sides} and rerolls it, recording the prior face; the origin becomes {@code resized}. */
+    public static ObjectNode resize(JsonNode original, JsonNode selection, String sourceId, int sides, RandomGenerator random) {
+        ObjectNode roll = validate(original);
+        Set<String> wanted = ids(selection, "/roll/dice", true);
+        Set<String> found = new HashSet<>();
+        for (ObjectNode[] entry : editableDice(roll)) {
+            ObjectNode die = entry[1];
+            if (!wanted.contains(die.path("id").asText())) continue;
+            if (random == null) throw RuleJson.error("/dice", "Host random generator is required.");
+            found.add(die.path("id").asText());
+            record(die, sourceId);
+            die.put("sides", sides).put("face", random.nextInt(sides) + 1).put("origin", "resized");
+        }
+        if (!found.containsAll(wanted)) throw RuleJson.error("/roll/dice", "Die selection contains an unknown, dropped, excluded or locked die.");
+        return calculate(roll, false);
+    }
+
     /** Adds one die after each selected die whose face satisfies {@code when}, chaining new dice, up to {@code limit} new dice. */
     public static ObjectNode explode(JsonNode original, JsonNode selection, String sourceId, int limit,
                                      java.util.function.Predicate<ObjectNode> when, RandomGenerator random) {
@@ -392,14 +409,15 @@ public final class StructuredRoll {
                     int face = RuleJson.integer(die.get("face"), diePath + "/face", 1, sides);
                     boolean kept = RuleExpression.bool(die.get("kept"), diePath + "/kept");
                     String origin = RuleJson.text(die.get("origin"), diePath + "/origin");
-                    if (!Set.of("rolled", "maximized", "stored", "rerolled", "set", "exploded", "added").contains(origin))
+                    if (!Set.of("rolled", "maximized", "stored", "rerolled", "set", "exploded", "added", "resized").contains(origin))
                         throw RuleJson.error(diePath + "/origin", "Unknown die provenance.");
                     for (String history : List.of("previous", "editedBy")) {
                         if (!die.has(history)) continue;
                         JsonNode items = die.get(history);
                         if (!items.isArray() || items.size() > 32) throw RuleJson.error(diePath + "/" + history, "Expected at most 32 edits.");
                         for (int k = 0; k < items.size(); k++)
-                            if ("previous".equals(history)) RuleJson.integer(items.get(k), diePath + "/previous/" + k, 1, sides);
+                            if ("previous".equals(history))
+                                RuleJson.integer(items.get(k), diePath + "/previous/" + k, 1, "resized".equals(origin) ? 1000 : sides);
                             else RuleJson.id(items.get(k), diePath + "/editedBy/" + k);
                     }
                     if ("maximized".equals(origin) && face != sides)

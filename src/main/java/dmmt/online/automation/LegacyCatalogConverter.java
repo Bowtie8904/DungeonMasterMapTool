@@ -37,7 +37,7 @@ public final class LegacyCatalogConverter {
     private static final Set<String> RESOURCE_FIELDS = Set.of("id", "label", "initial", "max", "resetOn");
     private static final Set<String> OPTION_FIELDS = Set.of("id", "label", "description", "roll", "value", "dice", "advantage", "cost",
             "defaultOn", "exclusive", "requiresEffect", "excludesEffect", "weapon", "weaponRange", "excludeRolls", "effect", "uses",
-            "usesSource", "endEffect", "hostOwned", "consumeItem");
+            "usesSource", "endEffect", "hostOwned", "consumeItem", "quantity", "proficiency", "hopeDie", "diceResource", "condition");
     private static final Set<String> TRIGGER_FIELDS = Set.of("id", "label", "description", "on", "cost", "reroll", "when", "outcome",
             "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
@@ -190,6 +190,7 @@ public final class LegacyCatalogConverter {
         ObjectNode effects = RuleJson.JSON.createObjectNode();
         Set<String> ruleIds = new HashSet<>();
         List<Nested> queue = new ArrayList<>();
+        List<ObjectNode> extra = new ArrayList<>();
         for (String family : FAMILIES) {
             JsonNode list = legacy.path(family);
             for (int i = 0; i < list.size(); i++) queue.add(new Nested(family, list.get(i), path + "/" + family + "/" + i));
@@ -200,11 +201,11 @@ public final class LegacyCatalogConverter {
             boolean usesBudget = limited && legacyRule.path("usesSource").asBoolean(true);
             ObjectNode rule = switch (next.family()) {
                 case "actions" -> action(legacyRule, next.path(), p, effects, pools, usesBudget);
-                case "rollOptions" -> rollOption(legacyRule, next.path(), p, effects, pools, usesBudget);
+                case "rollOptions" -> rollOption(legacyRule, next.path(), p, effects, pools, usesBudget, extra);
                 case "rollTriggers", "conditionalRollTriggers" -> rollTrigger(legacyRule, next.path(), p, effects, pools, usesBudget);
                 default -> mitigation(legacyRule, next.path(), p, effects, pools, usesBudget);
             };
-            if (rule == null) continue;
+            if (rule == null) { extra.clear(); continue; }
             if ("source".equals(legacyRule.path("uses").asText()) && !limited)
                 p.add(next.path() + "/uses", "Rule references a source use budget that is not declared.");
             rule.put("id", unique(rule.path("id").asText(), ruleIds));
@@ -217,6 +218,11 @@ public final class LegacyCatalogConverter {
                 }
             }
             rules.add(rule);
+            for (ObjectNode follow : extra) {
+                follow.put("id", unique(follow.path("id").asText(), ruleIds));
+                rules.add(follow);
+            }
+            extra.clear();
             if (!Set.of("rollOptions", "mitigation").contains(next.family()))
                 for (ObjectNode benefit : chatBenefits(legacyRule, next.path(), p, effects, pools, rule, ruleIds)) rules.add(benefit);
             queue.addAll(p.nested());
@@ -619,7 +625,8 @@ public final class LegacyCatalogConverter {
         return ui;
     }
 
-    private static ObjectNode rollOption(JsonNode option, String path, Problems p, ObjectNode effects, Pools pools, boolean limited) {
+    private static ObjectNode rollOption(JsonNode option, String path, Problems p, ObjectNode effects, Pools pools, boolean limited,
+                                         List<ObjectNode> extra) {
         p.onlyFields(option, path, OPTION_FIELDS);
         hostOwned(option, path, p);
         ObjectNode rule = ruleShell(option, path, p, "roll.prepare", "roll", "option");
@@ -635,23 +642,69 @@ public final class LegacyCatalogConverter {
         else if ("any".equals(weapon)) when.addObject().put("exists", "event.check.weapon");
         else if (!weapon.isEmpty()) p.add(path + "/weapon", "Unsupported weapon filter: " + weapon);
         commonConditions(option, path, p, when);
+        if (option.has("condition")) {
+            JsonNode condition = option.get("condition");
+            p.onlyFields(condition, path + "/condition", Set.of("unmarkedHp"));
+            JsonNode range = condition.path("unmarkedHp");
+            p.onlyFields(range, path + "/condition/unmarkedHp", Set.of("min", "max"));
+            ObjectNode unmarked = RuleJson.JSON.createObjectNode();
+            unmarked.putArray("subtract").add(read("actor.hp.capacity")).add(read("actor.hp.marked"));
+            for (String bound : List.of("min", "max")) {
+                if (!range.has(bound)) continue;
+                if (!range.path(bound).isInt() || range.path(bound).asInt() < 0) p.add(path + "/condition/unmarkedHp/" + bound, "Expected a nonnegative whole number.");
+                else when.addObject().putArray("min".equals(bound) ? "gte" : "lte").add(unmarked.deepCopy()).add(range.path(bound).asInt());
+            }
+        }
+        JsonNode quantity = null;
+        if (option.has("quantity")) {
+            JsonNode legacy = option.get("quantity");
+            p.onlyFields(legacy, path + "/quantity", Set.of("resource", "label", "max"));
+            JsonNode max = available(legacy.path("resource").asText(), pools);
+            if (max == null) p.add(path + "/quantity/resource", "Quantities need a known resource: " + legacy.path("resource").asText());
+            else if (legacy.has("max") && !(legacy.path("max").isInt() && legacy.path("max").asInt() > 0))
+                p.add(path + "/quantity/max", "Expected a positive whole maximum.");
+            else {
+                if (legacy.has("max")) {
+                    ObjectNode bounded = RuleJson.JSON.createObjectNode();
+                    bounded.putArray("min").add(max).add(legacy.path("max").asInt());
+                    max = bounded;
+                }
+                ObjectNode input = rule.putArray("inputs").addObject().put("id", "quantity").put("kind", "integer")
+                        .put("label", escape(legacy.path("label").asText("Quantity"))).put("min", 1);
+                input.set("max", max);
+                when.addObject().putArray("gte").add(max.deepCopy()).add(1);
+                quantity = read("input.quantity");
+            }
+        }
+        String id = option.path("id").asText(), label = escape(option.path("label").asText(""));
+        int proficiency = 0;
+        if (option.has("proficiency")) {
+            if (!(option.path("proficiency").isInt() && option.path("proficiency").asInt() > 0 && option.path("proficiency").asInt() <= 32))
+                p.add(path + "/proficiency", "Expected a whole Proficiency bonus from 1 to 32.");
+            else if (!Set.of("damage", "attack").contains(roll)) p.add(path + "/proficiency", "Proficiency bonuses apply to attack or damage rolls.");
+            else proficiency = option.path("proficiency").asInt();
+        }
+        if (proficiency > 0 && "damage".equals(roll)) weaponDiceConditions(when);
         applyWhen(rule, when);
         if (option.has("cost")) costs(option.get("cost"), path + "/cost", p, pools, rule);
+        if (quantity != null) for (JsonNode cost : rule.path("costs")) times((ObjectNode) cost, "amount", quantity);
         if (limited) rule.put("limitRef", "uses");
         ArrayNode steps = RuleJson.JSON.createArrayNode();
-        String id = option.path("id").asText(), label = escape(option.path("label").asText(""));
-        String role = "damage".equals(roll) ? "damage" : "modifier";
+        String role = option.has("diceResource") ? option.path("diceResource").asText() : "damage".equals(roll) ? "damage" : "modifier";
+        if (option.has("diceResource") && (!ID.matcher(role).matches() || Set.of("hope", "fear").contains(role)))
+            p.add(path + "/diceResource", "Expected a resource ID to tag the option's dice with.");
         List<ObjectNode> parts = new ArrayList<>();
         if (option.has("value")) {
             JsonNode value = signed(option.path("value"));
             if (value == null) p.add(path + "/value", "Unsupported bonus value: " + option.path("value"));
-            else parts.add((ObjectNode) contribution(id + "-flat", "flat", role, label).set("value", value));
+            else parts.add(times((ObjectNode) contribution(id + "-flat", "flat", "damage".equals(roll) ? "damage" : "modifier", label)
+                    .set("value", value), "value", quantity));
         }
         if (option.has("dice")) {
             var matcher = DICE.matcher(option.path("dice").asText());
             if (!matcher.matches()) p.add(path + "/dice", "Unsupported dice: " + option.path("dice").asText());
-            else parts.add(contribution(id + "-dice", "dice", role, label)
-                    .put("count", Integer.parseInt(matcher.group(1))).put("sides", Integer.parseInt(matcher.group(2))));
+            else parts.add(times(contribution(id + "-dice", "dice", role, label)
+                    .put("count", Integer.parseInt(matcher.group(1))).put("sides", Integer.parseInt(matcher.group(2))), "count", quantity));
         }
         if (option.has("advantage")) {
             String advantage = option.path("advantage").asText();
@@ -659,24 +712,120 @@ public final class LegacyCatalogConverter {
             else parts.add(contribution(id + "-" + advantage, "dice", advantage, label)
                     .put("count", 1).put("sides", 6).put("sign", "advantage".equals(advantage) ? 1 : -1));
         }
-        JsonNode from = read("event.roll");
+        JsonNode[] from = { read("event.roll") };
         for (int i = 0; i < parts.size(); i++) {
             String slot = "roll" + (i + 1);
             ObjectNode step = steps.addObject().put("op", "roll.contribute");
-            step.set("from", from);
+            step.set("from", from[0]);
             step.set("contribution", parts.get(i));
             step.put("as", slot);
-            from = read("result." + slot);
+            from[0] = read("result." + slot);
         }
-        if (!parts.isEmpty()) steps.addObject().put("op", "roll.publish").set("roll", from);
+        boolean edited = !parts.isEmpty();
+        if (option.has("hopeDie")) {
+            JsonNode sides = option.get("hopeDie");
+            if (!(sides.isInt() && sides.asInt() >= 2 && sides.asInt() <= 1000)) p.add(path + "/hopeDie", "Expected a die size from 2 to 1000.");
+            else {
+                ObjectNode where = RuleJson.JSON.createObjectNode();
+                where.putArray("eq").add(read("die.role")).add("hope");
+                ObjectNode select = steps.addObject().put("op", "roll.selectDice");
+                select.set("from", from[0]);
+                select.set("where", where);
+                select.put("as", "hopeDice");
+                ObjectNode resize = steps.addObject().put("op", "roll.resize");
+                resize.set("from", from[0]);
+                resize.set("dice", read("result.hopeDice"));
+                resize.put("sides", sides.asInt()).put("as", "resized");
+                from[0] = read("result.resized");
+                edited = true;
+            }
+        }
+        if (proficiency > 0 && "damage".equals(roll)) {
+            from[0] = addWeaponDice(steps, from[0], proficiency);
+            edited = true;
+        }
+        if (edited) steps.addObject().put("op", "roll.publish").set("roll", from[0]);
         if (option.has("effect")) {
             String effect = declareEffect(option.get("effect"), path + "/effect", p, effects);
             if (effect != null) steps.addObject().put("op", "effect.start").put("effect", effect).put("target", "actor");
         }
+        if (proficiency > 0 && "attack".equals(roll)) carriedProficiency(option, label, proficiency, effects, steps, extra);
         endEffect(option, steps);
         if (!steps.isEmpty()) rule.set("do", steps);
         labels(option, path, p, rule);
         return rule;
+    }
+
+    /** Multiplies a numeric field by the chosen quantity; without a quantity the node is unchanged. */
+    private static ObjectNode times(ObjectNode node, String field, JsonNode quantity) {
+        if (quantity == null) return node;
+        ObjectNode product = RuleJson.JSON.createObjectNode();
+        product.putArray("multiply").add(node.get(field)).add(quantity.deepCopy());
+        node.set(field, product);
+        return node;
+    }
+
+    /** Only damage rolls of a weapon whose dice scale with Proficiency can gain Proficiency dice. */
+    private static void weaponDiceConditions(ArrayNode when) {
+        when.addObject().put("exists", "event.check.weaponSourceId");
+        when.addObject().putArray("eq").add(read("event.check.fixedDice")).add(false);
+    }
+
+    /** Rolls {@code count} more of the attacking weapon's base damage dice; returns the edited roll reference. */
+    private static JsonNode addWeaponDice(ArrayNode steps, JsonNode from, int count) {
+        ObjectNode where = RuleJson.JSON.createObjectNode();
+        where.putArray("eq").add(read("die.sourceId")).add(read("event.check.weaponSourceId"));
+        ObjectNode select = steps.addObject().put("op", "roll.selectDice");
+        select.set("from", from);
+        select.set("where", where);
+        select.put("as", "weaponDice");
+        ObjectNode add = steps.addObject().put("op", "roll.addDice");
+        add.set("from", from);
+        add.set("dice", read("result.weaponDice"));
+        add.put("count", count).put("as", "proficiency");
+        return read("result.proficiency");
+    }
+
+    /**
+     * An attack-roll Proficiency bonus applies to that attack's damage: the option starts a pending effect, the next
+     * weapon damage roll automatically gains the dice and ends it, and a failed attack ends it unused.
+     */
+    private static void carriedProficiency(JsonNode option, String label, int proficiency, ObjectNode effects, ArrayNode steps,
+                                           List<ObjectNode> extra) {
+        Set<String> used = new HashSet<>();
+        effects.fieldNames().forEachRemaining(used::add);
+        String effect = unique(slug(option.path("id").asText() + "-proficiency"), used);
+        String pending = option.path("label").asText() + " (pending damage)";
+        ObjectNode declared = effects.putObject(effect).put("label", escape(pending)).put("kind", "buff");
+        declared.putArray("until").add("scene.end");
+        steps.addObject().put("op", "effect.start").put("effect", effect).put("target", "actor");
+        ObjectNode active = RuleJson.JSON.createObjectNode();
+        active.putArray("gt").add(read("effects." + effect)).add(0);
+
+        ObjectNode damage = RuleJson.JSON.createObjectNode().put("id", option.path("id").asText() + "-damage");
+        damage.putArray("bindings").addObject().put("id", "use").put("event", "roll.finished").put("surface", "roll").put("mode", "automatic");
+        ArrayNode when = RuleJson.JSON.createArrayNode();
+        when.addObject().putArray("eq").add(read("event.check.kind")).add("damage");
+        weaponDiceConditions(when);
+        when.add(active.deepCopy());
+        applyWhen(damage, when);
+        ArrayNode damageSteps = damage.putArray("do");
+        JsonNode roll = addWeaponDice(damageSteps, read("event.roll"), proficiency);
+        damageSteps.addObject().put("op", "roll.publish").set("roll", roll);
+        damageSteps.addObject().put("op", "effect.end").put("effect", pending).put("target", "actor");
+        damage.putObject("ui").put("label", label);
+        extra.add(damage);
+
+        ObjectNode miss = RuleJson.JSON.createObjectNode().put("id", option.path("id").asText() + "-miss");
+        miss.putArray("bindings").addObject().put("id", "use").put("event", "roll.finished").put("surface", "roll").put("mode", "automatic");
+        ArrayNode missWhen = RuleJson.JSON.createArrayNode();
+        missWhen.addObject().putArray("eq").add(read("event.check.kind")).add("attack");
+        missWhen.addObject().putArray("eq").add(read("event.check.outcome")).add("failure");
+        missWhen.add(active);
+        applyWhen(miss, missWhen);
+        miss.putArray("do").addObject().put("op", "effect.end").put("effect", pending).put("target", "actor");
+        miss.putObject("ui").put("label", label);
+        extra.add(miss);
     }
 
     private static void endEffect(JsonNode legacy, ArrayNode steps) {
@@ -1325,6 +1474,17 @@ public final class LegacyCatalogConverter {
         resolve.set("plan", planExpression);
         resolve.put("as", "sentRoll");
     }
+    /** How much of a named resource the actor can currently pay: Hope, free track boxes or a pool's value; null if unknown. */
+    private static JsonNode available(String resource, Pools pools) {
+        if ("hope".equals(resource)) return read("actor.hope.value");
+        if (TRACKS.containsKey(resource)) {
+            ObjectNode free = RuleJson.JSON.createObjectNode();
+            free.putArray("subtract").add(read(TRACKS.get(resource) + ".capacity")).add(read(TRACKS.get(resource) + ".marked"));
+            return free;
+        }
+        return pools.has(resource) ? read("actor.pools." + resource + ".value") : null;
+    }
+
     /** A player-chosen whole amount, bounded by what the named resource can currently pay; {@code @amount} reads it. */
     private static void selectAmount(JsonNode legacy, String path, Problems p, Pools pools, ObjectNode rule) {
         p.onlyFields(legacy, path, Set.of("resource", "label", "min", "heal"));
@@ -1335,13 +1495,8 @@ public final class LegacyCatalogConverter {
             p.add(path + "/min", "Expected a nonnegative whole minimum.");
         JsonNode max;
         if (heal) max = RuleJson.JSON.getNodeFactory().numberNode(1_000_000);
-        else if ("hope".equals(resource)) max = read("actor.hope.value");
-        else if (TRACKS.containsKey(resource)) {
-            ObjectNode free = RuleJson.JSON.createObjectNode();
-            free.putArray("subtract").add(read(TRACKS.get(resource) + ".capacity")).add(read(TRACKS.get(resource) + ".marked"));
-            max = free;
-        } else if (pools.has(resource)) max = read("actor.pools." + resource + ".value");
-        else { p.add(path + "/resource", "Amounts need a known resource: " + resource); return; }
+        else max = available(resource, pools);
+        if (max == null) { p.add(path + "/resource", "Amounts need a known resource: " + resource); return; }
         ObjectNode input = rule.putArray("inputs").addObject().put("id", "amount").put("kind", "integer")
                 .put("label", escape(legacy.path("label").asText("Amount"))).put("min", legacy.path("min").asInt(1));
         input.set("max", max);
