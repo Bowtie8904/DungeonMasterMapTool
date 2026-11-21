@@ -31,21 +31,23 @@ public final class LegacyCatalogConverter {
     private static final List<String> FAMILIES = List.of("actions", "rollOptions", "rollTriggers", "conditionalRollTriggers", "mitigation");
     private static final Set<String> BLOCK_FIELDS = Set.of("actions", "reloading", "uses", "modifiers", "resources", "rollOptions", "rollTriggers",
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
-            "damage", "alternateProfiles", "rest", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers");
+            "damage", "alternateProfiles", "rest", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions", "conditionalRollOptions");
+    /** Legacy gated families that are their base family plus extra conditions, which every family converts the same way. */
+    private static final Map<String, String> GATED_FAMILIES = Map.of("conditionalActions", "actions", "conditionalRollOptions", "rollOptions");
     private static final Map<String, String> RANGES = Map.of("melee", "melee", "very close", "veryClose", "veryclose", "veryClose",
             "close", "close", "far", "far", "very far", "veryFar", "veryfar", "veryFar");
     private static final Set<String> RESOURCE_FIELDS = Set.of("id", "label", "initial", "max", "resetOn");
     private static final Set<String> OPTION_FIELDS = Set.of("id", "label", "description", "roll", "value", "dice", "advantage", "cost",
             "defaultOn", "exclusive", "requiresEffect", "excludesEffect", "weapon", "weaponRange", "excludeRolls", "effect", "uses",
-            "usesSource", "endEffect", "hostOwned", "consumeItem", "quantity", "proficiency", "hopeDie", "diceResource", "condition");
+            "usesSource", "endEffect", "hostOwned", "consumeItem", "quantity", "proficiency", "hopeDie", "diceResource", "condition", "loadoutDomain");
     private static final Set<String> TRIGGER_FIELDS = Set.of("id", "label", "description", "on", "cost", "reroll", "when", "outcome",
             "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
-            "chatBenefits", "allowSourceOwner");
+            "chatBenefits", "allowSourceOwner", "loadoutDomain");
     private static final Set<String> MITIGATION_FIELDS = Set.of("id", "label", "description", "when", "cost", "negate", "halve", "reduce",
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
-            "markedHpOnly", "finalSevere", "markStress", "gainHope", "clearStress", "gainTokens", "armorCost", "followUp", "hiddenRoll", "consumeItem", "preserveAfterIncomingDamage");
+            "markedHpOnly", "finalSevere", "markStress", "gainHope", "clearStress", "gainTokens", "armorCost", "followUp", "hiddenRoll", "consumeItem", "preserveAfterIncomingDamage", "loadoutDomain");
     private static final List<String> MARKS_FIELDS = List.of("severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor");
     private static final List<String> PREPARE_FIELDS = List.of("negate", "halve", "reduce");
     private static final List<String> SEVERITIES = List.of("minor", "major", "severe", "massive");
@@ -54,7 +56,7 @@ public final class LegacyCatalogConverter {
     private static final Set<String> ACTION_FIELDS = Set.of("id", "label", "description", "cost", "steps", "report", "damage",
             "requiresEffect", "excludesEffect", "endEffect", "uses", "usesSource", "actionRoll", "target",
             "excludeSourceActor", "hostOwned", "selectAmount", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
-            "channel", "aura");
+            "channel", "aura", "loadoutDomain", "requiresZeroHope");
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
@@ -206,9 +208,12 @@ public final class LegacyCatalogConverter {
             p.nested().clear();
         }
         List<ObjectNode> extra = new ArrayList<>();
-        for (String family : FAMILIES) {
+        List<String> families = new ArrayList<>(FAMILIES);
+        families.addAll(GATED_FAMILIES.keySet().stream().sorted().toList());
+        for (String family : families) {
             JsonNode list = legacy.path(family);
-            for (int i = 0; i < list.size(); i++) queue.add(new Nested(family, list.get(i), path + "/" + family + "/" + i));
+            String base = GATED_FAMILIES.getOrDefault(family, family);
+            for (int i = 0; i < list.size(); i++) queue.add(new Nested(base, list.get(i), path + "/" + family + "/" + i));
         }
         if (legacy.has("rest")) queue.add(new Nested("rest", legacy.get("rest"), path + "/rest"));
         for (int n = 0; n < queue.size() && n < 256; n++) {
@@ -783,6 +788,17 @@ public final class LegacyCatalogConverter {
         if (legacy.has("uses") && !"source".equals(legacy.path("uses").asText()) && !legacy.path("uses").isObject())
             p.add(path + "/uses", "Per-rule use limits must reference the source budget.");
         if (legacy.has("weaponRange")) when.addObject().putArray("eq").add(read("event.check.range")).add(legacy.path("weaponRange").asText());
+        if (legacy.has("loadoutDomain")) {
+            JsonNode domain = legacy.get("loadoutDomain");
+            p.onlyFields(domain, path + "/loadoutDomain", Set.of("domain", "min"));
+            if (domain.path("domain").asText("").isBlank() || !domain.path("min").isInt() || domain.path("min").asInt() < 1)
+                p.add(path + "/loadoutDomain", "Expected a domain name and a positive minimum.");
+            else when.add(loadoutDomain(domain));
+        }
+        if (legacy.has("requiresZeroHope")) {
+            if (!legacy.path("requiresZeroHope").isBoolean()) p.add(path + "/requiresZeroHope", "Expected a boolean.");
+            else if (legacy.path("requiresZeroHope").asBoolean()) when.addObject().putArray("eq").add(read("actor.hope.value")).add(0);
+        }
         if (legacy.has("excludeRolls")) {
             for (JsonNode excluded : legacy.get("excludeRolls")) {
                 if (!ROLLS.contains(excluded.asText())) { p.add(path + "/excludeRolls", "Unsupported roll filter: " + excluded.asText()); continue; }
@@ -840,8 +856,19 @@ public final class LegacyCatalogConverter {
         commonConditions(option, path, p, when);
         if (option.has("condition")) {
             JsonNode condition = option.get("condition");
-            p.onlyFields(condition, path + "/condition", Set.of("unmarkedHp"));
-            JsonNode range = condition.path("unmarkedHp");
+            p.onlyFields(condition, path + "/condition", Set.of("unmarkedHp", "markedHp", "stressFull"));
+            if (condition.has("markedHp")) {
+                if (!condition.path("markedHp").isInt() || condition.path("markedHp").asInt() < 1) p.add(path + "/condition/markedHp", "Expected a positive whole number.");
+                else when.addObject().putArray("gte").add(read("actor.hp.marked")).add(condition.path("markedHp").asInt());
+            }
+            if (condition.has("stressFull")) {
+                if (!condition.path("stressFull").asBoolean(false)) p.add(path + "/condition/stressFull", "Expected true.");
+                else {
+                    when.addObject().putArray("gt").add(read("actor.stress.capacity")).add(0);
+                    when.addObject().putArray("gte").add(read("actor.stress.marked")).add(read("actor.stress.capacity"));
+                }
+            }
+            JsonNode range = condition.has("unmarkedHp") ? condition.get("unmarkedHp") : RuleJson.JSON.createObjectNode();
             p.onlyFields(range, path + "/condition/unmarkedHp", Set.of("min", "max"));
             ObjectNode unmarked = RuleJson.JSON.createObjectNode();
             unmarked.putArray("subtract").add(read("actor.hp.capacity")).add(read("actor.hp.marked"));

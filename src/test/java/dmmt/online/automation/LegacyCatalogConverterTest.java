@@ -437,6 +437,29 @@ class LegacyCatalogConverterTest {
         assertTrue(invalid.diagnostics().stream().anyMatch(d -> d.message().contains("exactly one value source")), invalid.diagnostics().toString());
     }
 
+    @Test
+    void gatedActionAndRollOptionFamiliesConvertLikeTheirBaseFamilies() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"g","name":"G","automation":{
+                  "conditionalActions":[{"id":"hope","label":"Gain Hope","requiresZeroHope":true,"loadoutDomain":{"domain":"Night","min":2},
+                    "steps":[{"op":"gain","resource":"hope","amount":1}]}],
+                  "conditionalRollOptions":[{"id":"full","label":"Full Stress","roll":"damage","condition":{"stressFull":true},"proficiency":1},
+                    {"id":"hurt","label":"Hurt","roll":"action","condition":{"markedHp":1},"value":1}]}}"""));
+        JsonNode automation = block(result, 0);
+        assertEquals(3, automation.path("rules").size(), automation.toString());
+        RuleCompiler.Program program = program(result, 0);
+        String actor = """
+                {"hope":{"value":%d,"max":6},"hp":{"marked":%d,"capacity":6},"stress":{"marked":%d,"capacity":6},
+                 "loadout":[{"id":"a","domain":"Night"},{"id":"b","domain":"Night"}],"effects":[]}""";
+        assertEquals(List.of("hope"), available(program, context(program, actor.formatted(0, 0, 0), "{\"type\":\"action.request\"}"), "sheet"));
+        assertEquals(List.of(), available(program, context(program, actor.formatted(1, 0, 0), "{\"type\":\"action.request\"}"), "sheet"));
+        String damage = "{\"type\":\"roll.prepare\",\"check\":{\"kind\":\"damage\",\"weaponSourceId\":\"w\",\"fixedDice\":false}}", action = "{\"type\":\"roll.prepare\",\"check\":{\"kind\":\"action\"}}";
+        assertEquals(List.of("full"), available(program, context(program, actor.formatted(0, 0, 6), damage), "roll"));
+        assertEquals(List.of(), available(program, context(program, actor.formatted(0, 0, 5), damage), "roll"));
+        assertEquals(List.of("hurt"), available(program, context(program, actor.formatted(0, 1, 0), action), "roll"));
+        assertEquals(List.of(), available(program, context(program, actor.formatted(0, 0, 0), action), "roll"));
+    }
+
     private static JsonNode block(LegacyCatalogConverter.Result result, int entry) {
         assertEquals(result.blocks(), result.converted(), result.diagnostics().toString());
         return result.catalog().at("/entries/" + entry + "/automation");
