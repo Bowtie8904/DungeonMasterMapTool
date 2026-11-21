@@ -33,7 +33,9 @@ public final class LegacyCatalogConverter {
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
             "damage", "alternateProfiles", "damageTypeChoice", "rest", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions", "conditionalRollOptions",
             "hopeReward", "classResourceOnly", "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "zeroHopeClearArmor",
-            "overflowHope", "criticalMelee");
+            "overflowHope", "criticalMelee", "deathMove", "manual");
+    private static final Set<String> DEATH_KINDS = Set.of("hopeBonus", "hopeSpend", "mask", "spectral", "egg", "battleHardened",
+            "unbreakable", "undying", "lifeWard");
     /** Legacy gated families that are their base family plus extra conditions, which every family converts the same way. */
     private static final Map<String, String> GATED_FAMILIES = Map.of("conditionalActions", "actions", "conditionalRollOptions", "rollOptions");
     private static final Map<String, String> RANGES = Map.of("melee", "melee", "very close", "veryClose", "veryclose", "veryClose",
@@ -67,7 +69,7 @@ public final class LegacyCatalogConverter {
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
             "actions", "rollOptions", "rollTriggers", "mitigation", "rest", "consumeLongRestMove", "group", "endOnDamage", "endOnSourceSevere", "endAfterIncomingDamage", "damage",
-            "unique", "exclusiveSource", "endOnMarkedHp", "endOnDealtDamage", "endOnAttack", "endOnAction");
+            "unique", "exclusiveSource", "endOnMarkedHp", "endOnDealtDamage", "endOnAttack", "endOnAction", "lifeWard");
     private static final Set<String> REST_FIELDS = Set.of("extraMoves", "longMovesInShort", "passives", "modifiers", "requiresEffect");
     private static final Set<String> PASSIVE_FIELDS = Set.of("id", "label", "defaultOn", "condition", "steps", "extraMoves", "consumeItem",
             "rest", "move", "bonus", "minHope", "cost", "chooseAlly", "hostOwned", "castBeforeRest", "requiresEffect", "excludesEffect");
@@ -224,12 +226,16 @@ public final class LegacyCatalogConverter {
             for (int i = 0; i < list.size(); i++) queue.add(new Nested(base, list.get(i), path + "/" + family + "/" + i));
         }
         if (legacy.has("rest")) queue.add(new Nested("rest", legacy.get("rest"), path + "/rest"));
+        JsonNode death = legacy.path("deathMove");
+        if (legacy.has("deathMove")) deathMove(death, path + "/deathMove", p, queue);
         for (int n = 0; n < queue.size() && n < 256; n++) {
             Nested next = queue.get(n);
             JsonNode legacyRule = next.legacy();
-            if (Set.of("rest", "consumeLongRestMove", "endOnDamage", "endOnDealtDamage", "effectDamage").contains(next.family())) {
+            if (Set.of("rest", "consumeLongRestMove", "endOnDamage", "endOnDealtDamage", "effectDamage", "undying", "lifeWard").contains(next.family())) {
                 List<ObjectNode> restRules = switch (next.family()) {
                     case "rest" -> rest(legacyRule, next.path(), p, effects, pools, next.path().equals(path + "/rest") ? legacy : null, ruleIds);
+                    case "undying" -> List.of(undying());
+                    case "lifeWard" -> List.of(lifeWard(legacyRule.path("effect").asText()));
                     case "endOnDamage" -> List.of(endOnDamage(legacyRule));
                     case "endOnDealtDamage" -> List.of(endOnDealtDamage(legacyRule));
                     case "effectDamage" -> effectDamage(legacyRule, next.path(), p);
@@ -245,7 +251,9 @@ public final class LegacyCatalogConverter {
             }
             boolean usesBudget = limited && legacyRule.path("usesSource").asBoolean(true);
             ObjectNode rule = switch (next.family()) {
-                case "actions" -> action(legacyRule, next.path(), p, effects, pools, usesBudget);
+                case "actions" -> legacyRule.has("deathMove")
+                        ? deathAction(legacyRule, death, next.path(), p, effects, pools, usesBudget, extra, out)
+                        : action(legacyRule, next.path(), p, effects, pools, usesBudget);
                 case "rollOptions" -> rollOption(legacyRule, next.path(), p, effects, pools, usesBudget, extra);
                 case "slotModifier" -> {
                     ObjectNode option = rollOption(legacyRule, next.path(), p, effects, pools, false, extra);
@@ -346,6 +354,7 @@ public final class LegacyCatalogConverter {
                 pools.local().forEach(pool -> ((ObjectNode) pool).put("section", "class"));
             }
         }
+        if (legacy.has("manual")) manualNotes(legacy.get("manual"), path + "/manual", p, rules);
         if (!pools.local().isEmpty()) out.set("pools", pools.local());
         if (!effects.isEmpty()) out.set("effects", effects);
         if (!rules.isEmpty()) out.set("rules", rules);
@@ -842,6 +851,10 @@ public final class LegacyCatalogConverter {
         else if ("trait".equals(roll)) when.addObject().putArray("ne").add(read("event.check.trait")).addNull();
         else if ("duality".equals(roll)) when.addObject().put("exists", "event.check.dominant");
         else if ("companion".equals(roll)) when.addObject().putArray("eq").add(read("event.check.kind")).add("companion");
+        else if (roll.matches("death(:(risk|avoid))?")) {
+            when.addObject().putArray("eq").add(read("event.check.kind")).add("death");
+            if (roll.contains(":")) when.addObject().putArray("eq").add(read("event.check.move")).add(roll.substring(6));
+        }
         else if ("spelldamage".equals(roll)) {
             when.addObject().putArray("eq").add(read("event.check.kind")).add("damage");
             when.addObject().putArray("eq").add(read("event.check.spell")).add(true);
@@ -2772,6 +2785,10 @@ public final class LegacyCatalogConverter {
             if (!effect.path("exclusiveSource").isBoolean()) p.add(path + "/exclusiveSource", "Expected a boolean.");
             else if (effect.path("exclusiveSource").asBoolean()) declared.put("singleHolder", true);
         }
+        if (effect.has("lifeWard")) {
+            if (!effect.path("lifeWard").asBoolean(false)) p.add(path + "/lifeWard", "Expected true.");
+            else p.nested().add(new Nested("lifeWard", RuleJson.JSON.createObjectNode().put("effect", name), path + "/lifeWard"));
+        }
         if (effect.has("endOnMarkedHp")) {
             if (!effect.path("endOnMarkedHp").asBoolean(false)) p.add(path + "/endOnMarkedHp", "Expected true.");
             else p.nested().add(new Nested("endOnDamage", RuleJson.JSON.createObjectNode().put("effect", name).put("field", "hitPoints")
@@ -3403,6 +3420,189 @@ public final class LegacyCatalogConverter {
         applyWhen(rule, when);
         rule.putArray("do").addObject().put("op", "effect.end").put("effect", effect).put("target", "actor");
         return rule;
+    }
+
+    /** The roll filter for death-move Hope bonuses: {@code death} for both moves, otherwise {@code death:<move>}. */
+    private static String deathRoll(JsonNode moves, String path, Problems p) {
+        Set<String> listed = new HashSet<>();
+        if (!moves.isArray() || moves.isEmpty()) { p.add(path, "Expected risk and/or avoid."); return null; }
+        for (JsonNode move : moves)
+            if (!Set.of("risk", "avoid").contains(move.asText()) || !listed.add(move.asText())) { p.add(path, "Expected risk and/or avoid."); return null; }
+        return listed.size() == 2 ? "death" : "death:" + listed.iterator().next();
+    }
+
+    /**
+     * A source's death-move declaration. Flat Hope bonuses become automatic death-roll modifiers, Mask tokens an optional
+     * paid modifier, and Won't Stay Dead a post-roll button; alternative moves are converted with their actions.
+     */
+    private static void deathMove(JsonNode move, String path, Problems p, List<Nested> queue) {
+        p.onlyFields(move, path, Set.of("kind", "moves", "bonus"));
+        String kind = move.path("kind").asText("");
+        if (!DEATH_KINDS.contains(kind)) { p.add(path + "/kind", "Unsupported death move: " + kind); return; }
+        boolean listsMoves = Set.of("hopeBonus", "mask", "hopeSpend").contains(kind);
+        if (move.has("moves") != listsMoves) { p.add(path + "/moves", "Only Hope bonuses list the death moves they apply to."); return; }
+        if (move.has("bonus") != Set.of("hopeBonus", "mask").contains(kind)) { p.add(path + "/bonus", "Only flat Hope bonuses declare a bonus."); return; }
+        String roll = listsMoves ? deathRoll(move.get("moves"), path + "/moves", p) : null;
+        if (listsMoves && roll == null) return;
+        if ("undying".equals(kind)) queue.add(new Nested("undying", RuleJson.JSON.createObjectNode(), path));
+        if (!move.has("bonus")) return;
+        JsonNode bonus = move.get("bonus");
+        if (!bonus.isInt() || bonus.asInt() < 1 || bonus.asInt() > 12) { p.add(path + "/bonus", "Expected a Hope bonus from 1 to 12."); return; }
+        ObjectNode option = RuleJson.JSON.createObjectNode().put("roll", roll).put("value", bonus.asInt());
+        if ("hopeBonus".equals(kind)) queue.add(new Nested("slotModifier", option.put("id", "death-hope-bonus").put("label", "Hope bonus").put("required", true), path));
+        else {
+            option.put("id", "death-mask").put("label", "Spend a Mask token (mask worn)").putObject("cost").put("death-mask", 1);
+            queue.add(new Nested("rollOptions", option, path));
+        }
+    }
+
+    /**
+     * A death-move action. Spending Hope on a death roll is a quantity roll option; alternative moves are buttons in the
+     * death-move dialog ({@code death.options}) that replace the core moves.
+     */
+    private static ObjectNode deathAction(JsonNode action, JsonNode move, String path, Problems p, ObjectNode effects, Pools pools,
+                                          boolean limited, List<ObjectNode> extra, ObjectNode out) {
+        p.onlyFields(action, path, Set.of("id", "label", "description", "deathMove"));
+        if (!move.isObject()) { p.add(path + "/deathMove", "Death-move actions need the source's deathMove declaration."); return null; }
+        String kind = move.path("kind").asText(""), chosen = action.path("deathMove").asText("");
+        if ("hopeSpend".equals(kind)) {
+            boolean listed = false;
+            for (JsonNode listedMove : move.path("moves")) listed |= chosen.equals(listedMove.asText());
+            if (!listed) { p.add(path + "/deathMove", "The death move is not listed by the source: " + chosen); return null; }
+            ObjectNode option = RuleJson.JSON.createObjectNode().put("id", action.path("id").asText()).put("label", action.path("label").asText(""))
+                    .put("roll", "death:" + chosen).put("value", 1);
+            if (action.has("description")) option.set("description", action.get("description"));
+            option.putObject("quantity").put("resource", "hope").put("label", "Hope to spend");
+            option.putObject("cost").put("hope", 1);
+            return rollOption(option, path, p, effects, pools, limited, extra);
+        }
+        if (!kind.equals(chosen) || !Set.of("spectral", "egg", "battleHardened", "unbreakable").contains(kind)) {
+            p.add(path + "/deathMove", "Expected the source's alternative death move: " + kind);
+            return null;
+        }
+        String id = action.path("id").asText();
+        if (!ID.matcher(id).matches()) { p.add(path + "/id", "Invalid action ID: " + id); return null; }
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", id);
+        rule.putArray("bindings").addObject().put("id", "death").put("event", "death.options").put("surface", "death").put("mode", "button");
+        ObjectNode ui = labels(action, path, p, rule);
+        if (limited) rule.put("limitRef", "uses");
+        ArrayNode costs = RuleJson.JSON.createArrayNode(), steps = RuleJson.JSON.createArrayNode();
+        switch (kind) {
+            case "battleHardened" -> {
+                costs.addObject().put("op", "resource.spend").put("pool", "actor.hope").put("amount", 1);
+                steps.addObject().put("op", "track.clear").put("track", "actor.hp").put("amount", 1).put("as", "hp");
+                ui.put("report", "Spent 1 Hope and cleared {result.hp} HP instead of a death move.");
+            }
+            case "unbreakable" -> {
+                steps.addObject().put("op", "dice.roll").put("count", 1).put("sides", 6).put("as", "roll");
+                steps.addObject().put("op", "track.clear").put("track", "actor.hp").put("as", "hp").set("amount", read("result.roll"));
+                steps.addObject().put("op", "collection.remove").put("target", "actor").put("collection", "loadout").put("as", "card")
+                        .set("item", read("source.instanceId"));
+                steps.addObject().put("op", "collection.add").put("target", "actor").put("collection", "vault").set("item", read("result.card"));
+                ui.put("report", "Rolled {result.roll}: cleared {result.hp} HP instead of a death move and moved {source.name} to the vault.");
+            }
+            case "egg" -> {
+                if (!p.sourceId().startsWith("consumables:")) costs.addObject().put("op", "inventory.consume").put("amount", 1);
+                ui.put("report", "{source.name}: returned as an ancient black-winged avian, retaining memories, now desiring to reside in the "
+                        + "Sanctum Mortalis. Resolve the new form with the GM.");
+            }
+            default -> {
+                ObjectNode form = RuleJson.JSON.createObjectNode().put("name", "Spectral Form").put("kind", "buff")
+                        .put("text", "Resistance to physical damage; pass through objects. Ends when you clear more HP or mark your last HP. "
+                                + "If inside an object when it ends, the GM must move you to the nearest open space.");
+                String effect = declareEffect(form, path + "/deathMove", p, effects);
+                if (effect == null) return null;
+                String hpSlot = effect + "-hp", blocked = effect + "-blocked";
+                ObjectNode state = out.has("state") ? (ObjectNode) out.get("state") : out.putObject("state");
+                state.put(hpSlot, 0).put(blocked, false);
+                rule.putObject("when").set("not", read("state." + blocked));
+                ui.put("unavailable", "Choose a different death move after Spectral Form ends at your last HP.");
+                steps.addObject().put("op", "track.clear").put("track", "actor.hp").put("amount", 1).put("as", "hp");
+                steps.addObject().put("op", "effect.start").put("effect", effect).put("target", "actor");
+                steps.addObject().put("op", "state.set").put("slot", hpSlot).set("value", read("actor.hp.marked"));
+                ui.put("report", "Cleared {result.hp} HP and became spectral. Further HP healing or marking the last HP ends this form.");
+                ObjectNode last = RuleJson.JSON.createObjectNode();
+                last.putArray("gte").add(read("actor.hp.marked")).add(read("actor.hp.capacity"));
+                ObjectNode healed = RuleJson.JSON.createObjectNode();
+                healed.putArray("lt").add(read("actor.hp.marked")).add(read("state." + hpSlot));
+                ObjectNode ends = trackChanged(effect + "-ends", "hp");
+                ArrayNode when = RuleJson.JSON.createArrayNode();
+                when.add(labelPresent("Spectral Form"));
+                when.addObject().putArray("or").add(healed).add(last.deepCopy());
+                applyWhen(ends, when);
+                ArrayNode ending = ends.putArray("do");
+                ending.addObject().put("op", "state.set").put("slot", blocked).set("value", last.deepCopy());
+                ending.addObject().put("op", "effect.end").put("effect", "Spectral Form").put("target", "actor");
+                ends.putObject("ui").put("label", "Spectral Form ends");
+                extra.add(ends);
+                ObjectNode recovers = trackChanged(effect + "-available", "hp");
+                ArrayNode open = RuleJson.JSON.createArrayNode();
+                open.add(read("state." + blocked));
+                open.addObject().putArray("lt").add(read("actor.hp.marked")).add(read("actor.hp.capacity"));
+                applyWhen(recovers, open);
+                recovers.putArray("do").addObject().put("op", "state.set").put("slot", blocked).put("value", false);
+                recovers.putObject("ui").put("label", "Spectral Form is available again");
+                extra.add(recovers);
+            }
+        }
+        if (!costs.isEmpty()) rule.set("costs", costs);
+        if (!steps.isEmpty()) rule.set("do", steps);
+        return rule;
+    }
+
+    /** Won't Stay Dead: after a failed Risk It All, permanently lose a Hit Point slot to succeed with Hope instead. */
+    private static ObjectNode undying() {
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "undying");
+        ObjectNode binding = rule.putArray("bindings").addObject().put("id", "claim").put("event", "roll.finished")
+                .put("surface", "roll").put("mode", "button").put("claimGroup", "death-outcome").put("audience", "self");
+        binding.putObject("claimScope").put("recipients", "sourceActor");
+        ArrayNode when = RuleJson.JSON.createArrayNode();
+        when.addObject().putArray("eq").add(read("event.check.kind")).add("death");
+        when.addObject().putArray("eq").add(read("event.check.move")).add("risk");
+        when.addObject().putArray("eq").add(read("event.check.dominant")).add("fear");
+        when.addObject().putArray("ne").add(read("event.check.critical")).add(true);
+        applyWhen(rule, when);
+        ArrayNode steps = rule.putArray("do");
+        steps.addObject().put("op", "track.capacity").put("track", "actor.hp").put("by", -1).put("as", "hp");
+        steps.addObject().put("op", "roll.annotate").put("field", "deathOutcome").put("value", "hope").put("as", "roll").set("from", read("event.roll"));
+        steps.addObject().put("op", "roll.publish").set("roll", read("result.roll"));
+        rule.putObject("ui").put("label", "Mark a Hit Point permanently to succeed with Hope")
+                .put("report", "Permanently marked a Hit Point to succeed with Hope.");
+        return rule;
+    }
+
+    /** An effect that lets its holder clear a Hit Point instead of making a death move, ending the effect. */
+    private static ObjectNode lifeWard(String effect) {
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", slug(effect) + "-death");
+        rule.putArray("bindings").addObject().put("id", "death").put("event", "death.options").put("surface", "death").put("mode", "button");
+        rule.set("when", labelPresent(effect));
+        ArrayNode steps = rule.putArray("do");
+        steps.addObject().put("op", "track.clear").put("track", "actor.hp").put("amount", 1).put("as", "hp");
+        steps.addObject().put("op", "effect.end").put("effect", effect).put("target", "actor");
+        rule.putObject("ui").put("label", "Clear 1 HP instead of a death move (" + escape(effect) + ")")
+                .put("report", "Cleared {result.hp} HP instead of a death move; " + escape(effect) + " ended.");
+        return rule;
+    }
+
+    /** Manual notes are shown with the source's player-facing rules. */
+    private static void manualNotes(JsonNode notes, String path, Problems p, ArrayNode rules) {
+        if (!notes.isArray() || notes.isEmpty()) { p.add(path, "Expected a list of notes."); return; }
+        List<String> text = new ArrayList<>();
+        for (int i = 0; i < notes.size(); i++) {
+            if (!notes.get(i).isTextual() || notes.get(i).asText().isBlank()) p.add(path + "/" + i, "Expected a note.");
+            else text.add(escape(notes.get(i).asText()));
+        }
+        boolean shown = false;
+        for (JsonNode rule : rules) {
+            if (!Set.of("button", "option").contains(rule.path("bindings").path(0).path("mode").asText())) continue;
+            ObjectNode ui = rule.has("ui") ? (ObjectNode) rule.get("ui") : ((ObjectNode) rule).putObject("ui");
+            List<String> parts = new ArrayList<>();
+            if (ui.has("description")) parts.add(ui.path("description").asText());
+            parts.addAll(text);
+            ui.put("description", String.join(" ", parts));
+            shown = true;
+        }
+        if (!shown) p.add(path, "Manual notes need a player-facing rule.");
     }
 
     /** A legacy rule still to convert; effect-granted rules are queued with the granting effect as a condition. */

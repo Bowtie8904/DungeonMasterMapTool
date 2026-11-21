@@ -939,6 +939,115 @@ class LegacyCatalogConverterTest {
                 "An unaffordable gold cost is rejected.");
     }
 
+    @Test
+    void deathMovesBecomeDeathRollOptionsAndDeathDialogButtons() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"feather","name":"Feather","automation":{"deathMove":{"kind":"hopeBonus","moves":["avoid"],"bonus":1}}},
+                {"id":"mask","name":"Mask","automation":{"deathMove":{"kind":"mask","moves":["risk","avoid"],"bonus":1},
+                  "resources":[{"id":"death-mask","label":"Mask tokens","initial":0,"max":4}],
+                  "actions":[{"id":"gain","label":"Gain token","steps":[{"op":"gain","resource":"death-mask","amount":1}]}],
+                  "manual":["Confirm the mask is worn."]}},
+                {"id":"plate","name":"Plate","automation":{"deathMove":{"kind":"hopeSpend","moves":["risk"]},"uses":{"max":1,"per":"longRest"},
+                  "actions":[{"id":"use","label":"Blessed","deathMove":"risk"}]}},
+                {"id":"hardened","name":"Hardened","automation":{"deathMove":{"kind":"battleHardened"},"uses":{"max":1,"per":"longRest"},
+                  "actions":[{"id":"use","label":"Clear HP","deathMove":"battleHardened"}]}},
+                {"id":"unbreakable","name":"Unbreakable","automation":{"deathMove":{"kind":"unbreakable"},
+                  "actions":[{"id":"use","label":"At last HP: clear HP","deathMove":"unbreakable"}]}},
+                {"id":"egg","name":"Egg","automation":{"deathMove":{"kind":"egg"},"actions":[{"id":"use","label":"Break egg","deathMove":"egg"}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        String roll = "{\"type\":\"roll.prepare\",\"check\":{\"kind\":\"%s\",\"move\":\"avoid\"},\"roll\":" + ROLL + "}";
+        RuleCompiler.Program feather = program(result, 0);
+        assertEquals(2, run(feather, context(feather, "{\"effects\":[]}", roll.formatted("death"))).contexts().getFirst().at("/event/roll/contributions").size());
+        assertEquals(1, run(feather, context(feather, "{\"effects\":[]}", roll.formatted("action"))).contexts().getFirst().at("/event/roll/contributions").size());
+        String mask = block(result, 1).toString();
+        assertTrue(mask.contains("\"pool.spend\"") && mask.contains("\"option\"") && mask.contains("Confirm the mask is worn."), mask);
+        String plate = block(result, 2).toString();
+        assertTrue(plate.contains("\"input.quantity\"") && plate.contains("\"actor.hope\"") && plate.contains("\"risk\""), plate);
+        for (int i = 0; i < 6; i++) program(result, i);
+
+        String dying = "{\"id\":\"ari\",\"hope\":{\"value\":2,\"max\":6},\"hp\":{\"marked\":6,\"capacity\":6},\"effects\":[],"
+                + "\"loadout\":[{\"id\":\"fixture\",\"name\":\"Unbreakable\"}],\"vault\":[]}";
+        RuleCompiler.Program hardened = program(result, 3);
+        JsonNode after = death(hardened, context(hardened, dying, "{\"type\":\"death.options\"}"), "use").contexts().getFirst();
+        assertEquals(5, after.at("/actor/hp/marked").asInt(), after.toString());
+        assertEquals(1, after.at("/actor/hope/value").asInt(), after.toString());
+        RuleCompiler.Program unbreakable = program(result, 4);
+        after = death(unbreakable, context(unbreakable, dying, "{\"type\":\"death.options\"}"), "use").contexts().getFirst();
+        assertTrue(after.at("/actor/hp/marked").asInt() < 6, after.toString());
+        assertEquals(0, after.at("/actor/loadout").size(), after.toString());
+        assertEquals("fixture", after.at("/actor/vault/0/id").asText(), after.toString());
+        assertTrue(block(result, 5).toString().contains("\"inventory.consume\""), block(result, 5).toString());
+    }
+
+    @Test
+    void spectralFormEndsOnHealingAndBlocksItselfAtTheLastHitPoint() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"spectral","name":"Spectral","automation":{"deathMove":{"kind":"spectral"},
+                  "actions":[{"id":"use","label":"Spectral Form death move","deathMove":"spectral"}]}}"""));
+        RuleCompiler.Program program = program(result, 0);
+        String actor = "{\"id\":\"ari\",\"hp\":{\"marked\":6,\"capacity\":6},\"effects\":[]}";
+        JsonNode spectral = death(program, context(program, actor, "{\"type\":\"death.options\"}"), "use").contexts().getFirst();
+        assertEquals("Spectral Form", spectral.at("/actor/effects/0/label").asText(), spectral.toString());
+        assertEquals(5, spectral.at("/state/spectral-form-hp").asInt(), spectral.toString());
+        String changed = "{\"type\":\"track.changed\",\"track\":\"hp\"}";
+        ObjectNode marked = context(program, spectral.path("actor").toString(), changed);
+        marked.set("state", spectral.path("state").deepCopy());
+        ((ObjectNode) marked.at("/actor/hp")).put("marked", 6);
+        JsonNode ended = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, marked)), List.of(), StructuredRollTest.noRandom())
+                .contexts().getFirst();
+        assertEquals(0, ended.at("/actor/effects").size(), ended.toString());
+        assertTrue(ended.at("/state/spectral-form-blocked").asBoolean(), ended.toString());
+        ObjectNode again = context(program, ended.path("actor").toString(), "{\"type\":\"death.options\"}");
+        again.set("state", ended.path("state").deepCopy());
+        assertEquals(List.of(), available(program, again, "death"));
+        ObjectNode healed = context(program, ended.path("actor").toString(), changed);
+        healed.set("state", ended.path("state").deepCopy());
+        ((ObjectNode) healed.at("/actor/hp")).put("marked", 4);
+        JsonNode open = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, healed)), List.of(), StructuredRollTest.noRandom())
+                .contexts().getFirst();
+        assertFalse(open.at("/state/spectral-form-blocked").asBoolean(true), open.toString());
+    }
+
+    @Test
+    void undyingAndLifeWardConvertToGenericRules() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"undying","name":"Undying","automation":{"deathMove":{"kind":"undying"}}},
+                {"id":"ward","name":"Ward","automation":{"deathMove":{"kind":"lifeWard"},"actions":[{"id":"use","label":"Life Ward","cost":{"hope":3},
+                  "steps":[{"op":"effect","effect":{"name":"Life Ward","until":"manual","lifeWard":true,"text":"Clear 1 HP instead."}}]}],
+                  "manual":["Choose an ally within Close range."]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        RuleCompiler.Program undying = program(result, 0);
+        String failed = "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"death\",\"move\":\"risk\",\"dominant\":\"fear\",\"critical\":false},\"roll\":" + ROLL + "}";
+        ObjectNode dying = context(undying, "{\"id\":\"me\",\"hp\":{\"marked\":6,\"capacity\":6},\"effects\":[]}", failed);
+        assertEquals(List.of("undying"), available(undying, dying, "roll"));
+        assertEquals(List.of(), available(undying, context(undying, "{\"id\":\"me\",\"effects\":[]}", failed.replace("\"risk\"", "\"avoid\"")), "roll"));
+        var claim = RuleDispatcher.executeClaims(List.of(new RuleDispatcher.Candidate(undying, dying)),
+                List.of(new RuleDispatcher.ClaimIntent(new RuleRuntime.Intent("undying", "claim", "fixture", 0, RuleJson.JSON.createObjectNode()), "me", 0, 0)),
+                List.of(new RuleDispatcher.RecipientCandidate("me", (ObjectNode) dying.path("actor").deepCopy(), 0)),
+                new RuleDispatcher.ClaimLedger(0, Set.of()), StructuredRollTest.noRandom());
+        JsonNode converted = claim.sourceContexts().getFirst();
+        assertEquals(5, converted.at("/actor/hp/capacity").asInt(), converted.toString());
+        assertEquals("hope", converted.at("/event/roll/metadata/deathOutcome").asText(), converted.toString());
+
+        JsonNode ward = block(result, 1);
+        assertTrue(ward.at("/rules/0/ui/description").asText().contains("Close range"), ward.toString());
+        RuleCompiler.Program program = program(result, 1);
+        String warded = "{\"hp\":{\"marked\":6,\"capacity\":6},\"effects\":[{\"id\":\"fixture/life-ward/1\",\"effect\":\""
+                + program.sourceId() + "#life-ward\",\"sourceInstanceId\":\"fixture\",\"label\":\"Life Ward\"}]}";
+        JsonNode after = death(program, context(program, warded, "{\"type\":\"death.options\"}"), "life-ward-death").contexts().getFirst();
+        assertEquals(5, after.at("/actor/hp/marked").asInt(), after.toString());
+        assertEquals(0, after.at("/actor/effects").size(), after.toString());
+    }
+
+    private static RuleDispatcher.EventResolution death(RuleCompiler.Program program, ObjectNode context, String rule) {
+        return intent(program, context, rule, "death");
+    }
+
+    private static RuleDispatcher.EventResolution intent(RuleCompiler.Program program, ObjectNode context, String rule, String binding) {
+        return RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context)),
+                List.of(new RuleRuntime.Intent(rule, binding, "fixture", 0, RuleJson.JSON.createObjectNode())), RandomGenerator.getDefault());
+    }
+
     private static JsonNode block(LegacyCatalogConverter.Result result, int entry) {
         assertEquals(result.blocks(), result.converted(), result.diagnostics().toString());
         return result.catalog().at("/entries/" + entry + "/automation");
