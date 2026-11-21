@@ -1042,4 +1042,50 @@ class LegacyCatalogConverterTest {
         restful.set("event", RuleJson.parse(move("tend", "long", false, true).replace("\"long\":false", "\"long\":true")));
         assertEquals(1, run(program, restful).contexts().getFirst().at("/actor/effects").size());
     }
+
+    @Test
+    void attachableItemsBecomeAttachmentDeclarationsWhoseRulesTargetTheHostGear() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"stone","name":"Stone","automation":{"attach":{"to":"weapon","requires":{"noFeature":true,"nameIncludes":["bow"]},
+                  "feature":{"name":"Brutal","text":"Roll more."},"automation":{"damage":{"explode":"once","label":"Brutal"}}}}},
+                {"id":"gem","name":"Gem","automation":{"attach":{"to":"weapon","trait":"Agility"}}},
+                {"id":"charm","name":"Charm","automation":{"attach":{"to":"weapon","requires":{"range":"Melee","damageType":"mag"}}}},
+                {"id":"plate","name":"Plate","automation":{"attach":{"to":"armor","requires":{"noFeature":true}}}}"""));
+        assertEquals(4, result.converted(), result.diagnostics().toString());
+        JsonNode stone = result.catalog().at("/entries/0/automation");
+        assertEquals("weapon", stone.at("/attachment/to").asText());
+        assertEquals("Brutal", stone.at("/attachment/feature/name").asText());
+        assertTrue(stone.at("/rules/0").toString().contains("\"source.attachedTo.instanceId\""), stone.toString());
+        assertFalse(stone.at("/rules/0").toString().contains("\"source.id\""), stone.toString());
+
+        ObjectNode source = (ObjectNode) RuleJson.parse("{\"id\":\"stone\",\"name\":\"Stone\"}");
+        RuleCompiler.Program program = program(result, 0);
+        assertEquals(List.of(), program.attachmentBlockers(RuleJson.parse("""
+                {"kind":"weapon","name":"Longbow","range":"far","damageType":"physical","hasFeature":false,"generated":false,"hasTraitAttachment":false}"""), source));
+        assertEquals(List.of("Attach this to weapon gear.", "Requires a bow."), program.attachmentBlockers(RuleJson.parse("""
+                {"kind":"armor","name":"Leather","hasFeature":false,"generated":false}"""), source));
+        assertEquals(List.of("Generated weapons cannot hold attachments.", "Axe already has a feature.", "Requires a bow."),
+                program.attachmentBlockers(RuleJson.parse("""
+                {"kind":"weapon","name":"Axe","hasFeature":true,"generated":true,"hasTraitAttachment":false}"""), source));
+        RuleCompiler.Program gem = program(result, 1);
+        assertEquals("Agility", gem.attachment().path("trait").asText());
+        assertEquals(List.of("Sword already has an attack-trait attachment."), gem.attachmentBlockers(RuleJson.parse("""
+                {"kind":"weapon","name":"Sword","hasFeature":false,"generated":false,"hasTraitAttachment":true}"""), source));
+        assertEquals(List.of("Requires a Melee weapon.", "Requires a magic weapon."), program(result, 2).attachmentBlockers(RuleJson.parse("""
+                {"kind":"weapon","name":"Bow","range":"far","damageType":"physical","generated":false}"""), source));
+        assertEquals(List.of("Mail already has a feature."), program(result, 3).attachmentBlockers(RuleJson.parse("""
+                {"kind":"armor","name":"Mail","hasFeature":true}"""), source));
+
+        assertThrows(IllegalArgumentException.class, () -> RuleCompiler.compile("x", RuleJson.parse("""
+                {"attachment":{"to":"weapon","requires":[{"when":{"read":"actor.hope"},"reason":"No."}]}}"""), RuleJson.parse(LegacyCatalogConverter.EMPTY_RECIPES)));
+        var unattached = assertThrows(IllegalArgumentException.class, () -> RuleCompiler.compile("x", RuleJson.parse("""
+                {"rules":[{"id":"r","bindings":[{"id":"b","event":"action.request","surface":"sheet","mode":"button"}],
+                  "ui":{"label":"{source.attachedTo.name}"},"do":[{"op":"resource.gain","pool":"actor.hope","amount":1}]}]}"""),
+                RuleJson.parse(LegacyCatalogConverter.EMPTY_RECIPES)));
+        assertTrue(unattached.getMessage().contains("source.attachedTo.name"), unattached.getMessage());
+        var invalid = LegacyCatalogConverter.convert(catalog("""
+                {"id":"x","name":"X","automation":{"attach":{"to":"shield"}}},
+                {"id":"y","name":"Y","automation":{"attach":{"to":"armor","requires":{"range":"Far"}}}}"""));
+        assertEquals(0, invalid.converted());
+    }
 }

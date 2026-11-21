@@ -31,7 +31,7 @@ public final class LegacyCatalogConverter {
     private static final List<String> FAMILIES = List.of("actions", "rollOptions", "rollTriggers", "conditionalRollTriggers", "mitigation");
     private static final Set<String> BLOCK_FIELDS = Set.of("actions", "uses", "modifiers", "resources", "rollOptions", "rollTriggers",
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
-            "damage", "alternateProfiles", "rest");
+            "damage", "alternateProfiles", "rest", "attach");
     private static final Map<String, String> RANGES = Map.of("melee", "melee", "very close", "veryClose", "veryclose", "veryClose",
             "close", "close", "far", "far", "very far", "veryFar", "veryfar", "veryFar");
     private static final Set<String> RESOURCE_FIELDS = Set.of("id", "label", "initial", "max", "resetOn");
@@ -165,6 +165,7 @@ public final class LegacyCatalogConverter {
         ObjectNode out = RuleJson.JSON.createObjectNode();
         Problems p = new Problems(sourceId, problems, new ArrayList<>());
         if (!legacy.isObject()) { p.add(path, "Automation must be an object."); return out; }
+        if (legacy.has("attach")) return attachment(legacy, path, sourceId, problems, shared, p);
         p.onlyFields(legacy, path, BLOCK_FIELDS);
         boolean limited = false;
         if (legacy.has("uses")) {
@@ -280,6 +281,102 @@ public final class LegacyCatalogConverter {
         if (!rules.isEmpty()) out.set("rules", rules);
         else if (limited) p.add(path + "/uses", "A use limit without rules has nothing to limit.");
         return out;
+    }
+
+    /**
+     * An attachable item becomes an {@code attachment} declaration whose legacy blockers are requirement conditions
+     * over {@code gear.*}; its nested automation applies to the host gear, so weapon identity reads
+     * {@code source.attachedTo.*}.
+     */
+    private static ObjectNode attachment(JsonNode legacy, String path, String sourceId, List<Diagnostic> problems,
+                                         Map<String, ObjectNode> shared, Problems p) {
+        p.onlyFields(legacy, path, Set.of("attach"));
+        JsonNode attach = legacy.get("attach");
+        String at = path + "/attach";
+        p.onlyFields(attach, at, Set.of("to", "requires", "feature", "trait", "automation"));
+        String to = attach.path("to").asText();
+        ObjectNode out = attach.has("automation")
+                ? convertBlock(attach.get("automation"), at + "/automation", sourceId, problems, shared)
+                : RuleJson.JSON.createObjectNode();
+        retarget(out);
+        if (!Set.of("weapon", "armor").contains(to)) { p.add(at + "/to", "Expected weapon or armor."); return out; }
+        ObjectNode declaration = RuleJson.JSON.createObjectNode().put("to", to);
+        ArrayNode requires = declaration.putArray("requires");
+        java.util.function.BiConsumer<JsonNode, String> require = (when, reason) ->
+                requires.addObject().<ObjectNode>set("when", when).put("reason", reason);
+        if ("weapon".equals(to))
+            require.accept(RuleJson.JSON.createObjectNode().set("not", read("gear.generated")), "Generated weapons cannot hold attachments.");
+        JsonNode needs = attach.path("requires");
+        if (attach.has("requires")) p.onlyFields(needs, at + "/requires", Set.of("noFeature", "range", "damageType", "nameIncludes"));
+        if (needs.path("noFeature").asBoolean(false))
+            require.accept(RuleJson.JSON.createObjectNode().set("not", read("gear.hasFeature")), "{gear.name} already has a feature.");
+        if (needs.has("range")) {
+            String range = RANGES.get(needs.path("range").asText().toLowerCase(java.util.Locale.ROOT));
+            if (range == null || !"weapon".equals(to)) p.add(at + "/requires/range", "Expected a weapon range.");
+            else {
+                ObjectNode when = RuleJson.JSON.createObjectNode();
+                when.putArray("eq").add(read("gear.range")).add(range);
+                require.accept(when, "Requires a " + escape(needs.path("range").asText()) + " weapon.");
+            }
+        }
+        if (needs.has("damageType")) {
+            String type = switch (needs.path("damageType").asText()) {
+                case "phys", "physical" -> "physical";
+                case "mag", "magic" -> "magic";
+                default -> null;
+            };
+            if (type == null || !"weapon".equals(to)) p.add(at + "/requires/damageType", "Expected a weapon damage type.");
+            else {
+                ObjectNode when = RuleJson.JSON.createObjectNode();
+                when.putArray("eq").add(read("gear.damageType")).add(type);
+                require.accept(when, "Requires a " + type + " weapon.");
+            }
+        }
+        if (attach.has("trait")) {
+            String trait = attach.path("trait").asText();
+            if (!TRAITS.contains(trait) || !"weapon".equals(to)) p.add(at + "/trait", "Expected a weapon attack trait.");
+            else {
+                declaration.put("trait", trait);
+                require.accept(RuleJson.JSON.createObjectNode().set("not", read("gear.hasTraitAttachment")),
+                        "{gear.name} already has an attack-trait attachment.");
+            }
+        }
+        if (needs.has("nameIncludes")) {
+            JsonNode names = needs.get("nameIncludes");
+            if (!names.isArray() || names.isEmpty()) p.add(at + "/requires/nameIncludes", "Expected one or more names.");
+            else {
+                ObjectNode when = RuleJson.JSON.createObjectNode();
+                ArrayNode any = when.putArray("or");
+                List<String> parts = new ArrayList<>();
+                for (JsonNode name : names) {
+                    any.addObject().putArray("containsText").add(read("gear.name")).add(name.asText());
+                    parts.add(escape(name.asText()));
+                }
+                require.accept(when, "Requires a " + String.join(" or ", parts) + ".");
+            }
+        }
+        if (requires.isEmpty()) declaration.remove("requires");
+        if (attach.has("feature")) {
+            JsonNode feature = attach.get("feature");
+            p.onlyFields(feature, at + "/feature", Set.of("name", "text"));
+            if (feature.path("name").asText("").isBlank() || feature.path("text").asText("").isBlank())
+                p.add(at + "/feature", "A granted feature needs a name and text.");
+            else declaration.putObject("feature").put("name", feature.path("name").asText()).put("text", feature.path("text").asText());
+        }
+        ObjectNode result = RuleJson.JSON.createObjectNode();
+        result.set("attachment", declaration);
+        result.setAll(out);
+        return result;
+    }
+
+    /** Points weapon identity reads at the gear the source is attached to. */
+    private static void retarget(JsonNode node) {
+        if (node.isObject()) {
+            JsonNode read = node.get("read");
+            if (node.size() == 1 && read != null && Set.of("source.id", "source.instanceId").contains(read.asText()))
+                ((ObjectNode) node).put("read", read.asText().replace("source.", "source.attachedTo."));
+            else node.elements().forEachRemaining(LegacyCatalogConverter::retarget);
+        } else if (node.isArray()) node.forEach(LegacyCatalogConverter::retarget);
     }
 
     /**

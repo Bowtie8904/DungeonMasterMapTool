@@ -86,7 +86,9 @@ public final class RuleCompiler {
                     + "|roll\\.(attack|damage|spellcast|action|reaction)|trait\\.(Agility|Strength|Finesse|Instinct|Presence|Knowledge)");
 
     /** Document-level declarations that operations and references may name. */
-    record Decl(ObjectNode state, ObjectNode limits, ObjectNode pools, ObjectNode effects) {
+    record Decl(ObjectNode state, ObjectNode limits, ObjectNode pools, ObjectNode effects, boolean attachable) {
+        Decl(ObjectNode state, ObjectNode limits, ObjectNode pools, ObjectNode effects) { this(state, limits, pools, effects, false); }
+
         static Decl empty() {
             return new Decl(RuleJson.JSON.createObjectNode(), RuleJson.JSON.createObjectNode(),
                     RuleJson.JSON.createObjectNode(), RuleJson.JSON.createObjectNode());
@@ -124,6 +126,29 @@ public final class RuleCompiler {
         /** Additional attack profiles the source offers while it is active. */
         public ArrayNode profiles() { return profiles.deepCopy(); }
         private Program withProfiles(ArrayNode list) { profiles = list.deepCopy(); return this; }
+        private ObjectNode attachment;
+        /** The attachment declaration, or {@code null} when the source is not attached to gear. */
+        public ObjectNode attachment() { return attachment == null ? null : attachment.deepCopy(); }
+        private Program withAttachment(ObjectNode declaration) { attachment = declaration == null ? null : declaration.deepCopy(); return this; }
+
+        /**
+         * Reasons this source cannot be attached to the described gear, in declaration order; empty when it may attach.
+         * {@code gear} supplies {@code kind}, {@code name}, {@code range}, {@code damageType}, {@code hasFeature},
+         * {@code generated} and {@code hasTraitAttachment}; requirement conditions and reasons read it as {@code gear.*}.
+         */
+        public List<String> attachmentBlockers(JsonNode gear, JsonNode source) {
+            if (attachment == null) return List.of("This source cannot be attached.");
+            ObjectNode context = RuleJson.JSON.createObjectNode();
+            context.set("gear", gear.deepCopy());
+            context.set("source", source.deepCopy());
+            List<String> reasons = new ArrayList<>();
+            if (!attachment.path("to").asText().equals(gear.path("kind").asText()))
+                reasons.add("Attach this to " + attachment.path("to").asText() + " gear.");
+            for (JsonNode requirement : attachment.path("requires"))
+                if (!RuleExpression.evaluate(requirement.get("when"), context).asBoolean())
+                    reasons.add(RuleTemplate.render(requirement.path("reason").asText(), context));
+            return reasons;
+        }
         ObjectNode effect(String id) {
             JsonNode effect = effects.get(id);
             if (effect == null) throw RuleJson.error("/effect", "Unknown effect: " + id);
@@ -155,7 +180,8 @@ public final class RuleCompiler {
     public static Program compile(String sourceId, JsonNode automation, JsonNode recipeDocument) {
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(sourceId), "/sourceId");
         RuleJson.checkTree(automation, "/automation", 0, new int[]{0});
-        RuleJson.fields(automation, "/automation", "state", "limits", "pools", "effects", "modifiers", "profiles", "rules");
+        RuleJson.fields(automation, "/automation", "state", "limits", "pools", "effects", "modifiers", "profiles", "rules", "attachment");
+        ObjectNode attachment = automation.has("attachment") ? attachment(automation.get("attachment")) : null;
         ObjectNode state = automation.has("state") ? RuleJson.object(automation.get("state"), "/automation/state") : RuleJson.JSON.createObjectNode();
         state.fieldNames().forEachRemaining(slot -> slot(slot, "/automation/state"));
         ObjectNode pools = automation.has("pools") ? RuleJson.object(automation.get("pools"), "/automation/pools") : RuleJson.JSON.createObjectNode();
@@ -188,13 +214,13 @@ public final class RuleCompiler {
         if (effects.size() > 64) throw RuleJson.error("/automation/effects", "Expected at most 64 effects.");
         effects.fields().forEachRemaining(field -> validateEffect(field.getKey(), field.getValue(), state, effects));
         ArrayNode modifiers = automation.has("modifiers") ? modifierList(automation.get("modifiers"), "/automation/modifiers", state) : RuleJson.JSON.createArrayNode();
-        Decl decl = new Decl(state, limits, pools, effects);
+        Decl decl = new Decl(state, limits, pools, effects, attachment != null);
         ArrayNode profiles = automation.has("profiles") ? profileList(automation.get("profiles")) : RuleJson.JSON.createArrayNode();
         JsonNode definitions = automation.path("rules");
-        if (definitions.isMissingNode() && (!modifiers.isEmpty() || !pools.isEmpty() || !profiles.isEmpty()))
-            return new Program(sourceId, decl, modifiers, Map.of()).withProfiles(profiles);
+        if (definitions.isMissingNode() && (!modifiers.isEmpty() || !pools.isEmpty() || !profiles.isEmpty() || attachment != null))
+            return new Program(sourceId, decl, modifiers, Map.of()).withProfiles(profiles).withAttachment(attachment);
         if (!definitions.isArray() || definitions.isEmpty() || definitions.size() > 256)
-            throw RuleJson.error("/automation/rules", "Expected 1-256 rules (or only passive modifiers, pools and profiles).");
+            throw RuleJson.error("/automation/rules", "Expected 1-256 rules (or only passive modifiers, pools, profiles and an attachment).");
         Map<String, ObjectNode> expanded = new LinkedHashMap<>();
         int[] expandedNodes = {0};
         Set<String> localIds = new HashSet<>();
@@ -225,7 +251,45 @@ public final class RuleCompiler {
             if ("claim.offer".equals(operation.path("op").asText()) && !claimGroups.contains(operation.path("group").asText()))
                 throw RuleJson.error("/automation/rules/" + rule.path("id").asText() + "/do",
                         "A claim offer must name a claim group declared by this source: " + operation.path("group").asText());
-        return new Program(sourceId, decl, modifiers, expanded).withProfiles(profiles);
+        return new Program(sourceId, decl, modifiers, expanded).withProfiles(profiles).withAttachment(attachment);
+    }
+
+    private static final Set<String> GEAR_FACTS = Set.of("kind", "name", "range", "damageType", "hasFeature", "generated", "hasTraitAttachment");
+    private static final Set<String> ATTACHED_TO_FACTS = Set.of("id", "instanceId", "kind", "name");
+
+    /**
+     * A source that is attached to a piece of gear instead of being active on its own. Its modifiers, profiles and
+     * rules apply only while attached; the gear shows {@code feature} and, with {@code trait}, attacks with that trait.
+     */
+    private static ObjectNode attachment(JsonNode declaration) {
+        String path = "/automation/attachment";
+        RuleJson.fields(declaration, path, "to", "requires", "feature", "trait");
+        RuleJson.id(declaration.path("to"), path + "/to");
+        JsonNode requires = declaration.path("requires");
+        if (declaration.has("requires") && (!requires.isArray() || requires.size() > 16))
+            throw RuleJson.error(path + "/requires", "Expected at most 16 requirements.");
+        for (int i = 0; i < requires.size(); i++) {
+            String at = path + "/requires/" + i;
+            RuleJson.fields(requires.get(i), at, "when", "reason");
+            RuleExpression.validate(requires.get(i).path("when"), at + "/when");
+            String reason = RuleJson.text(requires.get(i).get("reason"), at + "/reason");
+            RuleTemplate.validate(reason);
+            Set<String> refs = new HashSet<>(RuleExpression.references(requires.get(i).get("when")));
+            refs.addAll(RuleTemplate.references(reason));
+            for (String ref : refs) {
+                String[] parts = ref.split("\\.");
+                boolean valid = "gear".equals(parts[0]) && parts.length == 2 && GEAR_FACTS.contains(parts[1])
+                        || "source".equals(parts[0]) && Set.of("id", "name").contains(parts[1]);
+                if (!valid) throw RuleJson.error(at, "Attachment requirements may only read gear facts and the source: " + ref);
+            }
+        }
+        if (declaration.has("feature")) {
+            RuleJson.fields(declaration.get("feature"), path + "/feature", "name", "text");
+            for (String field : List.of("name", "text")) RuleJson.text(declaration.get("feature").get(field), path + "/feature/" + field);
+        }
+        if (declaration.has("trait") && !Set.of("Agility", "Strength", "Finesse", "Instinct", "Presence", "Knowledge").contains(declaration.path("trait").asText()))
+            throw RuleJson.error(path + "/trait", "Unknown trait.");
+        return (ObjectNode) declaration.deepCopy();
     }
 
     private static void validateEffect(String id, JsonNode effect, ObjectNode state, ObjectNode effects) {
@@ -636,7 +700,9 @@ public final class RuleCompiler {
                 case "result" -> results.contains(parts[1]);
                 case "die" -> die && Set.of("id", "face", "sides", "kept", "origin", "poolId", "role",
                         "previous", "editedBy", "contributionId", "sourceId").contains(parts[1]);
-                case "source" -> Set.of("id", "instanceId", "name", "quantity").contains(parts[1]);
+                case "source" -> Set.of("id", "instanceId", "name", "quantity").contains(parts[1])
+                        || "attachedTo".equals(parts[1]) && decl.attachable() && parts.length == 3 && ATTACHED_TO_FACTS.contains(parts[2]);
+                case "gear" -> false;
                 case "pool" -> decl.pools().has(parts[1]);
                 case "effects" -> parts.length == 2 && decl.effects().has(parts[1]);
                 default -> true;
