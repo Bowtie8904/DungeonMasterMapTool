@@ -48,7 +48,7 @@ public final class LegacyCatalogConverter {
             "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
             "chatBenefits", "allowSourceOwner", "loadoutDomain", "primaryWeapon", "anyWeapon", "advantage", "giveFear", "check", "choices",
-            "magicOnly", "weaponRanges", "addDice", "damageDice");
+            "magicOnly", "weaponRanges", "addDice", "damageDice", "disadvantage", "removeFear", "weaponDamage");
     private static final Set<String> MITIGATION_FIELDS = Set.of("id", "label", "description", "when", "cost", "negate", "halve", "reduce",
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
@@ -67,7 +67,7 @@ public final class LegacyCatalogConverter {
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
             "actions", "rollOptions", "rollTriggers", "mitigation", "rest", "consumeLongRestMove", "group", "endOnDamage", "endOnSourceSevere", "endAfterIncomingDamage", "damage",
-            "unique", "exclusiveSource", "endOnMarkedHp", "endOnDealtDamage");
+            "unique", "exclusiveSource", "endOnMarkedHp", "endOnDealtDamage", "endOnAttack", "endOnAction");
     private static final Set<String> REST_FIELDS = Set.of("extraMoves", "longMovesInShort", "passives", "modifiers", "requiresEffect");
     private static final Set<String> PASSIVE_FIELDS = Set.of("id", "label", "defaultOn", "condition", "steps", "extraMoves", "consumeItem",
             "rest", "move", "bonus", "minHope", "cost", "chooseAlly", "hostOwned", "castBeforeRest", "requiresEffect", "excludesEffect");
@@ -208,7 +208,8 @@ public final class LegacyCatalogConverter {
         ArrayNode rules = RuleJson.JSON.createArrayNode();
         ObjectNode effects = RuleJson.JSON.createObjectNode();
         Set<String> ruleIds = new HashSet<>();
-        List<Nested> queue = new ArrayList<>();
+        List<Nested> queue = new ArrayList<>(p.nested());
+        p.nested().clear();
         if (legacy.has("channelBenefit")) {
             channelBenefit(legacy.get("channelBenefit"), path + "/channelBenefit", p, effects);
             queue.addAll(p.nested());
@@ -246,6 +247,11 @@ public final class LegacyCatalogConverter {
             ObjectNode rule = switch (next.family()) {
                 case "actions" -> action(legacyRule, next.path(), p, effects, pools, usesBudget);
                 case "rollOptions" -> rollOption(legacyRule, next.path(), p, effects, pools, usesBudget, extra);
+                case "slotModifier" -> {
+                    ObjectNode option = rollOption(legacyRule, next.path(), p, effects, pools, false, extra);
+                    if (option != null) ((ObjectNode) option.get("ui")).put("label", "{source.name}");
+                    yield option;
+                }
                 case "rollTriggers", "conditionalRollTriggers" -> rollTrigger(legacyRule, next.path(), p, effects, pools, usesBudget);
                 default -> mitigation(legacyRule, next.path(), p, effects, pools, usesBudget);
             };
@@ -726,7 +732,8 @@ public final class LegacyCatalogConverter {
             if (entry.getValue().isInt() && entry.getValue().asInt() == 0) return;
             JsonNode amount = amount(entry.getValue());
             if (amount == null) { p.add(at, "Expected a positive whole cost or a supported computed value."); return; }
-            if ("hope".equals(entry.getKey())) costs.addObject().put("op", "resource.spend").put("pool", "actor.hope").set("amount", amount);
+            if ("hope".equals(entry.getKey()) || "gold".equals(entry.getKey()) && !pools.has("gold"))
+                costs.addObject().put("op", "resource.spend").put("pool", "actor." + entry.getKey()).set("amount", amount);
             else if (TRACKS.containsKey(entry.getKey())) costs.addObject().put("op", "track.mark").put("track", TRACKS.get(entry.getKey())).set("amount", amount);
             else if (pools.has(entry.getKey())) costs.addObject().put("op", "pool.spend").put("pool", entry.getKey()).set("amount", amount);
             else p.add(at, "Custom resource cost needs a declared pool: " + entry.getKey());
@@ -901,6 +908,11 @@ public final class LegacyCatalogConverter {
         }
         if (legacy.has("excludeRolls")) {
             for (JsonNode excluded : legacy.get("excludeRolls")) {
+                if ("spelldamage".equals(excluded.asText())) {
+                    when.addObject().putArray("or").add(RuleJson.JSON.createObjectNode().set("not", flag("event.check.kind", "damage")))
+                            .add(RuleJson.JSON.createObjectNode().set("not", flag("event.check.spell", true)));
+                    continue;
+                }
                 if (!ROLLS.contains(excluded.asText())) { p.add(path + "/excludeRolls", "Unsupported roll filter: " + excluded.asText()); continue; }
                 when.addObject().putArray("ne").add(read("event.check.kind")).add(excluded.asText());
             }
@@ -1266,7 +1278,8 @@ public final class LegacyCatalogConverter {
                 binding.remove("defaultOn");
                 binding.remove("exclusiveGroup");
                 // Effect-granted bonuses follow the effect holder (possibly an ally), not rolls with this weapon.
-                if (p.sourceId().startsWith("weapons:") && !option.has("requiresEffect"))
+                // A slot filter targets whichever weapon is equipped in that slot instead.
+                if (p.sourceId().startsWith("weapons:") && !option.has("requiresEffect") && !option.has("weapon"))
                     when.addObject().putArray("eq").add(read("event.check.weaponSource")).add(read("source.instanceId"));
             }
         }
@@ -1648,6 +1661,15 @@ public final class LegacyCatalogConverter {
         if (trigger.path("criticalOnly").asBoolean(false)) when.addObject().putArray("eq").add(read("event.check.critical")).add(true);
         if (trigger.path("weaponAttack").asBoolean(false)) when.addObject().put("exists", "event.check.weapon");
         if (trigger.path("primaryWeapon").asBoolean(false)) when.addObject().putArray("eq").add(read("event.check.weapon")).add("primary");
+        if (trigger.has("weaponDamage")) {
+            // Only weapon damage rolls; spells cast through a weapon do not qualify.
+            if (!trigger.path("weaponDamage").asBoolean(false)) p.add(path + "/weaponDamage", "Expected true.");
+            else {
+                when.addObject().putArray("eq").add(read("event.check.kind")).add("damage");
+                when.addObject().put("exists", "event.check.weapon");
+                when.addObject().set("not", flag("event.check.spell", true));
+            }
+        }
         commonConditions(trigger, path, p, when);
         sentRollConditions(trigger, when);
         applyWhen(rule, when);
@@ -1676,13 +1698,15 @@ public final class LegacyCatalogConverter {
             from = read("result.rerolled");
             edited = true;
         }
-        if (trigger.has("advantage")) {
-            if (!trigger.path("advantage").isBoolean() || !trigger.has("reroll")) p.add(path + "/advantage", "Advantage on a trigger needs a reroll and a boolean.");
-            else if (trigger.path("advantage").asBoolean()) {
+        if (trigger.has("advantage") || trigger.has("disadvantage")) {
+            String field = trigger.has("advantage") ? "advantage" : "disadvantage";
+            if (trigger.has("advantage") && trigger.has("disadvantage")) p.add(path + "/disadvantage", "A reroll gains either advantage or disadvantage.");
+            else if (!trigger.path(field).isBoolean() || !trigger.has("reroll")) p.add(path + "/" + field, "Advantage on a trigger needs a reroll and a boolean.");
+            else if (trigger.path(field).asBoolean()) {
                 ObjectNode step = steps.addObject().put("op", "roll.contribute");
                 step.set("from", from);
-                step.set("contribution", contribution(trigger.path("id").asText() + "-advantage", "dice", "advantage",
-                        escape(trigger.path("label").asText(""))).put("count", 1).put("sides", 6).put("sign", 1));
+                step.set("contribution", contribution(trigger.path("id").asText() + "-" + field, "dice", field,
+                        escape(trigger.path("label").asText(""))).put("count", 1).put("sides", 6).put("sign", "advantage".equals(field) ? 1 : -1));
                 step.put("as", "advantaged");
                 from = read("result.advantaged");
             }
@@ -1757,10 +1781,16 @@ public final class LegacyCatalogConverter {
         JsonNode extra = trigger.has("check") ? RuleJson.JSON.missingNode() : trigger.path("steps");
         for (int i = 0; i < extra.size(); i++) step(extra.get(i), path + "/steps/" + i, p, steps, effects, pools);
         giveFear(trigger, path, p, steps);
+        if (trigger.has("removeFear")) {
+            JsonNode amount = amount(trigger.get("removeFear"));
+            if (amount == null || !amount.isInt()) p.add(path + "/removeFear", "Expected a positive whole amount.");
+            else steps.addObject().put("op", "table.spend").put("resource", "fear").put("label", "Remove GM Fear").put("as", "removedFear").set("amount", amount);
+        }
         endEffect(trigger, steps);
         if (!steps.isEmpty()) rule.set("do", steps);
         ObjectNode ui = labels(trigger, path, p, rule);
         report(trigger, path, p, ui);
+        if (trigger.has("removeFear") && !ui.has("report")) ui.put("report", "Removed {result.removedFear.amount} GM Fear.");
         if (trigger.has("damage"))
             ui.put("report", "Damage total: {result.triggerDamage.total}." + (ui.has("report") ? " " + ui.path("report").asText() : ""));
         sentRollReport(trigger, ui);
@@ -2751,6 +2781,16 @@ public final class LegacyCatalogConverter {
             if (!effect.path("endOnDealtDamage").asBoolean(false)) p.add(path + "/endOnDealtDamage", "Expected true.");
             else p.nested().add(new Nested("endOnDealtDamage", RuleJson.JSON.createObjectNode().put("effect", name), path + "/endOnDealtDamage"));
         }
+        // Legacy attacks and spellcasts are also action rolls; reactions are not.
+        String[][] rollEnds = {{"endOnAttack", "attack"}, {"endOnAction", "action"}};
+        for (String[] end : rollEnds) {
+            if (!effect.has(end[0])) continue;
+            if (!effect.path(end[0]).asBoolean(false)) { p.add(path + "/" + end[0], "Expected true."); continue; }
+            ObjectNode ending = RuleJson.JSON.createObjectNode().put("effect", name).put("on", end[1]);
+            ArrayNode kinds = ending.putArray("kinds").add("attack");
+            if ("action".equals(end[1])) kinds.add("action").add("spellcast");
+            p.nested().add(new Nested("endOnDealtDamage", ending, path + "/" + end[0]));
+        }
         if (effect.has("endOnDamage")) {
             JsonNode severity = effect.get("endOnDamage");
             if (!severity.isInt() || severity.asInt() < 1 || severity.asInt() > 4) p.add(path + "/endOnDamage", "Expected a severity from 1 to 4.");
@@ -2882,6 +2922,19 @@ public final class LegacyCatalogConverter {
 
     /** Passive (source) modifiers may carry legacy conditions as a {@code when}; effect modifiers are frozen and unconditional. */
     private static void modifier(JsonNode modifier, String path, Problems p, ArrayNode out, boolean passive) {
+        if (passive && modifier.has("weapon")) {
+            // A roll bonus for the equipped weapon in a slot (not rolls with this source) becomes a required, slot-filtered roll option.
+            p.onlyFields(modifier, path, Set.of("roll", "value", "weapon"));
+            if (!modifier.has("roll") || !Set.of("primary", "secondary").contains(modifier.path("weapon").asText())) {
+                p.add(path + "/weapon", "Slot-filtered modifiers need a roll and a primary or secondary slot.");
+                return;
+            }
+            ObjectNode option = RuleJson.JSON.createObjectNode().put("id", "slot-bonus").put("label", "slot bonus")
+                    .put("roll", modifier.path("roll").asText()).put("required", true).put("weapon", modifier.path("weapon").asText());
+            option.set("value", modifier.path("value").deepCopy());
+            p.nested().add(new Nested("slotModifier", option, path));
+            return;
+        }
         Set<String> allowed = new HashSet<>(Set.of("value", "min", "max", "markedHpDivisor", "markedHpMultiplier", "markedStressMultiplier"));
         if (passive) allowed.addAll(MODIFIER_CONDITIONS);
         JsonNode value = modifierValue(modifier, path, p);
@@ -3283,13 +3336,17 @@ public final class LegacyCatalogConverter {
     }
 
     /** Ends the effect once applied damage reaches the given final (or, for {@code field: incoming}, pre-armor) severity (1 minor ... 4 massive). */
-    /** Ends an effect once its holder rolls damage. */
+    /** Ends an effect once its holder finishes a roll of one of the given kinds (damage by default). */
     private static ObjectNode endOnDealtDamage(JsonNode legacy) {
         String effect = legacy.path("effect").asText();
-        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "end-" + slug(effect) + "-on-damage");
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "end-" + slug(effect) + "-on-" + legacy.path("on").asText("damage"));
         rule.putArray("bindings").addObject().put("id", "use").put("event", "roll.finished").put("surface", "roll").put("mode", "automatic");
         ArrayNode when = RuleJson.JSON.createArrayNode();
-        when.addObject().putArray("eq").add(read("event.check.kind")).add("damage");
+        if (!legacy.has("kinds")) when.addObject().putArray("eq").add(read("event.check.kind")).add("damage");
+        else {
+            ArrayNode any = when.addObject().putArray("or");
+            for (JsonNode kind : legacy.get("kinds")) any.addObject().putArray("eq").add(read("event.check.kind")).add(kind.asText());
+        }
         when.add(labelPresent(effect));
         applyWhen(rule, when);
         rule.putArray("do").addObject().put("op", "effect.end").put("effect", effect).put("target", "actor");

@@ -902,6 +902,43 @@ class LegacyCatalogConverterTest {
         assertEquals(0, after.at("/actor/effects").size(), "The used-up bonus ends its effect.");
     }
 
+    @Test
+    void slotModifiersTriggerExtrasAndActionEndingsConvert() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"hammer","name":"Hammer","automation":{"modifiers":[{"roll":"attack","value":1,"weapon":"primary"}]}},
+                {"id":"basher","name":"Basher","automation":{"rollOptions":[{"id":"basher","label":"Basher","roll":"damage","value":1,"excludeRolls":["spelldamage"]}]}},
+                {"id":"mist","name":"Mist","automation":{"actions":[{"id":"use","label":"Mist","steps":[{"op":"effect","effect":{"name":"Mist","until":"scene","endOnAction":true}}]}]}},
+                {"id":"dire","name":"Dire","automation":{"rollTriggers":[{"id":"use","label":"Dire","on":"damage","weaponDamage":true,"removeFear":1,"cost":{"hope":1}}]}},
+                {"id":"star","name":"Star","automation":{"rollTriggers":[{"id":"re","label":"Rebound","on":"attack","when":"failure","reroll":"duality","disadvantage":true}]}},
+                {"id":"scythe","name":"Scythe","automation":{"rollOptions":[{"id":"greedy","label":"Greedy","roll":"damage","proficiency":1,"cost":{"gold":10}}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        String hammer = block(result, 0).toString();
+        assertTrue(hammer.contains("\"automatic\"") && hammer.contains("\"primary\"") && hammer.contains("{source.name}"), hammer);
+        assertFalse(hammer.contains("event.check.weaponSource"), "Slot modifiers apply to the equipped weapon, not this one: " + hammer);
+        assertTrue(block(result, 1).toString().contains("\"event.check.spell\""), block(result, 1).toString());
+        String mist = block(result, 2).path("rules").toString();
+        assertTrue(mist.contains("\"spellcast\"") && mist.contains("\"action\"") && !mist.contains("\"reaction\""), mist);
+        String dire = block(result, 3).toString();
+        assertTrue(dire.contains("\"table.spend\"") && dire.contains("\"fear\"") && dire.contains("event.check.weapon"), dire);
+        String star = block(result, 4).toString();
+        assertTrue(star.contains("\"role\":\"disadvantage\"") && star.contains("\"sign\":-1"), star);
+        String scythe = block(result, 5).toString();
+        assertTrue(scythe.contains("\"actor.gold\""), scythe);
+        for (int i = 0; i < 6; i++) program(result, i);
+    }
+
+    @Test
+    void numericActorFactsCanPayResourceCosts() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"t","name":"T","automation":{"actions":[{"id":"buy","label":"Buy","cost":{"gold":10},"steps":[{"op":"gain","resource":"hope","amount":1}]}]}}"""));
+        RuleCompiler.Program program = program(result, 0);
+        String actor = "{\"id\":\"ari\",\"gold\":%d,\"hope\":{\"value\":0,\"max\":6},\"effects\":[]}";
+        JsonNode paid = run(program, context(program, actor.formatted(12), "{\"type\":\"action.request\"}"), "buy").contexts().getFirst();
+        assertEquals(2, paid.at("/actor/gold").asInt(), paid.toString());
+        assertThrows(RuntimeException.class, () -> run(program, context(program, actor.formatted(9), "{\"type\":\"action.request\"}"), "buy"),
+                "An unaffordable gold cost is rejected.");
+    }
+
     private static JsonNode block(LegacyCatalogConverter.Result result, int entry) {
         assertEquals(result.blocks(), result.converted(), result.diagnostics().toString());
         return result.catalog().at("/entries/" + entry + "/automation");

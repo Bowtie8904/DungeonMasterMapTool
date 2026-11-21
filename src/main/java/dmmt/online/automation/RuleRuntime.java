@@ -618,7 +618,22 @@ public final class RuleRuntime {
             case "resource.spend", "resource.gain", "track.mark", "track.clear" -> {
                 boolean pool = kind.startsWith("resource");
                 String path = op.path(pool ? "pool" : "track").asText();
-                ObjectNode track = RuleJson.object(RuleExpression.read(context, path), "/" + path);
+                JsonNode target = RuleExpression.read(context, path);
+                if (pool && target != null && target.isNumber()) {
+                    // A plain numeric fact (for example gold) is an uncapped pool written back in place.
+                    double current = target.asDouble();
+                    if (current < 0 || current != Math.rint(current)) throw RuleJson.error("/" + path, "Expected a nonnegative whole resource value.");
+                    int amount = whole(op.path("amount"), context, 0, 1_000_000);
+                    if ("resource.spend".equals(kind) && amount > current) throw new Unavailable("cost", "Not enough " + path + " to pay the cost.");
+                    String[] parts = path.split("\\.");
+                    JsonNode owner = context;
+                    for (int i = 0; i < parts.length - 1; i++) owner = owner.path(parts[i]);
+                    RuleJson.object(owner, "/" + path).set(parts[parts.length - 1],
+                            RuleExpression.numeric(current + ("resource.spend".equals(kind) ? -amount : amount), "/" + path));
+                    result = RuleExpression.numeric(amount, "/result");
+                    break;
+                }
+                ObjectNode track = RuleJson.object(target, "/" + path);
                 String field = pool ? "value" : "marked";
                 double current = RuleExpression.number(track.get(field), "/" + path + "/" + field);
                 if (current < 0 || current != Math.rint(current)) throw RuleJson.error("/" + path, "Expected a nonnegative whole resource value.");
