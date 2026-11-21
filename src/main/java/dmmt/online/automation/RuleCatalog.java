@@ -15,7 +15,7 @@ import java.util.Set;
 
 /** Replacement-format catalog compilation; intentionally not connected to the production loader yet. */
 public final class RuleCatalog {
-    private static final Set<String> CATEGORIES = Set.of("ancestries", "armor", "classes", "communities", "consumables",
+    static final Set<String> CATEGORIES = Set.of("ancestries", "armor", "classes", "communities", "consumables",
             "domain-cards", "items", "transformations", "weapons");
 
     public record Source(String id, String name, RuleCompiler.Program program) {}

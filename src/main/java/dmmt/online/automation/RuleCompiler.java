@@ -39,6 +39,8 @@ public final class RuleCompiler {
             Map.entry("inventory.consume", List.of("amount")),
             Map.entry("dice.roll", List.of("count", "sides")),
             Map.entry("dice.hits", List.of("count", "sides", "atLeast")),
+            Map.entry("dice.table", List.of("count", "outcomes")),
+            Map.entry("inventory.grant", List.of("catalog", "entry", "quantity", "label", "to", "tag", "max", "scope")),
             Map.entry("state.set", List.of("slot", "value")),
             Map.entry("state.increment", List.of("slot", "by")),
             Map.entry("value", List.of("value")),
@@ -784,7 +786,8 @@ public final class RuleCompiler {
                 && !("pool.roll".equals(op) && "keepHighest".equals(field))
                 && !"owner".equals(field)
                 && !("damage.resolve".equals(op) && "armor".equals(field))
-                && !("claim.offer".equals(op) && "limit".equals(field)))
+                && !("claim.offer".equals(op) && "limit".equals(field))
+                && !("inventory.grant".equals(op) && Set.of("to", "tag", "max", "scope").contains(field)))
             throw RuleJson.error(path + "/" + field, "Missing operation field.");
         if (operation.has("as")) slot(RuleJson.text(operation.get("as"), path + "/as"), path + "/as");
         if ("damage.resolve".equals(op)) {
@@ -819,6 +822,29 @@ public final class RuleCompiler {
             RuleJson.id(operation.get("field"), path + "/field");
             RuleExpression.validate(operation.get("by"), path + "/by");
             RuleTemplate.validate(RuleJson.text(operation.get("label"), path + "/label"));
+            return;
+        }
+        if ("dice.table".equals(op)) {
+            RuleExpression.validate(operation.get("count"), path + "/count");
+            JsonNode outcomes = operation.get("outcomes");
+            if (!outcomes.isArray() || outcomes.size() < 2 || outcomes.size() > 100)
+                throw RuleJson.error(path + "/outcomes", "Expected 2-100 outcomes, one per die face.");
+            for (int i = 0; i < outcomes.size(); i++) RuleTemplate.validate(RuleJson.text(outcomes.get(i), path + "/outcomes/" + i));
+            return;
+        }
+        if ("inventory.grant".equals(op)) {
+            if (!RuleCatalog.CATEGORIES.contains(RuleJson.text(operation.get("catalog"), path + "/catalog")))
+                throw RuleJson.error(path + "/catalog", "Unknown catalog category.");
+            RuleExpression.validate(operation.get("entry"), path + "/entry");
+            RuleExpression.validate(operation.get("quantity"), path + "/quantity");
+            RuleTemplate.validate(RuleJson.text(operation.get("label"), path + "/label"));
+            if (operation.has("to") && !Set.of("actor", "recipient").contains(operation.path("to").asText()))
+                throw RuleJson.error(path + "/to", "Expected actor or recipient.");
+            if (operation.has("tag")) RuleJson.id(operation.get("tag"), path + "/tag");
+            if (operation.has("max")) RuleExpression.validate(operation.get("max"), path + "/max");
+            if (operation.has("scope") && !operation.has("max")) throw RuleJson.error(path + "/scope", "A cap scope requires max.");
+            if (operation.has("scope") && !Set.of("actor", "party").contains(operation.path("scope").asText()))
+                throw RuleJson.error(path + "/scope", "Expected actor or party.");
             return;
         }
         if ("roll.reroll".equals(op) && !Set.of("new", "higher").contains(operation.path("choose").asText()))

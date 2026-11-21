@@ -664,6 +664,29 @@ public final class RuleRuntime {
                 source.put("quantity", count - amount);
                 result = RuleExpression.numeric(amount, "/result");
             }
+            case "dice.table" -> {
+                if (preview) throw new Unavailable("randomPreview", "This preview requires a committed roll; no dice were rolled.");
+                int count = whole(op.path("count"), context, 0, 100);
+                JsonNode outcomes = op.path("outcomes");
+                int sides = outcomes.size();
+                int previouslyRolled = rolls.stream().mapToInt(RuleRuntime::rolledDice).sum();
+                if (count + previouslyRolled > 1024) throw RuleJson.error("/dice", "Action exceeds its dice limit.");
+                if (random == null) throw RuleJson.error("/dice", "Host random generator is required.");
+                ObjectNode roll = RuleJson.JSON.createObjectNode().put("sides", sides);
+                ArrayNode faces = roll.putArray("faces");
+                ObjectNode table = RuleJson.JSON.createObjectNode();
+                ArrayNode tableFaces = table.putArray("faces"), results = table.putArray("outcomes");
+                int total = 0;
+                for (int i = 0; i < count; i++) {
+                    int face = random.nextInt(sides) + 1;
+                    faces.add(face); tableFaces.add(face); total += face;
+                    results.add(RuleTemplate.render(outcomes.get(face - 1).asText(), context));
+                }
+                roll.put("total", total);
+                rolls.add(roll);
+                table.put("count", count);
+                result = table;
+            }
             case "dice.roll", "dice.hits" -> {
                 if (preview) throw new Unavailable("randomPreview", "This preview requires a committed roll; no dice were rolled.");
                 int count = whole(op.path("count"), context, 1, 1024);
@@ -980,7 +1003,7 @@ public final class RuleRuntime {
                     result = list.remove(index);
                 }
             }
-            case "damage.deal", "countdown.start", "claim.offer", "table.gain", "table.spend", "limits.refresh" -> {
+            case "damage.deal", "countdown.start", "claim.offer", "table.gain", "table.spend", "limits.refresh", "inventory.grant" -> {
                 ArrayNode outbox = context.has("outbox") ? (ArrayNode) context.get("outbox") : context.putArray("outbox");
                 if (outbox.size() >= 32) throw RuleJson.error("/outbox", "Too many host requests.");
                 ObjectNode request = outbox.addObject().put("kind", kind)
@@ -994,6 +1017,15 @@ public final class RuleRuntime {
                 }
                 else if (Set.of("table.gain", "table.spend").contains(kind)) request.put("resource", op.path("resource").asText()).put("amount", whole(op.path("amount"), context, 1, 1000));
                 else if ("limits.refresh".equals(kind)) request.set("on", op.path("on").deepCopy());
+                else if ("inventory.grant".equals(kind)) {
+                    request.put("catalog", op.path("catalog").asText())
+                            .put("entry", RuleJson.id(eval(op.path("entry"), context), "/entry"))
+                            .put("quantity", whole(op.path("quantity"), context, 1, 100))
+                            .put("to", op.path("to").asText("actor"));
+                    if (op.has("tag")) request.put("tag", op.path("tag").asText());
+                    if (op.has("max")) request.put("max", whole(op.path("max"), context, 1, 1000))
+                            .put("scope", op.path("scope").asText("actor"));
+                }
                 else request.put("value", whole(op.path("value"), context, 1, 1000));
                 result = request.deepCopy();
             }

@@ -31,6 +31,14 @@ public final class RuleTemplate {
                 if (format.startsWith("plural:")) {
                     String[] words = format.split(":", -1);
                     out.append(RuleExpression.number(value, "/template") == 1 ? words[1] : words[2]);
+                } else if ("list".equals(format)) {
+                    if (!value.isArray()) throw RuleJson.error("/template", "The list formatter requires a collection.");
+                    List<String> items = new ArrayList<>();
+                    for (JsonNode item : value) {
+                        if (!item.isValueNode()) throw RuleJson.error("/template", "The list formatter requires scalar items.");
+                        items.add(item.isNumber() ? BigDecimal.valueOf(item.asDouble()).stripTrailingZeros().toPlainString() : item.asText());
+                    }
+                    out.append(String.join(", ", items));
                 } else if ("signed".equals(format) || "number".equals(format) || value.isNumber()) {
                     double n = RuleExpression.number(value, "/template");
                     if ("signed".equals(format) && n > 0) out.append('+');
@@ -64,7 +72,7 @@ public final class RuleTemplate {
                 if (fields.length > 2) throw RuleJson.error("/template", "Invalid placeholder.");
                 RuleExpression.validateRead(fields[0], "/template");
                 String format = fields.length == 2 ? fields[1] : "";
-                if (fields.length == 2 && !format.equals("signed") && !format.equals("number")
+                if (fields.length == 2 && !format.equals("signed") && !format.equals("number") && !format.equals("list")
                         && !format.matches("plural:[^:{}|]+:[^:{}|]+"))
                     throw RuleJson.error("/template", "Unknown formatter: " + format);
                 parts.add(new Part("", fields[0], format));

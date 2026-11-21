@@ -1133,6 +1133,93 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void creationAllowancesAdjustTheCreationPlan() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"hardy","name":"Hardy","automation":{"creation":{"hp":1,"evasion":-1}}}"""));
+        JsonNode rule = block(result, 0).at("/rules/0");
+        assertEquals("creation.apply", rule.at("/bindings/0/event").asText());
+        RuleCompiler.Program program = program(result, 0);
+        JsonNode plan = run(program, context(program, "{}", """
+                {"type":"creation.apply","creation":{"hp":6,"evasion":10,
+                 "adjustable":{"hp":{"min":0,"max":20},"evasion":{"min":0,"max":20}}}}""")).contexts().getFirst().at("/event/creation");
+        assertEquals(7, plan.path("hp").asInt(), plan.toString());
+        assertEquals(9, plan.path("evasion").asInt());
+        assertFalse(LegacyCatalogConverter.convert(catalog("""
+                {"id":"x","name":"X","automation":{"creation":{"hp":0}}}""")).diagnostics().isEmpty());
+    }
+
+    @Test
+    void downtimeCraftingAndTablesBecomeGrantsAndTableRolls() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"recipe","name":"Recipe","automation":{"actions":[
+                  {"id":"brew","label":"Brew","timing":"downtime","cost":{"stress":1},"downtime":{"craft":"vial-of-darksmoke"}}]}},
+                {"id":"kit","name":"Kit","automation":{"actions":[
+                  {"id":"mix","label":"Mix","timing":"downtime","downtime":{"table":{"expression":"1d6","repeat":"1d4+@instinct",
+                    "outcomes":["Heal","Soothe","Empower","Enhance","Bolster","Invert"]}}}]}},
+                {"id":"forager","name":"Forager","automation":{"actions":[
+                  {"id":"forage","label":"Forage","timing":"downtime","downtime":{"table":{"expression":"1d6","forage":true,
+                    "outcomes":["Food","Relic","Rune","Vial","Charm","Choose"]}}}]}}"""));
+        assertEquals(3, result.converted(), result.diagnostics().toString());
+        String actor = """
+                {"id":"me","name":"Ash","stress":{"marked":0,"capacity":6},"traits":{"Instinct":2}}""";
+
+        RuleCompiler.Program recipe = program(result, 0);
+        ObjectNode brewed = run(recipe, context(recipe, actor, move("brew", "short", false, false)), "brew").contexts().getFirst();
+        JsonNode grant = brewed.at("/outbox/0");
+        assertEquals("inventory.grant", grant.path("kind").asText(), brewed.toString());
+        assertEquals("consumables", grant.path("catalog").asText());
+        assertEquals("vial-of-darksmoke", grant.path("entry").asText());
+        assertEquals(5, grant.path("max").asInt());
+        assertEquals("actor", grant.path("scope").asText());
+        assertEquals(1, brewed.at("/actor/stress/marked").asInt());
+
+        RuleCompiler.Program kit = program(result, 1);
+        var mixed = run(kit, context(kit, actor, move("mix", "short", false, false)), "mix");
+        String report = mixed.actions().getFirst().report();
+        var parts = java.util.regex.Pattern.compile("Fixture: rolled ([1-6](?:, [1-6])*): (.+)\\.").matcher(report);
+        assertTrue(parts.matches(), report);
+        int faces = parts.group(1).split(", ").length;
+        assertTrue(faces >= 3 && faces <= 6, report);
+        assertEquals(faces, parts.group(2).split(", ").length, report);
+
+        RuleCompiler.Program forager = program(result, 2);
+        JsonNode rules = block(result, 2).path("rules");
+        assertEquals(6, rules.size(), rules.toString());
+        assertEquals("forage-forage", rules.at("/1/bindings/0/claimGroup").asText());
+        boolean granted = false, offered = false;
+        for (int seed = 0; seed < 200 && !(granted && offered); seed++) {
+            var resolution = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(forager,
+                            context(forager, actor, move("forage", "short", false, false)))),
+                    List.of(new RuleRuntime.Intent("forage", "downtime", "fixture", 0, RuleJson.JSON.createObjectNode())),
+                    new java.util.Random(seed));
+            ObjectNode out = resolution.contexts().getFirst();
+            JsonNode request = out.at("/outbox/0");
+            String report2 = resolution.actions().getFirst().report();
+            String[] items = {"foraged-food", "foraged-relic", "foraged-rune", "foraged-vial", "foraged-charm"};
+            int face = Integer.parseInt(report2.replaceAll("^Fixture: rolled (\\d+):.*$", "$1"));
+            if (face < 6) {
+                granted = true;
+                assertEquals(items[face - 1], request.path("entry").asText(), out.toString());
+                assertEquals("party", request.path("scope").asText());
+                assertEquals("foraged", request.path("tag").asText());
+            } else {
+                offered = true;
+                assertEquals("forage-forage", request.path("group").asText(), out.toString());
+            }
+        }
+        assertTrue(granted && offered);
+        ObjectNode claim = context(forager, actor, "{\"type\":\"claim.accept\",\"id\":\"c\"}");
+        var recipients = List.of(new RuleDispatcher.RecipientCandidate("me", (ObjectNode) claim.path("actor").deepCopy(), 0));
+        var claimed = RuleDispatcher.executeClaims(List.of(new RuleDispatcher.Candidate(forager, claim)),
+                List.of(claimIntent("forage-foraged-rune", "me", null)), recipients,
+                new RuleDispatcher.ClaimLedger(0, java.util.Set.of(), Map.of("forage-forage", 1)), RandomGenerator.getDefault());
+        assertEquals("Ash foraged one Foraged Rune.", claimed.actions().getFirst().action().report());
+        assertFalse(LegacyCatalogConverter.convert(catalog("""
+                {"id":"x","name":"X","automation":{"actions":[{"id":"a","label":"A","timing":"downtime",
+                  "downtime":{"table":{"expression":"1d4","outcomes":["A","B"]}}}]}}""")).diagnostics().isEmpty());
+    }
+
+    @Test
     void sentRollsBecomeHostResolvedPlansWithComputedCountsAndEvasionBase() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"guard","name":"Guard","automation":{"actions":[

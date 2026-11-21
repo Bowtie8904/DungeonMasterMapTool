@@ -11,7 +11,7 @@ import java.util.HashSet;
 public final class RuleExpression {
     private static final Set<String> ROOTS = Set.of("source", "actor", "recipient", "event", "state", "input", "die", "result", "args", "effects", "gear");
     private static final Set<String> UNARY = Set.of("not", "floor", "ceil", "negate", "size");
-    private static final Set<String> BINARY = Set.of("subtract", "divide", "eq", "ne", "gt", "gte", "lt", "lte", "includes", "count", "pluck", "containsText");
+    private static final Set<String> BINARY = Set.of("subtract", "divide", "eq", "ne", "gt", "gte", "lt", "lte", "includes", "count", "pluck", "containsText", "at");
     private static final Set<String> MANY = Set.of("add", "multiply", "min", "max", "and", "or");
     private static final double MAX_NUMBER = 9_007_199_254_740_991d;
 
@@ -128,6 +128,13 @@ public final class RuleExpression {
             com.fasterxml.jackson.databind.node.ArrayNode plucked = RuleJson.JSON.createArrayNode();
             for (JsonNode element : values[0]) if (element.has(values[1].asText())) plucked.add(element.get(values[1].asText()));
             return plucked;
+        }
+        if ("at".equals(op)) {
+            if (!values[0].isArray()) throw RuleJson.error(path, "at requires a collection and an index.");
+            int index = (int) number(values[1], path);
+            if (index < 0 || index >= values[0].size() || index != number(values[1], path))
+                throw RuleJson.error(path, "at index is outside the collection.");
+            return values[0].get(index).deepCopy();
         }
         if ("includes".equals(op)) {
             if (!values[0].isArray()) throw RuleJson.error(path, "includes requires a collection.");

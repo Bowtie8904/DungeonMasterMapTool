@@ -33,7 +33,7 @@ public final class LegacyCatalogConverter {
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
             "damage", "alternateProfiles", "damageTypeChoice", "rest", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions", "conditionalRollOptions",
             "hopeReward", "classResourceOnly", "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "zeroHopeClearArmor",
-            "overflowHope", "criticalMelee", "deathMove", "manual");
+            "overflowHope", "criticalMelee", "deathMove", "manual", "creation");
     private static final Set<String> DEATH_KINDS = Set.of("hopeBonus", "hopeSpend", "mask", "spectral", "egg", "battleHardened",
             "unbreakable", "undying", "lifeWard");
     /** Legacy gated families that are their base family plus extra conditions, which every family converts the same way. */
@@ -64,7 +64,7 @@ public final class LegacyCatalogConverter {
     private static final Set<String> ACTION_FIELDS = Set.of("id", "label", "description", "cost", "steps", "report", "damage",
             "requiresEffect", "excludesEffect", "endEffect", "uses", "usesSource", "actionRoll", "target",
             "excludeSourceActor", "hostOwned", "selectAmount", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
-            "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope");
+            "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime");
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
@@ -226,15 +226,17 @@ public final class LegacyCatalogConverter {
             for (int i = 0; i < list.size(); i++) queue.add(new Nested(base, list.get(i), path + "/" + family + "/" + i));
         }
         if (legacy.has("rest")) queue.add(new Nested("rest", legacy.get("rest"), path + "/rest"));
+        if (legacy.has("creation")) queue.add(new Nested("creation", legacy.get("creation"), path + "/creation"));
         JsonNode death = legacy.path("deathMove");
         if (legacy.has("deathMove")) deathMove(death, path + "/deathMove", p, queue);
         for (int n = 0; n < queue.size() && n < 256; n++) {
             Nested next = queue.get(n);
             JsonNode legacyRule = next.legacy();
-            if (Set.of("rest", "consumeLongRestMove", "endOnDamage", "endOnDealtDamage", "effectDamage", "undying", "lifeWard").contains(next.family())) {
+            if (Set.of("rest", "consumeLongRestMove", "endOnDamage", "endOnDealtDamage", "effectDamage", "undying", "lifeWard", "creation").contains(next.family())) {
                 List<ObjectNode> restRules = switch (next.family()) {
                     case "rest" -> rest(legacyRule, next.path(), p, effects, pools, next.path().equals(path + "/rest") ? legacy : null, ruleIds);
                     case "undying" -> List.of(undying());
+                    case "creation" -> creation(legacyRule, next.path(), p);
                     case "lifeWard" -> List.of(lifeWard(legacyRule.path("effect").asText()));
                     case "endOnDamage" -> List.of(endOnDamage(legacyRule));
                     case "endOnDealtDamage" -> List.of(endOnDealtDamage(legacyRule));
@@ -264,6 +266,8 @@ public final class LegacyCatalogConverter {
                 default -> mitigation(legacyRule, next.path(), p, effects, pools, usesBudget);
             };
             if (rule == null) { extra.clear(); continue; }
+            if ("actions".equals(next.family()) && legacyRule.has("downtime"))
+                downtime(legacyRule, next.path(), p, rule, extra);
             if ("source".equals(legacyRule.path("uses").asText()) && !limited)
                 p.add(next.path() + "/uses", "Rule references a source use budget that is not declared.");
             rule.put("id", unique(rule.path("id").asText(), ruleIds));
@@ -2331,6 +2335,142 @@ public final class LegacyCatalogConverter {
     }
 
     private static final Pattern CHECK_DIE = Pattern.compile("1?d(\\d{1,3})");
+    private static final List<String> FORAGED = List.of("foraged-food", "foraged-relic", "foraged-rune", "foraged-vial", "foraged-charm");
+    private static final Pattern CATALOG_ID = Pattern.compile("[a-z0-9][a-z0-9-]{0,63}");
+
+    /**
+     * A downtime move body: {@code craft} grants one catalog consumable (at most 5 carried), {@code table} rolls
+     * {@code repeat} (default 1) dice whose faces pick the listed outcomes, {@code forage} grants the foraged consumable
+     * of faces 1-5 (party cap 5) or offers a choice on a 6, {@code additional} frees the move slot ({@code event.move.slots}),
+     * {@code rest} limits the move to a short or long rest and {@code consumeItem} uses up one unit of the source item.
+     */
+    private static void downtime(JsonNode action, String path, Problems p, ObjectNode rule, List<ObjectNode> extra) {
+        String at = path + "/downtime";
+        JsonNode downtime = action.get("downtime");
+        if (!downtime.isObject()) { p.add(at, "Expected a downtime object."); return; }
+        p.onlyFields(downtime, at, Set.of("craft", "table", "additional", "rest", "consumeItem"));
+        if (!Set.of("downtime", "rest").contains(action.path("timing").asText())) p.add(at, "Downtime bodies need a downtime timing.");
+        ArrayNode steps = rule.has("do") ? (ArrayNode) rule.get("do") : rule.putArray("do");
+        ObjectNode ui = (ObjectNode) rule.get("ui");
+        ArrayNode when = RuleJson.JSON.createArrayNode();
+        restFilter(downtime, at, p, "event.move.rest", when);
+        if (!when.isEmpty()) applyWhen(rule, when);
+        for (String flag : List.of("additional", "consumeItem"))
+            if (downtime.has(flag) && !downtime.path(flag).isBoolean()) p.add(at + "/" + flag, "Expected a boolean.");
+        if (downtime.path("additional").asBoolean(false))
+            steps.add(planAdjust("event.move", "slots", -1, "Additional downtime move"));
+        if (downtime.path("consumeItem").asBoolean(false)) {
+            ArrayNode costs = rule.has("costs") ? (ArrayNode) rule.get("costs") : rule.putArray("costs");
+            costs.addObject().put("op", "inventory.consume").put("amount", 1);
+        }
+        if (downtime.has("craft")) {
+            String id = downtime.path("craft").asText("");
+            if (!CATALOG_ID.matcher(id).matches()) p.add(at + "/craft", "Expected a consumable catalog ID.");
+            else {
+                steps.addObject().put("op", "inventory.grant").put("catalog", "consumables").put("entry", id).put("quantity", 1)
+                        .put("max", 5).put("scope", "actor").put("label", ui.path("label").asText("Craft"));
+                if (!action.has("report")) ui.put("report", "{source.name}: crafted one " + escape(title(id)) + ".");
+            }
+        }
+        if (downtime.has("table")) table(downtime.get("table"), at + "/table", p, rule, steps, ui, extra, action.has("report"));
+        if (steps.isEmpty()) rule.remove("do");
+    }
+
+    private static void table(JsonNode table, String at, Problems p, ObjectNode rule, ArrayNode steps, ObjectNode ui, List<ObjectNode> extra,
+                              boolean reported) {
+        if (!table.isObject()) { p.add(at, "Expected a table object."); return; }
+        p.onlyFields(table, at, Set.of("expression", "outcomes", "repeat", "forage"));
+        var die = CHECK_DIE.matcher(table.path("expression").asText(""));
+        JsonNode outcomes = table.path("outcomes");
+        if (!die.matches()) { p.add(at + "/expression", "Expected one die such as 1d6."); return; }
+        int sides = Integer.parseInt(die.group(1));
+        if (!outcomes.isArray() || outcomes.size() != sides || sides < 2 || sides > 100) {
+            p.add(at + "/outcomes", "Expected one outcome per die face.");
+            return;
+        }
+        ArrayNode labels = RuleJson.JSON.createArrayNode();
+        for (JsonNode outcome : outcomes) {
+            if (!outcome.isTextual() || outcome.asText().isBlank()) { p.add(at + "/outcomes", "Outcomes must be texts."); return; }
+            labels.add(escape(outcome.asText()));
+        }
+        if (table.has("forage") && !table.path("forage").isBoolean()) p.add(at + "/forage", "Expected a boolean.");
+        boolean forage = table.path("forage").asBoolean(false);
+        JsonNode count = RuleJson.JSON.getNodeFactory().numberNode(1);
+        if (table.has("repeat")) {
+            if (forage) { p.add(at + "/repeat", "A forage table rolls once."); return; }
+            ArrayNode add = RuleJson.JSON.createArrayNode();
+            String[] terms = table.path("repeat").asText("").replace(" ", "").replace("-", "+-").split("\\+");
+            for (int i = 0; i < terms.length; i++) {
+                String term = terms[i];
+                if (term.isEmpty()) continue;
+                var dice = DICE.matcher(term.replaceFirst("^d", "1d"));
+                if (dice.matches()) {
+                    String slot = "repeat" + i;
+                    steps.addObject().put("op", "dice.roll").put("count", Integer.parseInt(dice.group(1)))
+                            .put("sides", Integer.parseInt(dice.group(2))).put("as", slot);
+                    add.add(read("result." + slot));
+                } else if (term.matches("-?\\d{1,2}")) add.add(Integer.parseInt(term));
+                else {
+                    JsonNode value = computed(term);
+                    if (value == null) { p.add(at + "/repeat", "Unsupported repeat term: " + term); return; }
+                    add.add(value);
+                }
+            }
+            if (add.isEmpty()) { p.add(at + "/repeat", "Expected a repeat count."); return; }
+            ObjectNode sum = RuleJson.JSON.createObjectNode();
+            sum.set("add", add);
+            ObjectNode bounded = RuleJson.JSON.createObjectNode();
+            bounded.putArray("clamp").add(sum).add(0).add(100);
+            count = bounded;
+        }
+        ObjectNode roll = steps.addObject().put("op", "dice.table");
+        roll.set("count", count);
+        roll.set("outcomes", labels);
+        roll.put("as", "table");
+        if (!reported) ui.put("report", "{source.name}: rolled {result.table.faces|list}: {result.table.outcomes|list}.");
+        if (!forage) return;
+        if (sides != FORAGED.size() + 1) { p.add(at + "/outcomes", "A forage table lists the five foraged consumables and a choice."); return; }
+        ObjectNode face = RuleJson.JSON.createObjectNode();
+        face.putArray("at").add(read("result.table.faces")).add(0);
+        ObjectNode index = RuleJson.JSON.createObjectNode();
+        index.putArray("subtract").add(face).add(1);
+        ObjectNode ids = RuleJson.JSON.createObjectNode();
+        ids.set("literal", RuleJson.JSON.valueToTree(FORAGED));
+        ObjectNode entry = RuleJson.JSON.createObjectNode();
+        entry.putArray("at").add(ids).add(index);
+        ObjectNode found = RuleJson.JSON.createObjectNode();
+        found.putArray("lt").add(face.deepCopy()).add(sides);
+        ObjectNode grant = forageGrant(entry, "Foraged consumable");
+        grant.set("if", found);
+        steps.add(grant);
+        String group = rule.path("id").asText() + "-forage";
+        ObjectNode choose = RuleJson.JSON.createObjectNode();
+        choose.putArray("eq").add(face.deepCopy()).add(sides);
+        steps.addObject().put("op", "claim.offer").put("group", group).put("label", "Choose one foraged consumable").put("limit", 1)
+                .set("if", choose);
+        for (String id : FORAGED) {
+            ObjectNode claim = RuleJson.JSON.createObjectNode().put("id", rule.path("id").asText() + "-" + id);
+            ObjectNode binding = claim.putArray("bindings").addObject().put("id", "claim").put("event", "claim.accept")
+                    .put("surface", "chat").put("mode", "button").put("claimGroup", group).put("audience", "self");
+            binding.putObject("claimScope").put("recipients", "sourceActor");
+            claim.putArray("do").add(forageGrant(RuleJson.JSON.getNodeFactory().textNode(id), title(id)));
+            claim.putObject("ui").put("label", "Forager: " + title(id)).put("report", "{recipient.name} foraged one " + title(id) + ".");
+            extra.add(claim);
+        }
+    }
+
+    private static ObjectNode forageGrant(JsonNode entry, String label) {
+        ObjectNode grant = RuleJson.JSON.createObjectNode().put("op", "inventory.grant").put("catalog", "consumables");
+        grant.set("entry", entry);
+        return grant.put("quantity", 1).put("tag", "foraged").put("max", 5).put("scope", "party").put("label", label);
+    }
+
+    private static String title(String id) {
+        StringBuilder out = new StringBuilder();
+        for (String word : id.split("-")) if (!word.isEmpty())
+            out.append(out.isEmpty() ? "" : " ").append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+        return out.toString();
+    }
 
     /**
      * A consumable's sheet action uses up one unit unless it keeps the item. With a portion pool, the unit is used up
@@ -3548,6 +3688,27 @@ public final class LegacyCatalogConverter {
         if (!costs.isEmpty()) rule.set("costs", costs);
         if (!steps.isEmpty()) rule.set("do", steps);
         return rule;
+    }
+
+    private static final Map<String, String> CREATION_FIELDS = Map.of("hp", "Hit Point slots", "stress", "Stress slots",
+            "evasion", "Evasion", "domainCards", "Domain cards", "experienceBonus", "Experience bonus");
+
+    /**
+     * Character-creation allowances become an automatic {@code creation.apply} rule adjusting the host-published creation
+     * plan ({@code event.creation}); the character builder lists the adjustable fields and applies the adjusted plan once.
+     */
+    private static List<ObjectNode> creation(JsonNode creation, String path, Problems p) {
+        if (!creation.isObject() || creation.isEmpty()) { p.add(path, "Expected creation allowances."); return List.of(); }
+        p.onlyFields(creation, path, CREATION_FIELDS.keySet());
+        ObjectNode rule = restRule("creation", "creation.apply", "creation", "creation", "automatic");
+        ArrayNode steps = rule.putArray("do");
+        for (String field : CREATION_FIELDS.keySet().stream().sorted().toList()) {
+            if (!creation.has(field)) continue;
+            JsonNode by = creation.get(field);
+            if (!by.isInt() || by.asInt() == 0 || Math.abs(by.asInt()) > 8) p.add(path + "/" + field, "Expected a non-zero whole number from -8 to 8.");
+            else steps.add(planAdjust("event.creation", field, by.asInt(), CREATION_FIELDS.get(field)));
+        }
+        return steps.isEmpty() ? List.of() : List.of(rule);
     }
 
     /** Won't Stay Dead: after a failed Risk It All, permanently lose a Hit Point slot to succeed with Hope instead. */

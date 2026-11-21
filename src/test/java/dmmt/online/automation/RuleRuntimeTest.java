@@ -289,4 +289,40 @@ class RuleRuntimeTest {
         assertTrue(error.getMessage().contains("limit"));
         assertEquals(copy, before);
     }
+
+    @Test
+    void tableRollsPickOutcomesByFaceAndGrantsBecomeHostRequests() throws Exception {
+        ObjectNode automation = (ObjectNode) RuleJson.parse("""
+                {"rules":[{"id":"table","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                 "do":[{"op":"dice.table","count":2,"outcomes":["Calm","Storm","Fog"],"as":"weather"},
+                       {"op":"inventory.grant","catalog":"consumables","label":"Gift","quantity":1,"max":5,"scope":"party","tag":"gift",
+                        "entry":{"at":[{"literal":["a","b","c"]},{"subtract":[{"at":[{"read":"result.weather.faces"},1]},1]}]}}],
+                 "ui":{"label":"Weather","report":"{result.weather.faces|list}: {result.weather.outcomes|list}"}}]}
+                """);
+        RuleCompiler.Program program = RuleCompiler.compile("domain-cards:example", automation, fixture("rewrite/recipes"));
+        ObjectNode before = context("example", "Example");
+        var result = RuleRuntime.execute(program, intent("table", "sheet", before, "{}"), before, faces(2, 3));
+        assertEquals("2, 3: Storm, Fog", result.report());
+        JsonNode grant = result.context().at("/outbox/0");
+        assertEquals("inventory.grant", grant.path("kind").asText());
+        assertEquals("c", grant.path("entry").asText());
+        assertEquals("party", grant.path("scope").asText());
+        assertEquals("gift", grant.path("tag").asText());
+
+        for (String invalid : java.util.List.of(
+                "{\"op\":\"dice.table\",\"count\":1,\"outcomes\":[\"Only\"]}",
+                "{\"op\":\"inventory.grant\",\"catalog\":\"nowhere\",\"entry\":\"a\",\"quantity\":1,\"label\":\"X\"}",
+                "{\"op\":\"inventory.grant\",\"catalog\":\"consumables\",\"entry\":\"a\",\"quantity\":1,\"label\":\"X\",\"scope\":\"party\"}",
+                "{\"op\":\"inventory.grant\",\"catalog\":\"consumables\",\"entry\":\"a\",\"quantity\":1,\"label\":\"X\",\"to\":\"target\"}")) {
+            ObjectNode broken = (ObjectNode) RuleJson.parse("""
+                    {"rules":[{"id":"x","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                     "do":[%s],"ui":{"label":"X"}}]}""".formatted(invalid));
+            assertThrows(IllegalArgumentException.class, () -> RuleCompiler.compile("domain-cards:example", broken, fixture("rewrite/recipes")), invalid);
+        }
+        ObjectNode outOfRange = (ObjectNode) RuleJson.parse("""
+                {"rules":[{"id":"x","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                 "do":[{"op":"resource.gain","pool":"actor.hope","amount":{"at":[{"literal":[1]},3]}}],"ui":{"label":"X"}}]}""");
+        RuleCompiler.Program bad = RuleCompiler.compile("domain-cards:example", outOfRange, fixture("rewrite/recipes"));
+        assertThrows(IllegalArgumentException.class, () -> RuleRuntime.execute(bad, intent("x", "sheet", before, "{}"), before, noRandom()));
+    }
 }
