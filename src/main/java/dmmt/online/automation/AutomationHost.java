@@ -135,7 +135,12 @@ public final class AutomationHost {
                               String principalId, RandomGenerator random, PartyTargets party) {
         relation(relation);
         if (principalId == null || principalId.isBlank()) throw new IllegalArgumentException("Missing automation principal.");
-        RuleJson.fields(request, "/request", "requestId", "expectedRevision", "selections", "profileRoll", "target");
+        RuleJson.fields(request, "/request", "requestId", "expectedRevision", "selections", "profileRoll", "target", "resultId");
+        if (request.has("resultId")) {
+            if (!"self".equals(relation)) throw new SecurityException("Only the character owner may use this roll result.");
+            if (request.has("profileRoll") || request.has("target") || request.path("selections").size() != 1)
+                throw RuleJson.error("/request/resultId", "Choose one ordinary result action.");
+        }
         if (request.has("target") && "dm".equals(relation))
             throw new SecurityException("A scoped DM sheet grant cannot target other characters.");
         if (request.has("target") && (request.has("profileRoll") || request.path("selections").size() != 1))
@@ -159,7 +164,9 @@ public final class AutomationHost {
         ObjectNode response;
         if (request.has("profileRoll")) {
             response = profileRoll(pack, working, state, event, request, random);
-            offerResult(pack, working, response, principalId);
+            offerResult(pack, working, response, principalId, null);
+        } else if (request.has("resultId")) {
+            response = resultAction(pack, working, state, event, request, principalId, random);
         } else if (request.has("target")) {
             if (party == null) throw RuleJson.error("/request/target", "This action requires a host roster.");
             response = targeted(pack, working, state, event, request, relation, random, party);
@@ -291,7 +298,41 @@ public final class AutomationHost {
         return false;
     }
 
-    private void offerResult(Pack pack, ObjectNode sheet, ObjectNode response, String principal) {
+    private ObjectNode resultAction(Pack pack, ObjectNode working, ObjectNode state, ObjectNode origin,
+                                    ObjectNode request, String principal, RandomGenerator random) {
+        var sources = projection.sources(working);
+        ResultWindows.prune(state, ResultWindows.guards(sources, state.path("effects")));
+        var window = ResultWindows.lookup(state, pack.revision(), principal, RuleJson.id(request.get("resultId"), "/request/resultId"));
+        ObjectNode event = savedResultEvent(window, origin);
+        var selection = request.requiredAt("/selections/0");
+        String instance = RuleJson.id(selection.get("sourceInstanceId"), "/request/selections/0/sourceInstanceId");
+        var element = sources.stream().filter(e -> instance.equals(e.instanceId())).findFirst().orElseThrow(ResultWindows::stale);
+        var program = pack.programs().get(element.sourceId());
+        if (program == null) throw ResultWindows.stale();
+        var context = context(state, element, actor(pack, working, state, event, sources), event);
+        var intent = selections(request, List.of(new RuleDispatcher.Candidate(program, context)), state.required("revision").longValue(),
+                "self", false).getFirst();
+        ResultWindows.take(window, new ResultWindows.Button(instance, intent.ruleId(), intent.bindingId(), intent.eachId()));
+        // Dispatch only the chosen button: automatic roll.finished reactions already ran when the roll was made.
+        var resolution = RuleRuntime.execute(program, intent, context, random);
+        if (resolution.publishedRolls().size() > 1)
+            throw RuleJson.error("/result", "A result button may publish at most one revision of its roll.");
+        var action = new RuleDispatcher.ActionResult(instance, intent.ruleId(), intent.bindingId(), resolution.report(),
+                resolution.publishedRolls(), resolution.diceRolls());
+        List<ObjectNode> commands = new ArrayList<>();
+        resolution.context().path("outbox").forEach(cmd -> commands.add((ObjectNode) cmd));
+        var response = applyResolved(pack, working, state, event, List.of(resolution.context()), List.of(action), commands);
+        if (!resolution.publishedRolls().isEmpty()) {
+            ProfileRoll.updateCheck((ObjectNode) response.required("event"));
+            response.put("resultPublished", true);
+            window.withArray("buttons").removeAll();
+            offerResult(pack, working, response, principal, (ArrayNode) window.required("used"));
+        }
+        pruneResultWindows(working);
+        return response;
+    }
+
+    private void offerResult(Pack pack, ObjectNode sheet, ObjectNode response, String principal, ArrayNode used) {
         ObjectNode event = (ObjectNode) response.required("event");
         var sources = projection.sources(sheet);
         if (sources.stream().noneMatch(element -> {
@@ -302,8 +343,15 @@ public final class AutomationHost {
             return; // Consuming the roll's source cannot leave an actionable result behind.
         ObjectNode state = projection.state(sheet);
         ArrayNode matches = resultButtons(pack, sources, state, actor(pack, sheet, state, event, sources), event, null);
+        if (used != null) {
+            Set<ResultWindows.Button> spent = new java.util.HashSet<>();
+            used.forEach(item -> spent.add(ResultWindows.Button.of(item)));
+            for (int i = matches.size() - 1; i >= 0; i--)
+                if (spent.contains(ResultWindows.Button.of(matches.get(i)))) matches.remove(i);
+        }
         String id = ResultWindows.publish(state, pack.revision(), principal, event, matches, ResultWindows.guards(sources, state.path("effects")));
         if (id != null) {
+            if (used != null) ResultWindows.lookup(state, pack.revision(), principal, id).set("used", used.deepCopy());
             event.put("resultId", id);
             response.set("resultActions", matches);
         }

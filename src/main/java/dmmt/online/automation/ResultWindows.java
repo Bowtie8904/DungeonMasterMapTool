@@ -107,7 +107,11 @@ final class ResultWindows {
     static void take(ObjectNode window, Button chosen) {
         ArrayNode buttons = (ArrayNode) window.required("buttons");
         for (int i = 0; i < buttons.size(); i++) if (Button.of(buttons.get(i)).equals(chosen)) {
-            buttons.remove(i);
+            ArrayNode used = window.withArray("used");
+            if (used.size() >= MAX_BUTTONS) throw RuleJson.error("/result", "Too many edits to this roll.");
+            ObjectNode taken = (ObjectNode) buttons.remove(i);
+            taken.remove("guard");
+            used.add(taken);
             return;
         }
         throw stale();

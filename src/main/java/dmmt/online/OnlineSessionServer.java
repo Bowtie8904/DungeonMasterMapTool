@@ -5836,7 +5836,7 @@ public final class OnlineSessionServer {
                 }
                 changed.values().forEach(staged -> staged.put("featureRevision", staged.path("featureRevision").asLong(0) + 1));
                 List<ObjectNode> messages = new ArrayList<>();
-                if ("roll.finished".equals(response.at("/event/type").asText()))
+                if (body.path("request").has("profileRoll") || response.path("resultPublished").asBoolean())
                     messages.add(profileRollMessage(actor, response.path("event")));
                 for (JsonNode action : response.path("actions")) {
                     String report = action.path("report").asText("");

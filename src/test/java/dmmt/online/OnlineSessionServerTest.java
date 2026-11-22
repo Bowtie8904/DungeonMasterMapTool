@@ -21,6 +21,7 @@ import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -29,6 +30,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -1933,7 +1935,18 @@ class OnlineSessionServerTest {
         rules.add(MAPPER.readTree("""
             {"id":"after","bindings":[{"id":"apply","surface":"chat","event":"roll.finished","mode":"button"}],
              "when":{"eq":[{"read":"event.check.dominant"},"fear"]},"ui":{"label":"Use total {event.check.total}"},
-             "do":[{"op":"table.gain","resource":"fear","label":"After","amount":1}]}"""));
+             "costs":[{"op":"track.mark","track":"actor.stress","amount":1}],
+             "do":[{"op":"table.spend","resource":"fear","label":"After","amount":3}]}"""));
+        rules.add(MAPPER.readTree("""
+            {"id":"edit","bindings":[{"id":"apply","surface":"roll","event":"roll.finished","mode":"button"}],
+             "when":{"eq":[{"read":"event.check.dominant"},"fear"]},"ui":{"label":"Edit"},
+             "do":[{"op":"roll.contribute","from":{"read":"event.roll"},"as":"edited",
+                    "contribution":{"id":"late","kind":"flat","role":"modifier","label":"Late","value":2}},
+                   {"op":"roll.publish","roll":{"read":"result.edited"}}]}"""));
+        rules.add(MAPPER.readTree("""
+            {"id":"high","bindings":[{"id":"apply","surface":"roll","event":"roll.finished","mode":"button"}],
+             "when":{"gte":[{"read":"event.check.total"},30]},"ui":{"label":"High"},
+             "do":[{"op":"table.gain","resource":"fear","label":"High","amount":1}]}"""));
         java.nio.file.Files.writeString(file, catalog.toString());
         String initial = """
             {"name":"Ada","level":2,"stress":{"slots":6,"on":0},"traits":[{"name":"Finesse","mod":3}],
@@ -1972,7 +1985,7 @@ class OnlineSessionServerTest {
         assertEquals(29, event.at("/check/total").intValue()); // 1 Hope + 5 Fear + 3 Finesse + 20 boost
         String resultId = event.required("resultId").textValue();
         var resultOptions = MAPPER.readTree(result.body()).required("resultActions");
-        assertEquals(List.of("Use total 29"), resultOptions.findValuesAsText("label"));
+        assertEquals(Set.of("Use total 29", "Edit"), Set.copyOf(resultOptions.findValuesAsText("label")));
         assertEquals(resultOptions, MAPPER.readTree(resultHttp(cookie, "roller", resultId).body()).required("actions"));
         assertEquals(409, resultHttp(cookie, "roller", "not-current").statusCode());
         assertEquals(403, resultHttp(allyCookie("result-viewer"), "roller", resultId).statusCode());
@@ -2004,7 +2017,42 @@ class OnlineSessionServerTest {
         assertEquals(403, automationHttp(allyCookie("other-roller"), "roller", damage).statusCode());
         var retained = MAPPER.readTree(resultHttp(cookie, "roller", resultId).body());
         assertEquals(2, retained.required("revision").asInt());
-        assertEquals(List.of("Use total 29"), retained.required("actions").findValuesAsText("label"));
+        assertEquals(Set.of("Use total 29", "Edit"), Set.copyOf(retained.required("actions").findValuesAsText("label")));
+
+        String action = """
+            {"request":{"requestId":"after-1","expectedRevision":2,"resultId":"%s",
+             "selections":[{"sourceInstanceId":"s","ruleId":"after","bindingId":"apply"}]}}""".formatted(resultId);
+        assertEquals(403, automationHttp(allyCookie("result-invoker"), "roller", action).statusCode());
+        String saved = store.loadSheet(campaign.getId(), "roller");
+        assertEquals(400, automationHttp(cookie, "roller", action).statusCode(), "Cannot spend three Fear.");
+        assertEquals(saved, store.loadSheet(campaign.getId(), "roller"), "Failed command retains both the offer and its cost.");
+        campaign.setFear(3);
+        var used = automationHttp(cookie, "roller", action);
+        assertEquals(200, used.statusCode(), used.body());
+        assertEquals(0, campaign.getFear(), "Do not run the automatic finished reward again.");
+        assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "roller")).requiredAt("/stress/on").asInt());
+        assertEquals(history + 2, store.historyTail(campaign.getId(), 100).size(), "No new roll for a resource-only result action.");
+        assertEquals(used.body(), automationHttp(cookie, "roller", action).body());
+        assertEquals(409, automationHttp(cookie, "roller", action.replace("after-1", "again").replace("Revision\":2", "Revision\":3")).statusCode());
+
+        String edit = action.replace("after-1", "edit-1").replace("\"after\"", "\"edit\"").replace("Revision\":2", "Revision\":3");
+        var edited = automationHttp(cookie, "roller", edit);
+        assertEquals(200, edited.statusCode(), edited.body());
+        JsonNode revised = MAPPER.readTree(edited.body());
+        assertEquals(31, revised.requiredAt("/event/check/total").intValue());
+        assertEquals(List.of("high"), revised.required("resultActions").findValuesAsText("ruleId"),
+                "Neither the earlier reward nor the edit may re-arm on this revision.");
+        assertEquals(409, resultHttp(cookie, "roller", resultId).statusCode());
+        String nextId = revised.requiredAt("/event/resultId").textValue();
+        assertNotEquals(resultId, nextId);
+        assertEquals(409, automationHttp(cookie, "roller", edit.replace("edit-1", "another-edit")
+                .replace(resultId, nextId).replace("Revision\":3", "Revision\":4")).statusCode());
+        assertEquals(edited.body(), automationHttp(cookie, "roller", edit).body());
+        log = store.historyTail(campaign.getId(), 100);
+        assertEquals(history + 3, log.size());
+        assertEquals(event, log.get(history).required("automationEvent"), "Original history is immutable.");
+        assertEquals(31, log.getLast().required("total").asInt());
+        assertEquals(0, campaign.getFear());
     }
 
     @Test
