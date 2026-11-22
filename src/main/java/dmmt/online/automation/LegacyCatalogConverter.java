@@ -88,6 +88,16 @@ public final class LegacyCatalogConverter {
 
     private LegacyCatalogConverter() {}
 
+    /** Shipped recipes that converted catalogs may reference with {@code useRecipe}. */
+    public static String coreRecipes() {
+        try (var in = LegacyCatalogConverter.class.getResourceAsStream("/dmmt/automation/core-recipes.json")) {
+            if (in == null) throw new IllegalStateException("Missing core-recipes.json resource.");
+            return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            throw new IllegalStateException(ex);
+        }
+    }
+
     public static Result convert(String legacyJson) throws IOException {
         return convert(legacyJson, Map.of());
     }
@@ -100,7 +110,7 @@ public final class LegacyCatalogConverter {
         catalog.put("version", RuleCompiler.FORMAT_VERSION);
         String category = catalog.path("category").asText();
         Context context = new Context();
-        JsonNode recipes = RuleJson.parse(EMPTY_RECIPES);
+        JsonNode recipes = RuleJson.parse(coreRecipes());
         JsonNode entries = catalog.path("entries");
         for (int i = 0; i < entries.size(); i++) {
             JsonNode entry = entries.get(i);
@@ -171,6 +181,34 @@ public final class LegacyCatalogConverter {
         }
     }
 
+    private static boolean isDeathrun(JsonNode legacy) {
+        for (JsonNode trigger : legacy.path("rollTriggers")) if (trigger.path("deathrunResult").asBoolean()) return true;
+        return false;
+    }
+
+    /** The saved-damage run becomes one instance of the shared repeat-damage recipe with the legacy constants as arguments. */
+    private static ObjectNode deathrun(JsonNode legacy, String path, Problems p) {
+        p.onlyFields(legacy, path, Set.of("actions", "rollOptions", "rollTriggers"));
+        ObjectNode out = RuleJson.JSON.createObjectNode();
+        JsonNode cost = legacy.path("rollOptions").path(0).path("cost");
+        ObjectNode spend = RuleJson.JSON.createObjectNode();
+        if (cost.size() == 1 && cost.path("hope").isInt() && cost.path("hope").asInt() > 0)
+            spend.put("op", "resource.spend").put("pool", "actor.hope").put("amount", cost.path("hope").asInt());
+        else if (cost.size() == 1 && cost.path("stress").isInt() && cost.path("stress").asInt() > 0)
+            spend.put("op", "track.mark").put("track", "actor.stress").put("amount", cost.path("stress").asInt());
+        else { p.add(path + "/rollOptions/0/cost", "A repeated damage run needs one Hope or Stress price."); return out; }
+        ObjectNode state = out.putObject("state");
+        state.put("phase", "inactive").put("activation", 0).put("uses", 0).putNull("weaponId").putNull("firstDamage");
+        state.putArray("originalEligibleDice");
+        state.putArray("remainingDice");
+        ObjectNode rule = out.putArray("rules").addObject();
+        rule.put("id", "run").put("useRecipe", "core:repeat-saved-weapon-damage");
+        ObjectNode args = rule.putObject("args");
+        args.putArray("startCosts").add(spend);
+        args.put("firstProficiencyBonus", 1).put("removeEachTime", 1);
+        return out;
+    }
+
     static ObjectNode convertBlock(JsonNode legacy, String path, String sourceId, List<Diagnostic> problems) {
         return convertBlock(legacy, path, sourceId, problems, Map.of());
     }
@@ -182,6 +220,7 @@ public final class LegacyCatalogConverter {
         Problems p = new Problems(sourceId, problems, new ArrayList<>());
         if (!legacy.isObject()) { p.add(path, "Automation must be an object."); return out; }
         if (legacy.has("attach")) return attachment(legacy, path, sourceId, problems, shared, p);
+        if (isDeathrun(legacy)) return deathrun(legacy, path, p);
         p.onlyFields(legacy, path, BLOCK_FIELDS);
         boolean limited = false;
         if (legacy.has("uses")) {
@@ -3906,7 +3945,8 @@ public final class LegacyCatalogConverter {
         JsonNode amount = step.path("amount");
         boolean clearAllTrack = "all".equals(amount.asText()) && "clear".equals(op) && TRACKS.containsKey(resource);
         boolean clearAllPool = "all".equals(amount.asText()) && "clear".equals(op) && pools.has(resource);
-        JsonNode value = clearAllTrack || clearAllPool ? null : amount(amount);
+        boolean markAllTrack = "all".equals(amount.asText()) && "mark".equals(op) && TRACKS.containsKey(resource);
+        JsonNode value = clearAllTrack || clearAllPool || markAllTrack ? null : amount(amount);
         var rolled = amount.isTextual() ? ACTION_DAMAGE.matcher(amount.asText().trim()) : null;
         if (value == null && rolled != null && rolled.matches() && rolled.group(1).length() <= 2 && rolled.group(2).length() <= 3
                 && (rolled.group(4) == null || rolled.group(4).length() <= 6)) {
@@ -3926,7 +3966,7 @@ public final class LegacyCatalogConverter {
                 } else value = total;
             }
         }
-        if (value == null && !clearAllTrack && !clearAllPool) {
+        if (value == null && !clearAllTrack && !clearAllPool && !markAllTrack) {
             p.add(path + "/amount", "Computed amounts need an explicit expression: " + amount);
             return;
         }
@@ -3936,6 +3976,7 @@ public final class LegacyCatalogConverter {
                     String track = TRACKS.get(resource).replaceFirst("^actor\\.", operationTarget + ".");
                     ObjectNode converted = out.addObject().put("op", "track." + op).put("track", track);
                     if (value != null) converted.set("amount", value);
+                    else if (markAllTrack) converted.putObject("amount").putArray("subtract").add(read(track + ".capacity")).add(read(track + ".marked"));
                     else converted.putObject("amount").put("read", track + ".marked");
                 } else if ("clear".equals(op) && clearAllPool) {
                     ObjectNode converted = out.addObject().put("op", "pool.spend").put("pool", resource);
@@ -4971,8 +5012,8 @@ public final class LegacyCatalogConverter {
             ObjectNode ids = entry.putObject("assignedIds");
             result.assignedIds().forEach(ids::put);
         }
-        Files.writeString(staging.resolve("rules.json"), EMPTY_RECIPES);
-        for (String output : outputs.values()) RuleCatalog.compile(output, EMPTY_RECIPES);
+        Files.writeString(staging.resolve("rules.json"), coreRecipes());
+        for (String output : outputs.values()) RuleCatalog.compile(output, coreRecipes());
         report.put("blocks", blocks).put("converted", converted);
         ObjectNode summary = report.putObject("reasons");
         reasons.forEach(summary::put);

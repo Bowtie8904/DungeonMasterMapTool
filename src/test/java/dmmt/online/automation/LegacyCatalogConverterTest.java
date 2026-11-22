@@ -54,7 +54,7 @@ class LegacyCatalogConverterTest {
         JsonNode passive = result.catalog().at("/entries/0/features/1/automation/modifiers");
         assertEquals(8, passive.size());
         assertEquals("roll.attack", passive.at("/1/stat").asText());
-        var sources = RuleCatalog.compile(result.catalog().toString(), LegacyCatalogConverter.EMPTY_RECIPES);
+        var sources = RuleCatalog.compile(result.catalog().toString(), LegacyCatalogConverter.coreRecipes());
         assertEquals("classes:tester:features:second-wind", sources.get(0).id());
     }
 
@@ -1347,7 +1347,7 @@ class LegacyCatalogConverterTest {
     }
 
     private static RuleCompiler.Program program(LegacyCatalogConverter.Result result, int entry) throws Exception {
-        return RuleCatalog.compile(result.catalog().toString(), LegacyCatalogConverter.EMPTY_RECIPES).get(entry).program();
+        return RuleCatalog.compile(result.catalog().toString(), LegacyCatalogConverter.coreRecipes()).get(entry).program();
     }
 
     private static ObjectNode context(RuleCompiler.Program program, String actor, String event) throws Exception {
@@ -1457,7 +1457,7 @@ class LegacyCatalogConverterTest {
         assertEquals(6, table.path("outcomes").size());
         assertEquals("Clear 3 Stress.", table.at("/outcomes/3").asText());
 
-        RuleCompiler.Program program = RuleCatalog.compile(result.catalog().toString(), LegacyCatalogConverter.EMPTY_RECIPES).get(0).program();
+        RuleCompiler.Program program = RuleCatalog.compile(result.catalog().toString(), LegacyCatalogConverter.coreRecipes()).get(0).program();
         String actor = """
                 {"hope":{"value":1,"max":1},"scars":0,"hp":{"marked":4,"capacity":6},"stress":{"marked":5,"capacity":6}}""";
         java.util.Set<Integer> seen = new java.util.HashSet<>();
@@ -2566,6 +2566,20 @@ class LegacyCatalogConverterTest {
         String avatar = block(result, 1).toString();
         assertTrue(avatar.contains("revert-avatar") && avatar.contains("event.table.fear") && avatar.contains("roll.prepare"), avatar);
         for (int i = 0; i < 2; i++) assertNotNull(program(result, i));
+    }
+    @Test
+    void repeatedDamageRunsUseTheSharedRecipe() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"deathrun","name":"Deathrun","automation":{
+                 "actions":[{"id":"use","label":"Deathrun","cost":{"hope":3},"steps":[{"op":"effect","effect":{"name":"Deathrun","deathrun":true,"counter":{"value":0,"max":100}}}]}],
+                 "rollOptions":[{"id":"run","label":"Deathrun","roll":"attack","weapon":"any","cost":{"hope":3},"deathrun":true}],
+                 "rollTriggers":[{"id":"end","label":"End Deathrun","on":"damage","deathrunResult":true,"endEffect":"Deathrun"}]}}"""));
+        assertEquals(1, result.converted(), result.diagnostics().toString());
+        JsonNode rule = block(result, 0).at("/rules/0");
+        assertEquals("core:repeat-saved-weapon-damage", rule.path("useRecipe").asText(), rule.toString());
+        assertEquals(3, rule.at("/args/startCosts/0/amount").asInt(), rule.toString());
+        assertEquals(1, rule.at("/args/firstProficiencyBonus").asInt(), rule.toString());
+        assertNotNull(program(result, 0));
     }
     @Test
     void conditionalStepsSkipWhenFalseAndCannotNameResults() throws Exception {
