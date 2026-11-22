@@ -55,9 +55,15 @@ public final class AutomationHost {
     public static Pack compile(String revision, Map<String, String> catalogs, String recipes) {
         if (recipes == null) throw new NotReady("The compendium has no rules.json recipe document.");
         Map<String, RuleCompiler.Program> programs = new LinkedHashMap<>();
+        Map<String, ObjectNode> compiledRecipes;
+        try {
+            compiledRecipes = RuleCatalog.recipes(recipes);
+        } catch (IOException | IllegalArgumentException ex) {
+            throw new NotReady("rules.json: " + ex.getMessage());
+        }
         for (var entry : catalogs.entrySet()) {
             try {
-                for (RuleCatalog.Source source : RuleCatalog.compile(entry.getValue(), recipes))
+                for (RuleCatalog.Source source : RuleCatalog.compile(entry.getValue(), compiledRecipes))
                     if (programs.put(source.id(), source.program()) != null)
                         throw new NotReady("Duplicate automation source " + source.id() + ".");
             } catch (IOException | IllegalArgumentException ex) {

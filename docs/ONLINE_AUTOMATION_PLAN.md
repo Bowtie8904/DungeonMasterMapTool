@@ -91,7 +91,14 @@ derived effect and a result button, including projection and persisted guard pru
 ordinary mixed-weapon run in the same invocation measured 19.82 ms, 22.02 ms, and 11.85 MiB. The
 derived scenario also creates result controls, so the difference is not solely derived-effect overhead.
 
-These are separate single-run development measurements on Windows / Temurin 25, not release thresholds or directly comparable workloads. Allocation is JVM-wide (host and test HTTP client), not retained heap. The runs exclude browser rendering, WAN latency, connected-client broadcasts and unrelated concurrent play.
+`RuleCatalogTest#measureColdPackCompilation` measures pack compilation on the calling thread: nine
+catalog envelopes (three populated fixtures) and eight recipe definitions. After 10 warm-ups, 20 runs
+before sharing recipe validation measured 38.23 ms median, 60.14 ms p95 and 51.58 MiB mean allocation;
+one run after sharing it measured 8.93 ms, 14.68 ms and 7.77 MiB. This synthetic cold-load sample does
+not measure play-time requests or a full converted catalog. Validation still checks every recipe, including
+unused ones, before expanding it for any source.
+
+These are separate single-run development measurements on Windows / Temurin 25, not release thresholds or directly comparable workloads. The HTTP allocation figures are JVM-wide (host and test client); the cold-load figure is calling-thread allocation. Neither is retained heap. The runs exclude browser rendering, WAN latency, connected-client broadcasts and unrelated concurrent play.
 
 **Host-intent hardening (2026-11-22):** The automation POST now accepts only a rule request; browser-supplied event facts are rejected, and the initial sheet-action event is created by the host. Journal replays are bound to the authenticated player principal. This closes event-type/payload forgery for this endpoint, but authoritative roll and lifecycle event construction and their integration with the existing roll pipeline remain outstanding. Keep previews local and pure, reuse host-computed roll facts, and avoid additional network round trips. Compiled programs now index visible buttons/options by event and surface, avoiding a scan of unrelated rules for each action description; the host pack is reused by compendium revision. Any actor-projection cache must include every relevant sheet, catalog and event dependency, and must be justified by benchmarks before adding complexity.
 

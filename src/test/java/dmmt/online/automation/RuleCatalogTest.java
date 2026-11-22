@@ -11,12 +11,70 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class RuleCatalogTest {
     @Test
+    @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "dmmt.benchmark.automation", matches = "true")
+    void measureColdPackCompilation() throws Exception {
+        var files = new java.util.LinkedHashMap<String, String>();
+        for (String category : RuleCatalog.CATEGORIES.stream().sorted().toList())
+            files.put(category, "{\"format\":\"dmmap-daggerheart\",\"version\":2,\"category\":\"" + category + "\",\"entries\":[]}");
+        files.put("classes", fixture("rewrite/host-classes").toString());
+        files.put("consumables", fixture("rewrite/consumables").toString());
+        files.put("domain-cards", fixture("rewrite/domain-cards").toString());
+        ObjectNode recipes = fixture("rewrite/recipes");
+        var list = recipes.withArray("recipes");
+        ObjectNode template = ((ObjectNode) list.get(0)).deepCopy();
+        for (int i = 0; i < 7; i++) list.add(template.deepCopy().put("id", "example:recipe-" + i));
+        String recipeText = recipes.toString();
+        var allocation = java.lang.management.ManagementFactory.getPlatformMXBean(com.sun.management.ThreadMXBean.class);
+        if (allocation == null || !allocation.isThreadAllocatedMemorySupported())
+            throw new IllegalStateException("The benchmark requires JVM allocation counters.");
+        allocation.setThreadAllocatedMemoryEnabled(true);
+        long[] nanos = new long[20], bytes = new long[20];
+        long thread = Thread.currentThread().threadId();
+        for (int i = -10; i < nanos.length; i++) {
+            long before = allocation.getThreadAllocatedBytes(thread), start = System.nanoTime();
+            var pack = AutomationHost.compile("benchmark", files, recipeText);
+            long elapsed = System.nanoTime() - start, allocated = allocation.getThreadAllocatedBytes(thread) - before;
+            assertFalse(pack.programs().isEmpty());
+            if (i >= 0) { nanos[i] = elapsed; bytes[i] = allocated; }
+        }
+        java.util.Arrays.sort(nanos);
+        System.out.printf(java.util.Locale.ROOT,
+                "automation-bench cold pack: n=%d p50=%.2fms p95=%.2fms mean=%.2fMiB allocated%n",
+                nanos.length, nanos[nanos.length / 2 - 1] / 1e6, nanos[(int) Math.ceil(nanos.length * .95) - 1] / 1e6,
+                java.util.Arrays.stream(bytes).average().orElseThrow() / (1024 * 1024));
+    }
+
+    @Test
     void candidateConfigsCompileWithStableDefinitionIds() throws Exception {
         var sources = RuleCatalog.compile(fixture("rewrite/domain-cards").toString(), fixture("rewrite/recipes").toString());
         assertEquals(List.of("domain-cards:deathrun", "domain-cards:splinter-trail"), sources.stream().map(RuleCatalog.Source::id).toList());
         assertTrue(sources.get(0).program().ruleIds().contains("run.continue"));
         assertTrue(sources.get(1).program().ruleIds().contains("trail.continue"));
         assertEquals(1, RuleCatalog.compile(fixture("rewrite/consumables").toString(), fixture("rewrite/recipes").toString()).size());
+    }
+
+    @Test
+    void packCompilationReusesRecipesWithoutCrossCatalogMutation() throws Exception {
+        ObjectNode cards = fixture("rewrite/domain-cards");
+        ObjectNode items = cards.deepCopy().put("category", "items");
+        String recipes = fixture("rewrite/recipes").toString();
+        var files = new java.util.LinkedHashMap<String, String>();
+        files.put("domain-cards", cards.toString());
+        files.put("items", items.toString());
+        var pack = AutomationHost.compile("test", files, recipes);
+        for (var entry : files.entrySet()) {
+            for (var source : RuleCatalog.compile(entry.getValue(), recipes)) {
+                var compiled = pack.programs().get(source.id());
+                assertNotNull(compiled);
+                assertEquals(source.program().ruleIds(), compiled.ruleIds());
+                for (String id : compiled.ruleIds())
+                    assertEquals(source.program().rule(id), compiled.rule(id), source.id() + "/" + id);
+            }
+        }
+        ObjectNode invalid = fixture("rewrite/recipes");
+        ((ObjectNode) invalid.at("/recipes/0/args/startCosts")).put("type", "invalid");
+        assertThrows(AutomationHost.NotReady.class, () -> AutomationHost.compile("test", java.util.Map.of(), invalid.toString()));
+        assertThrows(AutomationHost.NotReady.class, () -> AutomationHost.compile("test", files, invalid.toString()));
     }
 
     @Test

@@ -23,8 +23,18 @@ public final class RuleCatalog {
     private RuleCatalog() {}
 
     public static List<Source> compile(String catalogJson, String recipesJson) throws IOException {
-        ObjectNode catalog = RuleCompiler.parseDocument(catalogJson, "dmmap-daggerheart");
-        Map<String, ObjectNode> recipes = RuleCompiler.recipes(RuleCompiler.parseDocument(recipesJson, "dmmap-daggerheart-rules"));
+        return compile(RuleCompiler.parseDocument(catalogJson, "dmmap-daggerheart"), recipes(recipesJson));
+    }
+
+    static Map<String, ObjectNode> recipes(String recipesJson) throws IOException {
+        return RuleCompiler.recipes(RuleCompiler.parseDocument(recipesJson, "dmmap-daggerheart-rules"));
+    }
+
+    static List<Source> compile(String catalogJson, Map<String, ObjectNode> recipes) throws IOException {
+        return compile(RuleCompiler.parseDocument(catalogJson, "dmmap-daggerheart"), recipes);
+    }
+
+    private static List<Source> compile(ObjectNode catalog, Map<String, ObjectNode> recipes) {
         RuleJson.fields(catalog, "/", "format", "version", "category", "label", "entries");
         String category = RuleJson.text(catalog.path("category"), "/category");
         if (!CATEGORIES.contains(category)) throw RuleJson.error("/category", "Unknown catalog category.");
@@ -91,11 +101,12 @@ public final class RuleCatalog {
 
     public static Map<String, List<Source>> compilePack(Map<String, String> catalogs, String recipesJson) throws IOException {
         if (!catalogs.keySet().equals(CATEGORIES)) throw RuleJson.error("/pack", "A replacement pack requires all nine catalog categories.");
+        Map<String, ObjectNode> recipes = recipes(recipesJson);
         Map<String, List<Source>> result = new LinkedHashMap<>();
         for (String category : CATEGORIES.stream().sorted().toList()) {
             ObjectNode file = RuleCompiler.parseDocument(catalogs.get(category), "dmmap-daggerheart");
             if (!category.equals(file.path("category").asText())) throw RuleJson.error("/pack/" + category, "Catalog category does not match its filename.");
-            result.put(category, compile(catalogs.get(category), recipesJson));
+            result.put(category, compile(file, recipes));
         }
         return Map.copyOf(result);
     }
