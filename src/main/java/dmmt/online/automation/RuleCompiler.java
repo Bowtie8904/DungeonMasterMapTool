@@ -352,8 +352,8 @@ public final class RuleCompiler {
             RuleExpression.validate(effect.get("while"), path + "/while");
             for (String ref : RuleExpression.references(effect.get("while"))) {
                 String root = ref.split("\\.")[0];
-                if (!Set.of("source", "actor", "state").contains(root) || "state".equals(root) && !state.has(ref.split("\\.")[1]))
-                    throw RuleJson.error(path + "/while", "A derived effect condition may only read source, actor and declared state: " + ref);
+                if (!Set.of("source", "actor", "state", "sourcePools").contains(root) || "state".equals(root) && !state.has(ref.split("\\.")[1]))
+                    throw RuleJson.error(path + "/while", "A derived effect condition may only read source, actor, source pools and declared state: " + ref);
             }
         }
         if (effect.has("exclusiveGroup")) RuleJson.id(effect.get("exclusiveGroup"), path + "/exclusiveGroup");
@@ -775,6 +775,7 @@ public final class RuleCompiler {
                         || "attachedTo".equals(parts[1]) && decl.attachable() && parts.length == 3 && ATTACHED_TO_FACTS.contains(parts[2]);
                 case "gear" -> false;
                 case "pool" -> decl.pools().has(parts[1]);
+                case "sourcePools" -> decl.pools().has(parts[1]) && "source".equals(decl.pools().path(parts[1]).path("scope").asText());
                 case "effects" -> parts.length == 2 && decl.effects().has(parts[1]);
                 default -> true;
             };

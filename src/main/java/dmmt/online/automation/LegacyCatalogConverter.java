@@ -57,7 +57,7 @@ public final class LegacyCatalogConverter {
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
             "markedHpOnly", "finalSevere", "markStress", "gainHope", "giveFear", "clearStress", "gainTokens", "armorCost", "followUp", "hiddenRoll", "consumeItem", "preserveAfterIncomingDamage", "loadoutDomain",
-            "double", "recoveryChoice", "reflectHp", "quantity");
+            "double", "recoveryChoice", "reflectHp", "quantity", "advancesSourcePool");
     private static final List<String> MARKS_FIELDS = List.of("severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor");
     private static final List<String> PREPARE_FIELDS = List.of("negate", "halve", "reduce", "double");
     private static final List<String> SEVERITIES = List.of("minor", "major", "severe", "massive");
@@ -260,6 +260,8 @@ public final class LegacyCatalogConverter {
                 continue;
             }
             boolean usesBudget = limited && legacyRule.path("usesSource").asBoolean(true);
+            if ("conditionalRollTriggers".equals(next.family()) && "zone".equals(legacyRule.path("splendorAction").asText()))
+                legacyRule = zone(legacyRule, next.path(), p, effects, pools);
             ObjectNode rule = switch (next.family()) {
                 case "actions" -> legacyRule.has("deathMove")
                         ? deathAction(legacyRule, death, next.path(), p, effects, pools, usesBudget, extra, out)
@@ -1951,6 +1953,45 @@ public final class LegacyCatalogConverter {
         return rule;
     }
 
+    /** Each use raises the shared source pool by one; using it at capacity empties the pool, ending the shared effect. */
+    private static void advanceSourcePool(String pool, int max, ArrayNode steps) {
+        JsonNode value = read("sourcePools." + pool + ".value");
+        ObjectNode full = RuleJson.JSON.createObjectNode();
+        full.putArray("gte").add(value).add(max);
+        steps.addObject().put("op", "pool.spend").put("pool", pool).set("amount", value.deepCopy());
+        ObjectNode spend = (ObjectNode) steps.get(steps.size() - 1);
+        spend.set("if", full);
+        steps.addObject().put("op", "pool.gain").put("pool", pool).put("amount", 1).putObject("if").putArray("lt").add(value.deepCopy()).add(max);
+    }
+
+    /**
+     * Zone of Protection: activating sets the shared Protection pool to 1 and offers allies a claim that starts the zone
+     * effect on them. Each use of the zone's mitigation, by anyone, raises the shared value that reduces the next hit.
+     */
+    private static JsonNode zone(JsonNode trigger, String path, Problems p, ObjectNode effects, Pools pools) {
+        ObjectNode copy = ((ObjectNode) trigger).deepCopy();
+        copy.remove("splendorAction");
+        if (!pools.local().has("protection")) { p.add(path + "/splendorAction", "The zone needs a Protection pool."); return copy; }
+        ((ObjectNode) pools.local().get("protection")).put("scope", "source");
+        ObjectNode marker = RuleJson.JSON.createObjectNode().put("name", "Zone of Protection source").put("kind", "buff");
+        String id = declareEffect(marker, path + "/effect", p, effects);
+        if (id != null) {
+            ObjectNode declared = (ObjectNode) effects.get(id);
+            declared.remove("until");
+            ObjectNode active = RuleJson.JSON.createObjectNode();
+            active.putArray("gt").add(read("sourcePools.protection.value")).add(0);
+            declared.set("while", active);
+        }
+        copy.putArray("steps").addObject().put("op", "gain").put("resource", "protection").put("amount", 1);
+        ObjectNode mitigation = RuleJson.JSON.createObjectNode().put("id", "protection").put("label", "Zone of Protection")
+                .put("reduce", "@sourcepool_protection").put("defaultOn", true).put("advancesSourcePool", "protection");
+        ObjectNode zoneEffect = RuleJson.JSON.createObjectNode().put("name", "Zone of Protection").put("kind", "buff").put("until", "manual");
+        zoneEffect.putArray("mitigation").add(mitigation);
+        ObjectNode join = copy.putArray("chatBenefits").addObject().put("id", "join").put("label", "Join Zone of Protection");
+        join.putArray("steps").addObject().put("op", "effect").set("effect", zoneEffect);
+        return copy;
+    }
+
     /** Salvation Beam: spend chosen Stress to clear the same amount of Hit Points on one wounded ally per use. */
     private static void salvationBeam(ObjectNode rule, ArrayNode steps) {
         ObjectNode unmarked = RuleJson.JSON.createObjectNode();
@@ -2092,6 +2133,8 @@ public final class LegacyCatalogConverter {
         }
         commonConditions(mitigation, path, p, when);
         boolean quantity = mitigationQuantity(mitigation, path, p, pools, rule, when);
+        String shared = mitigation.path("advancesSourcePool").asText("");
+        if (!shared.isEmpty()) when.addObject().putArray("gt").add(read("sourcePools." + shared + ".value")).add(0);
         applyWhen(rule, when);
         if (mitigation.has("cost")) {
             if ("marks".equals(stage) && (mitigation.get("cost").has("hp") || mitigation.get("cost").has("armor")))
@@ -2116,6 +2159,7 @@ public final class LegacyCatalogConverter {
             default -> {}
         }
         appliedSteps(mitigation, path, p, pools, steps, stage);
+        if (!shared.isEmpty()) advanceSourcePool(shared, pools.local().path(shared).path("max").asInt(), steps);
         if (recovery) recoveryChoice(path, p, rule, steps, stage);
         if (mitigation.has("effect")) {
             String effect = declareEffect(mitigation.get("effect"), path + "/effect", p, effects);
@@ -3519,6 +3563,7 @@ public final class LegacyCatalogConverter {
             case "level" -> read("actor.level");
             case "hope" -> read("actor.hope.value");
             case "amount" -> read("input.amount");
+            case "sourcepool_protection" -> read("sourcePools.protection.value");
             case "proficiency" -> read("actor.proficiency.value");
             case "total_proficiency" -> read("actor.stats.proficiency");
             case "armor_available" -> read("actor.stats.armorAvailable");

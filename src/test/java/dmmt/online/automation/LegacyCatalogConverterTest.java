@@ -955,6 +955,26 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void zoneOfProtectionSharesOneSourcePoolAcrossEveryHolder() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"t","name":"T","automation":{"spellcastDifficulty":16,"uses":{"max":1,"per":"longRest"},
+                 "resources":[{"id":"protection","label":"Protection","initial":0,"max":6,"resetOn":"longRest","resetValue":0}],
+                 "conditionalRollTriggers":[{"id":"activate","label":"Activate","on":"card:T","when":"success","difficulty":16,"hostOwned":true,"splendorAction":"zone"}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        JsonNode block = block(result, 0);
+        assertEquals("source", block.at("/pools/protection/scope").asText(), block.toString());
+        JsonNode rules = block.path("rules");
+        JsonNode mitigation = null;
+        for (JsonNode rule : rules) if ("damage.prepare".equals(rule.at("/bindings/0/event").asText())) mitigation = rule;
+        assertNotNull(mitigation, rules.toString());
+        assertTrue(mitigation.toString().contains("sourcePools.protection.value"), mitigation.toString());
+        assertEquals("pool.spend", mitigation.at("/do/2/op").asText(), mitigation.toString());
+        assertEquals("pool.gain", mitigation.at("/do/3/op").asText(), mitigation.toString());
+        RuleCompiler.Program program = program(result, 0);
+        assertNotNull(program);
+    }
+
+    @Test
     void resurrectionVaultsTheCardOnlyOnFiveOrLess() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"t","name":"T","automation":{"spellcastDifficulty":13,"rollTriggers":[

@@ -9,7 +9,7 @@ import java.util.Set;
 import java.util.HashSet;
 
 public final class RuleExpression {
-    private static final Set<String> ROOTS = Set.of("source", "actor", "recipient", "event", "state", "input", "die", "result", "args", "effects", "gear");
+    private static final Set<String> ROOTS = Set.of("source", "actor", "recipient", "event", "state", "input", "die", "result", "args", "effects", "gear", "sourcePools");
     private static final Set<String> UNARY = Set.of("not", "floor", "ceil", "negate", "size", "flatten");
     private static final Set<String> BINARY = Set.of("subtract", "divide", "eq", "ne", "gt", "gte", "lt", "lte", "includes", "count", "pluck", "containsText", "at");
     private static final Set<String> MANY = Set.of("add", "multiply", "min", "max", "and", "or");
