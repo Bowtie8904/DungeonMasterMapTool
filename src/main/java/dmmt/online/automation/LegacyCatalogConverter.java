@@ -33,7 +33,7 @@ public final class LegacyCatalogConverter {
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
             "damage", "alternateProfiles", "damageTypeChoice", "rest", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions", "conditionalRollOptions",
             "hopeReward", "classResourceOnly", "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "zeroHopeClearArmor",
-            "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases", "hideSpellcast");
+            "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases", "hideSpellcast", "companion", "companionTraining");
     private static final Set<String> DEATH_KINDS = Set.of("hopeBonus", "hopeSpend", "mask", "spectral", "egg", "battleHardened",
             "unbreakable", "undying", "lifeWard");
     /** Legacy gated families that are their base family plus extra conditions, which every family converts the same way. */
@@ -57,7 +57,7 @@ public final class LegacyCatalogConverter {
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
             "markedHpOnly", "finalSevere", "markStress", "gainHope", "giveFear", "clearStress", "gainTokens", "armorCost", "followUp", "hiddenRoll", "consumeItem", "preserveAfterIncomingDamage", "loadoutDomain",
-            "double", "recoveryChoice", "reflectHp", "quantity", "advancesSourcePool", "patronDice", "destroyResourceOnMax", "reportRoll");
+            "double", "recoveryChoice", "reflectHp", "quantity", "advancesSourcePool", "patronDice", "destroyResourceOnMax", "reportRoll", "companionIntercept", "companionArmored");
     private static final List<String> MARKS_FIELDS = List.of("severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor");
     private static final List<String> PREPARE_FIELDS = List.of("negate", "halve", "reduce", "double");
     private static final List<String> SEVERITIES = List.of("minor", "major", "severe", "massive");
@@ -68,7 +68,7 @@ public final class LegacyCatalogConverter {
             "requiresEffect", "excludesEffect", "endEffect", "uses", "usesSource", "actionRoll", "target",
             "excludeSourceActor", "hostOwned", "selectAmount", "resourceRoll", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
             "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime", "table",
-            "hostRollAction", "bloodAutomation", "castTokens", "patronDice", "witchAction");
+            "hostRollAction", "bloodAutomation", "castTokens", "patronDice", "witchAction", "requiresCompanion");
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
@@ -204,6 +204,9 @@ public final class LegacyCatalogConverter {
             JsonNode list = legacy.get("resources");
             for (int i = 0; i < list.size(); i++) resource(list.get(i), path + "/resources/" + i, p, pools.local(), lifecycle);
         }
+        if (legacy.has("companion")) companion(legacy.get("companion"), path + "/companion", p, pools.local(), lifecycle);
+        if (legacy.has("companionTraining") && (!legacy.path("companionTraining").isInt() || legacy.path("companionTraining").asInt() < 1))
+            p.add(path + "/companionTraining", "Expected a positive whole number of training options.");
         ArrayNode passive = RuleJson.JSON.createArrayNode();
         for (String family : List.of("modifiers", "conditionalModifiers")) {
             JsonNode list = legacy.path(family);
@@ -746,6 +749,54 @@ public final class LegacyCatalogConverter {
             list.addObject().put("feature", entry.getKey().substring(5)).put("limit", "uses").put("max", entry.getValue().asInt());
         });
         if (!list.isEmpty()) out.set("limitOverrides", list);
+    }
+
+    private static final String COMPANION_SLOTS = "companion-stress-slots";
+
+    /**
+     * A companion is generic pool state: one pool of unmarked Stress slots (marking spends, an unavailable companion has none
+     * left) plus one counter pool per training option that is a plain flag. Option stats and choices stay sheet data.
+     */
+    private static void companion(JsonNode companion, String path, Problems p, ObjectNode pools, List<ObjectNode> lifecycle) {
+        if (!companion.isObject()) { p.add(path, "Expected a companion object."); return; }
+        p.onlyFields(companion, path, Set.of("evasion", "stress", "maxStress", "damage", "range", "dice", "ranges", "options"));
+        JsonNode slots = companion.path("stress"), max = companion.path("maxStress");
+        if (!slots.isInt() || slots.asInt() < 1 || !max.isInt() || max.asInt() < slots.asInt()) {
+            p.add(path + "/stress", "Expected starting and maximum Stress slots."); return;
+        }
+        if (pools.has(COMPANION_SLOTS)) { p.add(path, "Only one companion can be declared."); return; }
+        pools.putObject(COMPANION_SLOTS).put("kind", "number").put("scope", "actor").put("label", "Companion Stress slots left")
+                .put("max", max.asInt()).put("initial", slots.asInt());
+        JsonNode options = companion.path("options");
+        for (int i = 0; i < options.size(); i++) {
+            JsonNode option = options.get(i);
+            String id = "companion-" + option.path("id").asText();
+            if (!ID.matcher(id).matches() || !option.path("max").isInt() || option.path("max").asInt() < 1) {
+                p.add(path + "/options/" + i, "Companion training needs an ID and a maximum."); continue;
+            }
+            if (option.has("stat") || option.has("choose") || pools.has(id)) continue;
+            pools.putObject(id).put("kind", "number").put("scope", "actor").put("label", escape(option.path("name").asText(id)))
+                    .put("max", option.path("max").asInt());
+        }
+        ObjectNode rule = restRule("companion-returns", "rest.long", "rest-long", "rest", "automatic");
+        rule.putObject("when").putArray("eq").add(read("actor.pools." + COMPANION_SLOTS + ".value")).add(0);
+        rule.putArray("do").addObject().put("op", "pool.gain").put("pool", COMPANION_SLOTS).put("amount", 1);
+        ((ObjectNode) rule.get("ui")).put("label", "Companion returns").put("report", "Your companion returns and clears 1 Stress.");
+        lifecycle.add(rule);
+    }
+
+    /** {@code requiresCompanion} and the intercept options need an available companion; Armored also needs that training. */
+    private static void companionGates(JsonNode legacy, String path, Problems p, Pools pools, ArrayNode when) {
+        boolean needs = legacy.path("requiresCompanion").asBoolean(false) || legacy.path("companionIntercept").asBoolean(false);
+        if (legacy.has("requiresCompanion") && !legacy.path("requiresCompanion").isBoolean()) p.add(path + "/requiresCompanion", "Expected a boolean.");
+        if (needs) {
+            if (!pools.has(COMPANION_SLOTS)) p.add(path, "A companion rule needs a companion declaration.");
+            else when.addObject().putArray("gt").add(read("actor.pools." + COMPANION_SLOTS + ".value")).add(0);
+        }
+        if (legacy.path("companionArmored").asBoolean(false)) {
+            if (!pools.has("companion-armored")) p.add(path + "/companionArmored", "Armored needs the companion's Armored training option.");
+            else when.addObject().putArray("gt").add(read("actor.pools.companion-armored.value")).add(0);
+        }
     }
 
     private static void resource(JsonNode resource, String path, Problems p, ObjectNode pools, List<ObjectNode> lifecycle) {
@@ -2371,6 +2422,14 @@ public final class LegacyCatalogConverter {
     private static ObjectNode mitigation(JsonNode mitigation, String path, Problems p, ObjectNode effects, Pools pools, boolean limited) {
         p.onlyFields(mitigation, path, MITIGATION_FIELDS);
         hostOwned(mitigation, path, p);
+        boolean armoredIntercept = mitigation.path("companionArmored").asBoolean(false);
+        if (mitigation.path("companionIntercept").asBoolean(false) && !armoredIntercept && pools.has(COMPANION_SLOTS)) {
+            // The companion marks Stress instead of the owner; Armored pays an owner Armor Slot instead.
+            ObjectNode copy = mitigation.deepCopy();
+            ObjectNode cost = copy.has("cost") && copy.get("cost").isObject() ? (ObjectNode) copy.get("cost") : copy.putObject("cost");
+            cost.put(COMPANION_SLOTS, 1);
+            mitigation = copy;
+        }
         JsonNode roll = mitigation.path("roll");
         boolean rolled = mitigation.has("roll"), rollHits = rolled && roll.has("success");
         boolean marks = MARKS_FIELDS.stream().anyMatch(mitigation::has);
@@ -2403,12 +2462,13 @@ public final class LegacyCatalogConverter {
             else when.addObject().putArray("gte").add(read("event.applied.severity")).add(3);
         }
         commonConditions(mitigation, path, p, when);
+        companionGates(mitigation, path, p, pools, when);
         boolean quantity = mitigationQuantity(mitigation, path, p, pools, rule, when);
         String shared = mitigation.path("advancesSourcePool").asText("");
         if (!shared.isEmpty()) when.addObject().putArray("gt").add(read("sourcePools." + shared + ".value")).add(0);
         applyWhen(rule, when);
         if (mitigation.has("cost")) {
-            if ("marks".equals(stage) && (mitigation.get("cost").has("hp") || mitigation.get("cost").has("armor")))
+            if ("marks".equals(stage) && !armoredIntercept && (mitigation.get("cost").has("hp") || mitigation.get("cost").has("armor")))
                 p.add(path + "/cost", "Marks-stage options cannot pay with the tracks the damage is about to mark.");
             costs(mitigation.get("cost"), path + "/cost", p, pools, rule);
             if (quantity) for (JsonNode cost : rule.path("costs")) times((ObjectNode) cost, "amount", read("input.quantity"));
@@ -2890,6 +2950,7 @@ public final class LegacyCatalogConverter {
             p.add(path + "/hostOwned", "Expected a boolean.");
         ArrayNode when = RuleJson.JSON.createArrayNode();
         commonConditions(action, path, p, when);
+        companionGates(action, path, p, pools, when);
         JsonNode damage = action.path("damage");
         boolean usesSpellcastTrait = "spellcast".equals(action.path("actionRoll").path("trait").asText())
                 || "spellcast".equals(damage.path("count").asText());
@@ -4118,6 +4179,11 @@ public final class LegacyCatalogConverter {
             for (JsonNode resource : node.path("automation").path("resources")) {
                 ObjectNode pools = RuleJson.JSON.createObjectNode();
                 resource(resource, "", new Problems("", new ArrayList<>(), new ArrayList<>()), pools, new ArrayList<>());
+                pools.fields().forEachRemaining(field -> shared.putIfAbsent(field.getKey(), (ObjectNode) field.getValue()));
+            }
+            if (node.has("automation") && node.path("automation").has("companion")) {
+                ObjectNode pools = RuleJson.JSON.createObjectNode();
+                companion(node.path("automation").get("companion"), "", new Problems("", new ArrayList<>(), new ArrayList<>()), pools, new ArrayList<>());
                 pools.fields().forEachRemaining(field -> shared.putIfAbsent(field.getKey(), (ObjectNode) field.getValue()));
             }
             node.forEach(child -> collectPools(child, shared));

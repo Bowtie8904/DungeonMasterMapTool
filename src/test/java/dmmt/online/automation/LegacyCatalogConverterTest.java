@@ -1023,6 +1023,24 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void companionIsPoolStateWithInterceptsPayingItsSlots() throws Exception {
+        String text = catalog("""
+                {"id":"pet","name":"Companion","automation":{"companionTraining":1,"companion":{"evasion":10,"stress":3,"maxStress":6,
+                  "options":[{"id":"armored","name":"Armored","max":1},{"id":"resilient","name":"Resilient","max":3,"stat":"stress","value":1}]}}},
+                {"id":"loyal","name":"Loyal","automation":{"actions":[{"id":"use","label":"Loyal","requiresCompanion":true}],
+                  "mitigation":[{"id":"plain","label":"Plain","companionIntercept":true,"when":{"lastHp":true},"replaceHp":true,"insteadOfArmor":true},
+                   {"id":"armor","label":"Armored","companionIntercept":true,"companionArmored":true,"cost":{"armor":1},"when":{"lastHp":true},"replaceHp":true,                   "insteadOfArmor":true}]}}""");
+                           var result = LegacyCatalogConverter.convert(text, LegacyCatalogConverter.sharedPools(List.of(text)));
+                           assertEquals(2, result.converted(), result.diagnostics().toString());
+                           JsonNode pet = block(result, 0);
+        assertEquals(3, pet.at("/pools/companion-stress-slots/initial").asInt(), pet.toString());
+        assertTrue(pet.at("/pools").has("companion-armored") && !pet.at("/pools").has("companion-resilient"), pet.toString());
+        String loyal = block(result, 1).toString();
+        assertTrue(loyal.contains("companion-stress-slots") && loyal.contains("companion-armored"), loyal);
+        for (int i = 0; i < 2; i++) assertNotNull(program(result, i));
+    }
+
+    @Test
     void lunarPhasesBecomeDerivedEffectsOverADiePool() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"moon","name":"Moon","automation":{
