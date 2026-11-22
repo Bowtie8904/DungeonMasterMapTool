@@ -663,6 +663,26 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void freeFormChatRollIsSavedButIsNotACharacterReactionSource() throws Exception {
+        splendorActor("healer", "Healing Hands");
+        splendorActor("patient");
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            ws.sendText("{\"type\":\"roll\",\"expression\":\"2d12+30\"}", true).join();
+            JsonNode roll = inbox.next("roll");
+            assertTrue(roll.required("total").asInt() >= 32);
+            assertEquals(roll, store.historyEntry(campaign.getId(), roll.required("id").asLong(), roll.required("ts").asLong()));
+            var request = splendorRequest("healer", "Healing Hands", "hp", roll).put("targetActorId", "patient");
+            var rejected = featureHttp(cookie, request);
+            assertEquals(400, rejected.statusCode(), rejected.body());
+            assertTrue(rejected.body().contains("no longer available for a feature reaction"), rejected.body());
+            assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "patient")).at("/hp/on").asInt());
+        } finally { ws.abort(); }
+    }
+
+    @Test
     void splendorInvigorationOffersSpentUsesAndRestoresExactlyOneFromHostDice() throws Exception {
         ObjectNode source = splendorActor("invigorator", "Invigoration");
         ObjectNode target = splendorActor("limited", "Second Wind");

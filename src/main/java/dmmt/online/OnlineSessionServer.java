@@ -6793,6 +6793,16 @@ public final class OnlineSessionServer {
     }
 
     private synchronized void onRoll(Client client, JsonNode msg) {
+        if (msg.properties().stream().allMatch(field -> CHAT_EXPRESSION_FIELDS.contains(field.getKey()))) {
+            try {
+                String to = chatRecipient(msg);
+                DiceRoller.Result dice = DiceRoller.roll(msg.path("expression").asText(""), config.maxDice(), diceRandom);
+                deliver(rollMessage(client, to, dice), to);
+            } catch (IllegalArgumentException e) {
+                sendTo(client.ctx, error(e.getMessage()));
+            }
+            return;
+        }
         String invisibilityRef = invisibilityRollRef(client, msg);
         if (invisibilityRef != null && invisibilityRolls.containsKey(invisibilityRef)) {
             sendTo(client.ctx, invisibilityRolls.get(invisibilityRef).toString());
@@ -6840,18 +6850,7 @@ public final class OnlineSessionServer {
             sendTo(client.ctx, error(e.getMessage()));
             return;
         }
-        ObjectNode out = MAPPER.createObjectNode();
-        synchronized (this) {
-            out.put("id", ++chatId);
-        }
-        out.put("type", "roll").put("ts", System.currentTimeMillis());
-        out.put("fromId", client.playerId).put("from", chatName(client.playerId, client.playerName));
-        putChatArtwork(out, client.playerId);
-        putRecipient(out, to);
-        out.put("expression", result.expression());
-        ArrayNode rolls = out.putArray("rolls");
-        result.rolls().forEach(rolls::add);
-        out.put("total", result.total());
+        ObjectNode out = rollMessage(client, to, result);
         if (rollSource != null) out.set("rollSource", rollSource);
         if (breakdown != null) {
             ArrayNode details = MAPPER.valueToTree(breakdown);
@@ -6863,6 +6862,18 @@ public final class OnlineSessionServer {
             out.set("breakdown", details);
         }
         completeRoll(client, msg, out, to, result);
+    }
+
+    private static final Set<String> CHAT_EXPRESSION_FIELDS = Set.of("type", "expression", "toId", "whisper");
+
+    private ObjectNode rollMessage(Client client, String to, DiceRoller.Result result) {
+        ObjectNode out = MAPPER.createObjectNode().put("id", ++chatId).put("type", "roll").put("ts", System.currentTimeMillis());
+        out.put("fromId", client.playerId).put("from", chatName(client.playerId, client.playerName));
+        putChatArtwork(out, client.playerId);
+        putRecipient(out, to);
+        out.put("expression", result.expression()).put("total", result.total());
+        result.rolls().forEach(out.putArray("rolls")::add);
+        return out;
     }
 
     private record ResolvedDice(DiceRoller.Result result, List<DiceRoller.Detail> breakdown, List<ArrayNode> notes) {}
