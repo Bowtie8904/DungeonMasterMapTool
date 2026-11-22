@@ -52,6 +52,17 @@ export interface ControlText {
 /** Renders host-described buttons only; roll options belong to the enclosing roll transaction. */
 export function ruleControl(descriptor: RuleDescriptor, submit: (intent: RuleIntent) => Promise<void>, text: ControlText): HTMLElement {
   if (descriptor.mode !== 'button') throw new Error('Only button bindings are independent actions; options belong to the enclosing roll transaction.');
+  return intentControl(descriptor, intent => submit({
+    ...intent, sourceId: descriptor.sourceId, sourceInstanceId: descriptor.sourceInstanceId,
+    ...(descriptor.eachId === undefined ? {} : { eachId: descriptor.eachId }),
+    ruleId: descriptor.ruleId, bindingId: descriptor.bindingId,
+  }), text);
+}
+
+type ButtonIntent = Pick<RuleIntent, 'requestId' | 'expectedRevision' | 'inputs'>;
+type ButtonDescriptor = Pick<RuleDescriptor, 'revision' | 'label' | 'description' | 'available' | 'reason' | 'inputs'>;
+
+export function intentControl(descriptor: ButtonDescriptor, submit: (intent: ButtonIntent) => Promise<void>, text: ControlText): HTMLElement {
   const error = el('div', { class: 'error', role: 'alert' });
   const reason = el('span', { class: 'muted' }, descriptor.available ? '' : descriptor.reason ?? '');
   const button = el('button', { type: 'button', class: 'small', disabled: !descriptor.available,
@@ -59,17 +70,14 @@ export function ruleControl(descriptor: RuleDescriptor, submit: (intent: RuleInt
   const root = el('div', { class: 'dh' }, button, reason, error);
   let pending = false;
   let completed = false;
-  let retryIntent: RuleIntent | undefined;
+  let retryIntent: ButtonIntent | undefined;
   let activeDialog: HTMLDialogElement | undefined;
 
   const send = async (inputs: RuleIntent['inputs'], go?: HTMLButtonElement, cancel?: HTMLButtonElement,
     dialogError?: HTMLElement, fields: HTMLInputElement[] = []): Promise<void> => {
     if (pending || completed) return;
     retryIntent ??= {
-      requestId: randomId(), sourceId: descriptor.sourceId, sourceInstanceId: descriptor.sourceInstanceId,
-      ...(descriptor.eachId === undefined ? {} : { eachId: descriptor.eachId }),
-      ruleId: descriptor.ruleId, bindingId: descriptor.bindingId, expectedRevision: descriptor.revision,
-      inputs: structuredClone(inputs),
+      requestId: randomId(), expectedRevision: descriptor.revision, inputs: structuredClone(inputs),
     };
     pending = true;
     error.textContent = '';

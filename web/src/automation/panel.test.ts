@@ -25,17 +25,6 @@ class Element {
   get text(): string { return this.textContent + this.children.map(child => child.text).join(''); }
 }
 
-vi.mock('./controls', () => ({
-  ruleControl: (descriptor: RuleDescriptor, submit: (intent: RuleIntent) => Promise<void>) => {
-    const button = document.createElement('button');
-    button.textContent = descriptor.label ?? '';
-    button.addEventListener('click', () => void submit({ requestId: 'r1', sourceId: descriptor.sourceId,
-      sourceInstanceId: descriptor.sourceInstanceId, ruleId: descriptor.ruleId, bindingId: descriptor.bindingId,
-      expectedRevision: descriptor.revision, inputs: {} } as RuleIntent));
-    return button;
-  },
-}));
-
 const { automationPanel, executeAutomation } = await import('./panel');
 type DescribedActions = import('./panel').DescribedActions;
 const fake = (element: HTMLElement) => element as unknown as Element;
@@ -92,6 +81,34 @@ describe('automation panel', () => {
     await settle();
     expect(panel.hidden).toBe(false);
     expect(fake(panel).text).toContain('Not your sheet.');
+  });
+
+  it('submits only profile IDs and retries the identical roll after a lost response', async () => {
+    const requests: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, options: RequestInit) => {
+      requests.push(String(options.body));
+      if (requests.length === 1) throw new Error('Lost response');
+      return new Response(JSON.stringify({ event: { check: { total: 17 } }, actions: [] }));
+    }));
+    const fetchActions = vi.fn(async () => ({ revision: 5, actions: [], profiles: [
+      { id: 'far', sourceInstanceId: 's1', label: 'Thrown', sourceName: 'Blade', damage: { sides: 8 } },
+      { id: 'near', sourceInstanceId: 's1', label: 'Close', sourceName: 'Blade' },
+    ] }));
+    const panel = automationPanel('a1', 'sheet', 'Actions', fetchActions);
+    await settle();
+    const buttons = fake(panel).all('button');
+    expect(buttons.map(button => button.text)).toEqual(['Blade: Thrown (attack)', 'Blade: Thrown (damage)', 'Blade: Close (attack)']);
+    buttons[1].click();
+    await settle();
+    expect(fake(panel).text).toContain('Lost response');
+    buttons[1].click();
+    await settle();
+    expect(requests).toHaveLength(2);
+    expect(requests[1]).toBe(requests[0]);
+    expect(JSON.parse(requests[0])).toEqual({ request: { requestId: expect.any(String), expectedRevision: 5,
+      selections: [], profileRoll: { sourceInstanceId: 's1', profileId: 'far', kind: 'damage' } } });
+    expect(fake(panel).text).toContain('Blade: Thrown (damage): 17');
+    expect(fetchActions).toHaveBeenCalledTimes(2);
   });
 
   it('maps an intent to a host selection without client-only fields', async () => {

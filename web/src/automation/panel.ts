@@ -1,10 +1,11 @@
 import { el } from '../login';
 import { hostFetch } from '../api';
-import { ruleControl, type ControlText, type RuleDescriptor, type RuleIntent } from './controls';
+import { intentControl, ruleControl, type ControlText, type RuleDescriptor, type RuleIntent } from './controls';
 
 export interface DescribedActions {
   revision: number;
   actions: RuleDescriptor[];
+  profiles?: Array<{ id: string; label: string; sourceInstanceId: string; sourceName: string; damage?: object }>;
 }
 
 export const CONTROL_TEXT: ControlText = {
@@ -44,11 +45,13 @@ export async function executeAutomation(actorId: string, intent: RuleIntent): Pr
     sourceInstanceId: intent.sourceInstanceId, ruleId: intent.ruleId, bindingId: intent.bindingId, inputs: intent.inputs,
   };
   if (intent.eachId !== undefined) selection.eachId = intent.eachId;
+  return postIntent(actorId, { requestId: intent.requestId, expectedRevision: intent.expectedRevision, selections: [selection] });
+}
+
+async function postIntent(actorId: string, request: object): Promise<unknown> {
   const response = await hostFetch(`/api/automation/${encodeURIComponent(actorId)}`, {
     method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      request: { requestId: intent.requestId, expectedRevision: intent.expectedRevision, selections: [selection] },
-    }),
+    body: JSON.stringify({ request }),
   });
   if (!response.ok) throw new Error(await errorText(response));
   return response.json();
@@ -86,13 +89,27 @@ export function automationPanel(actorId: string, surface = 'sheet', title = 'Act
       const described = await fetchActions(actorId, surface, event);
       if (current !== generation) return;
       const buttons = (described?.actions ?? []).filter(action => action.mode === 'button');
-      list.replaceChildren(...buttons.map(action => ruleControl({ ...action, revision: described!.revision }, async intent => {
+      const controls = buttons.map(action => ruleControl({ ...action, revision: described!.revision }, async intent => {
         const result = await submit(actorId, intent);
         output.textContent = actionReports(result).join('\n');
         void load();
-      }, CONTROL_TEXT)));
+      }, CONTROL_TEXT));
+      for (const profile of described?.profiles ?? []) {
+        for (const kind of profile.damage ? ['attack', 'damage'] : ['attack']) {
+          const label = `${profile.sourceName}: ${profile.label} (${kind})`;
+          controls.push(intentControl({ label, available: true, revision: described!.revision },
+            async ({ requestId, expectedRevision }) => {
+              const result = await postIntent(actorId, { requestId, expectedRevision, selections: [],
+                profileRoll: { sourceInstanceId: profile.sourceInstanceId, profileId: profile.id, kind } });
+              const event = (result as { event: { check: { total: number } } }).event;
+              output.textContent = [`${label}: ${event.check.total}`, ...actionReports(result)].join('\n');
+              void load();
+            }, CONTROL_TEXT));
+        }
+      }
+      list.replaceChildren(...controls);
       status.textContent = '';
-      root.hidden = buttons.length === 0 && !output.textContent;
+      root.hidden = controls.length === 0 && !output.textContent;
     } catch (failure) {
       if (current !== generation) return;
       status.textContent = failure instanceof Error ? failure.message : CONTROL_TEXT.failed;
