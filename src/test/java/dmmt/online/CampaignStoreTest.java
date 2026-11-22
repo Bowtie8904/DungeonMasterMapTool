@@ -53,6 +53,136 @@ class CampaignStoreTest {
     }
 
     @Test
+    void automationClaimsCompareOfferAndSheetsBeforeWritingAnything() throws Exception {
+        var store = new CampaignStore(dir);
+        String id = store.create("Claims").getId();
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        store.saveSheet(id, "source", "{\"notes\":\"source\"}");
+        store.saveSheet(id, "recipient", "{\"notes\":\"old\"}");
+        var originals = java.util.Map.of("source", store.loadSheet(id, "source"), "recipient", store.loadSheet(id, "recipient"));
+        var changed = java.util.Map.of("recipient", mapper.createObjectNode().put("notes", "claimed"));
+        var offer = mapper.createObjectNode().put("id", 1).put("ts", 10).put("text", "Offer");
+        offer.putObject("claims").put("revision", 0).putArray("claimedBy");
+        store.appendHistoryChecked(id, offer);
+        var claimed = offer.deepCopy();
+        claimed.withObject("/claims").put("revision", 1).withArray("/claimedBy").add("recipient");
+        var report = mapper.createObjectNode().put("id", 2).put("ts", 11).put("text", "Claimed");
+        int fear = store.load(id).getFear();
+
+        var editedOffer = offer.deepCopy().put("text", "Edited offer");
+        store.replaceHistoryEntry(id, 1, 10, editedOffer);
+        assertThrows(CampaignStore.StaleAutomationClaim.class, () -> store.saveAutomationClaimResults(id, originals,
+                changed, offer, claimed, List.of(report), fear + 1, null));
+        assertEquals(originals.get("recipient"), store.loadSheet(id, "recipient"));
+        assertEquals(List.of(editedOffer), store.historyTail(id, 10));
+        assertEquals(fear, store.load(id).getFear());
+
+        store.replaceHistoryEntry(id, 1, 10, offer);
+        store.saveSheet(id, "source", "{\"notes\":\"changed\"}");
+        assertThrows(CampaignStore.StaleAutomationSheet.class, () -> store.saveAutomationClaimResults(id, originals,
+                changed, offer, claimed, List.of(report), fear + 1, null));
+        assertEquals(originals.get("recipient"), store.loadSheet(id, "recipient"));
+        assertEquals(List.of(offer), store.historyTail(id, 10));
+        assertEquals(fear, store.load(id).getFear());
+
+        var current = java.util.Map.of("source", store.loadSheet(id, "source"), "recipient", store.loadSheet(id, "recipient"));
+        assertThrows(IllegalArgumentException.class, () -> store.saveAutomationClaimResults(id, current, changed,
+                offer, claimed.deepCopy().put("id", 9), List.of(report), fear + 1, null));
+        assertThrows(IllegalArgumentException.class, () -> store.saveAutomationClaimResults(id, current, changed,
+                offer, claimed, List.of(report, report), fear + 1, null));
+        assertThrows(IllegalArgumentException.class, () -> store.saveAutomationClaimResults(id, current, changed,
+                offer, claimed, List.of(offer), fear + 1, null));
+        var missing = offer.deepCopy().put("id", 8);
+        assertThrows(CampaignStore.StaleAutomationClaim.class, () -> store.saveAutomationClaimResults(id, current, changed,
+                missing, missing.deepCopy(), List.of(report), fear + 1, null));
+        assertEquals(List.of(offer), store.historyTail(id, 10));
+
+        store.saveAutomationClaimResults(id, current, changed, offer, claimed, List.of(report), fear + 1, null);
+        assertEquals(List.of(claimed, report), store.historyTail(id, 10));
+        assertEquals("claimed", mapper.readTree(store.loadSheet(id, "recipient")).path("notes").asText());
+        assertEquals(fear + 1, store.load(id).getFear());
+        assertThrows(CampaignStore.StaleAutomationClaim.class, () -> store.saveAutomationClaimResults(id, current,
+                changed, offer, claimed, List.of(report), fear + 1, null));
+        var latest = java.util.Map.of("source", store.loadSheet(id, "source"), "recipient", store.loadSheet(id, "recipient"));
+        assertThrows(IllegalArgumentException.class, () -> store.saveAutomationClaimResults(id, latest, changed,
+                claimed, claimed.deepCopy(), List.of(report), null, null));
+        assertEquals(List.of(claimed, report), store.historyTail(id, 10));
+    }
+
+    @Test
+    void automationClaimsRejectDamagedHistoryInsteadOfSavingPartialEffects() throws Exception {
+        var store = new CampaignStore(dir);
+        String id = store.create("Damaged claims").getId();
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        store.saveSheet(id, "recipient", "{\"marks\":0}");
+        String original = store.loadSheet(id, "recipient");
+        var offer = mapper.createObjectNode().put("id", 1).put("ts", 10);
+        store.appendHistoryChecked(id, offer);
+        Files.writeString(dir.resolve(id).resolve("history.jsonl"), "{broken}\n", StandardOpenOption.APPEND);
+        assertThrows(IOException.class, () -> store.saveAutomationClaimResults(id, java.util.Map.of("recipient", original),
+                java.util.Map.of("recipient", mapper.createObjectNode().put("marks", 1)),
+                offer, offer.deepCopy().put("claimed", true), List.of(), null, null));
+        assertEquals(original, store.loadSheet(id, "recipient"));
+        assertTrue(Files.notExists(dir.resolve(id).resolve("sheet-transfer.json")));
+    }
+
+    @Test
+    void competingClaimsCannotBothCommitAndInterruptedClaimReplayIsIdempotent() throws Exception {
+        var store = new CampaignStore(dir);
+        String id = store.create("Concurrent claims").getId();
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var offer = mapper.createObjectNode().put("id", 1).put("ts", 10);
+        offer.putObject("claims").put("revision", 0).putArray("claimedBy");
+        store.appendHistoryChecked(id, offer);
+        for (String actor : List.of("one", "two")) store.saveSheet(id, actor, "{\"marks\":0}");
+        var start = new java.util.concurrent.CountDownLatch(1);
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            var results = new java.util.ArrayList<java.util.concurrent.Future<String>>();
+            for (String actor : List.of("one", "two")) {
+                var original = java.util.Map.of(actor, store.loadSheet(id, actor));
+                var replacement = offer.deepCopy();
+                replacement.withObject("/claims").put("revision", 1).withArray("/claimedBy").add(actor);
+                var changed = java.util.Map.of(actor, mapper.createObjectNode().put("marks", 1));
+                var report = mapper.createObjectNode().put("id", actor.equals("one") ? 2 : 3).put("ts", 11).put("text", actor);
+                results.add(executor.submit(() -> {
+                    start.await();
+                    try {
+                        store.saveAutomationClaimResults(id, original, changed, offer, replacement, List.of(report), null, null);
+                        return actor;
+                    } catch (CampaignStore.StaleAutomationClaim stale) {
+                        return "stale";
+                    }
+                }));
+            }
+            start.countDown();
+            var outcomes = List.of(results.get(0).get(), results.get(1).get());
+            assertEquals(1, outcomes.stream().filter("stale"::equals).count());
+            String winner = outcomes.stream().filter(value -> !"stale".equals(value)).findFirst().orElseThrow();
+            String loser = winner.equals("one") ? "two" : "one";
+            var messages = store.historyTail(id, 10);
+            assertEquals(2, messages.size());
+            assertEquals(winner, messages.getFirst().at("/claims/claimedBy/0").asText());
+            assertEquals(1, mapper.readTree(store.loadSheet(id, winner)).path("marks").intValue());
+            assertEquals(0, mapper.readTree(store.loadSheet(id, loser)).path("marks").intValue());
+
+            var transaction = mapper.createObjectNode();
+            transaction.set(winner, mapper.readTree(store.loadSheet(id, winner)));
+            transaction.set("$roll", messages.getFirst());
+            transaction.set("$message", messages.get(1));
+            Path journal = dir.resolve(id).resolve("sheet-transfer.json");
+            Files.writeString(journal, transaction.toString());
+            var reopened = new CampaignStore(dir);
+            assertEquals(messages, reopened.historyTail(id, 10));
+            assertEquals(1, mapper.readTree(reopened.loadSheet(id, winner)).path("marks").intValue());
+            assertTrue(Files.notExists(journal));
+            assertEquals(messages, new CampaignStore(dir).historyTail(id, 10));
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void fullStressProvenanceSurvivesReloadAndAllSheetPersistencePaths() throws Exception {
         var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
         CampaignStore store = new CampaignStore(dir);

@@ -443,15 +443,63 @@ public final class CampaignStore {
         }
     }
 
+    static final class StaleAutomationClaim extends IOException {
+        StaleAutomationClaim() {
+            super("The claim offer changed or is no longer available. Refresh it before trying again.");
+        }
+    }
+
     synchronized void saveAutomationResults(String campaignId, Map<String, String> expectedSheets, Map<String, ObjectNode> sheets,
                                             List<ObjectNode> messages, Integer fear, List<Campaign.Countdown> countdowns) throws IOException {
+        checkAutomationSheets(campaignId, expectedSheets, sheets);
+        saveSheetsAndResults(campaignId, sheets, null, messages, fear, countdowns, null, null);
+    }
+
+    /**
+     * Compare the complete offer and every read sheet under the store lock, then journal the claim and its effects.
+     * The message identity is immutable; new reports cannot overwrite an existing history entry.
+     */
+    synchronized void saveAutomationClaimResults(String campaignId, Map<String, String> expectedSheets,
+                                                 Map<String, ObjectNode> sheets, ObjectNode expectedOffer,
+                                                 ObjectNode replacement, List<ObjectNode> messages, Integer fear,
+                                                 List<Campaign.Countdown> countdowns) throws IOException {
+        HistoryIdentity identity = historyIdentity(expectedOffer);
+        if (!identity.equals(historyIdentity(replacement)))
+            throw new IllegalArgumentException("The replacement claim message must retain its identity.");
+        recoverSheetTransfer(campaignId);
+        HistoryIndex history = historyIndex(campaignId);
+        history.requireReadable();
+        if (!expectedOffer.equals(history.entry(identity.id(), identity.timestamp()))) throw new StaleAutomationClaim();
+        checkAutomationSheets(campaignId, expectedSheets, sheets);
+        java.util.Set<HistoryIdentity> newIdentities = new java.util.HashSet<>();
+        for (ObjectNode message : messages) {
+            HistoryIdentity report = historyIdentity(message);
+            if (report.equals(identity) || !newIdentities.add(report)
+                    || history.entry(report.id(), report.timestamp()) != null)
+                throw new IllegalArgumentException("A claim report must have a new, unique history identity.");
+        }
+        saveSheetsAndResults(campaignId, sheets, replacement, messages, fear, countdowns, null, null);
+    }
+
+    private record HistoryIdentity(long id, long timestamp) {}
+
+    private static HistoryIdentity historyIdentity(JsonNode message) {
+        JsonNode id = message == null ? null : message.get("id");
+        JsonNode timestamp = message == null ? null : message.get("ts");
+        if (id == null || !id.isIntegralNumber() || !id.canConvertToLong() || id.longValue() < 0
+                || timestamp == null || !timestamp.isIntegralNumber() || !timestamp.canConvertToLong() || timestamp.longValue() < 0)
+            throw new IllegalArgumentException("A history message needs a valid id and timestamp.");
+        return new HistoryIdentity(id.longValue(), timestamp.longValue());
+    }
+
+    private void checkAutomationSheets(String campaignId, Map<String, String> expectedSheets,
+                                       Map<String, ObjectNode> sheets) throws IOException {
         if (!expectedSheets.keySet().containsAll(sheets.keySet()))
             throw new IllegalArgumentException("Missing original sheet for automation commit.");
         for (var original : expectedSheets.entrySet()) {
             if (!java.util.Objects.equals(original.getValue(), loadSheet(campaignId, original.getKey())))
                 throw new StaleAutomationSheet();
         }
-        saveSheetsAndResults(campaignId, sheets, null, messages, fear, countdowns, null, null);
     }
 
     private void saveSheetsAndResults(String campaignId, java.util.Map<String, ObjectNode> sheets,
