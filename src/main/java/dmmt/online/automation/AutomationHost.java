@@ -73,13 +73,17 @@ public final class AutomationHost {
     }
 
     public ObjectNode describe(Pack pack, ObjectNode sheet, ObjectNode event, String surface, String relation) {
+        return describe(pack, sheet, event, surface, relation, null);
+    }
+
+    public ObjectNode describe(Pack pack, ObjectNode sheet, ObjectNode event, String surface, String relation, PartyTargets party) {
         relation(relation);
         ObjectNode copy = sheet.deepCopy();
         ObjectNode state = projection.state(copy);
         var sources = projection.sources(copy);
         ObjectNode actor = actor(pack, copy, state, event, sources);
         ArrayNode visible = RuleDispatcher.describe(candidates(pack, sources, state, actor, event), surface,
-                audience -> allowed(audience, relation));
+                audience -> allowed(audience, relation), "dm".equals(relation) ? null : party);
         ObjectNode result = RuleJson.JSON.createObjectNode();
         result.put("revision", revision(copy));
         result.set("actions", visible);
@@ -112,9 +116,18 @@ public final class AutomationHost {
 
     public ObjectNode execute(Pack pack, ObjectNode sheet, ObjectNode event, ObjectNode request, String relation,
                               String principalId, RandomGenerator random) {
+        return execute(pack, sheet, event, request, relation, principalId, random, null);
+    }
+
+    public ObjectNode execute(Pack pack, ObjectNode sheet, ObjectNode event, ObjectNode request, String relation,
+                              String principalId, RandomGenerator random, PartyTargets party) {
         relation(relation);
         if (principalId == null || principalId.isBlank()) throw new IllegalArgumentException("Missing automation principal.");
-        RuleJson.fields(request, "/request", "requestId", "expectedRevision", "selections", "profileRoll");
+        RuleJson.fields(request, "/request", "requestId", "expectedRevision", "selections", "profileRoll", "target");
+        if (request.has("target") && "dm".equals(relation))
+            throw new SecurityException("A scoped DM sheet grant cannot target other characters.");
+        if (request.has("target") && (request.has("profileRoll") || request.path("selections").size() != 1))
+            throw RuleJson.error("/request/target", "Choose a single target action.");
         if (request.has("profileRoll") && !"self".equals(relation))
             throw new SecurityException("Only the character owner may roll an attack profile.");
         String requestId = RuleJson.id(request.get("requestId"), "/request/requestId");
@@ -134,6 +147,9 @@ public final class AutomationHost {
         ObjectNode response;
         if (request.has("profileRoll")) {
             response = profileRoll(pack, working, state, event, request, random);
+        } else if (request.has("target")) {
+            if (party == null) throw RuleJson.error("/request/target", "This action requires a host roster.");
+            response = targeted(pack, working, state, event, request, relation, random, party);
         } else {
             var candidates = candidates(pack, working, event);
             var intents = selections(request, candidates, revision, relation, false);
@@ -147,6 +163,43 @@ public final class AutomationHost {
         while (journal.size() > JOURNAL_LIMIT) journal.remove(0);
         replace(sheet, working);
         return response;
+    }
+
+    private record TargetAction(List<RuleDispatcher.Candidate> candidates, PartyTargets.Selection selection) {}
+
+    private TargetAction targetAction(Pack pack, ObjectNode sheet, ObjectNode event, ObjectNode request,
+                                      String relation, PartyTargets party) {
+        var candidates = candidates(pack, sheet, event);
+        var intent = selections(request, candidates, revision(sheet), relation, false).getFirst();
+        var candidate = candidates.stream().filter(c -> c.instanceId().equals(intent.sourceInstanceId())).findFirst().orElseThrow();
+        ObjectNode rule = candidate.program().rule(intent.ruleId());
+        JsonNode binding = RuleDispatcher.binding(rule, intent.bindingId());
+        if (!binding.has("targetSelection") || !event.path("type").equals(binding.path("event")))
+            throw RuleJson.error("/request/target", "Choose a target action for this event.");
+        var selection = party.resolve(binding, candidate.context(), intent, request.get("target"));
+        return new TargetAction(candidates, selection);
+    }
+
+    private ObjectNode targeted(Pack pack, ObjectNode working, ObjectNode state, ObjectNode event, ObjectNode request,
+                                String relation, RandomGenerator random, PartyTargets party) {
+        long revision = state.path("revision").longValue();
+        var action = targetAction(pack, working, event, request, relation, party);
+        ObjectNode result = automatic(pack, working, event, random);
+        if (!result.path("actions").isEmpty()) {
+            state.put("revision", revision);
+            event = (ObjectNode) result.required("event");
+            action = targetAction(pack, working, event, request, relation, party);
+        }
+        var targets = action.selection();
+        var resolved = RuleDispatcher.executeTargets(action.candidates(), targets.intent(), targets.recipients(), random);
+        var targetedActions = resolved.actions().stream().map(RuleDispatcher.TargetActionResult::action).toList();
+        ObjectNode after = applyResolved(pack, working, state, event, resolved.sourceContexts(), targetedActions, resolved.outbox());
+        for (int i = 0; i < resolved.actions().size(); i++)
+            ((ObjectNode) after.path("actions").get(i)).put("recipientId", resolved.actions().get(i).recipientId());
+        for (String key : List.of("actions", "outbox")) ((ArrayNode) result.get(key)).addAll((ArrayNode) after.get(key));
+        result.set("event", after.get("event"));
+        party.stage(resolved.recipients());
+        return result.put("revision", revision + 1);
     }
 
     private static List<RuleRuntime.Intent> selections(ObjectNode request, List<RuleDispatcher.Candidate> candidates,
@@ -241,16 +294,20 @@ public final class AutomationHost {
 
     private ObjectNode applyEvent(Pack pack, ObjectNode working, ObjectNode state, ObjectNode event,
                                   List<RuleDispatcher.Candidate> candidates, List<RuleRuntime.Intent> intents, RandomGenerator random) {
+        RuleDispatcher.EventResolution resolution = RuleDispatcher.executeEvent(candidates, intents, random);
+        return applyResolved(pack, working, state, event, resolution.contexts(), resolution.actions(), resolution.outbox());
+    }
+
+    private ObjectNode applyResolved(Pack pack, ObjectNode working, ObjectNode state, ObjectNode event,
+                                     List<ObjectNode> contexts, List<RuleDispatcher.ActionResult> results, List<ObjectNode> commands) {
         long revision = state.path("revision").asLong();
         ObjectNode before = projection.actor(working);
-        RuleDispatcher.EventResolution resolution = RuleDispatcher.executeEvent(candidates, intents, random);
         ArrayNode outbox = RuleJson.JSON.createArrayNode();
-        resolution.outbox().forEach(outbox::add);
+        commands.forEach(outbox::add);
         ObjectNode actor = before;
         Map<String, SheetProjection.SourceElement> elements = new HashMap<>();
         for (SheetProjection.SourceElement element : projection.sources(working)) elements.put(element.instanceId(), element);
         List<SheetProjection.SourceElement> emptied = new ArrayList<>();
-        var contexts = resolution.contexts();
         JsonNode finalEvent = contexts.isEmpty() ? event.deepCopy() : contexts.getFirst().path("event");
         for (ObjectNode context : contexts) {
             actor = (ObjectNode) context.path("actor");
@@ -273,14 +330,14 @@ public final class AutomationHost {
                 if (program != null) storeSource(state, element.instanceId(), RuleRuntime.refreshLimits(program, context(state, element, actor, event), events));
             }
         }
-        if (!resolution.actions().isEmpty()) projection.write(working, before, persisted(actor));
+        if (!results.isEmpty()) projection.write(working, before, persisted(actor));
         for (SheetProjection.SourceElement element : emptied) remove(working, element);
 
         ObjectNode response = RuleJson.JSON.createObjectNode();
-        long next = resolution.actions().isEmpty() ? revision : revision + 1;
+        long next = results.isEmpty() ? revision : revision + 1;
         response.put("revision", next);
         ArrayNode actions = response.putArray("actions");
-        for (RuleDispatcher.ActionResult result : resolution.actions()) {
+        for (RuleDispatcher.ActionResult result : results) {
             ObjectNode item = actions.addObject();
             item.put("sourceInstanceId", result.sourceInstanceId()).put("ruleId", result.ruleId())
                     .put("bindingId", result.bindingId()).put("report", result.report());
@@ -374,6 +431,7 @@ public final class AutomationHost {
     private ObjectNode actor(Pack pack, ObjectNode sheet, ObjectNode state, ObjectNode event,
                              List<SheetProjection.SourceElement> sources) {
         ObjectNode actor = projection.actor(sheet);
+        if (event.hasNonNull("actorId")) actor.set("id", event.get("actorId"));
         ObjectNode base = actor.deepCopy();
         base.set("stats", projection.stats(actor, List.of()));
         List<JsonNode> modifiers = new ArrayList<>();
@@ -405,6 +463,17 @@ public final class AutomationHost {
         ObjectNode copy = actor.deepCopy();
         copy.set("effects", RuleEffects.stored(actor.get("effects")));
         return copy;
+    }
+
+    public ObjectNode recipientSnapshot(Pack pack, ObjectNode sheet, ObjectNode event, String recipientId) {
+        return actor(pack, sheet, projection.state(sheet), event.deepCopy().put("actorId", recipientId));
+    }
+
+    public void writeRecipient(ObjectNode stagedSheet, RuleDispatcher.RecipientUpdate update) {
+        if (revision(stagedSheet) + 1 != update.revision())
+            throw new RuleRuntime.Unavailable("staleRecipient", "The recipient changed. Refresh the action.");
+        projection.write(stagedSheet, projection.actor(stagedSheet), persisted(update.snapshot()));
+        projection.state(stagedSheet).put("revision", update.revision());
     }
 
     private static ObjectNode context(ObjectNode state, SheetProjection.SourceElement element, ObjectNode actor, ObjectNode event) {

@@ -28,6 +28,8 @@ public final class RuleDispatcher {
 
         @Override
         public ObjectNode context() { return context.deepCopy(); }
+
+        String instanceId() { return context.path("source").path("instanceId").asText(); }
     }
 
     public record ClaimKey(String group, String recipientId) {
@@ -160,6 +162,10 @@ public final class RuleDispatcher {
     }
 
     static ArrayNode describe(List<Candidate> activeSources, String surface, java.util.function.Predicate<String> visible) {
+        return describe(activeSources, surface, visible, null);
+    }
+
+    static ArrayNode describe(List<Candidate> activeSources, String surface, java.util.function.Predicate<String> visible, PartyTargets party) {
         if (!SURFACES.contains(surface)) throw RuleJson.error("/surface", "Unknown surface.");
         List<ObjectNode> descriptions = new ArrayList<>();
         Snapshot snapshot = validateSources(activeSources);
@@ -170,9 +176,9 @@ public final class RuleDispatcher {
             for (RuleCompiler.Program.BindingRef binding : program.bindings(eventType, surface)) {
                 if (!visible.test(binding.audience())) continue;
                 if (binding.forEach())
-                    RuleRuntime.describeEach(program, binding.ruleId(), binding.bindingId(), context)
+                    RuleRuntime.describeEach(program, binding.ruleId(), binding.bindingId(), context, party)
                             .forEach(item -> descriptions.add((ObjectNode) item));
-                else descriptions.add(RuleRuntime.describe(program, binding.ruleId(), binding.bindingId(), context));
+                else descriptions.add(RuleRuntime.describe(program, binding.ruleId(), binding.bindingId(), context, party));
             }
         }
 
@@ -703,7 +709,7 @@ public final class RuleDispatcher {
         return new Snapshot(List.copyOf(sources), sharedActor, sharedEvent, sharedType, sharedRevision);
     }
 
-    private static JsonNode binding(ObjectNode rule, String id) {
+    static JsonNode binding(ObjectNode rule, String id) {
         for (JsonNode binding : rule.path("bindings")) if (id.equals(binding.path("id").asText())) return binding;
         throw RuleJson.error("/bindingId", "Unknown binding.");
     }

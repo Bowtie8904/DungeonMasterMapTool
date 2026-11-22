@@ -33,14 +33,22 @@ public final class RuleRuntime {
     private RuleRuntime() {}
 
     public static ObjectNode describe(RuleCompiler.Program program, String ruleId, String bindingId, ObjectNode hostContext) {
+        return describe(program, ruleId, bindingId, hostContext, null);
+    }
+
+    static ObjectNode describe(RuleCompiler.Program program, String ruleId, String bindingId, ObjectNode hostContext, PartyTargets party) {
         ObjectNode rule = program.rule(ruleId);
         ObjectNode context = context(program, rule, hostContext);
         JsonNode binding = binding(rule, bindingId);
         if (binding.has("forEach")) throw RuleJson.error("/bindingId", "Use describeEach for a per-die binding.");
-        return describe(program, ruleId, bindingId, rule, binding, context, null);
+        return describe(program, ruleId, bindingId, rule, binding, context, null, party);
     }
 
     public static ArrayNode describeEach(RuleCompiler.Program program, String ruleId, String bindingId, ObjectNode hostContext) {
+        return describeEach(program, ruleId, bindingId, hostContext, null);
+    }
+
+    static ArrayNode describeEach(RuleCompiler.Program program, String ruleId, String bindingId, ObjectNode hostContext, PartyTargets party) {
         ObjectNode rule = program.rule(ruleId);
         ObjectNode context = context(program, rule, hostContext);
         JsonNode binding = binding(rule, bindingId);
@@ -50,14 +58,14 @@ public final class RuleRuntime {
         for (JsonNode die : pool.path("dice")) {
             ObjectNode itemContext = context.deepCopy();
             itemContext.set("die", die.deepCopy());
-            ObjectNode description = describe(program, ruleId, bindingId, rule, binding, itemContext, die.path("id").asText());
+            ObjectNode description = describe(program, ruleId, bindingId, rule, binding, itemContext, die.path("id").asText(), party);
             descriptions.add(description);
         }
         return descriptions;
     }
 
     private static ObjectNode describe(RuleCompiler.Program program, String ruleId, String bindingId, ObjectNode rule,
-                                       JsonNode binding, ObjectNode context, String eachId) {
+                                       JsonNode binding, ObjectNode context, String eachId, PartyTargets party) {
         ObjectNode description = RuleJson.JSON.createObjectNode();
         description.put("ruleId", ruleId).put("bindingId", bindingId).put("sourceId", program.sourceId())
                 .put("sourceInstanceId", context.path("source").path("instanceId").asText())
@@ -69,7 +77,8 @@ public final class RuleRuntime {
         if (binding.has("exclusiveGroup")) description.set("exclusiveGroup", binding.get("exclusiveGroup"));
         if (binding.has("claimGroup")) description.set("claimGroup", binding.get("claimGroup"));
         if (binding.has("claimScope")) description.set("claimScope", binding.get("claimScope"));
-        if (binding.has("targetSelection")) description.set("targetSelection", describeTargets(binding, context));
+        if (binding.has("targetSelection")) description.set("targetSelection", party == null
+                ? describeTargets(binding, context) : party.describe(binding, ruleId, context));
         description.put("audience", binding.path("audience").asText("self"));
         description.put("priority", binding.path("priority").asInt());
         for (String text : List.of("label", "description")) if (rule.path("ui").has(text))

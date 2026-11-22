@@ -24,6 +24,10 @@ public final class PartyTargets {
     private final Function<String, List<Member>> loadScope;
     private final Map<String, List<Member>> scopes = new HashMap<>();
     private final Map<String, ObjectNode> actors = new HashMap<>();
+    private List<RuleDispatcher.RecipientUpdate> updates = List.of();
+
+    void stage(List<RuleDispatcher.RecipientUpdate> updates) { this.updates = List.copyOf(updates); }
+    public List<RuleDispatcher.RecipientUpdate> updates() { return updates; }
 
     public PartyTargets(String packVersion, String sourceVersion, Function<String, List<Member>> loadScope) {
         this.packVersion = packVersion;

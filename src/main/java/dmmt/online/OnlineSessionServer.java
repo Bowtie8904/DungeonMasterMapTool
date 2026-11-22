@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import dmmt.online.automation.AutomationHost;
+import dmmt.online.automation.PartyTargets;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import io.javalin.http.staticfiles.Location;
@@ -5711,6 +5713,48 @@ public final class OnlineSessionServer {
         return actor;
     }
 
+    private final class AutomationRoster {
+        final Map<String, String> originals = new java.util.LinkedHashMap<>();
+        final Map<String, ObjectNode> sheets = new java.util.HashMap<>();
+        final Map<String, PartyTargets.Member> members = new java.util.HashMap<>();
+        final PartyTargets party;
+
+        AutomationRoster(AutomationHost.Pack pack, ObjectNode event, Campaign.Actor source, String stored, ObjectNode sheet) {
+            originals.put(source.getId(), stored);
+            sheets.put(source.getId(), sheet);
+            party = new PartyTargets(pack.revision(), sheetVersion(stored, source), scope -> {
+                Set<String> connected = new LinkedHashSet<>();
+                if ("connectedPlayerCharacters".equals(scope))
+                    clients.values().stream().filter(client -> client.dmActorId == null).forEach(client -> connected.add(client.playerId));
+                List<PartyTargets.Member> eligible = new ArrayList<>();
+                try {
+                    for (Campaign.Actor actor : campaign.getActors()) {
+                        if (actor.isDisabled()) continue;
+                        if (!"activeCharacters".equals(scope) && campaign.player(actor.getOwnerId()) == null) continue;
+                        if ("connectedPlayerCharacters".equals(scope) && !connected.contains(actor.getOwnerId())) continue;
+                        String id = actor.getId();
+                        if (!originals.containsKey(id)) originals.put(id, store.loadSheet(campaign.getId(), id));
+                        String original = originals.get(id);
+                        if (original == null) continue;
+                        if (eligible.size() == 128) throw new IllegalArgumentException("An action is limited to 128 characters.");
+                        var member = members.get(id);
+                        if (member == null) {
+                            if (!sheets.containsKey(id)) sheets.put(id, hydrateSheet(id, original));
+                            ObjectNode saved = sheets.get(id);
+                            member = new PartyTargets.Member(id, actor.getName(), sheetVersion(original, actor), automationHost.revision(saved),
+                                    () -> automationHost.recipientSnapshot(pack, saved, event, id));
+                            members.put(id, member);
+                        }
+                        eligible.add(member);
+                    }
+                } catch (IOException ex) {
+                    throw new java.io.UncheckedIOException(ex);
+                }
+                return eligible;
+            });
+        }
+    }
+
     private synchronized void handleAutomationDescribe(Context ctx) {
         String playerId = requirePlayer(ctx);
         if (playerId == null) return;
@@ -5719,16 +5763,21 @@ public final class OnlineSessionServer {
             String surface = ctx.queryParam("surface");
             String type = ctx.queryParam("event");
             ObjectNode event = automationEvent(type == null || type.isBlank() ? "action.request" : type, actor);
-            ObjectNode sheet = storedSheet(actor.getId());
-            ObjectNode response = automationHost.describe(automationPack(), sheet, event,
-                    surface == null || surface.isBlank() ? "sheet" : surface, automationRelation(ctx, playerId, actor));
+            var pack = automationPack();
+            String stored = store.loadSheet(campaign.getId(), actor.getId());
+            ObjectNode sheet = stored == null ? MAPPER.createObjectNode() : hydrateSheet(actor.getId(), stored);
+            String relation = automationRelation(ctx, playerId, actor);
+            String requestedSurface = surface == null || surface.isBlank() ? "sheet" : surface;
+            PartyTargets party = "sheet".equals(requestedSurface) && "action.request".equals(event.path("type").asText())
+                    && !"dm".equals(relation) ? new AutomationRoster(pack, event, actor, stored, sheet).party : null;
+            ObjectNode response = automationHost.describe(pack, sheet, event, requestedSurface, relation, party);
             ctx.header("Cache-Control", "no-store");
             json(ctx, 200, response);
         } catch (dmmt.online.automation.AutomationHost.NotReady e) {
             json(ctx, 409, errorBody("Automation is unavailable: " + e.getMessage()));
         } catch (IllegalArgumentException e) {
             json(ctx, 400, errorBody(e.getMessage()));
-        } catch (IOException e) {
+        } catch (IOException | java.io.UncheckedIOException e) {
             json(ctx, 500, errorBody("Could not read automation actions."));
         }
     }
@@ -5759,10 +5808,21 @@ public final class OnlineSessionServer {
             long revisionBefore = automationHost.revision(sheet);
             ObjectNode event = automationEvent("action.request", actor);
             String relation = automationRelation(ctx, playerId, actor);
-            ObjectNode response = automationHost.execute(automationPack(), sheet, event,
-                    (ObjectNode) body.get("request"), relation, "dm".equals(relation) ? campaign.getId() : playerId, diceRandom);
+            var pack = automationPack();
+            AutomationRoster roster = body.path("request").has("target") && !"dm".equals(relation)
+                    ? new AutomationRoster(pack, event, actor, original, sheet) : null;
+            ObjectNode response = automationHost.execute(pack, sheet, event,
+                    (ObjectNode) body.get("request"), relation, "dm".equals(relation) ? campaign.getId() : playerId,
+                    diceRandom, roster == null ? null : roster.party);
             if (automationHost.revision(sheet) != revisionBefore) {
-                sheet.put("featureRevision", sheet.path("featureRevision").asLong(0) + 1);
+                Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
+                changed.put(actor.getId(), sheet);
+                if (roster != null) for (var update : roster.party.updates()) {
+                    ObjectNode staged = roster.sheets.get(update.actorId());
+                    automationHost.writeRecipient(staged, update);
+                    changed.put(update.actorId(), staged);
+                }
+                changed.values().forEach(staged -> staged.put("featureRevision", staged.path("featureRevision").asLong(0) + 1));
                 List<ObjectNode> messages = new ArrayList<>();
                 if ("roll.finished".equals(response.at("/event/type").asText()))
                     messages.add(profileRollMessage(actor, response.path("event")));
@@ -5773,8 +5833,8 @@ public final class OnlineSessionServer {
                             MAPPER.createObjectNode().put("name", "Automation"));
                     messages.add(actionReportMessage(actor, source, source.path("name").asText("Automation"), List.of(report), null));
                 }
-                commitAutomationResults(java.util.Collections.singletonMap(actor.getId(), original),
-                        Map.of(actor.getId(), sheet), messages, response.path("outbox"));
+                commitAutomationResults(roster == null ? java.util.Collections.singletonMap(actor.getId(), original) : roster.originals,
+                        changed, messages, response.path("outbox"));
             }
             json(ctx, 200, response);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
@@ -5789,7 +5849,7 @@ public final class OnlineSessionServer {
             json(ctx, 403, errorBody(e.getMessage()));
         } catch (IllegalArgumentException e) {
             json(ctx, 400, errorBody(e.getMessage()));
-        } catch (IOException e) {
+        } catch (IOException | java.io.UncheckedIOException e) {
             json(ctx, 500, errorBody("Could not save the automation result."));
         }
     }

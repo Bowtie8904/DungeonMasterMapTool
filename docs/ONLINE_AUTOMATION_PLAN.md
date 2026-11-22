@@ -57,6 +57,8 @@ Current supported automation fields are `state`, `limits`, `pools`, `effects`, `
 
 Target and claim dispatch return a separate ordered `outbox`. Each command carries the host-selected `recipientId`; do not recover commands from the last source context, which may represent only the last recipient.
 
+**Sheet endpoint:** On a format-2 pack, a sheet button's descriptor lists eligible saved characters by ID and label. A single-target button submits `request.target: {recipientId, version}` using that option's version. A party button submits `{version}` using the selection's version, never a list of IDs. The host rebuilds the eligible set, checks the catalog and saved sheet versions, and journals all changes together. A stale offer returns 409 without a charge or report; a retry of an already committed request returns its original receipt. Scoped DM sheet grants cannot invoke cross-character actions. Result-chat targets and claim acceptance are separate integrations.
+
 A target-selecting binding declares this JSON contract:
 
 ```json
