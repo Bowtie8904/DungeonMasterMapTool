@@ -13,17 +13,17 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 /** Request-local view of saved, host-selected characters. No sheet snapshots leave the host. */
 public final class PartyTargets {
-    public record Member(String id, String name, String sheetVersion, long revision, Supplier<ObjectNode> snapshot) {}
+    public record Member(String id, String name, String sheetVersion, long revision, Function<ObjectNode, ObjectNode> snapshot) {}
     record Selection(List<RuleDispatcher.RecipientCandidate> recipients, RuleDispatcher.TargetIntent intent) {}
+    private record ProjectionKey(String id, JsonNode event) {}
 
     private final String packVersion, sourceVersion;
     private final Function<String, List<Member>> loadScope;
     private final Map<String, List<Member>> scopes = new HashMap<>();
-    private final Map<String, ObjectNode> actors = new HashMap<>();
+    private final Map<ProjectionKey, ObjectNode> actors = new HashMap<>();
     private List<RuleDispatcher.RecipientUpdate> updates = List.of();
 
     void stage(List<RuleDispatcher.RecipientUpdate> updates) { this.updates = List.copyOf(updates); }
@@ -84,7 +84,9 @@ public final class PartyTargets {
 
     private ObjectNode snapshot(Member member, ObjectNode context) {
         if (member.id().equals(context.at("/actor/id").asText())) return (ObjectNode) context.required("actor");
-        return actors.computeIfAbsent(member.id(), ignored -> member.snapshot().get());
+        ObjectNode event = RuleJson.object(context.path("event"), "/event");
+        var key = new ProjectionKey(member.id(), event.deepCopy());
+        return actors.computeIfAbsent(key, ignored -> member.snapshot().apply(event.deepCopy()));
     }
 
     private String version(JsonNode binding, String ruleId, ObjectNode context, List<Member> members) {

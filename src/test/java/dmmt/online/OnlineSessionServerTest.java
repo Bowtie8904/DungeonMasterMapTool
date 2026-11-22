@@ -1916,6 +1916,153 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void targetedResultActionsCommitFanoutOnce() throws Exception {
+        targetedResultAction("all");
+    }
+
+    @Test
+    void targetedResultActionsCommitOneChosenRecipient() throws Exception {
+        targetedResultAction("one");
+    }
+
+    private void targetedResultAction(String cardinality) throws Exception {
+        ObjectNode catalog = installPartyAction();
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/0/automation");
+        ObjectNode binding = (ObjectNode) automation.at("/rules/0/bindings/0");
+        binding.put("event", "roll.finished").put("surface", "roll").put("id", "after");
+        ((ObjectNode) binding.required("targetSelection")).put("scope", "activePlayerCharacters").put("cardinality", cardinality);
+        ((ArrayNode) automation.at("/rules/0/do")).addObject().put("op", "table.spend")
+                .put("resource", "fear").put("amount", 1).put("label", "Fear");
+        java.nio.file.Files.writeString(compendiumDir.resolve("classes.json"), catalog.toString());
+        String cookie = cookie(), other = allyCookie("other"), id = campaign.getId();
+        for (String name : List.of("caster", "ally", "late")) {
+            campaign.getActors().add(Campaign.Actor.builder().id(name).name(name)
+                    .ownerId(name.equals("caster") ? playerId() : "other").build());
+            store.saveSheet(id, name, "{\"name\":\"" + name + "\",\"stress\":{\"slots\":6,\"on\":2}}");
+        }
+        store.saveSheet(id, "caster", """
+            {"name":"Caster","level":2,"hope":{"slots":6,"on":2},"stress":{"slots":6,"on":2},
+             "traits":[{"name":"Finesse","mod":3}],"features":[
+             {"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"},
+             {"name":"Steady","automationSource":"classes:tester:features:steady","instanceId":"s"}]}""");
+        String roll = """
+            {"request":{"requestId":"roll","expectedRevision":0,
+             "profileRoll":{"sourceInstanceId":"s","profileId":"thrown","kind":"attack"},"selections":[]}}""";
+        var rolled = automationHttp(cookie, "caster", roll);
+        assertEquals(200, rolled.statusCode(), rolled.body());
+        JsonNode receipt = MAPPER.readTree(rolled.body());
+        String resultId = receipt.requiredAt("/event/resultId").asText();
+        assertTrue(receipt.requiredAt("/resultActions/0/targetSelection/options").isEmpty(),
+                "A saved result needs a fresh target version after the roll transaction.");
+        assertEquals(403, resultHttp(other, "caster", resultId).statusCode());
+        JsonNode offer = MAPPER.readTree(resultHttp(cookie, "caster", resultId).body()).requiredAt("/actions/0/targetSelection");
+        assertEquals(List.of("ally", "late"), offer.path("options").findValuesAsText("id"));
+        assertFalse(offer.toString().contains("snapshot"));
+        ObjectNode body = MAPPER.createObjectNode();
+        ObjectNode request = body.putObject("request").put("requestId", "after").put("expectedRevision", 1).put("resultId", resultId);
+        request.putArray("selections").addObject().put("sourceInstanceId", "r").put("ruleId", "rally").put("bindingId", "after");
+        ObjectNode target = request.putObject("target");
+        if ("one".equals(cardinality)) target.put("recipientId", "ally").set("version", offer.requiredAt("/options/0/version"));
+        else target.set("version", offer.required("version"));
+        assertEquals(403, automationHttp(other, "caster", body.toString()).statusCode());
+        String before = store.loadSheet(id, "caster");
+        var edit = (ObjectNode) MAPPER.readTree(store.loadSheet(id, "ally"));
+        store.saveSheet(id, "ally", edit.put("notes", "changed").toString());
+        assertEquals(409, automationHttp(cookie, "caster", body.toString()).statusCode());
+        offer = MAPPER.readTree(resultHttp(cookie, "caster", resultId).body()).requiredAt("/actions/0/targetSelection");
+        target.set("version", "one".equals(cardinality) ? offer.requiredAt("/options/0/version") : offer.required("version"));
+        campaign.setFear("one".equals(cardinality) ? 0 : 1);
+        int history = store.historyTail(id, 100).size();
+        assertEquals(400, automationHttp(cookie, "caster", body.toString()).statusCode());
+        assertEquals(before, store.loadSheet(id, "caster"), "A failed multi-sheet action preserves its result button and cost.");
+        assertEquals(2, MAPPER.readTree(store.loadSheet(id, "ally")).at("/stress/on").asInt());
+        assertEquals(history, store.historyTail(id, 100).size());
+        campaign.setFear("one".equals(cardinality) ? 1 : 2);
+        var applied = automationHttp(cookie, "caster", body.toString());
+        assertEquals(200, applied.statusCode(), applied.body());
+        assertEquals("one".equals(cardinality) ? List.of("ally") : List.of("ally", "late"),
+                MAPPER.readTree(applied.body()).path("actions").findValuesAsText("recipientId"));
+        assertEquals(1, MAPPER.readTree(store.loadSheet(id, "caster")).at("/hope/on").asInt());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(id, "ally")).at("/stress/on").asInt());
+        assertEquals("one".equals(cardinality) ? 2 : 1, MAPPER.readTree(store.loadSheet(id, "late")).at("/stress/on").asInt());
+        assertEquals(0, campaign.getFear());
+        assertEquals(409, resultHttp(cookie, "caster", resultId).statusCode());
+        campaign.actor("ally").setDisabled(true);
+        assertEquals(applied.body(), automationHttp(cookie, "caster", body.toString()).body());
+        assertEquals(history + ("one".equals(cardinality) ? 1 : 2), store.historyTail(id, 100).size());
+    }
+
+    @Test
+    void targetedResultCanPublishOneRollRevision() throws Exception {
+        targetedResultPublishing("one");
+    }
+
+    @Test
+    void targetedResultRejectsMultipleRollRevisionsAtomically() throws Exception {
+        targetedResultPublishing("all");
+    }
+
+    private void targetedResultPublishing(String cardinality) throws Exception {
+        ObjectNode catalog = installPartyAction();
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/0/automation");
+        ObjectNode binding = (ObjectNode) automation.at("/rules/0/bindings/0");
+        binding.put("event", "roll.finished").put("surface", "roll").put("id", "after");
+        ((ObjectNode) binding.required("targetSelection")).put("scope", "activePlayerCharacters").put("cardinality", cardinality);
+        ArrayNode steps = (ArrayNode) automation.at("/rules/0/do");
+        steps.add(MAPPER.readTree("""
+            {"op":"roll.contribute","from":{"read":"event.roll"},"as":"edited",
+             "contribution":{"id":"late","kind":"flat","role":"modifier","label":"Late","value":2}}"""));
+        steps.add(MAPPER.readTree("{\"op\":\"roll.publish\",\"roll\":{\"read\":\"result.edited\"}}"));
+        java.nio.file.Files.writeString(compendiumDir.resolve("classes.json"), catalog.toString());
+        String cookie = cookie(), id = campaign.getId();
+        allyCookie("other");
+        for (String name : List.of("caster", "ally", "late")) {
+            campaign.getActors().add(Campaign.Actor.builder().id(name).name(name)
+                    .ownerId(name.equals("caster") ? playerId() : "other").build());
+            store.saveSheet(id, name, "{\"name\":\"" + name + "\",\"stress\":{\"slots\":6,\"on\":2}}");
+        }
+        store.saveSheet(id, "caster", """
+            {"name":"Caster","level":2,"hope":{"slots":6,"on":2},"stress":{"slots":6,"on":2},
+             "traits":[{"name":"Finesse","mod":3}],"features":[
+             {"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"},
+             {"name":"Steady","automationSource":"classes:tester:features:steady","instanceId":"s"}]}""");
+        String roll = """
+            {"request":{"requestId":"roll","expectedRevision":0,
+             "profileRoll":{"sourceInstanceId":"s","profileId":"thrown","kind":"attack"},"selections":[]}}""";
+        var rolled = automationHttp(cookie, "caster", roll);
+        assertEquals(200, rolled.statusCode(), rolled.body());
+        JsonNode event = MAPPER.readTree(rolled.body()).required("event");
+        String resultId = event.required("resultId").asText();
+        JsonNode offer = MAPPER.readTree(resultHttp(cookie, "caster", resultId).body()).requiredAt("/actions/0/targetSelection");
+        ObjectNode body = MAPPER.createObjectNode();
+        ObjectNode request = body.putObject("request").put("requestId", "after").put("expectedRevision", 1).put("resultId", resultId);
+        request.putArray("selections").addObject().put("sourceInstanceId", "r").put("ruleId", "rally").put("bindingId", "after");
+        ObjectNode target = request.putObject("target");
+        if ("one".equals(cardinality)) target.put("recipientId", "ally").set("version", offer.requiredAt("/options/0/version"));
+        else target.set("version", offer.required("version"));
+        String before = store.loadSheet(id, "caster"), ally = store.loadSheet(id, "ally");
+        int history = store.historyTail(id, 100).size();
+        var applied = automationHttp(cookie, "caster", body.toString());
+        if ("all".equals(cardinality)) {
+            assertEquals(400, applied.statusCode(), applied.body());
+            assertTrue(applied.body().contains("at most one revision"));
+            assertEquals(before, store.loadSheet(id, "caster"));
+            assertEquals(ally, store.loadSheet(id, "ally"));
+            assertEquals(history, store.historyTail(id, 100).size());
+            assertEquals(200, resultHttp(cookie, "caster", resultId).statusCode());
+        } else {
+            assertEquals(200, applied.statusCode(), applied.body());
+            JsonNode revised = MAPPER.readTree(applied.body());
+            assertTrue(revised.required("resultPublished").booleanValue());
+            assertEquals(event.at("/check/total").intValue() + 2, revised.requiredAt("/event/check/total").intValue());
+            assertEquals(1, MAPPER.readTree(store.loadSheet(id, "ally")).at("/stress/on").asInt());
+            assertEquals(409, resultHttp(cookie, "caster", resultId).statusCode());
+            assertEquals(history + 2, store.historyTail(id, 100).size());
+            assertEquals(applied.body(), automationHttp(cookie, "caster", body.toString()).body());
+        }
+    }
+
+    @Test
     void profileRollStagesOptionsReactionsAndHistoryInOneRequest() throws Exception {
         automationCompendium();
         Path file = compendiumDir.resolve("classes.json");

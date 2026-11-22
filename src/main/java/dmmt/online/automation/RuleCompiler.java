@@ -159,7 +159,7 @@ public final class RuleCompiler {
                             binding.path("audience").asText("self"), "option".equals(mode));
                     bindingIndex.computeIfAbsent(key, ignored -> new ArrayList<>()).add(ref);
                     if ("roll.finished".equals(event) && ("chat".equals(key.surface()) || "roll".equals(key.surface()))
-                            && !ref.option() && !binding.has("claimGroup") && !binding.has("targetSelection"))
+                            && !ref.option() && !binding.has("claimGroup"))
                         results.add(ref);
                 }
             });

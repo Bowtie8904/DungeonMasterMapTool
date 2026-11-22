@@ -191,6 +191,61 @@ describe('automation panel', () => {
     expect(fetchActions).toHaveBeenCalledTimes(2);
   });
 
+  it('loads a saved target offer after the roll and sends its version with the result action', async () => {
+    const calls: Array<{ url: string; body?: string }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit) => {
+      calls.push({ url, body: options.body?.toString() });
+      if (url.includes('resultId=')) return Response.json({ revision: 6, actions: [action({
+        surface: 'roll', targetSelection: { cardinality: 'all', version: 'saved', options: [{ id: 'b', label: 'Bea' }] },
+      })] });
+      if (calls.length === 1) return Response.json({ revision: 6, event: { check: { total: 17 }, resultId: 'r1' },
+        resultActions: [action({ surface: 'roll', available: false, targetSelection: { cardinality: 'all', version: '', options: [] } })] });
+      return Response.json({ revision: 7, actions: [{ report: 'Applied.' }] });
+    }));
+    const fetchActions = vi.fn(async () => ({ revision: 5, actions: [], profiles: [
+      { id: 'far', sourceInstanceId: 's1', label: 'Thrown', sourceName: 'Blade' },
+    ] }));
+    const panel = fake(automationPanel('a1', 'sheet', 'Actions', fetchActions));
+    await settle();
+    panel.all('button')[0].click();
+    await settle();
+    await settle();
+    expect(calls.map(call => call.url)).toEqual(['/api/automation/a1', '/api/automation/a1?resultId=r1']);
+    expect(panel.text).toContain('Recipients: Bea');
+    panel.all('button').find(button => button.text === 'Rally (2 Hope)')!.click();
+    await settle();
+    expect(JSON.parse(calls[2].body!).request).toEqual({ requestId: expect.any(String), expectedRevision: 6,
+      resultId: 'r1', target: { version: 'saved' },
+      selections: [{ sourceInstanceId: 'f-rally', ruleId: 'rally', bindingId: 'use', inputs: {} }] });
+  });
+
+  it('refreshes target offers for a revised result rather than the old roll', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit) => {
+      calls.push(url);
+      if (url.includes('resultId=')) return Response.json({ revision: 7, actions: [action({
+        targetSelection: { cardinality: 'all', version: 'revised', options: [{ id: 'b', label: 'Bea' }] },
+      })] });
+      if (calls.length === 1) return Response.json({ revision: 6, event: { check: { total: 17 }, resultId: 'r1' },
+        resultActions: [action({ label: 'Edit' })] });
+      expect(JSON.parse(String(options.body)).request.resultId).toBe('r1');
+      return Response.json({ revision: 7, resultPublished: true, event: { check: { total: 19 }, resultId: 'r2' },
+        resultActions: [action({ targetSelection: { cardinality: 'all', version: '', options: [] } })], actions: [] });
+    }));
+    const panel = fake(automationPanel('a1', 'sheet', 'Actions', async () => ({ revision: 5, actions: [], profiles: [
+      { id: 'far', sourceInstanceId: 's1', label: 'Thrown', sourceName: 'Blade' },
+    ] })));
+    await settle();
+    panel.all('button')[0].click();
+    await settle();
+    panel.all('button').find(button => button.text === 'Edit')!.click();
+    await settle();
+    await settle();
+    expect(calls).toEqual(['/api/automation/a1', '/api/automation/a1', '/api/automation/a1?resultId=r2']);
+    expect(panel.text).toContain('Revised total: 19');
+    expect(panel.text).toContain('Recipients: Bea');
+  });
+
   it('maps an intent to a host selection without client-only fields', async () => {
     const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);

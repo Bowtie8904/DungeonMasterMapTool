@@ -17,11 +17,12 @@ class PartyTargetsTest {
     PartyTargetsTest() {
         context.putObject("actor").put("id", "self");
         context.putObject("source").put("instanceId", "source");
+        context.putObject("event").put("type", "action.request");
         binding.putObject("targetSelection").put("excludeSource", true).put("scope", "activeCharacters").put("cardinality", "all");
     }
 
     private PartyTargets.Member member(String id, String sheetVersion) {
-        return new PartyTargets.Member(id, id, sheetVersion, 0, () -> {
+        return new PartyTargets.Member(id, id, sheetVersion, 0, event -> {
             projected.incrementAndGet();
             return RuleJson.JSON.createObjectNode().put("id", id);
         });
@@ -56,5 +57,23 @@ class PartyTargetsTest {
         var request = RuleJson.JSON.createObjectNode().put("recipientId", "a").set("version", offer.at("/options/0/version"));
         assertEquals("a", party(a).resolve(binding, context, action, request).intent().recipientId());
         assertThrows(RuleRuntime.Unavailable.class, () -> party(member("a", "edited")).resolve(binding, context, action, request));
+    }
+
+    @Test
+    void recipientProjectionUsesAndCachesTheCurrentEvent() {
+        var recipient = new PartyTargets.Member("a", "a", "v1", 0, event -> {
+            projected.incrementAndGet();
+            return RuleJson.JSON.createObjectNode().put("id", "a").set("projectedEvent", event);
+        });
+        var party = party(recipient);
+        var offer = party.describe(binding, "gift", context);
+        var request = RuleJson.JSON.createObjectNode().set("version", offer.required("version"));
+        assertEquals("action.request", party.resolve(binding, context, action, request)
+                .recipients().getFirst().snapshot().at("/projectedEvent/type").asText());
+        ((ObjectNode) context.required("event")).put("type", "roll.finished");
+        assertEquals("roll.finished", party.resolve(binding, context, action, request)
+                .recipients().getFirst().snapshot().at("/projectedEvent/type").asText());
+        party.resolve(binding, context, action, request);
+        assertEquals(2, projected.get());
     }
 }

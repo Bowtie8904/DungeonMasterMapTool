@@ -141,7 +141,7 @@ public final class AutomationHost {
         RuleJson.checkTree(request, "/request", 0, new int[]{0});
         if (request.has("resultId")) {
             if (!"self".equals(relation)) throw new SecurityException("Only the character owner may use this roll result.");
-            if (request.has("profileRoll") || request.has("target") || request.path("selections").size() != 1)
+            if (request.has("profileRoll") || request.path("selections").size() != 1)
                 throw RuleJson.error("/request/resultId", "Choose one ordinary result action.");
         }
         if (request.has("target") && "dm".equals(relation))
@@ -172,7 +172,7 @@ public final class AutomationHost {
             response = profileRoll(pack, working, state, event, request, random);
             offerResult(pack, working, response, principalId, null);
         } else if (request.has("resultId")) {
-            response = resultAction(pack, working, state, event, request, principalId, random);
+            response = resultAction(pack, working, state, event, request, principalId, random, party);
         } else if (request.has("target")) {
             if (party == null) throw RuleJson.error("/request/target", "This action requires a host roster.");
             response = targeted(pack, working, state, event, request, relation, random, party);
@@ -322,7 +322,7 @@ public final class AutomationHost {
     }
 
     private ObjectNode resultAction(Pack pack, ObjectNode working, ObjectNode state, ObjectNode origin,
-                                    ObjectNode request, String principal, RandomGenerator random) {
+                                    ObjectNode request, String principal, RandomGenerator random, PartyTargets party) {
         var sources = projection.sources(working);
         ResultWindows.prune(state, ResultWindows.guards(sources, state.path("effects")));
         var window = ResultWindows.lookup(state, pack.revision(), principal, RuleJson.id(request.get("resultId"), "/request/resultId"));
@@ -336,6 +336,30 @@ public final class AutomationHost {
         var intent = selections(request, List.of(new RuleDispatcher.Candidate(program, context)), state.required("revision").longValue(),
                 "self", false).getFirst();
         ResultWindows.take(window, new ResultWindows.Button(instance, intent.ruleId(), intent.bindingId(), intent.eachId()));
+        JsonNode binding = RuleDispatcher.binding(program.rule(intent.ruleId()), intent.bindingId());
+        if (binding.has("targetSelection") != request.has("target"))
+            throw RuleJson.error("/request/target", "This result action requires its current target selection.");
+        if (request.has("target")) {
+            if (party == null) throw RuleJson.error("/request/target", "This action requires a host roster.");
+            var candidate = new RuleDispatcher.Candidate(program, context);
+            var targets = party.resolve(binding, context, intent, request.get("target"));
+            var resolved = RuleDispatcher.executeTargets(List.of(candidate), targets.intent(), targets.recipients(), random);
+            var actions = resolved.actions().stream().map(RuleDispatcher.TargetActionResult::action).toList();
+            long published = actions.stream().mapToLong(action -> action.publishedRolls().size()).sum();
+            if (published > 1)
+                throw RuleJson.error("/result", "A result action may publish at most one revision of its roll.");
+            var response = applyResolved(pack, working, state, event, resolved.sourceContexts(), actions, resolved.outbox());
+            for (int i = 0; i < resolved.actions().size(); i++)
+                ((ObjectNode) response.path("actions").get(i)).put("recipientId", resolved.actions().get(i).recipientId());
+            party.stage(resolved.recipients());
+            if (published == 1) {
+                ObjectNode roll = actions.stream().flatMap(action -> action.publishedRolls().stream()).findFirst().orElseThrow();
+                ((ObjectNode) response.required("event")).set("roll", roll);
+                reviseResult(pack, working, response, principal, window);
+            }
+            pruneResultWindows(working);
+            return response;
+        }
         // Dispatch only the chosen button: automatic roll.finished reactions already ran when the roll was made.
         var resolution = RuleRuntime.execute(program, intent, context, random);
         if (resolution.publishedRolls().size() > 1)
@@ -345,14 +369,16 @@ public final class AutomationHost {
         List<ObjectNode> commands = new ArrayList<>();
         resolution.context().path("outbox").forEach(cmd -> commands.add((ObjectNode) cmd));
         var response = applyResolved(pack, working, state, event, List.of(resolution.context()), List.of(action), commands);
-        if (!resolution.publishedRolls().isEmpty()) {
-            ProfileRoll.updateCheck((ObjectNode) response.required("event"));
-            response.put("resultPublished", true);
-            window.withArray("buttons").removeAll();
-            offerResult(pack, working, response, principal, (ArrayNode) window.required("used"));
-        }
+        if (!resolution.publishedRolls().isEmpty()) reviseResult(pack, working, response, principal, window);
         pruneResultWindows(working);
         return response;
+    }
+
+    private void reviseResult(Pack pack, ObjectNode working, ObjectNode response, String principal, ObjectNode window) {
+        ProfileRoll.updateCheck((ObjectNode) response.required("event"));
+        response.put("resultPublished", true);
+        window.withArray("buttons").removeAll();
+        offerResult(pack, working, response, principal, (ArrayNode) window.required("used"));
     }
 
     private void offerResult(Pack pack, ObjectNode sheet, ObjectNode response, String principal, ArrayNode used) {
@@ -365,7 +391,7 @@ public final class AutomationHost {
         if (sources.stream().noneMatch(source -> source.instanceId().equals(event.path("sourceInstanceId").textValue())))
             return; // Consuming the roll's source cannot leave an actionable result behind.
         ObjectNode state = projection.state(sheet);
-        ArrayNode matches = resultButtons(pack, sources, state, actor(pack, sheet, state, event, sources), event, null);
+        ArrayNode matches = resultButtons(pack, sources, state, actor(pack, sheet, state, event, sources), event, null, null);
         if (used != null) {
             Set<ResultWindows.Button> spent = new java.util.HashSet<>();
             used.forEach(item -> spent.add(ResultWindows.Button.of(item)));
@@ -381,7 +407,7 @@ public final class AutomationHost {
     }
 
     private ArrayNode resultButtons(Pack pack, List<SheetProjection.SourceElement> sources, ObjectNode state,
-                                    ObjectNode actor, ObjectNode event, Set<ResultWindows.Button> retained) {
+                                    ObjectNode actor, ObjectNode event, Set<ResultWindows.Button> retained, PartyTargets party) {
         ArrayNode result = RuleJson.JSON.createArrayNode();
         for (var element : sources) {
             var program = pack.programs().get(element.sourceId());
@@ -390,8 +416,8 @@ public final class AutomationHost {
             for (var binding : program.resultButtons()) {
                 if (!allowed(binding.audience(), "self")) continue;
                 Iterable<JsonNode> options = binding.forEach()
-                        ? RuleRuntime.describeEach(program, binding.ruleId(), binding.bindingId(), context)
-                        : List.of(RuleRuntime.describe(program, binding.ruleId(), binding.bindingId(), context));
+                        ? RuleRuntime.describeEach(program, binding.ruleId(), binding.bindingId(), context, party)
+                        : List.of(RuleRuntime.describe(program, binding.ruleId(), binding.bindingId(), context, party));
                 for (JsonNode item : options) {
                     if ("condition".equals(item.path("reasonCode").asText())) continue;
                     if (retained == null || retained.contains(ResultWindows.Button.of(item))) result.add(item);
@@ -402,6 +428,11 @@ public final class AutomationHost {
     }
 
     public ObjectNode describeResult(Pack pack, ObjectNode sheet, String id, String relation, String principal, ObjectNode origin) {
+        return describeResult(pack, sheet, id, relation, principal, origin, null);
+    }
+
+    public ObjectNode describeResult(Pack pack, ObjectNode sheet, String id, String relation, String principal,
+                                     ObjectNode origin, PartyTargets party) {
         if (!"self".equals(relation)) throw new SecurityException("Only the character owner may use this roll result.");
         ObjectNode copy = sheet.deepCopy(), state = projection.state(copy);
         var sources = projection.sources(copy);
@@ -411,7 +442,7 @@ public final class AutomationHost {
         window.required("buttons").forEach(item -> retained.add(ResultWindows.Button.of(item)));
         ObjectNode event = savedResultEvent(window, origin);
         return RuleJson.JSON.createObjectNode().put("revision", state.path("revision").asLong())
-                .set("actions", resultButtons(pack, sources, state, actor(pack, copy, state, event, sources), event, retained));
+                .set("actions", resultButtons(pack, sources, state, actor(pack, copy, state, event, sources), event, retained, party));
     }
 
     private static ObjectNode savedResultEvent(ObjectNode window, ObjectNode origin) {

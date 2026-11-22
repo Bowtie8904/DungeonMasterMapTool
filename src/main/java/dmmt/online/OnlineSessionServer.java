@@ -5720,7 +5720,7 @@ public final class OnlineSessionServer {
         final Map<String, PartyTargets.Member> members = new java.util.HashMap<>();
         final PartyTargets party;
 
-        AutomationRoster(AutomationHost.Pack pack, ObjectNode event, Campaign.Actor source, String stored, ObjectNode sheet) {
+        AutomationRoster(AutomationHost.Pack pack, Campaign.Actor source, String stored, ObjectNode sheet) {
             originals.put(source.getId(), stored);
             sheets.put(source.getId(), sheet);
             party = new PartyTargets(pack.revision(), sheetVersion(stored, source), scope -> {
@@ -5743,7 +5743,7 @@ public final class OnlineSessionServer {
                             if (!sheets.containsKey(id)) sheets.put(id, hydrateSheet(id, original));
                             ObjectNode saved = sheets.get(id);
                             member = new PartyTargets.Member(id, actor.getName(), sheetVersion(original, actor), automationHost.revision(saved),
-                                    () -> automationHost.recipientSnapshot(pack, saved, event, id));
+                                    event -> automationHost.recipientSnapshot(pack, saved, event, id));
                             members.put(id, member);
                         }
                         eligible.add(member);
@@ -5770,14 +5770,15 @@ public final class OnlineSessionServer {
             String relation = automationRelation(ctx, playerId, actor);
             String requestedSurface = surface == null || surface.isBlank() ? "sheet" : surface;
             if (ctx.queryParam("resultId") != null) {
+                PartyTargets party = "self".equals(relation) ? new AutomationRoster(pack, actor, stored, sheet).party : null;
                 ObjectNode result = automationHost.describeResult(pack, sheet, ctx.queryParam("resultId"), relation, playerId,
-                        automationEvent("action.request", actor));
+                        automationEvent("action.request", actor), party);
                 ctx.header("Cache-Control", "no-store");
                 json(ctx, 200, result);
                 return;
             }
             PartyTargets party = "sheet".equals(requestedSurface) && "action.request".equals(event.path("type").asText())
-                    && !"dm".equals(relation) ? new AutomationRoster(pack, event, actor, stored, sheet).party : null;
+                    && !"dm".equals(relation) ? new AutomationRoster(pack, actor, stored, sheet).party : null;
             ObjectNode response = automationHost.describe(pack, sheet, event, requestedSurface, relation, party);
             ctx.header("Cache-Control", "no-store");
             json(ctx, 200, response);
@@ -5822,7 +5823,7 @@ public final class OnlineSessionServer {
             String relation = automationRelation(ctx, playerId, actor);
             var pack = automationPack();
             AutomationRoster roster = body.path("request").has("target") && !"dm".equals(relation)
-                    ? new AutomationRoster(pack, event, actor, original, sheet) : null;
+                    ? new AutomationRoster(pack, actor, original, sheet) : null;
             ObjectNode response = automationHost.execute(pack, sheet, event,
                     (ObjectNode) body.get("request"), relation, "dm".equals(relation) ? campaign.getId() : playerId,
                     diceRandom, roster == null ? null : roster.party);

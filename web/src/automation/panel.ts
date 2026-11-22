@@ -113,8 +113,11 @@ function resultControls(actorId: string, resultId: string, initial?: DescribedAc
         const reports = actionReports(receipt);
         if (receipt.resultPublished) {
           status.textContent = [`Revised total: ${receipt.event.check.total}`, ...reports].join('\n');
-          if (initial && receipt.event.resultId && receipt.resultActions?.length)
-            paint(receipt.event.resultId, { revision: receipt.revision, actions: receipt.resultActions });
+          if (initial && receipt.event.resultId && receipt.resultActions?.length) {
+            if (receipt.resultActions.some(action => action.targetSelection))
+              void refresh(receipt.event.resultId, status.textContent);
+            else paint(receipt.event.resultId, { revision: receipt.revision, actions: receipt.resultActions });
+          }
           else { finished = true; ++generation; list.replaceChildren(); }
         } else if (offer.actions.length === 1) {
           ++generation; list.replaceChildren();
@@ -143,7 +146,10 @@ function resultControls(actorId: string, resultId: string, initial?: DescribedAc
       list.replaceChildren(retry);
     }
   };
-  if (initial) paint(resultId, initial);
+  if (initial) {
+    if (initial.actions.some(action => action.targetSelection)) void refresh(resultId);
+    else paint(resultId, initial);
+  }
   return { root, reopen: () => { if (!retryId && !finished) void refresh(resultId); } };
 }
 
