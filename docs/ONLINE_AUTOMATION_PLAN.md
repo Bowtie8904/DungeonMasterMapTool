@@ -55,6 +55,8 @@ Current supported automation fields are `state`, `limits`, `pools`, `effects`, `
 
 ### Target actions
 
+Target and claim dispatch return a separate ordered `outbox`. Each command carries the host-selected `recipientId`; do not recover commands from the last source context, which may represent only the last recipient.
+
 A target-selecting binding declares this JSON contract:
 
 ```json

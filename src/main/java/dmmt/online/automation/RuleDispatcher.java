@@ -99,25 +99,29 @@ public final class RuleDispatcher {
     public record TargetActionResult(ActionResult action, String recipientId) {}
 
     public record TargetResolution(List<ObjectNode> sourceContexts, List<RecipientUpdate> recipients,
-                                   List<TargetActionResult> actions) {
+                                   List<TargetActionResult> actions, List<ObjectNode> outbox) {
         public TargetResolution {
             sourceContexts = copyNodes(sourceContexts);
             recipients = List.copyOf(recipients);
             actions = List.copyOf(actions);
+            outbox = copyNodes(outbox);
         }
 
         @Override public List<ObjectNode> sourceContexts() { return copyNodes(sourceContexts); }
+        @Override public List<ObjectNode> outbox() { return copyNodes(outbox); }
     }
 
     public record ClaimResolution(List<ObjectNode> sourceContexts, List<RecipientUpdate> recipients,
-                                  ClaimLedger ledger, List<ClaimActionResult> actions) {
+                                  ClaimLedger ledger, List<ClaimActionResult> actions, List<ObjectNode> outbox) {
         public ClaimResolution {
             sourceContexts = copyNodes(sourceContexts);
             recipients = List.copyOf(recipients);
             actions = List.copyOf(actions);
+            outbox = copyNodes(outbox);
         }
 
         @Override public List<ObjectNode> sourceContexts() { return copyNodes(sourceContexts); }
+        @Override public List<ObjectNode> outbox() { return copyNodes(outbox); }
     }
 
     public record ActionResult(String sourceInstanceId, String ruleId, String bindingId, String report,
@@ -438,6 +442,7 @@ public final class RuleDispatcher {
         }
 
         List<ClaimActionResult> actionResults = new ArrayList<>();
+        List<ObjectNode> outbox = new ArrayList<>();
         for (PreparedClaim claim : prepared) {
             RuleRuntime.Prepared item = claim.prepared();
             String instanceId = item.intent().sourceInstanceId();
@@ -451,6 +456,7 @@ public final class RuleDispatcher {
             RuleRuntime.Resolution resolution = RuleRuntime.executePrepared(
                     byInstance.get(instanceId).program(), executable, random, false);
             ObjectNode nextContext = resolution.context();
+            collectRecipientCommands(outbox, nextContext, claim.recipientId());
             if (self) sharedActor = selfResult(sharedActor, nextContext);
             else {
                 sharedActor = nextContext.path("actor").deepCopy();
@@ -485,7 +491,7 @@ public final class RuleDispatcher {
         Set<ClaimKey> allClaims = new HashSet<>(ledger.claims());
         allClaims.addAll(addedClaims);
         ClaimLedger updatedLedger = new ClaimLedger(ledger.revision() + (addedClaims.isEmpty() ? 0 : 1), allClaims, ledger.limits());
-        return new ClaimResolution(updatedSources, updatedRecipients, updatedLedger, actionResults);
+        return new ClaimResolution(updatedSources, updatedRecipients, updatedLedger, actionResults, outbox);
     }
 
     /**
@@ -598,6 +604,7 @@ public final class RuleDispatcher {
         }
 
         List<TargetActionResult> actionResults = new ArrayList<>();
+        List<ObjectNode> outbox = new ArrayList<>();
         for (PreparedTarget item : prepared) {
             ObjectNode current = item.prepared().context().deepCopy();
             mergeTransactionState(current, workingSource);
@@ -609,6 +616,7 @@ public final class RuleDispatcher {
             RuleRuntime.Prepared executable = new RuleRuntime.Prepared(intent, current, snapshot.revision());
             RuleRuntime.Resolution resolution = RuleRuntime.executePrepared(candidate.program(), executable, random, false);
             ObjectNode nextContext = resolution.context();
+            collectRecipientCommands(outbox, nextContext, item.recipientId());
             sharedActor = item.recipientId().equals(sourceActorId)
                     ? nextContext.path("recipient").deepCopy() : nextContext.path("actor").deepCopy();
             workingSource = nextContext.deepCopy();
@@ -633,7 +641,13 @@ public final class RuleDispatcher {
             RecipientCandidate original = recipientsById.get(id);
             updates.add(new RecipientUpdate(id, workingRecipients.get(id), original.revision() + 1));
         }
-        return new TargetResolution(updatedSources, updates, actionResults);
+        return new TargetResolution(updatedSources, updates, actionResults, outbox);
+    }
+
+    private static void collectRecipientCommands(List<ObjectNode> outbox, ObjectNode context, String recipientId) {
+        JsonNode commands = context.remove("outbox");
+        if (commands != null) for (JsonNode command : commands)
+            outbox.add(((ObjectNode) command).put("recipientId", recipientId));
     }
 
     private record Snapshot(List<Candidate> sources, ObjectNode actor, ObjectNode event, String eventType,

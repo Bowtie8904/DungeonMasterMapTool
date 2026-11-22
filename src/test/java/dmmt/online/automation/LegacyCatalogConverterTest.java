@@ -739,7 +739,7 @@ class LegacyCatalogConverterTest {
                 List.of(new RuleDispatcher.RecipientCandidate("me", (ObjectNode) presence.path("actor").deepCopy(), 0)),
                 new RuleDispatcher.ClaimLedger(0, Set.of()), StructuredRollTest.noRandom());
         assertEquals(Set.of(new RuleDispatcher.ClaimKey("roll-reward", "me")), claim.ledger().claims());
-        assertEquals("table.spend", claim.sourceContexts().getFirst().at("/outbox/0/kind").asText(), claim.sourceContexts().toString());
+        assertEquals("table.spend", claim.outbox().getFirst().path("kind").asText());
         assertEquals("Removed 1 GM Fear instead of gaining Hope.", claim.actions().getFirst().action().report());
 
         var invalid = LegacyCatalogConverter.convert(catalog("""

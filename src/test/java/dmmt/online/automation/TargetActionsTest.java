@@ -70,6 +70,23 @@ class TargetActionsTest {
     }
 
     @Test
+    void retainsEachRecipientsCommandsInExecutionOrder() throws Exception {
+        ObjectNode automation = fixture("rewrite/targets");
+        var steps = (com.fasterxml.jackson.databind.node.ArrayNode) automation.at("/rules/0/do");
+        steps.addObject().put("op", "table.spend").put("resource", "fear").put("amount", 1).put("label", "Spend");
+        steps.addObject().put("op", "countdown.start").put("value", 2).put("label", "{recipient.name}");
+        var program = RuleCompiler.compile("features:target-fixture", automation, fixture("rewrite/recipes"));
+        var result = RuleDispatcher.executeTargets(List.of(source(program)), new RuleDispatcher.TargetIntent(
+                new RuleRuntime.Intent("rally", "sheet", "rally-source", 4, RuleJson.JSON.createObjectNode()), null, null),
+                List.of(recipient("noor", "Noor", 1, 3), recipient("mira", "Mira", 2, 8)), RandomGenerator.getDefault());
+        assertEquals(List.of("mira:Spend", "mira:Mira", "noor:Spend", "noor:Noor"), result.outbox().stream()
+                .map(command -> command.path("recipientId").asText() + ":" + command.path("label").asText()).toList());
+        assertFalse(result.sourceContexts().getFirst().has("outbox"));
+        result.outbox().getFirst().put("label", "mutated");
+        assertEquals("Spend", result.outbox().getFirst().path("label").asText());
+    }
+
+    @Test
     void sourceCanBeIncludedInFanOutAndReceivesBothSourceCostAndTargetMutation() throws Exception {
         ObjectNode automation = fixture("rewrite/targets");
         ((ObjectNode) automation.at("/rules/0/bindings/0/targetSelection")).put("excludeSource", false);
