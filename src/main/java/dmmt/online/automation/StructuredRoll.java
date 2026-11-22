@@ -379,6 +379,17 @@ public final class StructuredRoll {
         }
         return calculate(roll, false);
     }
+    /** Exchanges the roles of two contributions, e.g. which die counts as Hope and which as Fear. */
+    public static ObjectNode swapRoles(JsonNode original, String first, String second) {
+        ObjectNode roll = validate(original);
+        for (JsonNode part : roll.path("contributions")) {
+            String role = part.path("role").asText();
+            if (role.equals(first)) ((ObjectNode) part).put("role", second);
+            else if (role.equals(second)) ((ObjectNode) part).put("role", first);
+        }
+        return calculate(roll, false);
+    }
+
     private static void record(ObjectNode die, String sourceId) {
         ArrayNode previous = die.has("previous") ? (ArrayNode) die.get("previous") : die.putArray("previous");
         ArrayNode editors = die.has("editedBy") ? (ArrayNode) die.get("editedBy") : die.putArray("editedBy");

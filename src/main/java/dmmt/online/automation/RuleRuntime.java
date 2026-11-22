@@ -907,6 +907,8 @@ public final class RuleRuntime {
                 result = exploded;
             }
             case "roll.diceTotal" -> result = RuleExpression.numeric(StructuredRoll.faceTotal(eval(op.path("from"), context), eval(op.path("dice"), context)), "/dice");
+            case "roll.swapRoles" -> result = StructuredRoll.swapRoles(eval(op.path("from"), context),
+                    op.path("first").asText(), op.path("second").asText());
             case "roll.discard" -> result = StructuredRoll.discard(eval(op.path("from"), context), op.path("role").asText());
             case "roll.annotate" -> {
                 ObjectNode annotated = StructuredRoll.validate(eval(op.path("from"), context));

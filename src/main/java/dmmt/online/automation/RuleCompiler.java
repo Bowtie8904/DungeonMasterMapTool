@@ -86,6 +86,7 @@ public final class RuleCompiler {
             Map.entry("roll.contribute", List.of("from", "contribution")),
             Map.entry("roll.annotate", List.of("from", "field", "value")),
             Map.entry("roll.discard", List.of("from", "role")),
+            Map.entry("roll.swapRoles", List.of("from", "first", "second")),
             Map.entry("roll.diceTotal", List.of("from", "dice")),
             Map.entry("plan.adjust", List.of("plan", "field", "by", "label")),
             Map.entry("event.block", List.of("reason")));

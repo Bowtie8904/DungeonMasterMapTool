@@ -1006,6 +1006,23 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void swapDualityResourceMultipliersAndOriginExclusionsConvert() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"aid","name":"Aid","automation":{"rollTriggers":[{"id":"swap","label":"Swap","on":"any","swapDuality":true,"repeatable":true}]}},
+                {"id":"upstage","name":"Upstage","automation":{"resources":[{"id":"upstaged","label":"Upstaged","initial":0,"max":6}],
+                  "rollOptions":[{"id":"up","label":"Upstaged","roll":"damage","resourceMultiplier":{"resource":"upstaged","value":5}}]}},
+                {"id":"cloak","name":"Cloak","automation":{"hideSpellcast":true,
+                  "conditionalRollTriggers":[{"id":"x","label":"X","on":"any","excludeRolls":["card:Cloak"],"reroll":"hope"}]}}"""));
+        assertEquals(3, result.converted(), result.diagnostics().toString());
+        String aid = block(result, 0).toString();
+        assertTrue(aid.contains("\"op\":\"roll.swapRoles\"") && aid.contains("event.check.fearDie"), aid);
+        String upstage = block(result, 1).toString();
+        assertTrue(upstage.contains("\"multiply\"") && upstage.contains("actor.pools.upstaged.value"), upstage);
+        assertTrue(block(result, 2).toString().contains("card:Cloak"));
+        for (int i = 0; i < 3; i++) assertNotNull(program(result, i));
+    }
+
+    @Test
     void lunarPhasesBecomeDerivedEffectsOverADiePool() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"moon","name":"Moon","automation":{

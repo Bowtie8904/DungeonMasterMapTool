@@ -33,7 +33,7 @@ public final class LegacyCatalogConverter {
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
             "damage", "alternateProfiles", "damageTypeChoice", "rest", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions", "conditionalRollOptions",
             "hopeReward", "classResourceOnly", "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "zeroHopeClearArmor",
-            "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases");
+            "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases", "hideSpellcast");
     private static final Set<String> DEATH_KINDS = Set.of("hopeBonus", "hopeSpend", "mask", "spectral", "egg", "battleHardened",
             "unbreakable", "undying", "lifeWard");
     /** Legacy gated families that are their base family plus extra conditions, which every family converts the same way. */
@@ -46,13 +46,13 @@ public final class LegacyCatalogConverter {
             "defaultOn", "exclusive", "requiresEffect", "excludesEffect", "weapon", "weaponRange", "excludeRolls", "effect", "uses",
             "usesSource", "endEffect", "hostOwned", "consumeItem", "quantity", "proficiency", "hopeDie", "diceResource", "condition", "loadoutDomain",
             "required", "traitValue", "multiplier", "allResourceDice", "steps", "damageDie", "diceByLevel", "diceByFeature", "diceConditions", "magicOnly", "weaponRanges",
-            "ignoreDisadvantage", "matchingDice");
+            "ignoreDisadvantage", "matchingDice", "resourceMultiplier");
     private static final Set<String> TRIGGER_FIELDS = Set.of("id", "label", "description", "on", "cost", "reroll", "when", "outcome",
             "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
             "chatBenefits", "allowSourceOwner", "loadoutDomain", "primaryWeapon", "anyWeapon", "advantage", "giveFear", "check", "choices",
             "magicOnly", "weaponRanges", "addDice", "damageDice", "disadvantage", "removeFear", "weaponDamage", "rollSection", "containsDie", "resourceRoll", "selectAmount",
-            "target", "excludeSourceActor", "splendorAction", "hostRollAction", "otherPlayerOnly", "spentTokenDamage", "bloodAutomation");
+            "target", "excludeSourceActor", "splendorAction", "hostRollAction", "otherPlayerOnly", "spentTokenDamage", "bloodAutomation", "swapDuality", "repeatable");
     private static final Set<String> MITIGATION_FIELDS = Set.of("id", "label", "description", "when", "cost", "negate", "halve", "reduce",
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
@@ -960,7 +960,7 @@ public final class LegacyCatalogConverter {
         else if ("spelldamage".equals(roll)) {
             when.addObject().putArray("eq").add(read("event.check.kind")).add("damage");
             when.addObject().putArray("eq").add(read("event.check.spell")).add(true);
-        } else if (roll.matches("(card|feat|featureAction):.+"))
+        } else if (roll.matches("(card|feat|featureAction|option):.+"))
             when.addObject().putArray("eq").add(read("event.check.origin")).add(roll);
         else if (!"any".equals(roll)) p.add(path, "Unsupported roll filter: " + roll);
     }
@@ -1026,6 +1026,10 @@ public final class LegacyCatalogConverter {
                 if ("spelldamage".equals(excluded.asText())) {
                     when.addObject().putArray("or").add(RuleJson.JSON.createObjectNode().set("not", flag("event.check.kind", "damage")))
                             .add(RuleJson.JSON.createObjectNode().set("not", flag("event.check.spell", true)));
+                    continue;
+                }
+                if (excluded.asText().matches("(card|feat|featureAction|option):.+")) {
+                    when.addObject().putArray("ne").add(read("event.check.origin")).add(excluded.asText());
                     continue;
                 }
                 if (!ROLLS.contains(excluded.asText())) { p.add(path + "/excludeRolls", "Unsupported roll filter: " + excluded.asText()); continue; }
@@ -1506,6 +1510,28 @@ public final class LegacyCatalogConverter {
                 applyWhen(rule, gate);
             }
         }
+        if (option.has("resourceMultiplier")) {
+            // The bonus is the pool's current value times a factor, so the option is offered only while the pool holds any.
+            JsonNode multiplier = option.get("resourceMultiplier");
+            p.onlyFields(multiplier, path + "/resourceMultiplier", Set.of("resource", "value"));
+            String resource = multiplier.path("resource").asText();
+            if (!pools.has(resource)) p.add(path + "/resourceMultiplier/resource", "Unknown resource: " + resource);
+            else if (!(multiplier.path("value").isInt() && multiplier.path("value").asInt() >= 1 && multiplier.path("value").asInt() <= 1000))
+                p.add(path + "/resourceMultiplier/value", "Expected a whole multiplier from 1 to 1000.");
+            else {
+                ObjectNode count = read("actor.pools." + resource + ".value");
+                ObjectNode product = RuleJson.JSON.createObjectNode();
+                product.putArray("multiply").add(count).add(multiplier.path("value").asInt());
+                parts.add((ObjectNode) contribution(id + "-pool", "flat", "damage".equals(roll) ? "damage" : "modifier", label).set("value", product));
+                ObjectNode available = RuleJson.JSON.createObjectNode();
+                available.putArray("gte").add(count.deepCopy()).add(1);
+                ArrayNode gate = RuleJson.JSON.createArrayNode();
+                if (rule.has("when")) gate.add(rule.get("when"));
+                gate.add(available);
+                rule.remove("when");
+                applyWhen(rule, gate);
+            }
+        }
         if (option.has("advantage")) {
             String advantage = option.path("advantage").asText();
             if (!Set.of("advantage", "disadvantage").contains(advantage)) p.add(path + "/advantage", "Expected advantage or disadvantage.");
@@ -1858,6 +1884,14 @@ public final class LegacyCatalogConverter {
         if (trigger.has("outcome")) when.addObject().putArray("eq").add(read("event.check.outcome")).add(trigger.path("outcome").asText());
         if (trigger.path("failedOnly").asBoolean(false)) when.addObject().putArray("eq").add(read("event.check.outcome")).add("failure");
         if (trigger.path("criticalOnly").asBoolean(false)) when.addObject().putArray("eq").add(read("event.check.critical")).add(true);
+        if (trigger.has("swapDuality")) {
+            if (!trigger.path("swapDuality").isBoolean()) p.add(path + "/swapDuality", "Expected a boolean.");
+            else if (trigger.path("swapDuality").asBoolean()) {
+                when.addObject().putArray("ne").add(read("event.check.kind")).add("damage");
+                when.addObject().putArray("ne").add(read("event.check.hopeDie")).add(read("event.check.fearDie"));
+            }
+        }
+        if (trigger.has("repeatable") && !trigger.path("repeatable").isBoolean()) p.add(path + "/repeatable", "Expected a boolean.");
         if (trigger.path("weaponAttack").asBoolean(false)) when.addObject().put("exists", "event.check.weapon");
         if (trigger.path("primaryWeapon").asBoolean(false)) when.addObject().putArray("eq").add(read("event.check.weapon")).add("primary");
         if (trigger.has("weaponDamage")) {
@@ -1904,6 +1938,13 @@ public final class LegacyCatalogConverter {
             step.set("dice", read("result.dice"));
             step.put("choose", "new").put("as", "rerolled");
             from = read("result.rerolled");
+            edited = true;
+        }
+        if (trigger.path("swapDuality").asBoolean(false)) {
+            ObjectNode step = steps.addObject().put("op", "roll.swapRoles");
+            step.set("from", from);
+            step.put("first", "hope").put("second", "fear").put("as", "swapped");
+            from = read("result.swapped");
             edited = true;
         }
         if (trigger.has("advantage") || trigger.has("disadvantage")) {
