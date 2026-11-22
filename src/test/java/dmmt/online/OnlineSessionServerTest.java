@@ -1662,6 +1662,32 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void automationDmSheetGrantUsesDmAudienceAndSeparateReceipts() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ((ObjectNode) catalog.at("/entries/0/features/0/automation/rules/0/bindings/0")).put("audience", "any");
+        java.nio.file.Files.writeString(file, catalog.toString());
+        campaign.getActors().add(Campaign.Actor.builder().id("ada").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "ada", """
+            {"name":"Ada","hope":{"slots":6,"on":1},"features":[
+             {"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"},
+             {"name":"Forage","automationSource":"classes:tester:features:forage","instanceId":"f"}]}""");
+        var dm = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/automation/ada"))
+                .header("Authorization", "Bearer " + URI.create(server.dmSheetUrl("ada")).getFragment());
+        var description = http.send(dm.GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, description.statusCode(), description.body());
+        assertEquals(List.of("Rally (1 Hope)"), MAPPER.readTree(description.body()).path("actions").findValuesAsText("label"));
+        String request = """
+            {"request":{"requestId":"invoke","expectedRevision":0,
+            "selections":[{"sourceInstanceId":"r","ruleId":"rally","bindingId":"sheet"}]}}""";
+        var result = http.send(dm.POST(HttpRequest.BodyPublishers.ofString(request)).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, result.statusCode(), result.body());
+        assertEquals(result.body(), http.send(dm.build(), HttpResponse.BodyHandlers.ofString()).body());
+        assertEquals(409, automationHttp(cookie(), "ada", request).statusCode());
+    }
+
+    @Test
     void profileRollStagesOptionsReactionsAndHistoryInOneRequest() throws Exception {
         automationCompendium();
         Path file = compendiumDir.resolve("classes.json");

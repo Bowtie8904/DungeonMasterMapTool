@@ -112,7 +112,7 @@ public final class RuleCompiler {
 
     public static final class Program {
         record BindingKey(String event, String surface) {}
-        record BindingRef(String ruleId, String bindingId, boolean forEach) {}
+        record BindingRef(String ruleId, String bindingId, boolean forEach, String audience) {}
         record AutomaticBinding(String ruleId, String bindingId, int priority) {}
 
         private final String sourceId;
@@ -146,7 +146,7 @@ public final class RuleCompiler {
                     if (!"button".equals(mode) && !"option".equals(mode)) continue;
                     BindingKey key = new BindingKey(event, binding.path("surface").asText());
                     bindingIndex.computeIfAbsent(key, ignored -> new ArrayList<>()).add(
-                            new BindingRef(ruleId, binding.path("id").asText(), binding.has("forEach")));
+                            new BindingRef(ruleId, binding.path("id").asText(), binding.has("forEach"), binding.path("audience").asText("self")));
                 }
             });
             Map<BindingKey, List<BindingRef>> immutableIndex = new HashMap<>();

@@ -152,6 +152,10 @@ public final class RuleDispatcher {
     private RuleDispatcher() {}
 
     public static ArrayNode describe(List<Candidate> activeSources, String surface) {
+        return describe(activeSources, surface, audience -> true);
+    }
+
+    static ArrayNode describe(List<Candidate> activeSources, String surface, java.util.function.Predicate<String> visible) {
         if (!SURFACES.contains(surface)) throw RuleJson.error("/surface", "Unknown surface.");
         List<ObjectNode> descriptions = new ArrayList<>();
         Snapshot snapshot = validateSources(activeSources);
@@ -160,6 +164,7 @@ public final class RuleDispatcher {
             ObjectNode context = candidate.context();
             String eventType = snapshot.eventType();
             for (RuleCompiler.Program.BindingRef binding : program.bindings(eventType, surface)) {
+                if (!visible.test(binding.audience())) continue;
                 if (binding.forEach())
                     RuleRuntime.describeEach(program, binding.ruleId(), binding.bindingId(), context)
                             .forEach(item -> descriptions.add((ObjectNode) item));

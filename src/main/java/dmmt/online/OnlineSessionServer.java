@@ -1263,6 +1263,7 @@ public final class OnlineSessionServer {
         if (authorization != null && authorization.startsWith("Bearer ")) {
             DmSheetGrant grant = dmSheetGrant(ctx.req().getRemoteAddr(), authorization.substring(7));
             if (grant != null) {
+                ctx.attribute("dmSheetGrant", grant);
                 String path = ctx.path();
                 if (path.equals("/api/preferences") || path.equals("/api/sheet/" + grant.actorId())
                         || path.equals("/api/sheet/" + grant.actorId() + "/demiplane")
@@ -5698,8 +5699,8 @@ public final class OnlineSessionServer {
         }
     }
 
-    /** Owner (or the DM sheet grant acting as owner) is "self"; any other session player is "other". */
-    private String automationRelation(String playerId, Campaign.Actor actor) {
+    private String automationRelation(Context ctx, String playerId, Campaign.Actor actor) {
+        if (ctx.attribute("dmSheetGrant") != null) return "dm";
         return playerId.equals(actor.getOwnerId()) ? "self" : "other";
     }
 
@@ -5720,7 +5721,7 @@ public final class OnlineSessionServer {
             ObjectNode event = automationEvent(type == null || type.isBlank() ? "action.request" : type, actor);
             ObjectNode sheet = storedSheet(actor.getId());
             ObjectNode response = automationHost.describe(automationPack(), sheet, event,
-                    surface == null || surface.isBlank() ? "sheet" : surface, automationRelation(playerId, actor));
+                    surface == null || surface.isBlank() ? "sheet" : surface, automationRelation(ctx, playerId, actor));
             ctx.header("Cache-Control", "no-store");
             json(ctx, 200, response);
         } catch (dmmt.online.automation.AutomationHost.NotReady e) {
@@ -5756,8 +5757,9 @@ public final class OnlineSessionServer {
                 sourceNames.put(element.instanceId(), element.element().deepCopy());
             long revisionBefore = automationHost.revision(sheet);
             ObjectNode event = automationEvent("action.request", actor);
+            String relation = automationRelation(ctx, playerId, actor);
             ObjectNode response = automationHost.execute(automationPack(), sheet, event,
-                    (ObjectNode) body.get("request"), automationRelation(playerId, actor), playerId, diceRandom);
+                    (ObjectNode) body.get("request"), relation, "dm".equals(relation) ? campaign.getId() : playerId, diceRandom);
             if (automationHost.revision(sheet) != revisionBefore) {
                 sheet.put("featureRevision", sheet.path("featureRevision").asLong(0) + 1);
                 List<ObjectNode> messages = new ArrayList<>();

@@ -78,9 +78,8 @@ public final class AutomationHost {
         ObjectNode state = projection.state(copy);
         var sources = projection.sources(copy);
         ObjectNode actor = actor(pack, copy, state, event, sources);
-        ArrayNode all = RuleDispatcher.describe(candidates(pack, sources, state, actor, event), surface);
-        ArrayNode visible = RuleJson.JSON.createArrayNode();
-        for (JsonNode item : all) if (allowed(item.path("audience").asText("self"), relation)) visible.add(item);
+        ArrayNode visible = RuleDispatcher.describe(candidates(pack, sources, state, actor, event), surface,
+                audience -> allowed(audience, relation));
         ObjectNode result = RuleJson.JSON.createObjectNode();
         result.put("revision", revision(copy));
         result.set("actions", visible);
@@ -123,7 +122,8 @@ public final class AutomationHost {
         ObjectNode state = projection.state(working);
         for (JsonNode entry : state.path("journal"))
             if (requestId.equals(entry.path("requestId").asText())) {
-                if (!principalId.equals(entry.path("principalId").asText()))
+                if (!principalId.equals(entry.path("principalId").asText()) ||
+                        "dm".equals(relation) != entry.path("dmPrincipal").asBoolean(false))
                     throw new RuleRuntime.Unavailable("requestId", "This request ID was already used by another caller.");
                 return ((ObjectNode) entry.path("response")).deepCopy();
             }
@@ -141,7 +141,9 @@ public final class AutomationHost {
         }
         response.put("requestId", requestId);
         ArrayNode journal = (ArrayNode) projection.state(working).get("journal");
-        journal.addObject().put("requestId", requestId).put("principalId", principalId).set("response", response.deepCopy());
+        ObjectNode receipt = journal.addObject().put("requestId", requestId).put("principalId", principalId);
+        if ("dm".equals(relation)) receipt.put("dmPrincipal", true);
+        receipt.set("response", response.deepCopy());
         while (journal.size() > JOURNAL_LIMIT) journal.remove(0);
         replace(sheet, working);
         return response;
