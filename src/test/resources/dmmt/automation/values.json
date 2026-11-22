@@ -10,6 +10,7 @@
     { "name": "negative ceiling", "expression": { "ceil": { "divide": [-3, 2] } }, "context": {}, "expected": -1 },
     { "name": "bounded gain", "expression": { "clamp": [10, 0, 6] }, "context": {}, "expected": 6 },
     { "name": "predicate", "expression": { "gte": [{ "size": { "read": "state.remaining" } }, 2] }, "context": { "state": { "remaining": ["a", "b"] } }, "expected": true },
+    { "name": "flatten one level", "expression": { "flatten": { "read": "state.groups" } }, "context": { "state": { "groups": [[1, 2], 3, [[4]]] } }, "expected": [1, 2, 3, [4]] },
     { "name": "short circuit", "expression": { "and": [false, { "read": "event.hidden" }] }, "context": {}, "expected": false },
     { "name": "choose only one branch", "expression": { "if": [true, 4, { "read": "event.hidden" }] }, "context": {}, "expected": 4 },
     { "name": "optional fact", "expression": { "exists": "event.difficulty" }, "context": { "event": {} }, "expected": false },

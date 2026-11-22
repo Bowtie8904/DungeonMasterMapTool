@@ -1798,6 +1798,55 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void resourceRollsSpendAChosenAmountAndRollThatManyDice() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"jar","name":"Jar","automation":{"actions":[{"id":"throw","label":"Throw","resourceRoll":{"resource":"gold","sides":20,"type":"magic"}}]}},
+                {"id":"sky","name":"Sky","automation":{"conditionalRollTriggers":[{"id":"damage","label":"Sky","on":"card:Sky",
+                  "resourceRoll":{"resource":"stress","sides":20,"bonusPerDie":2,"type":"magic"}}]}},
+                {"id":"mirror","name":"Mirror","automation":{"actions":[{"id":"reflect","label":"Reflect","resourceRoll":{"resource":"hope","sides":6},
+                  "report":{"text":"If any die shows 6, reflect it."}}]}}"""));
+        assertEquals(3, result.converted(), result.diagnostics().toString());
+
+        RuleCompiler.Program jar = program(result, 0);
+        ObjectNode rich = context(jar, "{\"gold\":5}", "{\"type\":\"action.request\"}");
+        var thrown = runWith(jar, rich, "throw", "{\"amount\":3}");
+        assertEquals(2, thrown.contexts().getFirst().at("/actor/gold").asInt());
+        JsonNode jarRule = result.catalog().at("/entries/0/automation/rules/0");
+        assertEquals("magic", jarRule.at("/do/0/plan/literal/metadata/damageType").asText());
+        assertTrue(jarRule.at("/ui/report").asText().startsWith("Spent {input.amount} gold: {input.amount}d20 magic damage"));
+
+        JsonNode sky = result.catalog().at("/entries/1/automation/rules/0");
+        assertEquals("track.mark", sky.at("/costs/0/op").asText());
+        assertEquals("multiply", sky.at("/do/0/plan/literal/contributions/1/value").fieldNames().next());
+        assertTrue(sky.at("/ui/report").asText().startsWith("Marked {input.amount} stress"));
+
+        JsonNode mirror = result.catalog().at("/entries/2/automation/rules/0");
+        assertEquals("resourceRoll", mirror.at("/do/0/as").asText());
+        assertEquals("roll", mirror.at("/do/0/plan/literal/metadata/kind").asText());
+        assertTrue(mirror.at("/ui/report").asText().endsWith("If any die shows 6, reflect it."));
+        RuleCompiler.Program program = program(result, 2);
+        ObjectNode after = runWith(program, context(program, "{\"hope\":{\"value\":4,\"max\":6}}", "{\"type\":\"action.request\"}"),
+                "reflect", "{\"amount\":2}").contexts().getFirst();
+        assertEquals(2, after.at("/actor/hope/value").asInt());
+    }
+
+    @Test
+    void containsDieReadsEveryFaceOfTheFinishedRollAndRollSectionsBecomeGroups() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"redirect","name":"Redirect","automation":{"rollTriggers":[{"id":"redirect","label":"Redirect","on":"any",
+                  "containsDie":6,"rollSection":"feature"}]}}"""));
+        assertEquals(1, result.converted(), result.diagnostics().toString());
+        assertEquals("sourceFeature", result.catalog().at("/entries/0/automation/rules/0/bindings/0/group").asText());
+        RuleCompiler.Program program = program(result, 0);
+        String roll = """
+                {"type":"roll.finished","check":{"kind":"action"},"roll":{"id":"r","contributions":[
+                  {"id":"d","kind":"dice","role":"roll","sourceId":"core","label":"d6","dice":[
+                    {"id":"d.d1","sides":6,"face":%d,"kept":true,"origin":"rolled"},{"id":"d.d2","sides":6,"face":2,"kept":true,"origin":"rolled"}]}]}}""";
+        assertEquals(List.of("redirect"), available(program, context(program, "{}", roll.formatted(6)), "roll"));
+        assertEquals(List.of(), available(program, context(program, "{}", roll.formatted(5)), "roll"));
+    }
+
+    @Test
     void spellcastDifficultyBecomesARollThatRefundsTheUseOnFailure() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"easy","name":"Easy","automation":{"uses":{"max":1,"per":"rest"},"spellcastDifficulty":0,"automaticRestUse":true}},

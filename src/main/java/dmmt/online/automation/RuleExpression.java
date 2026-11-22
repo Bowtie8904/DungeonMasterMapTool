@@ -10,7 +10,7 @@ import java.util.HashSet;
 
 public final class RuleExpression {
     private static final Set<String> ROOTS = Set.of("source", "actor", "recipient", "event", "state", "input", "die", "result", "args", "effects", "gear");
-    private static final Set<String> UNARY = Set.of("not", "floor", "ceil", "negate", "size");
+    private static final Set<String> UNARY = Set.of("not", "floor", "ceil", "negate", "size", "flatten");
     private static final Set<String> BINARY = Set.of("subtract", "divide", "eq", "ne", "gt", "gte", "lt", "lte", "includes", "count", "pluck", "containsText", "at");
     private static final Set<String> MANY = Set.of("add", "multiply", "min", "max", "and", "or");
     private static final double MAX_NUMBER = 9_007_199_254_740_991d;
@@ -113,6 +113,12 @@ public final class RuleExpression {
                 case "size" -> {
                     if (!value.isArray()) throw RuleJson.error(path, "size requires a collection.");
                     yield LongNode.valueOf(value.size());
+                }
+                case "flatten" -> {
+                    if (!value.isArray()) throw RuleJson.error(path, "flatten requires a collection.");
+                    com.fasterxml.jackson.databind.node.ArrayNode flat = RuleJson.JSON.createArrayNode();
+                    for (JsonNode element : value) if (element.isArray()) flat.addAll((com.fasterxml.jackson.databind.node.ArrayNode) element); else flat.add(element);
+                    yield flat;
                 }
                 default -> throw RuleJson.error(path, "Unknown expression operator.");
             };

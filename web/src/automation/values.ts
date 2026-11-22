@@ -3,7 +3,7 @@ export type Context = { [key: string]: Json };
 
 const roots = new Set(['source', 'actor', 'recipient', 'event', 'state', 'input', 'die', 'result', 'args', 'gear']);
 const reserved = new Set(['__proto__', 'constructor', 'prototype']);
-const unary = new Set(['not', 'floor', 'ceil', 'negate', 'size']);
+const unary = new Set(['not', 'floor', 'ceil', 'negate', 'size', 'flatten']);
 const binary = new Set(['subtract', 'divide', 'eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'includes', 'count', 'pluck', 'containsText']);
 const many = new Set(['add', 'multiply', 'min', 'max', 'and', 'or']);
 
@@ -123,6 +123,9 @@ export function evaluate(expression: Json, context: Context): Json {
         case 'size':
           if (!Array.isArray(value)) fail('/expression', 'size requires a collection.');
           return value.length;
+        case 'flatten':
+          if (!Array.isArray(value)) fail('/expression', 'flatten requires a collection.');
+          return (value as Json[]).flatMap(v => Array.isArray(v) ? v : [v]);
       }
     }
     const values = operands.map(evalNode);
