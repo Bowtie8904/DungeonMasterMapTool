@@ -29,6 +29,8 @@ campaign DM from a player. The grant still authorizes only its original sheet.
 Timed expiry clears an actor's `whileEffect` pool in the same reset transaction when its last supporting
 effect expires; another surviving copy preserves the balance.
 
+Started effects have persistent, non-reused instance IDs, separate from their source and effect definition. Ending and recasting the same effect must not make an earlier result refer to the new activation. Existing saved instance IDs need no rewrite.
+
 **Started, not cut over.** With a format-2 pack, the sheet panel and host endpoint support versioned single-target and whole-party actions and owner-initiated profile rolls with optional selections and inputs in the same request. Result-chat actions, catalog editing and migration remain incomplete. All nine shipped catalogs still use format 1; the replacement endpoint returns 409 for them. There is no live second-engine selector or legacy adapter.
 
 **Performance baseline.** Run `mvn "-Ddmmt.benchmark.automation=true" "-Dtest=OnlineSessionServerTest#measurePersistedProfileAndPartyActions" test` separately from other tests. It uses loopback HTTP and a temporary on-disk campaign, six sheets with 12 KB of notes each, a profile attack with a finished reaction, and a versioned action with a recipient filter and five recipients. After 20 warm-up cycles the retry journal is full. The next 40 cycles measure each request to receipt of its response, including persistence on POST. The party GET is the sheet offer, not an extra roll request.

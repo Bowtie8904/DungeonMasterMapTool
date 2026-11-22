@@ -109,13 +109,8 @@ public final class RuleEffects {
         String key = program.sourceId() + "#" + effectId;
         String instanceId = context.path("source").path("instanceId").asText();
         String stacking = definition.path("stacking").asText("replace");
-        int existing = 0, next = 1;
-        for (JsonNode effect : list) if (matches(effect, key, instanceId)) {
-            existing++;
-            String[] parts = effect.path("id").asText().split("/");
-            try { next = Math.max(next, Integer.parseInt(parts[parts.length - 1]) + 1); } catch (NumberFormatException ignored) {}
-        }
-        if ("unique".equals(stacking) && existing > 0) throw new RuleRuntime.Unavailable("effectActive", "This effect is already active.");
+        if ("unique".equals(stacking)) for (JsonNode effect : list)
+            if (matches(effect, key, instanceId)) throw new RuleRuntime.Unavailable("effectActive", "This effect is already active.");
         if ("replace".equals(stacking)) remove(list, key, instanceId);
         if ("replaceAnySource".equals(stacking)) for (int i = list.size() - 1; i >= 0; i--)
             if (key.equals(list.get(i).path("effect").asText()) && !list.get(i).path("derived").asBoolean()) list.remove(i);
@@ -125,7 +120,7 @@ public final class RuleEffects {
                 if (group.equals(list.get(i).path("group").asText()) && !list.get(i).path("derived").asBoolean()) list.remove(i);
         if (list.size() >= MAX_INSTANCES) throw RuleJson.error("/effects", "Too many active effects.");
         ObjectNode instance = RuleJson.JSON.createObjectNode()
-                .put("id", instanceId + "/" + effectId + "/" + next)
+                .put("id", java.util.UUID.randomUUID().toString())
                 .put("effect", key)
                 .put("sourceInstanceId", instanceId)
                 .put("label", RuleTemplate.render(definition.path("label").asText(), context));

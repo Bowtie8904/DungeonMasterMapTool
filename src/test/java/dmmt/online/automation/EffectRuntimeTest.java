@@ -38,7 +38,8 @@ class EffectRuntimeTest {
         assertEquals("Guard (0 active)", RuleRuntime.describe(program, "guard", "sheet", before).path("label").asText());
         var result = run(program, "guard", before, "{}");
         JsonNode effect = result.context().path("actor").path("effects").get(0);
-        assertEquals("inst-1/guarded/1", effect.path("id").asText());
+        assertFalse(effect.required("id").asText().isBlank());
+        assertEquals("inst-1", effect.required("sourceInstanceId").asText());
         assertEquals("features:stance-example#guarded", effect.path("effect").asText());
         assertEquals("Shieldwall: guarded", effect.path("label").asText());
         assertEquals("+2 Evasion until your next rest.", effect.path("text").asText());
@@ -56,7 +57,8 @@ class EffectRuntimeTest {
         ObjectNode state = context();
         for (int i = 0; i < 3; i++) state = run(program, "focus", state, "{}").context();
         assertEquals(3, state.path("actor").path("effects").size());
-        assertEquals("inst-1/focus/3", state.path("actor").path("effects").get(2).path("id").asText());
+        List<String> originalIds = state.path("actor").path("effects").findValuesAsText("id");
+        assertEquals(3, originalIds.stream().distinct().count());
 
         state = run(program, "oath", state, "{}").context();
         ObjectNode sworn = state;
@@ -70,6 +72,9 @@ class EffectRuntimeTest {
         assertEquals("Ended 3 focus.", released.report());
         assertEquals(1, released.context().path("actor").path("effects").size());
         assertFalse(RuleRuntime.describe(program, "release", "sheet", released.context()).path("available").asBoolean());
+        var recast = run(program, "focus", released.context(), "{}").context();
+        assertFalse(originalIds.contains(recast.requiredAt("/actor/effects/1/id").textValue()),
+                "An expired result must never address a new activation of the same effect.");
     }
 
     @Test
