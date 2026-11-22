@@ -52,7 +52,7 @@ public final class LegacyCatalogConverter {
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
             "chatBenefits", "allowSourceOwner", "loadoutDomain", "primaryWeapon", "anyWeapon", "advantage", "giveFear", "check", "choices",
             "magicOnly", "weaponRanges", "addDice", "damageDice", "disadvantage", "removeFear", "weaponDamage", "rollSection", "containsDie", "resourceRoll", "selectAmount",
-            "target", "excludeSourceActor", "splendorAction");
+            "target", "excludeSourceActor", "splendorAction", "hostRollAction", "otherPlayerOnly", "spentTokenDamage", "bloodAutomation");
     private static final Set<String> MITIGATION_FIELDS = Set.of("id", "label", "description", "when", "cost", "negate", "halve", "reduce",
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
@@ -67,7 +67,8 @@ public final class LegacyCatalogConverter {
     private static final Set<String> ACTION_FIELDS = Set.of("splendorAction", "id", "label", "description", "cost", "steps", "report", "damage",
             "requiresEffect", "excludesEffect", "endEffect", "uses", "usesSource", "actionRoll", "target",
             "excludeSourceActor", "hostOwned", "selectAmount", "resourceRoll", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
-            "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime", "table");
+            "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime", "table",
+            "hostRollAction", "bloodAutomation", "castTokens");
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
@@ -1687,6 +1688,21 @@ public final class LegacyCatalogConverter {
     private static ObjectNode rollTrigger(JsonNode trigger, String path, Problems p, ObjectNode effects, Pools pools, boolean limited) {
         p.onlyFields(trigger, path, TRIGGER_FIELDS);
         hostOwned(trigger, path, p);
+        hostRollAction(trigger, path, p);
+        boolean spentTokenDamage = false;
+        if (trigger.has("spentTokenDamage")) {
+            JsonNode sides = trigger.path("spentTokenDamage").path("sides");
+            p.onlyFields(trigger.path("spentTokenDamage"), path + "/spentTokenDamage", Set.of("sides"));
+            if (trigger.has("damage") || !sides.isInt() || sides.asInt() < 2 || sides.asInt() > 1000) {
+                p.add(path + "/spentTokenDamage", "Expected one die size and no other damage.");
+            } else {
+                spentTokenDamage = true;
+                trigger = trigger.deepCopy();
+                ((ObjectNode) trigger).remove("spentTokenDamage");
+                ((ObjectNode) trigger).putObject("damage").put("dice", "d" + sides.asInt()).put("fixed", true).put("type", "magic")
+                        .put(COUNT_READ, "event.roll.metadata." + SPENT_TOKENS);
+            }
+        }
         if (trigger.has("successIfKnown") && !trigger.path("successIfKnown").isBoolean())
             p.add(path + "/successIfKnown", "Expected a boolean.");
         if (trigger.has("difficulty") && (!trigger.path("difficulty").isIntegralNumber() || trigger.path("difficulty").asInt() < 0))
@@ -1751,6 +1767,11 @@ public final class LegacyCatalogConverter {
         }
         if ("spellcast".equals(trigger.path("damage").path("count").asText()))
             when.addObject().put("exists", "actor.spellcastTrait.value");
+        if (spentTokenDamage) {
+            String spent = "event.roll.metadata." + SPENT_TOKENS;
+            when.addObject().put("exists", spent);
+            when.addObject().putArray("gte").add(read(spent)).add(1);
+        }
         if (trigger.has("on")) rollCondition(trigger.path("on").asText(), path + "/on", p, when);
         if (trigger.has("when")) {
             String condition = trigger.path("when").asText();
@@ -2536,8 +2557,48 @@ public final class LegacyCatalogConverter {
         return "recipient";
     }
 
+    /** Roll metadata field recording how many tokens the cast spent, read later by {@code spentTokenDamage} triggers. */
+    private static final String SPENT_TOKENS = "spentTokens";
+    private static final String COUNT_READ = "@countRead";
+
+    /**
+     * {@code hostRollAction}, {@code bloodAutomation} and {@code otherPlayerOnly} only described how the legacy host
+     * gated a roll; the converted rule already pays, limits and filters by its own cost, limit and audience, so they are
+     * validated and dropped.
+     */
+    private static void hostRollAction(JsonNode legacy, String path, Problems p) {
+        for (String flag : List.of("hostRollAction", "bloodAutomation", "otherPlayerOnly"))
+            if (legacy.has(flag) && !legacy.path(flag).asBoolean(false)) p.add(path + "/" + flag, "Expected true.");
+        if (legacy.path("hostRollAction").asBoolean(false)) {
+            boolean action = legacy.has("actionRoll");
+            if (action && legacy.path("actionRoll").path("reaction").asBoolean(false))
+                p.add(path + "/hostRollAction", "A host-paid roll action cannot be a reaction.");
+            else if (!action && !legacy.has("reroll")) p.add(path + "/hostRollAction", "A host-paid roll needs an action roll or a reroll.");
+        }
+        if (legacy.has("otherPlayerOnly") && !"ally".equals(legacy.path("audience").asText()))
+            p.add(path + "/otherPlayerOnly", "Other-player-only triggers need the ally audience.");
+    }
+
+    /** {@code castTokens}: the cast chooses how many tokens of a pool to spend; the roll records the amount. */
+    private static JsonNode castTokens(JsonNode action, String path, Problems p) {
+        JsonNode spec = action.path("castTokens");
+        p.onlyFields(spec, path + "/castTokens", Set.of("resource", "sides"));
+        if (action.has("selectAmount")) p.add(path + "/castTokens", "A cast cannot also select another amount.");
+        if (!action.has("actionRoll")) p.add(path + "/castTokens", "Spent tokens need an action roll.");
+        if (spec.path("resource").asText("").isBlank()) p.add(path + "/castTokens/resource", "Expected a resource.");
+        if (!spec.path("sides").isInt() || spec.path("sides").asInt() < 2 || spec.path("sides").asInt() > 1000)
+            p.add(path + "/castTokens/sides", "Expected a die size of 2 to 1000.");
+        ObjectNode copy = action.deepCopy();
+        copy.remove("castTokens");
+        copy.putObject("selectAmount").put("resource", spec.path("resource").asText()).put("label", "Tokens to spend");
+        return copy;
+    }
+
     private static ObjectNode action(JsonNode action, String path, Problems p, ObjectNode effects, Pools pools, boolean limited) {
         p.onlyFields(action, path, ACTION_FIELDS);
+        hostRollAction(action, path, p);
+        boolean spendsTokens = action.has("castTokens");
+        if (spendsTokens) action = castTokens(action, path, p);
         String id = action.path("id").asText();
         if (!ID.matcher(id).matches()) { p.add(path + "/id", "Invalid action ID: " + id); return null; }
         String label = action.path("label").asText("");
@@ -2601,6 +2662,8 @@ public final class LegacyCatalogConverter {
         if (limited) rule.put("limitRef", "uses");
         ArrayNode steps = RuleJson.JSON.createArrayNode();
         if (action.has("actionRoll")) actionRoll(action.get("actionRoll"), path + "/actionRoll", action, p, steps);
+        if (spendsTokens && rule.has("inputs") && !steps.isEmpty())
+            ((ObjectNode) steps.get(0)).putObject("metadata").set(SPENT_TOKENS, read("input.amount"));
         if (action.has("damage")) {
             var pooled = POOL_DICE.matcher(damage.path("dice").asText(""));
             if (pooled.matches() && !pools.has(pooled.group(1))) p.add(path + "/damage/dice", "Unknown dice-count pool: " + pooled.group(1));
@@ -3176,7 +3239,8 @@ public final class LegacyCatalogConverter {
      * flat contribution, matching the Daggerheart critical damage rule.
      */
     private static void actionDamage(JsonNode legacy, String path, JsonNode action, Problems p, ArrayNode steps, JsonNode critical, String as) {
-        p.onlyFields(legacy, path, Set.of("dice", "type", "fixed", "count"));
+        p.onlyFields(legacy, path, Set.of("dice", "type", "fixed", "count", COUNT_READ));
+        String countRead = legacy.path(COUNT_READ).asText(null);
         String diceText = legacy.path("dice").asText("");
         String poolCount = null;
         var pooled = POOL_DICE.matcher(diceText);
@@ -3232,7 +3296,8 @@ public final class LegacyCatalogConverter {
         ArrayNode contributions = plan.putArray("contributions");
         ObjectNode dice = contributions.addObject().put("id", slug(id + "-damage-dice")).put("kind", "dice")
                 .put("role", "damage").put("sourceId", "core").put("label", action.path("label").asText("Damage"));
-        if (spellcastCount) dice.set("count", spellcastDiceCount(fixedCount));
+        if (countRead != null) dice.set("count", read(countRead));
+        else if (spellcastCount) dice.set("count", spellcastDiceCount(fixedCount));
         else if (poolCount != null) dice.set("count", read("actor.pools." + poolCount + ".value"));
         else if (fixed) dice.put("count", fixedCount);
         else dice.set("count", read("actor.proficiency.value"));

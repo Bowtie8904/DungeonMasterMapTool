@@ -44,7 +44,7 @@ public final class RuleCompiler {
             Map.entry("state.set", List.of("slot", "value")),
             Map.entry("state.increment", List.of("slot", "by")),
             Map.entry("value", List.of("value")),
-            Map.entry("roll.resolve", List.of("plan")),
+            Map.entry("roll.resolve", List.of("plan", "metadata")),
             Map.entry("roll.capture", List.of("from")),
             Map.entry("roll.check", List.of("from")),
             Map.entry("roll.addPoolDie", List.of("from", "pool", "dieId", "role", "label", "owner")),
@@ -743,6 +743,9 @@ public final class RuleCompiler {
                     references(RuleTemplate.references(part.path("label").asText()), args, decl, inputs, results, usesDieContext, path + "/" + list + "/contribution/label");
                     for (String expression : List.of("count", "sides", "keepHighest", "maximize", "value", "factor")) if (part.has(expression))
                         references(RuleExpression.references(part.get(expression)), args, decl, inputs, results, usesDieContext, path + "/" + list + "/contribution/" + expression);
+                } else if ("metadata".equals(field) && "roll.resolve".equals(op.path("op").asText())) {
+                    op.path(field).fields().forEachRemaining(entry -> references(RuleExpression.references(entry.getValue()), args, decl,
+                            inputs, results, usesDieContext, path + "/" + list + "/metadata/" + entry.getKey()));
                 } else if (PER_DIE_FIELDS.contains(field) && op.path("op").asText().startsWith("roll.")) {
                     references(RuleExpression.references(op.path(field)), args, decl, inputs, results, true, path + "/" + list + "/" + field);
                 } else if (!Set.of("pool", "track", "slot", "role", "effect", "target", "owner", "limit", "choose", "maxDice", "collection", "to", "plan", "field").contains(field)) {
@@ -801,6 +804,7 @@ public final class RuleCompiler {
         for (String field : fields) if (!operation.has(field)
                 && !("pool.roll".equals(op) && "keepHighest".equals(field))
                 && !"owner".equals(field)
+                && !("roll.resolve".equals(op) && "metadata".equals(field))
                 && !("damage.resolve".equals(op) && "armor".equals(field))
                 && !("claim.offer".equals(op) && "limit".equals(field))
                 && !("inventory.grant".equals(op) && Set.of("to", "tag", "max", "scope").contains(field)))
@@ -943,6 +947,13 @@ public final class RuleCompiler {
             else if (Set.of("id", "label").contains(field) && Set.of("damage.reduce", "damage.increase", "damage.deal", "countdown.start", "claim.offer", "table.gain", "table.spend").contains(op))
                 RuleTemplate.validate(RuleJson.text(value, path + "/" + field));
             else if (Set.of("choose", "maxDice").contains(field)) continue;
+            else if ("metadata".equals(field) && "roll.resolve".equals(op)) {
+                if (!value.isObject() || value.size() > 16) throw RuleJson.error(path + "/metadata", "Expected a bounded object of expressions.");
+                value.fields().forEachRemaining(entry -> {
+                    RuleJson.id(com.fasterxml.jackson.databind.node.TextNode.valueOf(entry.getKey()), path + "/metadata");
+                    RuleExpression.validate(entry.getValue(), path + "/metadata/" + entry.getKey());
+                });
+            }
             else if ("dieId".equals(field)) RuleExpression.validate(value, path + "/" + field);
             else RuleExpression.validate(value, path + "/" + field);
         }

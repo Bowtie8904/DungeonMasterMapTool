@@ -765,6 +765,14 @@ public final class RuleRuntime {
                 if (preview) throw new Unavailable("randomPreview", "This preview requires a committed roll; no dice were rolled.");
                 int remaining = 1024 - rolls.stream().mapToInt(RuleRuntime::rolledDice).sum();
                 ObjectNode roll = StructuredRoll.resolve(eval(op.path("plan"), context), context, random, remaining);
+                if (op.has("metadata")) {
+                    ObjectNode metadata = roll.has("metadata") ? (ObjectNode) roll.get("metadata") : roll.putObject("metadata");
+                    for (var entry : (Iterable<java.util.Map.Entry<String, JsonNode>>) () -> op.get("metadata").fields()) {
+                        JsonNode value = eval(entry.getValue(), context);
+                        if (!value.isValueNode()) throw RuleJson.error("/metadata/" + entry.getKey(), "Roll metadata values must be scalars.");
+                        metadata.set(entry.getKey(), value);
+                    }
+                }
                 rolls.add(roll);
                 result = roll;
             }

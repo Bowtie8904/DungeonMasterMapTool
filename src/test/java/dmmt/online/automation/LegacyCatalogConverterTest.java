@@ -975,6 +975,38 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void hostRollActionsAreValidatedAndSpentTokensFlowIntoTheRollMetadata() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"paid","name":"Paid","automation":{"actions":[
+                  {"id":"strike","label":"Strike","hostRollAction":true,"bloodAutomation":true,"cost":{"hope":1},
+                   "actionRoll":{"trait":"Agility","attack":true}}]}},
+                {"id":"chaos","name":"Chaos","automation":{
+                  "actions":[{"id":"unleash","label":"Unleash","hostRollAction":true,"castTokens":{"resource":"hope","sides":10},
+                   "actionRoll":{"trait":"spellcast"}}],
+                  "conditionalRollTriggers":[{"id":"burst","label":"Burst","on":"card:Chaos","spentTokenDamage":{"sides":10}}]}},
+                {"id":"help","name":"Help","automation":{"rollTriggers":[
+                  {"id":"cheer","label":"Cheer","audience":"ally","otherPlayerOnly":true,"hostRollAction":true,"reroll":"duality"}]}}"""));
+        assertEquals(3, result.converted(), result.diagnostics().toString());
+
+        JsonNode unleash = block(result, 1).at("/rules/0");
+        assertEquals("integer", unleash.at("/inputs/0/kind").asText());
+        JsonNode annotate = unleash.at("/do");
+        boolean annotated = false;
+        for (JsonNode step : annotate) annotated |= "roll.resolve".equals(step.path("op").asText()) && step.at("/metadata/spentTokens/read").asText().equals("input.amount");
+        assertTrue(annotated, unleash.toString());
+        String burst = block(result, 1).at("/rules/1").toString();
+        assertTrue(burst.contains("event.roll.metadata.spentTokens"), burst);
+        assertEquals("others", block(result, 2).at("/rules/0/bindings/0/audience").asText());
+
+        var invalid = LegacyCatalogConverter.convert(catalog("""
+                {"id":"a","name":"A","automation":{"actions":[{"id":"x","label":"X","hostRollAction":true}]}},
+                {"id":"b","name":"B","automation":{"actions":[{"id":"x","label":"X","hostRollAction":true,"actionRoll":{"trait":"Agility","reaction":true}}]}},
+                {"id":"c","name":"C","automation":{"rollTriggers":[{"id":"x","label":"X","otherPlayerOnly":true,"reroll":"duality"}]}}"""));
+        assertEquals(0, invalid.converted(), invalid.diagnostics().toString());
+        assertEquals(3, invalid.diagnostics().size(), invalid.diagnostics().toString());
+    }
+
+    @Test
     void resurrectionVaultsTheCardOnlyOnFiveOrLess() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"t","name":"T","automation":{"spellcastDifficulty":13,"rollTriggers":[
