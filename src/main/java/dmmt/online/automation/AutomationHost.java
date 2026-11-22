@@ -316,6 +316,12 @@ public final class AutomationHost {
         if (actor.path("effects").isArray()) {
             ArrayNode kept = RuleEffects.expire(actor.path("effects"), event);
             if (kept.size() != actor.path("effects").size()) {
+                Set<String> losingPools = boundPools(pack, actor.path("effects"));
+                losingPools.removeAll(boundPools(pack, kept));
+                for (String id : losingPools) {
+                    JsonNode pool = actor.path("pools").get(id);
+                    if (pool != null) RuleJson.object(pool, "/actor/pools/" + id).put("value", 0);
+                }
                 actor.set("effects", kept);
                 changed = true;
             }
@@ -326,6 +332,18 @@ public final class AutomationHost {
         state.put("revision", state.path("revision").asLong() + 1);
         replace(sheet, working);
         return true;
+    }
+
+    private static Set<String> boundPools(Pack pack, JsonNode effects) {
+        Set<String> ids = new java.util.HashSet<>();
+        for (JsonNode instance : effects) {
+            String key = instance.path("effect").asText();
+            int split = key.lastIndexOf('#');
+            if (split < 1) continue;
+            var program = pack.programs().get(key.substring(0, split));
+            if (program != null) ids.addAll(program.poolsBoundTo(key.substring(split + 1)));
+        }
+        return ids;
     }
 
     private List<RuleDispatcher.Candidate> candidates(Pack pack, ObjectNode sheet, ObjectNode event) {

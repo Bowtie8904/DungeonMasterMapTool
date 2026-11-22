@@ -119,6 +119,7 @@ public final class RuleCompiler {
         private final ObjectNode initialState;
         private final ObjectNode limits;
         private final ObjectNode pools;
+        private final Map<String, List<String>> poolsByEffect;
         private final ObjectNode effects;
         private final ArrayNode modifiers;
         private final Map<String, ObjectNode> rules;
@@ -131,6 +132,13 @@ public final class RuleCompiler {
             this.initialState = decl.state().deepCopy();
             this.limits = decl.limits().deepCopy();
             this.pools = decl.pools().deepCopy();
+            Map<String, List<String>> bound = new HashMap<>();
+            this.pools.fields().forEachRemaining(entry -> {
+                if (entry.getValue().has("whileEffect"))
+                    bound.computeIfAbsent(entry.getValue().get("whileEffect").textValue(), ignored -> new ArrayList<>()).add(entry.getKey());
+            });
+            bound.replaceAll((key, ids) -> List.copyOf(ids));
+            this.poolsByEffect = Map.copyOf(bound);
             this.effects = decl.effects().deepCopy();
             this.modifiers = modifiers.deepCopy();
             this.rules = new LinkedHashMap<>();
@@ -165,6 +173,7 @@ public final class RuleCompiler {
         public ObjectNode initialState() { return initialState.deepCopy(); }
         ObjectNode limits() { return limits.deepCopy(); }
         ObjectNode pools() { return pools.deepCopy(); }
+        List<String> poolsBoundTo(String effectId) { return poolsByEffect.getOrDefault(effectId, List.of()); }
         ObjectNode effects() { return effects.deepCopy(); }
         ArrayNode modifiers() { return modifiers.deepCopy(); }
         /** Additional attack profiles the source offers while it is active. */

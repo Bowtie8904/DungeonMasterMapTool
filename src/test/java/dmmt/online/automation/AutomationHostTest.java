@@ -214,6 +214,31 @@ class AutomationHostTest {
     }
 
     @Test
+    void timedExpiryClearsOnlyPoolsWhoseLastSupportingEffectEnded() throws Exception {
+        ObjectNode catalog = fixture("rewrite/host-classes");
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        automation.putObject("effects").putObject("stance").put("label", "Stance");
+        automation.putObject("pools").putObject("charge").put("kind", "number").put("scope", "actor")
+                .put("whileEffect", "stance").put("max", 4);
+        var pack = AutomationHost.compile("test", Map.of("classes", catalog.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet();
+        ObjectNode state = HOST.projection().state(sheet);
+        ObjectNode pools = state.putObject("pools");
+        pools.putObject("charge").put("value", 3).put("max", 4);
+        pools.putObject("other").put("value", 2);
+        var effects = state.putArray("effects");
+        for (String end : List.of("scene.end", "session.start"))
+            effects.addObject().put("id", end).put("effect", "classes:tester:features:steady#stance")
+                    .put("sourceInstanceId", "f-steady").putArray("until").add(end);
+        assertTrue(HOST.resetLimits(pack, sheet, "scene.end"));
+        assertEquals(3, sheet.at("/automationState/pools/charge/value").intValue());
+        assertTrue(HOST.resetLimits(pack, sheet, "session.start"));
+        assertEquals(0, sheet.at("/automationState/pools/charge/value").intValue());
+        assertEquals(2, sheet.at("/automationState/pools/other/value").intValue());
+        assertFalse(HOST.resetLimits(pack, sheet, "session.start"));
+    }
+
+    @Test
     void duplicateInstancesAndLegacyPacksAreRejected() throws Exception {
         ObjectNode sheet = sheet();
         ((ObjectNode) sheet.path("features").get(1)).put("instanceId", "f-rally");
