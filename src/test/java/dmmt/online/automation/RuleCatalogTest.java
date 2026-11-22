@@ -78,6 +78,22 @@ class RuleCatalogTest {
     }
 
     @Test
+    void hostRejectsCatalogsWhoseCategoryDoesNotMatchTheFile() throws Exception {
+        String recipes = fixture("rewrite/recipes").toString();
+        String classes = fixture("rewrite/host-classes").toString();
+        assertDoesNotThrow(() -> AutomationHost.compile("test", java.util.Map.of("classes", classes), recipes));
+        var mismatch = assertThrows(AutomationHost.NotReady.class,
+                () -> AutomationHost.compile("test", java.util.Map.of("items", classes), recipes));
+        assertTrue(mismatch.getMessage().contains("items"), mismatch.getMessage());
+        assertTrue(mismatch.getMessage().contains("does not match"), mismatch.getMessage());
+        String empty = "{\"format\":\"dmmap-daggerheart\",\"version\":2,\"category\":\"items\",\"entries\":[]}";
+        assertThrows(AutomationHost.NotReady.class,
+                () -> AutomationHost.compile("test", java.util.Map.of("classes", empty), recipes));
+        assertThrows(AutomationHost.NotReady.class,
+                () -> AutomationHost.compile("test", java.util.Map.of("other", empty), recipes));
+    }
+
+    @Test
     void unusedRecipesAreCheckedEvenWhenTheCatalogHasNoAutomation() throws Exception {
         String catalog = """
                 {"format":"dmmap-daggerheart","version":2,"category":"items","entries":[]}

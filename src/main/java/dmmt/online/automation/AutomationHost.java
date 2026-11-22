@@ -63,7 +63,7 @@ public final class AutomationHost {
         }
         for (var entry : catalogs.entrySet()) {
             try {
-                for (RuleCatalog.Source source : RuleCatalog.compile(entry.getValue(), compiledRecipes))
+                for (RuleCatalog.Source source : RuleCatalog.compileNamed(entry.getKey(), entry.getValue(), compiledRecipes))
                     if (programs.put(source.id(), source.program()) != null)
                         throw new NotReady("Duplicate automation source " + source.id() + ".");
             } catch (IOException | IllegalArgumentException ex) {

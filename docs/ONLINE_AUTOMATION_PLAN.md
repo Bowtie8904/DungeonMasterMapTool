@@ -73,6 +73,10 @@ yet been connected to the separate downtime descriptors; a sheet request is not 
 
 Unused recipe bodies also validate concrete binding IDs, event/surface/mode names, audience, defaults, priority, result groups, static conditions, target and claim scopes, UI templates, and complete input definitions without substitutions. Duplicate concrete input IDs and automatic rules with concrete inputs or costs are rejected as well. Local argument, input and result references are checked against their availability and operation order; scopes or expressions affected by substitutions are deferred to expansion. Input details containing substitutions and checks depending on the eventual source's declarations still run at expansion; full unused-body semantic linking is not yet complete. Expanded rules also validate references in target filters, roll plans and dice-table outcome templates.
 
+The host validates each present format-2 catalog's declared category against its filename, as the full
+candidate-pack validator does. A mismatched category makes the automation pack unavailable rather than
+silently producing source IDs that do not match the sheet. The separate nine-category cutover gate remains.
+
 **Performance baseline.** Run `mvn "-Ddmmt.benchmark.automation=true" "-Dtest=OnlineSessionServerTest#measurePersistedProfileAndPartyActions" test` separately from other tests. It uses loopback HTTP and a temporary on-disk campaign, six sheets with 12 KB of notes each, a profile attack with conditional and unconditional passives, a stored-effect modifier, a selected option and a finished reaction, and versioned result and sheet actions with a recipient filter and five recipients each. It checks the applied modifiers and total. After 20 warm-up cycles the retry journal is full. The next 40 cycles measure each request to receipt of its response, including persistence on POST. The result GET fetches a post-roll target offer; neither GET is required to resolve the roll.
 
 | Request | Median | p95 | Mean allocated per request |

@@ -30,8 +30,11 @@ public final class RuleCatalog {
         return RuleCompiler.recipes(RuleCompiler.parseDocument(recipesJson, "dmmap-daggerheart-rules"));
     }
 
-    static List<Source> compile(String catalogJson, Map<String, ObjectNode> recipes) throws IOException {
-        return compile(RuleCompiler.parseDocument(catalogJson, "dmmap-daggerheart"), recipes);
+    static List<Source> compileNamed(String category, String catalogJson, Map<String, ObjectNode> recipes) throws IOException {
+        ObjectNode catalog = RuleCompiler.parseDocument(catalogJson, "dmmap-daggerheart");
+        if (!category.equals(catalog.path("category").asText()))
+            throw RuleJson.error("/pack/" + category, "Catalog category does not match its filename.");
+        return compile(catalog, recipes);
     }
 
     private static List<Source> compile(ObjectNode catalog, Map<String, ObjectNode> recipes) {
@@ -104,9 +107,7 @@ public final class RuleCatalog {
         Map<String, ObjectNode> recipes = recipes(recipesJson);
         Map<String, List<Source>> result = new LinkedHashMap<>();
         for (String category : CATEGORIES.stream().sorted().toList()) {
-            ObjectNode file = RuleCompiler.parseDocument(catalogs.get(category), "dmmap-daggerheart");
-            if (!category.equals(file.path("category").asText())) throw RuleJson.error("/pack/" + category, "Catalog category does not match its filename.");
-            result.put(category, compile(file, recipes));
+            result.put(category, compileNamed(category, catalogs.get(category), recipes));
         }
         return Map.copyOf(result);
     }
