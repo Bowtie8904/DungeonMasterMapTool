@@ -1565,6 +1565,11 @@ class OnlineSessionServerTest {
         return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    private HttpResponse<String> resultHttp(String cookie, String actorId, String resultId) throws Exception {
+        return http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/automation/" + actorId
+                + "?resultId=" + resultId)).header("Cookie", cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
+    }
+
     @Test
     void automationEndpointsDescribeExecuteJournalAndRejectStaleOrForeignUse() throws Exception {
         automationCompendium();
@@ -1925,6 +1930,10 @@ class OnlineSessionServerTest {
             {"id":"block","bindings":[{"id":"auto","surface":"roll","event":"roll.prepare","mode":"automatic"}],
              "when":{"eq":[{"read":"event.table.fear"},0]},"ui":{"label":"Block"},
              "do":[{"op":"event.block","reason":"The attack is blocked."}]}"""));
+        rules.add(MAPPER.readTree("""
+            {"id":"after","bindings":[{"id":"apply","surface":"chat","event":"roll.finished","mode":"button"}],
+             "when":{"eq":[{"read":"event.check.dominant"},"fear"]},"ui":{"label":"Use total {event.check.total}"},
+             "do":[{"op":"table.gain","resource":"fear","label":"After","amount":1}]}"""));
         java.nio.file.Files.writeString(file, catalog.toString());
         String initial = """
             {"name":"Ada","level":2,"stress":{"slots":6,"on":0},"traits":[{"name":"Finesse","mod":3}],
@@ -1961,6 +1970,12 @@ class OnlineSessionServerTest {
         JsonNode event = MAPPER.readTree(result.body()).path("event");
         assertEquals("roll.finished", event.path("type").asText());
         assertEquals(29, event.at("/check/total").intValue()); // 1 Hope + 5 Fear + 3 Finesse + 20 boost
+        String resultId = event.required("resultId").textValue();
+        var resultOptions = MAPPER.readTree(result.body()).required("resultActions");
+        assertEquals(List.of("Use total 29"), resultOptions.findValuesAsText("label"));
+        assertEquals(resultOptions, MAPPER.readTree(resultHttp(cookie, "roller", resultId).body()).required("actions"));
+        assertEquals(409, resultHttp(cookie, "roller", "not-current").statusCode());
+        assertEquals(403, resultHttp(allyCookie("result-viewer"), "roller", resultId).statusCode());
         assertEquals("fear", event.at("/check/dominant").asText());
         assertTrue(event.at("/check/difficulty").isNull());
         assertEquals("far", event.at("/check/range").asText());
@@ -1987,6 +2002,9 @@ class OnlineSessionServerTest {
         assertEquals(6, base.at("/dice/0/sides").intValue());
         assertEquals(base.at("/dice/0/face").intValue() + 1, damageEvent.at("/check/total").intValue());
         assertEquals(403, automationHttp(allyCookie("other-roller"), "roller", damage).statusCode());
+        var retained = MAPPER.readTree(resultHttp(cookie, "roller", resultId).body());
+        assertEquals(2, retained.required("revision").asInt());
+        assertEquals(List.of("Use total 29"), retained.required("actions").findValuesAsText("label"));
     }
 
     @Test

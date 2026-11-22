@@ -1671,6 +1671,7 @@ public final class OnlineSessionServer {
             SplendorActions.preserveSave((ObjectNode) sheet, previous);
             if (previous.has("automationState")) ((ObjectNode) sheet).set("automationState", previous.get("automationState").deepCopy());
             else ((ObjectNode) sheet).remove("automationState");
+            automationHost.pruneResultWindows((ObjectNode) sheet);
             DmEffectProtection.validate(previous, sheet, null);
             BoneValorRules.validateSave(previous, (ObjectNode) sheet);
             String problem = CharacterSheetRules.problem(sheet, previous, actor.isTestingCharacter(), c.getFear());
@@ -5768,11 +5769,22 @@ public final class OnlineSessionServer {
             ObjectNode sheet = stored == null ? MAPPER.createObjectNode() : hydrateSheet(actor.getId(), stored);
             String relation = automationRelation(ctx, playerId, actor);
             String requestedSurface = surface == null || surface.isBlank() ? "sheet" : surface;
+            if (ctx.queryParam("resultId") != null) {
+                ObjectNode result = automationHost.describeResult(pack, sheet, ctx.queryParam("resultId"), relation, playerId,
+                        automationEvent("action.request", actor));
+                ctx.header("Cache-Control", "no-store");
+                json(ctx, 200, result);
+                return;
+            }
             PartyTargets party = "sheet".equals(requestedSurface) && "action.request".equals(event.path("type").asText())
                     && !"dm".equals(relation) ? new AutomationRoster(pack, event, actor, stored, sheet).party : null;
             ObjectNode response = automationHost.describe(pack, sheet, event, requestedSurface, relation, party);
             ctx.header("Cache-Control", "no-store");
             json(ctx, 200, response);
+        } catch (dmmt.online.automation.RuleRuntime.Unavailable e) {
+            json(ctx, 409, errorBody(e.getMessage()));
+        } catch (SecurityException e) {
+            json(ctx, 403, errorBody(e.getMessage()));
         } catch (dmmt.online.automation.AutomationHost.NotReady e) {
             json(ctx, 409, errorBody("Automation is unavailable: " + e.getMessage()));
         } catch (IllegalArgumentException e) {
@@ -5889,7 +5901,7 @@ public final class OnlineSessionServer {
     }
 
     private ObjectNode automationEvent(String type, Campaign.Actor actor) {
-        return dmmt.online.automation.AutomationHost.event(type, actor.getId(), campaign.getFear());
+        return dmmt.online.automation.AutomationHost.event(type, actor.getId(), campaign.getFear()).put("sessionId", sessionId);
     }
 
     private ObjectNode profileRollMessage(Campaign.Actor actor, JsonNode event) {
@@ -5927,6 +5939,7 @@ public final class OnlineSessionServer {
 
     private void commitAutomationResults(Map<String, String> originals, Map<String, ObjectNode> changed,
                                          List<ObjectNode> messages, JsonNode commands) throws IOException {
+        changed.values().forEach(automationHost::pruneResultWindows);
         int fear = campaign.getFear();
         List<Campaign.Countdown> countdowns = null;
         for (JsonNode command : commands) {

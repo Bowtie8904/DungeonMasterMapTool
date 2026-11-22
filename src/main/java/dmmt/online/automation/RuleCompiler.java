@@ -124,6 +124,7 @@ public final class RuleCompiler {
         private final ArrayNode modifiers;
         private final Map<String, ObjectNode> rules;
         private final Map<BindingKey, List<BindingRef>> bindingsByEventSurface;
+        private final List<BindingRef> resultButtons;
         private final Map<String, List<AutomaticBinding>> automaticByEvent;
         private ArrayNode profiles = RuleJson.JSON.createArrayNode();
 
@@ -144,6 +145,7 @@ public final class RuleCompiler {
             this.rules = new LinkedHashMap<>();
             rules.forEach((id, rule) -> this.rules.put(id, rule.deepCopy()));
             Map<BindingKey, List<BindingRef>> bindingIndex = new HashMap<>();
+            List<BindingRef> results = new ArrayList<>();
             Map<String, List<AutomaticBinding>> automatic = new HashMap<>();
             this.rules.forEach((ruleId, rule) -> {
                 for (JsonNode binding : rule.path("bindings")) {
@@ -153,19 +155,24 @@ public final class RuleCompiler {
                                 new AutomaticBinding(ruleId, binding.path("id").asText(), binding.path("priority").asInt()));
                     if (!"button".equals(mode) && !"option".equals(mode)) continue;
                     BindingKey key = new BindingKey(event, binding.path("surface").asText());
-                    bindingIndex.computeIfAbsent(key, ignored -> new ArrayList<>()).add(
-                            new BindingRef(ruleId, binding.path("id").asText(), binding.has("forEach"),
-                                    binding.path("audience").asText("self"), "option".equals(mode)));
+                    var ref = new BindingRef(ruleId, binding.path("id").asText(), binding.has("forEach"),
+                            binding.path("audience").asText("self"), "option".equals(mode));
+                    bindingIndex.computeIfAbsent(key, ignored -> new ArrayList<>()).add(ref);
+                    if ("roll.finished".equals(event) && ("chat".equals(key.surface()) || "roll".equals(key.surface()))
+                            && !ref.option() && !binding.has("claimGroup") && !binding.has("targetSelection"))
+                        results.add(ref);
                 }
             });
             Map<BindingKey, List<BindingRef>> immutableIndex = new HashMap<>();
             bindingIndex.forEach((key, refs) -> immutableIndex.put(key, List.copyOf(refs)));
             this.bindingsByEventSurface = Map.copyOf(immutableIndex);
+            this.resultButtons = List.copyOf(results);
             automatic.replaceAll((key, refs) -> List.copyOf(refs));
             this.automaticByEvent = Map.copyOf(automatic);
         }
 
         public String sourceId() { return sourceId; }
+        List<BindingRef> resultButtons() { return resultButtons; }
         public Set<String> ruleIds() { return Set.copyOf(rules.keySet()); }
         List<AutomaticBinding> automatic(String event) { return automaticByEvent.getOrDefault(event, List.of()); }
         List<BindingRef> bindings(String event, String surface) {
