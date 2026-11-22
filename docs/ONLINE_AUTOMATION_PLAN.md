@@ -39,15 +39,17 @@ The sheet renders ordinary result actions from the private roll receipt. If a re
 
 **Started, not cut over.** With a format-2 pack, the sheet panel and host endpoint support versioned single-target and whole-party sheet and owner result actions, plus owner-initiated profile rolls with optional selections. Claims, catalog editing and migration remain incomplete. All nine shipped catalogs still use format 1; the replacement endpoint returns 409 for them. There is no live second-engine selector or legacy adapter.
 
-**Performance baseline.** Run `mvn "-Ddmmt.benchmark.automation=true" "-Dtest=OnlineSessionServerTest#measurePersistedProfileAndPartyActions" test` separately from other tests. It uses loopback HTTP and a temporary on-disk campaign, six sheets with 12 KB of notes each, a profile attack with a finished reaction, and a versioned action with a recipient filter and five recipients. After 20 warm-up cycles the retry journal is full. The next 40 cycles measure each request to receipt of its response, including persistence on POST. The party GET is the sheet offer, not an extra roll request.
+**Performance baseline.** Run `mvn "-Ddmmt.benchmark.automation=true" "-Dtest=OnlineSessionServerTest#measurePersistedProfileAndPartyActions" test` separately from other tests. It uses loopback HTTP and a temporary on-disk campaign, six sheets with 12 KB of notes each, a profile attack with a selected option and finished reaction, and versioned result and sheet actions with a recipient filter and five recipients each. After 20 warm-up cycles the retry journal is full. The next 40 cycles measure each request to receipt of its response, including persistence on POST. The result GET fetches a post-roll target offer; neither GET is required to resolve the roll.
 
 | Request | Median | p95 | Mean allocated per request |
 |---|---:|---:|---:|
-| Profile POST | 14.49 ms | 17.66 ms | 4.35 MiB |
-| Party GET | 8.74 ms | 10.93 ms | 5.69 MiB |
-| Party POST | 36.79 ms | 43.17 ms | 11.03 MiB |
+| Profile POST | 16.05 ms | 18.89 ms | 7.11 MiB |
+| Result GET | 8.31 ms | 10.24 ms | 6.12 MiB |
+| Result POST | 36.80 ms | 42.14 ms | 11.98 MiB |
+| Party GET | 8.14 ms | 10.09 ms | 6.46 MiB |
+| Party POST | 37.04 ms | 41.73 ms | 12.70 MiB |
 
-These are single-run development measurements on Windows / Temurin 25, not release thresholds. Allocation is JVM-wide (host and test HTTP client), not retained heap. The run excludes browser rendering, WAN latency, connected-client broadcasts and unrelated concurrent play.
+These are single-run development measurements on Windows / Temurin 25, not release thresholds. The expanded workload is not directly comparable with the earlier profile and sheet-action baseline. Allocation is JVM-wide (host and test HTTP client), not retained heap. The run excludes browser rendering, WAN latency, connected-client broadcasts and unrelated concurrent play.
 
 **Host-intent hardening (2026-11-22):** The automation POST now accepts only a rule request; browser-supplied event facts are rejected, and the initial sheet-action event is created by the host. Journal replays are bound to the authenticated player principal. This closes event-type/payload forgery for this endpoint, but authoritative roll and lifecycle event construction and their integration with the existing roll pipeline remain outstanding. Keep previews local and pure, reuse host-computed roll facts, and avoid additional network round trips. Compiled programs now index visible buttons/options by event and surface, avoiding a scan of unrelated rules for each action description; the host pack is reused by compendium revision. Any actor-projection cache must include every relevant sheet, catalog and event dependency, and must be justified by benchmarks before adding complexity.
 

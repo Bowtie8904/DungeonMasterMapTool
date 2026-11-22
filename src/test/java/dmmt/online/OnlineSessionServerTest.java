@@ -1774,6 +1774,8 @@ class OnlineSessionServerTest {
         ObjectNode targets = (ObjectNode) rally.at("/bindings/0/targetSelection");
         targets.put("scope", "activePlayerCharacters").set("where", MAPPER.readTree("""
                 {"gt":[{"read":"recipient.stress.marked"},0]}"""));
+        ((ArrayNode) rally.required("bindings")).addObject().put("id", "after").put("event", "roll.finished")
+                .put("surface", "roll").put("mode", "button").set("targetSelection", targets.deepCopy());
         // Restore the track and source cost between samples, without resetting the persistent receipt journal.
         rally.set("do", MAPPER.readTree("""
             [{"op":"track.clear","track":"recipient.stress","amount":1,"as":"cleared"},
@@ -1781,7 +1783,13 @@ class OnlineSessionServerTest {
         ((ObjectNode) rally.path("ui")).put("report", "{recipient.name} cleared {result.cleared}.");
         ((ArrayNode) catalog.at("/entries/0/features/2/automation/rules")).add(MAPPER.readTree("""
             {"id":"reward","bindings":[{"id":"auto","surface":"roll","event":"roll.finished","mode":"automatic"}],
-             "ui":{"label":"Reward"},"do":[{"op":"resource.gain","pool":"actor.hope","amount":1}]}"""));
+             "ui":{"label":"Reward"},"do":[{"op":"resource.gain","pool":"actor.hope","amount":2}]}"""));
+        ((ArrayNode) catalog.at("/entries/0/features/2/automation/rules")).add(MAPPER.readTree("""
+            {"id":"boost","bindings":[{"id":"option","surface":"roll","event":"roll.prepare","mode":"option"}],
+             "ui":{"label":"Boost"},"do":[
+             {"op":"roll.contribute","from":{"read":"event.roll"},"as":"boosted",
+              "contribution":{"id":"boost","kind":"flat","role":"modifier","label":"Boost","value":1}},
+             {"op":"roll.publish","roll":{"read":"result.boosted"}}]}"""));
         java.nio.file.Files.writeString(compendiumDir.resolve("classes.json"), catalog.toString());
         String cookie = cookie(), campaignId = campaign.getId();
         int partySize = 5, warmup = 20, samples = 40;
@@ -1801,44 +1809,53 @@ class OnlineSessionServerTest {
         if (alloc == null || !alloc.isThreadAllocatedMemorySupported())
             throw new IllegalStateException("The benchmark requires JVM allocation counters.");
         alloc.setThreadAllocatedMemoryEnabled(true);
-        long[][] nanos = new long[3][samples], bytes = new long[3][samples];
+        long[][] nanos = new long[5][samples], bytes = new long[5][samples];
         long revision = 0;
         for (int i = -warmup; i < samples; i++) {
-            String partyVersion = null;
-            for (int stage = 0; stage < 3; stage++) {
+            String partyVersion = null, resultId = null, resultVersion = null;
+            for (int stage = 0; stage < 5; stage++) {
                 String body = null;
                 if (stage == 0) body = """
-                        {"request":{"requestId":"roll-%d","expectedRevision":%d,"selections":[],
+                        {"request":{"requestId":"roll-%d","expectedRevision":%d,"selections":[
+                        {"sourceInstanceId":"steady","ruleId":"boost","bindingId":"option"}],
                         "profileRoll":{"sourceInstanceId":"steady","profileId":"thrown","kind":"attack"}}}
                         """.formatted(revision, revision);
                 if (stage == 2) body = """
+                        {"request":{"requestId":"result-%d","expectedRevision":%d,"resultId":"%s","selections":[
+                        {"sourceInstanceId":"rally","ruleId":"rally","bindingId":"after"}],"target":{"version":"%s"}}}
+                        """.formatted(revision, revision, resultId, resultVersion);
+                if (stage == 4) body = """
                         {"request":{"requestId":"party-%d","expectedRevision":%d,"selections":[
                         {"sourceInstanceId":"rally","ruleId":"rally","bindingId":"sheet"}],"target":{"version":"%s"}}}
                         """.formatted(revision, revision, partyVersion);
                 long allocated = alloc.getTotalThreadAllocatedBytes(), start = System.nanoTime();
-                var response = automationHttp(cookie, "caster", body);
+                var response = stage == 1 ? resultHttp(cookie, "caster", resultId) : automationHttp(cookie, "caster", body);
                 long elapsed = System.nanoTime() - start, used = alloc.getTotalThreadAllocatedBytes() - allocated;
                 assertEquals(200, response.statusCode(), response.body());
                 JsonNode result = MAPPER.readTree(response.body());
-                if (stage == 1) {
+                if (stage == 1 || stage == 3) {
                     JsonNode offer = result.requiredAt("/actions/0/targetSelection");
                     assertEquals(partySize, offer.required("options").size());
-                    partyVersion = offer.required("version").textValue();
+                    if (stage == 1) resultVersion = offer.required("version").textValue();
+                    else partyVersion = offer.required("version").textValue();
                 } else {
                     assertEquals(++revision, result.required("revision").longValue());
-                    if (stage == 0) assertEquals("roll.finished", result.requiredAt("/event/type").textValue());
+                    if (stage == 0) {
+                        assertEquals("roll.finished", result.requiredAt("/event/type").textValue());
+                        resultId = result.requiredAt("/event/resultId").textValue();
+                    }
                     else assertEquals(partySize, result.required("actions").size());
                 }
                 if (i >= 0) { nanos[stage][i] = elapsed; bytes[stage][i] = used; }
             }
         }
         assertEquals(revision, MAPPER.readTree(store.loadSheet(campaignId, "caster")).requiredAt("/automationState/revision").longValue());
-        for (int i = 1; i <= partySize; i++) assertEquals(warmup + samples,
+        for (int i = 1; i <= partySize; i++) assertEquals(2 * (warmup + samples),
                 MAPPER.readTree(store.loadSheet(campaignId, "ally-" + i)).requiredAt("/automationState/revision").intValue());
-        for (int stage = 0; stage < 3; stage++) {
+        for (int stage = 0; stage < 5; stage++) {
             java.util.Arrays.sort(nanos[stage]);
             System.out.printf(java.util.Locale.ROOT, "automation-bench %s: n=%d p50=%.2fms p95=%.2fms mean=%.2fMiB allocated%n",
-                    List.of("profile POST", "party GET", "party POST").get(stage), samples,
+                    List.of("profile POST", "result GET", "result POST", "party GET", "party POST").get(stage), samples,
                     nanos[stage][samples / 2 - 1] / 1e6, nanos[stage][(int) Math.ceil(samples * .95) - 1] / 1e6,
                     java.util.Arrays.stream(bytes[stage]).average().orElseThrow() / (1024 * 1024));
         }
