@@ -112,11 +112,17 @@ public final class StructuredRoll {
         double total = resolved.path("total").asDouble();
         check.set("total", resolved.path("total").deepCopy());
         int hope = 0, fear = 0;
-        boolean duality = false;
-        for (JsonNode die : dice(resolved, "hope", true)) { hope += die.path("face").asInt(); duality = true; }
-        boolean fearDie = false;
-        for (JsonNode die : dice(resolved, "fear", true)) { fear += die.path("face").asInt(); fearDie = true; }
-        duality &= fearDie;
+        Set<String> excluded = ids(resolved.path("excludedDice"), "/roll/excludedDice", false);
+        for (JsonNode part : resolved.path("contributions")) {
+            String role = part.path("role").asText();
+            if (!"hope".equals(role) && !"fear".equals(role)) continue;
+            for (JsonNode die : part.path("dice")) {
+                if (!die.path("kept").asBoolean() || excluded.contains(die.path("id").asText())) continue;
+                if ("hope".equals(role)) hope += die.path("face").intValue();
+                else fear += die.path("face").intValue();
+            }
+        }
+        boolean duality = hope > 0 && fear > 0;
         boolean critical = duality && hope == fear;
         if (duality) {
             check.put("hopeDie", hope).put("fearDie", fear);

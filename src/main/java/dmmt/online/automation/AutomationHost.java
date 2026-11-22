@@ -68,6 +68,10 @@ public final class AutomationHost {
         return projection.state(sheet).path("revision").asLong();
     }
 
+    public static ObjectNode event(String type, String actorId, int fear) {
+        return ProfileRoll.event(type, actorId, fear);
+    }
+
     public ObjectNode describe(Pack pack, ObjectNode sheet, ObjectNode event, String surface, String relation) {
         relation(relation);
         ObjectNode copy = sheet.deepCopy();
@@ -84,6 +88,8 @@ public final class AutomationHost {
         for (JsonNode effect : actor.path("effects"))
             if (effect.path("derived").asBoolean()) derived.add(effect);
         ArrayNode profiles = result.putArray("profiles");
+        if (!"self".equals(relation) || !"sheet".equals(surface) || !"action.request".equals(event.path("type").asText()))
+            return result;
         for (SheetProjection.SourceElement element : sources) {
             RuleCompiler.Program program = pack.programs().get(element.sourceId());
             if (program == null) continue;
@@ -109,7 +115,9 @@ public final class AutomationHost {
                               String principalId, RandomGenerator random) {
         relation(relation);
         if (principalId == null || principalId.isBlank()) throw new IllegalArgumentException("Missing automation principal.");
-        RuleJson.fields(request, "/request", "requestId", "expectedRevision", "selections");
+        RuleJson.fields(request, "/request", "requestId", "expectedRevision", "selections", "profileRoll");
+        if (request.has("profileRoll") && !"self".equals(relation))
+            throw new SecurityException("Only the character owner may roll an attack profile.");
         String requestId = RuleJson.id(request.get("requestId"), "/request/requestId");
         ObjectNode working = sheet.deepCopy();
         ObjectNode state = projection.state(working);
@@ -123,7 +131,24 @@ public final class AutomationHost {
         if (!request.path("expectedRevision").isIntegralNumber() || request.path("expectedRevision").asLong() != revision)
             throw new RuleRuntime.Unavailable("stale", "The character changed. Reopen this action.");
 
-        List<RuleDispatcher.Candidate> candidates = candidates(pack, working, event);
+        ObjectNode response;
+        if (request.has("profileRoll")) {
+            response = profileRoll(pack, working, state, event, request, random);
+        } else {
+            var candidates = candidates(pack, working, event);
+            var intents = selections(request, candidates, revision, relation, false);
+            response = applyEvent(pack, working, state, event, candidates, intents, random);
+        }
+        response.put("requestId", requestId);
+        ArrayNode journal = (ArrayNode) projection.state(working).get("journal");
+        journal.addObject().put("requestId", requestId).put("principalId", principalId).set("response", response.deepCopy());
+        while (journal.size() > JOURNAL_LIMIT) journal.remove(0);
+        replace(sheet, working);
+        return response;
+    }
+
+    private static List<RuleRuntime.Intent> selections(ObjectNode request, List<RuleDispatcher.Candidate> candidates,
+                                                        long revision, String relation, boolean rollOptions) {
         Map<String, RuleDispatcher.Candidate> byInstance = new HashMap<>();
         for (RuleDispatcher.Candidate candidate : candidates)
             byInstance.put(candidate.context().path("source").path("instanceId").asText(), candidate);
@@ -143,6 +168,8 @@ public final class AutomationHost {
             for (JsonNode item : candidate.program().rule(ruleId).path("bindings"))
                 if (bindingId.equals(item.path("id").asText())) binding = item;
             if (binding == null) throw RuleJson.error(at + "/bindingId", "Unknown binding.");
+            if (rollOptions && !"option".equals(binding.path("mode").asText()))
+                throw RuleJson.error(at + "/bindingId", "Only roll options may accompany a profile roll.");
             if (!allowed(binding.path("audience").asText("self"), relation))
                 throw new SecurityException("This action is not available to you.");
             ObjectNode inputs = selection.has("inputs") ? RuleJson.object(selection.get("inputs"), at + "/inputs") : RuleJson.JSON.createObjectNode();
@@ -150,13 +177,47 @@ public final class AutomationHost {
             intents.add(new RuleRuntime.Intent(ruleId, bindingId, instanceId, revision, inputs, eachId));
         }
 
-        ObjectNode response = applyEvent(pack, working, state, event, candidates, intents, random);
-        response.put("requestId", requestId);
-        ArrayNode journal = (ArrayNode) projection.state(working).get("journal");
-        journal.addObject().put("requestId", requestId).put("principalId", principalId).set("response", response.deepCopy());
-        while (journal.size() > JOURNAL_LIMIT) journal.remove(0);
-        replace(sheet, working);
-        return response;
+        return intents;
+    }
+
+    private ObjectNode profileRoll(Pack pack, ObjectNode working, ObjectNode state, ObjectNode origin,
+                                   ObjectNode request, RandomGenerator random) {
+        JsonNode intent = request.get("profileRoll");
+        RuleJson.fields(intent, "/request/profileRoll", "sourceInstanceId", "profileId", "kind");
+        String instance = RuleJson.id(intent.get("sourceInstanceId"), "/request/profileRoll/sourceInstanceId");
+        String profileId = RuleJson.id(intent.get("profileId"), "/request/profileRoll/profileId");
+        String kind = RuleJson.text(intent.get("kind"), "/request/profileRoll/kind");
+        var sources = projection.sources(working);
+        var source = sources.stream().filter(item -> instance.equals(item.instanceId())).findFirst()
+                .orElseThrow(() -> new RuleRuntime.Unavailable("source", "This source is no longer active."));
+        var program = pack.programs().get(source.sourceId());
+        JsonNode profile = null;
+        if (program != null) for (JsonNode candidate : program.profiles())
+            if (profileId.equals(candidate.path("id").asText())) profile = candidate;
+        if (profile == null) throw new RuleRuntime.Unavailable("profile", "This profile is no longer available.");
+
+        long revision = state.path("revision").longValue();
+        ObjectNode event = origin.deepCopy();
+        ObjectNode actor = actor(pack, working, state, event, sources);
+        boolean equipped = false;
+        for (JsonNode item : working.path("activeWeapons")) if (item == source.element()) equipped = true;
+        ProfileRoll.prepare(event, source, profile, kind, actor, equipped, random);
+        var candidates = candidates(pack, sources, state, actor, event);
+        var intents = selections(request, candidates, revision, "self", true);
+        ObjectNode result = applyEvent(pack, working, state, event, candidates, intents, random);
+        ObjectNode finished = (ObjectNode) result.get("event");
+        if (finished.path("blocked").size() > 0)
+            throw new RuleRuntime.Unavailable("blocked", finished.at("/blocked/0/reason").asText());
+        if (!finished.path("roll").equals(event.path("roll"))) ProfileRoll.updateCheck(finished);
+        finished.put("type", "roll.finished");
+        ObjectNode after = automatic(pack, working, finished, random);
+        ObjectNode finalEvent = (ObjectNode) after.get("event");
+        if (!finalEvent.path("roll").equals(finished.path("roll"))) ProfileRoll.updateCheck(finalEvent);
+        result.set("event", finalEvent);
+        for (String key : List.of("actions", "outbox"))
+            ((ArrayNode) result.get(key)).addAll((ArrayNode) after.get(key));
+        projection.state(working).put("revision", revision + 1);
+        return result.put("revision", revision + 1);
     }
 
     /** Dispatch a host transition in the caller's staged sheet transaction, without creating a player retry record. */

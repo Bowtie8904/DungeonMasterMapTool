@@ -1662,6 +1662,83 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void profileRollStagesOptionsReactionsAndHistoryInOneRequest() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        var rules = (ArrayNode) catalog.at("/entries/0/features/2/automation/rules");
+        rules.removeAll();
+        rules.add(MAPPER.readTree("""
+            {"id":"boost","bindings":[{"id":"option","surface":"roll","event":"roll.prepare","mode":"option"}],
+             "ui":{"label":"Boost"},"costs":[{"op":"track.mark","track":"actor.stress","amount":1}],
+             "do":[{"op":"roll.contribute","from":{"read":"event.roll"},"as":"boosted",
+                    "contribution":{"id":"boost","kind":"flat","role":"modifier","label":"Boost","value":20}},
+                   {"op":"roll.publish","roll":{"read":"result.boosted"}}]}"""));
+        rules.add(MAPPER.readTree("""
+            {"id":"reward","bindings":[{"id":"auto","surface":"roll","event":"roll.finished","mode":"automatic"}],
+             "when":{"gte":[{"read":"event.check.total"},25]},"ui":{"label":"Reward"},
+             "do":[{"op":"table.gain","resource":"fear","label":"Reward","amount":1}]}"""));
+        rules.add(MAPPER.readTree("""
+            {"id":"block","bindings":[{"id":"auto","surface":"roll","event":"roll.prepare","mode":"automatic"}],
+             "when":{"eq":[{"read":"event.table.fear"},0]},"ui":{"label":"Block"},
+             "do":[{"op":"event.block","reason":"The attack is blocked."}]}"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String initial = """
+            {"name":"Ada","level":2,"stress":{"slots":6,"on":0},"traits":[{"name":"Finesse","mod":3}],
+             "features":[{"name":"Steady","instanceId":"s","automationSource":"classes:tester:features:steady"}]}""";
+        campaign.getActors().add(Campaign.Actor.builder().id("roller").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "roller", initial);
+        String before = store.loadSheet(campaign.getId(), "roller");
+        String cookie = cookie();
+        String request = """
+            {"request":{"requestId":"attack-1","expectedRevision":0,
+             "profileRoll":{"sourceInstanceId":"s","profileId":"thrown","kind":"attack"},
+             "selections":[{"sourceInstanceId":"s","ruleId":"boost","bindingId":"option"}]}}""";
+        int history = store.historyTail(campaign.getId(), 100).size();
+        campaign.setFear(0);
+        var blocked = automationHttp(cookie, "roller", request);
+        assertEquals(409, blocked.statusCode(), blocked.body());
+        assertTrue(blocked.body().contains("The attack is blocked."));
+        assertEquals(before, store.loadSheet(campaign.getId(), "roller"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        campaign.setFear(1);
+        assertEquals(400, automationHttp(cookie, "roller", request.replace("\"kind\":\"attack\"", "\"kind\":\"attack\",\"total\":42")).statusCode());
+        assertEquals(409, automationHttp(cookie, "roller", request.replace("\"thrown\"", "\"unknown\"")).statusCode());
+        diceSeed(0);
+        var result = automationHttp(cookie, "roller", request);
+        assertEquals(200, result.statusCode(), result.body());
+        JsonNode event = MAPPER.readTree(result.body()).path("event");
+        assertEquals("roll.finished", event.path("type").asText());
+        assertEquals(29, event.at("/check/total").intValue()); // 1 Hope + 5 Fear + 3 Finesse + 20 boost
+        assertEquals("fear", event.at("/check/dominant").asText());
+        assertTrue(event.at("/check/difficulty").isNull());
+        assertEquals("far", event.at("/check/range").asText());
+        assertEquals(2, event.at("/thresholds/major").intValue());
+        assertEquals(2, campaign.getFear(), "Finished reactions see the edited total");
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "roller")).at("/stress/on").intValue());
+        assertEquals(result.body(), automationHttp(cookie, "roller", request).body());
+        var log = store.historyTail(campaign.getId(), 100);
+        assertEquals(history + 1, log.size());
+        assertEquals("roll", log.getLast().path("type").asText());
+        assertEquals(29, log.getLast().path("total").intValue());
+        assertEquals(event, log.getLast().get("automationEvent"));
+        assertEquals(2, campaign.getFear());
+        String damage = """
+            {"request":{"requestId":"damage-1","expectedRevision":1,
+             "profileRoll":{"sourceInstanceId":"s","profileId":"thrown","kind":"damage"},"selections":[]}}""";
+        var damaged = automationHttp(cookie, "roller", damage);
+        assertEquals(200, damaged.statusCode(), damaged.body());
+        JsonNode damageEvent = MAPPER.readTree(damaged.body()).path("event");
+        assertTrue(damageEvent.at("/check/dominant").isNull());
+        assertFalse(damageEvent.at("/check/fixedDice").booleanValue());
+        JsonNode base = damageEvent.at("/roll/contributions/0");
+        assertEquals("classes:tester:features:steady", base.path("sourceId").asText());
+        assertEquals(6, base.at("/dice/0/sides").intValue());
+        assertEquals(base.at("/dice/0/face").intValue() + 1, damageEvent.at("/check/total").intValue());
+        assertEquals(403, automationHttp(allyCookie("other-roller"), "roller", damage).statusCode());
+    }
+
+    @Test
     void replacementSceneAndNewSessionResetOfflineActorsInOneCommit() throws Exception {
         automationCompendium();
         Path file = compendiumDir.resolve("classes.json");

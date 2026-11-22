@@ -10,6 +10,14 @@ Start with the [Deathrun and homebrew example](#example-2-deathrun-and-a-mechani
 
 ## Implementation status
 
+**Profile rolls (format 2).** The automation endpoint accepts an owner-only `request.profileRoll` with
+`sourceInstanceId`, `profileId` and `kind` (`attack` or `damage`); `selections` names any chosen `roll.prepare`
+options. The host determines contributions, traits, thresholds and Fear from its sheet, catalog and campaign.
+It runs prepare edits and automatic finished reactions in the same request. A blocked prepare discards the
+transaction. Roll history stores the final structured event; retrying returns the journaled response without
+publishing or spending again. This covers declared source profiles, not every feature action that rolls dice,
+effect-carried profiles, damage application or interactive post-roll claims.
+
 **Started, not cut over.** The new implementation is a development foundation with a first host integration (`/api/automation/{actorId}`, see *Host integration* below). A sheet *Automation* panel and a one-time format converter (see *Format converter*) exist; chat/roll surfaces and the catalog editor are not yet connected, and live play still uses the old engine because the shipped catalogs are format 1 (the new endpoint answers 409 until they are converted). All nine production catalogs remain at format 1. Target selection, recipient snapshots and all-target fan-out now have an isolated generic JSON contract and dispatcher, but are not yet routed through `AutomationHost`, the endpoint or the browser panel. No compatibility version has changed because no new network contract is exposed. There is no live second-engine selector or legacy adapter; complete the remaining work before replacing the running engine.
 
 **Host-intent hardening (2026-11-22):** The automation POST now accepts only a rule request; browser-supplied event facts are rejected, and the initial sheet-action event is created by the host. Journal replays are bound to the authenticated player principal. This closes event-type/payload forgery for this endpoint, but authoritative roll and lifecycle event construction and their integration with the existing roll pipeline remain outstanding. Keep previews local and pure, reuse host-computed roll facts, and avoid additional network round trips. Compiled programs now index visible buttons/options by event and surface, avoiding a scan of unrelated rules for each action description; the host pack is reused by compendium revision. Any actor-projection cache must include every relevant sheet, catalog and event dependency, and must be justified by benchmarks before adding complexity.

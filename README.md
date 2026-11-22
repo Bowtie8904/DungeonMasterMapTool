@@ -41,6 +41,10 @@ coordinated replacement. A generic sheet *Automation* panel appears only once co
 one-time `LegacyCatalogConverter` writes converted copies and a coverage report to a separate staging directory; the current dry run converts 1,011 of 1,087 blocks (93.0%), including attachable items, reloading weapons, channel/aura features (derived effects and exclusive effect groups), rest allowances, passives and move modifiers, legacy target modes, downtime-timed actions (shown in a generic Downtime panel on the sheet), sent rolls, conditional roll triggers, fixed-trait/highest-trait/traitless/spellcast-trait action rolls and direct or triggered fixed, proficiency-scaled or spellcast-scaled damage rolls. Converted applicability checks treat missing and explicitly null event facts alike. Generic single-target and fan-out dispatch is covered by independent fixtures, but target picking and atomic multi-sheet persistence are not yet integrated into the live endpoint or UI.
 See the [rewrite design and implementation status](docs/ONLINE_AUTOMATION_PLAN.md#implementation-status).
 
+In a format-2 pack, an owner can roll a declared attack profile or its damage. The host resolves
+the profile from the saved sheet and commits its edited dice, reactions and costs together. A blocked
+profile roll spends nothing, and a retry does not roll again. Typed chat dice stay separate.
+
 **Custom effects (partial implementation):** While hosting, the **Custom effects** tool on the right-hand tool rail (below Handouts) opens a dialog that lets the DM
 select saved player characters, compose stat or roll modifiers, optional roll bonuses, damage mitigation,
 resource actions and visible narrative rules, and remove individual DM-managed effects. Passive and selectable
