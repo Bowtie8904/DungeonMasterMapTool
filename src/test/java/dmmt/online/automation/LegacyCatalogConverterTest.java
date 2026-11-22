@@ -922,6 +922,39 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void salvationBeamSpendsChosenStressToHealOneWoundedAlly() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"t","name":"T","automation":{"spellcastDifficulty":16,"conditionalRollTriggers":[
+                  {"id":"heal","label":"Salvation Beam","on":"card:T","when":"success","difficulty":16,"splendorAction":"salvation","hostOwned":true}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        RuleCompiler.Program program = program(result, 0);
+        String event = "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"action\",\"origin\":\"card:T\",\"critical\":false,\"outcome\":null,\"total\":17,\"difficulty\":16},\"roll\":" + ROLL + "}";
+        String actor = "{\"id\":\"owner\",\"name\":\"Ari\",\"effects\":[],\"hp\":{\"marked\":0,\"capacity\":6},\"stress\":{\"marked\":4,\"capacity\":6}}";
+        ObjectNode source = context(program, actor, event);
+        source.with("targetOptions").set("connectedPlayerCharacters", RuleJson.parse("[{\"id\":\"mira\",\"label\":\"Mira\",\"revision\":2}]"));
+        RuleDispatcher.TargetResolution resolved = RuleDispatcher.executeTargets(List.of(new RuleDispatcher.Candidate(program, source)),
+                new RuleDispatcher.TargetIntent(new RuleRuntime.Intent("heal", "use", "fixture", 0,
+                        (ObjectNode) RuleJson.parse("{\"amount\":2}")), "mira", 2L),
+                List.of(new RuleDispatcher.RecipientCandidate("mira", (ObjectNode) RuleJson.parse(
+                        "{\"id\":\"mira\",\"name\":\"Mira\",\"hp\":{\"marked\":4,\"capacity\":6}}"), 2)), StructuredRollTest.noRandom());
+        assertEquals(6, resolved.sourceContexts().getFirst().at("/actor/stress/marked").asInt());
+        assertEquals(2, resolved.recipients().getFirst().snapshot().at("/hp/marked").asInt());
+    }
+
+    @Test
+    void invigorationAsksTheHostToRestoreOneLimitedUseOnAnyCharacter() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"t","name":"T","automation":{"actions":[{"id":"restore","label":"Roll","resourceRoll":{"resource":"hope","sides":6},"hostOwned":true}],
+                 "conditionalRollTriggers":[{"id":"restore-use","label":"Restore","on":"featureAction:card:T:restore","containsDie":6,"when":"always","splendorAction":"invigoration","hostOwned":true,"usesSource":false}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        RuleCompiler.Program program = program(result, 0);
+        JsonNode selection = block(result, 0).at("/rules/1/bindings/0/targetSelection");
+        assertEquals("activeCharacters", selection.path("scope").asText(), selection.toString());
+        assertFalse(selection.path("excludeSource").asBoolean(), selection.toString());
+        assertEquals("limit.restore", block(result, 0).at("/rules/1/do/0/op").asText());
+    }
+
+    @Test
     void resurrectionVaultsTheCardOnlyOnFiveOrLess() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"t","name":"T","automation":{"spellcastDifficulty":13,"rollTriggers":[

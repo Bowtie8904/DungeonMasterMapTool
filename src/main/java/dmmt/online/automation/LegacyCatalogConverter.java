@@ -1719,14 +1719,20 @@ public final class LegacyCatalogConverter {
         String operationTarget = targetSelection(trigger, path, p, (ObjectNode) rule.path("bindings").get(0));
         boolean healingHands = false;
         boolean secondWindTrigger = "secondWind".equals(trigger.path("splendorAction").asText());
-        if (secondWindTrigger) {
+        boolean salvationBeam = "salvation".equals(trigger.path("splendorAction").asText());
+        boolean invigoration = "invigoration".equals(trigger.path("splendorAction").asText());
+        if (invigoration) {
+            operationTarget = targetSelection(RuleJson.JSON.createObjectNode().put("target", "anyActor"), path, p,
+                    (ObjectNode) rule.path("bindings").get(0));
+        }
+        if (secondWindTrigger || salvationBeam) {
             operationTarget = targetSelection(RuleJson.JSON.createObjectNode().put("target", "actor").put("excludeSourceActor", true), path, p,
                     (ObjectNode) rule.path("bindings").get(0));
         }
         String splendor = trigger.path("splendorAction").asText("");
         if (trigger.has("splendorAction")) {
             if ("healingHands".equals(splendor) && "recipient".equals(operationTarget)) healingHands = true;
-            else if (secondWindTrigger) { }
+            else if (secondWindTrigger || salvationBeam || invigoration) { }
             else if (!Set.of("sunlight", "resurrection").contains(splendor) || "recipient".equals(operationTarget))
                 p.add(path + "/splendorAction", "Unsupported Splendor action: " + splendor);
             else if ("sunlight".equals(splendor) && !trigger.has("selectAmount")) {
@@ -1920,6 +1926,8 @@ public final class LegacyCatalogConverter {
         for (int i = 0; i < extra.size(); i++) step(extra.get(i), path + "/steps/" + i, p, steps, effects, pools, operationTarget);
         if (healingHands) healingHandsRecovery(rule, path, p, steps, effects);
         if (secondWindTrigger) secondWind(rule, steps, "recipient");
+        if (salvationBeam) salvationBeam(rule, steps);
+        if (invigoration) steps.addObject().put("op", "limit.restore").put("to", "recipient").put("label", "Restore one spent limited feature use");
         amountHeal(trigger.path("selectAmount"), path + "/selectAmount", p, steps);
         giveFear(trigger, path, p, steps);
         if (trigger.has("removeFear")) {
@@ -1941,6 +1949,24 @@ public final class LegacyCatalogConverter {
         sentRollReport(trigger, ui);
         checkReport(trigger, ui);
         return rule;
+    }
+
+    /** Salvation Beam: spend chosen Stress to clear the same amount of Hit Points on one wounded ally per use. */
+    private static void salvationBeam(ObjectNode rule, ArrayNode steps) {
+        ObjectNode unmarked = RuleJson.JSON.createObjectNode();
+        unmarked.putArray("add").add(read("actor.stress.capacity")).addObject().set("negate", read("actor.stress.marked"));
+        ObjectNode input = rule.withArray("inputs").addObject().put("id", "amount").put("kind", "integer")
+                .put("label", "Stress to spend (HP healed)").put("min", 1);
+        input.set("max", unmarked);
+        ObjectNode enough = RuleJson.JSON.createObjectNode();
+        enough.putArray("gte").add(unmarked.deepCopy()).add(1);
+        rule.set("when", rule.has("when") ? RuleJson.JSON.createObjectNode().set("and",
+                RuleJson.JSON.createArrayNode().add(rule.get("when")).add(enough)) : enough);
+        ObjectNode wounded = RuleJson.JSON.createObjectNode();
+        wounded.putArray("gt").add(read("recipient.hp.marked")).add(0);
+        ((ObjectNode) rule.path("bindings").get(0).path("targetSelection")).set("where", wounded);
+        rule.withArray("costs").addObject().put("op", "track.mark").put("track", "actor.stress").set("amount", read("input.amount"));
+        steps.addObject().put("op", "track.clear").put("track", "recipient.hp").set("amount", read("input.amount"));
     }
 
     /** Second Wind: choose HP (1) or Stress (3) to clear on yourself or, after a hopeful attack, on an ally. */

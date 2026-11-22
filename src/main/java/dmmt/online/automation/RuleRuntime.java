@@ -1047,7 +1047,7 @@ public final class RuleRuntime {
                     result = list.remove(index);
                 }
             }
-            case "damage.deal", "countdown.start", "claim.offer", "table.gain", "table.spend", "limits.refresh", "inventory.grant" -> {
+            case "damage.deal", "countdown.start", "claim.offer", "table.gain", "table.spend", "limits.refresh", "limit.restore", "inventory.grant" -> {
                 ArrayNode outbox = context.has("outbox") ? (ArrayNode) context.get("outbox") : context.putArray("outbox");
                 if (outbox.size() >= 32) throw RuleJson.error("/outbox", "Too many host requests.");
                 ObjectNode request = outbox.addObject().put("kind", kind)
@@ -1061,6 +1061,8 @@ public final class RuleRuntime {
                 }
                 else if (Set.of("table.gain", "table.spend").contains(kind)) request.put("resource", op.path("resource").asText()).put("amount", whole(op.path("amount"), context, 1, 1000));
                 else if ("limits.refresh".equals(kind)) request.set("on", op.path("on").deepCopy());
+                else if ("limit.restore".equals(kind)) request.put("to", op.path("to").asText())
+                        .put("actorId", context.path(op.path("to").asText()).path("id").asText());
                 else if ("inventory.grant".equals(kind)) {
                     request.put("catalog", op.path("catalog").asText())
                             .put("entry", RuleJson.id(eval(op.path("entry"), context), "/entry"))
