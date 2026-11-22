@@ -50,7 +50,7 @@ public final class LegacyCatalogConverter {
             "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
             "chatBenefits", "allowSourceOwner", "loadoutDomain", "primaryWeapon", "anyWeapon", "advantage", "giveFear", "check", "choices",
-            "magicOnly", "weaponRanges", "addDice", "damageDice", "disadvantage", "removeFear", "weaponDamage", "rollSection", "containsDie", "resourceRoll");
+            "magicOnly", "weaponRanges", "addDice", "damageDice", "disadvantage", "removeFear", "weaponDamage", "rollSection", "containsDie", "resourceRoll", "selectAmount");
     private static final Set<String> MITIGATION_FIELDS = Set.of("id", "label", "description", "when", "cost", "negate", "halve", "reduce",
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
@@ -1708,6 +1708,10 @@ public final class LegacyCatalogConverter {
         sentRollConditions(trigger, when);
         applyWhen(rule, when);
         if (trigger.has("cost")) costs(trigger.get("cost"), path + "/cost", p, pools, rule);
+        if (trigger.has("selectAmount")) {
+            selectAmount(trigger.get("selectAmount"), path + "/selectAmount", p, pools, rule);
+            amountCost(trigger, path + "/selectAmount", p, pools, rule);
+        }
         if (limited) rule.put("limitRef", "uses");
         ArrayNode steps = RuleJson.JSON.createArrayNode();
         JsonNode from = read("event.roll");
@@ -1806,6 +1810,16 @@ public final class LegacyCatalogConverter {
                 edited = true;
             }
         }
+        if (trigger.path("selectAmount").path("addToRoll").asBoolean(false) && rule.has("inputs")) {
+            ObjectNode step = steps.addObject().put("op", "roll.contribute");
+            step.set("from", from);
+            step.set("contribution", contribution(trigger.path("id").asText() + "-amount", "flat",
+                    "damage".equals(trigger.path("on").asText()) ? "damage" : "modifier", escape(trigger.path("label").asText("")))
+                    .set("value", read("input.amount")));
+            step.put("as", "addedAmount");
+            from = read("result.addedAmount");
+            edited = true;
+        }
         if (edited) steps.addObject().put("op", "roll.publish").set("roll", from);
         if (trigger.has("damage"))
             actionDamage(trigger.get("damage"), path + "/damage", trigger, p, steps, read("event.check.critical"), "triggerDamage");
@@ -1814,7 +1828,9 @@ public final class LegacyCatalogConverter {
         if (trigger.has("check")) check(trigger, path, p, rule, steps, effects, pools, "actor");
         else noChoices(trigger, path, p);
         JsonNode extra = trigger.has("check") ? RuleJson.JSON.missingNode() : trigger.path("steps");
+        amountStore(trigger.path("selectAmount"), path + "/selectAmount", p, pools, steps, effects);
         for (int i = 0; i < extra.size(); i++) step(extra.get(i), path + "/steps/" + i, p, steps, effects, pools);
+        amountHeal(trigger.path("selectAmount"), path + "/selectAmount", p, steps);
         giveFear(trigger, path, p, steps);
         if (trigger.has("removeFear")) {
             JsonNode amount = amount(trigger.get("removeFear"));
@@ -2341,7 +2357,11 @@ public final class LegacyCatalogConverter {
         }
         applyWhen(rule, when);
         if (action.has("cost")) costs(action.get("cost"), path + "/cost", p, pools, rule);
-        if (action.has("selectAmount")) selectAmount(action.get("selectAmount"), path + "/selectAmount", p, pools, rule);
+        if (action.has("selectAmount")) {
+            selectAmount(action.get("selectAmount"), path + "/selectAmount", p, pools, rule);
+            amountCost(action, path + "/selectAmount", p, pools, rule);
+            if (action.path("selectAmount").has("addToRoll")) p.add(path + "/selectAmount/addToRoll", "Only roll triggers can add the amount to a roll.");
+        }
         boolean transfer = action.has("transferHope");
         if (transfer) {
             if (!action.path("transferHope").asBoolean(false) || !"recipient".equals(operationTarget) || action.has("selectAmount")
@@ -2376,7 +2396,9 @@ public final class LegacyCatalogConverter {
         if (action.has("check")) check(action, path, p, rule, steps, effects, pools, operationTarget);
         else noChoices(action, path, p);
         JsonNode list = action.has("check") ? RuleJson.JSON.missingNode() : action.path("steps");
+        amountStore(action.path("selectAmount"), path + "/selectAmount", p, pools, steps, effects);
         for (int i = 0; i < list.size(); i++) step(list.get(i), path + "/steps/" + i, p, steps, effects, pools, operationTarget);
+        amountHeal(action.path("selectAmount"), path + "/selectAmount", p, steps);
         if (action.has("table")) actionTable(action.get("table"), path + "/table", p, steps, effects, pools, operationTarget);
         endEffect(action, steps, operationTarget);
         if (transfer) steps.addObject().put("op", "resource.gain").put("pool", "recipient.hope").set("amount", read("input.amount"));
@@ -2859,7 +2881,7 @@ public final class LegacyCatalogConverter {
 
     /** A player-chosen whole amount, bounded by what the named resource can currently pay; {@code @amount} reads it. */
     private static void selectAmount(JsonNode legacy, String path, Problems p, Pools pools, ObjectNode rule) {
-        p.onlyFields(legacy, path, Set.of("resource", "label", "min", "heal"));
+        p.onlyFields(legacy, path, Set.of("resource", "label", "min", "heal", "store", "base", "addToRoll"));
         String resource = legacy.path("resource").asText();
         boolean heal = legacy.path("heal").asBoolean(false);
         if (legacy.has("heal") && !legacy.path("heal").isBoolean()) p.add(path + "/heal", "Expected a boolean.");
@@ -2869,7 +2891,7 @@ public final class LegacyCatalogConverter {
         if (heal) max = RuleJson.JSON.getNodeFactory().numberNode(1_000_000);
         else max = available(resource, pools);
         if (max == null) { p.add(path + "/resource", "Amounts need a known resource: " + resource); return; }
-        ObjectNode input = rule.putArray("inputs").addObject().put("id", "amount").put("kind", "integer")
+        ObjectNode input = rule.withArray("inputs").addObject().put("id", "amount").put("kind", "integer")
                 .put("label", escape(legacy.path("label").asText("Amount"))).put("min", legacy.path("min").asInt(1));
         input.set("max", max);
         ObjectNode enough = RuleJson.JSON.createObjectNode();
@@ -2880,6 +2902,45 @@ public final class LegacyCatalogConverter {
             both.putArray("and").add(rule.get("when")).add(enough);
             rule.set("when", both);
         }
+    }
+
+    /**
+     * The legacy chosen amount is paid from its resource (added to any fixed cost of that resource) unless it counts
+     * healed Hit Points; an explicit {@code "@amount"} cost already pays it.
+     */
+    private static void amountCost(JsonNode owner, String path, Problems p, Pools pools, ObjectNode rule) {
+        JsonNode spec = owner.path("selectAmount");
+        if (!rule.has("inputs") || spec.path("heal").asBoolean(false)) return;
+        String resource = spec.path("resource").asText();
+        if ("@amount".equals(owner.path("cost").path(resource).asText())) return;
+        ObjectNode scratch = RuleJson.JSON.createObjectNode();
+        costs(RuleJson.JSON.createObjectNode().put(resource, "@amount"), path + "/resource", p, pools, scratch);
+        if (scratch.has("costs")) rule.withArray("costs").addAll((ArrayNode) scratch.get("costs"));
+    }
+
+    /** {@code store}: the chosen amount (plus {@code base}) replaces the value of a declared pool, before other steps. */
+    private static void amountStore(JsonNode spec, String path, Problems p, Pools pools, ArrayNode steps, ObjectNode effects) {
+        if (!spec.has("store")) return;
+        String store = spec.path("store").asText();
+        if (!pools.has(store)) { p.add(path + "/store", "Unknown store pool: " + store); return; }
+        if (spec.has("base") && (!spec.path("base").isInt() || spec.path("base").asInt() < 0)) {
+            p.add(path + "/base", "Expected a nonnegative whole base."); return;
+        }
+        step(RuleJson.JSON.createObjectNode().put("op", "clear").put("resource", store).put("amount", "all"), path + "/store", p, steps, effects, pools);
+        JsonNode amount = read("input.amount");
+        if (spec.path("base").asInt(0) > 0) {
+            ObjectNode sum = RuleJson.JSON.createObjectNode();
+            sum.putArray("add").add(amount).add(spec.path("base").asInt());
+            amount = sum;
+        }
+        steps.addObject().put("op", "pool.gain").put("pool", store).set("amount", amount);
+    }
+
+    /** {@code heal}: the chosen amount of marked Hit Points is cleared after the other steps. */
+    private static void amountHeal(JsonNode spec, String path, Problems p, ArrayNode steps) {
+        if (!spec.path("heal").asBoolean(false)) return;
+        if (!"hp".equals(spec.path("resource").asText())) { p.add(path + "/resource", "Only marked Hit Points can be healed."); return; }
+        steps.addObject().put("op", "track.clear").put("track", TRACKS.get("hp")).set("amount", read("input.amount"));
     }
 
     private static void actionDamage(JsonNode legacy, String path, JsonNode action, Problems p, ArrayNode steps) {

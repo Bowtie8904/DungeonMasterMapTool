@@ -1743,7 +1743,8 @@ class LegacyCatalogConverterTest {
     }
 
     private static RuleDispatcher.EventResolution runWith(RuleCompiler.Program program, ObjectNode context, String rule, String inputs) throws Exception {
-        var intent = new RuleRuntime.Intent(rule, "sheet", "fixture", context.path("revision").asLong(), (ObjectNode) RuleJson.parse(inputs));
+        String binding = "roll.finished".equals(context.at("/event/type").asText()) ? "use" : "sheet";
+        var intent = new RuleRuntime.Intent(rule, binding, "fixture", context.path("revision").asLong(), (ObjectNode) RuleJson.parse(inputs));
         return RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context)), List.of(intent), RandomGenerator.getDefault());
     }
 
@@ -1795,6 +1796,42 @@ class LegacyCatalogConverterTest {
         ObjectNode broke = context(program, """
                 {"hope":{"value":0,"max":6},"stress":{"marked":4,"capacity":6}}""", "{\"type\":\"action.request\"}");
         assertFalse(available(program, broke, "sheet").contains("spend"));
+    }
+
+    @Test
+    void selectedAmountsArePaidStoredHealedOrAddedToTheRoll() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"aura","name":"Aura","automation":{"resources":[{"id":"layers","label":"Layers","initial":0}],
+                  "conditionalRollTriggers":[{"id":"make","label":"Make","on":"card:Aura","selectAmount":{"resource":"stress","label":"Extra","min":0,"store":"layers","base":1}}]}},
+                {"id":"fane","name":"Fane","automation":{"resources":[{"id":"tokens","label":"Tokens","initial":3}],
+                  "conditionalRollTriggers":[{"id":"bonus","label":"Fane","on":"spellcast","selectAmount":{"resource":"tokens","label":"Tokens","addToRoll":true}}]}},
+                {"id":"heal","name":"Heal","automation":{"actions":[{"id":"heal","label":"Heal","selectAmount":{"resource":"hp","label":"HP","min":0,"heal":true}}]}},
+                {"id":"pay","name":"Pay","automation":{"actions":[{"id":"pay","label":"Pay","selectAmount":{"resource":"hope","label":"Hope"}}]}}"""));
+        assertEquals(4, result.converted(), result.diagnostics().toString());
+
+        RuleCompiler.Program aura = program(result, 0);
+        ObjectNode auraContext = context(aura, """
+                {"stress":{"marked":1,"capacity":6},"pools":{"layers":{"value":5}}}""",
+                "{\"type\":\"roll.finished\",\"check\":{\"origin\":\"card:Aura\",\"outcome\":\"success\"},\"roll\":" + ROLL + "}");
+        ObjectNode made = runWith(aura, auraContext, "make", "{\"amount\":2}").contexts().getFirst();
+        assertEquals(3, made.at("/actor/stress/marked").asInt());
+        assertEquals(3, made.at("/actor/pools/layers/value").asInt());
+
+        JsonNode fane = result.catalog().at("/entries/1/automation/rules/0");
+        assertEquals("roll.contribute", fane.at("/do/0/op").asText());
+        assertEquals("input.amount", fane.at("/do/0/contribution/value/read").asText());
+        assertEquals("pool.spend", fane.at("/costs/0/op").asText());
+
+        RuleCompiler.Program heal = program(result, 2);
+        ObjectNode healed = runWith(heal, context(heal, "{\"hp\":{\"marked\":4,\"capacity\":6}}", "{\"type\":\"action.request\"}"),
+                "heal", "{\"amount\":3}").contexts().getFirst();
+        assertEquals(1, healed.at("/actor/hp/marked").asInt());
+        assertFalse(result.catalog().at("/entries/2/automation/rules/0").has("costs"));
+
+        RuleCompiler.Program pay = program(result, 3);
+        ObjectNode paid = runWith(pay, context(pay, "{\"hope\":{\"value\":4,\"max\":6}}", "{\"type\":\"action.request\"}"),
+                "pay", "{\"amount\":3}").contexts().getFirst();
+        assertEquals(1, paid.at("/actor/hope/value").asInt());
     }
 
     @Test
