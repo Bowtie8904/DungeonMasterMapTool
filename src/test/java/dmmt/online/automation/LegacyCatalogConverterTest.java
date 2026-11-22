@@ -975,6 +975,36 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void witchGrantsBecomeSourcePoolsAndClaimedBenefits() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"ward","name":"Ward","automation":{"uses":{"max":1,"per":"rest"},
+                 "resources":[{"id":"rune-ward","label":"Rune Ward","initial":0,"max":1}],
+                 "actions":[{"id":"infuse","label":"Infuse","hostOwned":true,"steps":[
+                   {"op":"effect","effect":{"name":"Rune Ward source","kind":"buff","until":"manual","witchGrant":"runeWard","tokenResource":"rune-ward"}}]}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        JsonNode block = block(result, 0);
+        assertEquals("source", block.at("/pools/rune-ward/scope").asText(), block.toString());
+        assertTrue(block.toString().contains("destroyResourceOnMax") == false, block.toString());
+        assertTrue(block.toString().contains("sourcePools.rune-ward.value"), block.toString());
+        assertNotNull(program(result, 0));
+    }
+
+    @Test
+    void lunarPhasesBecomeDerivedEffectsOverADiePool() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"moon","name":"Moon","automation":{
+                 "effectCounters":[{"label":"Lunar die","effect":"Lunar Phases","cardOnly":true}],
+                 "lunarPhases":[{"faces":[2,3],"effect":{"name":"Lunar Phases","kind":"buff","text":"Damage."}},{"faces":[4],"effect":{"name":"Lunar Phases","kind":"buff","text":"Thresholds."}}],
+                 "actions":[{"id":"roll","label":"Roll","witchAction":"lunarRoll"},{"id":"advance","label":"Advance","witchAction":"lunarAdvance"}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        JsonNode block = block(result, 0);
+        assertEquals("number", block.at("/pools/lunar-die/kind").asText(), block.toString());
+        assertTrue(block.at("/effects/lunar-phases-die-2-3/while").has("or"), block.toString());
+        assertTrue(block.at("/effects/lunar-phases-die-4/while").has("eq"), block.toString());
+        assertNotNull(program(result, 0));
+    }
+
+    @Test
     void usesOverridesCardOnlyAndEffectBoundResourcesConvert() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"devout","name":"Devout","automation":{"usesOverrides":{"feat:Sparing Touch":2}}},

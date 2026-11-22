@@ -33,7 +33,7 @@ public final class LegacyCatalogConverter {
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
             "damage", "alternateProfiles", "damageTypeChoice", "rest", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions", "conditionalRollOptions",
             "hopeReward", "classResourceOnly", "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "zeroHopeClearArmor",
-            "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides");
+            "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases");
     private static final Set<String> DEATH_KINDS = Set.of("hopeBonus", "hopeSpend", "mask", "spectral", "egg", "battleHardened",
             "unbreakable", "undying", "lifeWard");
     /** Legacy gated families that are their base family plus extra conditions, which every family converts the same way. */
@@ -57,7 +57,7 @@ public final class LegacyCatalogConverter {
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
             "markedHpOnly", "finalSevere", "markStress", "gainHope", "giveFear", "clearStress", "gainTokens", "armorCost", "followUp", "hiddenRoll", "consumeItem", "preserveAfterIncomingDamage", "loadoutDomain",
-            "double", "recoveryChoice", "reflectHp", "quantity", "advancesSourcePool", "patronDice");
+            "double", "recoveryChoice", "reflectHp", "quantity", "advancesSourcePool", "patronDice", "destroyResourceOnMax", "reportRoll");
     private static final List<String> MARKS_FIELDS = List.of("severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor");
     private static final List<String> PREPARE_FIELDS = List.of("negate", "halve", "reduce", "double");
     private static final List<String> SEVERITIES = List.of("minor", "major", "severe", "massive");
@@ -68,7 +68,7 @@ public final class LegacyCatalogConverter {
             "requiresEffect", "excludesEffect", "endEffect", "uses", "usesSource", "actionRoll", "target",
             "excludeSourceActor", "hostOwned", "selectAmount", "resourceRoll", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
             "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime", "table",
-            "hostRollAction", "bloodAutomation", "castTokens", "patronDice");
+            "hostRollAction", "bloodAutomation", "castTokens", "patronDice", "witchAction");
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
@@ -216,6 +216,7 @@ public final class LegacyCatalogConverter {
         ArrayNode rules = RuleJson.JSON.createArrayNode();
         ObjectNode effects = RuleJson.JSON.createObjectNode();
         Set<String> ruleIds = new HashSet<>();
+        String lunarPool = lunar(legacy, path, p, pools, effects, lifecycle);
         for (ObjectNode rule : lifecycle) {
             rule.put("id", unique(rule.path("id").asText(), ruleIds));
             rules.add(rule);
@@ -264,6 +265,7 @@ public final class LegacyCatalogConverter {
             boolean usesBudget = limited && legacyRule.path("usesSource").asBoolean(true);
             if ("conditionalRollTriggers".equals(next.family()) && "zone".equals(legacyRule.path("splendorAction").asText()))
                 legacyRule = zone(legacyRule, next.path(), p, effects, pools);
+            legacyRule = witch(legacyRule, next.path(), p, pools);
             ObjectNode rule = switch (next.family()) {
                 case "actions" -> legacyRule.has("deathMove")
                         ? deathAction(legacyRule, death, next.path(), p, effects, pools, usesBudget, extra, out)
@@ -278,6 +280,10 @@ public final class LegacyCatalogConverter {
                 default -> mitigation(legacyRule, next.path(), p, effects, pools, usesBudget);
             };
             if (rule == null) { extra.clear(); continue; }
+            if (legacyRule.path("witchAction").asText("").startsWith("lunar")) {
+                if (lunarPool == null) p.add(next.path() + "/witchAction", "Lunar actions need lunar phases.");
+                else lunarSteps(legacyRule.get("witchAction").asText(), lunarPool, rule, rule.has("do") ? (ArrayNode) rule.get("do") : rule.putArray("do"), next.path(), p);
+            }
             if ("actions".equals(next.family()) && legacyRule.has("downtime"))
                 downtime(legacyRule, next.path(), p, rule, extra);
             if ("source".equals(legacyRule.path("uses").asText()) && !limited)
@@ -381,7 +387,8 @@ public final class LegacyCatalogConverter {
             JsonNode list = legacy.get("resources");
             for (int i = 0; i < list.size(); i++) {
                 JsonNode label = list.get(i).path("whileEffect");
-                if (!label.isTextual() || !pools.local().has(list.get(i).path("id").asText())) continue;
+                if (!label.isTextual() || !pools.local().has(list.get(i).path("id").asText())
+                        || "source".equals(pools.local().path(list.get(i).path("id").asText()).path("scope").asText())) continue;
                 String bound = null;
                 for (var names = effects.fields(); names.hasNext(); ) {
                     var entry = names.next();
@@ -2052,6 +2059,183 @@ public final class LegacyCatalogConverter {
         return copy;
     }
 
+    private static ObjectNode poolValue(Pools pools, String id) {
+        boolean source = "source".equals(pools.local().path(id).path("scope").asText());
+        return read((source ? "sourcePools." : "actor.pools.") + id + ".value");
+    }
+
+    private static final Set<String> WITCH_GRANTS = Set.of("circle", "moonbeam", "sprites", "runeWard", "lifeblood", "talisman");
+
+    /**
+     * Witch grants: the legacy marker effect only announces the grant. The rewrite turns it into a plain marker effect plus a
+     * claim that starts a benefit effect on whoever joins; pools that holders spend become shared source pools. The
+     * talisman, ward and Lifeblood benefits are single-holder effects, so claiming one elsewhere passes it on.
+     */
+    private static JsonNode witch(JsonNode rule, String path, Problems p, Pools pools) {
+        String action = rule.path("witchAction").asText("");
+        boolean grants = false;
+        for (JsonNode step : rule.path("steps")) grants |= step.path("effect").has("witchGrant");
+        if (action.isEmpty() && !grants) return rule;
+        ObjectNode copy = rule.deepCopy();
+        if (!action.startsWith("lunar")) copy.remove("witchAction");
+        ArrayNode steps = copy.has("steps") ? (ArrayNode) copy.get("steps") : copy.putArray("steps");
+        if ("talisman".equals(action)) {
+            copy.putObject("selectAmount").put("resource", "hope").put("label", "Hope to spend").put("store", "enchanted-talisman");
+            ObjectNode marker = steps.addObject().put("op", "effect").putObject("effect").put("name", "Enchanted Talisman source")
+                    .put("kind", "buff").put("until", "rest").put("witchGrant", "talisman").put("tokenResource", "enchanted-talisman");
+            marker.put("text", "Protective essence for a creature of your choice. Each token reduces the Hit Points they mark by one.");
+        } else if ("lifeblood".equals(action)) {
+            steps.addObject().put("op", "effect").putObject("effect").put("name", "Lifeblood Talisman source").put("kind", "buff")
+                    .put("until", "manual").put("witchGrant", "lifeblood");
+        } else if (!action.isEmpty() && !action.startsWith("lunar")) p.add(path + "/witchAction", "Unsupported witch action: " + action);
+        List<ObjectNode> benefits = new ArrayList<>();
+        for (int i = 0; i < steps.size(); i++) {
+            if (!(steps.get(i).path("effect") instanceof ObjectNode effect) || !effect.has("witchGrant")) continue;
+            String kind = effect.remove("witchGrant").asText();
+            if (!WITCH_GRANTS.contains(kind)) { p.add(path + "/steps/" + i + "/effect/witchGrant", "Unsupported witch grant: " + kind); continue; }
+            ObjectNode benefit = witchBenefit(kind);
+            String pool = effect.path("tokenResource").asText(switch (kind) {
+                case "runeWard" -> "rune-ward";
+                case "talisman" -> "enchanted-talisman";
+                default -> "";
+            });
+            if (!pool.isEmpty()) {
+                if (!pools.local().has(pool)) { p.add(path + "/steps/" + i + "/effect", "The grant needs a declared pool: " + pool); continue; }
+                ((ObjectNode) pools.local().get(pool)).put("scope", "source");
+                if (!"circle".equals(kind) && !"moonbeam".equals(kind)) benefit.put("tokenResource", pool);
+            }
+            benefits.add(benefit);
+        }
+        if (!benefits.isEmpty()) {
+            copy.put("allowSourceOwner", true);
+            ArrayNode joins = copy.putArray("chatBenefits");
+            for (ObjectNode benefit : benefits)
+                joins.addObject().put("id", "join-" + slug(benefit.path("name").asText())).put("label", "Join " + benefit.path("name").asText().replace(" benefits", ""))
+                        .putArray("steps").addObject().put("op", "effect").set("effect", benefit);
+        }
+        return copy;
+    }
+
+    private static ObjectNode witchBenefit(String kind) {
+        ObjectNode effect = RuleJson.JSON.createObjectNode().put("kind", "buff");
+        switch (kind) {
+            case "circle" -> {
+                effect.put("name", "Circle of Power benefits").put("until", "rest")
+                        .put("text", "+2 damage thresholds, +2 Evasion, and +2 attack rolls while within the Circle of Power. Remove these benefits manually when you leave the circle.");
+                ArrayNode modifiers = effect.putArray("modifiers");
+                modifiers.addObject().put("stat", "thresholds").put("value", 2);
+                modifiers.addObject().put("stat", "evasion").put("value", 2);
+                effect.putArray("rollOptions").addObject().put("id", "circle").put("label", "Circle of Power").put("roll", "attack").put("value", 2).put("defaultOn", true);
+            }
+            case "moonbeam" -> {
+                effect.put("name", "Moonbeam benefits").put("until", "scene")
+                        .put("text", "+1 Spellcast while within the Close-range moonlight, and you can see through illusions. Remove these benefits manually when you leave the moonlight.");
+                effect.putArray("rollOptions").addObject().put("id", "moonbeam").put("label", "Moonbeam").put("roll", "spellcast").put("value", 1).put("defaultOn", true);
+            }
+            case "sprites" -> {
+                effect.put("name", "Forest Sprites benefits").put("until", "manual")
+                        .put("text", "Use within Melee range of a sprite. Each benefit consumes one sprite shared by the party.");
+                ObjectNode attack = effect.putArray("rollOptions").addObject().put("id", "sprite-attack").put("label", "Forest Sprite nearby").put("roll", "attack").put("value", 3);
+                attack.putObject("cost").put("sprites", 1);
+                ObjectNode armor = effect.putArray("mitigation").addObject().put("id", "sprite-armor").put("label", "Forest Sprite: additional Armor Slot").put("armorSlots", 1);
+                armor.putObject("when").put("armor", true);
+                armor.putObject("cost").put("sprites", 1);
+            }
+            case "runeWard" -> {
+                effect.put("name", "Rune Ward benefits").put("until", "manual").put("exclusiveSource", true)
+                        .put("text", "Spend 1 Hope to reduce damage by 1d8. On an 8 the ward's power ends after it reduces damage.");
+                ObjectNode ward = effect.putArray("mitigation").addObject().put("id", "ward").put("label", "Rune Ward")
+                        .put("destroyResourceOnMax", "rune-ward").put("reportRoll", true)
+                        .put("description", "Spend 1 Hope to reduce damage by 1d8. On an 8 destroy the ward after the reduction.");
+                ward.putObject("cost").put("hope", 1);
+                ward.putObject("roll").put("sides", 8);
+            }
+            case "lifeblood" -> {
+                effect.put("name", "Lifeblood Talisman benefits").put("until", "manual").put("exclusiveSource", true)
+                        .put("text", "When marking 2 or more HP, spend 1 Hope to mark 1 fewer.");
+                ObjectNode protect = effect.putArray("mitigation").addObject().put("id", "protect").put("label", "Lifeblood Talisman").put("hp", -1).put("markedHpOnly", true);
+                protect.putObject("when").put("minMarkedHp", 2);
+                protect.putObject("cost").put("hope", 1);
+            }
+            default -> {
+                effect.put("name", "Enchanted Talisman benefits").put("until", "rest").put("exclusiveSource", true)
+                        .put("text", "Spend tokens from the creator's Enchanted Talisman pool to reduce the Hit Points you mark by one per token. Expires when the creator rests or the pool is depleted.");
+                ObjectNode protect = effect.putArray("mitigation").addObject().put("id", "protect").put("label", "Enchanted Talisman").put("hp", -1)
+                        .put("quantity", true).put("markedHpOnly", true).put("description", "Spend this talisman's tokens to reduce HP marked by one per token.");
+                protect.putObject("cost").put("enchanted-talisman", 1);
+                protect.putObject("when").put("markingHp", true);
+            }
+        }
+        return effect;
+    }
+
+    /**
+     * Lunar Phases: the effect counter becomes a shared 0-6 die pool and each phase an effect derived from the faces it covers,
+     * so exactly the matching phase is active. The roll and advance actions then only change that pool.
+     */
+    private static String lunar(JsonNode legacy, String path, Problems p, Pools pools, ObjectNode effects, List<ObjectNode> lifecycle) {
+        if (!legacy.has("effectCounters") && !legacy.has("lunarPhases")) return null;
+        JsonNode counters = legacy.path("effectCounters"), phases = legacy.path("lunarPhases");
+        if (!counters.isArray() || counters.size() != 1 || !phases.isArray() || phases.isEmpty()) {
+            p.add(path + "/" + (legacy.has("effectCounters") ? "effectCounters" : "lunarPhases"), "Unsupported legacy field: " + (legacy.has("effectCounters") ? "effectCounters" : "lunarPhases")); return null;
+        }
+        JsonNode counter = counters.get(0);
+        p.onlyFields(counter, path + "/effectCounters/0", Set.of("label", "effect", "cardOnly"));
+        String id = slug(counter.path("label").asText(""));
+        ObjectNode resource = RuleJson.JSON.createObjectNode().put("id", id).put("label", counter.path("label").asText()).put("initial", 0).put("max", 6);
+        if (counter.has("cardOnly")) resource.set("cardOnly", counter.get("cardOnly"));
+        resource(resource, path + "/effectCounters/0", p, pools.local(), lifecycle);
+        for (int i = 0; i < phases.size(); i++) {
+            JsonNode phase = phases.get(i);
+            String at = path + "/lunarPhases/" + i;
+            p.onlyFields(phase, at, Set.of("faces", "effect"));
+            if (!phase.path("faces").isArray() || phase.path("faces").isEmpty() || !phase.path("effect").isObject()) { p.add(at, "Phases need faces and an effect."); continue; }
+            ArrayNode faces = RuleJson.JSON.createArrayNode();
+            List<String> names = new ArrayList<>();
+            boolean valid = true;
+            for (JsonNode face : phase.get("faces")) {
+                valid &= face.isInt() && face.asInt() >= 1 && face.asInt() <= 6;
+                if (valid) {
+                    names.add(face.asText());
+                    ObjectNode same = RuleJson.JSON.createObjectNode();
+                    same.putArray("eq").add(read("actor.pools." + id + ".value")).add(face.asInt());
+                    faces.add(same);
+                }
+            }
+            if (!valid) { p.add(at + "/faces", "Expected faces from 1 to 6."); continue; }
+            ObjectNode copy = ((ObjectNode) phase.get("effect")).deepCopy();
+            copy.put("name", copy.path("name").asText("Lunar Phases") + " (die " + String.join("/", names) + ")");
+            String effect = declareEffect(copy, at + "/effect", p, effects);
+            if (effect == null) continue;
+            ObjectNode active = RuleJson.JSON.createObjectNode();
+            if (faces.size() == 1) active = (ObjectNode) faces.get(0);
+            else active.set("or", faces);
+            ((ObjectNode) effects.get(effect)).set("while", active);
+        }
+        return id;
+    }
+
+    /** The roll replaces the die; advancing wraps a 6 back to 1. Both only touch the converted die pool. */
+    private static void lunarSteps(String action, String pool, ObjectNode rule, ArrayNode steps, String path, Problems p) {
+        ObjectNode value = read("actor.pools." + pool + ".value");
+        if ("lunarRoll".equals(action)) {
+            steps.addObject().put("op", "dice.roll").put("count", 1).put("sides", 6).put("as", "die");
+            steps.addObject().put("op", "pool.spend").put("pool", pool).set("amount", value);
+            steps.addObject().put("op", "pool.gain").put("pool", pool).set("amount", read("result.die"));
+            ((ObjectNode) rule.get("ui")).put("report", "{actor.name} rolled {result.die} on the lunar die.");
+        } else if ("lunarAdvance".equals(action)) {
+            ObjectNode wrapped = RuleJson.JSON.createObjectNode();
+            wrapped.putArray("gte").add(value.deepCopy()).add(6);
+            steps.addObject().put("op", "pool.spend").put("pool", pool).set("amount", value.deepCopy());
+            ((ObjectNode) steps.get(steps.size() - 1)).set("if", wrapped);
+            steps.addObject().put("op", "pool.gain").put("pool", pool).put("amount", 1);
+            ObjectNode rolled = RuleJson.JSON.createObjectNode();
+            rolled.putArray("gt").add(value.deepCopy()).add(0);
+            rule.set("when", rule.has("when") ? RuleJson.JSON.createObjectNode().set("and", RuleJson.JSON.createArrayNode().add(rule.get("when")).add(rolled)) : rolled);
+            ((ObjectNode) rule.get("ui")).put("report", "{actor.name} advanced the lunar die.");
+        } else p.add(path + "/witchAction", "Unsupported witch action: " + action);
+    }
+
     /** Salvation Beam: spend chosen Stress to clear the same amount of Hit Points on one wounded ally per use. */
     private static void salvationBeam(ObjectNode rule, ArrayNode steps) {
         ObjectNode unmarked = RuleJson.JSON.createObjectNode();
@@ -3210,7 +3394,7 @@ public final class LegacyCatalogConverter {
             free.putArray("subtract").add(read(TRACKS.get(resource) + ".capacity")).add(read(TRACKS.get(resource) + ".marked"));
             return free;
         }
-        if (pools.has(resource)) return read("actor.pools." + resource + ".value");
+        if (pools.has(resource)) return poolValue(pools, resource);
         return "gold".equals(resource) ? read("actor.gold") : null;
     }
 
@@ -3533,7 +3717,7 @@ public final class LegacyCatalogConverter {
                 } else if ("clear".equals(op) && clearAllPool) {
                     ObjectNode converted = out.addObject().put("op", "pool.spend").put("pool", resource);
                     if ("recipient".equals(operationTarget)) converted.put("owner", "recipient");
-                    converted.set("amount", read(operationTarget + ".pools." + resource + ".value"));
+                    converted.set("amount", "recipient".equals(operationTarget) ? read("recipient.pools." + resource + ".value") : poolValue(pools, resource));
                 } else p.add(path + "/resource", "Unsupported track: " + resource);
             }
             case "gain" -> {
@@ -3562,7 +3746,7 @@ public final class LegacyCatalogConverter {
             String pool = effect.remove("tokenResource").asText();
             if (!pools.has(pool)) { p.add(path + "/tokenResource", "Unknown token resource: " + pool); return; }
             if (effect.has("while")) { p.add(path + "/tokenResource", "A conditional effect cannot also end when its tokens run out."); return; }
-            effect.putObject("endWhen").putArray("lte").add(read("actor.pools." + pool + ".value")).add(0);
+            effect.putObject("endWhen").putArray("lte").add(poolValue(pools, pool)).add(0);
         });
     }
 

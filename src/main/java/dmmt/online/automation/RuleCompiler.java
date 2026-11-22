@@ -369,8 +369,8 @@ public final class RuleCompiler {
             RuleExpression.validate(effect.get("endWhen"), path + "/endWhen");
             for (String ref : RuleExpression.references(effect.get("endWhen"))) {
                 String root = ref.split("\\.")[0];
-                if (!Set.of("source", "actor", "state").contains(root) || "state".equals(root) && !state.has(ref.split("\\.")[1]))
-                    throw RuleJson.error(path + "/endWhen", "An effect end condition may only read source, actor and declared state: " + ref);
+                if (!Set.of("source", "actor", "state", "sourcePools").contains(root) || "state".equals(root) && !state.has(ref.split("\\.")[1]))
+                    throw RuleJson.error(path + "/endWhen", "An effect end condition may only read source, actor, source pools and declared state: " + ref);
             }
         }
         if (effect.has("while")) {
