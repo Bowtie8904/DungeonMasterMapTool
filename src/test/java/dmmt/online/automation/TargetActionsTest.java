@@ -106,6 +106,30 @@ class TargetActionsTest {
     }
 
     @Test
+    void selfTargetReadsWritesAndCostsAsOneCharacterInRuleOrder() throws Exception {
+        ObjectNode automation = fixture("rewrite/targets");
+        ((ObjectNode) automation.at("/rules/0/bindings/0/targetSelection")).put("excludeSource", false).put("cardinality", "one");
+        var rule = (ObjectNode) automation.at("/rules/0");
+        rule.set("do", RuleJson.parse("""
+                [{"op":"resource.gain","pool":"actor.hope","amount":2},
+                 {"op":"resource.spend","pool":"recipient.hope","amount":3},
+                 {"op":"track.mark","track":"actor.stress","amount":{"read":"recipient.hope.value"}}]"""));
+        ((ObjectNode) rule.get("ui")).put("report", "{actor.hope.value}/{recipient.hope.value} Hope");
+        var program = RuleCompiler.compile("features:target-fixture", automation, fixture("rewrite/recipes"));
+        var source = source(program);
+        var result = RuleDispatcher.executeTargets(List.of(source), new RuleDispatcher.TargetIntent(
+                new RuleRuntime.Intent("rally", "sheet", "rally-source", 4, RuleJson.JSON.createObjectNode()), "owner", 4L),
+                List.of(new RuleDispatcher.RecipientCandidate("owner", source.context().path("actor").deepCopy(), 4)),
+                RandomGenerator.getDefault());
+        assertTrue(result.recipients().isEmpty());
+        assertEquals("1/1 Hope", result.actions().getFirst().action().report());
+        var saved = result.sourceContexts().getFirst();
+        assertEquals(1, saved.at("/actor/hope/value").asInt());
+        assertEquals(2, saved.at("/actor/stress/marked").asInt());
+        assertEquals(3, source.context().at("/actor/hope/value").asInt());
+    }
+
+    @Test
     void singleTargetRequiresAnEligibleCurrentTargetAndRejectsStaleRecipientRevision() throws Exception {
         ObjectNode automation = fixture("rewrite/targets");
         ((ObjectNode) automation.at("/rules/0/bindings/0/targetSelection")).put("cardinality", "one");

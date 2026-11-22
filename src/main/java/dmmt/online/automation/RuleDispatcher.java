@@ -417,8 +417,7 @@ public final class RuleDispatcher {
         for (Invocation invocation : invocations) {
             String recipientId = invocation.recipientId();
             ObjectNode context = invocation.candidate().context();
-            context.set("actor", snapshot.actor().deepCopy());
-            context.set("recipient", selfClaims.contains(recipientId) ? snapshot.actor().deepCopy()
+            setParticipants(context, snapshot.actor(), selfClaims.contains(recipientId) ? null
                     : recipientsById.get(recipientId).snapshot());
             context.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             RuleRuntime.Prepared next = RuleRuntime.preflight(invocation.candidate().program(), invocation.intent(), context);
@@ -433,15 +432,13 @@ public final class RuleDispatcher {
             String recipientId = checked.recipientId();
             ObjectNode context = workingContexts.get(instanceId).deepCopy();
             boolean self = selfClaims.contains(recipientId);
-            context.set("actor", sharedActor.deepCopy());
-            context.set("recipient", self ? sharedActor.deepCopy() : workingRecipients.get(recipientId).deepCopy());
+            setParticipants(context, sharedActor, self ? null : workingRecipients.get(recipientId));
             context.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             RuleRuntime.Prepared next = RuleRuntime.reserveCosts(
                     byInstance.get(instanceId).program(), item, context);
             workingContexts.put(instanceId, next.context().deepCopy());
-            if (self) sharedActor = selfResult(sharedActor, next.context());
-            else {
-                sharedActor = next.context().path("actor").deepCopy();
+            sharedActor = next.context().path("actor").deepCopy();
+            if (!self) {
                 workingRecipients.put(recipientId, next.context().path("recipient").deepCopy());
             }
             prepared.add(new PreparedClaim(next, recipientId, checked.claimGroup()));
@@ -455,17 +452,15 @@ public final class RuleDispatcher {
             ObjectNode current = item.context().deepCopy();
             mergeTransactionState(current, workingContexts.get(instanceId));
             boolean self = selfClaims.contains(claim.recipientId());
-            current.set("actor", sharedActor.deepCopy());
-            current.set("recipient", self ? sharedActor.deepCopy() : workingRecipients.get(claim.recipientId()).deepCopy());
+            setParticipants(current, sharedActor, self ? null : workingRecipients.get(claim.recipientId()));
             current.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             RuleRuntime.Prepared executable = new RuleRuntime.Prepared(item.intent(), current, snapshot.revision());
             RuleRuntime.Resolution resolution = RuleRuntime.executePrepared(
                     byInstance.get(instanceId).program(), executable, random, false);
             ObjectNode nextContext = resolution.context();
             collectRecipientCommands(outbox, nextContext, claim.recipientId());
-            if (self) sharedActor = selfResult(sharedActor, nextContext);
-            else {
-                sharedActor = nextContext.path("actor").deepCopy();
+            sharedActor = nextContext.path("actor").deepCopy();
+            if (!self) {
                 workingRecipients.put(claim.recipientId(), nextContext.path("recipient").deepCopy());
             }
             workingContexts.put(instanceId, nextContext);
@@ -504,14 +499,11 @@ public final class RuleDispatcher {
      * Folds a self-claim back into the shared actor: the source actor is both {@code actor} and {@code recipient}, so
      * at most one of the two views may change.
      */
-    private static ObjectNode selfResult(ObjectNode before, ObjectNode context) {
-        JsonNode actor = context.path("actor");
-        JsonNode recipient = context.path("recipient");
-        boolean actorChanged = !before.equals(actor);
-        boolean recipientChanged = !before.equals(recipient);
-        if (actorChanged && recipientChanged && !actor.equals(recipient))
-            throw new RuleRuntime.Unavailable("selfClaim", "The source actor cannot claim this for itself.");
-        return (recipientChanged ? recipient : actor).deepCopy();
+    /** A self-target is one staged sheet with two expression roots, not two sheets to merge after execution. */
+    private static void setParticipants(ObjectNode context, ObjectNode actor, ObjectNode otherRecipient) {
+        ObjectNode staged = actor.deepCopy();
+        context.set("actor", staged);
+        context.set("recipient", otherRecipient == null ? staged : otherRecipient.deepCopy());
     }
 
     /**
@@ -585,8 +577,7 @@ public final class RuleDispatcher {
         List<PreparedTarget> checked = new ArrayList<>();
         for (String id : targetIds) {
             ObjectNode context = candidate.context();
-            context.set("actor", snapshot.actor().deepCopy());
-            context.set("recipient", recipientsById.get(id).snapshot());
+            setParticipants(context, snapshot.actor(), id.equals(sourceActorId) ? null : workingRecipients.get(id));
             context.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             checked.add(new PreparedTarget(RuleRuntime.preflight(candidate.program(), intent, context), id));
         }
@@ -597,8 +588,7 @@ public final class RuleDispatcher {
         boolean reserveSourceCosts = true;
         for (PreparedTarget item : checked) {
             ObjectNode context = workingSource.deepCopy();
-            context.set("actor", sharedActor.deepCopy());
-            context.set("recipient", workingRecipients.get(item.recipientId()).deepCopy());
+            setParticipants(context, sharedActor, item.recipientId().equals(sourceActorId) ? null : workingRecipients.get(item.recipientId()));
             context.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             RuleRuntime.Prepared next = RuleRuntime.reserveCosts(candidate.program(), item.prepared(), context, reserveSourceCosts);
             reserveSourceCosts = false;
@@ -614,17 +604,13 @@ public final class RuleDispatcher {
         for (PreparedTarget item : prepared) {
             ObjectNode current = item.prepared().context().deepCopy();
             mergeTransactionState(current, workingSource);
-            current.set("actor", sharedActor.deepCopy());
-            ObjectNode recipient = item.recipientId().equals(sourceActorId)
-                    ? sharedActor.deepCopy() : workingRecipients.get(item.recipientId()).deepCopy();
-            current.set("recipient", recipient);
+            setParticipants(current, sharedActor, item.recipientId().equals(sourceActorId) ? null : workingRecipients.get(item.recipientId()));
             current.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             RuleRuntime.Prepared executable = new RuleRuntime.Prepared(intent, current, snapshot.revision());
             RuleRuntime.Resolution resolution = RuleRuntime.executePrepared(candidate.program(), executable, random, false);
             ObjectNode nextContext = resolution.context();
             collectRecipientCommands(outbox, nextContext, item.recipientId());
-            sharedActor = item.recipientId().equals(sourceActorId)
-                    ? nextContext.path("recipient").deepCopy() : nextContext.path("actor").deepCopy();
+            sharedActor = nextContext.path("actor").deepCopy();
             workingSource = nextContext.deepCopy();
             if (!item.recipientId().equals(sourceActorId))
                 workingRecipients.put(item.recipientId(), nextContext.path("recipient").deepCopy());

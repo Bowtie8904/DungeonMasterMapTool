@@ -196,7 +196,7 @@ public final class RuleRuntime {
         if (revision != preflight.revision() || revision != intent.expectedRevision())
             throw new Unavailable("stale", "This action is stale. Use its latest state.");
         for (String field : List.of("actor", "recipient", "source", "state", "usage", "sourcePools"))
-            if (currentContext.has(field)) next.set(field, currentContext.path(field).deepCopy());
+            if (currentContext.has(field)) copyField(currentContext, next, field);
         RuleEffects.refreshCounts(program, next);
         if (reserveSourceCosts && rule.has("limitRef")) {
             String limit = rule.path("limitRef").asText();
@@ -216,7 +216,7 @@ public final class RuleRuntime {
     static Resolution executePrepared(RuleCompiler.Program program, Prepared prepared, RandomGenerator random, boolean preview) {
         Intent intent = prepared.intent();
         ObjectNode rule = program.rule(intent.ruleId());
-        ObjectNode next = prepared.context().deepCopy();
+        ObjectNode next = copyContext(prepared.context());
         if (!next.path("source").path("instanceId").asText().equals(intent.sourceInstanceId()))
             throw new Unavailable("source", "The source instance changed. Reopen this action.");
         long revision = revision(next);
@@ -313,9 +313,25 @@ public final class RuleRuntime {
         return next;
     }
 
+    private static void copyField(ObjectNode from, ObjectNode to, String field) {
+        if ("recipient".equals(field) && from.get("actor") == from.get("recipient")) {
+            to.set("recipient", to.get("actor"));
+        } else to.set(field, from.get(field).deepCopy());
+    }
+
+    private static ObjectNode copyContext(ObjectNode from) {
+        if (!from.has("recipient") || from.get("recipient") != from.get("actor")) return from.deepCopy();
+        ObjectNode copy = from.objectNode();
+        copy.set("actor", from.get("actor").deepCopy());
+        from.fieldNames().forEachRemaining(field -> {
+            if (!"actor".equals(field)) copyField(from, copy, field);
+        });
+        return copy;
+    }
+
     static ObjectNode context(RuleCompiler.Program program, ObjectNode rule, ObjectNode hostContext) {
         RuleJson.checkTree(hostContext, "/context", 0, new int[]{0});
-        ObjectNode next = hostContext.deepCopy();
+        ObjectNode next = copyContext(hostContext);
         ObjectNode source = RuleJson.object(next.path("source"), "/source");
         if (!program.sourceId().equals(source.path("id").asText())) throw RuleJson.error("/source/id", "Source definition does not match the program.");
         RuleJson.id(source.get("instanceId"), "/source/instanceId");
