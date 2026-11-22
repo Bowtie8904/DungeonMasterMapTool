@@ -34,6 +34,7 @@ class Element {
 
 const text: ControlText = {
   cancel: 'Cancel', retry: 'Retry', pending: 'Applying', failed: 'Action failed',
+  recipient: 'Choose a character', recipients: 'Recipients',
   wholeNumber: (min, max) => `Choose a whole number from ${min} to ${max}.`,
   selectDice: (count, min) => min === undefined ? `Choose ${count} dice.` : `Choose ${min} to ${count} dice.`,
   selectOptions: count => `Choose ${count} option(s).`,
@@ -91,6 +92,36 @@ describe('generic rule controls', () => {
     reopened.all('button')[1].click();
     await settle();
     expect(submit).toHaveBeenCalledWith(expect.objectContaining({ inputs: { remove: ['die-a', 'die-b'] } }));
+  });
+
+  it('collects the versioned recipient alongside rule inputs and retries that exact choice', async () => {
+    const body = dom();
+    const submit = vi.fn(async (_intent: RuleIntent) => {}).mockRejectedValueOnce(new Error('Lost response'));
+    const root = asElement(ruleControl({ ...descriptor, targetSelection: { cardinality: 'one', options: [
+      { id: 'a', label: 'Ada', version: 'a1' }, { id: 'b', label: 'Bea', version: 'b2' },
+    ] }, inputs: [{ kind: 'integer', id: 'amount', label: 'Amount', min: 1, max: 3 }] }, submit, text));
+    root.all('button')[0].click();
+    const cancelled = body.all('dialog')[0];
+    cancelled.all('button')[0].click();
+    expect(submit).not.toHaveBeenCalled();
+    root.all('button')[0].click();
+    const dialog = body.all('dialog')[1];
+    expect(dialog.all('legend')[0].text).toBe(text.recipient);
+    dialog.all('button')[1].click();
+    expect(dialog.text).toContain('Choose 1 option(s).');
+    const [first, second, amount] = dialog.all('input');
+    second.checked = true;
+    amount.value = '2';
+    dialog.all('button')[1].click();
+    await settle();
+    expect(submit.mock.calls[0][0]).toMatchObject({ target: { recipientId: 'b', version: 'b2' }, inputs: { amount: 2 } });
+    expect(second.disabled).toBe(true);
+    first.checked = true;
+    amount.value = '1';
+    dialog.all('button')[1].click();
+    await settle();
+    expect(submit.mock.calls[1]).toEqual(submit.mock.calls[0]);
+    expect(dialog.removed).toBe(true);
   });
 
   it('accepts any die count between the minimum and the maximum', async () => {

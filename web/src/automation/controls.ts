@@ -25,6 +25,9 @@ export interface RuleDescriptor {
   reasonCode?: string;
   costsRequireInput?: boolean;
   inputs?: RuleInput[];
+  targetSelection?:
+    | { cardinality: 'one'; options: Array<{ id: string; label: string; version: string }> }
+    | { cardinality: 'all'; version: string; options: Array<{ id: string; label: string }> };
 }
 
 export interface RuleIntent {
@@ -36,6 +39,7 @@ export interface RuleIntent {
   bindingId: string;
   expectedRevision: number;
   inputs: Record<string, number | string | string[] | Record<string, number>>;
+  target?: { version: string; recipientId?: string };
 }
 
 export interface ControlText {
@@ -43,6 +47,8 @@ export interface ControlText {
   retry: string;
   pending: string;
   failed: string;
+  recipient: string;
+  recipients: string;
   wholeNumber: (min: number, max: number) => string;
   selectDice: (count: number, min?: number) => string;
   selectOptions: (count: number) => string;
@@ -59,8 +65,8 @@ export function ruleControl(descriptor: RuleDescriptor, submit: (intent: RuleInt
   }), text);
 }
 
-type ButtonIntent = Pick<RuleIntent, 'requestId' | 'expectedRevision' | 'inputs'>;
-type ButtonDescriptor = Pick<RuleDescriptor, 'revision' | 'label' | 'description' | 'available' | 'reason' | 'inputs'>;
+type ButtonIntent = Pick<RuleIntent, 'requestId' | 'expectedRevision' | 'inputs' | 'target'>;
+type ButtonDescriptor = Pick<RuleDescriptor, 'revision' | 'label' | 'description' | 'available' | 'reason' | 'inputs' | 'targetSelection'>;
 
 export function intentControl(descriptor: ButtonDescriptor, submit: (intent: ButtonIntent) => Promise<void>, text: ControlText): HTMLElement {
   const error = el('div', { class: 'error', role: 'alert' });
@@ -68,16 +74,21 @@ export function intentControl(descriptor: ButtonDescriptor, submit: (intent: But
   const button = el('button', { type: 'button', class: 'small', disabled: !descriptor.available,
     title: descriptor.description ?? descriptor.reason ?? '' }, descriptor.label);
   const root = el('div', { class: 'dh' }, button, reason, error);
+  const selection = descriptor.targetSelection;
+  const party = selection?.cardinality === 'all' ? { version: selection.version } : undefined;
+  if (selection?.cardinality === 'all') root.append(el('span', { class: 'muted' },
+    `${text.recipients}: ${selection.options.map(option => option.label).join(', ')}`));
   let pending = false;
   let completed = false;
   let retryIntent: ButtonIntent | undefined;
   let activeDialog: HTMLDialogElement | undefined;
 
-  const send = async (inputs: RuleIntent['inputs'], go?: HTMLButtonElement, cancel?: HTMLButtonElement,
+  const send = async (inputs: RuleIntent['inputs'], target?: RuleIntent['target'], go?: HTMLButtonElement, cancel?: HTMLButtonElement,
     dialogError?: HTMLElement, fields: HTMLInputElement[] = []): Promise<void> => {
     if (pending || completed) return;
     retryIntent ??= {
       requestId: randomId(), expectedRevision: descriptor.revision, inputs: structuredClone(inputs),
+      ...(target ? { target: { ...target } } : {}),
     };
     pending = true;
     error.textContent = '';
@@ -106,15 +117,32 @@ export function intentControl(descriptor: ButtonDescriptor, submit: (intent: But
 
   button.addEventListener('click', () => {
     if (pending || completed || !descriptor.available || activeDialog) return;
-    if (retryIntent) { void send(retryIntent.inputs); return; }
+    if (retryIntent) { void send(retryIntent.inputs, retryIntent.target); return; }
     const definitions = descriptor.inputs ?? [];
-    if (!definitions.length) { void send({}); return; }
+    if (!definitions.length && selection?.cardinality !== 'one') { void send({}, party); return; }
     const dialog = el('dialog', { class: 'dh dh-rolldlg', ariaLabel: descriptor.label });
     activeDialog = dialog;
     button.disabled = true;
     const fields: HTMLInputElement[] = [];
     const reads: Array<() => [string, RuleIntent['inputs'][string]]> = [];
     dialog.append(el('h4', {}, descriptor.label));
+    let readTarget = (): RuleIntent['target'] => party;
+    if (selection?.cardinality === 'one') {
+      const group = el('fieldset', {}, el('legend', {}, text.recipient));
+      const name = `recipient-${randomId()}`;
+      const radios = selection.options.map(option => {
+        const field = el('input', { type: 'radio', name });
+        fields.push(field);
+        group.append(el('label', {}, field, option.label));
+        return { field, option };
+      });
+      readTarget = () => {
+        const chosen = radios.find(row => row.field.checked);
+        if (!chosen) throw new Error(text.selectOptions(1));
+        return { recipientId: chosen.option.id, version: chosen.option.version };
+      };
+      dialog.append(group);
+    }
     for (const input of definitions) {
       if (input.kind === 'choice') {
         const single = input.count === 1;
@@ -195,12 +223,16 @@ export function intentControl(descriptor: ButtonDescriptor, submit: (intent: But
     go.addEventListener('click', () => {
       if (pending || completed) return;
       let inputs: RuleIntent['inputs'];
-      try { inputs = retryIntent?.inputs ?? Object.fromEntries(reads.map(read => read())); }
+      let target: RuleIntent['target'];
+      try {
+        target = retryIntent ? retryIntent.target : readTarget();
+        inputs = retryIntent?.inputs ?? Object.fromEntries(reads.map(read => read()));
+      }
       catch (failure) {
         dialogError.textContent = failure instanceof Error ? failure.message : text.failed;
         return;
       }
-      void send(inputs, go, cancel, dialogError, fields);
+      void send(inputs, target, go, cancel, dialogError, fields);
     });
     dialog.append(dialogError, el('div', { class: 'acts' }, cancel, go));
     document.body.append(dialog);

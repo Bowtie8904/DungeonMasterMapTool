@@ -45,6 +45,8 @@ In a format-2 pack, an owner can roll a declared attack profile or its damage. T
 the profile from the saved sheet and commits its edited dice, reactions and costs together. A blocked
 profile roll spends nothing, and a retry does not roll again. Typed chat dice stay separate.
 
+For a single-target sheet action, choose a character alongside the action's other inputs. A whole-party action lists its recipients next to the button and needs no second confirmation. If the host rejects a stale offer, the panel reloads the choices without reapplying the action. If the connection drops before the result arrives, **Retry** submits the original choice and request ID.
+
 **Custom effects (partial implementation):** While hosting, the **Custom effects** tool on the right-hand tool rail (below Handouts) opens a dialog that lets the DM
 select saved player characters, compose stat or roll modifiers, optional roll bonuses, damage mitigation,
 resource actions and visible narrative rules, and remove individual DM-managed effects. Passive and selectable

@@ -124,4 +124,34 @@ describe('automation panel', () => {
       request: { requestId: 'r1', expectedRevision: 4, selections: [{ sourceInstanceId: 'f-rally', ruleId: 'rally', bindingId: 'use', eachId: 'd1', inputs: { amount: 2 } }] },
     });
   });
+
+  it('shows the party inline, sends only its version, and refreshes a rejected offer without reapplying', async () => {
+      const requests: string[] = [];
+      vi.stubGlobal('fetch', vi.fn(async (_url: string, options: RequestInit) => {
+        requests.push(String(options.body));
+        return requests.length === 1
+          ? new Response(JSON.stringify({ error: 'Party changed. Refresh this action.' }), { status: 409 })
+          : new Response('{}');
+      }));
+      const fetchActions = vi.fn(async () => ({ revision: 4, actions: [action({ targetSelection: {
+        cardinality: 'all', version: requests.length ? 'new' : 'old',
+        options: requests.length ? [{ id: 'b', label: 'Bea' }] : [{ id: 'a', label: 'Ada' }],
+      } })] }));
+      const panel = fake(automationPanel('a1', 'sheet', 'Actions', fetchActions));
+      await settle();
+      expect(panel.text).toContain('Recipients: Ada');
+      panel.all('button')[0].click();
+      await settle();
+      expect(requests).toHaveLength(1);
+      expect(panel.text).toContain('Party changed.');
+      expect(panel.text).toContain('Recipients: Bea');
+      expect(panel.text).not.toContain('Ada');
+      panel.all('button')[0].click();
+      await settle();
+      const [first, second] = requests.map(body => JSON.parse(body).request);
+      expect(first.target).toEqual({ version: 'old' });
+      expect(second.target).toEqual({ version: 'new' });
+      expect(second.requestId).not.toBe(first.requestId);
+      expect(first.selections[0]).toEqual({ sourceInstanceId: 'f-rally', ruleId: 'rally', bindingId: 'use', inputs: {} });
+  });
 });
