@@ -40,11 +40,12 @@ public final class LegacyCatalogConverter {
     private static final Map<String, String> GATED_FAMILIES = Map.of("conditionalActions", "actions", "conditionalRollOptions", "rollOptions");
     private static final Map<String, String> RANGES = Map.of("melee", "melee", "very close", "veryClose", "veryclose", "veryClose",
             "close", "close", "far", "far", "very far", "veryFar", "veryfar", "veryFar");
-    private static final Set<String> RESOURCE_FIELDS = Set.of("id", "label", "initial", "max", "resetOn", "resetValue", "minimumReset");
+    private static final Set<String> RESOURCE_FIELDS = Set.of("id", "label", "initial", "max", "resetOn", "resetValue", "minimumReset",
+            "session", "sessionHope", "sessionReset");
     private static final Set<String> OPTION_FIELDS = Set.of("id", "label", "description", "roll", "value", "dice", "advantage", "cost",
             "defaultOn", "exclusive", "requiresEffect", "excludesEffect", "weapon", "weaponRange", "excludeRolls", "effect", "uses",
             "usesSource", "endEffect", "hostOwned", "consumeItem", "quantity", "proficiency", "hopeDie", "diceResource", "condition", "loadoutDomain",
-            "required", "traitValue", "multiplier", "damageDie", "diceByLevel", "diceByFeature", "diceConditions", "magicOnly", "weaponRanges",
+            "required", "traitValue", "multiplier", "allResourceDice", "steps", "damageDie", "diceByLevel", "diceByFeature", "diceConditions", "magicOnly", "weaponRanges",
             "ignoreDisadvantage", "matchingDice");
     private static final Set<String> TRIGGER_FIELDS = Set.of("id", "label", "description", "on", "cost", "reroll", "when", "outcome",
             "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
@@ -196,9 +197,10 @@ public final class LegacyCatalogConverter {
             }
         }
         Pools pools = new Pools(RuleJson.JSON.createObjectNode(), shared);
+        List<ObjectNode> lifecycle = new ArrayList<>();
         if (legacy.has("resources")) {
             JsonNode list = legacy.get("resources");
-            for (int i = 0; i < list.size(); i++) resource(list.get(i), path + "/resources/" + i, p, pools.local());
+            for (int i = 0; i < list.size(); i++) resource(list.get(i), path + "/resources/" + i, p, pools.local(), lifecycle);
         }
         ArrayNode passive = RuleJson.JSON.createArrayNode();
         for (String family : List.of("modifiers", "conditionalModifiers")) {
@@ -211,6 +213,10 @@ public final class LegacyCatalogConverter {
         ArrayNode rules = RuleJson.JSON.createArrayNode();
         ObjectNode effects = RuleJson.JSON.createObjectNode();
         Set<String> ruleIds = new HashSet<>();
+        for (ObjectNode rule : lifecycle) {
+            rule.put("id", unique(rule.path("id").asText(), ruleIds));
+            rules.add(rule);
+        }
         List<Nested> queue = new ArrayList<>(p.nested());
         p.nested().clear();
         if (legacy.has("channelBenefit")) {
@@ -690,18 +696,51 @@ public final class LegacyCatalogConverter {
         rule.put("limitRef", id);
     }
 
-    private static void resource(JsonNode resource, String path, Problems p, ObjectNode pools) {
+    private static void resource(JsonNode resource, String path, Problems p, ObjectNode pools, List<ObjectNode> lifecycle) {
         p.onlyFields(resource, path, RESOURCE_FIELDS);
         String id = resource.path("id").asText();
         if (!ID.matcher(id).matches() || pools.has(id)) { p.add(path + "/id", "Invalid or duplicate resource ID: " + id); return; }
         ObjectNode pool = pools.putObject(id).put("kind", "number").put("scope", "actor");
         if (resource.has("label")) pool.put("label", escape(resource.path("label").asText()));
         JsonNode max = resource.path("max");
-        if (resource.has("max") && !(max.isInt() && max.asInt() > 0)) p.add(path + "/max", "Computed pool capacity is not supported: " + max);
-        pool.put("max", resource.has("max") ? max.asInt() : 1_000_000);
+        JsonNode capacity = !resource.has("max") ? RuleJson.JSON.getNodeFactory().numberNode(1_000_000)
+                : max.isInt() && max.asInt() > 0 ? max : max.isTextual() ? computed(max.asText()) : null;
+        if (capacity == null) { p.add(path + "/max", "Unsupported pool capacity: " + max); return; }
+        pool.set("max", capacity);
         if (resource.has("initial")) {
             if (!resource.path("initial").isInt()) p.add(path + "/initial", "Expected a whole initial value.");
             pool.put("initial", resource.path("initial").asInt());
+        }
+        boolean session = resource.path("session").asBoolean(false);
+        if (resource.has("session") && !resource.path("session").isBoolean()) p.add(path + "/session", "Expected a boolean.");
+        if (!session && (resource.has("sessionHope") || resource.has("sessionReset"))) {
+            p.add(path + "/session", "Session conversions need a session resource.");
+            return;
+        }
+        if (session && (resource.has("resetOn") || resource.has("resetValue") || resource.has("minimumReset"))) { p.add(path + "/resetOn", "A session resource cannot declare another reset."); return; }
+        if (resource.path("sessionHope").asBoolean(false)) {
+            // Unspent tokens become Hope at the start of a session; the rule spends them, so the pool needs no reset.
+            if (resource.has("sessionReset")) { p.add(path + "/sessionReset", "Hope conversion empties the pool."); return; }
+            ObjectNode rule = restRule("session-" + id, "session.start", "use", "resource", "automatic");
+            ObjectNode value = read("actor.pools." + id + ".value");
+            rule.putObject("when").putArray("gt").add(value).add(0);
+            ArrayNode steps = rule.putArray("do");
+            steps.addObject().put("op", "resource.gain").put("pool", "actor.hope").put("as", "gained").set("amount", value);
+            steps.addObject().put("op", "pool.spend").put("pool", id).set("amount", value);
+            String label = resource.has("label") ? escape(resource.path("label").asText()) : id;
+            ((ObjectNode) rule.get("ui")).put("label", label).put("report", "Gained {result.gained} Hope from unspent " + label + ".");
+            lifecycle.add(rule);
+            return;
+        }
+        if (session) {
+            pool.putArray("resetOn").add("session.start");
+            if (resource.has("sessionReset")) {
+                JsonNode reset = resource.path("sessionReset");
+                JsonNode value = reset.isInt() && reset.asInt() >= 0 ? reset : reset.isTextual() ? computed(reset.asText()) : null;
+                if (value == null) { p.add(path + "/sessionReset", "Unsupported session reset: " + reset); return; }
+                pool.set("resetTo", value);
+            }
+            return;
         }
         if (resource.has("resetOn")) {
             List<String> resets = RESETS.get(resource.path("resetOn").asText());
@@ -1388,6 +1427,28 @@ public final class LegacyCatalogConverter {
             }
         } else for (String scaled : List.of("diceByLevel", "diceByFeature", "diceConditions"))
             if (option.has(scaled)) p.add(path + "/" + scaled, "Scaled dice need base dice.");
+        if (option.has("allResourceDice")) {
+            // Rolls one die per unit currently in the pool, so the option is offered only while the pool holds any.
+            JsonNode all = option.get("allResourceDice");
+            p.onlyFields(all, path + "/allResourceDice", Set.of("resource", "sides"));
+            String resource = all.path("resource").asText();
+            if (!pools.has(resource)) p.add(path + "/allResourceDice/resource", "Unknown resource: " + resource);
+            else if (!(all.path("sides").isInt() && all.path("sides").asInt() >= 2 && all.path("sides").asInt() <= 1000))
+                p.add(path + "/allResourceDice/sides", "Expected a die size from 2 to 1000.");
+            else {
+                ObjectNode count = read("actor.pools." + resource + ".value");
+                ObjectNode part = contribution(id + "-pool", "dice", role, label).put("sides", all.path("sides").asInt());
+                part.set("count", count);
+                parts.add(part);
+                ObjectNode available = RuleJson.JSON.createObjectNode();
+                available.putArray("gte").add(count.deepCopy()).add(1);
+                ArrayNode gate = RuleJson.JSON.createArrayNode();
+                if (rule.has("when")) gate.add(rule.get("when"));
+                gate.add(available);
+                rule.remove("when");
+                applyWhen(rule, gate);
+            }
+        }
         if (option.has("advantage")) {
             String advantage = option.path("advantage").asText();
             if (!Set.of("advantage", "disadvantage").contains(advantage)) p.add(path + "/advantage", "Expected advantage or disadvantage.");
@@ -1492,6 +1553,8 @@ public final class LegacyCatalogConverter {
             else if (!"attack".equals(roll)) p.add(path + "/damageDie", "Damage die sizes are chosen on the attack roll.");
             else carriedDamageDie(option, label, sides.asInt(), effects, steps, extra);
         }
+        JsonNode legacySteps = option.path("steps");
+        for (int s = 0; s < legacySteps.size(); s++) step(legacySteps.get(s), path + "/steps/" + s, p, steps, effects, pools);
         endEffect(option, steps);
         if ("automatic".equals(binding.path("mode").asText()) && rule.has("costs")) {
             // Automatic rules have no choice to pay for, so a required option pays as its first steps.
@@ -3500,7 +3563,7 @@ public final class LegacyCatalogConverter {
         if (node.isObject()) {
             for (JsonNode resource : node.path("automation").path("resources")) {
                 ObjectNode pools = RuleJson.JSON.createObjectNode();
-                resource(resource, "", new Problems("", new ArrayList<>(), new ArrayList<>()), pools);
+                resource(resource, "", new Problems("", new ArrayList<>(), new ArrayList<>()), pools, new ArrayList<>());
                 pools.fields().forEachRemaining(field -> shared.putIfAbsent(field.getKey(), (ObjectNode) field.getValue()));
             }
             node.forEach(child -> collectPools(child, shared));

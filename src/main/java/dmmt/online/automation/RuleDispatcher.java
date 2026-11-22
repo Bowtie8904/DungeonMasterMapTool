@@ -679,6 +679,13 @@ public final class RuleDispatcher {
             sharedEvent = RuleJson.JSON.createObjectNode();
             sharedType = "";
             sharedRevision = 0L;
+        } else {
+            for (Candidate candidate : sources) {
+                ObjectNode view = candidate.context().deepCopy();
+                view.set("actor", sharedActor);
+                RuleRuntime.clampComputedActorPools(candidate.program(), view);
+                sharedActor = (ObjectNode) view.get("actor");
+            }
         }
         return new Snapshot(List.copyOf(sources), sharedActor, sharedEvent, sharedType, sharedRevision);
     }

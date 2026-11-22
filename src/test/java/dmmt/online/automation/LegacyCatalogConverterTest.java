@@ -1835,6 +1835,47 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void computedCapacitiesSessionResetsAndWholePoolDiceConvert() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"slayer","name":"Slayer","automation":{"resources":[{"id":"slayer","label":"Slayer Dice","initial":0,
+                  "max":"@proficiency","session":true,"sessionHope":true}]}},
+                {"id":"chaos","name":"Chaos","automation":{"resources":[{"id":"chaos","label":"Chaos","initial":0,"max":"@spellcast",
+                  "session":true,"sessionReset":"@spellcast"}]}},
+                {"id":"sigil","name":"Sigil","automation":{"resources":[{"id":"sigil","label":"Sigil d8s","initial":0,"max":"@level"}],
+                  "rollOptions":[{"id":"damage","label":"Sigil","roll":"damage","allResourceDice":{"resource":"sigil","sides":8},
+                    "steps":[{"op":"clear","resource":"sigil","amount":"all"}]}]}}"""));
+        assertEquals(3, result.converted(), result.diagnostics().toString());
+        assertEquals("actor.proficiency.value", result.catalog().at("/entries/0/automation/pools/slayer/max/read").asText());
+        assertFalse(result.catalog().at("/entries/0/automation/pools/slayer").has("resetOn"), "Hope conversion spends the pool.");
+
+        RuleCompiler.Program slayer = program(result, 0);
+        ObjectNode session = context(slayer, """
+                {"proficiency":{"value":2},"hope":{"value":1,"max":6},"pools":{"slayer":{"value":5,"max":5}}}""", "{\"type\":\"session.start\"}");
+        ObjectNode converted = run(slayer, session).contexts().getFirst();
+        assertEquals(3, converted.at("/actor/hope/value").asInt(), "The capacity follows Proficiency, so only 2 dice remain.");
+        assertEquals(0, converted.at("/actor/pools/slayer/value").asInt());
+        assertEquals(2, converted.at("/actor/pools/slayer/max").asInt());
+
+        RuleCompiler.Program chaos = program(result, 1);
+        ObjectNode prepared = RuleRuntime.resetLimits(chaos, context(chaos, """
+                {"stats":{"spellcast":{"base":3}}}""", "{\"type\":\"session.start\"}"), "session.start");
+        assertEquals(3, prepared.at("/actor/pools/chaos/value").asInt(), prepared.toString());
+
+        RuleCompiler.Program sigil = program(result, 2);
+        String damage = "{\"type\":\"roll.prepare\",\"check\":{\"kind\":\"damage\"},\"roll\":" + ROLL + "}";
+        assertEquals(List.of(), available(sigil, context(sigil, "{\"level\":3}", damage), "roll"));
+        ObjectNode charged = context(sigil, "{\"level\":3,\"pools\":{\"sigil\":{\"value\":2,\"max\":3}}}", damage);
+        assertEquals(List.of("damage"), available(sigil, charged, "roll"));
+        ObjectNode rolled = run(sigil, charged, "damage").contexts().getFirst();
+        assertEquals(0, rolled.at("/actor/pools/sigil/value").asInt());
+        assertEquals(2, rolled.at("/event/roll/contributions/1/dice").size(), rolled.at("/event/roll").toString());
+
+        var invalid = LegacyCatalogConverter.convert(catalog("""
+                {"id":"b","name":"B","automation":{"resources":[{"id":"x","max":"@nothing"},{"id":"y","sessionHope":true}]}}"""));
+        assertEquals(2, invalid.diagnostics().size(), invalid.diagnostics().toString());
+    }
+
+    @Test
     void resourceRollsSpendAChosenAmountAndRollThatManyDice() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"jar","name":"Jar","automation":{"actions":[{"id":"throw","label":"Throw","resourceRoll":{"resource":"gold","sides":20,"type":"magic"}}]}},

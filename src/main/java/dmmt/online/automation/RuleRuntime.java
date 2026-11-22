@@ -273,7 +273,7 @@ public final class RuleRuntime {
                 if ("number".equals(definition.getValue().path("kind").asText())) {
                     JsonNode resetTo = definition.getValue().get("resetTo");
                     int initial = resetTo == null ? definition.getValue().path("initial").asInt(0)
-                            : (int) Math.max(0, Math.min(definition.getValue().path("max").asInt(),
+                            : (int) Math.max(0, Math.min(pool.path("max").asInt(),
                                     Math.floor(RuleExpression.number(RuleExpression.evaluate(resetTo, hostContext), "/pools/" + definition.getKey() + "/resetTo"))));
                     if (pool.path("value").asInt() != initial) { pool.put("value", initial); changed = true; }
                 } else if (!pool.path("dice").isEmpty()) {
@@ -322,6 +322,28 @@ public final class RuleRuntime {
         return usage;
     }
 
+    /** A computed pool capacity reads its owner as {@code actor}; it is floored and clamped to 0-1,000,000. */
+    private static int computedMax(JsonNode expression, ObjectNode context, String owner, String id) {
+        ObjectNode view = context;
+        if (owner != null && !"actor".equals(owner)) {
+            view = context.objectNode();
+            view.setAll(context);
+            view.set("actor", context.get(owner));
+        }
+        double value = RuleExpression.number(RuleExpression.evaluate(expression, view), "/automation/pools/" + id + "/max");
+        return (int) Math.max(0, Math.min(1_000_000, Math.floor(value)));
+    }
+
+    static void clampComputedActorPools(RuleCompiler.Program program, ObjectNode context) {
+        var pools = program.pools().fields();
+        while (pools.hasNext()) {
+            var pool = pools.next();
+            if ("actor".equals(pool.getValue().path("scope").asText()) && !pool.getValue().path("max").isInt()
+                    && context.path("actor").path("pools").has(pool.getKey()))
+                poolState(program, context, pool.getKey());
+        }
+    }
+
     private static void initializePools(RuleCompiler.Program program, ObjectNode context) {
         ObjectNode definitions = program.pools();
         var pools = definitions.fields();
@@ -349,13 +371,20 @@ public final class RuleRuntime {
         ObjectNode pool = owner.has(id) ? RuleJson.object(owner.get(id), "/" + statePath + id)
                 : owner.putObject(id);
         String path = "/" + statePath + id;
-        int max = RuleJson.integer(definition.path("max"), "/automation/pools/" + id + "/max", 1,
-                "dice".equals(definition.path("kind").asText()) ? 1024 : 1_000_000);
+        boolean computed = !definition.path("max").isInt();
+        int max = computed ? computedMax(definition.get("max"), context, contextOwner, id)
+                : RuleJson.integer(definition.path("max"), "/automation/pools/" + id + "/max", 1,
+                        "dice".equals(definition.path("kind").asText()) ? 1024 : 1_000_000);
         if ("number".equals(definition.path("kind").asText())) {
             RuleJson.fields(pool, path, "value", "max");
-            if (!pool.has("value")) pool.put("value", definition.path("initial").asInt(0));
+            if (!pool.has("value")) pool.put("value", Math.min(max, definition.path("initial").asInt(0)));
+            if (computed) {
+                // A computed capacity follows the actor, so the stored value is clamped to the current capacity.
+                int value = RuleJson.integer(pool.get("value"), path + "/value", 0, 1_000_000);
+                pool.put("max", max).put("value", Math.min(value, max));
+            }
             if (!pool.has("max")) pool.put("max", max);
-            int storedMax = RuleJson.integer(pool.get("max"), path + "/max", 1, 1_000_000);
+            int storedMax = RuleJson.integer(pool.get("max"), path + "/max", computed ? 0 : 1, 1_000_000);
             if (storedMax != max) throw RuleJson.error(path + "/max", "Pool definition changed; migrate the stored pool.");
             RuleJson.integer(pool.get("value"), path + "/value", 0, storedMax);
         } else {

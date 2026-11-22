@@ -211,10 +211,12 @@ public final class RuleCompiler {
             if (!Set.of("number", "dice").contains(kind)) throw RuleJson.error(path + "/kind", "Expected number or dice.");
             String scope = RuleJson.text(field.getValue().get("scope"), path + "/scope");
             if (!Set.of("source", "actor").contains(scope)) throw RuleJson.error(path + "/scope", "Expected source or actor scope.");
-            RuleJson.integer(field.getValue().get("max"), path + "/max", 1, "dice".equals(kind) ? 1024 : 1_000_000);
+            JsonNode max = field.getValue().get("max");
+            if ("number".equals(kind) && max != null && !max.isNumber()) RuleExpression.validate(max, path + "/max");
+            else RuleJson.integer(max, path + "/max", 1, "dice".equals(kind) ? 1024 : 1_000_000);
             if (field.getValue().has("initial")) {
                 if (!"number".equals(kind)) throw RuleJson.error(path + "/initial", "Only numeric pools have an initial value.");
-                RuleJson.integer(field.getValue().get("initial"), path + "/initial", 0, field.getValue().path("max").asInt());
+                RuleJson.integer(field.getValue().get("initial"), path + "/initial", 0, max.isNumber() ? max.asInt() : 1_000_000);
             }
             if (field.getValue().has("resetOn")) resetEvents(field.getValue().get("resetOn"), path + "/resetOn");
             if (field.getValue().has("resetTo")) {
