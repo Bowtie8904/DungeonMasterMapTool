@@ -558,6 +558,7 @@ public final class RuleCompiler {
                 String path = "/recipes/" + id + "/rules/" + i;
                 validateRecipeReferences(rule, recipe.path("args"), recipe.path("ui"), path);
                 validateRecipeShape(rule, path);
+                validateRecipeLocalReferences(rule, recipe.path("args"), path);
             }
         }
         return recipes;
@@ -990,8 +991,13 @@ public final class RuleCompiler {
     private static void validateReferences(ObjectNode rule, ObjectNode args, Decl decl, Set<String> inputs, boolean usesDieContext, String path) {
         Set<String> noVariables = Set.of();
         if (rule.has("when")) references(RuleExpression.references(rule.get("when")), args, decl, noVariables, noVariables, false, path + "/when");
-        for (JsonNode binding : rule.path("bindings")) if (binding.has("when"))
-            references(RuleExpression.references(binding.get("when")), args, decl, noVariables, noVariables, binding.has("forEach"), path + "/bindings/when");
+        for (JsonNode binding : rule.path("bindings")) {
+            if (binding.has("when"))
+                references(RuleExpression.references(binding.get("when")), args, decl, noVariables, noVariables, binding.has("forEach"), path + "/bindings/when");
+            if (binding.path("targetSelection").has("where"))
+                references(RuleExpression.references(binding.path("targetSelection").get("where")), args, decl, noVariables,
+                        noVariables, false, path + "/bindings/targetSelection/where");
+        }
         for (JsonNode input : rule.path("inputs")) {
             for (String field : List.of("from", "eligible", "count", "min", "max", "optionsFrom", "total")) if (input.has(field))
                 references(RuleExpression.references(input.get(field)), args, decl, noVariables, noVariables, false, path + "/inputs/" + field);
@@ -1008,25 +1014,8 @@ public final class RuleCompiler {
         }
         Set<String> results = new HashSet<>();
         for (String list : List.of("costs", "do")) for (JsonNode op : rule.path(list)) {
-            for (String field : OPERATIONS.get(op.path("op").asText())) if (op.has(field)) {
-                if (Set.of("id", "label", "reason").contains(field)) {
-                    references(RuleTemplate.references(op.path(field).asText()), args, decl, inputs, results, usesDieContext, path + "/" + list + "/" + field);
-                } else if ("contribution".equals(field)) {
-                    JsonNode part = op.path(field);
-                    references(RuleTemplate.references(part.path("label").asText()), args, decl, inputs, results, usesDieContext, path + "/" + list + "/contribution/label");
-                    for (String expression : List.of("count", "sides", "keepHighest", "maximize", "value", "factor")) if (part.has(expression))
-                        references(RuleExpression.references(part.get(expression)), args, decl, inputs, results, usesDieContext, path + "/" + list + "/contribution/" + expression);
-                } else if ("metadata".equals(field) && "roll.resolve".equals(op.path("op").asText())) {
-                    op.path(field).fields().forEachRemaining(entry -> references(RuleExpression.references(entry.getValue()), args, decl,
-                            inputs, results, usesDieContext, path + "/" + list + "/metadata/" + entry.getKey()));
-                } else if (PER_DIE_FIELDS.contains(field) && op.path("op").asText().startsWith("roll.")) {
-                    references(RuleExpression.references(op.path(field)), args, decl, inputs, results, true, path + "/" + list + "/" + field);
-                } else if (!Set.of("pool", "track", "slot", "role", "effect", "target", "owner", "limit", "choose", "maxDice", "collection", "to", "plan", "field").contains(field)) {
-                    references(RuleExpression.references(op.path(field)), args, decl, inputs, results, usesDieContext, path + "/" + list + "/" + field);
-                }
-            }
-            if (op.has("if"))
-                references(RuleExpression.references(op.get("if")), args, decl, inputs, results, usesDieContext, path + "/" + list + "/if");
+            operationReferences(op, path + "/" + list, usesDieContext, false,
+                    (refs, die, at) -> references(refs, args, decl, inputs, results, die, at));
             if (op.has("as")) results.add(op.path("as").asText());
         }
         rule.path("ui").fields().forEachRemaining(field -> {
@@ -1034,6 +1023,126 @@ public final class RuleCompiler {
             references(RuleTemplate.references(field.getValue().asText()), args, decl, resolved ? inputs : noVariables,
                     resolved ? results : noVariables, usesDieContext, path + "/ui/" + field.getKey());
         });
+    }
+
+    @FunctionalInterface
+    private interface ReferenceVisitor {
+        void visit(Set<String> refs, boolean die, String path);
+    }
+
+    private static void operationReferences(JsonNode op, String path, boolean usesDieContext, boolean partial,
+                                            ReferenceVisitor visitor) {
+        String name = op.path("op").asText();
+        List<String> fields = OPERATIONS.get(name);
+        if (fields != null) for (String field : fields) if (op.has(field)) {
+            JsonNode value = op.get(field);
+            if (partial && substitution(value)) continue;
+            String at = path + "/" + field;
+            if (Set.of("id", "label", "reason").contains(field))
+                templateReferences(value, at, usesDieContext, partial, visitor);
+            else if ("contribution".equals(field)) {
+                templateReferences(value.path("label"), at + "/label", usesDieContext, partial, visitor);
+                for (String expression : List.of("count", "sides", "keepHighest", "maximize", "value", "factor"))
+                    if (value.has(expression))
+                        expressionReferences(value.get(expression), at + "/" + expression, usesDieContext, partial, visitor);
+            } else if ("metadata".equals(field) && "roll.resolve".equals(name)) {
+                value.fields().forEachRemaining(entry -> expressionReferences(entry.getValue(), at + "/" + entry.getKey(),
+                        usesDieContext, partial, visitor));
+            } else if ("outcomes".equals(field) && "dice.table".equals(name) && value.isArray()) {
+                for (int i = 0; i < value.size(); i++)
+                    templateReferences(value.get(i), at + "/" + i, usesDieContext, partial, visitor);
+            } else if (PER_DIE_FIELDS.contains(field) && name.startsWith("roll."))
+                expressionReferences(value, at, true, partial, visitor);
+            else if ("plan".equals(field) && "roll.resolve".equals(name)
+                    || !Set.of("pool", "track", "slot", "role", "effect", "target", "owner", "limit",
+                    "choose", "maxDice", "collection", "to", "plan", "field").contains(field))
+                expressionReferences(value, at, usesDieContext, partial, visitor);
+        }
+        if (op.has("if")) expressionReferences(op.get("if"), path + "/if", usesDieContext, partial, visitor);
+    }
+
+    private static void expressionReferences(JsonNode expression, String path, boolean die, boolean partial,
+                                             ReferenceVisitor visitor) {
+        if (!partial || !containsSubstitution(expression))
+            visitor.visit(RuleExpression.references(expression), die, path);
+    }
+
+    private static void templateReferences(JsonNode template, String path, boolean die, boolean partial,
+                                           ReferenceVisitor visitor) {
+        if (!partial || !containsSubstitution(template))
+            visitor.visit(RuleTemplate.references(template.asText()), die, path);
+    }
+
+    private static void validateRecipeLocalReferences(JsonNode rule, JsonNode args, String path) {
+        Set<String> inputs = new HashSet<>(), results = new HashSet<>();
+        JsonNode inputNodes = rule.path("inputs");
+        boolean unknownInputs = substitution(inputNodes);
+        for (JsonNode input : inputNodes) {
+            if (substitution(input) || substitution(input.path("id"))) unknownInputs = true;
+            else if (input.path("id").isTextual()) inputs.add(input.path("id").textValue());
+        }
+        ReferenceVisitor before = (refs, die, at) -> localReferences(refs, args, Set.of(), false, Set.of(), false, at);
+        if (rule.has("when")) expressionReferences(rule.get("when"), path + "/when", false, true, before);
+        for (JsonNode binding : rule.path("bindings")) {
+            if (binding.has("when")) expressionReferences(binding.get("when"), path + "/bindings/when", false, true, before);
+            if (binding.path("targetSelection").has("where"))
+                expressionReferences(binding.path("targetSelection").get("where"),
+                        path + "/bindings/targetSelection/where", false, true, before);
+        }
+        for (JsonNode input : inputNodes) {
+            if (substitution(input)) continue;
+            for (String field : List.of("from", "eligible", "count", "min", "max", "optionsFrom", "total", "where"))
+                if (input.has(field)) expressionReferences(input.get(field), path + "/inputs/" + field, false, true, before);
+            for (String field : List.of("label", "choiceLabel"))
+                if (input.has(field)) templateReferences(input.get(field), path + "/inputs/" + field, false, true, before);
+            for (JsonNode option : input.path("options")) {
+                if (option.has("label")) templateReferences(option.get("label"), path + "/inputs/options/label", false, true, before);
+                if (option.has("when")) expressionReferences(option.get("when"), path + "/inputs/options/when", false, true, before);
+            }
+        }
+        boolean unknownResults = false;
+        for (String list : List.of("costs", "do")) {
+            JsonNode operations = rule.path(list);
+            if (substitution(operations)) {
+                unknownResults = true;
+                continue;
+            }
+            for (int i = 0; i < operations.size(); i++) {
+                JsonNode op = operations.get(i);
+                if (substitution(op)) {
+                    unknownResults = true;
+                    continue;
+                }
+                boolean deferredInputs = unknownInputs, deferredResults = unknownResults;
+                operationReferences(op, path + "/" + list + "/" + i, false, true,
+                        (refs, die, at) -> localReferences(refs, args, inputs, deferredInputs, results, deferredResults, at));
+                if (substitution(op.path("as"))) unknownResults = true;
+                else if (op.path("as").isTextual()) results.add(op.path("as").textValue());
+            }
+        }
+        boolean deferredInputs = unknownInputs, deferredResults = unknownResults;
+        rule.path("ui").fields().forEachRemaining(field -> {
+            if (substitution(field.getValue())) return;
+            boolean resolved = Set.of("report", "preview").contains(field.getKey());
+            templateReferences(field.getValue(), path + "/ui/" + field.getKey(), false, true,
+                    (refs, die, at) -> localReferences(refs, args, resolved ? inputs : Set.of(), resolved && deferredInputs,
+                            resolved ? results : Set.of(), resolved && deferredResults, at));
+        });
+    }
+
+    private static void localReferences(Set<String> refs, JsonNode args, Set<String> inputs, boolean unknownInputs,
+                                        Set<String> results, boolean unknownResults, String path) {
+        for (String ref : refs) {
+            RuleExpression.validateRead(ref, path);
+            String[] parts = ref.split("\\.");
+            boolean valid = switch (parts[0]) {
+                case "args" -> args.has(parts[1]);
+                case "input" -> unknownInputs || inputs.contains(parts[1]);
+                case "result" -> unknownResults || results.contains(parts[1]);
+                default -> true;
+            };
+            if (!valid) throw RuleJson.error(path, "Unknown or unavailable reference: " + ref);
+        }
     }
 
     private static void references(Set<String> references, ObjectNode args, Decl decl, Set<String> inputs,

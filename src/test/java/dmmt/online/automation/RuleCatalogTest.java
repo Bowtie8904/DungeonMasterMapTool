@@ -258,6 +258,117 @@ class RuleCatalogTest {
         assertFalse(RuleCatalog.compile(fixture("rewrite/domain-cards").toString(), dynamic.toString()).isEmpty());
     }
 
+    private static ObjectNode localReferenceRecipes() throws Exception {
+        return (ObjectNode) RuleJson.parse("""
+            {"format":"dmmap-daggerheart-rules","version":2,"recipes":[{
+              "id":"test","args":{"inputId":{"type":"string","default":"amount"},
+                                   "outputId":{"type":"string","default":"first"}},
+              "ui":{},"rules":[{
+                "id":"rule","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                "inputs":[{"id":"amount","kind":"integer","label":"Amount","min":0,"max":2}],
+                "do":[{"op":"value","value":{"read":"input.amount"},"as":"first"},
+                      {"op":"value","value":{"read":"result.first"},"as":"second"}],
+                "ui":{"label":"Action","report":"{result.second}"}
+              }]
+            }]}""");
+    }
+
+    @Test
+    void unusedRecipesLinkKnownLocalReferencesInOrderAndScope() throws Exception {
+        String catalog = """
+            {"format":"dmmap-daggerheart","version":2,"category":"items","entries":[]}""";
+        ObjectNode recipes = localReferenceRecipes();
+        assertTrue(RuleCatalog.compile(catalog, recipes.toString()).isEmpty());
+        for (String invalid : List.of(
+                """
+                {"when":{"read":"input.amount"}}""",
+                """
+                {"when":{"read":"args.missing"}}""",
+                """
+                {"inputs":[{"id":"amount","kind":"integer","label":"Amount","min":{"read":"input.amount"},"max":2}]}""",
+                """
+                {"do":[{"op":"value","value":{"read":"result.later"},"as":"first"},
+                       {"op":"value","value":0,"as":"later"}]}""",
+                """
+                {"do":[{"op":"value","value":{"read":"result.first"},"as":"first"}]}""",
+                """
+                {"do":[{"op":"value","value":{"read":"input.missing"},"as":"first"}]}""",
+                """
+                {"do":[{"op":"roll.resolve","plan":{"read":"result.missing"},"as":"first"}]}""",
+                """
+                {"do":[{"op":"dice.table","count":1,"outcomes":["{result.missing}","B"],"as":"first"}]}""",
+                """
+                {"ui":{"label":"{result.first}","report":"Done"}}""",
+                """
+                {"ui":{"label":"Action","report":"{result.missing}"}}"""
+        )) {
+            ObjectNode bad = recipes.deepCopy();
+            ((ObjectNode) bad.at("/recipes/0/rules/0")).setAll((ObjectNode) RuleJson.parse(invalid));
+            var error = assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, bad.toString()), invalid);
+            assertTrue(error.getMessage().contains("Unknown or unavailable reference"), error.getMessage());
+        }
+        ObjectNode binding = recipes.deepCopy();
+        ((ObjectNode) binding.at("/recipes/0/rules/0/bindings/0")).set("when", RuleJson.parse("{\"read\":\"result.first\"}"));
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, binding.toString()));
+        ObjectNode target = recipes.deepCopy();
+        ObjectNode selection = ((ObjectNode) target.at("/recipes/0/rules/0/bindings/0")).putObject("targetSelection")
+                .put("cardinality", "one").put("scope", "activePlayerCharacters");
+        selection.set("where", RuleJson.parse("{\"read\":\"input.amount\"}"));
+        assertTrue(assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, target.toString()))
+                .getMessage().contains("input.amount"));
+
+        ObjectNode direct = (ObjectNode) RuleJson.parse("{\"rules\":[]}");
+        direct.withArray("rules").add(recipes.at("/recipes/0/rules/0").deepCopy());
+        assertNotNull(RuleCompiler.compile("test", direct, recipes));
+        ObjectNode badPlan = (ObjectNode) recipes.at("/recipes/0/rules/0").deepCopy();
+        ((ObjectNode) badPlan.at("/do/0")).put("op", "roll.resolve").remove("value");
+        ((ObjectNode) badPlan.at("/do/0")).set("plan", RuleJson.parse("{\"read\":\"result.missing\"}"));
+        direct.withArray("rules").set(0, badPlan);
+        assertTrue(assertThrows(IllegalArgumentException.class, () -> RuleCompiler.compile("test", direct, recipes))
+                .getMessage().contains("result.missing"));
+        ObjectNode badTable = (ObjectNode) recipes.at("/recipes/0/rules/0").deepCopy();
+        ((ObjectNode) badTable.at("/do/0")).put("op", "dice.table").remove("value");
+        ((ObjectNode) badTable.at("/do/0")).put("count", 1).putArray("outcomes").add("{result.missing}").add("B");
+        direct.withArray("rules").set(0, badTable);
+        assertTrue(assertThrows(IllegalArgumentException.class, () -> RuleCompiler.compile("test", direct, recipes))
+                .getMessage().contains("result.missing"));
+        direct.withArray("rules").set(0, target.at("/recipes/0/rules/0").deepCopy());
+        assertTrue(assertThrows(IllegalArgumentException.class, () -> RuleCompiler.compile("test", direct, recipes))
+                .getMessage().contains("input.amount"));
+    }
+
+    @Test
+    void unusedRecipeLocalReferencesDeferOnlySubstitutionDependentScopes() throws Exception {
+        String catalog = """
+            {"format":"dmmap-daggerheart","version":2,"category":"items","entries":[]}""";
+        ObjectNode recipes = localReferenceRecipes();
+        ObjectNode rule = (ObjectNode) recipes.at("/recipes/0/rules/0");
+        ((ObjectNode) rule.at("/inputs/0")).putObject("id").put("$arg", "inputId");
+        ((ObjectNode) rule.at("/do/0")).putObject("as").put("$arg", "outputId");
+        assertTrue(RuleCatalog.compile(catalog, recipes.toString()).isEmpty());
+        ObjectNode use = (ObjectNode) RuleJson.parse("""
+            {"rules":[{"id":"use","useRecipe":"test","args":{}}]}""");
+        assertNotNull(RuleCompiler.compile("test", use, recipes));
+        ((ObjectNode) recipes.at("/recipes/0/args/inputId")).put("default", "other");
+        assertTrue(RuleCatalog.compile(catalog, recipes.toString()).isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> RuleCompiler.compile("test", use, recipes));
+        ((ObjectNode) recipes.at("/recipes/0/args/inputId")).put("default", "amount");
+        ((ObjectNode) recipes.at("/recipes/0/args/outputId")).put("default", "other");
+        assertTrue(RuleCatalog.compile(catalog, recipes.toString()).isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> RuleCompiler.compile("test", use, recipes));
+
+        ObjectNode dynamicCost = localReferenceRecipes();
+        ((ObjectNode) dynamicCost.at("/recipes/0/args")).putObject("extraCosts").put("type", "costs")
+                .putArray("default").addObject().put("op", "resource.spend").put("pool", "actor.hope").put("amount", 1).put("as", "bonus");
+        ObjectNode costRule = (ObjectNode) dynamicCost.at("/recipes/0/rules/0");
+        costRule.putObject("costs").put("$arg", "extraCosts");
+        ((ObjectNode) costRule.at("/do/0")).set("value", RuleJson.parse("{\"read\":\"result.bonus\"}"));
+        assertTrue(RuleCatalog.compile(catalog, dynamicCost.toString()).isEmpty());
+        assertNotNull(RuleCompiler.compile("test", use, dynamicCost));
+        ((ObjectNode) use.at("/rules/0/args")).putArray("extraCosts");
+        assertThrows(IllegalArgumentException.class, () -> RuleCompiler.compile("test", use, dynamicCost));
+    }
+
     @Test
     void compiledProgramsIndexUserBindingsByEventAndSurface() throws Exception {
         var source = RuleCatalog.compile(fixture("rewrite/host-classes").toString(), fixture("rewrite/recipes").toString())
