@@ -33,7 +33,7 @@ class Element {
   get text(): string { return this.textContent + this.children.map(child => child.text).join(''); }
 }
 
-const { automationPanel, executeAutomation } = await import('./panel');
+const { automationPanel, executeAutomation, historyResultControls } = await import('./panel');
 type DescribedActions = import('./panel').DescribedActions;
 const fake = (element: HTMLElement) => element as unknown as Element;
 
@@ -46,6 +46,78 @@ const action = (overrides: Partial<RuleDescriptor> = {}): RuleDescriptor => ({
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 
 afterEach(() => vi.unstubAllGlobals());
+
+describe('saved roll controls', () => {
+  const roll = { actorId: 'hero', fromId: 'owner', from: 'Player', id: 1, ts: 2, expression: '1d6', rolls: [5], total: 5,
+    automationEvent: { type: 'roll.finished', sessionId: 'session', resultId: 'r1' } };
+  const toggleOpen = (card: HTMLElement) => {
+    (card as HTMLDetailsElement).open = true;
+    fake(card).listeners.get('toggle')!.forEach(listener => listener());
+  };
+
+  it('loads no historical descriptors until the current owner opens one result', async () => {
+    const get = vi.fn(async () => new Response('{}', { status: 409 }));
+    vi.stubGlobal('fetch', get);
+    expect(historyResultControls(roll, 'viewer', 'session', true)).toBeNull();
+    expect(historyResultControls(roll, 'owner', 'session', false)).toBeNull();
+    expect(historyResultControls(roll, 'owner', 'old', true)).toBeNull();
+    const cards = Array.from({ length: 50 }, () => historyResultControls(roll, 'owner', 'session', true)!);
+    expect(get).not.toHaveBeenCalled();
+    toggleOpen(cards[3]);
+    await settle();
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(get).toHaveBeenCalledWith('/api/automation/hero?resultId=r1', expect.objectContaining({ cache: 'no-store' }));
+    expect(fake(cards[3]).text).toContain('No current actions');
+  });
+
+  it('keeps a lost POST for retry and does not attach revised actions to the original roll', async () => {
+    const requests: string[] = [];
+    const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+      if (!init.body) return Response.json({ revision: 8, actions: [action({ eachId: 'd1' })] });
+      requests.push(String(init.body));
+      if (requests.length === 1) throw new Error('Reply lost');
+      return Response.json({ revision: 9, resultPublished: true, event: { check: { total: 7 }, resultId: 'r2' },
+        resultActions: [action({ label: 'New button' })], actions: [{ report: 'Edited.' }] });
+    });
+    vi.stubGlobal('fetch', fetch);
+    const card = historyResultControls(roll, 'owner', 'session', true)!;
+    toggleOpen(card);
+    await settle();
+    fake(card).all('button')[0].click();
+    await settle();
+    toggleOpen(card);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    fake(card).all('button')[0].click();
+    await settle();
+    expect(requests).toEqual([requests[0], requests[0]]);
+    expect(JSON.parse(requests[0]).request).toEqual({ resultId: 'r1', requestId: expect.any(String), expectedRevision: 8,
+      selections: [{ sourceInstanceId: 'f-rally', ruleId: 'rally', bindingId: 'use', eachId: 'd1', inputs: {} }] });
+    expect(fake(card).text).toContain('Revised total: 7\nEdited.');
+    expect(fake(card).all('button')).toHaveLength(0);
+  });
+
+  it('reloads a rejected offer without automatically submitting it again', async () => {
+    const requests: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      if (!init.body) return Response.json({ revision: requests.length ? 7 : 5, actions: [action()] });
+      requests.push(String(init.body));
+      return requests.length === 1 ? Response.json({ error: 'Sheet changed' }, { status: 409 })
+        : Response.json({ actions: [{ report: 'Gained Hope' }] });
+    }));
+    const card = historyResultControls(roll, 'owner', 'session', true)!;
+    toggleOpen(card);
+    await settle();
+    fake(card).all('button')[0].click();
+    await settle();
+    expect(fake(card).text).toContain('Sheet changed');
+    expect(requests).toHaveLength(1);
+    fake(card).all('button')[0].click();
+    await settle();
+    expect(JSON.parse(requests[1]).request.expectedRevision).toBe(7);
+    expect(fake(card).text).toContain('Gained Hope');
+    expect(fake(card).all('button')).toHaveLength(0);
+  });
+});
 
 describe('automation panel', () => {
   it('stays hidden without an automation pack or button actions', async () => {

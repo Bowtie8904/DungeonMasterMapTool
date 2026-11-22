@@ -15,6 +15,7 @@ import { renderCountdowns } from './countdowns';
 import { rosterPlayerName } from './roster';
 import { setGmFear } from './daggerheart/engine';
 import { rollButtons } from './daggerheart/rollbuttons';
+import { historyResultControls } from './automation/panel';
 import { ChatActionReports } from './chat-action-reports';
 import { addToSheet, needsInventoryRarityCatalogs, refreshInventoryRarities } from './daggerheart/compendium';
 import { CompendiumPanel } from './compendium';
@@ -1402,6 +1403,10 @@ export class App {
   private actionReports?: ChatActionReports;
 
   private rollActions(m: RollMessage | import('./protocol').ChatMessage): HTMLElement | null {
+    if ('automationEvent' in m && m.automationEvent) {
+      return historyResultControls(m, this.playerId, this.conn.sessionId,
+        this.myActors.some(actor => actor.id === m.actorId && !actor.disabled));
+    }
     return rollButtons(m, {
       playerId: this.playerId,
       supportsRollRewards: () => this.conn.rollRewards,

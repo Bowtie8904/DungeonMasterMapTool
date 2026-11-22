@@ -7,8 +7,9 @@ class Control {
   disabled = false;
   title = '';
   hidden: object | null = null;
+  private = false;
   constructor(public textContent: string) {}
-  closest() { return this.hidden; }
+  closest(selector: string) { return this.private && selector.includes('.private-result-actions') ? this : this.hidden; }
   getAttribute() { return null; }
 }
 
@@ -16,7 +17,7 @@ class Card {
   dataset = { messageId: '4', messageTs: '5' };
   buttons = [new Control('Gain 1 Hope'), new Control('Reroll · Ally'), new Control('Claim · Friend')];
   querySelectorAll() { return this.buttons; }
-  contains(node: object) { return node === this; }
+  contains(node: object) { return node === this || this.buttons.includes(node as Control); }
 }
 
 it('mirrors rewards, reactions and claims, including unavailable explanations but not hidden controls', () => {
@@ -24,6 +25,9 @@ it('mirrors rewards, reactions and claims, including unavailable explanations bu
   card.buttons[1].disabled = true;
   card.buttons[1].title = 'Not enough Hope';
   card.buttons[2].hidden = card;
+  const privateResult = new Control('Spend stored dice');
+  privateResult.private = true;
+  card.buttons.push(privateResult);
   expect(chatActionLabels(card as unknown as HTMLElement)).toEqual([
     { label: 'Gain 1 Hope', disabled: false, detail: '' },
     { label: 'Reroll · Ally', disabled: true, detail: 'Not enough Hope' },

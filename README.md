@@ -47,6 +47,8 @@ profile roll spends nothing, and a retry does not roll again. Typed chat dice st
 Choose any offered options and their inputs together before pressing Roll (the attack or damage button). If no options are available, the button rolls immediately. Opening the choices does not contact the host; **Retry** resends the same selection if the reply was lost.
 Format-2 authors must put choices based on the new faces or total on a result action, not a pre-roll option. A pre-roll option can use previously stored dice and can change the new dice when it executes.
 
+The rolling owner can use an offered result button on the sheet or reopen **Result actions** on the roll in chat. Restoring chat history does not fetch actions for every roll. A successful use spends that button once; an edit posts a new roll and leaves the original readable. Other players see the roll, not the owner's choices.
+
 For a single-target sheet action, choose a character alongside the action's other inputs. A whole-party action lists its recipients next to the button and needs no second confirmation. If the host rejects a stale offer, the panel reloads the choices without reapplying the action. If the connection drops before the result arrives, **Retry** submits the original choice and request ID.
 
 **Custom effects (partial implementation):** While hosting, the **Custom effects** tool on the right-hand tool rail (below Handouts) opens a dialog that lets the DM

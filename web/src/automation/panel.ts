@@ -1,5 +1,6 @@
 import { el } from '../login';
 import { ApiError, hostFetch } from '../api';
+import type { RollMessage } from '../protocol';
 import { intentControl, ruleControl, type ControlText, type RuleDescriptor, type RuleIntent } from './controls';
 
 export interface DescribedActions {
@@ -35,7 +36,10 @@ async function errorText(response: Response): Promise<string> {
 
 /** Reads host-described automation actions. Resolves null when the host has no format-2 automation pack. */
 export async function describeAutomation(actorId: string, surface = 'sheet', event = 'action.request'): Promise<DescribedActions | null> {
-  const query = new URLSearchParams({ surface, event });
+  return fetchDescription(actorId, new URLSearchParams({ surface, event }));
+}
+
+async function fetchDescription(actorId: string, query: URLSearchParams): Promise<DescribedActions | null> {
   const response = await hostFetch(`/api/automation/${encodeURIComponent(actorId)}?${query}`, { credentials: 'same-origin', cache: 'no-store' });
   if (response.status === 409) return null;
   if (!response.ok) throw new Error(await errorText(response));
@@ -43,12 +47,13 @@ export async function describeAutomation(actorId: string, surface = 'sheet', eve
 }
 
 /** Submits one selected binding as a host intent; the host recomputes everything from trusted JSON. */
-export async function executeAutomation(actorId: string, intent: RuleIntent): Promise<unknown> {
+export async function executeAutomation(actorId: string, intent: RuleIntent, resultId?: string): Promise<unknown> {
   const selection: Record<string, unknown> = {
     sourceInstanceId: intent.sourceInstanceId, ruleId: intent.ruleId, bindingId: intent.bindingId, inputs: intent.inputs,
   };
   if (intent.eachId !== undefined) selection.eachId = intent.eachId;
   return postIntent(actorId, { requestId: intent.requestId, expectedRevision: intent.expectedRevision, selections: [selection],
+    ...(resultId === undefined ? {} : { resultId }),
     ...(intent.target ? { target: intent.target } : {}) });
 }
 
@@ -72,6 +77,86 @@ function actionReports(response: unknown): string[] {
   });
 }
 
+interface RollReceipt {
+  revision: number;
+  event: { check: { total: number }; resultId?: string };
+  resultActions?: RuleDescriptor[];
+  resultPublished?: boolean;
+}
+
+/** Keep a chat card pinned to its original result. A sheet can follow a newly published revision instead. */
+function resultControls(actorId: string, resultId: string, initial?: DescribedActions) {
+  const list = el('div', { class: 'acts automation-actions' });
+  const status = el('div', { role: 'status' });
+  const root = el('div', { class: 'automation-result-actions' }, status, list);
+  let generation = 0;
+  let retryId: string | undefined;
+  let finished = false;
+  const paint = (id: string, offer: DescribedActions): void => {
+    const current = ++generation;
+    const controls = offer.actions.filter(button => button.mode === 'button').map(button => {
+      const control = ruleControl({ ...button, revision: offer.revision }, async intent => {
+        if (current !== generation) return;
+        if (retryId && retryId !== intent.requestId) throw new Error('Finish the pending result action first.');
+        retryId = intent.requestId;
+        controls.forEach(other => { other.inert = other !== control; });
+        let receipt: RollReceipt;
+        try { receipt = await executeAutomation(actorId, intent, id) as RollReceipt; }
+        catch (failure) {
+          if (!(failure instanceof ApiError) || failure.status !== 409) throw failure;
+          retryId = undefined;
+          if (current === generation) void refresh(id, failure.message);
+          return;
+        }
+        retryId = undefined;
+        if (current !== generation) return;
+        const reports = actionReports(receipt);
+        if (receipt.resultPublished) {
+          status.textContent = [`Revised total: ${receipt.event.check.total}`, ...reports].join('\n');
+          if (initial && receipt.event.resultId && receipt.resultActions?.length)
+            paint(receipt.event.resultId, { revision: receipt.revision, actions: receipt.resultActions });
+          else { finished = true; ++generation; list.replaceChildren(); }
+        } else if (offer.actions.length === 1) {
+          ++generation; list.replaceChildren();
+          finished = true;
+          status.textContent = reports.join('\n') || 'Applied.';
+        } else void refresh(id, reports.join('\n') || 'Applied.');
+      }, CONTROL_TEXT);
+      return control;
+    });
+    list.replaceChildren(...controls);
+  };
+  const refresh = async (id: string, notice = ''): Promise<void> => {
+    const current = ++generation;
+    list.replaceChildren();
+    status.textContent = notice || 'Loading result actions…';
+    try {
+      const offer = await fetchDescription(actorId, new URLSearchParams({ resultId: id }));
+      if (current !== generation) return;
+      status.textContent = notice || (offer?.actions.length ? '' : 'No current actions for this result.');
+      if (offer) paint(id, offer);
+    } catch (failure) {
+      if (current !== generation) return;
+      status.textContent = failure instanceof Error ? failure.message : CONTROL_TEXT.failed;
+      const retry = el('button', { type: 'button' }, CONTROL_TEXT.retry);
+      retry.addEventListener('click', () => { void refresh(id, notice); });
+      list.replaceChildren(retry);
+    }
+  };
+  if (initial) paint(resultId, initial);
+  return { root, reopen: () => { if (!retryId && !finished) void refresh(resultId); } };
+}
+
+/** Restoring a history tail makes no per-card requests. Load only the result the owner opens. */
+export function historyResultControls(roll: RollMessage, playerId: string, session: string, ownsActor: boolean): HTMLElement | null {
+  const { resultId, sessionId } = roll.automationEvent ?? {};
+  if (!ownsActor || !session || session !== sessionId || !resultId || !roll.actorId || playerId !== roll.fromId) return null;
+  const actions = resultControls(roll.actorId, resultId);
+  const details = el('details', { class: 'dh private-result-actions' }, el('summary', {}, 'Result actions'), actions.root);
+  details.addEventListener('toggle', () => { if (details.open) actions.reopen(); });
+  return details;
+}
+
 /**
  * Renders every independent button the host describes for this actor and surface. The panel stays hidden while the
  * host has no automation pack or no visible actions, and refreshes itself after each completed action.
@@ -83,9 +168,10 @@ export function automationPanel(actorId: string, surface = 'sheet', title = 'Act
   const status = el('div', { class: 'error' });
   status.setAttribute('role', 'alert');
   const output = el('div', { class: 'automation-result' });
+  const resultActions = el('div', { class: 'dh' });
   output.setAttribute('role', 'status');
   const root = el('div', { class: 'card automation-panel', hidden: true },
-    el('h3', { class: 'card-zone-header' }, title), list, output, status);
+    el('h3', { class: 'card-zone-header' }, title), list, output, resultActions, status);
   let generation = 0;
   const load = async (notice = ''): Promise<void> => {
     const current = ++generation;
@@ -120,7 +206,9 @@ export function automationPanel(actorId: string, surface = 'sheet', title = 'Act
                 void load(failure.message);
                 return;
               }
-              const event = (result as { event: { check: { total: number } } }).event;
+              const { event, resultActions: actions, revision } = result as RollReceipt;
+              resultActions.replaceChildren(...(event.resultId && actions?.length
+                ? [resultControls(actorId, event.resultId, { revision, actions }).root] : []));
               output.textContent = [`${label}: ${event.check.total}`, ...actionReports(result)].join('\n');
               void load();
             }, CONTROL_TEXT));

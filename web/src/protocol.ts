@@ -237,6 +237,7 @@ export interface RollDetail extends RollContribution {
 }
 
 export interface RollMessage {
+  automationEvent?: { type: string; sessionId?: string; resultId?: string };
   deathrun?: { effectId: string; count: number };
   actionBenefits?: ChatMessage['actionBenefits'];
   id: string | number;
