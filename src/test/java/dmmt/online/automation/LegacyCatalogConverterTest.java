@@ -2582,6 +2582,16 @@ class LegacyCatalogConverterTest {
         assertNotNull(program(result, 0));
     }
     @Test
+    void dualityDieRerollsConvert() throws Exception {
+        for (String role : new String[]{"hope", "fear"}) {
+            var result = LegacyCatalogConverter.convert(catalog("""
+                    {"id":"rr","name":"Reroll","automation":{"conditionalRollTriggers":[{"id":"again","label":"Reroll","on":"duality","rerollDualityDie":"%s"}]}}""".formatted(role)));
+            assertEquals(1, result.converted(), result.diagnostics().toString());
+            assertTrue(block(result, 0).toString().contains("\"" + role + "\""), block(result, 0).toString());
+            assertNotNull(program(result, 0));
+        }
+    }
+    @Test
     void traitHalvesToggledEffectsAndHopeAmountsConvert() throws Exception {
         var half = LegacyCatalogConverter.convert(catalog("""
                 {"id":"untouchable","name":"Untouchable","automation":{"modifiers":[{"stat":"evasion","traitValue":"Agility","divisor":2,"round":"up"}]}}"""));

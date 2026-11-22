@@ -51,7 +51,7 @@ public final class LegacyCatalogConverter {
             "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
             "chatBenefits", "allowSourceOwner", "loadoutDomain", "primaryWeapon", "anyWeapon", "advantage", "giveFear", "check", "choices",
-            "magicOnly", "weaponRanges", "addDice", "damageDice", "damageDiceBelow", "spendHopeAmount", "disadvantage", "removeFear", "weaponDamage", "rollSection", "containsDie", "resourceRoll", "selectAmount",
+            "magicOnly", "weaponRanges", "addDice", "damageDice", "damageDiceBelow", "rerollDualityDie", "spendHopeAmount", "disadvantage", "removeFear", "weaponDamage", "rollSection", "containsDie", "resourceRoll", "selectAmount",
             "target", "excludeSourceActor", "splendorAction", "hostRollAction", "otherPlayerOnly", "spentTokenDamage", "bloodAutomation", "swapDuality", "repeatable");
     private static final Set<String> MITIGATION_FIELDS = Set.of("id", "label", "description", "when", "cost", "negate", "halve", "reduce",
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
@@ -2056,10 +2056,18 @@ public final class LegacyCatalogConverter {
         ArrayNode steps = RuleJson.JSON.createArrayNode();
         JsonNode from = read("event.roll");
         boolean edited = false;
+        if (trigger.has("rerollDualityDie")) {
+            String role = trigger.path("rerollDualityDie").asText();
+            if (trigger.has("reroll") || !Set.of("hope", "fear").contains(role)) p.add(path + "/rerollDualityDie", "Expected hope or fear and no other reroll.");
+            else {
+                trigger = trigger.deepCopy();
+                ((ObjectNode) trigger).put("reroll", role);
+            }
+        }
         if (trigger.has("reroll")) {
             String reroll = trigger.path("reroll").asText();
             ObjectNode where = RuleJson.JSON.createObjectNode();
-            if ("hope".equals(reroll)) where.putArray("eq").add(read("die.role")).add("hope");
+            if (Set.of("hope", "fear").contains(reroll)) where.putArray("eq").add(read("die.role")).add(reroll);
             else if ("duality".equals(reroll)) {
                 ArrayNode any = where.putArray("or");
                 any.addObject().putArray("eq").add(read("die.role")).add("hope");
