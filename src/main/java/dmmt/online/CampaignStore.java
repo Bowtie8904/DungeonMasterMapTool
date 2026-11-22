@@ -484,7 +484,7 @@ public final class CampaignStore {
                     || history.entry(report.id(), report.timestamp()) != null)
                 throw new IllegalArgumentException("A claim report must have a new, unique history identity.");
         }
-        saveSheetsAndResults(campaignId, sheets, replacement, messages, fear, countdowns, null, null);
+        saveSheetsAndResults(campaignId, sheets, replacement, messages, fear, countdowns, null, null, expectedOffer);
     }
 
     private record HistoryIdentity(long id, long timestamp) {}
@@ -511,6 +511,13 @@ public final class CampaignStore {
     private void saveSheetsAndResults(String campaignId, java.util.Map<String, ObjectNode> sheets,
                                       ObjectNode replacement, List<ObjectNode> messages, Integer fear,
                                       List<Campaign.Countdown> countdowns, Campaign.Actor actor, String name) throws IOException {
+        saveSheetsAndResults(campaignId, sheets, replacement, messages, fear, countdowns, actor, name, null);
+    }
+
+    private void saveSheetsAndResults(String campaignId, java.util.Map<String, ObjectNode> sheets,
+                                      ObjectNode replacement, List<ObjectNode> messages, Integer fear,
+                                      List<Campaign.Countdown> countdowns, Campaign.Actor actor, String name,
+                                      ObjectNode expectedOffer) throws IOException {
         recoverSheetTransfer(campaignId);
         ObjectNode transaction = MAPPER.createObjectNode();
         for (var entry : sheets.entrySet()) {
@@ -518,6 +525,7 @@ public final class CampaignStore {
             transaction.set(entry.getKey(), entry.getValue());
         }
         if (replacement != null) transaction.set("$roll", replacement);
+        if (expectedOffer != null) transaction.set("$claimExpected", expectedOffer);
         if (messages.size() == 1) transaction.set("$message", messages.getFirst());
         else if (!messages.isEmpty()) transaction.set("$messages", MAPPER.valueToTree(messages));
         if (fear != null) transaction.put("$fear", fear);
@@ -541,12 +549,15 @@ public final class CampaignStore {
         if (!Files.isRegularFile(journal))
             return;
         JsonNode transaction = MAPPER.readTree(journal.toFile());
+        if (transaction == null || !transaction.isObject()) throw new IOException("Invalid pending sheet transaction.");
+        if (transaction.has("$claimExpected")) checkClaimReplay(campaignId, transaction);
         var fields = transaction.fields();
         while (fields.hasNext()) {
             var entry = fields.next();
-            if (List.of("$roll", "$message", "$messages", "$fear", "$actorName", "$countdowns").contains(entry.getKey())) continue;
+            if (List.of("$roll", "$message", "$messages", "$fear", "$actorName", "$countdowns", "$claimExpected").contains(entry.getKey())) continue;
             writeSheet(campaignId, entry.getKey(), entry.getValue().toString());
         }
+
         if (transaction.get("$roll") instanceof ObjectNode roll)
             replaceHistoryEntryRaw(campaignId, roll.path("id").asLong(), roll.path("ts").asLong(), roll);
         if (transaction.get("$message") instanceof ObjectNode message)
@@ -577,6 +588,37 @@ public final class CampaignStore {
             Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
         }
         Files.delete(journal);
+    }
+
+    private void checkClaimReplay(String campaignId, JsonNode transaction) throws IOException {
+        JsonNode expected = transaction.get("$claimExpected"), replacement = transaction.get("$roll");
+        try {
+            HistoryIdentity identity = historyIdentity(expected);
+            if (!expected.isObject() || replacement == null || !replacement.isObject()
+                    || !identity.equals(historyIdentity(replacement)))
+                throw new IOException("Invalid pending claim offer.");
+            HistoryIndex history = historyIndex(campaignId);
+            JsonNode current = history.uniqueEntry(identity.id(), identity.timestamp());
+            if (!expected.equals(current) && !replacement.equals(current))
+                throw new IOException("Pending claim offer conflicts with history.");
+            List<JsonNode> reports = new ArrayList<>();
+            if (transaction.has("$message")) reports.add(transaction.get("$message"));
+            if (transaction.has("$messages")) {
+                if (!transaction.path("$messages").isArray()) throw new IOException("Invalid pending claim reports.");
+                transaction.path("$messages").forEach(reports::add);
+            }
+            java.util.Set<HistoryIdentity> seen = new java.util.HashSet<>();
+            for (JsonNode report : reports) {
+                HistoryIdentity key = historyIdentity(report);
+                if (!report.isObject() || key.equals(identity) || !seen.add(key))
+                    throw new IOException("Invalid pending claim report identity.");
+                JsonNode existing = history.uniqueEntry(key.id(), key.timestamp());
+                if (existing != null && !existing.equals(report))
+                    throw new IOException("Pending claim report conflicts with history.");
+            }
+        } catch (IllegalArgumentException e) {
+            throw new IOException("Invalid pending claim transaction.", e);
+        }
     }
 
     private void writeSheet(String campaignId, String actorId, String json) throws IOException {

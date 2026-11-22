@@ -190,6 +190,121 @@ class CampaignStoreTest {
     }
 
     @Test
+    void claimJournalReplayRejectsConflictingHistoryBeforeWritingSheets() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        for (String conflict : List.of("missing", "changed", "duplicate-offer", "changed-report", "duplicate-report", "duplicate-journal-report")) {
+            var store = new CampaignStore(dir);
+            String id = store.create(conflict).getId();
+            var offer = mapper.createObjectNode().put("id", 1).put("ts", 10).put("text", "Offer");
+            var replacement = offer.deepCopy().put("claimed", true);
+            var report = mapper.createObjectNode().put("id", 2).put("ts", 20).put("text", "Claimed");
+            if (!"missing".equals(conflict))
+                store.appendHistoryChecked(id, "changed".equals(conflict) ? offer.deepCopy().put("text", "Edited") : offer);
+            if ("duplicate-offer".equals(conflict)) store.appendHistoryChecked(id, offer);
+            if ("changed-report".equals(conflict)) store.appendHistoryChecked(id, report.deepCopy().put("text", "Other"));
+            if ("duplicate-report".equals(conflict)) {
+                store.appendHistoryChecked(id, report);
+                store.appendHistoryChecked(id, report);
+            }
+            store.saveSheet(id, "recipient", "{\"marks\":0}");
+            Path folder = dir.resolve(id), sheet = folder.resolve("sheets").resolve("recipient.json");
+            String before = Files.readString(sheet);
+            var journal = mapper.createObjectNode();
+            journal.putObject("recipient").put("marks", 1);
+            journal.set("$claimExpected", offer);
+            journal.set("$roll", replacement);
+            journal.putArray("$messages").add(report);
+            if ("duplicate-journal-report".equals(conflict)) journal.withArray("$messages").add(report);
+            Files.writeString(folder.resolve("sheet-transfer.json"), journal.toString());
+            assertThrows(IOException.class, () -> new CampaignStore(dir).loadSheet(id, "recipient"), conflict);
+            assertEquals(before, Files.readString(sheet), conflict);
+            assertTrue(Files.exists(folder.resolve("sheet-transfer.json")), conflict);
+        }
+    }
+
+    @Test
+    void claimJournalReplayAcceptsBothOriginalAndAlreadyWrittenOfferAndReports() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        for (boolean alreadyWritten : List.of(false, true)) {
+            var store = new CampaignStore(dir);
+            String id = store.create("Replay").getId();
+            var offer = mapper.createObjectNode().put("id", 1).put("ts", 10).put("text", "Offer");
+            var replacement = offer.deepCopy().put("claimed", true);
+            var report = mapper.createObjectNode().put("id", 2).put("ts", 20).put("text", "Claimed");
+            store.appendHistoryChecked(id, alreadyWritten ? replacement : offer);
+            if (alreadyWritten) store.appendHistoryChecked(id, report);
+            store.saveSheet(id, "recipient", "{\"marks\":0}");
+            var journal = mapper.createObjectNode();
+            journal.putObject("recipient").put("marks", 1);
+            journal.set("$claimExpected", offer);
+            journal.set("$roll", replacement);
+            journal.set("$message", report);
+            Path journalPath = dir.resolve(id).resolve("sheet-transfer.json");
+            Files.writeString(journalPath, journal.toString());
+            var reopened = new CampaignStore(dir);
+            assertEquals(1, mapper.readTree(reopened.loadSheet(id, "recipient")).path("marks").intValue());
+            assertEquals(List.of(replacement, report), reopened.historyTail(id, 10));
+            assertTrue(Files.notExists(journalPath));
+            assertEquals(List.of(replacement, report), new CampaignStore(dir).historyTail(id, 10));
+        }
+    }
+
+    @Test
+    void malformedClaimJournalDoesNotWriteSheets() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        for (String defect : List.of("expected", "missing-replacement", "different-replacement", "reports", "report")) {
+            var store = new CampaignStore(dir);
+            String id = store.create(defect).getId();
+            var offer = mapper.createObjectNode().put("id", 1).put("ts", 10);
+            store.appendHistoryChecked(id, offer);
+            store.saveSheet(id, "recipient", "{\"marks\":0}");
+            Path folder = dir.resolve(id), sheet = folder.resolve("sheets").resolve("recipient.json");
+            String before = Files.readString(sheet);
+            var journal = mapper.createObjectNode();
+            journal.putObject("recipient").put("marks", 1);
+            journal.set("$claimExpected", offer);
+            journal.set("$roll", offer.deepCopy().put("claimed", true));
+            if ("expected".equals(defect)) journal.putNull("$claimExpected");
+            if ("missing-replacement".equals(defect)) journal.remove("$roll");
+            if ("different-replacement".equals(defect)) journal.withObject("$roll").put("id", 9);
+            if ("reports".equals(defect)) journal.put("$messages", "invalid");
+            if ("report".equals(defect)) journal.putArray("$messages").addObject().put("id", 2);
+            Files.writeString(folder.resolve("sheet-transfer.json"), journal.toString());
+            assertThrows(IOException.class, () -> new CampaignStore(dir).loadSheet(id, "recipient"), defect);
+            assertEquals(before, Files.readString(sheet), defect);
+        }
+    }
+
+    @Test
+    void claimJournalReplayRecoversTornReportAppend() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var store = new CampaignStore(dir);
+        String id = store.create("Torn claim").getId();
+        var offer = mapper.createObjectNode().put("id", 1).put("ts", 10);
+        var replacement = offer.deepCopy().put("claimed", true);
+        var report = mapper.createObjectNode().put("id", 2).put("ts", 20).put("text", "Claimed");
+        store.appendHistoryChecked(id, replacement);
+        Path folder = dir.resolve(id), history = folder.resolve("history.jsonl");
+        long offset = Files.size(history);
+        String payload = report + "\n";
+        byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
+        Files.writeString(folder.resolve("history-append.json"),
+                mapper.createObjectNode().put("offset", offset).put("append", payload).toString());
+        Files.write(history, Arrays.copyOf(bytes, bytes.length - 4), StandardOpenOption.APPEND);
+        var journal = mapper.createObjectNode();
+        journal.putObject("recipient").put("marks", 1);
+        journal.set("$claimExpected", offer);
+        journal.set("$roll", replacement);
+        journal.set("$message", report);
+        Files.writeString(folder.resolve("sheet-transfer.json"), journal.toString());
+        var reopened = new CampaignStore(dir);
+        assertEquals(1, mapper.readTree(reopened.loadSheet(id, "recipient")).path("marks").intValue());
+        assertEquals(List.of(replacement, report), reopened.historyTail(id, 10));
+        assertTrue(Files.notExists(folder.resolve("history-append.json")));
+        assertTrue(Files.notExists(folder.resolve("sheet-transfer.json")));
+    }
+
+    @Test
     void competingClaimsCannotBothCommitAndInterruptedClaimReplayIsIdempotent() throws Exception {
         var store = new CampaignStore(dir);
         String id = store.create("Concurrent claims").getId();

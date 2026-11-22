@@ -158,6 +158,9 @@ rejects ambiguous identities, compares the entire saved offer under the store lo
 to retain the offer identity, and prevents reports from overwriting history. It journals the replacement, all changed
 sheets, campaign state and reports together and replays interrupted commits idempotently. This is only the persistence
 foundation: cross-player offer creation, authorization, claim acceptance, retry receipts and client controls remain unwired.
+Before replaying a claim journal, the store requires the saved offer to match either the compared original or the
+journaled replacement; each new report must be absent or already identical. Ambiguous or conflicting history stops
+replay before writing sheets, instead of overwriting unrelated messages.
 The compiler links each `claim.offer` to a matching `claim.accept` chat binding in the same expanded source;
 a roll-result claim with the same group is not an acceptance handler.
 
