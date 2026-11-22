@@ -52,6 +52,7 @@ Format-2 authors must put choices based on the new faces or total on a result ac
 The rolling owner can use an offered result button on the sheet or reopen **Result actions** on the roll in chat. Restoring chat history does not fetch actions for every roll. A successful use spends that button once; an edit posts a new roll and leaves the original readable. Other players see the roll, not the owner's choices.
 
 For a single-target sheet action, choose a character alongside the action's other inputs. A whole-party action lists its recipients next to the button and needs no second confirmation. If the host rejects a stale offer, the panel reloads the choices without reapplying the action. If the connection drops before the result arrives, **Retry** submits the original choice and request ID.
+New automation receipts reject reuse of the same request ID for a different intent; retry the original intent instead of changing its inputs.
 
 **Custom effects (partial implementation):** While hosting, the **Custom effects** tool on the right-hand tool rail (below Handouts) opens a dialog that lets the DM
 select saved player characters, compose stat or roll modifiers, optional roll bonuses, damage mitigation,

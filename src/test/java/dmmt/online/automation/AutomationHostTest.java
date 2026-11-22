@@ -143,6 +143,30 @@ class AutomationHostTest {
     }
 
     @Test
+    void retriesBindTheIntentWhileAcceptingReorderedObjectsAndOldReceipts() throws Exception {
+        var pack = pack();
+        ObjectNode sheet = sheet();
+        ObjectNode original = request("same", 0, "f-rally", "rally");
+        ObjectNode response = HOST.execute(pack, sheet, action(), original, "self", "owner", new SplittableRandom(1));
+        ObjectNode saved = sheet.deepCopy();
+        ObjectNode reordered = (ObjectNode) RuleJson.parse("""
+                {"selections":[{"bindingId":"sheet","ruleId":"rally","sourceInstanceId":"f-rally"}],
+                 "expectedRevision":0,"requestId":"same"}""");
+        assertEquals(response, HOST.execute(pack, sheet, action(), reordered, "self", "owner", null));
+        ObjectNode altered = request("same", 0, "f-forage", "forage");
+        var error = assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.execute(pack, sheet, action(), altered, "self", "owner", null));
+        assertEquals("requestId", error.code());
+        assertEquals(saved, sheet);
+        assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.execute(pack, sheet, action(), original, "self", "another", null));
+
+        ((ObjectNode) sheet.at("/automationState/journal/0")).remove("intentHash");
+        assertEquals(response, HOST.execute(pack, sheet, action(), original, "self", "owner", null),
+                "Existing saved receipts remain replayable.");
+    }
+
+    @Test
     void refreshRequestsClearOtherSourcesRestLimitsButNotPools() throws Exception {
         String tea = LegacyCatalogConverter.convert("""
                 {"format":"dmmap-daggerheart","version":1,"category":"consumables","label":"Fixture","entries":[

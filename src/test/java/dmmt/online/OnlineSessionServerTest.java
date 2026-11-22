@@ -1631,6 +1631,11 @@ class OnlineSessionServerTest {
         assertEquals(3, persisted.getCountdowns().getFirst().value());
         assertEquals(executed.body(), automationHttp(cookie, "auto", request).body(), "repeated request IDs replay");
         assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "auto")).path("hope").path("on").asInt());
+        String conflicting = request.replace("\"rally\"", "\"forage\"").replace("f-rally", "f-forage");
+        var reused = automationHttp(cookie, "auto", conflicting);
+        assertEquals(409, reused.statusCode(), reused.body());
+        assertTrue(reused.body().contains("different action"));
+        assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "auto")).path("hope").path("on").asInt());
         assertEquals(409, automationHttp(cookie, "auto", request.replace("r1", "r2")).statusCode(), "stale revision");
         String uri = "http://localhost:" + port + "/api/sheet/auto";
         var loaded = MAPPER.readTree(sheetRead(cookie, "auto").body());

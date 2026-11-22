@@ -3,8 +3,10 @@ package dmmt.online.automation;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import dmmt.online.CampaignStore;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -136,6 +138,7 @@ public final class AutomationHost {
         relation(relation);
         if (principalId == null || principalId.isBlank()) throw new IllegalArgumentException("Missing automation principal.");
         RuleJson.fields(request, "/request", "requestId", "expectedRevision", "selections", "profileRoll", "target", "resultId");
+        RuleJson.checkTree(request, "/request", 0, new int[]{0});
         if (request.has("resultId")) {
             if (!"self".equals(relation)) throw new SecurityException("Only the character owner may use this roll result.");
             if (request.has("profileRoll") || request.has("target") || request.path("selections").size() != 1)
@@ -148,6 +151,7 @@ public final class AutomationHost {
         if (request.has("profileRoll") && !"self".equals(relation))
             throw new SecurityException("Only the character owner may roll an attack profile.");
         String requestId = RuleJson.id(request.get("requestId"), "/request/requestId");
+        String fingerprint = CampaignStore.sha256(canonical(request).toString().getBytes(StandardCharsets.UTF_8));
         ObjectNode working = sheet.deepCopy();
         ObjectNode state = projection.state(working);
         for (JsonNode entry : state.path("journal"))
@@ -155,6 +159,8 @@ public final class AutomationHost {
                 if (!principalId.equals(entry.path("principalId").asText()) ||
                         "dm".equals(relation) != entry.path("dmPrincipal").asBoolean(false))
                     throw new RuleRuntime.Unavailable("requestId", "This request ID was already used by another caller.");
+                if (entry.has("intentHash") && !fingerprint.equals(entry.path("intentHash").asText()))
+                    throw new RuleRuntime.Unavailable("requestId", "This request ID was already used for a different action.");
                 return ((ObjectNode) entry.path("response")).deepCopy();
             }
         long revision = state.path("revision").asLong();
@@ -177,12 +183,29 @@ public final class AutomationHost {
         }
         response.put("requestId", requestId);
         ArrayNode journal = (ArrayNode) projection.state(working).get("journal");
-        ObjectNode receipt = journal.addObject().put("requestId", requestId).put("principalId", principalId);
+        ObjectNode receipt = journal.addObject().put("requestId", requestId).put("principalId", principalId).put("intentHash", fingerprint);
         if ("dm".equals(relation)) receipt.put("dmPrincipal", true);
         receipt.set("response", response.deepCopy());
         while (journal.size() > JOURNAL_LIMIT) journal.remove(0);
         replace(sheet, working);
         return response;
+    }
+
+    private static JsonNode canonical(JsonNode value) {
+        if (value.isObject()) {
+            ObjectNode sorted = RuleJson.JSON.createObjectNode();
+            List<String> names = new ArrayList<>();
+            value.fieldNames().forEachRemaining(names::add);
+            names.sort(String::compareTo);
+            for (String name : names) sorted.set(name, canonical(value.get(name)));
+            return sorted;
+        }
+        if (value.isArray()) {
+            ArrayNode sorted = RuleJson.JSON.createArrayNode();
+            value.forEach(item -> sorted.add(canonical(item)));
+            return sorted;
+        }
+        return value;
     }
 
     private record TargetAction(List<RuleDispatcher.Candidate> candidates, PartyTargets.Selection selection) {}

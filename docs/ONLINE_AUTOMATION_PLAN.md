@@ -83,6 +83,8 @@ Target and claim dispatch return a separate ordered `outbox`. Each command carri
 
 **Sheet endpoint:** On a format-2 pack, a sheet button's descriptor lists eligible saved characters by ID and label. A single-target button submits `request.target: {recipientId, version}` using that option's version. A party button submits `{version}` using the selection's version, never a list of IDs. The host rebuilds the eligible set, checks the catalog and saved sheet versions, and journals all changes together. A stale offer returns 409 without a charge or report; a retry of an already committed request returns its original receipt. Scoped DM sheet grants cannot invoke cross-character actions. Result-chat targets and claim acceptance are separate integrations.
 
+New journal entries bind the caller and a SHA-256 fingerprint of the complete submitted intent to the request ID. Object-key order does not affect the fingerprint, but changed values or array order do; conflicting reuse returns 409 before applying anything. Older entries without a fingerprint remain replayable until evicted, preserving saved retries across the upgrade.
+
 A target-selecting binding declares this JSON contract:
 
 ```json
