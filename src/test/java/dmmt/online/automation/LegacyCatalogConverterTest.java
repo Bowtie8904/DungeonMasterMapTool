@@ -1790,7 +1790,10 @@ class LegacyCatalogConverterTest {
         assertEquals("roll.reroll", rules.at("/0/do/1/op").asText());
         assertFalse(rules.get(1).has("limitRef"));
         assertEquals("event.check.critical", rules.at("/1/when/and/0/eq/0/read").asText());
-        assertEquals("event.check.weapon", rules.at("/1/when/and/1/exists").asText());
+        JsonNode weaponFilter = rules.at("/1/when/and/1");
+        for (String absent : List.of("{}", "{\"weapon\":null}"))
+            assertFalse(RuleExpression.evaluate(weaponFilter, RuleJson.parse("{\"event\":{\"check\":" + absent + "}}")).booleanValue());
+        assertTrue(RuleExpression.evaluate(weaponFilter, RuleJson.parse("{\"event\":{\"check\":{\"weapon\":\"primary\"}}}")).booleanValue());
         assertEquals("actor.proficiency.value", rules.at("/1/do/1/amount/read").asText());
         assertEquals("event.check.hopeDie", rules.at("/2/when/and/0/eq/0/read").asText());
         assertEquals("Lucky!", rules.at("/2/ui/report").asText());

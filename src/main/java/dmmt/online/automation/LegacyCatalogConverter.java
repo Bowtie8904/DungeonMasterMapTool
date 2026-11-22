@@ -590,7 +590,7 @@ public final class LegacyCatalogConverter {
         java.util.function.Supplier<ArrayNode> attackWithThis = () -> {
             ArrayNode when = RuleJson.JSON.createArrayNode();
             when.addObject().putArray("eq").add(read("event.check.kind")).add("attack");
-            when.addObject().put("exists", "event.check.weaponSource");
+            when.add(hasFact("event.check.weaponSource"));
             when.addObject().putArray("eq").add(read("event.check.weaponSource")).add(read("source.instanceId"));
             return when;
         };
@@ -606,7 +606,7 @@ public final class LegacyCatalogConverter {
         ObjectNode check = restRule("reloading-check", "roll.finished", "use", "roll", "automatic");
         ArrayNode checkWhen = attackWithThis.get();
         ObjectNode reroll = RuleJson.JSON.createObjectNode();
-        reroll.putObject("not").put("exists", "event.check.reroll");
+        reroll.set("not", hasFact("event.check.reroll"));
         checkWhen.add(reroll);
         applyWhen(check, checkWhen);
         ArrayNode steps = check.putArray("do");
@@ -1052,7 +1052,7 @@ public final class LegacyCatalogConverter {
         else if (roll.startsWith("trait:") && TRAITS.contains(roll.substring(6)))
             when.addObject().putArray("eq").add(read("event.check.trait")).add(roll.substring(6));
         else if ("trait".equals(roll)) when.addObject().putArray("ne").add(read("event.check.trait")).addNull();
-        else if ("duality".equals(roll)) when.addObject().put("exists", "event.check.dominant");
+        else if ("duality".equals(roll)) when.add(hasFact("event.check.dominant"));
         else if ("companion".equals(roll)) when.addObject().putArray("eq").add(read("event.check.kind")).add("companion");
         else if (roll.matches("death(:(risk|avoid))?")) {
             when.addObject().putArray("eq").add(read("event.check.kind")).add("death");
@@ -1097,9 +1097,9 @@ public final class LegacyCatalogConverter {
                 if (range == null) p.add(path + "/weaponRanges", "Unknown range: " + name.asText());
                 else options.addObject().putArray("eq").add(read("event.check.range")).add(range);
             }
-            when.addObject().put("exists", "event.check.weapon");
+            when.add(hasFact("event.check.weapon"));
             when.addObject().set("not", flag("event.check.spell", true));
-            when.addObject().put("exists", "event.check.range");
+            when.add(hasFact("event.check.range"));
             when.add(any);
         }
         if (legacy.has("magicOnly")) {
@@ -1147,6 +1147,15 @@ public final class LegacyCatalogConverter {
     private static void applyWhen(ObjectNode rule, ArrayNode when) {
         if (when.size() == 1) rule.set("when", when.get(0));
         else if (when.size() > 1) rule.putObject("when").set("and", when);
+    }
+
+    /** Optional event facts can be absent in previews or explicitly null in committed events. */
+    private static ObjectNode hasFact(String path) {
+        ObjectNode expression = RuleJson.JSON.createObjectNode();
+        ArrayNode and = expression.putArray("and");
+        and.addObject().put("exists", path);
+        and.addObject().putArray("ne").add(read(path)).addNull();
+        return expression;
     }
 
     private static ObjectNode read(String path) { return RuleJson.JSON.createObjectNode().put("read", path); }
@@ -1507,7 +1516,7 @@ public final class LegacyCatalogConverter {
         if (!roll.isEmpty()) rollCondition(roll, path + "/roll", p, when);
         String weapon = option.path("weapon").asText("");
         if (Set.of("primary", "secondary").contains(weapon)) when.addObject().putArray("eq").add(read("event.check.weapon")).add(weapon);
-        else if ("any".equals(weapon)) when.addObject().put("exists", "event.check.weapon");
+        else if ("any".equals(weapon)) when.add(hasFact("event.check.weapon"));
         else if (!weapon.isEmpty()) p.add(path + "/weapon", "Unsupported weapon filter: " + weapon);
         commonConditions(option, path, p, when);
         if (option.has("condition")) {
@@ -1612,7 +1621,7 @@ public final class LegacyCatalogConverter {
                     // Zero dice are not a roll, so the option is offered only while the GM holds Fear.
                     ArrayNode gate = RuleJson.JSON.createArrayNode();
                     if (rule.has("when")) gate.add(rule.get("when"));
-                    gate.addObject().put("exists", "event.table.fear");
+                    gate.add(hasFact("event.table.fear"));
                     gate.addObject().putArray("gte").add(read("event.table.fear")).add(1);
                     rule.remove("when");
                     applyWhen(rule, gate);
@@ -1793,7 +1802,7 @@ public final class LegacyCatalogConverter {
 
     /** Only damage rolls of a weapon whose dice scale with Proficiency can gain Proficiency dice. */
     private static void weaponDiceConditions(ArrayNode when) {
-        when.addObject().put("exists", "event.check.weaponSourceId");
+        when.add(hasFact("event.check.weaponSourceId"));
         when.addObject().putArray("eq").add(read("event.check.fixedDice")).add(false);
     }
 
@@ -1861,7 +1870,7 @@ public final class LegacyCatalogConverter {
         ArrayNode when = RuleJson.JSON.createArrayNode();
         when.addObject().putArray("eq").add(read("event.check.kind")).add("damage");
         if (proficiencyDice) weaponDiceConditions(when);
-        else when.addObject().put("exists", "event.check.weaponSourceId");
+        else when.add(hasFact("event.check.weaponSourceId"));
         when.add(active.deepCopy());
         applyWhen(damage, when);
         ArrayNode damageSteps = damage.putArray("do");
@@ -2024,14 +2033,14 @@ public final class LegacyCatalogConverter {
             }
         }
         if (trigger.has("repeatable") && !trigger.path("repeatable").isBoolean()) p.add(path + "/repeatable", "Expected a boolean.");
-        if (trigger.path("weaponAttack").asBoolean(false)) when.addObject().put("exists", "event.check.weapon");
+        if (trigger.path("weaponAttack").asBoolean(false)) when.add(hasFact("event.check.weapon"));
         if (trigger.path("primaryWeapon").asBoolean(false)) when.addObject().putArray("eq").add(read("event.check.weapon")).add("primary");
         if (trigger.has("weaponDamage")) {
             // Only weapon damage rolls; spells cast through a weapon do not qualify.
             if (!trigger.path("weaponDamage").asBoolean(false)) p.add(path + "/weaponDamage", "Expected true.");
             else {
                 when.addObject().putArray("eq").add(read("event.check.kind")).add("damage");
-                when.addObject().put("exists", "event.check.weapon");
+                when.add(hasFact("event.check.weapon"));
                 when.addObject().set("not", flag("event.check.spell", true));
             }
         }
@@ -3105,7 +3114,7 @@ public final class LegacyCatalogConverter {
             when.addObject().putArray("includes").add(pluck).add("channel");
         }
         if ("nightTerror".equals(action.path("specialAction").asText())) {
-            when.addObject().put("exists", "event.table.fear");
+            when.add(hasFact("event.table.fear"));
             when.addObject().putArray("gt").add(read("event.table.fear")).add(0);
         }
         applyWhen(rule, when);
