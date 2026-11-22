@@ -23,6 +23,12 @@ final class ResultWindows {
         }
     }
 
+    record ClaimGroup(String sourceInstanceId, String group) {
+        static ClaimGroup of(JsonNode item) {
+            return new ClaimGroup(item.required("sourceInstanceId").textValue(), item.required("claimGroup").textValue());
+        }
+    }
+
     /** Source definition plus current activations, not mutable quantities, labels, or a global sheet revision. */
     static Map<String, ObjectNode> guards(List<SheetProjection.SourceElement> sources, JsonNode effects) {
         Map<String, ObjectNode> guards = new HashMap<>();
@@ -58,6 +64,7 @@ final class ResultWindows {
             var item = buttons.addObject().put("sourceInstanceId", key.sourceInstanceId())
                     .put("ruleId", key.ruleId()).put("bindingId", key.bindingId());
             if (key.eachId() != null) item.put("eachId", key.eachId());
+            if (match.has("claimGroup")) item.set("claimGroup", match.get("claimGroup"));
             item.set("guard", guards.get(key.sourceInstanceId()));
         }
         int count = buttons.size();
@@ -104,14 +111,22 @@ final class ResultWindows {
         throw stale();
     }
 
-    static void take(ObjectNode window, Button chosen) {
+    static void take(ObjectNode window, Button chosen, String claimGroup) {
         ArrayNode buttons = (ArrayNode) window.required("buttons");
         for (int i = 0; i < buttons.size(); i++) if (Button.of(buttons.get(i)).equals(chosen)) {
+            if (!java.util.Objects.equals(claimGroup, buttons.get(i).path("claimGroup").textValue())) throw stale();
             ArrayNode used = window.withArray("used");
             if (used.size() >= MAX_BUTTONS) throw RuleJson.error("/result", "Too many edits to this roll.");
             ObjectNode taken = (ObjectNode) buttons.remove(i);
             taken.remove("guard");
             used.add(taken);
+            if (claimGroup != null) {
+                for (int other = buttons.size() - 1; other >= 0; other--)
+                    if (chosen.sourceInstanceId().equals(buttons.get(other).path("sourceInstanceId").textValue())
+                            && claimGroup.equals(buttons.get(other).path("claimGroup").textValue())) buttons.remove(other);
+                window.withArray("usedClaimGroups").addObject()
+                        .put("sourceInstanceId", chosen.sourceInstanceId()).put("claimGroup", claimGroup);
+            }
             return;
         }
         throw stale();

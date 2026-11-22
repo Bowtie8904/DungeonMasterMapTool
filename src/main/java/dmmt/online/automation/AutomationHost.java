@@ -200,7 +200,7 @@ public final class AutomationHost {
         ObjectNode response;
         if (request.has("profileRoll")) {
             response = profileRoll(pack, working, state, event, request, random);
-            offerResult(pack, working, response, principalId, null);
+            offerResult(pack, working, response, principalId, null, null);
         } else if (request.has("resultId")) {
             response = resultAction(pack, working, state, event, request, principalId, random, party);
         } else if (request.has("target")) {
@@ -385,10 +385,31 @@ public final class AutomationHost {
         var context = context(state, element, actor, event);
         var intent = selections(request, List.of(new RuleDispatcher.Candidate(program, context)), state.required("revision").longValue(),
                 "self", false).getFirst();
-        ResultWindows.take(window, new ResultWindows.Button(instance, intent.ruleId(), intent.bindingId(), intent.eachId()));
         JsonNode binding = RuleDispatcher.binding(program.rule(intent.ruleId()), intent.bindingId());
+        String claimGroup = binding.path("claimGroup").textValue();
+        ResultWindows.take(window, new ResultWindows.Button(instance, intent.ruleId(), intent.bindingId(), intent.eachId()), claimGroup);
         if (binding.has("targetSelection") != request.has("target"))
             throw RuleJson.error("/request/target", "This result action requires its current target selection.");
+        if (claimGroup != null) {
+            String actorId = RuleJson.id(actor.get("id"), "/actor/id");
+            long revision = state.required("revision").longValue();
+            var candidate = new RuleDispatcher.Candidate(program, context);
+            var recipient = new RuleDispatcher.RecipientCandidate(actorId, actor, revision);
+            var claim = new RuleDispatcher.ClaimIntent(intent, actorId, revision, 0);
+            var resolved = RuleDispatcher.executeClaims(List.of(candidate), List.of(claim), List.of(recipient),
+                    new RuleDispatcher.ClaimLedger(0, Set.of()), random);
+            var actions = resolved.actions().stream().map(RuleDispatcher.ClaimActionResult::action).toList();
+            long published = actions.stream().mapToLong(action -> action.publishedRolls().size()).sum();
+            if (published > 1)
+                throw RuleJson.error("/result", "A result action may publish at most one revision of its roll.");
+            var response = applyResolved(pack, working, state, event, resolved.sourceContexts(), actions, resolved.outbox());
+            if (published == 1) {
+                ObjectNode roll = actions.stream().flatMap(action -> action.publishedRolls().stream()).findFirst().orElseThrow();
+                ((ObjectNode) response.required("event")).set("roll", roll);
+                reviseResult(pack, working, response, principal, window);
+            }
+            return response;
+        }
         if (request.has("target")) {
             if (party == null) throw RuleJson.error("/request/target", "This action requires a host roster.");
             var candidate = new RuleDispatcher.Candidate(program, context);
@@ -426,10 +447,12 @@ public final class AutomationHost {
         ProfileRoll.updateCheck((ObjectNode) response.required("event"));
         response.put("resultPublished", true);
         window.withArray("buttons").removeAll();
-        offerResult(pack, working, response, principal, (ArrayNode) window.required("used"));
+        offerResult(pack, working, response, principal, (ArrayNode) window.required("used"),
+                window.path("usedClaimGroups"));
     }
 
-    private void offerResult(Pack pack, ObjectNode sheet, ObjectNode response, String principal, ArrayNode used) {
+    private void offerResult(Pack pack, ObjectNode sheet, ObjectNode response, String principal, ArrayNode used,
+                             JsonNode usedClaimGroups) {
         ObjectNode event = (ObjectNode) response.required("event");
         var sources = projection.sources(sheet);
         if (sources.stream().noneMatch(element -> {
@@ -451,12 +474,19 @@ public final class AutomationHost {
         if (used != null) {
             Set<ResultWindows.Button> spent = new java.util.HashSet<>();
             used.forEach(item -> spent.add(ResultWindows.Button.of(item)));
+            Set<ResultWindows.ClaimGroup> spentGroups = new java.util.HashSet<>();
+            if (usedClaimGroups != null && usedClaimGroups.isArray())
+                usedClaimGroups.forEach(item -> spentGroups.add(ResultWindows.ClaimGroup.of(item)));
             for (int i = matches.size() - 1; i >= 0; i--)
-                if (spent.contains(ResultWindows.Button.of(matches.get(i)))) matches.remove(i);
+                if (spent.contains(ResultWindows.Button.of(matches.get(i)))
+                        || spentGroups.contains(new ResultWindows.ClaimGroup(matches.get(i).path("sourceInstanceId").textValue(),
+                        matches.get(i).path("claimGroup").textValue()))) matches.remove(i);
         }
         String id = ResultWindows.publish(state, pack.revision(), principal, event, matches, ResultWindows.guards(sources, actor.path("effects")));
         if (id != null) {
             if (used != null) ResultWindows.lookup(state, pack.revision(), principal, id).set("used", used.deepCopy());
+            if (usedClaimGroups != null && usedClaimGroups.isArray())
+                ResultWindows.lookup(state, pack.revision(), principal, id).set("usedClaimGroups", usedClaimGroups.deepCopy());
             event.put("resultId", id);
             response.set("resultActions", matches);
         }
@@ -471,6 +501,8 @@ public final class AutomationHost {
             var context = context(state, element, actor, event);
             for (var binding : program.resultButtons()) {
                 if (!allowed(binding.audience(), "self")) continue;
+                if (binding.claimGroup() != null) context.set("recipient", context.get("actor"));
+                else context.remove("recipient");
                 Iterable<JsonNode> options = binding.forEach()
                         ? RuleRuntime.describeEach(program, binding.ruleId(), binding.bindingId(), context, party)
                         : List.of(RuleRuntime.describe(program, binding.ruleId(), binding.bindingId(), context, party));

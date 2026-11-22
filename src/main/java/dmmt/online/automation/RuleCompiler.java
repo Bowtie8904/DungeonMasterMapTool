@@ -114,7 +114,8 @@ public final class RuleCompiler {
 
     public static final class Program {
         record BindingKey(String event, String surface) {}
-        record BindingRef(String ruleId, String bindingId, boolean forEach, String audience, boolean option) {}
+        record BindingRef(String ruleId, String bindingId, boolean forEach, String audience, boolean option,
+                          String claimGroup) {}
         record AutomaticBinding(String ruleId, String bindingId, int priority) {}
 
         private final String sourceId;
@@ -158,10 +159,11 @@ public final class RuleCompiler {
                     if (!"button".equals(mode) && !"option".equals(mode)) continue;
                     BindingKey key = new BindingKey(event, binding.path("surface").asText());
                     var ref = new BindingRef(ruleId, binding.path("id").asText(), binding.has("forEach"),
-                            binding.path("audience").asText("self"), "option".equals(mode));
+                            binding.path("audience").asText("self"), "option".equals(mode),
+                            binding.path("claimGroup").textValue());
                     bindingIndex.computeIfAbsent(key, ignored -> new ArrayList<>()).add(ref);
                     if ("roll.finished".equals(event) && ("chat".equals(key.surface()) || "roll".equals(key.surface()))
-                            && !ref.option() && !binding.has("claimGroup"))
+                            && !ref.option() && (ref.claimGroup() == null || selfClaim(binding)))
                         results.add(ref);
                 }
             });
@@ -171,6 +173,13 @@ public final class RuleCompiler {
             this.resultButtons = List.copyOf(results);
             automatic.replaceAll((key, refs) -> List.copyOf(refs));
             this.automaticByEvent = Map.copyOf(automatic);
+        }
+
+        private static boolean selfClaim(JsonNode binding) {
+            JsonNode scope = binding.path("claimScope");
+            String recipients = scope.path("recipients").asText("otherPlayersCharacters");
+            return !scope.path("excludeSource").asBoolean(false)
+                    && Set.of("sourceActor", "playerCharacters").contains(recipients);
         }
 
         public String sourceId() { return sourceId; }

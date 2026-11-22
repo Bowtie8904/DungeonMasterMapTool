@@ -2058,6 +2058,63 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void ownerRollClaimsPersistOnceAndRejectOtherPlayers() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        automation.set("rules", MAPPER.readTree("""
+                [{"id":"reward","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button",
+                   "claimGroup":"reward","claimScope":{"recipients":"sourceActor"}}],
+                  "do":[{"op":"resource.gain","pool":"recipient.hope","amount":2}],
+                  "ui":{"label":"Reward {recipient.name}","report":"{recipient.name} claimed."}},
+                 {"id":"alternative","bindings":[{"id":"use","event":"roll.finished","surface":"chat","mode":"button",
+                   "claimGroup":"reward","claimScope":{"recipients":"sourceActor"}}],
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"Alternative"}},
+                 {"id":"other","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button"}],
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"Other"}}]"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String id = campaign.getId();
+        campaign.getActors().add(Campaign.Actor.builder().id("roller").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(id, "roller", """
+                {"name":"Ada","level":2,"hope":{"slots":6,"on":1},"traits":[{"name":"Finesse","mod":2}],
+                 "features":[{"name":"Steady","instanceId":"s","automationSource":"classes:tester:features:steady"}]}""");
+        String owner = cookie(), other = allyCookie("claim-viewer");
+        String roll = """
+                {"request":{"requestId":"roll","expectedRevision":0,"selections":[],
+                  "profileRoll":{"sourceInstanceId":"s","profileId":"thrown","kind":"damage"}}}""";
+        var rolled = automationHttp(owner, "roller", roll);
+        assertEquals(200, rolled.statusCode(), rolled.body());
+        JsonNode receipt = MAPPER.readTree(rolled.body());
+        String resultId = receipt.requiredAt("/event/resultId").textValue();
+        assertEquals(List.of("reward", "alternative", "other"), receipt.required("resultActions").findValuesAsText("ruleId"));
+        String claim = """
+                {"request":{"requestId":"claim","expectedRevision":1,"resultId":"%s",
+                  "selections":[{"sourceInstanceId":"s","ruleId":"reward","bindingId":"use"}]}}""".formatted(resultId);
+        assertEquals(403, resultHttp(other, "roller", resultId).statusCode());
+        assertEquals(403, automationHttp(other, "roller", claim).statusCode());
+        int history = store.historyTail(id, 100).size();
+        var claimed = automationHttp(owner, "roller", claim);
+        assertEquals(200, claimed.statusCode(), claimed.body());
+        assertEquals(3, MAPPER.readTree(store.loadSheet(id, "roller")).requiredAt("/hope/on").intValue());
+        assertEquals(history + 1, store.historyTail(id, 100).size());
+        assertEquals(claimed.body(), automationHttp(owner, "roller", claim).body());
+        assertEquals(history + 1, store.historyTail(id, 100).size());
+        assertEquals(List.of("other"), MAPPER.readTree(resultHttp(owner, "roller", resultId).body())
+                .required("actions").findValuesAsText("ruleId"));
+        assertEquals(409, automationHttp(owner, "roller", claim.replace("\"claim\"", "\"again\"")
+                .replace("\"expectedRevision\":1", "\"expectedRevision\":2")
+                .replace("\"reward\"", "\"alternative\"")).statusCode());
+        var reopened = new CampaignStore(temp.resolve("campaigns"));
+        JsonNode saved = MAPPER.readTree(reopened.loadSheet(id, "roller"));
+        assertEquals(3, saved.requiredAt("/hope/on").intValue());
+        JsonNode usedGroups = saved.requiredAt("/automationState/resultWindows/results/0/usedClaimGroups");
+        assertEquals(1, usedGroups.size());
+        assertEquals("s", usedGroups.get(0).required("sourceInstanceId").textValue());
+        assertEquals("reward", usedGroups.get(0).required("claimGroup").textValue());
+    }
+
+    @Test
     void targetedResultActionsCommitOneChosenRecipient() throws Exception {
         targetedResultAction("one");
     }

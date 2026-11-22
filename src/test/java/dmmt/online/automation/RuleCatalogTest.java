@@ -373,7 +373,7 @@ class RuleCatalogTest {
     void compiledProgramsIndexUserBindingsByEventAndSurface() throws Exception {
         var source = RuleCatalog.compile(fixture("rewrite/host-classes").toString(), fixture("rewrite/recipes").toString())
                 .stream().filter(item -> item.id().equals("classes:tester:features:rally")).findFirst().orElseThrow();
-        assertEquals(List.of(new RuleCompiler.Program.BindingRef("rally", "sheet", false, "party", false)),
+        assertEquals(List.of(new RuleCompiler.Program.BindingRef("rally", "sheet", false, "party", false, null)),
                 source.program().bindings("action.request", "sheet"));
         assertTrue(source.program().bindings("rest.long", "sheet").isEmpty());
         assertTrue(source.program().bindings("action.request", "downtime").isEmpty());

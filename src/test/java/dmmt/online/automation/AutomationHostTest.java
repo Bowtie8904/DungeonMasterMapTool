@@ -435,6 +435,109 @@ class AutomationHostTest {
         assertThrows(RuleRuntime.Unavailable.class, () -> HOST.describeResult(pack, sheet, secondId, "self", "owner", origin));
     }
 
+    @Test
+    void ownerRollClaimsConsumeTheGroupAndStaySpentAcrossRollRevisions() throws Exception {
+        ObjectNode classes = fixture("rewrite/host-classes");
+        ObjectNode automation = (ObjectNode) classes.at("/entries/0/features/2/automation");
+        automation.set("rules", RuleJson.parse("""
+                [{"id":"costly","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button",
+                   "claimGroup":"reward","claimScope":{"recipients":"sourceActor"}}],
+                  "costs":[{"op":"resource.spend","pool":"actor.hope","amount":2}],
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"Costly"}},
+                 {"id":"reward","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button",
+                   "claimGroup":"reward","claimScope":{"recipients":"playerCharacters"}}],
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":2},
+                        {"op":"track.clear","track":"recipient.stress","amount":1}],
+                  "ui":{"label":"Reward {recipient.name}","report":"{recipient.name} claimed."}},
+                 {"id":"later","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button",
+                   "claimGroup":"reward","claimScope":{"recipients":"sourceActor"}}],
+                  "when":{"gte":[{"read":"event.check.total"},100]},
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"Later"}},
+                 {"id":"foreign","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button",
+                   "claimGroup":"foreign","claimScope":{"recipients":"otherPlayersCharacters"}}],
+                  "do":[{"op":"resource.gain","pool":"recipient.hope","amount":1}],"ui":{"label":"Foreign"}},
+                 {"id":"revise","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button"}],
+                  "do":[{"op":"roll.contribute","from":{"read":"event.roll"},"as":"edited",
+                         "contribution":{"id":"reward-test-bonus","kind":"flat","role":"damage","label":"Bonus","value":100}},
+                        {"op":"roll.publish","roll":{"read":"result.edited"}}],"ui":{"label":"Revise"}},
+                 {"id":"stay","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button"}],
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"Stay"}}]"""));
+        ((ObjectNode) classes.at("/entries/0/features/1/automation")).withArray("rules").add(RuleJson.parse("""
+                {"id":"other-reward","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button",
+                   "claimGroup":"reward","claimScope":{"recipients":"sourceActor"}}],
+                 "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"Other reward"}}"""));
+        var pack = AutomationHost.compile("test", Map.of("classes", classes.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet(), origin = AutomationHost.event("action.request", "actor", 0).put("sessionId", "session");
+        ObjectNode roll = HOST.execute(pack, sheet, origin, profileRequest("roll", 0, "f-steady", "thrown", "damage"),
+                "self", "owner", new SplittableRandom(2));
+        String resultId = roll.requiredAt("/event/resultId").textValue();
+        assertEquals(List.of("other-reward", "costly", "reward", "revise", "stay"), roll.required("resultActions").findValuesAsText("ruleId"));
+        assertEquals("Reward Ada", roll.requiredAt("/resultActions/2/label").textValue());
+
+        ObjectNode costly = request("costly", 1, "f-steady", "costly").put("resultId", resultId);
+        ((ObjectNode) costly.requiredAt("/selections/0")).put("bindingId", "use");
+        ObjectNode before = sheet.deepCopy();
+        assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, sheet, origin, costly, "self", "owner", null));
+        assertEquals(before, sheet);
+        assertThrows(SecurityException.class, () -> HOST.execute(pack, sheet, origin, costly, "other", "other", null));
+        assertEquals(before, sheet);
+
+        ObjectNode claim = request("claim", 1, "f-steady", "reward").put("resultId", resultId);
+        ((ObjectNode) claim.requiredAt("/selections/0")).put("bindingId", "use");
+        ObjectNode response = HOST.execute(pack, sheet, origin, claim, "self", "owner", null);
+        assertEquals("Ada claimed.", response.requiredAt("/actions/0/report").textValue());
+        assertEquals(3, sheet.requiredAt("/hope/on").intValue());
+        assertEquals(0, sheet.requiredAt("/stress/on").intValue());
+        assertEquals(response, HOST.execute(pack, sheet, origin, claim, "self", "owner", null));
+        assertEquals(List.of("other-reward", "revise", "stay"), HOST.describeResult(pack, sheet, resultId, "self", "owner", origin)
+                .required("actions").findValuesAsText("ruleId"));
+
+        ObjectNode revise = request("revise", 2, "f-steady", "revise").put("resultId", resultId);
+        ((ObjectNode) revise.requiredAt("/selections/0")).put("bindingId", "use");
+        ObjectNode revised = HOST.execute(pack, sheet, origin, revise, "self", "owner", null);
+        String revisedId = revised.requiredAt("/event/resultId").textValue();
+        assertTrue(revised.requiredAt("/event/check/total").intValue() >= 100);
+        assertEquals(List.of("other-reward", "stay"), revised.required("resultActions").findValuesAsText("ruleId"));
+        ObjectNode forbidden = request("later", 3, "f-steady", "later").put("resultId", revisedId);
+        ((ObjectNode) forbidden.requiredAt("/selections/0")).put("bindingId", "use");
+        before = sheet.deepCopy();
+        assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, sheet, origin, forbidden, "self", "owner", null));
+        assertEquals(before, sheet);
+        ObjectNode other = request("other", 3, "f-forage", "other-reward").put("resultId", revisedId);
+        ((ObjectNode) other.requiredAt("/selections/0")).put("bindingId", "use");
+        HOST.execute(pack, sheet, origin, other, "self", "owner", null);
+        assertEquals(4, sheet.requiredAt("/hope/on").intValue());
+    }
+
+    @Test
+    void aClaimThatPublishesARevisionCannotRearmItsOwnGroup() throws Exception {
+        ObjectNode classes = fixture("rewrite/host-classes");
+        ObjectNode automation = (ObjectNode) classes.at("/entries/0/features/2/automation");
+        automation.set("rules", RuleJson.parse("""
+                [{"id":"claim","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button",
+                   "claimGroup":"reward","claimScope":{"recipients":"sourceActor"}}],
+                  "do":[{"op":"roll.contribute","from":{"read":"event.roll"},"as":"edited",
+                         "contribution":{"id":"claim-bonus","kind":"flat","role":"damage","label":"Claim","value":2}},
+                        {"op":"roll.publish","roll":{"read":"result.edited"}}],"ui":{"label":"Claim"}},
+                 {"id":"stay","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button"}],
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"Stay"}}]"""));
+        var pack = AutomationHost.compile("test", Map.of("classes", classes.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet(), origin = AutomationHost.event("action.request", "actor", 0).put("sessionId", "session");
+        ObjectNode roll = HOST.execute(pack, sheet, origin, profileRequest("roll", 0, "f-steady", "thrown", "damage"),
+                "self", "owner", new SplittableRandom(2));
+        String oldId = roll.requiredAt("/event/resultId").textValue();
+        ObjectNode claim = request("claim", 1, "f-steady", "claim").put("resultId", oldId);
+        ((ObjectNode) claim.requiredAt("/selections/0")).put("bindingId", "use");
+        ObjectNode revised = HOST.execute(pack, sheet, origin, claim, "self", "owner", null);
+        assertTrue(revised.required("resultPublished").booleanValue());
+        assertEquals(roll.requiredAt("/event/check/total").intValue() + 2, revised.requiredAt("/event/check/total").intValue());
+        String resultId = revised.requiredAt("/event/resultId").textValue();
+        assertEquals(List.of("stay"), revised.required("resultActions").findValuesAsText("ruleId"));
+        assertEquals(List.of("stay"), HOST.describeResult(pack, sheet, resultId, "self", "owner", origin)
+                .required("actions").findValuesAsText("ruleId"));
+        assertThrows(RuleRuntime.Unavailable.class, () -> HOST.describeResult(pack, sheet, oldId, "self", "owner", origin));
+    }
+
     private static ObjectNode profileRequest(String id, long revision, String instance, String profile, String kind) {
         ObjectNode request = RuleJson.JSON.createObjectNode().put("requestId", id).put("expectedRevision", revision);
         request.putArray("selections");

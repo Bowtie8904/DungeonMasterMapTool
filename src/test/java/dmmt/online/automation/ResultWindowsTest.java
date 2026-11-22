@@ -31,9 +31,9 @@ class ResultWindowsTest {
         var latest = ResultWindows.lookup(state, "pack", "owner", b);
         assertEquals(7, latest.requiredAt("/event/total").intValue());
         var bonus = ResultWindows.Button.of(first.get(0));
-        assertThrows(RuleRuntime.Unavailable.class, () -> ResultWindows.take(old, bonus));
-        ResultWindows.take(latest, bonus);
-        assertThrows(RuleRuntime.Unavailable.class, () -> ResultWindows.take(latest, bonus));
+        assertThrows(RuleRuntime.Unavailable.class, () -> ResultWindows.take(old, bonus, null));
+        ResultWindows.take(latest, bonus, null);
+        assertThrows(RuleRuntime.Unavailable.class, () -> ResultWindows.take(latest, bonus, null));
         ObjectNode saved = state;
         assertThrows(RuleRuntime.Unavailable.class, () -> ResultWindows.lookup(saved, "pack", "other", a));
         assertThrows(RuleRuntime.Unavailable.class, () -> ResultWindows.lookup(saved, "new-pack", "owner", a));
