@@ -894,7 +894,7 @@ public final class RuleRuntime {
                 }
                 result = resized;
             }
-            case "roll.addDice" -> {
+            case "roll.addDice", "roll.addDicePerPool" -> {
                 if (preview) throw new Unavailable("randomPreview", "This preview requires a committed roll; no dice were rolled.");
                 int count = whole(op.path("count"), context, 0, 1024);
                 if (count + rolls.stream().mapToInt(RuleRuntime::rolledDice).sum() > 1024)
@@ -902,7 +902,10 @@ public final class RuleRuntime {
                 ObjectNode from = StructuredRoll.validate(eval(op.path("from"), context));
                 Set<String> before = new HashSet<>();
                 for (JsonNode part : from.path("contributions")) for (JsonNode die : part.path("dice")) before.add(die.path("id").asText());
-                ObjectNode added = StructuredRoll.addDice(from, eval(op.path("dice"), context), count, program.sourceId(), random);
+                int remaining = 1024 - rolls.stream().mapToInt(RuleRuntime::rolledDice).sum();
+                ObjectNode added = "roll.addDicePerPool".equals(kind)
+                        ? StructuredRoll.addDicePerPool(from, eval(op.path("dice"), context), count, program.sourceId(), random, remaining)
+                        : StructuredRoll.addDice(from, eval(op.path("dice"), context), count, program.sourceId(), random);
                 ArrayNode faces = RuleJson.JSON.createArrayNode();
                 for (JsonNode part : added.path("contributions")) for (JsonNode die : part.path("dice"))
                     if (!before.contains(die.path("id").asText())) faces.add(die.path("face"));
@@ -914,6 +917,8 @@ public final class RuleRuntime {
                 result = added;
             }
             case "roll.dropLowest" -> result = StructuredRoll.dropLowest(eval(op.path("from"), context), eval(op.path("dice"), context),
+                    whole(op.path("count"), context, 0, 1024));
+            case "roll.dropLowestPerPool" -> result = StructuredRoll.dropLowestPerPool(eval(op.path("from"), context), eval(op.path("dice"), context),
                     whole(op.path("count"), context, 0, 1024));
             case "roll.explode" -> {
                 if (preview) throw new Unavailable("randomPreview", "This preview requires a committed roll; no dice were rolled.");

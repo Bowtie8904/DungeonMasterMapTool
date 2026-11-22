@@ -475,7 +475,7 @@ class LegacyCatalogConverterTest {
         assertEquals(-100, rules.at("/1/bindings/0/priority").asInt());
         RuleCompiler.Program program = program(result, 0);
         String damageRoll = """
-                {"id":"dmg","contributions":[{"id":"weapon","kind":"dice","role":"damage","sourceId":"weapon:axe","label":"Axe",
+                {"id":"dmg","metadata":{"weaponBaseContributions":["weapon"]},"contributions":[{"id":"weapon","kind":"dice","role":"damage","sourceId":"weapon:axe","label":"Axe",
                   "dice":[{"id":"w1","sides":8,"face":3,"kept":true,"origin":"rolled"}]}]}""";
         String actor = "{\"hope\":{\"value\":0,\"max\":6},\"stats\":{\"trait\":{\"Strength\":2}},\"effects\":[]}";
         ObjectNode damage = context(program, actor, """
@@ -1636,6 +1636,28 @@ class LegacyCatalogConverterTest {
                 StructuredRollTest.noRandom(), 1, 1, 3).path("total").asInt(), "Fixed dice ignore proficiency-only handling.");
         assertEquals(3, weaponRoll(program(result, 2), "{\"weaponSource\":\"other\"}", 8,
                 StructuredRollTest.noRandom(), 1, 2).path("total").asInt(), "Other weapons are untouched.");
+
+        RuleCompiler.Program mixedProgram = program(result, 0);
+        ObjectNode mixed = (ObjectNode) RuleJson.parse("""
+                {"id":"mixed","metadata":{"weaponBaseContributions":["eight","six"]},"contributions":[
+                 {"id":"eight","kind":"dice","role":"damage","sourceId":"%s","label":"Eight","dice":[
+                   {"id":"e1","sides":8,"face":2,"kept":true,"origin":"rolled"},
+                   {"id":"e2","sides":8,"face":7,"kept":true,"origin":"rolled"}]},
+                 {"id":"six","kind":"dice","role":"damage","sourceId":"%s","label":"Six","dice":[
+                   {"id":"s1","sides":6,"face":3,"kept":true,"origin":"rolled"},
+                   {"id":"s2","sides":6,"face":6,"kept":true,"origin":"rolled"}]},
+                 {"id":"bonus","kind":"dice","role":"damage","sourceId":"%s","label":"Bonus","dice":[
+                   {"id":"b1","sides":4,"face":1,"kept":true,"origin":"rolled"}]}]}"""
+                .formatted(mixedProgram.sourceId(), mixedProgram.sourceId(), mixedProgram.sourceId()));
+        ObjectNode event = RuleJson.JSON.createObjectNode().put("type", "roll.finished");
+        event.putObject("check").put("kind", "damage").put("weaponSource", "fixture");
+        event.set("roll", StructuredRoll.validate(mixed));
+        ObjectNode context = context(mixedProgram, "{}", event.toString());
+        JsonNode edited = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(mixedProgram, context)), List.of(),
+                StructuredRollTest.faces(4, 5)).contexts().getFirst().at("/event/roll");
+        assertEquals(4 + 7 + 5 + 6 + 1, edited.path("total").intValue());
+        assertEquals(1, edited.at("/contributions/2/dice").size(), "Bonus dice from the same source are not weapon base dice.");
+        assertEquals(2, edited.path("excludedDice").size(), "Drop the lowest die in each base pool.");
     }
 
     @Test
@@ -1657,7 +1679,7 @@ class LegacyCatalogConverterTest {
         for (int i = 0; i < faces.length; i++)
             dice.addObject().put("id", "w" + i).put("sides", sides).put("face", faces[i]).put("kept", true).put("origin", "rolled");
         ObjectNode roll = (ObjectNode) RuleJson.parse("""
-                {"id":"hit","contributions":[{"id":"weapon","kind":"dice","role":"damage","sourceId":"%s","label":"Weapon","dice":[]},
+                {"id":"hit","metadata":{"weaponBaseContributions":["weapon"]},"contributions":[{"id":"weapon","kind":"dice","role":"damage","sourceId":"%s","label":"Weapon","dice":[]},
                   {"id":"bonus","kind":"flat","role":"modifier","sourceId":"core","label":"Bonus","value":0}]}""".formatted(program.sourceId()));
         ((ObjectNode) roll.at("/contributions/0")).set("dice", dice);
         ObjectNode checkNode = (ObjectNode) RuleJson.parse(check);
@@ -1716,7 +1738,7 @@ class LegacyCatalogConverterTest {
         RuleCompiler.Program program = program(result, 0);
 
         String damageRoll = """
-                {"id":"dmg","contributions":[{"id":"weapon","kind":"dice","role":"damage","sourceId":"weapon:axe","label":"Axe",
+                {"id":"dmg","metadata":{"weaponBaseContributions":["weapon"]},"contributions":[{"id":"weapon","kind":"dice","role":"damage","sourceId":"weapon:axe","label":"Axe",
                   "dice":[{"id":"w1","sides":8,"face":3,"kept":true,"origin":"rolled"}]}]}""";
         String wounded = "{\"hope\":{\"value\":5,\"max\":6},\"hp\":{\"marked\":5,\"capacity\":6},\"effects\":[]}";
         ObjectNode damage = context(program, wounded, """

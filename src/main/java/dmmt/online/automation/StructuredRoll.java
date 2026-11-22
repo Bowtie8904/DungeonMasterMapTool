@@ -351,6 +351,67 @@ public final class StructuredRoll {
         return calculate(roll, false);
     }
 
+    /** Adds {@code count} dice to each contribution containing a selected die, using that pool's first selected size. */
+    static ObjectNode addDicePerPool(JsonNode original, JsonNode selection, int count, String sourceId,
+                                     RandomGenerator random, int budget) {
+        ObjectNode roll = validate(original);
+        Map<String, List<ObjectNode[]>> pools = selectedPools(roll, selection);
+        long additions = (long) count * pools.size();
+        int total = 0;
+        Set<String> used = new HashSet<>();
+        for (JsonNode part : roll.path("contributions")) for (JsonNode die : part.path("dice")) {
+            total++;
+            used.add(die.path("id").asText());
+        }
+        if (count < 0 || additions > budget || total + additions > 1024)
+            throw RuleJson.error("/roll/dice", "Roll exceeds its dice limit.");
+        if (additions == 0) return roll;
+        if (random == null) throw RuleJson.error("/dice", "Host random generator is required.");
+        for (var pool : pools.entrySet()) {
+            ObjectNode[] first = pool.getValue().getFirst();
+            ArrayNode dice = (ArrayNode) first[0].path("dice");
+            int sides = first[1].path("sides").asInt(), n = 1;
+            for (int i = 0; i < count; i++) {
+                while (used.contains(pool.getKey() + ".a" + n)) n++;
+                String id = pool.getKey() + ".a" + n;
+                used.add(id);
+                ObjectNode extra = dice.addObject().put("id", id).put("sides", sides).put("face", random.nextInt(sides) + 1)
+                        .put("kept", true).put("origin", "added");
+                extra.putArray("editedBy").add(sourceId);
+            }
+        }
+        return calculate(roll, false);
+    }
+
+    /** Excludes up to {@code count} of the lowest selected dice independently in each contribution. */
+    static ObjectNode dropLowestPerPool(JsonNode original, JsonNode selection, int count) {
+        ObjectNode roll = validate(original);
+        Map<String, List<ObjectNode[]>> pools = selectedPools(roll, selection);
+        if (count < 0) throw RuleJson.error("/roll/dice", "The number of dice to drop cannot be negative.");
+        if (count == 0 || pools.isEmpty()) return roll;
+        Set<String> excluded = ids(roll.path("excludedDice"), "/roll/excludedDice", false);
+        for (List<ObjectNode[]> pool : pools.values()) {
+            pool.sort(Comparator.comparingInt(entry -> entry[1].path("face").asInt()));
+            for (int i = 0; i < Math.min(count, pool.size()); i++) excluded.add(pool.get(i)[1].path("id").asText());
+        }
+        ArrayNode removed = roll.putArray("excludedDice");
+        excluded.forEach(removed::add);
+        return calculate(roll, false);
+    }
+
+    private static Map<String, List<ObjectNode[]>> selectedPools(ObjectNode roll, JsonNode selection) {
+        Set<String> wanted = ids(selection, "/roll/dice", true);
+        Map<String, List<ObjectNode[]>> pools = new LinkedHashMap<>();
+        int found = 0;
+        for (ObjectNode[] entry : editableDice(roll)) if (wanted.contains(entry[1].path("id").asText())) {
+            pools.computeIfAbsent(entry[0].path("id").asText(), ignored -> new ArrayList<>()).add(entry);
+            found++;
+        }
+        if (found != wanted.size())
+            throw RuleJson.error("/roll/dice", "Die selection contains an unknown, dropped, excluded or locked die.");
+        return pools;
+    }
+
     /** Excludes the {@code count} lowest selected dice (earlier dice first on ties); a count above the selection excludes all of it. */
     public static ObjectNode dropLowest(JsonNode original, JsonNode selection, int count) {
         ObjectNode roll = validate(original);

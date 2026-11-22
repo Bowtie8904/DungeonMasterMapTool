@@ -100,8 +100,10 @@ public final class AutomationHost {
                         .stream().anyMatch(binding -> binding.option() && allowed(binding.audience(), relation)));
         for (SheetProjection.SourceElement element : sources) {
             RuleCompiler.Program program = pack.programs().get(element.sourceId());
-            if (program == null) continue;
-            for (JsonNode profile : program.profiles()) {
+            ArrayNode declared = program == null ? RuleJson.JSON.createArrayNode() : program.profiles();
+            ArrayNode available = declared.deepCopy();
+            if (equippedWeapon(copy, element)) available.insert(0, ProfileRoll.weaponProfile(element, declared));
+            for (JsonNode profile : available) {
                 ObjectNode item = profiles.addObject().put("sourceId", element.sourceId())
                         .put("sourceInstanceId", element.instanceId()).put("sourceName", element.name());
                 item.setAll((ObjectNode) profile);
@@ -290,7 +292,12 @@ public final class AutomationHost {
                 .orElseThrow(() -> new RuleRuntime.Unavailable("source", "This source is no longer active."));
         var program = pack.programs().get(source.sourceId());
         JsonNode profile = null;
-        if (program != null) for (JsonNode candidate : program.profiles())
+        ArrayNode declared = program == null ? RuleJson.JSON.createArrayNode() : program.profiles();
+        if (equippedWeapon(working, source)) {
+            JsonNode base = ProfileRoll.weaponProfile(source, declared);
+            if (profileId.equals(base.path("id").asText())) profile = base;
+        }
+        for (JsonNode candidate : declared)
             if (profileId.equals(candidate.path("id").asText())) profile = candidate;
         if (profile == null) throw new RuleRuntime.Unavailable("profile", "This profile is no longer available.");
 

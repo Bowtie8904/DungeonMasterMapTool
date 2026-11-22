@@ -129,6 +129,34 @@ class StructuredRollTest {
     }
 
     @Test
+    void perPoolEditsValidateBeforeSamplingAndKeepMixedDiceSeparate() throws Exception {
+        ObjectNode roll = (ObjectNode) RuleJson.parse("""
+                {"id":"mixed","contributions":[
+                 {"id":"d8","kind":"dice","role":"damage","sourceId":"weapon","label":"Eight","dice":[
+                   {"id":"e1","sides":8,"face":2,"kept":true,"origin":"rolled"},
+                   {"id":"e2","sides":8,"face":7,"kept":true,"origin":"rolled"}]},
+                 {"id":"d6","kind":"dice","role":"damage","sourceId":"weapon","label":"Six","dice":[
+                   {"id":"s1","sides":6,"face":3,"kept":true,"origin":"rolled"},
+                   {"id":"s2","sides":6,"face":6,"kept":true,"origin":"rolled"}]}]}""");
+        JsonNode selected = RuleJson.parse("[\"e1\",\"e2\",\"s1\",\"s2\"]");
+        ObjectNode before = roll.deepCopy();
+        assertThrows(IllegalArgumentException.class, () -> StructuredRoll.addDicePerPool(
+                roll, RuleJson.parse("[\"e1\",\"unknown\"]"), 1, "feature", noRandom(), 1024));
+        assertThrows(IllegalArgumentException.class, () -> StructuredRoll.addDicePerPool(
+                roll, selected, 2, "feature", noRandom(), 3));
+        assertEquals(before, roll);
+        JsonNode added = StructuredRoll.addDicePerPool(roll, selected, 1, "feature", faces(4, 5), 2);
+        assertEquals(8, added.at("/contributions/0/dice/2/sides").intValue());
+        assertEquals(6, added.at("/contributions/1/dice/2/sides").intValue());
+        assertEquals("[\"feature\"]", added.at("/contributions/1/dice/2/editedBy").toString());
+        JsonNode all = RuleJson.parse("[\"e1\",\"e2\",\"d8.a1\",\"s1\",\"s2\",\"d6.a1\"]");
+        JsonNode dropped = StructuredRoll.dropLowestPerPool(added, all, 1);
+        assertEquals(7 + 4 + 6 + 5, dropped.path("total").intValue());
+        assertEquals(2, dropped.path("excludedDice").size());
+        assertEquals(before, roll);
+    }
+
+    @Test
     void zeroCountDicePreserveFlatContributionsWithoutSamplingRandomness() throws Exception {
         ObjectNode plan = (ObjectNode) RuleJson.parse("""
                 {"id":"zero","contributions":[

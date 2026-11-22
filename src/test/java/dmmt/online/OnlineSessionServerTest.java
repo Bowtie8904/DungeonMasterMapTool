@@ -2239,6 +2239,57 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void equippedWeaponMixedDiceAreResolvedAndEditedInOneSavedTransaction() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        var rules = (ArrayNode) catalog.at("/entries/0/features/2/automation/rules");
+        rules.removeAll();
+        rules.add(MAPPER.readTree("""
+            {"id":"weapon-edit","bindings":[{"id":"auto","surface":"roll","event":"roll.finished","mode":"automatic"}],
+             "when":{"eq":[{"read":"event.check.kind"},"damage"]},"ui":{"label":"Weapon edit"},
+             "do":[
+               {"op":"roll.selectDice","from":{"read":"event.roll"},
+                "where":{"includes":[{"read":"event.roll.metadata.weaponBaseContributions"},{"read":"die.contributionId"}]},"as":"selected"},
+               {"op":"roll.addDicePerPool","from":{"read":"event.roll"},"dice":{"read":"result.selected"},"count":1,"as":"added"},
+               {"op":"roll.selectDice","from":{"read":"result.added"},
+                "where":{"includes":[{"read":"event.roll.metadata.weaponBaseContributions"},{"read":"die.contributionId"}]},"as":"all"},
+               {"op":"roll.dropLowestPerPool","from":{"read":"result.added"},"dice":{"read":"result.all"},"count":1,"as":"dropped"},
+               {"op":"roll.publish","roll":{"read":"result.dropped"}}]}"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        campaign.getActors().add(Campaign.Actor.builder().id("roller").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "roller", """
+            {"name":"Ada","level":2,"proficiency":{"on":2,"slots":6},
+             "traits":[{"name":"Finesse","mod":3}],
+             "activeWeapons":[{"name":"Mixed Blade","slot":"Primary","trait":"Finesse","range":"Melee",
+               "damage":"d8+d6+2","damageType":"phys","instanceId":"s",
+               "automationSource":"classes:tester:features:steady"}]}""");
+        String cookie = cookie();
+        JsonNode profile = MAPPER.readTree(automationHttp(cookie, "roller", null).body()).requiredAt("/profiles/0");
+        assertEquals("weapon.base", profile.required("id").textValue());
+        String request = """
+            {"request":{"requestId":"mixed-damage","expectedRevision":0,
+             "profileRoll":{"sourceInstanceId":"s","profileId":"weapon.base","kind":"damage"},"selections":[]}}""";
+        int history = store.historyTail(campaign.getId(), 100).size();
+        var response = automationHttp(cookie, "roller", request);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode event = MAPPER.readTree(response.body()).required("event");
+        JsonNode roll = event.required("roll");
+        assertEquals("[\"damage\",\"damage.2\"]", roll.requiredAt("/metadata/weaponBaseContributions").toString());
+        assertEquals(3, roll.requiredAt("/contributions/0/dice").size());
+        assertEquals(3, roll.requiredAt("/contributions/1/dice").size());
+        assertEquals(2, roll.required("excludedDice").size());
+        assertEquals(8, roll.requiredAt("/contributions/0/dice/2/sides").intValue());
+        assertEquals(6, roll.requiredAt("/contributions/1/dice/2/sides").intValue());
+        assertEquals(response.body(), automationHttp(cookie, "roller", request).body());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "roller")).requiredAt("/automationState/revision").intValue());
+        var historyAfter = store.historyTail(campaign.getId(), 100);
+        assertEquals(history + 1, historyAfter.size());
+        assertEquals(event, historyAfter.getLast().required("automationEvent"));
+        assertEquals(403, automationHttp(allyCookie("other-roller"), "roller", request.replace("mixed-damage", "other")).statusCode());
+    }
+
+    @Test
     void replacementSceneAndNewSessionResetOfflineActorsInOneCommit() throws Exception {
         automationCompendium();
         Path file = compendiumDir.resolve("classes.json");

@@ -84,6 +84,8 @@ public final class RuleCompiler {
             Map.entry("roll.explode", List.of("from", "dice", "when", "maxDice")),
             Map.entry("roll.addDice", List.of("from", "dice", "count")),
             Map.entry("roll.dropLowest", List.of("from", "dice", "count")),
+            Map.entry("roll.addDicePerPool", List.of("from", "dice", "count")),
+            Map.entry("roll.dropLowestPerPool", List.of("from", "dice", "count")),
             Map.entry("roll.contribute", List.of("from", "contribution")),
             Map.entry("roll.annotate", List.of("from", "field", "value")),
             Map.entry("roll.discard", List.of("from", "role")),

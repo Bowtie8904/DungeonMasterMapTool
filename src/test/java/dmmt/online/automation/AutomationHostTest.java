@@ -86,7 +86,8 @@ class AutomationHostTest {
         var pack = AutomationHost.compile("test", Map.of("classes", classes.toString()), fixture("rewrite/recipes").toString());
         ObjectNode sheet = sheet();
         var gear = (ObjectNode) sheet.withArray("features").remove(2);
-        sheet.withArray("activeWeapons").add(gear.put("slot", "Primary").put("damageType", "mag"));
+        sheet.withArray("activeWeapons").add(gear.put("slot", "Primary").put("damageType", "mag")
+                .put("trait", "Finesse").put("range", "Far").put("damage", "1d6"));
         var origin = AutomationHost.event("action.request", "actor", 0);
         JsonNode options = HOST.describe(pack, sheet, origin, "sheet", "self").requiredAt("/profiles/0/options");
         assertTrue(options.required("attack").isEmpty());
@@ -142,8 +143,10 @@ class AutomationHostTest {
         var features = sheet.withArray("features");
         ObjectNode selectedWeapon = (ObjectNode) features.remove(2);
         ObjectNode unselectedWeapon = (ObjectNode) features.remove(0);
-        sheet.withArray("activeWeapons").add(selectedWeapon.put("slot", "Primary"));
-        sheet.withArray("activeWeapons").add(unselectedWeapon.put("slot", "Secondary"));
+        sheet.withArray("activeWeapons").add(selectedWeapon.put("slot", "Primary").put("trait", "Finesse")
+                .put("range", "Far").put("damage", "1d6").put("damageType", "phys"));
+        sheet.withArray("activeWeapons").add(unselectedWeapon.put("slot", "Secondary").put("trait", "Agility")
+                .put("range", "Melee").put("damage", "1d8").put("damageType", "phys"));
         sheet.putObject("automationState").putArray("effects").addObject()
                 .put("id", "active-effect").put("sourceInstanceId", "f-forage").put("label", "Active effect")
                 .putArray("modifiers").addObject().put("stat", "roll.attack").put("value", 3);
@@ -179,6 +182,89 @@ class AutomationHostTest {
         JsonNode noHopeRoll = HOST.execute(pack, sheet, origin, noHope, "self", new SplittableRandom(7)).at("/event/roll");
         assertFalse(noHopeRoll.path("contributions").findValuesAsText("label").contains("Conditional penalty"));
         assertEquals(roll.path("total").intValue() - 3, noHopeRoll.path("total").intValue(), "same dice, no option, no penalty");
+    }
+
+    @Test
+    void equippedWeaponBaseProfilesUseSavedMixedDiceAndDistinctIds() throws Exception {
+        ObjectNode classes = fixture("rewrite/host-classes");
+        ((ObjectNode) classes.at("/entries/0/features/2/automation/profiles/0")).put("id", "weapon.base");
+        var pack = AutomationHost.compile("test", Map.of("classes", classes.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet();
+        sheet.withArray("traits").addObject().put("name", "Finesse").put("mod", 2);
+        ((ObjectNode) sheet.path("proficiency")).put("on", 2);
+        ObjectNode weapon = (ObjectNode) sheet.withArray("features").remove(2);
+        sheet.withArray("activeWeapons").add(weapon.put("name", "Customized Blade").put("slot", "Primary")
+                .put("trait", "Finesse").put("range", "Very Close").put("damageType", "phys").put("damage", "1d8 + d6 + 3"));
+        sheet.withArray("activeWeapons").addObject().put("name", "Fixed").put("slot", "Secondary")
+                .put("instanceId", "w-fixed").put("automationSource", "weapons:custom-fixed")
+                .put("trait", "Agility").put("range", "Melee").put("damageType", "magic")
+                .put("damage", "2d8+1d4-3").put("fixedDice", true);
+        ObjectNode origin = AutomationHost.event("action.request", "actor", 0);
+        JsonNode profiles = HOST.describe(pack, sheet, origin, "sheet", "self").required("profiles");
+        assertEquals(List.of("weapon.base.base", "weapon.base", "weapon.base"), profiles.findValuesAsText("id"));
+        assertTrue(HOST.describe(pack, sheet, origin, "sheet", "other").required("profiles").isEmpty());
+
+        ObjectNode attack = profileRequest("attack", 0, "f-steady", "weapon.base.base", "attack");
+        ObjectNode attacked = HOST.execute(pack, sheet, origin, attack, "self", new SplittableRandom(2));
+        assertEquals("Finesse", attacked.requiredAt("/event/check/trait").textValue());
+        assertEquals("veryClose", attacked.requiredAt("/event/check/range").textValue());
+        assertEquals("primary", attacked.requiredAt("/event/check/weapon").textValue());
+        assertEquals("f-steady", attacked.requiredAt("/event/check/weaponSource").textValue());
+        assertEquals(attacked, HOST.execute(pack, sheet, origin, attack, "self", null));
+
+        ObjectNode damage = profileRequest("damage", 1, "f-steady", "weapon.base.base", "damage");
+        JsonNode result = HOST.execute(pack, sheet, origin, damage, "self", new SplittableRandom(3));
+        JsonNode event = result.required("event");
+        assertEquals("physical", event.requiredAt("/check/damageType").textValue());
+        assertFalse(event.requiredAt("/check/fixedDice").booleanValue());
+        JsonNode parts = event.requiredAt("/roll/contributions");
+        assertEquals(2, parts.get(0).required("dice").size());
+        assertEquals(2, parts.get(1).required("dice").size());
+        assertEquals(8, parts.get(0).requiredAt("/dice/0/sides").intValue());
+        assertEquals(6, parts.get(1).requiredAt("/dice/0/sides").intValue());
+        assertEquals("classes:tester:features:steady", parts.get(1).required("sourceId").textValue());
+        assertEquals(parts.get(0).required("total").intValue() + parts.get(1).required("total").intValue() + 3,
+                event.requiredAt("/check/total").intValue());
+
+        ObjectNode fixed = profileRequest("fixed", 2, "w-fixed", "weapon.base", "damage");
+        JsonNode fixedEvent = HOST.execute(pack, sheet, origin, fixed, "self", new SplittableRandom(4)).required("event");
+        assertTrue(fixedEvent.requiredAt("/check/fixedDice").booleanValue());
+        assertEquals("magic", fixedEvent.requiredAt("/check/damageType").textValue());
+        JsonNode fixedParts = fixedEvent.requiredAt("/roll/contributions");
+        assertEquals(2, fixedParts.get(0).required("dice").size());
+        assertEquals(1, fixedParts.get(1).required("dice").size());
+        assertEquals(fixedParts.get(0).required("total").intValue() + fixedParts.get(1).required("total").intValue() - 3,
+                fixedEvent.requiredAt("/check/total").intValue());
+    }
+
+    @Test
+    void weaponDamageRejectsMalformedExpressionsAndStaleOrForgedSources() throws Exception {
+        var pack = pack();
+        ObjectNode sheet = sheet();
+        ObjectNode weapon = sheet.withArray("activeWeapons").addObject().put("name", "Custom").put("slot", "Primary")
+                .put("instanceId", "custom").put("automationSource", "weapons:custom")
+                .put("trait", "Agility").put("range", "Melee").put("damageType", "phys").put("damage", "1d8");
+        ObjectNode origin = AutomationHost.event("action.request", "actor", 0);
+        ObjectNode damage = profileRequest("bad", 0, "custom", "weapon.base", "damage");
+        for (String invalid : List.of("1d8+bad", "1d1", "1d1001", "0d6", "1d8+999999999999999999999", "d8-d6")) {
+            weapon.put("damage", invalid);
+            ObjectNode before = sheet.deepCopy();
+            assertThrows(IllegalArgumentException.class, () -> HOST.execute(pack, sheet, origin, damage, "self", new SplittableRandom(1)), invalid);
+            assertEquals(before, sheet, "Invalid damage must not commit anything.");
+        }
+        weapon.put("damage", "d8");
+        ObjectNode forged = damage.deepCopy();
+        ((ObjectNode) forged.get("profileRoll")).put("damage", "100d100");
+        assertThrows(IllegalArgumentException.class, () -> HOST.execute(pack, sheet, origin, forged, "self", new SplittableRandom(1)));
+        sheet.withArray("activeWeapons").removeAll();
+        assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, sheet, origin, damage, "self", new SplittableRandom(1)));
+    }
+
+    private static ObjectNode profileRequest(String id, long revision, String instance, String profile, String kind) {
+        ObjectNode request = RuleJson.JSON.createObjectNode().put("requestId", id).put("expectedRevision", revision);
+        request.putArray("selections");
+        request.putObject("profileRoll").put("sourceInstanceId", instance).put("profileId", profile).put("kind", kind);
+        return request;
     }
 
     @Test

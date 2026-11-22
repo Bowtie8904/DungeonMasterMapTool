@@ -660,11 +660,7 @@ public final class LegacyCatalogConverter {
             step.put("as", as);
             return as;
         };
-        java.util.function.Supplier<ObjectNode> weaponDice = () -> {
-            ObjectNode where = RuleJson.JSON.createObjectNode();
-            where.putArray("eq").add(read("die.sourceId")).add(read("source.id"));
-            return where;
-        };
+        java.util.function.Supplier<ObjectNode> weaponDice = () -> weaponDiceWhere(read("source.id"));
         java.util.function.BiConsumer<ObjectNode, String> edit = (step, as) -> {
             step.set("from", from[0].deepCopy());
             step.put("as", as);
@@ -673,14 +669,14 @@ public final class LegacyCatalogConverter {
         int extra = damage.path("extraDice").asInt(0), drop = damage.path("dropLowest").asInt(0);
         if (extra > 0) {
             String dice = select.apply(weaponDice.get());
-            ObjectNode step = steps.addObject().put("op", "roll.addDice");
+            ObjectNode step = steps.addObject().put("op", "roll.addDicePerPool");
             step.set("dice", read("result." + dice));
             step.put("count", extra);
             edit.accept(step, "added");
         }
         if (drop > 0) {
             String dice = select.apply(weaponDice.get());
-            ObjectNode step = steps.addObject().put("op", "roll.dropLowest");
+            ObjectNode step = steps.addObject().put("op", "roll.dropLowestPerPool");
             step.set("dice", read("result." + dice));
             step.put("count", drop);
             edit.accept(step, "dropped");
@@ -700,7 +696,7 @@ public final class LegacyCatalogConverter {
         java.util.function.Supplier<ObjectNode> weaponOnes = () -> {
             ObjectNode where = RuleJson.JSON.createObjectNode();
             ArrayNode all = where.putArray("and");
-            all.addObject().putArray("eq").add(read("die.sourceId")).add(read("source.id"));
+            all.add(weaponDiceWhere(read("source.id")));
             all.addObject().putArray("eq").add(read("die.face")).add(1);
             return where;
         };
@@ -1807,15 +1803,23 @@ public final class LegacyCatalogConverter {
         when.addObject().putArray("eq").add(read("event.check.fixedDice")).add(false);
     }
 
+    private static ObjectNode weaponDiceWhere(JsonNode source) {
+        ObjectNode where = RuleJson.JSON.createObjectNode();
+        ArrayNode all = where.putArray("and");
+        all.addObject().putArray("eq").add(read("die.sourceId")).add(source);
+        all.addObject().putArray("includes").add(read("event.roll.metadata.weaponBaseContributions"))
+                .add(read("die.contributionId"));
+        return where;
+    }
+
     /** Rolls {@code count} more of the attacking weapon's base damage dice; returns the edited roll reference. */
     private static JsonNode addWeaponDice(ArrayNode steps, JsonNode from, int count) {
-        ObjectNode where = RuleJson.JSON.createObjectNode();
-        where.putArray("eq").add(read("die.sourceId")).add(read("event.check.weaponSourceId"));
+        ObjectNode where = weaponDiceWhere(read("event.check.weaponSourceId"));
         ObjectNode select = steps.addObject().put("op", "roll.selectDice");
         select.set("from", from);
         select.set("where", where);
         select.put("as", "weaponDice");
-        ObjectNode add = steps.addObject().put("op", "roll.addDice");
+        ObjectNode add = steps.addObject().put("op", "roll.addDicePerPool");
         add.set("from", from);
         add.set("dice", read("result.weaponDice"));
         add.put("count", count).put("as", "proficiency");
@@ -1835,8 +1839,7 @@ public final class LegacyCatalogConverter {
     private static void carriedDamageDie(JsonNode option, String label, int sides, ObjectNode effects, ArrayNode steps,
                                          List<ObjectNode> extra) {
         carried(option, "damage-die", label, effects, steps, extra, false, (damageSteps, from) -> {
-            ObjectNode where = RuleJson.JSON.createObjectNode();
-            where.putArray("eq").add(read("die.sourceId")).add(read("event.check.weaponSourceId"));
+            ObjectNode where = weaponDiceWhere(read("event.check.weaponSourceId"));
             ObjectNode select = damageSteps.addObject().put("op", "roll.selectDice");
             select.set("from", from);
             select.set("where", where);
