@@ -593,7 +593,7 @@ public final class RuleCompiler {
             if (binding.has("targetSelection")) {
                 JsonNode targets = binding.get("targetSelection");
                 String targetPath = path + "/bindings/targetSelection";
-                RuleJson.fields(targets, targetPath, "cardinality", "scope", "excludeSource");
+                RuleJson.fields(targets, targetPath, "cardinality", "scope", "excludeSource", "where");
                 if (!Set.of("one", "all").contains(targets.path("cardinality").asText()))
                     throw RuleJson.error(targetPath + "/cardinality", "Expected one or all.");
                 if (!Set.of("connectedPlayerCharacters", "activeCharacters", "activePlayerCharacters")
@@ -601,10 +601,11 @@ public final class RuleCompiler {
                     throw RuleJson.error(targetPath + "/scope", "Expected connectedPlayerCharacters, activeCharacters or activePlayerCharacters.");
                 if (targets.has("excludeSource") && !targets.path("excludeSource").isBoolean())
                     throw RuleJson.error(targetPath + "/excludeSource", "Expected a boolean.");
-                if (!"button".equals(binding.path("mode").asText())
-                        || !"action.request".equals(binding.path("event").asText())
-                        || !"sheet".equals(binding.path("surface").asText()))
-                    throw RuleJson.error(targetPath, "Target selection requires a sheet action button.");
+                if (targets.has("where")) RuleExpression.validate(targets.get("where"), targetPath + "/where");
+                boolean sheetAction = "action.request".equals(binding.path("event").asText()) && "sheet".equals(binding.path("surface").asText());
+                boolean rollAction = "roll.finished".equals(binding.path("event").asText()) && "roll".equals(binding.path("surface").asText());
+                if (!"button".equals(binding.path("mode").asText()) || !sheetAction && !rollAction)
+                    throw RuleJson.error(targetPath, "Target selection requires a sheet action or roll trigger button.");
                 if (binding.has("claimGroup"))
                     throw RuleJson.error(targetPath, "Target selections use a transaction, not a claim group.");
             }

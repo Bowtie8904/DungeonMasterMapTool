@@ -51,7 +51,8 @@ public final class LegacyCatalogConverter {
             "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
             "chatBenefits", "allowSourceOwner", "loadoutDomain", "primaryWeapon", "anyWeapon", "advantage", "giveFear", "check", "choices",
-            "magicOnly", "weaponRanges", "addDice", "damageDice", "disadvantage", "removeFear", "weaponDamage", "rollSection", "containsDie", "resourceRoll", "selectAmount");
+            "magicOnly", "weaponRanges", "addDice", "damageDice", "disadvantage", "removeFear", "weaponDamage", "rollSection", "containsDie", "resourceRoll", "selectAmount",
+            "target", "excludeSourceActor", "splendorAction");
     private static final Set<String> MITIGATION_FIELDS = Set.of("id", "label", "description", "when", "cost", "negate", "halve", "reduce",
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
@@ -1715,6 +1716,14 @@ public final class LegacyCatalogConverter {
             if (section == null) p.add(path + "/rollSection", "Unsupported roll section: " + trigger.path("rollSection").asText());
             else ((ObjectNode) rule.path("bindings").get(0)).put("group", section);
         }
+        String operationTarget = targetSelection(trigger, path, p, (ObjectNode) rule.path("bindings").get(0));
+        boolean healingHands = false;
+        if (trigger.has("splendorAction")) {
+            if (!"healingHands".equals(trigger.path("splendorAction").asText()) || !"recipient".equals(operationTarget))
+                p.add(path + "/splendorAction", "Unsupported Splendor action: " + trigger.path("splendorAction").asText());
+            else healingHands = true;
+        }
+        if (!trigger.has("target") && trigger.has("excludeSourceActor")) p.add(path + "/excludeSourceActor", "Source exclusion requires a target mode.");
         ArrayNode when = RuleJson.JSON.createArrayNode();
         if ("spellcast".equals(trigger.path("damage").path("count").asText()))
             when.addObject().put("exists", "actor.spellcastTrait.value");
@@ -1888,11 +1897,12 @@ public final class LegacyCatalogConverter {
             actionDamage(trigger.get("damage"), path + "/damage", trigger, p, steps, read("event.check.critical"), "triggerDamage");
         if (trigger.has("sendRoll")) sentRoll(trigger.get("sendRoll"), path + "/sendRoll", trigger, p, steps);
         if (trigger.has("resourceRoll")) resourceRoll(trigger.get("resourceRoll"), path + "/resourceRoll", trigger, p, pools, rule, steps);
-        if (trigger.has("check")) check(trigger, path, p, rule, steps, effects, pools, "actor");
+        if (trigger.has("check")) check(trigger, path, p, rule, steps, effects, pools, operationTarget);
         else noChoices(trigger, path, p);
         JsonNode extra = trigger.has("check") ? RuleJson.JSON.missingNode() : trigger.path("steps");
         amountStore(trigger.path("selectAmount"), path + "/selectAmount", p, pools, steps, effects);
-        for (int i = 0; i < extra.size(); i++) step(extra.get(i), path + "/steps/" + i, p, steps, effects, pools);
+        for (int i = 0; i < extra.size(); i++) step(extra.get(i), path + "/steps/" + i, p, steps, effects, pools, operationTarget);
+        if (healingHands) healingHandsRecovery(rule, path, p, steps, effects);
         amountHeal(trigger.path("selectAmount"), path + "/selectAmount", p, steps);
         giveFear(trigger, path, p, steps);
         if (trigger.has("removeFear")) {
@@ -1911,6 +1921,25 @@ public final class LegacyCatalogConverter {
         sentRollReport(trigger, ui);
         checkReport(trigger, ui);
         return rule;
+    }
+
+    /** One Healing Hands benefit per ally per long rest: the recovery debuff both gates and follows each heal. */
+    private static void healingHandsRecovery(ObjectNode rule, String path, Problems p, ArrayNode steps, ObjectNode effects) {
+        ObjectNode recovery = RuleJson.JSON.createObjectNode().put("name", "Healing Hands recovery").put("kind", "debuff").put("until", "longRest")
+                .put("text", "Cannot be healed by Healing Hands again until a long rest.");
+        String id = null;
+        for (var names = effects.fields(); names.hasNext(); ) {
+            var entry = names.next();
+            if ("Healing Hands recovery".equals(entry.getValue().path("label").asText())) id = entry.getKey();
+        }
+        if (id == null) id = declareEffect(recovery, path + "/splendorAction", p, effects);
+        if (id == null) return;
+        steps.addObject().put("op", "effect.start").put("effect", id).put("target", "recipient");
+        ObjectNode pluck = RuleJson.JSON.createObjectNode();
+        pluck.putArray("pluck").add(read("recipient.effects")).add("label");
+        ObjectNode includes = RuleJson.JSON.createObjectNode();
+        includes.putArray("includes").add(pluck).add("Healing Hands recovery");
+        ((ObjectNode) rule.path("bindings").get(0).path("targetSelection")).putObject("where").set("not", includes);
     }
 
     /** Daggerheart severity bands from {@code event.thresholds}; massive damage is at least twice the severe threshold. */
@@ -2358,6 +2387,26 @@ public final class LegacyCatalogConverter {
         return rule;
     }
 
+    /** Maps a legacy target mode to a binding target selection; returns the operation target for the action steps. */
+    private static String targetSelection(JsonNode legacy, String path, Problems p, ObjectNode binding) {
+        if (!legacy.has("target")) return "actor";
+        if (!legacy.path("target").isTextual()) { p.add(path + "/target", "Expected a supported target mode."); return "actor"; }
+        String[] target = switch (legacy.path("target").asText()) {
+            case "actor" -> new String[]{"one", "connectedPlayerCharacters"};
+            case "anyActor" -> new String[]{"one", "activeCharacters"};
+            case "party" -> new String[]{"all", "connectedPlayerCharacters"};
+            case "allActors" -> new String[]{"all", "activePlayerCharacters"};
+            default -> null;
+        };
+        if (target == null) { p.add(path + "/target", "Unsupported target mode: " + legacy.path("target").asText()); return "actor"; }
+        ObjectNode selection = binding.putObject("targetSelection");
+        selection.put("cardinality", target[0]).put("scope", target[1]);
+        if (legacy.has("excludeSourceActor") && !legacy.path("excludeSourceActor").isBoolean())
+            p.add(path + "/excludeSourceActor", "Expected a boolean.");
+        selection.put("excludeSource", legacy.path("excludeSourceActor").asBoolean(false));
+        return "recipient";
+    }
+
     private static ObjectNode action(JsonNode action, String path, Problems p, ObjectNode effects, Pools pools, boolean limited) {
         p.onlyFields(action, path, ACTION_FIELDS);
         String id = action.path("id").asText();
@@ -2373,28 +2422,8 @@ public final class LegacyCatalogConverter {
                 p.add(path + "/timing", "Unsupported action timing: " + action.path("timing").asText());
             else binding.put("id", "downtime").put("event", "downtime.move").put("surface", "downtime");
         }
-        String operationTarget = "actor";
-        if (action.has("target")) {
-            if (!action.path("target").isTextual()) p.add(path + "/target", "Expected a supported target mode.");
-            else {
-                String[] target = switch (action.path("target").asText()) {
-                    case "actor" -> new String[]{"one", "connectedPlayerCharacters"};
-                    case "anyActor" -> new String[]{"one", "activeCharacters"};
-                    case "party" -> new String[]{"all", "connectedPlayerCharacters"};
-                    case "allActors" -> new String[]{"all", "activePlayerCharacters"};
-                    default -> null;
-                };
-                if (target == null) p.add(path + "/target", "Unsupported target mode: " + action.path("target").asText());
-                else {
-                    ObjectNode selection = binding.putObject("targetSelection");
-                    selection.put("cardinality", target[0]).put("scope", target[1]);
-                    if (action.has("excludeSourceActor") && !action.path("excludeSourceActor").isBoolean())
-                        p.add(path + "/excludeSourceActor", "Expected a boolean.");
-                    selection.put("excludeSource", action.path("excludeSourceActor").asBoolean(false));
-                    operationTarget = "recipient";
-                }
-            }
-        } else if (action.has("excludeSourceActor") && !action.has("chatBenefits") && !action.has("benefitsPerAmount"))
+        String operationTarget = targetSelection(action, path, p, binding);
+        if (!action.has("target") && action.has("excludeSourceActor") && !action.has("chatBenefits") && !action.has("benefitsPerAmount"))
             p.add(path + "/excludeSourceActor", "Source exclusion requires a target mode or chat benefits.");
         if (action.has("hostOwned") && !action.path("hostOwned").isBoolean())
             p.add(path + "/hostOwned", "Expected a boolean.");

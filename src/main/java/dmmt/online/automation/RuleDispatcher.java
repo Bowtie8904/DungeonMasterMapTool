@@ -569,6 +569,12 @@ public final class RuleDispatcher {
             targetIds.sort(String::compareTo);
         } else throw RuleJson.error("/targetSelection/cardinality", "Unknown target cardinality.");
         if (targetSelection.path("excludeSource").asBoolean(false)) targetIds.remove(sourceActorId);
+        if (targetSelection.has("where")) {
+            ObjectNode eligibilityContext = candidate.context();
+            targetIds.removeIf(id -> !RuleRuntime.recipientEligible(targetSelection, eligibilityContext, recipientsById.get(id).snapshot()));
+            if ("one".equals(cardinality) && targetIds.isEmpty())
+                throw new RuleRuntime.Unavailable("recipient", "This recipient is no longer eligible.");
+        }
         if (targetIds.isEmpty()) throw new RuleRuntime.Unavailable("recipient", "There are no eligible targets for this action.");
 
         List<PreparedTarget> checked = new ArrayList<>();

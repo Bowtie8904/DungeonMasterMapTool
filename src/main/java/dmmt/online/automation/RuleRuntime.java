@@ -88,6 +88,14 @@ public final class RuleRuntime {
         return description;
     }
 
+    /** Evaluates a target selection's per-recipient {@code where} condition against the recipient snapshot. */
+    static boolean recipientEligible(JsonNode selection, ObjectNode context, ObjectNode recipient) {
+        if (!selection.has("where")) return true;
+        ObjectNode scoped = context.deepCopy();
+        scoped.set("recipient", recipient);
+        return RuleExpression.bool(eval(selection.get("where"), scoped), "/targetSelection/where");
+    }
+
     private static ObjectNode describeTargets(JsonNode binding, ObjectNode context) {
         ObjectNode selection = ((ObjectNode) binding.path("targetSelection")).deepCopy();
         String scope = selection.path("scope").asText();
@@ -100,7 +108,7 @@ public final class RuleRuntime {
             for (int i = 0; i < available.size(); i++) {
                 JsonNode option = available.get(i);
                 String path = "/targetOptions/" + scope + "/" + i;
-                RuleJson.fields(option, path, "id", "label", "revision");
+                RuleJson.fields(option, path, "id", "label", "revision", "snapshot");
                 String id = RuleJson.id(option.path("id"), path + "/id");
                 if (!ids.add(id)) throw RuleJson.error(path + "/id", "Duplicate target option.");
                 JsonNode revisionNode = option.path("revision");
@@ -109,6 +117,9 @@ public final class RuleRuntime {
                 ObjectNode item = options.addObject().put("id", id)
                         .put("label", RuleJson.text(option.path("label"), path + "/label"));
                 item.put("revision", revisionNode.longValue());
+                if (selection.has("where") && option.has("snapshot")
+                        && !recipientEligible(selection, context, RuleJson.object(option.get("snapshot"), path + "/snapshot")))
+                    options.remove(options.size() - 1);
             }
         }
         if (selection.path("excludeSource").asBoolean(false)) {

@@ -853,6 +853,36 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void healingHandsHealsOneAllyOnceUntilTheirLongRest() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"t","name":"T","automation":{"spellcastDifficulty":13,"conditionalRollTriggers":[
+                  {"id":"hp","label":"Heal 2 HP","on":"card:T","when":"success","difficulty":13,"splendorAction":"healingHands","hostOwned":true,
+                   "excludeSourceActor":true,"exclusiveRollGroup":"healing","target":"actor","cost":{"stress":1},"steps":[{"op":"clear","resource":"hp","amount":2}]}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        JsonNode selection = block(result, 0).at("/rules/0/bindings/0/targetSelection");
+        assertTrue(selection.has("where"), selection.toString());
+        RuleCompiler.Program program = program(result, 0);
+        String actor = "{\"id\":\"owner\",\"name\":\"Ari\",\"effects\":[],\"stress\":{\"marked\":0,\"capacity\":6},\"hp\":{\"marked\":0,\"capacity\":6}}";
+        ObjectNode source = context(program, actor, "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"action\",\"origin\":\"card:T\",\"critical\":false,\"outcome\":null,\"total\":15,\"difficulty\":13},\"roll\":" + ROLL + "}");
+        source.with("targetOptions").set(selection.path("scope").asText(), RuleJson.parse("""
+                [{"id":"mira","label":"Mira","revision":2,"snapshot":{"id":"mira","effects":[]}},
+                 {"id":"bo","label":"Bo","revision":1,"snapshot":{"id":"bo","effects":[{"label":"Healing Hands recovery"}]}}]"""));
+        JsonNode described = RuleDispatcher.describe(List.of(new RuleDispatcher.Candidate(program, source)), "roll").get(0);
+        assertEquals(1, described.at("/targetSelection/options").size(), described.toString());
+        assertEquals("mira", described.at("/targetSelection/options/0/id").asText());
+        String mira = "{\"id\":\"mira\",\"name\":\"Mira\",\"effects\":[],\"hp\":{\"marked\":4,\"capacity\":6}}";
+        RuleDispatcher.TargetResolution resolved = RuleDispatcher.executeTargets(List.of(new RuleDispatcher.Candidate(program, source)),
+                new RuleDispatcher.TargetIntent(new RuleRuntime.Intent("hp", "use", "fixture", 0, RuleJson.JSON.createObjectNode()), "mira", 2L),
+                List.of(new RuleDispatcher.RecipientCandidate("mira", (ObjectNode) RuleJson.parse(mira), 2)), StructuredRollTest.noRandom());
+        assertEquals(2, resolved.recipients().getFirst().snapshot().at("/hp/marked").asInt(), resolved.toString());
+        assertEquals(1, resolved.sourceContexts().getFirst().at("/actor/stress/marked").asInt());
+        String healed = "{\"id\":\"bo\",\"name\":\"Bo\",\"hp\":{\"marked\":4,\"capacity\":6},\"effects\":[{\"label\":\"Healing Hands recovery\"}]}";
+        assertThrows(RuleRuntime.Unavailable.class, () -> RuleDispatcher.executeTargets(List.of(new RuleDispatcher.Candidate(program, source)),
+                new RuleDispatcher.TargetIntent(new RuleRuntime.Intent("hp", "use", "fixture", 0, RuleJson.JSON.createObjectNode()), "bo", 1L),
+                List.of(new RuleDispatcher.RecipientCandidate("bo", (ObjectNode) RuleJson.parse(healed), 1)), StructuredRollTest.noRandom()));
+    }
+
+    @Test
     void transferHopeMovesChosenHopeToOneAlly() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"t","name":"T","automation":{"actions":[{"id":"give","label":"Close-Knit","target":"actor","transferHope":true}]}}"""));
