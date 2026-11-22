@@ -406,7 +406,7 @@ public final class CampaignStore {
     public synchronized void saveSheetsAndRename(Campaign campaign, Campaign.Actor actor, String name,
                                                  java.util.Map<String, ObjectNode> sheets,
                                                  ObjectNode replacement, List<ObjectNode> messages) throws IOException {
-        saveSheetsAndResults(campaign.getId(), sheets, replacement, messages, null, actor, name);
+        saveSheetsAndResults(campaign.getId(), sheets, replacement, messages, null, null, actor, name);
         actor.setName(name);
     }
 
@@ -434,12 +434,17 @@ public final class CampaignStore {
 
     private void saveSheetsAndResults(String campaignId, java.util.Map<String, ObjectNode> sheets,
                                       ObjectNode replacement, List<ObjectNode> messages, Integer fear) throws IOException {
-        saveSheetsAndResults(campaignId, sheets, replacement, messages, fear, null, null);
+        saveSheetsAndResults(campaignId, sheets, replacement, messages, fear, null, null, null);
+    }
+
+    synchronized void saveAutomationResults(String campaignId, java.util.Map<String, ObjectNode> sheets,
+                                            List<ObjectNode> messages, Integer fear, List<Campaign.Countdown> countdowns) throws IOException {
+        saveSheetsAndResults(campaignId, sheets, null, messages, fear, countdowns, null, null);
     }
 
     private void saveSheetsAndResults(String campaignId, java.util.Map<String, ObjectNode> sheets,
                                       ObjectNode replacement, List<ObjectNode> messages, Integer fear,
-                                      Campaign.Actor actor, String name) throws IOException {
+                                      List<Campaign.Countdown> countdowns, Campaign.Actor actor, String name) throws IOException {
         recoverSheetTransfer(campaignId);
         ObjectNode transaction = MAPPER.createObjectNode();
         for (var entry : sheets.entrySet()) {
@@ -450,6 +455,7 @@ public final class CampaignStore {
         if (messages.size() == 1) transaction.set("$message", messages.getFirst());
         else if (!messages.isEmpty()) transaction.set("$messages", MAPPER.valueToTree(messages));
         if (fear != null) transaction.put("$fear", fear);
+        if (countdowns != null) transaction.set("$countdowns", MAPPER.valueToTree(countdowns));
         if (actor != null) transaction.putObject("$actorName").put("id", actor.getId()).put("name", name);
         writeSheetTransaction(campaignId, transaction);
     }

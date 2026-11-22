@@ -150,6 +150,7 @@ public final class AutomationHost {
         ObjectNode before = projection.actor(working);
         RuleDispatcher.EventResolution resolution = RuleDispatcher.executeEvent(candidates, intents, random);
         ArrayNode outbox = RuleJson.JSON.createArrayNode();
+        resolution.outbox().forEach(outbox::add);
         ObjectNode actor = before;
         Map<String, SheetProjection.SourceElement> elements = new HashMap<>();
         for (SheetProjection.SourceElement element : projection.sources(working)) elements.put(element.instanceId(), element);
@@ -164,7 +165,6 @@ public final class AutomationHost {
                 if (quantity <= 0) emptied.add(element);
                 else element.element().put(element.quantityField(), quantity);
             }
-            for (JsonNode request2 : context.path("outbox")) outbox.add(request2);
         }
         for (JsonNode refresh : outbox) {
             if (!"limits.refresh".equals(refresh.path("kind").asText())) continue;

@@ -1571,6 +1571,20 @@ class OnlineSessionServerTest {
         String request = """
                 {"request":{"requestId":"r1","expectedRevision":0,
                  "selections":[{"sourceInstanceId":"f-rally","ruleId":"rally","bindingId":"sheet"}]}}""";
+        Path catalog = compendiumDir.resolve("classes.json");
+        ObjectNode pack = (ObjectNode) MAPPER.readTree(catalog.toFile());
+        var steps = (ArrayNode) pack.at("/entries/0/features/0/automation/rules/0/do");
+        steps.addObject().put("op", "table.spend").put("resource", "fear").put("label", "Spend Fear").put("amount", 2);
+        steps.addObject().put("op", "table.gain").put("resource", "fear").put("label", "Gain Fear").put("amount", 1);
+        java.nio.file.Files.writeString(catalog, pack.toString());
+        campaign.setFear(0);
+        String beforeInsufficientFear = store.loadSheet(campaign.getId(), "auto");
+        var unpaid = automationHttp(cookie, "auto", request);
+        assertEquals(400, unpaid.statusCode(), unpaid.body());
+        assertTrue(unpaid.body().contains("Not enough GM Fear"));
+        assertEquals(beforeInsufficientFear, store.loadSheet(campaign.getId(), "auto"));
+        assertTrue(campaign.getCountdowns().isEmpty(), "A later failed payment must also roll back the countdown");
+        campaign.setFear(2);
         String forgedEvent = request.replace("{\"request\"", "{\"event\":{\"type\":\"rest.long\"},\"request\"");
         var rejectedEvent = automationHttp(cookie, "auto", forgedEvent);
         assertEquals(400, rejectedEvent.statusCode(), rejectedEvent.body());
@@ -1583,6 +1597,11 @@ class OnlineSessionServerTest {
         assertEquals(1, MAPPER.readTree(executed.body()).path("revision").asLong());
         JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "auto"));
         assertEquals(3, saved.path("hope").path("on").asInt());
+        var persisted = store.load(campaign.getId());
+        assertEquals(1, persisted.getFear());
+        assertEquals(1, campaign.getFear());
+        assertEquals(List.of("Rally from Ada"), persisted.getCountdowns().stream().map(Campaign.Countdown::name).toList());
+        assertEquals(3, persisted.getCountdowns().getFirst().value());
         assertEquals(executed.body(), automationHttp(cookie, "auto", request).body(), "repeated request IDs replay");
         assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "auto")).path("hope").path("on").asInt());
         assertEquals(409, automationHttp(cookie, "auto", request.replace("r1", "r2")).statusCode(), "stale revision");
@@ -1607,6 +1626,7 @@ class OnlineSessionServerTest {
         assertEquals(beforeReplay, store.loadSheet(campaign.getId(), "auto"),
                 "Replaying a journal entry from an older revision must not save or broadcast a new transaction");
         assertEquals(messages, dmMessages.size(), "Older journals must not re-publish their reports or outbox");
+        assertEquals(persisted.getCountdowns(), campaign.getCountdowns());
 
         java.nio.file.Files.delete(compendiumDir.resolve("rules.json"));
         assertEquals(409, automationHttp(cookie, "auto", null).statusCode(), "missing recipes make automation unavailable");

@@ -28,7 +28,9 @@ stored die to a derived roll result or reduce pre-severity damage, a separately 
 Favor pool. The isolated host can now stage grouped event actions with automatic rules, selected buttons/options,
 aggregate cost/use-limit preflight and exclusive option groups; resolve configurable damage thresholds, armor
 spending and bounded HP marks; and apply recipient-targeted actions guarded by a per-recipient claim ledger.
-Independent fixtures exercise offline recipients and stale claim revisions.
+Independent fixtures exercise offline recipients and stale claim revisions. For format-2 sheet actions the host
+saves reports, the sheet and any Fear or countdown changes in one transaction. Unsupported host operations
+reject the action without spending its costs.
 The live catalogs and gameplay still use the existing implementation: full catalog conversion, production
 integration, authoritative journaled commits and backed-up saved-game conversion are required before the single
 coordinated replacement. A generic sheet *Automation* panel appears only once converted catalogs are installed; the

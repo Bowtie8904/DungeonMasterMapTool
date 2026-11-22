@@ -5749,21 +5749,15 @@ public final class OnlineSessionServer {
                     (ObjectNode) body.get("request"), automationRelation(playerId, actor), playerId, diceRandom);
             if (automationHost.revision(sheet) != revisionBefore) {
                 sheet.put("featureRevision", sheet.path("featureRevision").asLong(0) + 1);
-                store.saveSheets(campaign.getId(), Map.of(actor.getId(), sheet));
-                sendFeatureState(actor, sheet);
+                List<ObjectNode> messages = new ArrayList<>();
                 for (JsonNode action : response.path("actions")) {
                     String report = action.path("report").asText("");
                     if (report.isBlank()) continue;
                     JsonNode source = sourceNames.getOrDefault(action.path("sourceInstanceId").asText(),
                             MAPPER.createObjectNode().put("name", "Automation"));
-                    publishActionReport(actor, source, source.path("name").asText("Automation"), List.of(report), null);
+                    messages.add(actionReportMessage(actor, source, source.path("name").asText("Automation"), List.of(report), null));
                 }
-                for (JsonNode item : response.path("outbox")) {
-                    ObjectNode message = chatMessage(actor.getOwnerId(), campaign.player(actor.getOwnerId()).getName(), null,
-                            clip("AUTOMATION REQUEST\n" + actor.getName() + "\n" + item.path("label").asText(item.path("type").asText("Request"))));
-                    message.set("automationRequest", item.deepCopy());
-                    deliver(message, null);
-                }
+                commitAutomationResults(actor, sheet, messages, response.path("outbox"));
             }
             json(ctx, 200, response);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
@@ -5779,6 +5773,50 @@ public final class OnlineSessionServer {
         } catch (IOException e) {
             json(ctx, 500, errorBody("Could not save the automation result."));
         }
+    }
+
+    private void commitAutomationResults(Campaign.Actor actor, ObjectNode sheet, List<ObjectNode> messages, JsonNode commands) throws IOException {
+        int fear = campaign.getFear();
+        List<Campaign.Countdown> countdowns = null;
+        for (JsonNode command : commands) {
+            String kind = command.required("kind").asText();
+            switch (kind) {
+                case "limits.refresh" -> { /* Already applied by AutomationHost. */ }
+                case "countdown.start" -> {
+                    if (countdowns == null) countdowns = new ArrayList<>(campaign.getCountdowns());
+                    int value = command.required("value").intValue();
+                    countdowns.add(new Campaign.Countdown(java.util.UUID.randomUUID().toString(), command.required("label").asText(), value, value));
+                }
+                case "table.gain", "table.spend" -> {
+                    if (!"fear".equals(command.path("resource").asText()))
+                        throw new IllegalArgumentException("Unsupported automation table resource.");
+                    int amount = command.required("amount").intValue();
+                    if ("table.gain".equals(kind)) fear = Math.min(Campaign.MAX_FEAR, fear + amount);
+                    else {
+                        if (fear < amount) throw new IllegalArgumentException("Not enough GM Fear.");
+                        fear -= amount;
+                    }
+                }
+                default -> throw new IllegalArgumentException("The host cannot apply this automation operation yet: " + kind);
+            }
+        }
+        if (sheet.toString().getBytes(StandardCharsets.UTF_8).length > MAX_SHEET_BYTES)
+            throw new IllegalArgumentException("The character sheet is too large.");
+        boolean fearChanged = fear != campaign.getFear();
+        store.saveAutomationResults(campaign.getId(), Map.of(actor.getId(), sheet), messages, fearChanged ? fear : null, countdowns);
+        if (fearChanged || countdowns != null) {
+            campaign.setFear(fear);
+            if (countdowns != null) campaign.setCountdowns(countdowns);
+            if (current != null) {
+                ObjectNode snapshot = current.deepCopy();
+                snapshot.put("fear", fear);
+                if (countdowns != null) snapshot.set("countdowns", MAPPER.valueToTree(countdowns));
+                publish(snapshot, currentMapKey);
+            }
+            host.campaignChanged(campaign);
+        }
+        sendFeatureState(actor, sheet);
+        for (ObjectNode message : messages) deliver(message, null, false);
     }
 
     private Campaign.Actor ownedActor(String playerId, String actorId) {

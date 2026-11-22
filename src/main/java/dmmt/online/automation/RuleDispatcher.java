@@ -131,13 +131,15 @@ public final class RuleDispatcher {
         @Override public List<ObjectNode> diceRolls() { return copyNodes(diceRolls); }
     }
 
-    public record EventResolution(List<ObjectNode> contexts, List<ActionResult> actions) {
+    public record EventResolution(List<ObjectNode> contexts, List<ActionResult> actions, List<ObjectNode> outbox) {
         public EventResolution {
             contexts = copyNodes(contexts);
             actions = List.copyOf(actions);
+            outbox = copyNodes(outbox);
         }
 
         @Override public List<ObjectNode> contexts() { return copyNodes(contexts); }
+        @Override public List<ObjectNode> outbox() { return copyNodes(outbox); }
     }
 
     private record Invocation(Candidate candidate, RuleRuntime.Intent intent, String mode, int priority,
@@ -281,6 +283,7 @@ public final class RuleDispatcher {
         }
 
         List<ActionResult> results = new ArrayList<>();
+        List<ObjectNode> outbox = new ArrayList<>();
         ObjectNode sharedEvent = snapshot.event().deepCopy();
         for (RuleRuntime.Prepared item : prepared) {
             String instanceId = item.intent().sourceInstanceId();
@@ -293,6 +296,7 @@ public final class RuleDispatcher {
             RuleRuntime.Resolution resolution = RuleRuntime.executePrepared(
                     byInstance.get(instanceId).program(), executable, random, false);
             ObjectNode nextContext = resolution.context();
+            for (JsonNode command : nextContext.path("outbox")) outbox.add((ObjectNode) command);
             sharedActor = nextContext.path("actor").deepCopy();
             if (nextContext.path("event").isObject()) sharedEvent = nextContext.get("event").deepCopy();
             nextContext.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
@@ -311,7 +315,7 @@ public final class RuleDispatcher {
             if (!prepared.isEmpty()) context.set("revision", RuleExpression.numeric(snapshot.revision() + 1d, "/revision"));
             updated.add(context);
         }
-        return new EventResolution(updated, results);
+        return new EventResolution(updated, results, outbox);
     }
 
     public static ClaimResolution executeClaims(List<Candidate> activeSources, List<ClaimIntent> selections,
