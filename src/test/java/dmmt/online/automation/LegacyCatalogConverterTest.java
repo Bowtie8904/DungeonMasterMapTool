@@ -883,6 +883,42 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void stunningSunlightSpendsChosenHopeAndRollsBothReactionOutcomes() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"t","name":"T","automation":{"spellcastDifficulty":13,"rollTriggers":[
+                  {"id":"sun","label":"Sunlight","on":"card:T","when":"success","difficulty":13,"splendorAction":"sunlight","hostOwned":true}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        RuleCompiler.Program program = program(result, 0);
+        ObjectNode source = context(program, "{\"id\":\"owner\",\"name\":\"Ari\",\"hope\":{\"value\":4,\"max\":6},\"effects\":[]}",
+                "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"action\",\"origin\":\"card:T\",\"critical\":false,\"outcome\":null,\"total\":15,\"difficulty\":13},\"roll\":" + ROLL + "}");
+        RuleDispatcher.EventResolution done = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, source)),
+                List.of(new RuleRuntime.Intent("sun", "use", "fixture", 0, (ObjectNode) RuleJson.parse("{\"amount\":3}"))),
+                StructuredRollTest.faces(1, 2, 3, 4, 5, 6, 7));
+        assertEquals(1, done.contexts().getFirst().at("/actor/hope/value").asInt());
+        String report = done.actions().getFirst().report();
+        assertTrue(report.contains("Spent 3 Hope") && report.contains("magic damage"), report);
+    }
+
+    @Test
+    void resurrectionVaultsTheCardOnlyOnFiveOrLess() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"t","name":"T","automation":{"spellcastDifficulty":13,"rollTriggers":[
+                  {"id":"res","label":"Resurrect","on":"card:T","when":"success","difficulty":13,"splendorAction":"resurrection","hostOwned":true}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        RuleCompiler.Program program = program(result, 0);
+        String event = "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"action\",\"origin\":\"card:T\",\"critical\":false,\"outcome\":null,\"total\":15,\"difficulty\":13},\"roll\":" + ROLL + "}";
+        String actor = "{\"id\":\"owner\",\"name\":\"Ari\",\"effects\":[],\"loadout\":[{\"id\":\"fixture\"}],\"vault\":[]}";
+        for (int face : new int[]{5, 6}) {
+            ObjectNode source = context(program, actor, event);
+            RuleDispatcher.EventResolution done = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, source)),
+                    List.of(new RuleRuntime.Intent("res", "use", "fixture", 0, RuleJson.JSON.createObjectNode())), StructuredRollTest.faces(face));
+            JsonNode after = done.contexts().getFirst().path("actor");
+            assertEquals(face == 5 ? 1 : 0, after.path("vault").size(), after.toString());
+            assertEquals(face == 5 ? 0 : 1, after.path("loadout").size(), after.toString());
+        }
+    }
+
+    @Test
     void transferHopeMovesChosenHopeToOneAlly() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"t","name":"T","automation":{"actions":[{"id":"give","label":"Close-Knit","target":"actor","transferHope":true}]}}"""));

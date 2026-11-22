@@ -1718,10 +1718,15 @@ public final class LegacyCatalogConverter {
         }
         String operationTarget = targetSelection(trigger, path, p, (ObjectNode) rule.path("bindings").get(0));
         boolean healingHands = false;
+        String splendor = trigger.path("splendorAction").asText("");
         if (trigger.has("splendorAction")) {
-            if (!"healingHands".equals(trigger.path("splendorAction").asText()) || !"recipient".equals(operationTarget))
-                p.add(path + "/splendorAction", "Unsupported Splendor action: " + trigger.path("splendorAction").asText());
-            else healingHands = true;
+            if ("healingHands".equals(splendor) && "recipient".equals(operationTarget)) healingHands = true;
+            else if (!Set.of("sunlight", "resurrection").contains(splendor) || "recipient".equals(operationTarget))
+                p.add(path + "/splendorAction", "Unsupported Splendor action: " + splendor);
+            else if ("sunlight".equals(splendor) && !trigger.has("selectAmount")) {
+                trigger = trigger.deepCopy();
+                ((ObjectNode) trigger).putObject("selectAmount").put("resource", "hope").put("label", "Hope to spend");
+            }
         }
         if (!trigger.has("target") && trigger.has("excludeSourceActor")) p.add(path + "/excludeSourceActor", "Source exclusion requires a target mode.");
         ArrayNode when = RuleJson.JSON.createArrayNode();
@@ -1913,6 +1918,9 @@ public final class LegacyCatalogConverter {
         endEffect(trigger, steps);
         if (!steps.isEmpty()) rule.set("do", steps);
         ObjectNode ui = labels(trigger, path, p, rule);
+        if ("sunlight".equals(splendor)) stunningSunlight(ui, steps);
+        if ("resurrection".equals(splendor)) resurrection(ui, steps);
+        if (!steps.isEmpty()) rule.set("do", steps);
         report(trigger, path, p, ui);
         if (trigger.has("removeFear") && !ui.has("report")) ui.put("report", "Removed {result.removedFear.amount} GM Fear.");
         if (trigger.has("damage"))
@@ -1923,6 +1931,33 @@ public final class LegacyCatalogConverter {
         return rule;
     }
 
+    /** Stunning Sunlight: the spent Hope sets the target count; damage is rolled once for each reaction outcome. */
+    private static void stunningSunlight(ObjectNode ui, ArrayNode steps) {
+        for (String[] roll : new String[][]{{"success", "3", "3"}, {"failure", "4", "5"}}) {
+            steps.addObject().put("op", "dice.roll").put("count", Integer.parseInt(roll[1])).put("sides", 20).put("as", roll[0] + "Dice");
+            ObjectNode sum = steps.addObject().put("op", "value").put("as", roll[0] + "Damage");
+            sum.putObject("value").putArray("add").add(read("result." + roll[0] + "Dice")).add(Integer.parseInt(roll[2]));
+        }
+        ui.put("report", "Spent {input.amount} Hope: that many targets make a Reaction Roll (14). Successful reaction: {result.successDamage} magic damage. "
+                + "Failed reaction: {result.failureDamage} magic damage; temporarily Stunned.");
+    }
+
+    /** Resurrection: a d6 of 5 or less permanently vaults the card; a 6 keeps it. */
+    private static void resurrection(ObjectNode ui, ArrayNode steps) {
+        steps.addObject().put("op", "dice.roll").put("count", 1).put("sides", 6).put("as", "die");
+        ObjectNode face = steps.addObject().put("op", "value").put("as", "face");
+        face.set("value", read("result.die"));
+        ObjectNode lost = RuleJson.JSON.createObjectNode(), kept = RuleJson.JSON.createObjectNode();
+        lost.putArray("lte").add(read("result.face")).add(5);
+        kept.putArray("gt").add(read("result.face")).add(5);
+        steps.addObject().put("op", "collection.remove").put("target", "actor").put("collection", "loadout").put("as", "card")
+                .set("item", read("source.instanceId"));
+        ObjectNode vault = steps.addObject().put("op", "collection.add").put("target", "actor").put("collection", "vault");
+        vault.set("item", read("result.card")); vault.set("if", lost);
+        ObjectNode back = steps.addObject().put("op", "collection.add").put("target", "actor").put("collection", "loadout");
+        back.set("item", read("result.card")); back.set("if", kept);
+        ui.put("report", "Rolled {result.face}: on 5 or less {source.name} is permanently vaulted; on 6 it remains available.");
+    }
     /** One Healing Hands benefit per ally per long rest: the recovery debuff both gates and follows each heal. */
     private static void healingHandsRecovery(ObjectNode rule, String path, Problems p, ArrayNode steps, ObjectNode effects) {
         ObjectNode recovery = RuleJson.JSON.createObjectNode().put("name", "Healing Hands recovery").put("kind", "debuff").put("until", "longRest")
