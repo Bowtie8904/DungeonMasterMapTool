@@ -1911,7 +1911,8 @@ class OnlineSessionServerTest {
         var rules = (ArrayNode) catalog.at("/entries/0/features/2/automation/rules");
         rules.removeAll();
         rules.add(MAPPER.readTree("""
-            {"id":"boost","bindings":[{"id":"option","surface":"roll","event":"roll.prepare","mode":"option"}],
+            {"id":"boost","bindings":[{"id":"option","surface":"roll","event":"roll.prepare","mode":"option","defaultOn":true}],
+             "when":{"eq":[{"read":"event.check.duality"},true]},
              "ui":{"label":"Boost"},"costs":[{"op":"track.mark","track":"actor.stress","amount":1}],
              "do":[{"op":"roll.contribute","from":{"read":"event.roll"},"as":"boosted",
                     "contribution":{"id":"boost","kind":"flat","role":"modifier","label":"Boost","value":20}},
@@ -1947,6 +1948,14 @@ class OnlineSessionServerTest {
         assertEquals(400, automationHttp(cookie, "roller", request.replace("\"kind\":\"attack\"", "\"kind\":\"attack\",\"total\":42")).statusCode());
         assertEquals(409, automationHttp(cookie, "roller", request.replace("\"thrown\"", "\"unknown\"")).statusCode());
         diceSeed(0);
+        var offered = automationHttp(cookie, "roller", null);
+        assertEquals(200, offered.statusCode(), offered.body());
+        JsonNode options = MAPPER.readTree(offered.body()).requiredAt("/profiles/0/options");
+        assertEquals(List.of("boost"), options.required("attack").findValuesAsText("ruleId"));
+        assertTrue(options.requiredAt("/attack/0/defaultOn").booleanValue());
+        assertTrue(options.required("damage").isEmpty());
+        assertEquals(offered.body(), automationHttp(cookie, "roller", null).body());
+        assertEquals(before, store.loadSheet(campaign.getId(), "roller"));
         var result = automationHttp(cookie, "roller", request);
         assertEquals(200, result.statusCode(), result.body());
         JsonNode event = MAPPER.readTree(result.body()).path("event");

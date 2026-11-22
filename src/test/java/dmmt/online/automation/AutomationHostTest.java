@@ -69,6 +69,47 @@ class AutomationHostTest {
     }
 
     @Test
+    void profileOffersMatchEquippedDamageFactsAndFilterByBindingAndPrice() throws Exception {
+        var classes = fixture("rewrite/host-classes");
+        var rules = (com.fasterxml.jackson.databind.node.ArrayNode) classes.at("/entries/0/features/2/automation/rules");
+        rules.add(RuleJson.parse("""
+                {"id":"edge","bindings":[
+                   {"id":"offer","event":"roll.prepare","surface":"roll","mode":"option","exclusiveGroup":"stance"},
+                   {"id":"hidden","event":"roll.prepare","surface":"roll","mode":"option","audience":"others"},
+                   {"id":"sheet","event":"roll.prepare","surface":"sheet","mode":"option"},
+                   {"id":"button","event":"roll.prepare","surface":"roll","mode":"button"}],
+                 "when":{"and":[{"eq":[{"read":"event.check.weapon"},"primary"]},
+                                 {"eq":[{"read":"event.damageType"},"magic"]}]},
+                 "inputs":[{"id":"n","kind":"integer","label":"Amount","min":1,"max":3,"default":2}],
+                 "costs":[{"op":"resource.spend","pool":"actor.hope","amount":2}],
+                 "ui":{"label":"Edge"},"do":[{"op":"resource.gain","pool":"actor.hope","amount":{"read":"input.n"}}]}"""));
+        var pack = AutomationHost.compile("test", Map.of("classes", classes.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet();
+        var gear = (ObjectNode) sheet.withArray("features").remove(2);
+        sheet.withArray("activeWeapons").add(gear.put("slot", "Primary").put("damageType", "mag"));
+        var origin = AutomationHost.event("action.request", "actor", 0);
+        JsonNode options = HOST.describe(pack, sheet, origin, "sheet", "self").requiredAt("/profiles/0/options");
+        assertTrue(options.required("attack").isEmpty());
+        assertEquals(List.of("offer"), options.required("damage").findValuesAsText("bindingId"));
+        assertEquals("cost", options.requiredAt("/damage/0/reasonCode").textValue());
+        assertTrue(HOST.describe(pack, sheet, origin, "sheet", "other").required("profiles").isEmpty());
+        ((ObjectNode) sheet.required("hope")).put("on", 3);
+        JsonNode offer = HOST.describe(pack, sheet, origin, "sheet", "self").requiredAt("/profiles/0/options/damage/0");
+        assertTrue(offer.required("available").booleanValue());
+        assertEquals("stance", offer.required("exclusiveGroup").textValue());
+        assertEquals(2, offer.requiredAt("/inputs/0/default").intValue());
+        var request = request("damage", 0, "f-steady", "edge");
+        request.putObject("profileRoll").put("sourceInstanceId", "f-steady").put("profileId", "thrown").put("kind", "damage");
+        var selected = (ObjectNode) request.requiredAt("/selections/0");
+        selected.putObject("inputs").put("n", 1);
+        assertThrows(IllegalArgumentException.class, () -> HOST.execute(pack, sheet, origin, request, "self", new SplittableRandom(1)));
+        selected.put("bindingId", "offer");
+        var result = HOST.execute(pack, sheet, origin, request, "self", new SplittableRandom(1));
+        assertEquals("magic", result.requiredAt("/event/check/damageType").textValue());
+        assertEquals(2, sheet.requiredAt("/hope/on").intValue());
+    }
+
+    @Test
     void executesWritesBackJournalsAndRejectsStaleOrRepeatedUse() throws Exception {
         var pack = pack();
         ObjectNode sheet = sheet();

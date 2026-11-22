@@ -20,6 +20,8 @@ effect-carried profiles, damage application or interactive post-roll claims.
 
 A player chooses `roll.prepare` options before seeing the new dice. Their availability, inputs, prices and labels may use saved dice and known roll facts (`event.check.duality` identifies a planned Hope/Fear roll), but not the new faces or result. The compiler directs such choices to a `roll.finished` action instead. The selected option's `do` steps may still edit the sampled dice.
 
+The owner's sheet description embeds matching option descriptors in `profiles[].options.attack` and `.damage` when the loadout has roll options. The host constructs these from the same profile facts used for execution, without rolling, spending, or making a second request at roll time.
+
 A scoped loopback DM sheet grant uses the `dm` audience for automation rather than impersonating the owner.
 `any` bindings include the DM; `self`, `others` and `party` are player audiences. Receipts distinguish the
 campaign DM from a player. The grant still authorizes only its original sheet.

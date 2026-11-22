@@ -166,6 +166,16 @@ public final class RuleDispatcher {
     }
 
     static ArrayNode describe(List<Candidate> activeSources, String surface, java.util.function.Predicate<String> visible, PartyTargets party) {
+        return describe(activeSources, surface, binding -> visible.test(binding.audience()), party, false);
+    }
+
+    static ArrayNode describeRollOptions(List<Candidate> sources, java.util.function.Predicate<String> visible) {
+        return describe(sources, "roll", binding -> binding.option() && visible.test(binding.audience()), null, true);
+    }
+
+    private static ArrayNode describe(List<Candidate> activeSources, String surface,
+                                      java.util.function.Predicate<RuleCompiler.Program.BindingRef> visible,
+                                      PartyTargets party, boolean skipUnmatched) {
         if (!SURFACES.contains(surface)) throw RuleJson.error("/surface", "Unknown surface.");
         List<ObjectNode> descriptions = new ArrayList<>();
         Snapshot snapshot = validateSources(activeSources);
@@ -174,7 +184,7 @@ public final class RuleDispatcher {
             ObjectNode context = candidate.context();
             String eventType = snapshot.eventType();
             for (RuleCompiler.Program.BindingRef binding : program.bindings(eventType, surface)) {
-                if (!visible.test(binding.audience())) continue;
+                if (!visible.test(binding)) continue;
                 if (binding.forEach())
                     RuleRuntime.describeEach(program, binding.ruleId(), binding.bindingId(), context, party)
                             .forEach(item -> descriptions.add((ObjectNode) item));
@@ -189,7 +199,8 @@ public final class RuleDispatcher {
                 .thenComparing(item -> item.path("bindingId").asText())
                 .thenComparing(item -> item.path("eachId").asText()));
         ArrayNode result = RuleJson.JSON.createArrayNode();
-        descriptions.forEach(result::add);
+        for (ObjectNode item : descriptions)
+            if (!skipUnmatched || !"condition".equals(item.path("reasonCode").asText())) result.add(item);
         return result;
     }
 

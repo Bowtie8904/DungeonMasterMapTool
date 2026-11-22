@@ -93,6 +93,9 @@ public final class AutomationHost {
         ArrayNode profiles = result.putArray("profiles");
         if (!"self".equals(relation) || !"sheet".equals(surface) || !"action.request".equals(event.path("type").asText()))
             return result;
+        boolean hasRollOptions = sources.stream().map(source -> pack.programs().get(source.sourceId()))
+                .filter(java.util.Objects::nonNull).anyMatch(program -> program.bindings("roll.prepare", "roll")
+                        .stream().anyMatch(binding -> binding.option() && allowed(binding.audience(), relation)));
         for (SheetProjection.SourceElement element : sources) {
             RuleCompiler.Program program = pack.programs().get(element.sourceId());
             if (program == null) continue;
@@ -100,6 +103,15 @@ public final class AutomationHost {
                 ObjectNode item = profiles.addObject().put("sourceId", element.sourceId())
                         .put("sourceInstanceId", element.instanceId()).put("sourceName", element.name());
                 item.setAll((ObjectNode) profile);
+                if (hasRollOptions) {
+                    ObjectNode options = item.putObject("options");
+                    for (String kind : profile.has("damage") ? List.of("attack", "damage") : List.of("attack")) {
+                        ObjectNode facts = event.deepCopy();
+                        ProfileRoll.facts(facts, element, profile, kind, actor, equippedWeapon(copy, element));
+                        options.set(kind, RuleDispatcher.describeRollOptions(candidates(pack, sources, state, actor, facts),
+                                audience -> allowed(audience, relation)));
+                    }
+                }
             }
         }
         return result;
@@ -223,7 +235,7 @@ public final class AutomationHost {
             for (JsonNode item : candidate.program().rule(ruleId).path("bindings"))
                 if (bindingId.equals(item.path("id").asText())) binding = item;
             if (binding == null) throw RuleJson.error(at + "/bindingId", "Unknown binding.");
-            if (rollOptions && !"option".equals(binding.path("mode").asText()))
+            if (rollOptions && (!"option".equals(binding.path("mode").asText()) || !"roll".equals(binding.path("surface").asText())))
                 throw RuleJson.error(at + "/bindingId", "Only roll options may accompany a profile roll.");
             if (!allowed(binding.path("audience").asText("self"), relation))
                 throw new SecurityException("This action is not available to you.");
@@ -254,9 +266,7 @@ public final class AutomationHost {
         long revision = state.path("revision").longValue();
         ObjectNode event = origin.deepCopy();
         ObjectNode actor = actor(pack, working, state, event, sources);
-        boolean equipped = false;
-        for (JsonNode item : working.path("activeWeapons")) if (item == source.element()) equipped = true;
-        ProfileRoll.prepare(event, source, profile, kind, actor, equipped, random);
+        ProfileRoll.prepare(event, source, profile, kind, actor, equippedWeapon(working, source), random);
         var candidates = candidates(pack, sources, state, actor, event);
         var intents = selections(request, candidates, revision, "self", true);
         ObjectNode result = applyEvent(pack, working, state, event, candidates, intents, random);
@@ -273,6 +283,11 @@ public final class AutomationHost {
             ((ArrayNode) result.get(key)).addAll((ArrayNode) after.get(key));
         projection.state(working).put("revision", revision + 1);
         return result.put("revision", revision + 1);
+    }
+
+    private static boolean equippedWeapon(ObjectNode sheet, SheetProjection.SourceElement source) {
+        for (JsonNode item : sheet.path("activeWeapons")) if (item == source.element()) return true;
+        return false;
     }
 
     /** Dispatch a host transition in the caller's staged sheet transaction, without creating a player retry record. */

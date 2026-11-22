@@ -24,8 +24,8 @@ final class ProfileRoll {
         return event;
     }
 
-    static void prepare(ObjectNode event, SheetProjection.SourceElement source, JsonNode profile, String kind,
-                        ObjectNode actor, boolean equippedWeapon, RandomGenerator random) {
+    static void facts(ObjectNode event, SheetProjection.SourceElement source, JsonNode profile, String kind,
+                      ObjectNode actor, boolean equippedWeapon) {
         boolean attack = "attack".equals(kind);
         if (!attack && !"damage".equals(kind)) throw RuleJson.error("/request/profileRoll/kind", "Choose attack or damage.");
         JsonNode gear = source.element();
@@ -33,7 +33,7 @@ final class ProfileRoll {
         if (!attack && !damage.isObject()) throw new RuleRuntime.Unavailable("profile", "This profile has no damage roll.");
         JsonNode stats = actor.path("stats");
         String trait = profile.path("trait").asText(equippedWeapon ? gear.path("trait").textValue() : null);
-        ObjectNode check = (ObjectNode) event.path("check");
+        ObjectNode check = event.withObject("/check");
         check.put("kind", kind).put("duality", attack).put("trait", trait).put("range", profile.path("range").asText(null))
                 .put("spell", false).put("weaponSource", source.instanceId()).put("weaponSourceId", source.sourceId());
         if (equippedWeapon) {
@@ -43,11 +43,25 @@ final class ProfileRoll {
         event.put("type", "roll.prepare").put("sourceInstanceId", source.instanceId())
                 .put("profileId", profile.path("id").asText()).put("label", profile.path("label").asText());
         if (stats.path("thresholds").isObject()) event.set("thresholds", stats.get("thresholds").deepCopy());
+        if (!attack) {
+            String type = damage.path("type").asText(equippedWeapon ? gear.path("damageType").textValue() : null);
+            if ("phys".equals(type)) type = "physical";
+            if ("mag".equals(type)) type = "magic";
+            check.put("fixedDice", damage.has("count")).put("damageType", type);
+            event.put("damageType", type);
+        }
+    }
+
+    static void prepare(ObjectNode event, SheetProjection.SourceElement source, JsonNode profile, String kind,
+                        ObjectNode actor, boolean equippedWeapon, RandomGenerator random) {
+        facts(event, source, profile, kind, actor, equippedWeapon);
+        JsonNode check = event.path("check"), stats = actor.path("stats"), damage = profile.path("damage");
         ObjectNode plan = RuleJson.JSON.createObjectNode().put("id", java.util.UUID.randomUUID().toString());
         ArrayNode parts = plan.putArray("contributions");
-        if (attack) {
+        if ("attack".equals(kind)) {
             dice(parts, "hope", "Hope die", "core", 1, 12);
             dice(parts, "fear", "Fear die", "core", 1, 12);
+            String trait = check.path("trait").textValue();
             if (trait != null) {
                 JsonNode mod = stats.path("trait").path(trait);
                 if (!mod.isNumber()) throw new RuleRuntime.Unavailable("trait", "The profile trait is not available.");
@@ -55,11 +69,7 @@ final class ProfileRoll {
                         .put("sourceId", source.sourceId()).put("label", trait).set("value", mod);
             }
         } else {
-            check.put("fixedDice", damage.has("count"));
-            String type = damage.path("type").asText(equippedWeapon ? gear.path("damageType").textValue() : null);
-            if ("phys".equals(type)) type = "physical";
-            check.put("damageType", type);
-            plan.putObject("metadata").put("damageType", type);
+            plan.putObject("metadata").set("damageType", check.get("damageType"));
             dice(parts, "damage", profile.path("label").asText(), source.sourceId(),
                     damage.path("count").asInt(stats.path("proficiency").asInt()), damage.path("sides").intValue());
             if (damage.path("flat").asInt() != 0) parts.addObject().put("id", "bonus").put("kind", "flat")
