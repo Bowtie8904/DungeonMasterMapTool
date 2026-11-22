@@ -975,18 +975,34 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
-    void witchGrantsBecomeSourcePoolsAndClaimedBenefits() throws Exception {
+    void witchTalismansAreGrantedAsTransferableItems() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"ward","name":"Ward","automation":{"uses":{"max":1,"per":"rest"},
-                 "resources":[{"id":"rune-ward","label":"Rune Ward","initial":0,"max":1}],
                  "actions":[{"id":"infuse","label":"Infuse","hostOwned":true,"steps":[
-                   {"op":"effect","effect":{"name":"Rune Ward source","kind":"buff","until":"manual","witchGrant":"runeWard","tokenResource":"rune-ward"}}]}]}}"""));
+                   {"op":"effect","effect":{"name":"Rune Ward source","kind":"buff","until":"manual","witchGrant":"runeWard"}}]}]}},
+                {"id":"charm","name":"Charm","automation":{"uses":{"max":1,"per":"rest"},
+                 "actions":[{"id":"use","label":"Imbue","witchAction":"talisman"}]}}"""));
         assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
-        JsonNode block = block(result, 0);
-        assertEquals("source", block.at("/pools/rune-ward/scope").asText(), block.toString());
-        assertTrue(block.toString().contains("destroyResourceOnMax") == false, block.toString());
-        assertTrue(block.toString().contains("sourcePools.rune-ward.value"), block.toString());
+        String ward = block(result, 0).toString(), charm = block(result, 1).toString();
+        assertTrue(ward.contains("\"op\":\"inventory.grant\"") && ward.contains("\"entry\":\"rune-ward\"") && ward.contains("\"to\":\"actor\""), ward);
+        assertTrue(charm.contains("\"entry\":\"enchanted-talisman\"") && charm.contains("input.amount"), charm);
         assertNotNull(program(result, 0));
+        assertNotNull(program(result, 1));
+    }
+
+    @Test
+    void carriedItemsPayAndExpireThroughTheirOwnQuantity() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"talisman","name":"Talisman","automation":{"rest":{"expireItem":true},
+                 "mitigation":[{"id":"protect","label":"Protect","hp":-1,"quantity":true,"markedHpOnly":true,"cost":{"@item":1},"when":{"markingHp":true}}]}},
+                {"id":"ward","name":"Ward","automation":{"mitigation":[{"id":"ward","label":"Ward","cost":{"hope":1},"roll":{"sides":8},"destroyResourceOnMax":"@item","reportRoll":true}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        String talisman = block(result, 0).toString(), ward = block(result, 1).toString();
+        assertTrue(talisman.contains("source.quantity") && talisman.contains("\"op\":\"inventory.consume\""), talisman);
+        assertTrue(talisman.contains("rest.short") && talisman.contains("rest.long"), talisman);
+        assertTrue(ward.contains("\"op\":\"inventory.consume\"") && ward.contains("result.reduction"), ward);
+        assertNotNull(program(result, 0));
+        assertNotNull(program(result, 1));
     }
 
     @Test

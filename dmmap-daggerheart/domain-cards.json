@@ -4446,30 +4446,12 @@
      "max": 1,
      "per": "rest"
     },
-    "resources": [
-     {
-      "id": "rune-ward",
-      "label": "Rune Ward power",
-      "initial": 0,
-      "max": 1
-     }
-    ],
     "actions": [
      {
       "id": "infuse",
       "label": "Infuse Rune Ward trinket",
       "hostOwned": true,
       "steps": [
-       {
-        "op": "clear",
-        "resource": "rune-ward",
-        "amount": "all"
-       },
-       {
-        "op": "gain",
-        "resource": "rune-ward",
-        "amount": 1
-       },
        {
         "op": "effect",
         "effect": {

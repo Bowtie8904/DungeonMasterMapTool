@@ -897,7 +897,6 @@
      "text": "Once per rest, you can imbue a small item with your protective essence. ** Spend any number of Hope **to place an equal number of tokens on this card. When the person holding the talisman takes damage, spend a token to reduce the number of Hit Points they mark by one. Clear all tokens from this card when you take a rest.",
      "type": "subclass",
      "automation": {
-      "resources": [{ "id": "enchanted-talisman", "label": "Tokens", "initial": 0, "resetOn": "rest", "whileEffect": "Enchanted Talisman source", "cardOnly": true }],
       "uses": {
        "max": 1,
        "per": "rest"

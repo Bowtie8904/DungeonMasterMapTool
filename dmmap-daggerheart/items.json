@@ -3619,6 +3619,67 @@
      "Confirm the mask is worn before spending one token for the optional death-move Hope bonus. Other health-related rolls and their token spending remain manual; ordinary action rolls do not spend Mask tokens automatically."
     ]
    }
+  },
+  {
+   "id": "enchanted-talisman",
+   "image": "/item-icons/lorc/gem-pendant.svg",
+   "name": "Enchanted Talisman",
+   "rarity": "Special",
+   "text": "A small item imbued with a Witch's protective essence. Its quantity is the number of protective tokens it holds. When the holder takes damage, spend a token to reduce the number of Hit Points they mark by one. It can be handed to another character like any item, and expires on the holder's next rest.",
+   "automation": {
+    "rest": { "expireItem": true },
+    "mitigation": [
+     {
+      "id": "protect",
+      "label": "Enchanted Talisman",
+      "hp": -1,
+      "quantity": true,
+      "markedHpOnly": true,
+      "cost": { "@item": 1 },
+      "when": { "markingHp": true },
+      "description": "Spend this talisman's tokens to reduce HP marked by one per token."
+     }
+    ]
+   }
+  },
+  {
+   "id": "rune-ward",
+   "image": "/item-icons/lorc/rune-stone.svg",
+   "name": "Rune Ward",
+   "rarity": "Special",
+   "text": "A deeply personal trinket infused with protective magic. The holder can spend a Hope to reduce incoming damage by 1d8. If the Ward Die result is 8, the ward's power ends after it reduces damage. It can be handed to another character like any item.",
+   "automation": {
+    "mitigation": [
+     {
+      "id": "ward",
+      "label": "Rune Ward",
+      "cost": { "hope": 1 },
+      "roll": { "sides": 8 },
+      "destroyResourceOnMax": "@item",
+      "reportRoll": true,
+      "description": "Spend 1 Hope to reduce damage by 1d8. On an 8 the ward is used up after the reduction."
+     }
+    ]
+   }
+  },
+  {
+   "id": "lifeblood-talisman",
+   "image": "/item-icons/delapouite/heart-necklace.svg",
+   "name": "Lifeblood Talisman",
+   "rarity": "Special",
+   "text": "A talisman infused with life essence. Whenever the bearer marks 2 or more Hit Points, they can spend a Hope to reduce the number of Hit Points marked by 1. It can be handed to another character like any item. The conjurer decides when it disappears.",
+   "automation": {
+    "mitigation": [
+     {
+      "id": "protect",
+      "label": "Lifeblood Talisman",
+      "hp": -1,
+      "markedHpOnly": true,
+      "when": { "minMarkedHp": 2 },
+      "cost": { "hope": 1 }
+     }
+    ]
+   }
   }
  ]
 }
