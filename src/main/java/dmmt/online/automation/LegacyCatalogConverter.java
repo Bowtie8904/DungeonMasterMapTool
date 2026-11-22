@@ -2936,6 +2936,11 @@ public final class LegacyCatalogConverter {
     }
 
     private static void report(JsonNode legacy, String path, Problems p, ObjectNode ui) {
+        report(legacy, path, p, ui, null, null);
+    }
+
+    /** With steps and pools, a computed or pool-valued report amount is evaluated first and shown from {@code result.reportAmount}. */
+    private static void report(JsonNode legacy, String path, Problems p, ObjectNode ui, ArrayNode steps, Pools pools) {
         if (!legacy.has("report")) return;
         JsonNode report = legacy.get("report");
         String text = report.isTextual() ? escape(report.asText()) : null;
@@ -2947,7 +2952,11 @@ public final class LegacyCatalogConverter {
                 JsonNode value = amount.isInt() ? null : computed(amount.asText());
                 if (amount.isInt()) text = text.replace("{{amount}}", amount.asText());
                 else if (value != null && value.has("read")) text = text.replace("{{amount}}", "{" + value.path("read").asText() + "}");
-                else p.add(path + "/report/amount", "Report amounts must be whole numbers or a directly projected value.");
+                else if (steps != null && (value != null || pools.has(amount.asText().replaceFirst("^@", "")))) {
+                    if (value == null) value = read("actor.pools." + amount.asText().substring(1) + ".value");
+                    steps.insertObject(0).put("op", "value").put("as", "reportAmount").set("value", value);
+                    text = text.replace("{{amount}}", "{result.reportAmount}");
+                } else p.add(path + "/report/amount", "Report amounts must be whole numbers or a directly projected value.");
             }
         }
         if (text == null || text.isBlank()) p.add(path + "/report", "Report text is missing.");
@@ -3186,7 +3195,8 @@ public final class LegacyCatalogConverter {
             else if (action.has("table")) ui.put("report", "{source.name}: rolled {result.table.faces|list}. {result.table.outcomes|list}");
             else if (action.has("toggleEffect")) ui.put("report", "{source.name}: toggled.");
         }
-        report(action, path, p, ui);
+        report(action, path, p, ui, steps, pools);
+        if (!steps.isEmpty() && !rule.has("do")) rule.set("do", steps);
         resourceRollReport(action, ui);
         sentRollReport(action, ui);
         checkReport(action, ui);

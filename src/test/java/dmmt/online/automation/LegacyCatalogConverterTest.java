@@ -2582,6 +2582,15 @@ class LegacyCatalogConverterTest {
         assertNotNull(program(result, 0));
     }
     @Test
+    void computedReportAmountsEvaluateBeforeReporting() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"clarity","name":"Clarity","automation":{"actions":[{"id":"use","label":"Clarity",
+                 "report":{"amount":"@Instinct","text":"Clear {amount} Stress."}}]}}"""));
+        assertEquals(1, result.converted(), result.diagnostics().toString());
+        assertNotNull(program(result, 0));
+        assertTrue(block(result, 0).toString().contains("{result.reportAmount}"), block(result, 0).toString());
+    }
+    @Test
     void dualityDieRerollsConvert() throws Exception {
         for (String role : new String[]{"hope", "fear"}) {
             var result = LegacyCatalogConverter.convert(catalog("""
