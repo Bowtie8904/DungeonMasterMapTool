@@ -753,6 +753,7 @@ public final class RuleCompiler {
             }
         }
         validateReferences(rule, args, decl, inputs, usesDieContext, path);
+        validatePreRollChoices(rule, path);
         if (hasRecipientMutation(rule)) {
             for (JsonNode binding : bindings) if (!binding.has("claimGroup") && !binding.has("targetSelection"))
                 throw RuleJson.error(path + "/bindings", "Every recipient mutation binding requires a claim group or target selection.");
@@ -761,6 +762,32 @@ public final class RuleCompiler {
             throw RuleJson.error(path + "/bindings", "Target selection requires a recipient mutation.");
         rule.set("args", args.deepCopy());
         rules.put(id, rule);
+    }
+
+    private static final Set<String> ROLLED_CHECK_FIELDS = Set.of("hopeDie", "fearDie", "dominant", "critical", "total", "outcome");
+
+    private static void validatePreRollChoices(ObjectNode rule, String path) {
+        Set<String> reads = new HashSet<>();
+        boolean preRoll = false;
+        for (JsonNode binding : rule.path("bindings")) {
+            if (!"roll.prepare".equals(binding.path("event").asText()) || !"option".equals(binding.path("mode").asText())) continue;
+            preRoll = true;
+            reads.addAll(RuleExpression.references(binding.path("when")));
+        }
+        if (!preRoll) return;
+        for (String key : List.of("when", "inputs", "costs")) reads.addAll(RuleExpression.references(rule.path(key)));
+        for (String key : List.of("label", "description", "unavailable"))
+            reads.addAll(RuleTemplate.references(rule.path("ui").path(key).asText("")));
+        for (JsonNode input : rule.path("inputs")) {
+            for (String key : List.of("label", "choiceLabel")) reads.addAll(RuleTemplate.references(input.path(key).asText("")));
+            for (JsonNode option : input.path("options")) reads.addAll(RuleTemplate.references(option.path("label").asText()));
+        }
+        for (String ref : reads) {
+            String[] parts = ref.split("\\.");
+            if (parts[0].equals("event") && (parts[1].equals("roll") || parts[1].equals("check")
+                    && (parts.length == 2 || ROLLED_CHECK_FIELDS.contains(parts[2]))))
+                throw RuleJson.error(path, "A pre-roll choice cannot depend on " + ref + "; use a roll.finished result action.");
+        }
     }
 
     private static boolean hasRecipientMutation(JsonNode rule) {

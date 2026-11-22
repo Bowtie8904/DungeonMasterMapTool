@@ -1513,7 +1513,8 @@ public final class LegacyCatalogConverter {
             }
         }
         String roll = option.path("roll").asText("");
-        if (!roll.isEmpty()) rollCondition(roll, path + "/roll", p, when);
+        if ("duality".equals(roll)) when.add(flag("event.check.duality", true));
+        else if (!roll.isEmpty()) rollCondition(roll, path + "/roll", p, when);
         String weapon = option.path("weapon").asText("");
         if (Set.of("primary", "secondary").contains(weapon)) when.addObject().putArray("eq").add(read("event.check.weapon")).add(weapon);
         else if ("any".equals(weapon)) when.add(hasFact("event.check.weapon"));

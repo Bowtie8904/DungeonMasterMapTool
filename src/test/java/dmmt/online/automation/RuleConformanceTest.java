@@ -40,6 +40,29 @@ class RuleConformanceTest {
     }
 
     @Test
+    void preRollChoicesCannotDependOnUnseenDiceButTheirEffectsMayEditThem() throws Exception {
+        ObjectNode rule = (ObjectNode) RuleJson.parse("""
+            {"id":"boost","bindings":[{"id":"use","event":"roll.prepare","surface":"roll","mode":"option"}],
+             "do":[{"op":"roll.check","from":{"read":"event.roll"},"as":"seen"}],"ui":{"label":"Boost"}}""");
+        ObjectNode definition = RuleJson.JSON.createObjectNode();
+        definition.putArray("rules").add(rule);
+        ObjectNode recipes = fixture("rewrite/recipes");
+        assertDoesNotThrow(() -> RuleCompiler.compile("test:boost", definition, recipes));
+        rule.set("when", RuleJson.parse("{\"exists\":\"event.check.dominant\"}"));
+        assertTrue(assertThrows(IllegalArgumentException.class,
+                () -> RuleCompiler.compile("test:boost", definition, recipes)).getMessage().contains("roll.finished"));
+        rule.remove("when");
+        rule.set("costs", RuleJson.parse("""
+            [{"op":"resource.spend","pool":"actor.hope","amount":{"read":"event.check.hopeDie"}}]"""));
+        assertThrows(IllegalArgumentException.class, () -> RuleCompiler.compile("test:boost", definition, recipes));
+        rule.remove("costs");
+        ((ObjectNode) rule.get("ui")).put("description", "Total {event.check.total}");
+        assertThrows(IllegalArgumentException.class, () -> RuleCompiler.compile("test:boost", definition, recipes));
+        ((ObjectNode) rule.at("/bindings/0")).put("event", "roll.finished").put("mode", "button");
+        assertDoesNotThrow(() -> RuleCompiler.compile("test:boost", definition, recipes));
+    }
+
+    @Test
     void inputParsingRejectsDuplicatesTrailingTokensAndReservedFields() {
         assertThrows(IOException.class, () -> RuleJson.parse("{\"rules\":[],\"rules\":[]}"));
         assertThrows(IOException.class, () -> RuleJson.parse("{} {}"));

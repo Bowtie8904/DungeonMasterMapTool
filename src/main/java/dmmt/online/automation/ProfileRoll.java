@@ -20,7 +20,7 @@ final class ProfileRoll {
         ObjectNode check = event.putObject("check");
         for (String key : List.of("kind", "trait", "weapon", "range", "dominant", "outcome", "critical",
                 "hopeDie", "fearDie", "spell", "origin", "total", "difficulty", "weaponSource", "weaponSourceId",
-                "fixedDice", "damageType", "move", "reroll")) check.putNull(key);
+                "fixedDice", "damageType", "move", "reroll", "duality")) check.putNull(key);
         return event;
     }
 
@@ -34,7 +34,7 @@ final class ProfileRoll {
         JsonNode stats = actor.path("stats");
         String trait = profile.path("trait").asText(equippedWeapon ? gear.path("trait").textValue() : null);
         ObjectNode check = (ObjectNode) event.path("check");
-        check.put("kind", kind).put("trait", trait).put("range", profile.path("range").asText(null))
+        check.put("kind", kind).put("duality", attack).put("trait", trait).put("range", profile.path("range").asText(null))
                 .put("spell", false).put("weaponSource", source.instanceId()).put("weaponSourceId", source.sourceId());
         if (equippedWeapon) {
             String slot = gear.path("slot").asText("").toLowerCase(Locale.ROOT);

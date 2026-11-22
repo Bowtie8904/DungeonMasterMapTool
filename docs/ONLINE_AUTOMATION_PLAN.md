@@ -18,6 +18,8 @@ transaction. Roll history stores the final structured event; retrying returns th
 publishing or spending again. This covers declared source profiles, not every feature action that rolls dice,
 effect-carried profiles, damage application or interactive post-roll claims.
 
+A player chooses `roll.prepare` options before seeing the new dice. Their availability, inputs, prices and labels may use saved dice and known roll facts (`event.check.duality` identifies a planned Hope/Fear roll), but not the new faces or result. The compiler directs such choices to a `roll.finished` action instead. The selected option's `do` steps may still edit the sampled dice.
+
 A scoped loopback DM sheet grant uses the `dm` audience for automation rather than impersonating the owner.
 `any` bindings include the DM; `self`, `others` and `party` are player audiences. Receipts distinguish the
 campaign DM from a player. The grant still authorizes only its original sheet.
