@@ -1790,6 +1790,11 @@ class OnlineSessionServerTest {
              {"op":"roll.contribute","from":{"read":"event.roll"},"as":"boosted",
               "contribution":{"id":"boost","kind":"flat","role":"modifier","label":"Boost","value":1}},
              {"op":"roll.publish","roll":{"read":"result.boosted"}}]}"""));
+        ((ObjectNode) catalog.at("/entries/0/features/0/automation")).set("modifiers", MAPPER.readTree("""
+            [{"stat":"roll.action","value":2,"label":"Action passive"}]"""));
+        ((ObjectNode) catalog.at("/entries/0/features/2/automation")).set("modifiers", MAPPER.readTree("""
+            [{"stat":"roll.attack","value":-1,"label":"Attack passive",
+              "when":{"gt":[{"read":"actor.hope.value"},0]}}]"""));
         java.nio.file.Files.writeString(compendiumDir.resolve("classes.json"), catalog.toString());
         String cookie = cookie(), campaignId = campaign.getId();
         int partySize = 5, warmup = 20, samples = 40;
@@ -1803,6 +1808,9 @@ class OnlineSessionServerTest {
             if (i == 0) for (String feature : List.of("rally", "steady"))
                 features.addObject().put("name", feature).put("instanceId", feature)
                         .put("automationSource", "classes:tester:features:" + feature);
+            if (i == 0) sheet.putObject("automationState").putArray("effects").addObject()
+                    .put("id", "active-bonus").put("sourceInstanceId", "rally").put("label", "Stored effect")
+                    .putArray("modifiers").addObject().put("stat", "roll.attack").put("value", 3);
             store.saveSheet(campaignId, id, sheet.toString());
         }
         var alloc = java.lang.management.ManagementFactory.getPlatformMXBean(com.sun.management.ThreadMXBean.class);
@@ -1842,6 +1850,12 @@ class OnlineSessionServerTest {
                     assertEquals(++revision, result.required("revision").longValue());
                     if (stage == 0) {
                         assertEquals("roll.finished", result.requiredAt("/event/type").textValue());
+                        JsonNode roll = result.requiredAt("/event/roll");
+                        assertTrue(roll.required("contributions").findValuesAsText("label")
+                                .containsAll(List.of("Action passive", "Attack passive", "Stored effect", "Boost")));
+                        assertEquals(result.requiredAt("/event/check/hopeDie").intValue()
+                                        + result.requiredAt("/event/check/fearDie").intValue() + 8,
+                                roll.required("total").intValue());
                         resultId = result.requiredAt("/event/resultId").textValue();
                     }
                     else assertEquals(partySize, result.required("actions").size());
