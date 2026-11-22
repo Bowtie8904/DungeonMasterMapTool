@@ -606,21 +606,67 @@ public final class RuleCompiler {
         return node.isObject() && (node.has("$arg") || node.has("$ui"));
     }
 
+    private static boolean containsSubstitution(JsonNode node) {
+        if (substitution(node)) return true;
+        if (node.isContainerNode()) for (JsonNode child : node)
+            if (containsSubstitution(child)) return true;
+        return false;
+    }
+
+    private static void validateBindingBasics(JsonNode binding, String path, boolean allowSubstitutions) {
+        RuleJson.fields(binding, path, "id", "event", "surface", "mode", "when", "group",
+                "defaultOn", "forEach", "exclusiveGroup", "priority", "claimGroup", "claimScope", "audience", "targetSelection");
+        if (!(allowSubstitutions && substitution(binding.path("id")))) RuleJson.id(binding.path("id"), path + "/id");
+        if (!(allowSubstitutions && substitution(binding.path("event"))) && !EVENTS.contains(binding.path("event").asText()))
+            throw RuleJson.error(path + "/event", "Unknown event.");
+        if (!(allowSubstitutions && substitution(binding.path("surface"))) && !SURFACES.contains(binding.path("surface").asText()))
+            throw RuleJson.error(path + "/surface", "Unknown surface.");
+        if (!(allowSubstitutions && substitution(binding.path("mode"))) && !MODES.contains(binding.path("mode").asText()))
+            throw RuleJson.error(path + "/mode", "Unknown binding mode.");
+        if (binding.has("when") && !(allowSubstitutions && containsSubstitution(binding.get("when"))))
+            RuleExpression.validate(binding.get("when"), path + "/when");
+        if (binding.has("audience") && !(allowSubstitutions && substitution(binding.get("audience")))
+                && !AUDIENCES.contains(binding.path("audience").asText()))
+            throw RuleJson.error(path + "/audience", "Expected self, others, party or any.");
+        if (binding.has("defaultOn") && !(allowSubstitutions && substitution(binding.get("defaultOn"))))
+            RuleExpression.bool(binding.get("defaultOn"), path + "/defaultOn");
+        if (binding.has("priority") && !(allowSubstitutions && substitution(binding.get("priority"))))
+            RuleJson.integer(binding.get("priority"), path + "/priority", -1000, 1000);
+        if (binding.has("group") && !(allowSubstitutions && substitution(binding.get("group")))
+                && !Set.of("result", "sourceFeature", "otherFeatures").contains(binding.path("group").asText()))
+            throw RuleJson.error(path + "/group", "Unknown result section.");
+        if (binding.has("defaultOn") && !(allowSubstitutions && substitution(binding.path("mode")))
+                && !"option".equals(binding.path("mode").asText()))
+            throw RuleJson.error(path + "/defaultOn", "Defaults are only valid for option bindings.");
+    }
+
     private static void validateRecipeShape(JsonNode rule, String path) {
         RuleJson.fields(rule, path, "id", "bindings", "when", "inputs", "costs", "limitRef", "do", "ui");
+        if (rule.has("when") && !containsSubstitution(rule.get("when")))
+            RuleExpression.validate(rule.get("when"), path + "/when");
         JsonNode bindings = rule.path("bindings");
         if (!substitution(bindings)) {
             if (!bindings.isArray() || bindings.isEmpty() || bindings.size() > 32)
                 throw RuleJson.error(path + "/bindings", "Expected 1-32 bindings.");
+            Set<String> ids = new HashSet<>();
             for (int i = 0; i < bindings.size(); i++) {
                 JsonNode binding = bindings.get(i);
-                if (!substitution(binding)) RuleJson.fields(binding, path + "/bindings/" + i, "id", "event", "surface",
-                        "mode", "when", "group", "defaultOn", "forEach", "exclusiveGroup", "priority",
-                        "claimGroup", "claimScope", "audience", "targetSelection");
+                if (!substitution(binding)) {
+                    String at = path + "/bindings/" + i;
+                    validateBindingBasics(binding, at, true);
+                    if (!substitution(binding.path("id")) && !ids.add(binding.path("id").asText()))
+                        throw RuleJson.error(at + "/id", "Duplicate binding ID.");
+                }
             }
         }
         JsonNode ui = rule.path("ui");
-        if (!substitution(ui)) RuleJson.fields(ui, path + "/ui", TEXT_FIELDS.toArray(String[]::new));
+        if (!substitution(ui)) {
+            RuleJson.fields(ui, path + "/ui", TEXT_FIELDS.toArray(String[]::new));
+            ui.fields().forEachRemaining(field -> {
+                if (!substitution(field.getValue()))
+                    RuleTemplate.validate(RuleJson.text(field.getValue(), path + "/ui/" + field.getKey()));
+            });
+        }
         Set<String> outputs = new HashSet<>();
         for (String list : List.of("costs", "do")) {
             JsonNode steps = rule.path(list);
@@ -725,19 +771,8 @@ public final class RuleCompiler {
         boolean needsLabel = false;
         boolean usesDieContext = false;
         for (JsonNode binding : bindings) {
-            RuleJson.fields(binding, path + "/bindings", "id", "event", "surface", "mode", "when", "group",
-                    "defaultOn", "forEach", "exclusiveGroup", "priority", "claimGroup", "claimScope", "audience", "targetSelection");
+            validateBindingBasics(binding, path + "/bindings", false);
             if (!bindingIds.add(RuleJson.id(binding.path("id"), path + "/bindings/id"))) throw RuleJson.error(path, "Duplicate binding ID.");
-            if (!EVENTS.contains(binding.path("event").asText())) throw RuleJson.error(path + "/bindings/event", "Unknown event.");
-            if (!SURFACES.contains(binding.path("surface").asText())) throw RuleJson.error(path + "/bindings/surface", "Unknown surface.");
-            if (!MODES.contains(binding.path("mode").asText())) throw RuleJson.error(path + "/bindings/mode", "Unknown binding mode.");
-            if (binding.has("when")) RuleExpression.validate(binding.get("when"), path + "/bindings/when");
-            if (binding.has("audience") && !AUDIENCES.contains(binding.path("audience").asText()))
-                throw RuleJson.error(path + "/bindings/audience", "Expected self, others, party or any.");
-            if (binding.has("defaultOn")) RuleExpression.bool(binding.get("defaultOn"), path + "/bindings/defaultOn");
-            if (binding.has("priority")) RuleJson.integer(binding.get("priority"), path + "/bindings/priority", -1000, 1000);
-            if (binding.has("group") && !Set.of("result", "sourceFeature", "otherFeatures").contains(binding.path("group").asText()))
-                throw RuleJson.error(path + "/bindings/group", "Unknown result section.");
             if (binding.has("exclusiveGroup")) {
                 RuleJson.id(binding.get("exclusiveGroup"), path + "/bindings/exclusiveGroup");
                 if (!Set.of("button", "option").contains(binding.path("mode").asText()))
@@ -779,8 +814,6 @@ public final class RuleCompiler {
                 if (binding.has("claimGroup"))
                     throw RuleJson.error(targetPath, "Target selections use a transaction, not a claim group.");
             }
-            if (binding.has("defaultOn") && !"option".equals(binding.path("mode").asText()))
-                throw RuleJson.error(path + "/bindings/defaultOn", "Defaults are only valid for option bindings.");
             if (binding.has("forEach")) {
                 String pool = RuleJson.text(binding.get("forEach"), path + "/bindings/forEach");
                 if (!pools.has(pool) || !"dice".equals(pools.path(pool).path("kind").asText()))

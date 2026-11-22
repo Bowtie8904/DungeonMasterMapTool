@@ -43,6 +43,8 @@ The sheet renders ordinary result actions from the private roll receipt. If a re
 
 **Started, not cut over.** With a format-2 pack, the sheet panel and host endpoint support versioned single-target and whole-party sheet and owner result actions, plus owner-initiated profile rolls with optional selections. Claims, catalog editing and migration remain incomplete. All nine shipped catalogs still use format 1; the replacement endpoint returns 409 for them. There is no live second-engine selector or legacy adapter.
 
+Unused recipe bodies also validate concrete binding IDs, event/surface/mode names, audience, defaults, priority, result groups, static conditions and UI templates. Checks depending on substitutions or the eventual source's declarations still run at expansion; full unused-body semantic linking is not yet complete.
+
 **Performance baseline.** Run `mvn "-Ddmmt.benchmark.automation=true" "-Dtest=OnlineSessionServerTest#measurePersistedProfileAndPartyActions" test` separately from other tests. It uses loopback HTTP and a temporary on-disk campaign, six sheets with 12 KB of notes each, a profile attack with conditional and unconditional passives, a stored-effect modifier, a selected option and a finished reaction, and versioned result and sheet actions with a recipient filter and five recipients each. It checks the applied modifiers and total. After 20 warm-up cycles the retry journal is full. The next 40 cycles measure each request to receipt of its response, including persistence on POST. The result GET fetches a post-roll target offer; neither GET is required to resolve the roll.
 
 | Request | Median | p95 | Mean allocated per request |

@@ -94,6 +94,44 @@ class RuleCatalogTest {
     }
 
     @Test
+    void unusedRecipesValidateConcreteBindingsAndDeferSubstitutedValues() throws Exception {
+        String catalog = """
+                {"format":"dmmap-daggerheart","version":2,"category":"items","entries":[]}
+                """;
+        ObjectNode recipes = fixture("rewrite/recipes");
+        for (String field : List.of("event", "surface", "mode", "audience", "group")) {
+            ObjectNode bad = recipes.deepCopy();
+            ((ObjectNode) bad.at("/recipes/0/rules/0/bindings/0")).put(field, "invalid");
+            var error = assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, bad.toString()));
+            assertTrue(error.getMessage().contains("/bindings/0/" + field), error.getMessage());
+        }
+        ObjectNode badId = recipes.deepCopy();
+        ((ObjectNode) badId.at("/recipes/0/rules/0/bindings/0")).put("id", "invalid id");
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, badId.toString()));
+        ObjectNode duplicate = recipes.deepCopy();
+        var bindings = (com.fasterxml.jackson.databind.node.ArrayNode) duplicate.at("/recipes/0/rules/0/bindings");
+        bindings.add(bindings.get(0).deepCopy());
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, duplicate.toString()));
+        ObjectNode badPriority = recipes.deepCopy();
+        ((ObjectNode) badPriority.at("/recipes/0/rules/0/bindings/0")).put("priority", 1001);
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, badPriority.toString()));
+        ObjectNode badDefault = recipes.deepCopy();
+        ((ObjectNode) badDefault.at("/recipes/0/rules/0/bindings/0")).put("defaultOn", true).put("mode", "button");
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, badDefault.toString()));
+        ObjectNode badCondition = recipes.deepCopy();
+        ((ObjectNode) badCondition.at("/recipes/0/rules/0/bindings/0")).putObject("when").put("unknown", true);
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, badCondition.toString()));
+        ObjectNode badUi = recipes.deepCopy();
+        ((ObjectNode) badUi.at("/recipes/0/rules/0/ui")).put("description", "{invalid");
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, badUi.toString()));
+
+        ObjectNode dynamic = recipes.deepCopy();
+        ((ObjectNode) dynamic.at("/recipes/0/args")).putObject("bindingMode").put("type", "string").put("default", "button");
+        ((ObjectNode) dynamic.at("/recipes/0/rules/0/bindings/0")).putObject("mode").put("$arg", "bindingMode");
+        assertTrue(RuleCatalog.compile(catalog, dynamic.toString()).isEmpty());
+    }
+
+    @Test
     void compiledProgramsIndexUserBindingsByEventAndSurface() throws Exception {
         var source = RuleCatalog.compile(fixture("rewrite/host-classes").toString(), fixture("rewrite/recipes").toString())
                 .stream().filter(item -> item.id().equals("classes:tester:features:rally")).findFirst().orElseThrow();
