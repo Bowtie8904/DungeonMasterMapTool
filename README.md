@@ -59,7 +59,7 @@ The rolling owner can use an offered result button on the sheet or reopen **Resu
 For a single-target sheet action, choose a character alongside the action's other inputs. A whole-party action lists its recipients next to the button and needs no second confirmation. If the host rejects a stale offer, the panel reloads the choices without reapplying the action. If the connection drops before the result arrives, **Retry** submits the original choice and request ID.
 New automation receipts reject reuse of the same request ID for a different intent; retry the original intent instead of changing its inputs.
 Targeted result actions use the same host-selected recipient choices after the roll is saved. The rolling owner can use them from the sheet or their own chat result; stale choices refresh without applying the action.
-An opt-in [performance benchmark](docs/ONLINE_AUTOMATION_PLAN.md#implementation-status) measures persisted profile rolls with modifiers, result and party transactions without adding a round trip to the roll.
+Opt-in [performance benchmarks](docs/ONLINE_AUTOMATION_PLAN.md#implementation-status) measure persisted profile rolls with modifiers, mixed weapon dice edits, and result and party transactions without adding a round trip to the roll.
 
 **Custom effects (partial implementation):** While hosting, the **Custom effects** tool on the right-hand tool rail (below Handouts) opens a dialog that lets the DM
 select saved player characters, compose stat or roll modifiers, optional roll bonuses, damage mitigation,

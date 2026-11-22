@@ -1876,6 +1876,92 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "dmmt.benchmark.automation", matches = "true")
+    void measurePersistedMixedWeaponDamage() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        automation.set("modifiers", MAPPER.readTree("""
+            [{"stat":"roll.damage","value":2,"label":"Damage passive"},
+             {"stat":"roll.damage","value":1,"label":"Conditional damage",
+              "when":{"gt":[{"read":"actor.hope.value"},0]}}]"""));
+        ArrayNode rules = automation.withArray("rules");
+        rules.removeAll();
+        rules.add(MAPPER.readTree("""
+            {"id":"boost","bindings":[{"id":"option","surface":"roll","event":"roll.prepare","mode":"option"}],
+             "ui":{"label":"Boost"},"do":[
+             {"op":"roll.contribute","from":{"read":"event.roll"},"as":"boosted",
+              "contribution":{"id":"boost","kind":"flat","role":"damage","label":"Boost","value":1}},
+             {"op":"roll.publish","roll":{"read":"result.boosted"}}]}"""));
+        rules.add(MAPPER.readTree("""
+            {"id":"edit","bindings":[{"id":"auto","surface":"roll","event":"roll.finished","mode":"automatic"}],
+             "ui":{"label":"Edit"},"do":[
+             {"op":"roll.selectDice","from":{"read":"event.roll"},
+              "where":{"includes":[{"read":"event.roll.metadata.weaponBaseContributions"},{"read":"die.contributionId"}]},"as":"selected"},
+             {"op":"roll.addDicePerPool","from":{"read":"event.roll"},"dice":{"read":"result.selected"},"count":1,"as":"added"},
+             {"op":"roll.selectDice","from":{"read":"result.added"},
+              "where":{"includes":[{"read":"event.roll.metadata.weaponBaseContributions"},{"read":"die.contributionId"}]},"as":"all"},
+             {"op":"roll.dropLowestPerPool","from":{"read":"result.added"},"dice":{"read":"result.all"},"count":1,"as":"dropped"},
+             {"op":"roll.publish","roll":{"read":"result.dropped"}}]}"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        campaign.getActors().add(Campaign.Actor.builder().id("roller").name("Ada").ownerId(playerId()).build());
+        ObjectNode sheet = performanceSheet().put("name", "Ada").put("notes", "Session notes. ".repeat(800));
+        sheet.putObject("proficiency").put("on", 2).put("slots", 6);
+        sheet.putArray("traits").addObject().put("name", "Finesse").put("mod", 3);
+        sheet.putArray("features");
+        sheet.putArray("activeWeapons").addObject().put("name", "Mixed Blade").put("slot", "Primary")
+                .put("trait", "Finesse").put("range", "Melee").put("damage", "d8+d6+2").put("damageType", "phys")
+                .put("instanceId", "steady").put("automationSource", "classes:tester:features:steady");
+        sheet.putObject("automationState").putArray("effects").addObject()
+                .put("id", "active-bonus").put("sourceInstanceId", "steady").put("label", "Stored effect")
+                .putArray("modifiers").addObject().put("stat", "roll.damage").put("value", 3);
+        store.saveSheet(campaign.getId(), "roller", sheet.toString());
+        String cookie = cookie();
+        var alloc = java.lang.management.ManagementFactory.getPlatformMXBean(com.sun.management.ThreadMXBean.class);
+        if (alloc == null || !alloc.isThreadAllocatedMemorySupported())
+            throw new IllegalStateException("The benchmark requires JVM allocation counters.");
+        alloc.setThreadAllocatedMemoryEnabled(true);
+        int warmup = 20, samples = 40;
+        long[] nanos = new long[samples], bytes = new long[samples];
+        for (int i = 0; i < warmup + samples; i++) {
+            String body = """
+                {"request":{"requestId":"mixed-%d","expectedRevision":%d,"selections":[
+                 {"sourceInstanceId":"steady","ruleId":"boost","bindingId":"option"}],
+                 "profileRoll":{"sourceInstanceId":"steady","profileId":"weapon.base","kind":"damage"}}}"""
+                    .formatted(i, i);
+            long allocated = alloc.getTotalThreadAllocatedBytes(), start = System.nanoTime();
+            var response = automationHttp(cookie, "roller", body);
+            long elapsed = System.nanoTime() - start, used = alloc.getTotalThreadAllocatedBytes() - allocated;
+            assertEquals(200, response.statusCode(), response.body());
+            JsonNode result = MAPPER.readTree(response.body());
+            assertEquals(i + 1, result.required("revision").intValue());
+            JsonNode roll = result.requiredAt("/event/roll");
+            assertEquals("[\"damage\",\"damage.2\"]", roll.requiredAt("/metadata/weaponBaseContributions").toString());
+            assertEquals(3, roll.requiredAt("/contributions/0/dice").size());
+            assertEquals(3, roll.requiredAt("/contributions/1/dice").size());
+            assertEquals(8, roll.requiredAt("/contributions/0/dice/2/sides").intValue());
+            assertEquals(6, roll.requiredAt("/contributions/1/dice/2/sides").intValue());
+            assertEquals(2, roll.required("excludedDice").size());
+            assertTrue(roll.required("contributions").findValuesAsText("label")
+                    .containsAll(List.of("Damage passive", "Conditional damage", "Stored effect", "Boost")));
+            assertEquals(roll.requiredAt("/contributions/0/total").intValue()
+                            + roll.requiredAt("/contributions/1/total").intValue() + 9,
+                    roll.required("total").intValue());
+            if (i >= warmup) {
+                nanos[i - warmup] = elapsed;
+                bytes[i - warmup] = used;
+            }
+        }
+        assertEquals(warmup + samples,
+                MAPPER.readTree(store.loadSheet(campaign.getId(), "roller")).requiredAt("/automationState/revision").intValue());
+        java.util.Arrays.sort(nanos);
+        System.out.printf(java.util.Locale.ROOT, "automation-bench mixed weapon POST: n=%d p50=%.2fms p95=%.2fms mean=%.2fMiB allocated%n",
+                samples, nanos[samples / 2 - 1] / 1e6, nanos[(int) Math.ceil(samples * .95) - 1] / 1e6,
+                java.util.Arrays.stream(bytes).average().orElseThrow() / (1024 * 1024));
+    }
+
+    @Test
     void partyActionRefreshesOnMembershipOrSheetChangesAndCommitsOnlyOnce() throws Exception {
         ObjectNode catalog = installPartyAction();
         Path file = compendiumDir.resolve("classes.json");
