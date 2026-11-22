@@ -121,7 +121,7 @@ Run the focused checks from the repository root with `mvn -q "-Dtest=RuleConform
 
 ## What exists today
 
-A recursive count of `automation` objects in the nine maintained catalogs gives **1,123 blocks across 1,216 entries** (1,122 nonempty blocks; some entries have none and others have several). This includes nested features, grimoire spells, companion options, attachments and beastform features; it excludes `_editorOriginal` and other internal metadata. There are **58 distinct keys directly inside** these blocks. The direct lists alone contain 620 actions, 210 roll options, 103 result triggers and 79 mitigation options; these counts do **not** include conditional lists or controls created at runtime. A migration based only on the `actions` list would miss most kinds of behavior.
+A recursive count of `automation` objects in the nine maintained catalogs gives **1,126 blocks across 1,219 entries** (1,125 nonempty blocks), excluding keys starting with `_` such as `_editorOriginal`. The converter ledger counts **1,087**: it counts an outer automation block once, including when its owner is a feature or grimoire spell. Inside those blocks are another 39 automation objects: 29 on beastform features, two on features of effects granted by those features, one on a companion option and seven on attachments. They are part of the parent block's conversion and parity obligation, not 39 extra converter successes. The recursive inventory has 58 distinct direct keys, including lists with 620 actions, 210 roll options, 103 result triggers and 82 mitigation options. Those list totals exclude conditional lists and controls created at runtime.
 
 | What the implementation shows | Why it matters for authoring |
 |---|---|
