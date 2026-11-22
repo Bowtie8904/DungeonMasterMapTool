@@ -1687,8 +1687,7 @@ class OnlineSessionServerTest {
         assertEquals(409, automationHttp(cookie(), "ada", request).statusCode());
     }
 
-    @Test
-    void partyActionRefreshesOnMembershipOrSheetChangesAndCommitsOnlyOnce() throws Exception {
+    private ObjectNode installPartyAction() throws Exception {
         automationCompendium();
         Path file = compendiumDir.resolve("classes.json");
         ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
@@ -1697,6 +1696,68 @@ class OnlineSessionServerTest {
             automation.removeAll();
             automation.setAll((ObjectNode) MAPPER.readTree(input));
         }
+        return catalog;
+    }
+
+    @Test
+    void singleTargetRequiresTheSelectedPlayerConnectionNotAScopedDmConnection() throws Exception {
+        ObjectNode catalog = installPartyAction();
+        ((ObjectNode) catalog.at("/entries/0/features/0/automation/rules/0/bindings/0/targetSelection")).put("cardinality", "one");
+        java.nio.file.Files.writeString(compendiumDir.resolve("classes.json"), catalog.toString());
+        String cookie = cookie(), ally = allyCookie("other"), id = campaign.getId();
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("patient").name("Bea").ownerId("other").build());
+        store.saveSheet(id, "caster", """
+            {"name":"Ada","hope":{"on":3,"slots":6},"features":[
+             {"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"}]}""");
+        store.saveSheet(id, "patient", "{\"name\":\"Bea\",\"stress\":{\"on\":2,\"slots\":6}}");
+        String before = store.loadSheet(id, "caster");
+        String grant = URI.create(server.dmSheetUrl("patient")).getFragment();
+        Inbox dmInbox = new Inbox(), playerInbox = new Inbox();
+        WebSocket dm = http.newWebSocketBuilder()
+                .buildAsync(URI.create("ws://127.0.0.1:" + port + "/ws?dm-sheet=" + grant), dmInbox).join();
+        try {
+            dmInbox.next("hello");
+            assertTrue(partyOptions(cookie).isEmpty());
+            WebSocket player = connect(ally, playerInbox);
+            ObjectNode request = MAPPER.createObjectNode().put("requestId", "choose").put("expectedRevision", 0);
+            request.putArray("selections").addObject().put("sourceInstanceId", "r").put("ruleId", "rally").put("bindingId", "sheet");
+            ObjectNode body = MAPPER.createObjectNode().set("request", request);
+            try {
+                playerInbox.next("hello");
+                var options = partyOptions(cookie);
+                assertEquals(List.of("patient"), options.findValuesAsText("id"));
+                request.putObject("target").put("recipientId", "patient").set("version", options.get(0).required("version"));
+            } finally { player.abort(); }
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (!partyOptions(cookie).isEmpty() && System.nanoTime() < deadline) Thread.sleep(10);
+            assertTrue(partyOptions(cookie).isEmpty());
+            assertEquals(409, automationHttp(cookie, "caster", body.toString()).statusCode());
+            assertEquals(before, store.loadSheet(id, "caster"));
+            playerInbox = new Inbox();
+            player = connect(ally, playerInbox);
+            try {
+                playerInbox.next("hello");
+                ((ObjectNode) request.get("target")).set("version", partyOptions(cookie).required(0).required("version"));
+                var applied = automationHttp(cookie, "caster", body.toString());
+                assertEquals(200, applied.statusCode(), applied.body());
+                assertEquals(2, MAPPER.readTree(store.loadSheet(id, "caster")).at("/hope/on").asInt());
+                assertEquals(1, MAPPER.readTree(store.loadSheet(id, "patient")).at("/stress/on").asInt());
+            } finally { player.abort(); }
+        } finally { dm.abort(); }
+    }
+
+    private JsonNode partyOptions(String cookie) throws Exception {
+        var response = automationHttp(cookie, "caster", null);
+        assertEquals(200, response.statusCode(), response.body());
+        return MAPPER.readTree(response.body()).requiredAt("/actions/0/targetSelection/options");
+    }
+
+    @Test
+    void partyActionRefreshesOnMembershipOrSheetChangesAndCommitsOnlyOnce() throws Exception {
+        ObjectNode catalog = installPartyAction();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/0/automation");
         var selector = (ObjectNode) automation.at("/rules/0/bindings/0/targetSelection");
         selector.put("scope", "activePlayerCharacters");
         selector.set("where", MAPPER.readTree("{\"gt\":[{\"read\":\"recipient.stress.marked\"},0]}"));
