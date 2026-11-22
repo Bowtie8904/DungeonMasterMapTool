@@ -198,6 +198,67 @@ class RuleCatalogTest {
     }
 
     @Test
+    void unusedRecipesValidateConcreteInputsAndDeferParameterizedInputs() throws Exception {
+        String catalog = """
+                {"format":"dmmap-daggerheart","version":2,"category":"items","entries":[]}
+                """;
+        ObjectNode recipes = fixture("rewrite/recipes");
+        for (String invalid : List.of(
+                """
+                [{"id":"amount","kind":"unknown","label":"Amount"}]""",
+                """
+                [{"id":"bad id","kind":"integer","label":"Amount","min":0,"max":2}]""",
+                """
+                [{"id":"amount","kind":"integer","label":"{invalid","min":0,"max":2}]""",
+                """
+                [{"id":"amount","kind":"integer","label":"Amount","min":{"unknown":true},"max":2}]""",
+                """
+                [{"id":"amount","kind":"integer","label":"Amount","min":0,"max":2,"default":"one"}]""",
+                """
+                [{"id":"die","kind":"die.select","label":"Die","from":[],"count":1,"choiceLabel":"Die"}]""",
+                """
+                [{"id":"choice","kind":"choice","label":"Choice","options":[{"id":"a","label":"A"},{"id":"a","label":"B"}]}]""",
+                """
+                [{"id":"allocation","kind":"allocation","label":"Allocation","options":[{"id":"a","label":"A"}],"total":{"bad":1}}]""",
+                """
+                [{"id":"same","kind":"integer","label":"A","min":0,"max":1},
+                 {"id":"same","kind":"integer","label":"B","min":0,"max":1}]"""
+        )) {
+            ObjectNode bad = recipes.deepCopy();
+            ((ObjectNode) bad.at("/recipes/0/rules/0")).set("inputs", RuleJson.parse(invalid));
+            assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, bad.toString()), invalid);
+        }
+
+        ObjectNode tooMany = recipes.deepCopy();
+        var manyInputs = ((ObjectNode) tooMany.at("/recipes/0/rules/0")).putArray("inputs");
+        for (int i = 0; i < 17; i++)
+            manyInputs.addObject().put("id", "amount" + i).put("kind", "integer").put("label", "Amount").put("min", 0).put("max", 2);
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, tooMany.toString()));
+
+        ObjectNode automatic = recipes.deepCopy();
+        ((ObjectNode) automatic.at("/recipes/0/rules/0/bindings/0")).put("mode", "automatic");
+        ((ObjectNode) automatic.at("/recipes/0/rules/0")).set("inputs",
+                RuleJson.parse("[{\"id\":\"amount\",\"kind\":\"integer\",\"label\":\"Amount\",\"min\":0,\"max\":2}]"));
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, automatic.toString()));
+        ObjectNode automaticCosts = recipes.deepCopy();
+        ((ObjectNode) automaticCosts.at("/recipes/0/rules/0/bindings/0")).put("mode", "automatic");
+        ((ObjectNode) automaticCosts.at("/recipes/0/rules/0")).putArray("costs")
+                .addObject().put("op", "resource.spend").put("pool", "actor.hope").put("amount", 1);
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, automaticCosts.toString()));
+
+        ObjectNode dynamic = recipes.deepCopy();
+        ((ObjectNode) dynamic.at("/recipes/0/args")).putObject("inputKind").put("type", "string").put("default", "unknown");
+        ((ObjectNode) dynamic.at("/recipes/0/rules/0")).set("inputs",
+                RuleJson.parse("[{\"id\":\"amount\",\"kind\":{\"$arg\":\"inputKind\"},\"label\":\"Amount\",\"min\":0,\"max\":2}]"));
+        assertTrue(RuleCatalog.compile(catalog, dynamic.toString()).isEmpty());
+        var error = assertThrows(IllegalArgumentException.class,
+                () -> RuleCatalog.compile(fixture("rewrite/domain-cards").toString(), dynamic.toString()));
+        assertTrue(error.getMessage().contains("/inputs/kind"), error.getMessage());
+        ((ObjectNode) dynamic.at("/recipes/0/args/inputKind")).put("default", "integer");
+        assertFalse(RuleCatalog.compile(fixture("rewrite/domain-cards").toString(), dynamic.toString()).isEmpty());
+    }
+
+    @Test
     void compiledProgramsIndexUserBindingsByEventAndSurface() throws Exception {
         var source = RuleCatalog.compile(fixture("rewrite/host-classes").toString(), fixture("rewrite/recipes").toString())
                 .stream().filter(item -> item.id().equals("classes:tester:features:rally")).findFirst().orElseThrow();

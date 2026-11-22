@@ -724,6 +724,30 @@ public final class RuleCompiler {
                     RuleTemplate.validate(RuleJson.text(field.getValue(), path + "/ui/" + field.getKey()));
             });
         }
+        JsonNode inputs = rule.path("inputs");
+        if (!inputs.isMissingNode() && !substitution(inputs)) {
+            if (!inputs.isArray() || inputs.size() > 16)
+                throw RuleJson.error(path + "/inputs", "Expected up to 16 inputs.");
+            Set<String> ids = new HashSet<>();
+            for (int i = 0; i < inputs.size(); i++) {
+                JsonNode input = inputs.get(i);
+                String at = path + "/inputs/" + i;
+                if (substitution(input)) continue;
+                RuleJson.object(input, at);
+                if (!substitution(input.path("id"))) {
+                    String id = RuleJson.id(input.path("id"), at + "/id");
+                    slot(id, at + "/id");
+                    if (!ids.add(id)) throw RuleJson.error(at + "/id", "Duplicate input ID.");
+                }
+                if (!containsSubstitution(input)) validateInput(input, at);
+            }
+        }
+        if (bindings.isArray()) for (JsonNode binding : bindings) {
+            if (!"automatic".equals(binding.path("mode").asText())) continue;
+            JsonNode costs = rule.path("costs");
+            if (inputs.isArray() && !inputs.isEmpty() || costs.isArray() && !costs.isEmpty())
+                throw RuleJson.error(path, "Automatic rules cannot require inputs or explicit costs.");
+        }
         Set<String> outputs = new HashSet<>();
         for (String list : List.of("costs", "do")) {
             JsonNode steps = rule.path(list);
@@ -850,38 +874,7 @@ public final class RuleCompiler {
                 String inputId = RuleJson.id(input.path("id"), path + "/inputs/id");
                 slot(inputId, path + "/inputs/id");
                 if (!inputs.add(inputId)) throw RuleJson.error(path + "/inputs", "Duplicate input ID.");
-                RuleTemplate.validate(RuleJson.text(input.path("label"), path + "/inputs/label"));
-                switch (input.path("kind").asText()) {
-                    case "integer" -> {
-                        RuleJson.fields(input, path + "/inputs", "id", "kind", "min", "max", "default", "label");
-                        if (input.has("default")) RuleJson.integer(input.get("default"), path + "/inputs/default", -1_000_000, 1_000_000);
-                        RuleExpression.validate(input.path("min"), path + "/inputs/min");
-                        RuleExpression.validate(input.path("max"), path + "/inputs/max");
-                    }
-                    case "die.select" -> {
-                        RuleJson.fields(input, path + "/inputs", "id", "kind", "from", "eligible", "where", "count", "min", "default", "label", "choiceLabel");
-                        if (input.has("eligible") == input.has("where"))
-                            throw RuleJson.error(path + "/inputs", "Die selections need either eligible dice or a per-die where filter.");
-                        for (String field : List.of("from", "eligible", "where", "count", "min")) if (input.has(field) || !Set.of("eligible", "where", "min").contains(field))
-                            RuleExpression.validate(input.path(field), path + "/inputs/" + field);
-                        if (input.has("default") && !"lowest".equals(input.path("default").asText()))
-                            throw RuleJson.error(path + "/inputs/default", "Unknown die selection default.");
-                        RuleTemplate.validate(RuleJson.text(input.path("choiceLabel"), path + "/inputs/choiceLabel"));
-                    }
-                    case "choice" -> {
-                        RuleJson.fields(input, path + "/inputs", "id", "kind", "label", "options", "optionsFrom", "count");
-                        int size = validateOptions(input, path + "/inputs");
-                        int count = input.has("count") ? RuleJson.integer(input.get("count"), path + "/inputs/count", 1, size) : 1;
-                        if (count < 1) throw RuleJson.error(path + "/inputs/count", "Expected at least one choice.");
-                    }
-                    case "allocation" -> {
-                        RuleJson.fields(input, path + "/inputs", "id", "kind", "label", "options", "optionsFrom", "total", "max");
-                        validateOptions(input, path + "/inputs");
-                        RuleExpression.validate(input.path("total"), path + "/inputs/total");
-                        if (input.has("max")) RuleExpression.validate(input.get("max"), path + "/inputs/max");
-                    }
-                    default -> throw RuleJson.error(path + "/inputs/kind", "Unknown input kind.");
-                }
+                validateInput(input, path + "/inputs");
             }
         }
         boolean hasAutomatic = false;
@@ -911,6 +904,42 @@ public final class RuleCompiler {
             throw RuleJson.error(path + "/bindings", "Target selection requires a recipient mutation.");
         rule.set("args", args.deepCopy());
         rules.put(id, rule);
+    }
+
+    private static void validateInput(JsonNode input, String path) {
+        RuleTemplate.validate(RuleJson.text(input.path("label"), path + "/label"));
+        switch (input.path("kind").asText()) {
+            case "integer" -> {
+                RuleJson.fields(input, path, "id", "kind", "min", "max", "default", "label");
+                if (input.has("default")) RuleJson.integer(input.get("default"), path + "/default", -1_000_000, 1_000_000);
+                RuleExpression.validate(input.path("min"), path + "/min");
+                RuleExpression.validate(input.path("max"), path + "/max");
+            }
+            case "die.select" -> {
+                RuleJson.fields(input, path, "id", "kind", "from", "eligible", "where", "count", "min", "default", "label", "choiceLabel");
+                if (input.has("eligible") == input.has("where"))
+                    throw RuleJson.error(path, "Die selections need either eligible dice or a per-die where filter.");
+                for (String field : List.of("from", "eligible", "where", "count", "min"))
+                    if (input.has(field) || !Set.of("eligible", "where", "min").contains(field))
+                        RuleExpression.validate(input.path(field), path + "/" + field);
+                if (input.has("default") && !"lowest".equals(input.path("default").asText()))
+                    throw RuleJson.error(path + "/default", "Unknown die selection default.");
+                RuleTemplate.validate(RuleJson.text(input.path("choiceLabel"), path + "/choiceLabel"));
+            }
+            case "choice" -> {
+                RuleJson.fields(input, path, "id", "kind", "label", "options", "optionsFrom", "count");
+                int size = validateOptions(input, path);
+                int count = input.has("count") ? RuleJson.integer(input.get("count"), path + "/count", 1, size) : 1;
+                if (count < 1) throw RuleJson.error(path + "/count", "Expected at least one choice.");
+            }
+            case "allocation" -> {
+                RuleJson.fields(input, path, "id", "kind", "label", "options", "optionsFrom", "total", "max");
+                validateOptions(input, path);
+                RuleExpression.validate(input.path("total"), path + "/total");
+                if (input.has("max")) RuleExpression.validate(input.get("max"), path + "/max");
+            }
+            default -> throw RuleJson.error(path + "/kind", "Unknown input kind.");
+        }
     }
 
     private static final Set<String> ROLLED_CHECK_FIELDS = Set.of("hopeDie", "fearDie", "dominant", "critical", "total", "outcome");
