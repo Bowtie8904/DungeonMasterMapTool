@@ -47,7 +47,9 @@ In a format-2 pack, an owner can roll a declared attack profile or its damage. T
 the profile from the saved sheet and commits its edited dice, reactions and costs together. A blocked
 profile roll spends nothing, and a retry does not roll again. Equipped weapons with stable automation
 source and instance IDs also offer their ordinary attack and damage; saved customized weapon statistics
-and mixed dice pools are used. Matching passive and active-effect roll modifiers appear as labelled
+and mixed dice pools are used. A stored effect on its own active source can also offer its frozen profile;
+ending or replacing the effect invalidates that activation's roll and result controls. Derived and
+other-character effect profiles are not yet integrated. Matching passive and active-effect roll modifiers appear as labelled
 contributions; weapon passives apply only to that weapon's profiles. Existing sheets still need the
 planned identity migration. Typed chat dice stay separate. Other roll origins are not yet integrated
 with these modifiers.

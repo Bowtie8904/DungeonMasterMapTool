@@ -20,11 +20,18 @@ damage modifiers; eligible passive and active-effect modifiers become labelled, 
 An equipped weapon's passive roll modifiers apply only to its own profile, while effect modifiers apply to the
 holder. `set`, `add` and bounds are combined per statistic using the derived-stat ordering. Trait bonuses
 are already included in the projected trait total. This covers declared source profiles, not every feature action that rolls dice,
-effect-carried profiles, damage application or interactive post-roll claims. Equipped weapons that already
+damage application or interactive post-roll claims. Equipped weapons that already
 have stable source and instance IDs also receive a base profile even without an automation program. The
 host reads their saved customized trait, range, damage type, dice and flat bonus. Multiple dice pools each
 scale with Proficiency unless `fixedDice` is set. Unsupported damage expressions reject the damage roll;
 identity migration for existing sheets remains outstanding. The generated profile ID avoids declared IDs.
+
+A stored effect whose source is active on its holder also offers its frozen attack profile. Its descriptor
+and `request.profileRoll` include `effectInstanceId` and the reserved profile ID `effect.profile`; the host
+resolves and validates the stored instance, not submitted damage facts. The activation must still exist when
+using an offer or a result button, including after ending and recasting the effect. If a roll itself ends the
+effect, it completes without creating a result offer for that activation. Derived profiles and profiles on
+another character's effect remain pending cross-holder and activation integration.
 
 Weapon damage records its base contribution IDs in roll metadata. Converted weapon-dice edits use those IDs
 and the source ID so a bonus contribution from the same source is not mistaken for a base pool.

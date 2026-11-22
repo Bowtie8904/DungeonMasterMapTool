@@ -2376,6 +2376,69 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void storedEffectProfileRollsArePersistedAndBoundToTheActivation() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        ObjectNode form = automation.putObject("effects").putObject("form").put("label", "Form");
+        form.set("profile", MAPPER.readTree("""
+            {"label":"Claws","trait":"Finesse","range":"melee","damage":{"sides":8,"flat":2,"type":"physical"}}"""));
+        automation.set("rules", MAPPER.readTree("""
+            [{"id":"start","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+              "do":[{"op":"effect.start","effect":"form","target":"actor"}],"ui":{"label":"Start"}},
+             {"id":"end","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+              "do":[{"op":"effect.end","effect":"form","target":"actor"}],"ui":{"label":"End"}},
+             {"id":"after","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button"}],
+              "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"After"}}]"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        campaign.getActors().add(Campaign.Actor.builder().id("roller").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "roller", """
+            {"name":"Ada","level":2,"proficiency":{"on":2,"slots":6},
+             "traits":[{"name":"Finesse","mod":3}],
+             "features":[{"name":"Steady","instanceId":"s","automationSource":"classes:tester:features:steady"}]}""");
+        String cookie = cookie();
+        String start = """
+            {"request":{"requestId":"start","expectedRevision":0,"selections":[
+             {"sourceInstanceId":"s","ruleId":"start","bindingId":"sheet"}]}}""";
+        assertEquals(200, automationHttp(cookie, "roller", start).statusCode());
+        JsonNode profile = MAPPER.readTree(automationHttp(cookie, "roller", null).body()).requiredAt("/profiles/1");
+        String effectId = profile.required("effectInstanceId").textValue();
+        assertEquals("effect.profile", profile.required("id").textValue());
+        ObjectNode body = MAPPER.createObjectNode();
+        ObjectNode request = body.putObject("request").put("requestId", "roll").put("expectedRevision", 1);
+        request.putArray("selections");
+        request.putObject("profileRoll").put("sourceInstanceId", "s").put("profileId", "effect.profile")
+                .put("effectInstanceId", effectId).put("kind", "damage");
+        int history = store.historyTail(campaign.getId(), 100).size();
+        var response = automationHttp(cookie, "roller", body.toString());
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode event = MAPPER.readTree(response.body()).required("event");
+        assertEquals(effectId, event.required("effectInstanceId").textValue());
+        assertEquals(2, event.requiredAt("/roll/contributions/0/dice").size());
+        assertEquals("physical", event.requiredAt("/check/damageType").textValue());
+        String resultId = event.required("resultId").textValue();
+        assertEquals(event, store.historyTail(campaign.getId(), 100).getLast().required("automationEvent"));
+        assertEquals(response.body(), automationHttp(cookie, "roller", body.toString()).body());
+        assertEquals(history + 1, store.historyTail(campaign.getId(), 100).size());
+        assertEquals(200, resultHttp(cookie, "roller", resultId).statusCode());
+        assertEquals(403, automationHttp(allyCookie("other-roller"), "roller", body.toString()).statusCode());
+
+        String end = """
+            {"request":{"requestId":"end","expectedRevision":2,"selections":[
+             {"sourceInstanceId":"s","ruleId":"end","bindingId":"sheet"}]}}""";
+        assertEquals(200, automationHttp(cookie, "roller", end).statusCode());
+        String restart = start.replace("\"start\",\"expectedRevision\":0", "\"restart\",\"expectedRevision\":3");
+        assertEquals(200, automationHttp(cookie, "roller", restart).statusCode());
+        assertEquals(409, resultHttp(cookie, "roller", resultId).statusCode());
+        request.put("requestId", "stale").put("expectedRevision", 4);
+        String before = store.loadSheet(campaign.getId(), "roller");
+        assertEquals(409, automationHttp(cookie, "roller", body.toString()).statusCode());
+        assertEquals(before, store.loadSheet(campaign.getId(), "roller"));
+        assertEquals(history + 1, store.historyTail(campaign.getId(), 100).size());
+    }
+
+    @Test
     void replacementSceneAndNewSessionResetOfflineActorsInOneCommit() throws Exception {
         automationCompendium();
         Path file = compendiumDir.resolve("classes.json");

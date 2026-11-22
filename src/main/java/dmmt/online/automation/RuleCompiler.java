@@ -184,6 +184,7 @@ public final class RuleCompiler {
         ObjectNode limits() { return limits.deepCopy(); }
         ObjectNode pools() { return pools.deepCopy(); }
         List<String> poolsBoundTo(String effectId) { return poolsByEffect.getOrDefault(effectId, List.of()); }
+        boolean hasEffect(String effectId) { return effects.has(effectId); }
         ObjectNode effects() { return effects.deepCopy(); }
         ArrayNode modifiers() { return modifiers.deepCopy(); }
         /** Additional attack profiles the source offers while it is active. */
@@ -470,7 +471,7 @@ public final class RuleCompiler {
         return (ArrayNode) list.deepCopy();
     }
 
-    private static void validateProfile(JsonNode profile, String path) {
+    static void validateProfile(JsonNode profile, String path) {
         RuleJson.fields(profile, path, "label", "trait", "range", "damage");
         validateProfileBody(profile, path);
     }

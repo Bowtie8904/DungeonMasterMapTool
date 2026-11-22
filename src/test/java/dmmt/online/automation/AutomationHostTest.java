@@ -260,6 +260,130 @@ class AutomationHostTest {
         assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, sheet, origin, damage, "self", new SplittableRandom(1)));
     }
 
+    @Test
+    void storedEffectProfilesRollOnceAndExpireWithTheirActivation() throws Exception {
+        ObjectNode classes = fixture("rewrite/host-classes");
+        ObjectNode automation = (ObjectNode) classes.at("/entries/0/features/2/automation");
+        ObjectNode form = automation.putObject("effects").putObject("form").put("label", "Form");
+        form.set("profile", RuleJson.parse("""
+                {"label":"Claws","trait":"Agility","range":"melee",
+                 "damage":{"count":2,"sides":8,"flat":2,"type":"physical"}}"""));
+        automation.set("rules", RuleJson.parse("""
+                [{"id":"start","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"effect.start","effect":"form","target":"actor"}],"ui":{"label":"Start"}},
+                 {"id":"end","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"effect.end","effect":"form","target":"actor"}],"ui":{"label":"End"}},
+                 {"id":"option","bindings":[{"id":"use","event":"roll.prepare","surface":"roll","mode":"option"}],
+                  "when":{"eq":[{"read":"event.profileId"},"effect.profile"]},
+                  "costs":[{"op":"resource.spend","pool":"actor.hope","amount":1}],
+                  "do":[{"op":"roll.contribute","from":{"read":"event.roll"},"as":"edited",
+                         "contribution":{"id":"option-bonus","kind":"flat","role":"damage","label":"Bonus","value":3}},
+                        {"op":"roll.publish","roll":{"read":"result.edited"}}],"ui":{"label":"Bonus"}},
+                 {"id":"reaction","bindings":[{"id":"auto","event":"roll.finished","surface":"roll","mode":"automatic"}],
+                  "do":[{"op":"track.mark","track":"actor.stress","amount":1}],"ui":{"label":"Reaction"}},
+                 {"id":"after","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button"}],
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"After"}}]"""));
+        var pack = AutomationHost.compile("test", Map.of("classes", classes.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet(), origin = AutomationHost.event("action.request", "actor", 0).put("sessionId", "session");
+        assertEquals(1, HOST.describe(pack, sheet, origin, "sheet", "self").path("profiles").size());
+        HOST.execute(pack, sheet, origin, request("start", 0, "f-steady", "start"), "self", new SplittableRandom(1));
+        String effectId = sheet.requiredAt("/automationState/effects/0/id").textValue();
+        JsonNode profile = HOST.describe(pack, sheet, origin, "sheet", "self").requiredAt("/profiles/1");
+        assertEquals("effect.profile", profile.required("id").textValue());
+        assertEquals(effectId, profile.required("effectInstanceId").textValue());
+        assertEquals("Claws", profile.required("label").textValue());
+        assertEquals("option", profile.requiredAt("/options/damage/0/ruleId").textValue());
+        assertTrue(HOST.describe(pack, sheet, origin, "sheet", "other").required("profiles").isEmpty());
+
+        ObjectNode damage = profileRequest("damage", 1, "f-steady", "effect.profile", "damage");
+        ((ObjectNode) damage.required("profileRoll")).put("effectInstanceId", effectId);
+        damage.withArray("selections").addObject().put("sourceInstanceId", "f-steady").put("ruleId", "option").put("bindingId", "use");
+        ObjectNode result = HOST.execute(pack, sheet, origin, damage, "self", "owner", new SplittableRandom(4));
+        assertEquals(effectId, result.requiredAt("/event/effectInstanceId").textValue());
+        assertEquals("physical", result.requiredAt("/event/check/damageType").textValue());
+        assertEquals(2, result.requiredAt("/event/roll/contributions/0/dice").size());
+        assertEquals(8, result.requiredAt("/event/roll/contributions/0/dice/0/sides").intValue());
+        assertEquals(result.requiredAt("/event/roll/contributions/0/total").intValue() + 5,
+                result.requiredAt("/event/check/total").intValue());
+        assertEquals(0, sheet.requiredAt("/hope/on").intValue());
+        assertEquals(2, sheet.requiredAt("/stress/on").intValue());
+        assertEquals(result, HOST.execute(pack, sheet, origin, damage, "self", "owner", null));
+        String resultId = result.requiredAt("/event/resultId").textValue();
+        assertEquals(1, HOST.describeResult(pack, sheet, resultId, "self", "owner", origin).required("actions").size());
+
+        HOST.execute(pack, sheet, origin, request("end", 2, "f-steady", "end"), "self", new SplittableRandom(1));
+        HOST.execute(pack, sheet, origin, request("restart", 3, "f-steady", "start"), "self", new SplittableRandom(1));
+        assertNotEquals(effectId, sheet.requiredAt("/automationState/effects/0/id").textValue());
+        assertThrows(RuleRuntime.Unavailable.class, () -> HOST.describeResult(pack, sheet, resultId, "self", "owner", origin));
+        ObjectNode stale = profileRequest("stale", 4, "f-steady", "effect.profile", "damage");
+        ((ObjectNode) stale.required("profileRoll")).put("effectInstanceId", effectId);
+        ObjectNode before = sheet.deepCopy();
+        assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, sheet, origin, stale, "self", StructuredRollTest.noRandom()));
+        assertEquals(before, sheet);
+        ((ObjectNode) stale.required("profileRoll")).put("effectInstanceId", sheet.requiredAt("/automationState/effects/0/id").textValue())
+                .put("sourceInstanceId", "f-rally");
+        assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, sheet, origin, stale, "self", StructuredRollTest.noRandom()));
+        assertEquals(before, sheet);
+    }
+
+    @Test
+    void endingEffectDuringRollDoesNotLeaveAResultOffer() throws Exception {
+        ObjectNode classes = fixture("rewrite/host-classes");
+        ObjectNode automation = (ObjectNode) classes.at("/entries/0/features/2/automation");
+        ObjectNode form = automation.putObject("effects").putObject("form").put("label", "Form");
+        form.set("profile", RuleJson.parse("""
+                {"label":"Claws","damage":{"sides":6,"type":"physical"}}"""));
+        automation.set("rules", RuleJson.parse("""
+                [{"id":"end","bindings":[{"id":"auto","event":"roll.prepare","surface":"roll","mode":"automatic"}],
+                  "do":[{"op":"effect.end","effect":"form","target":"actor"}],"ui":{"label":"End"}},
+                 {"id":"after","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button"}],
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"After"}}]"""));
+        var pack = AutomationHost.compile("test", Map.of("classes", classes.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet(), origin = AutomationHost.event("action.request", "actor", 0);
+        ObjectNode effect = HOST.projection().state(sheet).putArray("effects").addObject()
+                .put("id", "activation").put("effect", "classes:tester:features:steady#form").put("sourceInstanceId", "f-steady");
+        effect.set("profile", form.required("profile").deepCopy());
+        ObjectNode damage = profileRequest("damage", 0, "f-steady", "effect.profile", "damage");
+        ((ObjectNode) damage.required("profileRoll")).put("effectInstanceId", "activation");
+        ObjectNode result = HOST.execute(pack, sheet, origin, damage, "self", new SplittableRandom(2));
+        assertTrue(sheet.requiredAt("/automationState/effects").isEmpty());
+        assertFalse(result.required("event").has("resultId"));
+        assertFalse(result.has("resultActions"));
+        assertEquals(1, result.required("revision").intValue());
+    }
+
+    @Test
+    void effectAttackUsesFrozenFactsAndRejectsInvalidSavedProfilesBeforeRolling() throws Exception {
+        ObjectNode classes = fixture("rewrite/host-classes");
+        ObjectNode automation = (ObjectNode) classes.at("/entries/0/features/2/automation");
+        automation.putObject("effects").putObject("form").put("label", "Form").set("profile", RuleJson.parse("""
+                {"label":"Catalog claw","trait":"Finesse","range":"far","damage":{"sides":6}}"""));
+        var pack = AutomationHost.compile("test", Map.of("classes", classes.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet(), origin = AutomationHost.event("action.request", "actor", 0);
+        ObjectNode effect = HOST.projection().state(sheet).putArray("effects").addObject()
+                .put("id", "activation").put("effect", "classes:tester:features:steady#form").put("sourceInstanceId", "f-steady");
+        effect.set("profile", RuleJson.parse("""
+                {"label":"Frozen claw","trait":"Agility","range":"melee","damage":{"sides":8,"type":"magic"}}"""));
+        ObjectNode attack = profileRequest("attack", 0, "f-steady", "effect.profile", "attack");
+        ((ObjectNode) attack.required("profileRoll")).put("effectInstanceId", "activation");
+        JsonNode event = HOST.execute(pack, sheet, origin, attack, "self", new SplittableRandom(2)).required("event");
+        assertEquals("Frozen claw", event.required("label").textValue());
+        assertEquals("Agility", event.requiredAt("/check/trait").textValue());
+        assertEquals("melee", event.requiredAt("/check/range").textValue());
+        assertEquals(event.requiredAt("/check/hopeDie").intValue() + event.requiredAt("/check/fearDie").intValue() + 1,
+                event.requiredAt("/check/total").intValue());
+
+        ObjectNode stored = (ObjectNode) sheet.requiredAt("/automationState/effects/0/profile");
+        stored.withObject("/damage").put("sides", 1);
+        ObjectNode malformed = profileRequest("bad", 1, "f-steady", "effect.profile", "damage");
+        ((ObjectNode) malformed.required("profileRoll")).put("effectInstanceId", "activation");
+        ObjectNode before = sheet.deepCopy();
+        assertThrows(IllegalArgumentException.class,
+                () -> HOST.execute(pack, sheet, origin, malformed, "self", StructuredRollTest.noRandom()));
+        assertThrows(IllegalArgumentException.class, () -> HOST.describe(pack, sheet, origin, "sheet", "self"));
+        assertEquals(before, sheet);
+    }
+
     private static ObjectNode profileRequest(String id, long revision, String instance, String profile, String kind) {
         ObjectNode request = RuleJson.JSON.createObjectNode().put("requestId", id).put("expectedRevision", revision);
         request.putArray("selections");

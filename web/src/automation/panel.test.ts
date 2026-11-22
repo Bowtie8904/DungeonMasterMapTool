@@ -191,6 +191,22 @@ describe('automation panel', () => {
     expect(fetchActions).toHaveBeenCalledTimes(2);
   });
 
+  it('submits the stored effect activation with the profile intent', async () => {
+    const fetchMock = vi.fn(async () => Response.json({ event: { check: { total: 9 } }, actions: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+    const panel = fake(automationPanel('a1', 'sheet', 'Actions', async () => ({ revision: 5, actions: [], profiles: [
+      { id: 'effect.profile', effectInstanceId: 'activation-1', sourceInstanceId: 's1',
+        label: 'Claws', sourceName: 'Form', damage: { sides: 8 } },
+    ] })));
+    await settle();
+    panel.all('button')[1].click();
+    await settle();
+    const [, options] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(options.body))).toEqual({ request: { requestId: expect.any(String), expectedRevision: 5,
+      selections: [], profileRoll: { sourceInstanceId: 's1', profileId: 'effect.profile', kind: 'damage',
+        effectInstanceId: 'activation-1' } } });
+  });
+
   it('loads a saved target offer after the roll and sends its version with the result action', async () => {
     const calls: Array<{ url: string; body?: string }> = [];
     vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit) => {

@@ -22,6 +22,7 @@ import java.util.random.RandomGenerator;
 public final class AutomationHost {
     public static final int JOURNAL_LIMIT = 32;
     private static final Set<String> RELATIONS = Set.of("self", "other", "dm");
+    private static final String EFFECT_PROFILE = "effect.profile";
 
     /** Compiled automation keyed by fully qualified source ID. */
     public record Pack(String revision, Map<String, RuleCompiler.Program> programs) {
@@ -103,22 +104,49 @@ public final class AutomationHost {
             ArrayNode declared = program == null ? RuleJson.JSON.createArrayNode() : program.profiles();
             ArrayNode available = declared.deepCopy();
             if (equippedWeapon(copy, element)) available.insert(0, ProfileRoll.weaponProfile(element, declared));
-            for (JsonNode profile : available) {
-                ObjectNode item = profiles.addObject().put("sourceId", element.sourceId())
-                        .put("sourceInstanceId", element.instanceId()).put("sourceName", element.name());
-                item.setAll((ObjectNode) profile);
-                if (hasRollOptions) {
-                    ObjectNode options = item.putObject("options");
-                    for (String kind : profile.has("damage") ? List.of("attack", "damage") : List.of("attack")) {
-                        ObjectNode facts = event.deepCopy();
-                        ProfileRoll.facts(facts, element, profile, kind, actor, equippedWeapon(copy, element));
-                        options.set(kind, RuleDispatcher.describeRollOptions(candidates(pack, sources, state, actor, facts),
-                                audience -> allowed(audience, relation)));
-                    }
-                }
-            }
+            for (JsonNode profile : available)
+                describeProfile(profiles, pack, sources, state, actor, event, element, profile, null,
+                        equippedWeapon(copy, element), hasRollOptions, relation);
+        }
+        Map<String, SheetProjection.SourceElement> active = new HashMap<>();
+        sources.forEach(source -> active.put(source.instanceId(), source));
+        for (JsonNode effect : state.path("effects")) {
+            var source = active.get(effect.path("sourceInstanceId").textValue());
+            if (source == null) continue;
+            ObjectNode profile = effectProfile(pack, source, effect);
+            if (profile != null)
+                describeProfile(profiles, pack, sources, state, actor, event, source, profile,
+                        RuleJson.text(effect.get("id"), "/effects/id"), false, hasRollOptions, relation);
         }
         return result;
+    }
+
+    private void describeProfile(ArrayNode profiles, Pack pack, List<SheetProjection.SourceElement> sources,
+                                 ObjectNode state, ObjectNode actor, ObjectNode event, SheetProjection.SourceElement source,
+                                 JsonNode profile, String effectId, boolean weapon, boolean hasRollOptions, String relation) {
+        ObjectNode item = profiles.addObject().put("sourceId", source.sourceId())
+                .put("sourceInstanceId", source.instanceId()).put("sourceName", source.name());
+        item.setAll((ObjectNode) profile);
+        if (effectId != null) item.put("effectInstanceId", effectId);
+        if (!hasRollOptions) return;
+        ObjectNode options = item.putObject("options");
+        for (String kind : profile.has("damage") ? List.of("attack", "damage") : List.of("attack")) {
+            ObjectNode facts = event.deepCopy();
+            if (effectId != null) facts.put("effectInstanceId", effectId);
+            ProfileRoll.facts(facts, source, profile, kind, actor, weapon);
+            options.set(kind, RuleDispatcher.describeRollOptions(candidates(pack, sources, state, actor, facts),
+                    audience -> allowed(audience, relation)));
+        }
+    }
+
+    private static ObjectNode effectProfile(Pack pack, SheetProjection.SourceElement source, JsonNode effect) {
+        if (!effect.has("profile") || effect.path("derived").asBoolean()) return null;
+        String key = effect.path("effect").asText("");
+        String prefix = source.sourceId() + "#";
+        RuleCompiler.Program program = pack.programs().get(source.sourceId());
+        if (program == null || !key.startsWith(prefix) || !program.hasEffect(key.substring(prefix.length()))) return null;
+        RuleCompiler.validateProfile(effect.get("profile"), "/effects/profile");
+        return ((ObjectNode) effect.get("profile")).deepCopy().put("id", EFFECT_PROFILE);
     }
 
     /**
@@ -283,7 +311,7 @@ public final class AutomationHost {
     private ObjectNode profileRoll(Pack pack, ObjectNode working, ObjectNode state, ObjectNode origin,
                                    ObjectNode request, RandomGenerator random) {
         JsonNode intent = request.get("profileRoll");
-        RuleJson.fields(intent, "/request/profileRoll", "sourceInstanceId", "profileId", "kind");
+        RuleJson.fields(intent, "/request/profileRoll", "sourceInstanceId", "profileId", "kind", "effectInstanceId");
         String instance = RuleJson.id(intent.get("sourceInstanceId"), "/request/profileRoll/sourceInstanceId");
         String profileId = RuleJson.id(intent.get("profileId"), "/request/profileRoll/profileId");
         String kind = RuleJson.text(intent.get("kind"), "/request/profileRoll/kind");
@@ -292,20 +320,31 @@ public final class AutomationHost {
                 .orElseThrow(() -> new RuleRuntime.Unavailable("source", "This source is no longer active."));
         var program = pack.programs().get(source.sourceId());
         JsonNode profile = null;
+        String effectId = intent.has("effectInstanceId")
+                ? RuleJson.text(intent.get("effectInstanceId"), "/request/profileRoll/effectInstanceId") : null;
         ArrayNode declared = program == null ? RuleJson.JSON.createArrayNode() : program.profiles();
-        if (equippedWeapon(working, source)) {
-            JsonNode base = ProfileRoll.weaponProfile(source, declared);
-            if (profileId.equals(base.path("id").asText())) profile = base;
+        if (effectId != null) {
+            if (EFFECT_PROFILE.equals(profileId))
+                for (JsonNode effect : state.path("effects"))
+                    if (effectId.equals(effect.path("id").textValue())
+                            && instance.equals(effect.path("sourceInstanceId").textValue()))
+                        profile = effectProfile(pack, source, effect);
+        } else {
+            if (equippedWeapon(working, source)) {
+                JsonNode base = ProfileRoll.weaponProfile(source, declared);
+                if (profileId.equals(base.path("id").asText())) profile = base;
+            }
+            for (JsonNode candidate : declared)
+                if (profileId.equals(candidate.path("id").asText())) profile = candidate;
         }
-        for (JsonNode candidate : declared)
-            if (profileId.equals(candidate.path("id").asText())) profile = candidate;
         if (profile == null) throw new RuleRuntime.Unavailable("profile", "This profile is no longer available.");
 
         long revision = state.path("revision").longValue();
         ObjectNode event = origin.deepCopy();
+        if (effectId != null) event.put("effectInstanceId", effectId);
         ActorProjection projected = projectActor(pack, working, state, event, sources, true);
         ObjectNode actor = projected.actor();
-        ProfileRoll.prepare(event, source, profile, kind, actor, equippedWeapon(working, source),
+        ProfileRoll.prepare(event, source, profile, kind, actor, effectId == null && equippedWeapon(working, source),
                 projected.rollModifiers(), random);
         var candidates = candidates(pack, sources, state, actor, event);
         var intents = selections(request, candidates, revision, "self", true);
@@ -400,6 +439,13 @@ public final class AutomationHost {
         if (sources.stream().noneMatch(source -> source.instanceId().equals(event.path("sourceInstanceId").textValue())))
             return; // Consuming the roll's source cannot leave an actionable result behind.
         ObjectNode state = projection.state(sheet);
+        if (event.has("effectInstanceId")) {
+            boolean active = false;
+            for (JsonNode effect : state.path("effects"))
+                if (effect.path("id").equals(event.path("effectInstanceId"))
+                        && effect.path("sourceInstanceId").equals(event.path("sourceInstanceId"))) active = true;
+            if (!active) return;
+        }
         ArrayNode matches = resultButtons(pack, sources, state, actor(pack, sheet, state, event, sources), event, null, null);
         if (used != null) {
             Set<ResultWindows.Button> spent = new java.util.HashSet<>();

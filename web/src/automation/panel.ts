@@ -7,6 +7,7 @@ export interface DescribedActions {
   revision: number;
   actions: RuleDescriptor[];
   profiles?: Array<{ id: string; label: string; sourceInstanceId: string; sourceName: string; damage?: object;
+    effectInstanceId?: string;
     options?: Partial<Record<'attack' | 'damage', RuleDescriptor[]>> }>;
 }
 
@@ -206,7 +207,8 @@ export function automationPanel(actorId: string, surface = 'sheet', title = 'Act
               let result: unknown;
               try {
                 result = await postIntent(actorId, { requestId, expectedRevision, selections,
-                  profileRoll: { sourceInstanceId: profile.sourceInstanceId, profileId: profile.id, kind } });
+                  profileRoll: { sourceInstanceId: profile.sourceInstanceId, profileId: profile.id, kind,
+                    ...(profile.effectInstanceId === undefined ? {} : { effectInstanceId: profile.effectInstanceId }) } });
               } catch (failure) {
                 if (!(failure instanceof ApiError) || failure.status !== 409) throw failure;
                 void load(failure.message);
