@@ -247,6 +247,10 @@ public final class RuleCompiler {
     }
 
     public static Program compile(String sourceId, JsonNode automation, JsonNode recipeDocument) {
+        return compileWithRecipes(sourceId, automation, recipes(recipeDocument));
+    }
+
+    static Program compileWithRecipes(String sourceId, JsonNode automation, Map<String, ObjectNode> recipes) {
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(sourceId), "/sourceId");
         RuleJson.checkTree(automation, "/automation", 0, new int[]{0});
         RuleJson.fields(automation, "/automation", "state", "limits", "pools", "effects", "modifiers", "profiles", "rules", "attachment", "grants", "limitOverrides");
@@ -295,7 +299,6 @@ public final class RuleCompiler {
             RuleJson.integer(field.getValue().get("max"), path + "/max", 1, 1000);
             resetEvents(field.getValue().path("resetOn"), path + "/resetOn");
         });
-        Map<String, ObjectNode> recipes = recipes(recipeDocument);
         ObjectNode effects = automation.has("effects") ? RuleJson.object(automation.get("effects"), "/automation/effects") : RuleJson.JSON.createObjectNode();
         if (effects.size() > 64) throw RuleJson.error("/automation/effects", "Expected at most 64 effects.");
         effects.fields().forEachRemaining(field -> validateEffect(field.getKey(), field.getValue(), state, effects));
@@ -524,7 +527,7 @@ public final class RuleCompiler {
         return (ArrayNode) list.deepCopy();
     }
 
-    private static Map<String, ObjectNode> recipes(JsonNode document) {
+    static Map<String, ObjectNode> recipes(JsonNode document) {
         RuleJson.checkTree(document, "/recipes", 0, new int[]{0}, RuleJson.MAX_DOCUMENT_NODES);
         RuleJson.fields(document, "/recipes", "format", "version", "recipes");
         if (!"dmmap-daggerheart-rules".equals(document.path("format").asText())
@@ -539,16 +542,62 @@ public final class RuleCompiler {
             if (recipes.put(id, (ObjectNode) recipe) != null) throw RuleJson.error("/recipes/id", "Duplicate recipe ID.");
             RuleJson.object(recipe.path("args"), "/recipes/" + id + "/args");
             RuleJson.object(recipe.path("ui"), "/recipes/" + id + "/ui");
+            validateRecipeArguments(recipe.path("args"), "/recipes/" + id);
+            mergedUi(recipe.path("ui"), RuleJson.JSON.createObjectNode(), "/recipes/" + id);
             if (!recipe.path("rules").isArray() || recipe.path("rules").isEmpty() || recipe.path("rules").size() > 64)
                 throw RuleJson.error("/recipes/" + id + "/rules", "Expected 1-64 recipe rules.");
             Set<String> ids = new HashSet<>();
-            for (JsonNode rule : recipe.path("rules")) {
+            for (int i = 0; i < recipe.path("rules").size(); i++) {
+                JsonNode rule = recipe.path("rules").get(i);
                 if (rule.has("useRecipe")) throw RuleJson.error("/recipes/" + id, "Nested recipes are not supported.");
                 if (!ids.add(RuleJson.id(rule.path("id"), "/recipes/" + id + "/rules/id")))
                     throw RuleJson.error("/recipes/" + id, "Duplicate recipe rule ID.");
+                validateRecipeReferences(rule, recipe.path("args"), recipe.path("ui"), "/recipes/" + id + "/rules/" + i);
             }
         }
         return recipes;
+    }
+
+    private static void validateRecipeArguments(JsonNode specs, String path) {
+        ObjectNode examples = RuleJson.JSON.createObjectNode();
+        specs.fields().forEachRemaining(field -> {
+            String at = path + "/args/" + field.getKey();
+            slot(field.getKey(), at);
+            JsonNode spec = field.getValue();
+            RuleJson.fields(spec, at, "type", "min", "max", "default");
+            String type = RuleJson.text(spec.get("type"), at + "/type");
+            switch (type) {
+                case "integer" -> {
+                    int min = spec.has("min") ? RuleJson.integer(spec.get("min"), at + "/min", -1_000_000, 1_000_000) : -1_000_000;
+                    int max = spec.has("max") ? RuleJson.integer(spec.get("max"), at + "/max", -1_000_000, 1_000_000) : 1_000_000;
+                    if (min > max) throw RuleJson.error(at, "Minimum exceeds maximum.");
+                    examples.put(field.getKey(), min);
+                }
+                case "string" -> examples.put(field.getKey(), "example");
+                case "costs" -> examples.putArray(field.getKey());
+                default -> throw RuleJson.error(at + "/type", "Unknown recipe argument type.");
+            }
+            if (spec.has("default")) examples.set(field.getKey(), spec.get("default"));
+        });
+        arguments(specs, examples, path);
+    }
+
+    private static void validateRecipeReferences(JsonNode node, JsonNode args, JsonNode ui, String path) {
+        if (node.isObject()) {
+            if (node.has("$arg") || node.has("$ui")) {
+                if (node.size() != 1) throw RuleJson.error(path, "A recipe substitution must be a single field.");
+                boolean argument = node.has("$arg");
+                String name = RuleJson.text(node.get(argument ? "$arg" : "$ui"), path);
+                if (!(argument ? args : ui).has(name))
+                    throw RuleJson.error(path, "Unknown recipe substitution: " + name);
+                return;
+            }
+            node.fields().forEachRemaining(field ->
+                    validateRecipeReferences(field.getValue(), args, ui, path + "/" + field.getKey()));
+        } else if (node.isArray()) {
+            for (int i = 0; i < node.size(); i++)
+                validateRecipeReferences(node.get(i), args, ui, path + "/" + i);
+        }
     }
 
     private static ObjectNode arguments(JsonNode specs, JsonNode supplied, String path) {

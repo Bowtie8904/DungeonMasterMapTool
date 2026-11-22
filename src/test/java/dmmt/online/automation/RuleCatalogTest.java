@@ -20,6 +20,45 @@ class RuleCatalogTest {
     }
 
     @Test
+    void unusedRecipesAreCheckedEvenWhenTheCatalogHasNoAutomation() throws Exception {
+        String catalog = """
+                {"format":"dmmap-daggerheart","version":2,"category":"items","entries":[]}
+                """;
+        ObjectNode recipes = fixture("rewrite/recipes");
+        assertTrue(RuleCatalog.compile(catalog, recipes.toString()).isEmpty());
+
+        ObjectNode unknownArgument = recipes.deepCopy();
+        ((ObjectNode) unknownArgument.at("/recipes/0/rules/0/costs")).put("$arg", "missing");
+        var error = assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, unknownArgument.toString()));
+        assertTrue(error.getMessage().contains("/recipes/core:repeat-saved-weapon-damage/rules/0/costs"), error.getMessage());
+        assertTrue(error.getMessage().contains("missing"), error.getMessage());
+
+        ObjectNode unknownText = recipes.deepCopy();
+        ((ObjectNode) unknownText.at("/recipes/0/rules/0/ui/label")).put("$ui", "missing");
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, unknownText.toString()));
+        ObjectNode malformedSubstitution = recipes.deepCopy();
+        ((ObjectNode) malformedSubstitution.at("/recipes/0/rules/0/costs")).put("extra", true);
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, malformedSubstitution.toString()));
+
+        ObjectNode invalidRange = recipes.deepCopy();
+        ((ObjectNode) invalidRange.at("/recipes/0/args/removeEachTime")).put("min", 5).put("max", 2);
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, invalidRange.toString()));
+        ObjectNode invalidDefault = recipes.deepCopy();
+        ((ObjectNode) invalidDefault.at("/recipes/0/args/removeEachTime")).put("default", 100);
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, invalidDefault.toString()));
+        ObjectNode invalidType = recipes.deepCopy();
+        ((ObjectNode) invalidType.at("/recipes/0/args/startCosts")).put("type", "mystery");
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, invalidType.toString()));
+        ObjectNode invalidCost = recipes.deepCopy();
+        ((ObjectNode) invalidCost.at("/recipes/0/args/startCosts")).putArray("default")
+                .addObject().put("op", "countdown.start").put("label", "Not a cost").put("value", 1);
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, invalidCost.toString()));
+        ObjectNode invalidText = recipes.deepCopy();
+        ((ObjectNode) invalidText.at("/recipes/0/ui")).put("start", "{invalid");
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, invalidText.toString()));
+    }
+
+    @Test
     void compiledProgramsIndexUserBindingsByEventAndSurface() throws Exception {
         var source = RuleCatalog.compile(fixture("rewrite/host-classes").toString(), fixture("rewrite/recipes").toString())
                 .stream().filter(item -> item.id().equals("classes:tester:features:rally")).findFirst().orElseThrow();

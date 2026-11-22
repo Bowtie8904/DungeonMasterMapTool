@@ -41,6 +41,8 @@ coordinated replacement. A generic sheet *Automation* panel appears only once co
 one-time `LegacyCatalogConverter` writes converted copies and a coverage report to a separate staging directory; the current dry run converts 1,011 of 1,087 blocks (93.0%), including attachable items, reloading weapons, channel/aura features (derived effects and exclusive effect groups), rest allowances, passives and move modifiers, legacy target modes, downtime-timed actions (shown in a generic Downtime panel on the sheet), sent rolls, conditional roll triggers, fixed-trait/highest-trait/traitless/spellcast-trait action rolls and direct or triggered fixed, proficiency-scaled or spellcast-scaled damage rolls. Converted applicability checks treat missing and explicitly null event facts alike. With a format-2 pack, the sheet endpoint supports single-target and whole-party actions: the host checks the eligible characters again before it commits the cost, recipient sheets and reports together. If the party changed, refresh the action; nothing is spent. The shipped catalogs still use format 1.
 See the [rewrite design and implementation status](docs/ONLINE_AUTOMATION_PLAN.md#implementation-status).
 
+Candidate catalog validation checks recipe argument declarations, defaults, UI templates and substitutions even when no entry uses them. Full semantic validation of unused rule bodies remains outstanding.
+
 In a format-2 pack, an owner can roll a declared attack profile or its damage. The host resolves
 the profile from the saved sheet and commits its edited dice, reactions and costs together. A blocked
 profile roll spends nothing, and a retry does not roll again. Typed chat dice stay separate.

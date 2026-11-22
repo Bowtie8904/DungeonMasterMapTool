@@ -24,7 +24,7 @@ public final class RuleCatalog {
 
     public static List<Source> compile(String catalogJson, String recipesJson) throws IOException {
         ObjectNode catalog = RuleCompiler.parseDocument(catalogJson, "dmmap-daggerheart");
-        ObjectNode recipes = RuleCompiler.parseDocument(recipesJson, "dmmap-daggerheart-rules");
+        Map<String, ObjectNode> recipes = RuleCompiler.recipes(RuleCompiler.parseDocument(recipesJson, "dmmap-daggerheart-rules"));
         RuleJson.fields(catalog, "/", "format", "version", "category", "label", "entries");
         String category = RuleJson.text(catalog.path("category"), "/category");
         if (!CATEGORIES.contains(category)) throw RuleJson.error("/category", "Unknown catalog category.");
@@ -44,11 +44,11 @@ public final class RuleCatalog {
         return List.copyOf(result);
     }
 
-    private static void collect(JsonNode node, String id, ObjectNode recipes, List<Source> sources, String path) {
+    private static void collect(JsonNode node, String id, Map<String, ObjectNode> recipes, List<Source> sources, String path) {
         RuleJson.object(node, path);
         if (node.has("automation")) {
             String name = RuleJson.text(node.path("name"), path + "/name");
-            try { sources.add(new Source(id, name, RuleCompiler.compile(id, node.get("automation"), recipes))); }
+            try { sources.add(new Source(id, name, RuleCompiler.compileWithRecipes(id, node.get("automation"), recipes))); }
             catch (IllegalArgumentException ex) { throw RuleJson.error(path + "/automation (" + id + ")", ex.getMessage()); }
         }
         var fields = node.fields();
