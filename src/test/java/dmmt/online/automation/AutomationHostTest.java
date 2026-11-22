@@ -69,6 +69,26 @@ class AutomationHostTest {
     }
 
     @Test
+    void sheetIntentsCannotExecuteBindingsOnOtherSurfaces() throws Exception {
+        ObjectNode classes = fixture("rewrite/host-classes");
+        var bindings = (com.fasterxml.jackson.databind.node.ArrayNode) classes.at("/entries/0/features/0/automation/rules/0/bindings");
+        bindings.add(RuleJson.parse("""
+                {"id":"chat","event":"action.request","surface":"chat","mode":"button","audience":"party"}"""));
+        bindings.add(RuleJson.parse("""
+                {"id":"roll-option","event":"action.request","surface":"roll","mode":"option","audience":"party"}"""));
+        var pack = AutomationHost.compile("test", Map.of("classes", classes.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet(), original = sheet.deepCopy();
+        for (String binding : List.of("chat", "roll-option")) {
+            ObjectNode forged = request(binding, 0, "f-rally", "rally");
+            ((ObjectNode) forged.requiredAt("/selections/0")).put("bindingId", binding);
+            assertThrows(IllegalArgumentException.class, () -> HOST.execute(pack, sheet, action(), forged, "self", null));
+            assertEquals(original, sheet);
+        }
+        HOST.execute(pack, sheet, action(), request("sheet", 0, "f-rally", "rally"), "self", null);
+        assertEquals(4, sheet.requiredAt("/hope/on").intValue());
+    }
+
+    @Test
     void profileOffersMatchEquippedDamageFactsAndFilterByBindingAndPrice() throws Exception {
         var classes = fixture("rewrite/host-classes");
         var rules = (com.fasterxml.jackson.databind.node.ArrayNode) classes.at("/entries/0/features/2/automation/rules");

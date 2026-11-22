@@ -1573,6 +1573,32 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void automationSheetRequestsRejectBindingsFromOtherSurfacesWithoutCommitting() throws Exception {
+        automationCompendium();
+        Path catalogPath = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(catalogPath.toFile());
+        ((ArrayNode) catalog.at("/entries/0/features/0/automation/rules/0/bindings")).add(
+                MAPPER.readTree("""
+                        {"id":"chat","event":"action.request","surface":"chat","mode":"button","audience":"party"}"""));
+        java.nio.file.Files.writeString(catalogPath, catalog.toString());
+        campaign.getActors().add(Campaign.Actor.builder().id("auto").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "auto", """
+                {"name":"Ada","level":2,"hope":{"slots":6,"on":1},
+                 "features":[{"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"f-rally"}]}""");
+        String cookie = cookie(), before = store.loadSheet(campaign.getId(), "auto");
+        int history = store.historyTail(campaign.getId(), 100).size();
+        String request = """
+                {"request":{"requestId":"surface","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"f-rally","ruleId":"rally","bindingId":"chat"}]}}""";
+        var denied = automationHttp(cookie, "auto", request);
+        assertEquals(400, denied.statusCode(), denied.body());
+        assertTrue(denied.body().contains("action surface"));
+        assertEquals(before, store.loadSheet(campaign.getId(), "auto"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        assertEquals(200, automationHttp(cookie, "auto", request.replace("\"chat\"", "\"sheet\"")).statusCode());
+    }
+
+    @Test
     void automationEndpointsDescribeExecuteJournalAndRejectStaleOrForeignUse() throws Exception {
         automationCompendium();
         campaign.getActors().add(Campaign.Actor.builder().id("auto").name("Ada").ownerId(playerId()).build());

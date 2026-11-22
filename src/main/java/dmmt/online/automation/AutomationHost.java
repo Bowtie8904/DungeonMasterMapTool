@@ -208,7 +208,7 @@ public final class AutomationHost {
             response = targeted(pack, working, state, event, request, relation, random, party);
         } else {
             var candidates = candidates(pack, working, event);
-            var intents = selections(request, candidates, revision, relation, false);
+            var intents = selections(request, candidates, revision, relation, "sheet", false);
             response = applyEvent(pack, working, state, event, candidates, intents, random);
         }
         pruneResultWindows(pack, working, event);
@@ -244,7 +244,7 @@ public final class AutomationHost {
     private TargetAction targetAction(Pack pack, ObjectNode sheet, ObjectNode event, ObjectNode request,
                                       String relation, PartyTargets party) {
         var candidates = candidates(pack, sheet, event);
-        var intent = selections(request, candidates, revision(sheet), relation, false).getFirst();
+        var intent = selections(request, candidates, revision(sheet), relation, "sheet", false).getFirst();
         var candidate = candidates.stream().filter(c -> c.instanceId().equals(intent.sourceInstanceId())).findFirst().orElseThrow();
         ObjectNode rule = candidate.program().rule(intent.ruleId());
         JsonNode binding = RuleDispatcher.binding(rule, intent.bindingId());
@@ -277,7 +277,7 @@ public final class AutomationHost {
     }
 
     private static List<RuleRuntime.Intent> selections(ObjectNode request, List<RuleDispatcher.Candidate> candidates,
-                                                        long revision, String relation, boolean rollOptions) {
+                                                        long revision, String relation, String surface, boolean rollOptions) {
         Map<String, RuleDispatcher.Candidate> byInstance = new HashMap<>();
         for (RuleDispatcher.Candidate candidate : candidates)
             byInstance.put(candidate.context().path("source").path("instanceId").asText(), candidate);
@@ -297,6 +297,8 @@ public final class AutomationHost {
             for (JsonNode item : candidate.program().rule(ruleId).path("bindings"))
                 if (bindingId.equals(item.path("id").asText())) binding = item;
             if (binding == null) throw RuleJson.error(at + "/bindingId", "Unknown binding.");
+            if (surface != null && !surface.equals(binding.path("surface").asText()))
+                throw RuleJson.error(at + "/bindingId", "This binding is not available on this action surface.");
             if (rollOptions && (!"option".equals(binding.path("mode").asText()) || !"roll".equals(binding.path("surface").asText())))
                 throw RuleJson.error(at + "/bindingId", "Only roll options may accompany a profile roll.");
             if (!allowed(binding.path("audience").asText("self"), relation))
@@ -348,7 +350,7 @@ public final class AutomationHost {
         ProfileRoll.prepare(event, source, profile, kind, actor, effectId == null && equippedWeapon(working, source),
                 projected.rollModifiers(), random);
         var candidates = candidates(pack, sources, state, actor, event);
-        var intents = selections(request, candidates, revision, "self", true);
+        var intents = selections(request, candidates, revision, "self", "roll", true);
         ObjectNode result = applyEvent(pack, working, state, event, candidates, intents, random);
         ObjectNode finished = (ObjectNode) result.get("event");
         if (finished.path("blocked").size() > 0)
@@ -384,7 +386,7 @@ public final class AutomationHost {
         if (program == null) throw ResultWindows.stale();
         var context = context(state, element, actor, event);
         var intent = selections(request, List.of(new RuleDispatcher.Candidate(program, context)), state.required("revision").longValue(),
-                "self", false).getFirst();
+                "self", null, false).getFirst();
         JsonNode binding = RuleDispatcher.binding(program.rule(intent.ruleId()), intent.bindingId());
         String claimGroup = binding.path("claimGroup").textValue();
         ResultWindows.take(window, new ResultWindows.Button(instance, intent.ruleId(), intent.bindingId(), intent.eachId()), claimGroup);
