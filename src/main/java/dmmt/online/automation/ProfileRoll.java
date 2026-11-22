@@ -12,6 +12,8 @@ import java.util.random.RandomGenerator;
 final class ProfileRoll {
     private ProfileRoll() {}
 
+    record Modifier(JsonNode value, String sourceId, String label, boolean weapon) {}
+
     static ObjectNode event(String type, String actorId, int fear) {
         ObjectNode event = RuleJson.JSON.createObjectNode().put("type", type).put("actorId", actorId);
         event.putObject("table").put("fear", fear);
@@ -53,7 +55,7 @@ final class ProfileRoll {
     }
 
     static void prepare(ObjectNode event, SheetProjection.SourceElement source, JsonNode profile, String kind,
-                        ObjectNode actor, boolean equippedWeapon, RandomGenerator random) {
+                        ObjectNode actor, boolean equippedWeapon, List<Modifier> modifiers, RandomGenerator random) {
         facts(event, source, profile, kind, actor, equippedWeapon);
         JsonNode check = event.path("check"), stats = actor.path("stats"), damage = profile.path("damage");
         ObjectNode plan = RuleJson.JSON.createObjectNode().put("id", java.util.UUID.randomUUID().toString());
@@ -76,8 +78,58 @@ final class ProfileRoll {
                     .put("role", "damage").put("sourceId", source.sourceId()).put("label", profile.path("label").asText())
                     .put("value", damage.path("flat").intValue());
         }
+        for (String stat : "attack".equals(kind) ? List.of("roll.action", "roll.attack") : List.of("roll.damage"))
+            addModifiers(parts, modifiers, stat, source.instanceId(), kind);
         event.set("roll", StructuredRoll.resolve(plan, RuleJson.JSON.createObjectNode(), random));
         updateCheck(event);
+    }
+
+    private static void addModifiers(ArrayNode parts, List<Modifier> modifiers, String stat, String sourceInstanceId,
+                                     String kind) {
+        Modifier set = null, floor = null, ceiling = null;
+        double value = 0;
+        for (Modifier modifier : modifiers) {
+            JsonNode item = modifier.value();
+            if (!stat.equals(item.path("stat").asText())
+                    || modifier.weapon() && !sourceInstanceId.equals(modifier.sourceId())) continue;
+            double amount = RuleExpression.number(item.get("value"), "/modifiers/value");
+            switch (item.path("op").asText("add")) {
+                case "add" -> {
+                    value += amount;
+                    addModifier(parts, modifier, kind, amount);
+                }
+                case "set" -> set = modifier;
+                case "atLeast" -> {
+                    if (floor == null || amount > floor.value().path("value").asDouble()) floor = modifier;
+                }
+                case "atMost" -> {
+                    if (ceiling == null || amount < ceiling.value().path("value").asDouble()) ceiling = modifier;
+                }
+                default -> throw RuleJson.error("/modifiers/op", "Unknown modifier operation.");
+            }
+        }
+        if (set != null) {
+            double amount = set.value().path("value").asDouble();
+            value += amount;
+            addModifier(parts, set, kind, amount);
+        }
+        if (floor != null) {
+            double adjusted = Math.max(value, floor.value().path("value").asDouble());
+            addModifier(parts, floor, kind, adjusted - value);
+            value = adjusted;
+        }
+        if (ceiling != null) {
+            double adjusted = Math.min(value, ceiling.value().path("value").asDouble());
+            addModifier(parts, ceiling, kind, adjusted - value);
+        }
+    }
+
+    private static void addModifier(ArrayNode parts, Modifier modifier, String kind, double value) {
+        if (value == 0) return;
+        parts.addObject().put("id", "modifier." + parts.size()).put("kind", "flat")
+                .put("role", "damage".equals(kind) ? "damage" : "modifier")
+                .put("sourceId", modifier.sourceId()).put("label", modifier.label())
+                .set("value", RuleExpression.numeric(value, "/modifiers/value"));
     }
 
     static void updateCheck(ObjectNode event) {

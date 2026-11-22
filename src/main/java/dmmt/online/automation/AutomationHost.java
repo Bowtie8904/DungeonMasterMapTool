@@ -296,8 +296,10 @@ public final class AutomationHost {
 
         long revision = state.path("revision").longValue();
         ObjectNode event = origin.deepCopy();
-        ObjectNode actor = actor(pack, working, state, event, sources);
-        ProfileRoll.prepare(event, source, profile, kind, actor, equippedWeapon(working, source), random);
+        ActorProjection projected = projectActor(pack, working, state, event, sources, true);
+        ObjectNode actor = projected.actor();
+        ProfileRoll.prepare(event, source, profile, kind, actor, equippedWeapon(working, source),
+                projected.rollModifiers(), random);
         var candidates = candidates(pack, sources, state, actor, event);
         var intents = selections(request, candidates, revision, "self", true);
         ObjectNode result = applyEvent(pack, working, state, event, candidates, intents, random);
@@ -614,11 +616,19 @@ public final class AutomationHost {
 
     private ObjectNode actor(Pack pack, ObjectNode sheet, ObjectNode state, ObjectNode event,
                              List<SheetProjection.SourceElement> sources) {
+        return projectActor(pack, sheet, state, event, sources, false).actor();
+    }
+
+    private record ActorProjection(ObjectNode actor, List<ProfileRoll.Modifier> rollModifiers) {}
+
+    private ActorProjection projectActor(Pack pack, ObjectNode sheet, ObjectNode state, ObjectNode event,
+                                         List<SheetProjection.SourceElement> sources, boolean collectRollModifiers) {
         ObjectNode actor = projection.actor(sheet);
         if (event.hasNonNull("actorId")) actor.set("id", event.get("actorId"));
         ObjectNode base = actor.deepCopy();
         base.set("stats", projection.stats(actor, List.of()));
         List<JsonNode> modifiers = new ArrayList<>();
+        List<ProfileRoll.Modifier> rollModifiers = new ArrayList<>();
         ObjectNode limitOverrides = RuleJson.JSON.createObjectNode();
         ArrayNode derived = RuleJson.JSON.createArrayNode();
         for (SheetProjection.SourceElement element : sources) {
@@ -628,17 +638,32 @@ public final class AutomationHost {
                 String key = override.path("feature").asText() + ":" + override.path("limit").asText();
                 limitOverrides.put(key, Math.max(limitOverrides.path(key).asInt(), override.path("max").asInt()));
             }
-            if (!program.modifiers().isEmpty()) RuleEffects.passives(program, context(state, element, base, event)).forEach(modifiers::add);
+            if (!program.modifiers().isEmpty()) {
+                for (JsonNode modifier : RuleEffects.passives(program, context(state, element, base, event))) {
+                    modifiers.add(modifier);
+                    if (collectRollModifiers && modifier.path("stat").asText().startsWith("roll."))
+                        rollModifiers.add(new ProfileRoll.Modifier(modifier, element.instanceId(),
+                                modifier.path("label").asText(element.name()), equippedWeapon(sheet, element)));
+                }
+            }
             derived.addAll(RuleEffects.derived(program, context(state, element, base, event)));
         }
         if (!derived.isEmpty()) {
             ArrayNode effects = actor.path("effects").isArray() ? (ArrayNode) actor.get("effects") : actor.putArray("effects");
             effects.addAll(derived);
         }
-        if (actor.path("effects").isArray()) RuleEffects.modifiers(actor.get("effects")).forEach(modifiers::add);
+        if (actor.path("effects").isArray()) {
+            RuleEffects.modifiers(actor.get("effects")).forEach(modifiers::add);
+            if (collectRollModifiers) for (JsonNode effect : actor.get("effects"))
+                for (JsonNode modifier : effect.path("modifiers"))
+                    if (modifier.path("stat").asText().startsWith("roll."))
+                        rollModifiers.add(new ProfileRoll.Modifier(modifier,
+                                effect.path("sourceInstanceId").asText(effect.path("id").asText()),
+                                modifier.path("label").asText(effect.path("label").asText()), false));
+        }
         actor.set("stats", projection.stats(actor, modifiers));
         if (!limitOverrides.isEmpty()) actor.set("limitOverrides", limitOverrides);
-        return actor;
+        return new ActorProjection(actor, rollModifiers);
     }
 
     /** The actor without derived effect instances, which are recomputed on every projection and never stored. */

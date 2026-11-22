@@ -15,7 +15,11 @@ Start with the [Deathrun and homebrew example](#example-2-deathrun-and-a-mechani
 options. The host determines contributions, traits, thresholds and Fear from its sheet, catalog and campaign.
 It runs prepare edits and automatic finished reactions in the same request. A blocked prepare discards the
 transaction. Roll history stores the final structured event; retrying returns the journaled response without
-publishing or spending again. This covers declared source profiles, not every feature action that rolls dice,
+publishing or spending again. Profile attacks include action and attack modifiers, and profile damage includes
+damage modifiers; eligible passive and active-effect modifiers become labelled, source-identified contributions.
+An equipped weapon's passive roll modifiers apply only to its own profile, while effect modifiers apply to the
+holder. `set`, `add` and bounds are combined per statistic using the derived-stat ordering. Trait bonuses
+are already included in the projected trait total. This covers declared source profiles, not every feature action that rolls dice,
 effect-carried profiles, damage application or interactive post-roll claims.
 
 A player chooses `roll.prepare` options before seeing the new dice. Their availability, inputs, prices and labels may use saved dice and known roll facts (`event.check.duality` identifies a planned Hope/Fear roll), but not the new faces or result. The compiler directs such choices to a `roll.finished` action instead. The selected option's `do` steps may still edit the sampled dice.

@@ -110,6 +110,78 @@ class AutomationHostTest {
     }
 
     @Test
+    void profileRollsApplyApplicableModifiersWithProvenanceAndRetryOnce() throws Exception {
+        var classes = fixture("rewrite/host-classes");
+        ObjectNode otherWeapon = (ObjectNode) classes.at("/entries/0/features/0/automation");
+        otherWeapon.set("modifiers", RuleJson.parse("""
+                [{"stat":"roll.attack","value":99},{"stat":"roll.damage","value":99}]"""));
+        ObjectNode feature = (ObjectNode) classes.at("/entries/0/features/1/automation");
+        feature.set("modifiers", RuleJson.parse("""
+                [{"stat":"roll.action","op":"set","value":2,"label":"Action base"},
+                 {"stat":"roll.action","value":3,"label":"Action bonus"},
+                 {"stat":"roll.action","op":"atLeast","value":8,"label":"Action floor"},
+                 {"stat":"roll.action","op":"atMost","value":7,"label":"Action ceiling"},
+                 {"stat":"roll.attack","value":-1,"label":"Conditional penalty",
+                  "when":{"gt":[{"read":"actor.hope.value"},0]}},
+                 {"stat":"roll.damage","value":2,"label":"Damage bonus"},
+                 {"stat":"trait.Finesse","value":2}]"""));
+        ObjectNode weapon = (ObjectNode) classes.at("/entries/0/features/2/automation");
+        weapon.set("modifiers", RuleJson.parse("""
+                [{"stat":"roll.attack","value":5,"label":"Weapon bonus"},
+                 {"stat":"roll.damage","value":-1,"label":"Weapon penalty"}]"""));
+        weapon.withArray("rules").add(RuleJson.parse("""
+                {"id":"edge","bindings":[{"id":"offer","event":"roll.prepare","surface":"roll","mode":"option"}],
+                 "costs":[{"op":"resource.spend","pool":"actor.hope","amount":1}],
+                 "do":[{"op":"roll.contribute","from":{"read":"event.roll"},
+                        "contribution":{"id":"edge","kind":"flat","role":"modifier","label":"Edge","value":4},"as":"next"},
+                       {"op":"roll.publish","roll":{"read":"result.next"}}],
+                 "ui":{"label":"Edge"}}"""));
+        var pack = AutomationHost.compile("test", Map.of("classes", classes.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet();
+        sheet.withArray("traits").addObject().put("name", "Finesse").put("mod", 1);
+        var features = sheet.withArray("features");
+        ObjectNode selectedWeapon = (ObjectNode) features.remove(2);
+        ObjectNode unselectedWeapon = (ObjectNode) features.remove(0);
+        sheet.withArray("activeWeapons").add(selectedWeapon.put("slot", "Primary"));
+        sheet.withArray("activeWeapons").add(unselectedWeapon.put("slot", "Secondary"));
+        sheet.putObject("automationState").putArray("effects").addObject()
+                .put("id", "active-effect").put("sourceInstanceId", "f-forage").put("label", "Active effect")
+                .putArray("modifiers").addObject().put("stat", "roll.attack").put("value", 3);
+        ((ObjectNode) sheet.at("/automationState/effects/0")).withArray("modifiers")
+                .addObject().put("stat", "roll.damage").put("value", 4);
+        var origin = AutomationHost.event("action.request", "actor", 0);
+        ObjectNode attack = request("attack", 0, "f-steady", "edge");
+        ((ObjectNode) attack.at("/selections/0")).put("bindingId", "offer");
+        attack.putObject("profileRoll").put("sourceInstanceId", "f-steady").put("profileId", "thrown").put("kind", "attack");
+        ObjectNode result = HOST.execute(pack, sheet, origin, attack, "self", new SplittableRandom(7));
+        JsonNode roll = result.at("/event/roll");
+        int dice = result.at("/event/check/hopeDie").intValue() + result.at("/event/check/fearDie").intValue();
+        assertEquals(dice + 21, roll.path("total").intValue(), "trait 3, action 7, attack 7 and selected option 4");
+        assertTrue(roll.path("contributions").findValuesAsText("label").containsAll(
+                List.of("Action base", "Action bonus", "Action floor", "Action ceiling", "Conditional penalty",
+                        "Weapon bonus", "Active effect", "Edge")));
+        assertFalse(roll.path("contributions").findValuesAsText("sourceId").contains("f-rally"));
+        assertEquals(0, sheet.at("/hope/on").intValue());
+        assertEquals(result, HOST.execute(pack, sheet, origin, attack, "self", null));
+        assertEquals(0, sheet.at("/hope/on").intValue());
+
+        ObjectNode damage = RuleJson.JSON.createObjectNode().put("requestId", "damage").put("expectedRevision", 1);
+        damage.putArray("selections");
+        damage.putObject("profileRoll").put("sourceInstanceId", "f-steady").put("profileId", "thrown").put("kind", "damage");
+        JsonNode damageRoll = HOST.execute(pack, sheet, origin, damage, "self", new SplittableRandom(9)).at("/event/roll");
+        JsonNode damageDie = damageRoll.at("/contributions/0/dice/0/face");
+        assertEquals(damageDie.intValue() + 6, damageRoll.path("total").intValue(), "profile flat 1, damage modifiers 2-1+4");
+        assertFalse(damageRoll.path("contributions").findValuesAsText("sourceId").contains("f-rally"));
+
+        ObjectNode noHope = RuleJson.JSON.createObjectNode().put("requestId", "no-hope").put("expectedRevision", 2);
+        noHope.putArray("selections");
+        noHope.putObject("profileRoll").put("sourceInstanceId", "f-steady").put("profileId", "thrown").put("kind", "attack");
+        JsonNode noHopeRoll = HOST.execute(pack, sheet, origin, noHope, "self", new SplittableRandom(7)).at("/event/roll");
+        assertFalse(noHopeRoll.path("contributions").findValuesAsText("label").contains("Conditional penalty"));
+        assertEquals(roll.path("total").intValue() - 3, noHopeRoll.path("total").intValue(), "same dice, no option, no penalty");
+    }
+
+    @Test
     void executesWritesBackJournalsAndRejectsStaleOrRepeatedUse() throws Exception {
         var pack = pack();
         ObjectNode sheet = sheet();
