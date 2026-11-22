@@ -59,6 +59,41 @@ class RuleCatalogTest {
     }
 
     @Test
+    void unusedRecipesRejectStaticRuleAndOperationShapeErrors() throws Exception {
+        String catalog = """
+                {"format":"dmmap-daggerheart","version":2,"category":"items","entries":[]}
+                """;
+        ObjectNode recipes = fixture("rewrite/recipes");
+        ObjectNode invalidRule = recipes.deepCopy();
+        ((ObjectNode) invalidRule.at("/recipes/0/rules/0")).put("unexpected", true);
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, invalidRule.toString()));
+        ObjectNode invalidBinding = recipes.deepCopy();
+        ((ObjectNode) invalidBinding.at("/recipes/0/rules/0/bindings/0")).put("unknown", true);
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, invalidBinding.toString()));
+        ObjectNode invalidUi = recipes.deepCopy();
+        ((ObjectNode) invalidUi.at("/recipes/0/rules/0/ui")).put("unknown", "bad");
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, invalidUi.toString()));
+        ObjectNode invalidOp = recipes.deepCopy();
+        ((ObjectNode) invalidOp.at("/recipes/0/rules/0/do/0")).put("op", "not.an.operation");
+        var error = assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, invalidOp.toString()));
+        assertTrue(error.getMessage().contains("/recipes/core:repeat-saved-weapon-damage/rules/0/do/0/op"), error.getMessage());
+        ObjectNode missingField = recipes.deepCopy();
+        ((ObjectNode) missingField.at("/recipes/0/rules/0/do/0")).remove("slot");
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, missingField.toString()));
+        ObjectNode badField = recipes.deepCopy();
+        ((ObjectNode) badField.at("/recipes/0/rules/0/do/0")).put("unknown", 1);
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, badField.toString()));
+        ObjectNode badCost = recipes.deepCopy();
+        ((ObjectNode) badCost.at("/recipes/0/rules/0")).putArray("costs")
+                .addObject().put("op", "countdown.start").put("label", "Bad").put("value", 1);
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, badCost.toString()));
+        ObjectNode duplicate = recipes.deepCopy();
+        ((ObjectNode) duplicate.at("/recipes/0/rules/1/do/1")).put("as", "effectiveProficiency");
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, duplicate.toString()));
+        assertTrue(RuleCatalog.compile(catalog, recipes.toString()).isEmpty(), "Substitutions remain valid without a source.");
+    }
+
+    @Test
     void compiledProgramsIndexUserBindingsByEventAndSurface() throws Exception {
         var source = RuleCatalog.compile(fixture("rewrite/host-classes").toString(), fixture("rewrite/recipes").toString())
                 .stream().filter(item -> item.id().equals("classes:tester:features:rally")).findFirst().orElseThrow();

@@ -552,7 +552,9 @@ public final class RuleCompiler {
                 if (rule.has("useRecipe")) throw RuleJson.error("/recipes/" + id, "Nested recipes are not supported.");
                 if (!ids.add(RuleJson.id(rule.path("id"), "/recipes/" + id + "/rules/id")))
                     throw RuleJson.error("/recipes/" + id, "Duplicate recipe rule ID.");
-                validateRecipeReferences(rule, recipe.path("args"), recipe.path("ui"), "/recipes/" + id + "/rules/" + i);
+                String path = "/recipes/" + id + "/rules/" + i;
+                validateRecipeReferences(rule, recipe.path("args"), recipe.path("ui"), path);
+                validateRecipeShape(rule, path);
             }
         }
         return recipes;
@@ -597,6 +599,49 @@ public final class RuleCompiler {
         } else if (node.isArray()) {
             for (int i = 0; i < node.size(); i++)
                 validateRecipeReferences(node.get(i), args, ui, path + "/" + i);
+        }
+    }
+
+    private static boolean substitution(JsonNode node) {
+        return node.isObject() && (node.has("$arg") || node.has("$ui"));
+    }
+
+    private static void validateRecipeShape(JsonNode rule, String path) {
+        RuleJson.fields(rule, path, "id", "bindings", "when", "inputs", "costs", "limitRef", "do", "ui");
+        JsonNode bindings = rule.path("bindings");
+        if (!substitution(bindings)) {
+            if (!bindings.isArray() || bindings.isEmpty() || bindings.size() > 32)
+                throw RuleJson.error(path + "/bindings", "Expected 1-32 bindings.");
+            for (int i = 0; i < bindings.size(); i++) {
+                JsonNode binding = bindings.get(i);
+                if (!substitution(binding)) RuleJson.fields(binding, path + "/bindings/" + i, "id", "event", "surface",
+                        "mode", "when", "group", "defaultOn", "forEach", "exclusiveGroup", "priority",
+                        "claimGroup", "claimScope", "audience", "targetSelection");
+            }
+        }
+        JsonNode ui = rule.path("ui");
+        if (!substitution(ui)) RuleJson.fields(ui, path + "/ui", TEXT_FIELDS.toArray(String[]::new));
+        Set<String> outputs = new HashSet<>();
+        for (String list : List.of("costs", "do")) {
+            JsonNode steps = rule.path(list);
+            if (steps.isMissingNode() || substitution(steps)) continue;
+            if (!steps.isArray() || steps.size() > 128)
+                throw RuleJson.error(path + "/" + list, "Expected a bounded operation list.");
+            for (int i = 0; i < steps.size(); i++) {
+                JsonNode step = steps.get(i);
+                if (substitution(step)) continue;
+                String at = path + "/" + list + "/" + i;
+                RuleJson.object(step, at);
+                JsonNode name = step.path("op");
+                if (substitution(name)) continue;
+                String op = RuleJson.text(name, at + "/op");
+                validateOperationShape(step, "costs".equals(list), op, at);
+                if (step.has("as") && !substitution(step.get("as"))) {
+                    String output = RuleJson.text(step.get("as"), at + "/as");
+                    slot(output, at + "/as");
+                    if (!outputs.add(output)) throw RuleJson.error(at + "/as", "Duplicate operation result ID.");
+                }
+            }
         }
     }
 
@@ -941,26 +986,8 @@ public final class RuleCompiler {
     private static void validateOperation(JsonNode operation, boolean cost, Decl decl, String path) {
         ObjectNode state = decl.state(), pools = decl.pools();
         String op = RuleJson.text(operation.path("op"), path + "/op");
-        List<String> fields = OPERATIONS.get(op);
-        if (fields == null || cost && !COSTS.contains(op)) throw RuleJson.error(path + "/op", "Unsupported operation in this phase: " + op);
-        List<String> allowed = new ArrayList<>(fields);
-        allowed.add("op");
-        allowed.add("as");
-        if (!cost) allowed.add("if");
-        RuleJson.fields(operation, path, allowed.toArray(String[]::new));
-        if (operation.has("if")) {
-            if (operation.has("as"))
-                throw RuleJson.error(path + "/as", "A conditional step cannot name a result; later steps could read a skipped value.");
-            RuleExpression.validate(operation.get("if"), path + "/if");
-        }
-        for (String field : fields) if (!operation.has(field)
-                && !("pool.roll".equals(op) && "keepHighest".equals(field))
-                && !"owner".equals(field)
-                && !("roll.resolve".equals(op) && "metadata".equals(field))
-                && !("damage.resolve".equals(op) && "armor".equals(field))
-                && !("claim.offer".equals(op) && "limit".equals(field))
-                && !("inventory.grant".equals(op) && Set.of("to", "tag", "max", "scope").contains(field)))
-            throw RuleJson.error(path + "/" + field, "Missing operation field.");
+        List<String> fields = validateOperationShape(operation, cost, op, path);
+        if (operation.has("if")) RuleExpression.validate(operation.get("if"), path + "/if");
         if (operation.has("as")) slot(RuleJson.text(operation.get("as"), path + "/as"), path + "/as");
         if ("damage.resolve".equals(op)) {
             validateDamageResolution(operation, path);
@@ -1109,6 +1136,27 @@ public final class RuleCompiler {
             else if ("dieId".equals(field)) RuleExpression.validate(value, path + "/" + field);
             else RuleExpression.validate(value, path + "/" + field);
         }
+    }
+
+    private static List<String> validateOperationShape(JsonNode operation, boolean cost, String op, String path) {
+        List<String> fields = OPERATIONS.get(op);
+        if (fields == null || cost && !COSTS.contains(op)) throw RuleJson.error(path + "/op", "Unsupported operation in this phase: " + op);
+        List<String> allowed = new ArrayList<>(fields);
+        allowed.add("op");
+        allowed.add("as");
+        if (!cost) allowed.add("if");
+        RuleJson.fields(operation, path, allowed.toArray(String[]::new));
+        if (operation.has("if") && operation.has("as"))
+            throw RuleJson.error(path + "/as", "A conditional step cannot name a result; later steps could read a skipped value.");
+        for (String field : fields) if (!operation.has(field)
+                && !("pool.roll".equals(op) && "keepHighest".equals(field))
+                && !"owner".equals(field)
+                && !("roll.resolve".equals(op) && "metadata".equals(field))
+                && !("damage.resolve".equals(op) && "armor".equals(field))
+                && !("claim.offer".equals(op) && "limit".equals(field))
+                && !("inventory.grant".equals(op) && Set.of("to", "tag", "max", "scope").contains(field)))
+            throw RuleJson.error(path + "/" + field, "Missing operation field.");
+        return fields;
     }
 
     /** Static {@code options} or one {@code optionsFrom} expression yielding {@code [{id, label}]}; returns the static maximum. */
