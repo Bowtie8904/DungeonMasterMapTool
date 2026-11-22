@@ -1641,6 +1641,53 @@ class OnlineSessionServerTest {
         return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    @Test
+    void replacementSceneAndNewSessionResetOfflineActorsInOneCommit() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        var steady = (ObjectNode) catalog.at("/entries/0/features/2/automation/rules/0");
+        ((ObjectNode) steady.at("/bindings/0")).put("event", "session.start");
+        ((ObjectNode) catalog.at("/entries/0/features/0/automation/limits/once")).putArray("resetOn").add("scene.end");
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String initial = """
+            {"name":"Ada","stress":{"slots":6,"on":1},"hope":{"slots":6,"on":2},
+             "features":[{"name":"Steady","instanceId":"s","automationSource":"classes:tester:features:steady"},
+                         {"name":"Rally","instanceId":"r","automationSource":"classes:tester:features:rally"}],
+             "automationState":{"revision":5,"journal":[],"sources":{"r":{"usage":{"once":1}}},
+               "effects":[{"id":"temporary","label":"Temporary","until":["scene.end"]},{"id":"long","label":"Long","until":["rest.long"]}]}}
+            """;
+        for (String id : List.of("active", "offline")) {
+            campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId()).build());
+            store.saveSheet(campaign.getId(), id, initial);
+        }
+        assertNull(server.endScene());
+        for (String id : List.of("active", "offline")) {
+            JsonNode sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+            assertEquals(0, sheet.at("/automationState/sources/r/usage/once").intValue());
+            assertEquals(List.of("long"), sheet.at("/automationState/effects").findValuesAsText("id"));
+            assertEquals(2, sheet.at("/hope/on").intValue());
+            assertEquals(6, sheet.at("/automationState/revision").intValue());
+        }
+        // Make the second actor fail validation after staging the first actor's session reward.
+        String before = store.loadSheet(campaign.getId(), "offline");
+        ObjectNode invalid = (ObjectNode) MAPPER.readTree(before);
+        invalid.withObject("/automationState/sources/r/usage").put("once", -1);
+        store.saveSheet(campaign.getId(), "offline", invalid.toString());
+        int history = store.historyTail(campaign.getId(), 20).size();
+        assertNotNull(server.newSession());
+        assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "active")).at("/hope/on").intValue());
+        assertEquals(history, store.historyTail(campaign.getId(), 20).size());
+        store.saveSheet(campaign.getId(), "offline", before);
+        assertNull(server.newSession());
+        for (String id : List.of("active", "offline")) {
+            JsonNode sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+            assertEquals(3, sheet.at("/hope/on").intValue());
+            assertEquals(7, sheet.at("/automationState/revision").intValue());
+            assertTrue(sheet.at("/automationState/journal").isEmpty());
+        }
+    }
+
     private HttpResponse<String> artworkHttp(String actorId, String cookie, String token, String body) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/actors/" + actorId + "/artwork"));
         if (cookie != null) request.header("Cookie", cookie);

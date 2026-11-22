@@ -201,6 +201,14 @@ final class HostCatalog {
             return document.revision;
         }
 
+        boolean declaresReplacementPack() {
+            for (String category : CatalogEditor.CATEGORIES) {
+                Document doc = documents.get(category + ".json");
+                if (doc != null && doc.file != null && doc.file.path("version").asInt() == 2) return true;
+            }
+            return false;
+        }
+
         List<String> categories() {
             return documents.keySet().stream().map(name -> name.substring(0, name.length() - 5)).toList();
         }

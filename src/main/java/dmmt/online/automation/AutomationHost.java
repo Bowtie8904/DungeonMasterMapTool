@@ -147,6 +147,35 @@ public final class AutomationHost {
             intents.add(new RuleRuntime.Intent(ruleId, bindingId, instanceId, revision, inputs, eachId));
         }
 
+        ObjectNode response = applyEvent(pack, working, state, event, candidates, intents, random);
+        response.put("requestId", requestId);
+        ArrayNode journal = (ArrayNode) projection.state(working).get("journal");
+        journal.addObject().put("requestId", requestId).put("principalId", principalId).set("response", response.deepCopy());
+        while (journal.size() > JOURNAL_LIMIT) journal.remove(0);
+        replace(sheet, working);
+        return response;
+    }
+
+    /** Dispatch a host transition in the caller's staged sheet transaction, without creating a player retry record. */
+    public ObjectNode automatic(Pack pack, ObjectNode working, ObjectNode event, RandomGenerator random) {
+        var sources = projection.sources(working);
+        String type = RuleJson.text(event.path("type"), "/event/type");
+        if (sources.stream().noneMatch(source -> {
+            var program = pack.programs().get(source.sourceId());
+            return program != null && !program.automatic(type).isEmpty();
+        })) {
+            ObjectNode response = RuleJson.JSON.createObjectNode().put("revision", working.path(projection.stateField()).path("revision").asLong());
+            response.putArray("actions");
+            response.putArray("outbox");
+            response.set("event", event.deepCopy());
+            return response;
+        }
+        return applyEvent(pack, working, projection.state(working), event, candidates(pack, working, event), List.of(), random);
+    }
+
+    private ObjectNode applyEvent(Pack pack, ObjectNode working, ObjectNode state, ObjectNode event,
+                                  List<RuleDispatcher.Candidate> candidates, List<RuleRuntime.Intent> intents, RandomGenerator random) {
+        long revision = state.path("revision").asLong();
         ObjectNode before = projection.actor(working);
         RuleDispatcher.EventResolution resolution = RuleDispatcher.executeEvent(candidates, intents, random);
         ArrayNode outbox = RuleJson.JSON.createArrayNode();
@@ -180,7 +209,6 @@ public final class AutomationHost {
         for (SheetProjection.SourceElement element : emptied) remove(working, element);
 
         ObjectNode response = RuleJson.JSON.createObjectNode();
-        response.put("requestId", requestId);
         long next = resolution.actions().isEmpty() ? revision : revision + 1;
         response.put("revision", next);
         ArrayNode actions = response.putArray("actions");
@@ -197,10 +225,6 @@ public final class AutomationHost {
         response.set("event", resolution.contexts().isEmpty() ? event.deepCopy() : resolution.contexts().getFirst().path("event").deepCopy());
         state = projection.state(working);
         state.put("revision", next);
-        ArrayNode journal = (ArrayNode) state.get("journal");
-        journal.addObject().put("requestId", requestId).put("principalId", principalId).set("response", response.deepCopy());
-        while (journal.size() > JOURNAL_LIMIT) journal.remove(0);
-        replace(sheet, working);
         return response;
     }
 
@@ -219,6 +243,13 @@ public final class AutomationHost {
                 changed = true;
                 storeSource(state, element.instanceId(), next);
                 actor = (ObjectNode) next.path("actor");
+            }
+        }
+        if (actor.path("effects").isArray()) {
+            ArrayNode kept = RuleEffects.expire(actor.path("effects"), event);
+            if (kept.size() != actor.path("effects").size()) {
+                actor.set("effects", kept);
+                changed = true;
             }
         }
         if (!changed) return false;

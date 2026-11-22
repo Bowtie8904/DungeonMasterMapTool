@@ -5459,10 +5459,15 @@ public final class OnlineSessionServer {
         Campaign c = campaign;
         if (c == null) return "No online session is running.";
         Set<String> periods = session ? Set.of("scene", "session") : Set.of("scene");
-        Set<String> resourceIds = session ? sessionResourceIds() : Set.of();
         Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
         List<String> lines = new ArrayList<>();
         try {
+            HostCatalog.Snapshot snapshot = catalogs();
+            if (snapshot.declaresReplacementPack()) {
+                resetAutomationPeriod(session, automationPack(snapshot));
+                return null;
+            }
+            Set<String> resourceIds = session ? sessionResourceIds() : Set.of();
             for (Campaign.Actor actor : c.getActors()) {
                 if (store.loadSheet(c.getId(), actor.getId()) == null) continue;
                 ObjectNode sheet = storedSheet(actor.getId());
@@ -5660,7 +5665,10 @@ public final class OnlineSessionServer {
 
     /** Compiles format-2 catalogs plus rules.json once per combined compendium revision. */
     private dmmt.online.automation.AutomationHost.Pack automationPack() throws IOException {
-        HostCatalog.Snapshot snapshot = catalogs();
+        return automationPack(catalogs());
+    }
+
+    private dmmt.online.automation.AutomationHost.Pack automationPack(HostCatalog.Snapshot snapshot) throws IOException {
         StringBuilder key = new StringBuilder();
         for (String category : CatalogEditor.CATEGORIES) {
             String revision = snapshot.revision(category);
@@ -5709,7 +5717,7 @@ public final class OnlineSessionServer {
             Campaign.Actor actor = automationActor(ctx.pathParam("id"));
             String surface = ctx.queryParam("surface");
             String type = ctx.queryParam("event");
-            ObjectNode event = MAPPER.createObjectNode().put("type", type == null || type.isBlank() ? "action.request" : type);
+            ObjectNode event = automationEvent(type == null || type.isBlank() ? "action.request" : type, actor);
             ObjectNode sheet = storedSheet(actor.getId());
             ObjectNode response = automationHost.describe(automationPack(), sheet, event,
                     surface == null || surface.isBlank() ? "sheet" : surface, automationRelation(playerId, actor));
@@ -5746,7 +5754,7 @@ public final class OnlineSessionServer {
             for (var element : automationHost.projection().sources(sheet))
                 sourceNames.put(element.instanceId(), element.element().deepCopy());
             long revisionBefore = automationHost.revision(sheet);
-            ObjectNode event = MAPPER.createObjectNode().put("type", "action.request");
+            ObjectNode event = automationEvent("action.request", actor);
             ObjectNode response = automationHost.execute(automationPack(), sheet, event,
                     (ObjectNode) body.get("request"), automationRelation(playerId, actor), playerId, diceRandom);
             if (automationHost.revision(sheet) != revisionBefore) {
@@ -5759,7 +5767,7 @@ public final class OnlineSessionServer {
                             MAPPER.createObjectNode().put("name", "Automation"));
                     messages.add(actionReportMessage(actor, source, source.path("name").asText("Automation"), List.of(report), null));
                 }
-                commitAutomationResults(actor, sheet, messages, response.path("outbox"));
+                commitAutomationResults(Map.of(actor.getId(), sheet), messages, response.path("outbox"));
             }
             json(ctx, 200, response);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
@@ -5777,7 +5785,45 @@ public final class OnlineSessionServer {
         }
     }
 
-    private void commitAutomationResults(Campaign.Actor actor, ObjectNode sheet, List<ObjectNode> messages, JsonNode commands) throws IOException {
+    private void resetAutomationPeriod(boolean session, dmmt.online.automation.AutomationHost.Pack pack) throws IOException {
+        Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
+        List<String> lines = new ArrayList<>();
+        ArrayNode commands = MAPPER.createArrayNode();
+        for (Campaign.Actor actor : campaign.getActors()) {
+            if (actor.isDisabled()) continue;
+            String stored = store.loadSheet(campaign.getId(), actor.getId());
+            if (stored == null) continue;
+            if (!(MAPPER.readTree(stored) instanceof ObjectNode sheet)) throw new IOException("Invalid stored sheet.");
+            boolean modified = false;
+            for (String type : session ? List.of("scene.end", "session.start") : List.of("scene.end")) {
+                ObjectNode event = automationEvent(type, actor);
+                ObjectNode result = automationHost.automatic(pack, sheet, event, diceRandom);
+                for (JsonNode action : result.path("actions")) {
+                    modified = true;
+                    String report = action.path("report").asText();
+                    if (!report.isBlank()) lines.add(actor.getName() + ": " + report);
+                }
+                result.path("outbox").forEach(commands::add);
+                modified |= automationHost.resetLimits(pack, sheet, type);
+            }
+            if (modified) {
+                sheet.put("featureRevision", sheet.path("featureRevision").asLong() + 1);
+                changed.put(actor.getId(), sheet);
+            }
+        }
+        String title = session ? "NEW SESSION\nSession and scene limits reset." : "SCENE ENDED\nScene limits reset.";
+        var message = chatMessage("dm", "DM", null, clip(lines.isEmpty() ? title : title + "\n" + String.join("\n", lines)));
+        message.put("system", session ? "newSession" : "sceneEnd");
+        commitAutomationResults(changed, List.of(message), commands);
+    }
+
+    private ObjectNode automationEvent(String type, Campaign.Actor actor) {
+        ObjectNode event = MAPPER.createObjectNode().put("type", type).put("actorId", actor.getId());
+        event.putObject("table").put("fear", campaign.getFear());
+        return event;
+    }
+
+    private void commitAutomationResults(Map<String, ObjectNode> changed, List<ObjectNode> messages, JsonNode commands) throws IOException {
         int fear = campaign.getFear();
         List<Campaign.Countdown> countdowns = null;
         for (JsonNode command : commands) {
@@ -5802,10 +5848,11 @@ public final class OnlineSessionServer {
                 default -> throw new IllegalArgumentException("The host cannot apply this automation operation yet: " + kind);
             }
         }
-        if (sheet.toString().getBytes(StandardCharsets.UTF_8).length > MAX_SHEET_BYTES)
-            throw new IllegalArgumentException("The character sheet is too large.");
+        for (ObjectNode sheet : changed.values())
+            if (sheet.toString().getBytes(StandardCharsets.UTF_8).length > MAX_SHEET_BYTES)
+                throw new IllegalArgumentException("The character sheet is too large.");
         boolean fearChanged = fear != campaign.getFear();
-        store.saveAutomationResults(campaign.getId(), Map.of(actor.getId(), sheet), messages, fearChanged ? fear : null, countdowns);
+        store.saveAutomationResults(campaign.getId(), changed, messages, fearChanged ? fear : null, countdowns);
         if (fearChanged || countdowns != null) {
             campaign.setFear(fear);
             if (countdowns != null) campaign.setCountdowns(countdowns);
@@ -5817,7 +5864,7 @@ public final class OnlineSessionServer {
             }
             host.campaignChanged(campaign);
         }
-        sendFeatureState(actor, sheet);
+        changed.forEach((id, sheet) -> sendFeatureState(campaign.actor(id), sheet));
         for (ObjectNode message : messages) deliver(message, null, false);
     }
 
