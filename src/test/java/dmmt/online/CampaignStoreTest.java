@@ -127,6 +127,34 @@ class CampaignStoreTest {
     }
 
     @Test
+    void automationClaimLookupRequiresReadableHistoryAndUsesExactIdentity() throws Exception {
+        var store = new CampaignStore(dir);
+        String id = store.create("Claim lookup").getId();
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var offer = mapper.createObjectNode().put("id", 1).put("ts", 10).put("text", "Offer");
+        store.appendHistoryChecked(id, offer);
+        for (int i = 2; i < 160; i++)
+            store.appendHistoryChecked(id, mapper.createObjectNode().put("id", i).put("ts", 10 + i));
+        assertEquals(offer, store.automationClaimEntry(id, 1, 10));
+        assertNull(store.automationClaimEntry(id, 1, 11));
+        assertNull(store.automationClaimEntry(id, 999, 10));
+        assertThrows(IllegalArgumentException.class, () -> store.automationClaimEntry(id, -1, 10));
+        assertThrows(IllegalArgumentException.class, () -> store.automationClaimEntry(id, 1, -1));
+        ((com.fasterxml.jackson.databind.node.ObjectNode) store.automationClaimEntry(id, 1, 10)).put("text", "Changed");
+        assertEquals(offer, store.automationClaimEntry(id, 1, 10));
+
+        Path journal = dir.resolve(id).resolve("sheet-transfer.json");
+        Files.writeString(journal, "{broken}");
+        assertThrows(IOException.class, () -> store.automationClaimEntry(id, 1, 10));
+        Files.delete(journal);
+        assertEquals(offer, store.automationClaimEntry(id, 1, 10));
+
+        Files.writeString(dir.resolve(id).resolve("history.jsonl"), "{broken}\n", StandardOpenOption.APPEND);
+        assertThrows(IOException.class, () -> store.automationClaimEntry(id, 1, 10));
+        assertThrows(IOException.class, () -> store.automationClaimEntry(id, 999, 10));
+    }
+
+    @Test
     void competingClaimsCannotBothCommitAndInterruptedClaimReplayIsIdempotent() throws Exception {
         var store = new CampaignStore(dir);
         String id = store.create("Concurrent claims").getId();

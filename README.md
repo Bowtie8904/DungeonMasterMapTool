@@ -31,7 +31,7 @@ spending and bounded HP marks; and apply recipient-targeted actions guarded by a
 Independent fixtures exercise offline recipients and stale claim revisions. For format-2 sheet actions the host
 saves reports, the sheet and any Fear or countdown changes in one transaction. Unsupported host operations
 reject the action without spending its costs.
-The claim transaction storage can compare and journal an offer and participating sheets together, but live
+The claim transaction storage can strictly look up an offer and compare and journal it with participating sheets, but live
 cross-player claim offers and acceptance are not yet connected. An authored claim offer must name an acceptance group
 on the `claim.accept` chat surface of the same source.
 Ending a scene or starting a new session with a format-2 pack applies its automatic rules, limit and pool

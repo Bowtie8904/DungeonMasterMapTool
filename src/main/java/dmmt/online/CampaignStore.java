@@ -213,6 +213,15 @@ public final class CampaignStore {
         }
     }
 
+    /** Strict indexed lookup for an automation claim; the caller must authorize and compare the returned entry. */
+    synchronized JsonNode automationClaimEntry(String campaignId, long id, long timestamp) throws IOException {
+        if (id < 0 || timestamp < 0) throw new IllegalArgumentException("Invalid claim message identity.");
+        recoverSheetTransfer(campaignId);
+        HistoryIndex history = historyIndex(campaignId);
+        history.requireReadable();
+        return history.entry(id, timestamp);
+    }
+
     /** First persisted shared-card match, with the same recovery and ownership semantics as historyEntry. */
     public synchronized JsonNode historyCard(String campaignId, String cardId) {
         try {
