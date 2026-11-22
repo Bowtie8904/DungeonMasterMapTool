@@ -4687,7 +4687,7 @@ class OnlineSessionServerTest {
     }
 
     @Test
-    void prayerDiceSpendOnPlainAndAllyRollsOnceAndExpireWithSession() throws Exception {
+    void prayerDiceRejectFreeformAndSpendOnActorAndAllyRollsOnceAndExpireWithSession() throws Exception {
         campaign.getActors().add(Campaign.Actor.builder().id("seraph").name("Seraph").ownerId(playerId()).build());
         ObjectNode sheet = seraphSheet("Divine Wielder");
         var effects = sheet.withArray("effects");
@@ -4706,6 +4706,12 @@ class OnlineSessionServerTest {
             ObjectNode request = MAPPER.createObjectNode().put("actorId", "seraph").put("key", "effect:pool-prayer-0").put("actionId", "spend");
             request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
             var response = featureHttp(cookie, request);
+            assertEquals(400, response.statusCode(), response.body());
+            assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "seraph")).path("effects").size());
+            ws.sendText("{\"type\":\"roll\",\"expression\":\"1d1\",\"source\":\"damage\",\"actorId\":\"seraph\"}", true).join();
+            roll = inbox.next("roll");
+            request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+            response = featureHttp(cookie, request);
             assertEquals(200, response.statusCode(), response.body());
             assertEquals(4, inbox.next("rollUpdate").path("total").asInt());
             assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "seraph")).path("effects").size());
