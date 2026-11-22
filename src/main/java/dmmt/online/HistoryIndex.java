@@ -20,10 +20,12 @@ import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /** Byte offsets retain legacy JSONL ordering without retaining every message's parsed tree. */
 final class HistoryIndex {
@@ -60,6 +62,7 @@ final class HistoryIndex {
     private Stamp stamp;
     private List<Line> lines = new ArrayList<>();
     private final Map<Key, Integer> identities = new HashMap<>();
+    private final Set<Key> duplicateIdentities = new HashSet<>();
     private final Map<String, Integer> cards = new HashMap<>();
     private final Map<Integer, JsonNode> parsed = new LinkedHashMap<>(16, .75f, true);
     private boolean damaged;
@@ -128,7 +131,7 @@ final class HistoryIndex {
             damaged = true;
         }
         Key key = Key.of(node);
-        if (key != null) identities.putIfAbsent(key, lines.size());
+        if (key != null && identities.putIfAbsent(key, lines.size()) != null) duplicateIdentities.add(key);
         String cardId = cardId(node);
         if (!cardId.isEmpty()) cards.putIfAbsent(cardId, lines.size());
         if (!invalid) cacheParsed(lines.size(), node);
@@ -147,6 +150,13 @@ final class HistoryIndex {
         requireUtf8();
         Integer position = identities.get(new Key(id, timestamp));
         return position == null ? null : node(position);
+    }
+
+    JsonNode uniqueEntry(long id, long timestamp) throws IOException {
+        requireReadable();
+        if (duplicateIdentities.contains(new Key(id, timestamp)))
+            throw new IOException("History contains duplicate message identities.");
+        return entry(id, timestamp);
     }
 
     JsonNode card(String cardId) throws IOException {
@@ -307,10 +317,12 @@ final class HistoryIndex {
             Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
             lines = updated;
             identities.clear();
+            duplicateIdentities.clear();
             cards.clear();
             parsed.clear();
             for (int i = 0; i < lines.size(); i++) {
-                if (lines.get(i).key != null) identities.putIfAbsent(lines.get(i).key, i);
+                Key key = lines.get(i).key;
+                if (key != null && identities.putIfAbsent(key, i) != null) duplicateIdentities.add(key);
                 if (!lines.get(i).cardId.isEmpty()) cards.putIfAbsent(lines.get(i).cardId, i);
             }
             Stamp current = Stamp.read(file);

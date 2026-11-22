@@ -217,9 +217,7 @@ public final class CampaignStore {
     synchronized JsonNode automationClaimEntry(String campaignId, long id, long timestamp) throws IOException {
         if (id < 0 || timestamp < 0) throw new IllegalArgumentException("Invalid claim message identity.");
         recoverSheetTransfer(campaignId);
-        HistoryIndex history = historyIndex(campaignId);
-        history.requireReadable();
-        return history.entry(id, timestamp);
+        return historyIndex(campaignId).uniqueEntry(id, timestamp);
     }
 
     /** First persisted shared-card match, with the same recovery and ownership semantics as historyEntry. */
@@ -477,8 +475,7 @@ public final class CampaignStore {
             throw new IllegalArgumentException("The replacement claim message must retain its identity.");
         recoverSheetTransfer(campaignId);
         HistoryIndex history = historyIndex(campaignId);
-        history.requireReadable();
-        if (!expectedOffer.equals(history.entry(identity.id(), identity.timestamp()))) throw new StaleAutomationClaim();
+        if (!expectedOffer.equals(history.uniqueEntry(identity.id(), identity.timestamp()))) throw new StaleAutomationClaim();
         checkAutomationSheets(campaignId, expectedSheets, sheets);
         java.util.Set<HistoryIdentity> newIdentities = new java.util.HashSet<>();
         for (ObjectNode message : messages) {

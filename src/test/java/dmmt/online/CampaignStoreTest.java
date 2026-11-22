@@ -155,6 +155,41 @@ class CampaignStoreTest {
     }
 
     @Test
+    void automationClaimsRejectDuplicateOfferIdentitiesAcrossIndexUpdatesAndReloads() throws Exception {
+        var store = new CampaignStore(dir);
+        String id = store.create("Ambiguous claims").getId();
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var offer = mapper.createObjectNode().put("id", 1).put("ts", 10).put("text", "Offer");
+        var other = mapper.createObjectNode().put("id", 2).put("ts", 20).put("text", "Other");
+        store.saveSheet(id, "recipient", "{\"marks\":0}");
+        String original = store.loadSheet(id, "recipient");
+        store.appendHistoryChecked(id, offer);
+        store.appendHistoryChecked(id, other);
+        assertEquals(offer, store.automationClaimEntry(id, 1, 10));
+
+        store.appendHistoryChecked(id, offer.deepCopy().put("text", "Duplicate"));
+        assertEquals(offer, store.historyEntry(id, 1, 10), "legacy reads still use the first match");
+        assertThrows(IOException.class, () -> store.automationClaimEntry(id, 1, 10));
+        assertThrows(IOException.class, () -> new CampaignStore(dir).automationClaimEntry(id, 1, 10));
+        assertThrows(IOException.class, () -> store.saveAutomationClaimResults(id, java.util.Map.of("recipient", original),
+                java.util.Map.of("recipient", mapper.createObjectNode().put("marks", 1)), offer,
+                offer.deepCopy().put("claimed", true), List.of(), null, null));
+        assertEquals(original, store.loadSheet(id, "recipient"));
+        assertEquals(3, store.historyTail(id, 10).size());
+
+        store.deleteHistoryEntry(id, 1, 10);
+        assertNull(store.automationClaimEntry(id, 1, 10));
+        store.appendHistoryChecked(id, offer);
+        assertEquals(offer, store.automationClaimEntry(id, 1, 10));
+        store.replaceHistoryEntry(id, 2, 20, offer.deepCopy().put("text", "Replacement"));
+        assertThrows(IOException.class, () -> store.automationClaimEntry(id, 1, 10));
+        assertThrows(IOException.class, () -> new CampaignStore(dir).automationClaimEntry(id, 1, 10));
+        store.deleteHistoryEntry(id, 1, 10);
+        store.appendHistoryChecked(id, offer);
+        assertEquals(offer, store.automationClaimEntry(id, 1, 10));
+    }
+
+    @Test
     void competingClaimsCannotBothCommitAndInterruptedClaimReplayIsIdempotent() throws Exception {
         var store = new CampaignStore(dir);
         String id = store.create("Concurrent claims").getId();

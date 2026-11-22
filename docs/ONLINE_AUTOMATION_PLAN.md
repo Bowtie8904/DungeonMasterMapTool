@@ -148,8 +148,9 @@ Grouped execution preflights every selected rule's inputs, limits and costs on c
 
 Format-2 sheet and lifecycle commits check the original stored sheets under the campaign store lock before writing the journal. An intervening edit, even one that does not change `automationState.revision`, rejects the staged sheets, campaign changes and chat together. This commit-time check is separate from checking the revision the player saw when opening an action.
 
-The cross-player claim storage foundation also provides an exact indexed offer lookup that rejects damaged history or
-failed recovery rather than treating it as a missing offer. Its commit primitive compares the entire saved offer under the store lock, requires the replacement
+The cross-player claim storage foundation also provides an exact indexed offer lookup that rejects damaged history,
+duplicate offer identities or failed recovery rather than treating them as a missing offer. Its commit primitive
+rejects ambiguous identities, compares the entire saved offer under the store lock, requires the replacement
 to retain the offer identity, and prevents reports from overwriting history. It journals the replacement, all changed
 sheets, campaign state and reports together and replays interrupted commits idempotently. This is only the persistence
 foundation: cross-player offer creation, authorization, claim acceptance, retry receipts and client controls remain unwired.
