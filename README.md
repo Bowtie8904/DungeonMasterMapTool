@@ -33,6 +33,7 @@ saves reports, the sheet and any Fear or countdown changes in one transaction. U
 reject the action without spending its costs.
 Ending a scene or starting a new session with a format-2 pack applies its automatic rules, limit and pool
 resets, and timed effect expiry to saved active characters, including offline ones, in a single campaign commit.
+Reset expressions use the same host-generated actor, table and session facts as lifecycle rules.
 Typing a dice expression in chat rolls dice and records the result, but does not trigger or qualify for
 character automation. Roll from the character sheet or its feature when character rules should apply.
 The live catalogs and gameplay still use the existing implementation: full catalog conversion, production

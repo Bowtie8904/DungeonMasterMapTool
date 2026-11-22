@@ -5898,7 +5898,7 @@ public final class OnlineSessionServer {
                     if (!report.isBlank()) lines.add(actor.getName() + ": " + report);
                 }
                 result.path("outbox").forEach(commands::add);
-                modified |= automationHost.resetLimits(pack, sheet, type);
+                modified |= automationHost.resetLimits(pack, sheet, event);
             }
             if (modified) {
                 sheet.put("featureRevision", sheet.path("featureRevision").asLong() + 1);

@@ -596,16 +596,19 @@ public final class AutomationHost {
     }
 
     /** Applies limit and pool resets for a lifecycle event. Returns whether anything changed. */
-    public boolean resetLimits(Pack pack, ObjectNode sheet, String event) {
+    public boolean resetLimits(Pack pack, ObjectNode sheet, ObjectNode event) {
+        String type = RuleJson.text(RuleJson.object(event, "/event").get("type"), "/event/type");
+        if (!Set.of("rest.short", "rest.long", "scene.end", "session.start").contains(type))
+            throw RuleJson.error("/event/type", "Unknown limit-reset event.");
         ObjectNode working = sheet.deepCopy();
         ObjectNode state = projection.state(working);
-        ObjectNode actor = actor(pack, working, state, RuleJson.JSON.createObjectNode().put("type", event));
-        boolean changed = "session.start".equals(event) && state.remove("resultWindows") != null;
+        ObjectNode actor = actor(pack, working, state, event);
+        boolean changed = "session.start".equals(type) && state.remove("resultWindows") != null;
         for (SheetProjection.SourceElement element : projection.sources(working)) {
             RuleCompiler.Program program = pack.programs().get(element.sourceId());
             if (program == null) continue;
-            ObjectNode context = context(state, element, actor, RuleJson.JSON.createObjectNode().put("type", event));
-            ObjectNode next = RuleRuntime.resetLimits(program, context, event);
+            ObjectNode context = context(state, element, actor, event);
+            ObjectNode next = RuleRuntime.resetLimits(program, context, type);
             if (next.path("revision").asLong() != context.path("revision").asLong()) {
                 changed = true;
                 storeSource(state, element.instanceId(), next);
@@ -613,7 +616,7 @@ public final class AutomationHost {
             }
         }
         if (actor.path("effects").isArray()) {
-            ArrayNode kept = RuleEffects.expire(actor.path("effects"), event);
+            ArrayNode kept = RuleEffects.expire(actor.path("effects"), type);
             if (kept.size() != actor.path("effects").size()) {
                 Set<String> losingPools = boundPools(pack, actor.path("effects"));
                 losingPools.removeAll(boundPools(pack, kept));

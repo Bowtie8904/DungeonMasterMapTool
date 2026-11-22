@@ -2648,6 +2648,35 @@ class OnlineSessionServerTest {
         }
     }
 
+    @Test
+    void replacementSceneResetsUseHostActorAndTableFactsForOnlineAndOfflineActors() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        automation.set("pools", MAPPER.readTree("""
+                {"charge":{"kind":"number","scope":"source","max":10,"resetOn":["scene.end"],
+                  "resetTo":{"if":[{"and":[{"eq":[{"read":"actor.id"},{"read":"event.actorId"}]},
+                                               {"exists":"event.sessionId"}]},
+                                      {"read":"event.table.fear"},0]}}}"""));
+        automation.set("effects", MAPPER.readTree("""
+                {"form":{"label":"Form","while":{"eq":[{"read":"actor.id"},"active"]}}}"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        campaign.setFear(3);
+        for (String id : List.of("active", "offline")) {
+            campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId()).build());
+            store.saveSheet(campaign.getId(), id, """
+                    {"name":"Ada","features":[
+                     {"name":"Steady","instanceId":"s","automationSource":"classes:tester:features:steady"}]}""");
+        }
+        assertNull(server.endScene());
+        for (String id : List.of("active", "offline")) {
+            JsonNode sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+            assertEquals(3, sheet.requiredAt("/automationState/sources/s/sourcePools/charge/value").intValue());
+            assertFalse(sheet.at("/automationState/effects").isArray());
+        }
+    }
+
     private HttpResponse<String> artworkHttp(String actorId, String cookie, String token, String body) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/actors/" + actorId + "/artwork"));
         if (cookie != null) request.header("Cookie", cookie);

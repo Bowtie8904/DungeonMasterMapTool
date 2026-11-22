@@ -468,9 +468,9 @@ class AutomationHostTest {
         assertEquals("limit", spent.code());
         assertEquals(4, sheet.path("hope").path("on").asInt(), "failed requests leave the sheet unchanged");
 
-        assertTrue(HOST.resetLimits(pack, sheet, "rest.short"));
+        assertTrue(HOST.resetLimits(pack, sheet, AutomationHost.event("rest.short", "ada", 0)));
         assertEquals(2, HOST.revision(sheet));
-        assertFalse(HOST.resetLimits(pack, sheet, "rest.short"));
+        assertFalse(HOST.resetLimits(pack, sheet, AutomationHost.event("rest.short", "ada", 0)));
         HOST.execute(pack, sheet, action(), request("r4", 2, "f-rally", "rally"), "other", null);
         assertEquals(6, sheet.path("hope").path("on").asInt(), "Hope is capped by its slots");
     }
@@ -628,12 +628,38 @@ class AutomationHostTest {
         for (String end : List.of("scene.end", "session.start"))
             effects.addObject().put("id", end).put("effect", "classes:tester:features:steady#stance")
                     .put("sourceInstanceId", "f-steady").putArray("until").add(end);
-        assertTrue(HOST.resetLimits(pack, sheet, "scene.end"));
+        assertTrue(HOST.resetLimits(pack, sheet, AutomationHost.event("scene.end", "ada", 0)));
         assertEquals(3, sheet.at("/automationState/pools/charge/value").intValue());
-        assertTrue(HOST.resetLimits(pack, sheet, "session.start"));
+        assertTrue(HOST.resetLimits(pack, sheet, AutomationHost.event("session.start", "ada", 0)));
         assertEquals(0, sheet.at("/automationState/pools/charge/value").intValue());
         assertEquals(2, sheet.at("/automationState/pools/other/value").intValue());
-        assertFalse(HOST.resetLimits(pack, sheet, "session.start"));
+        assertFalse(HOST.resetLimits(pack, sheet, AutomationHost.event("session.start", "ada", 0)));
+    }
+
+    @Test
+    void lifecycleResetsUseTheFullHostEventAndLeaveFailedSheetsUnchanged() throws Exception {
+        ObjectNode catalog = fixture("rewrite/host-classes");
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        automation.set("pools", RuleJson.parse("""
+                {"charge":{"kind":"number","scope":"source","max":10,"resetOn":["scene.end"],
+                  "resetTo":{"if":[{"and":[{"eq":[{"read":"actor.id"},{"read":"event.actorId"}]},
+                                               {"exists":"event.sessionId"}]},
+                                      {"read":"event.table.fear"},0]}}}"""));
+        automation.set("effects", RuleJson.parse("""
+                {"form":{"label":"Form","while":{"eq":[{"read":"actor.id"},"ada"]}}}"""));
+        var pack = AutomationHost.compile("test", Map.of("classes", catalog.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet();
+        ObjectNode before = sheet.deepCopy();
+        assertThrows(IllegalArgumentException.class, () -> HOST.resetLimits(pack, sheet,
+                RuleJson.JSON.createObjectNode().put("type", "scene.end")));
+        assertEquals(before, sheet);
+        assertThrows(IllegalArgumentException.class, () -> HOST.resetLimits(pack, sheet,
+                AutomationHost.event("roll.finished", "ada", 3)));
+        assertEquals(before, sheet);
+
+        assertTrue(HOST.resetLimits(pack, sheet, AutomationHost.event("scene.end", "ada", 3).put("sessionId", "session")));
+        assertEquals(3, sheet.requiredAt("/automationState/sources/f-steady/sourcePools/charge/value").intValue());
+        assertFalse(sheet.at("/automationState/effects").isArray(), "Derived effects remain projections.");
     }
 
     @Test

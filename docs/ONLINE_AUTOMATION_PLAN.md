@@ -52,7 +52,8 @@ A scoped loopback DM sheet grant uses the `dm` audience for automation rather th
 campaign DM from a player. The grant still authorizes only its original sheet.
 
 Timed expiry clears an actor's `whileEffect` pool in the same reset transaction when its last supporting
-effect expires; another surviving copy preserves the balance.
+effect expires; another surviving copy preserves the balance. Lifecycle resets use the same host-generated
+event as automatic rules, retaining actor identity, table facts and session identity for projections and expressions.
 
 Started effects have persistent, non-reused instance IDs, separate from their source and effect definition. Ending and recasting the same effect must not make an earlier result refer to the new activation. Existing saved instance IDs need no rewrite.
 
