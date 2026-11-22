@@ -575,6 +575,7 @@ public final class OnlineSessionServer {
                     sheet.put("compendiumRevision", sheet.path("compendiumRevision").asLong() + 1);
                 if (sheet.toString().getBytes(StandardCharsets.UTF_8).length > MAX_SHEET_BYTES)
                     throw new IllegalArgumentException("The receiving character sheet is too large.");
+                pruneAutomationResultWindows(sheet, actor);
                 store.saveSheet(campaign.getId(), actor.getId(), sheet.toString());
                 inventoryChanged(actor, sheet);
                 json(ctx, 200, MAPPER.createObjectNode().put("target", target));
@@ -1671,7 +1672,6 @@ public final class OnlineSessionServer {
             SplendorActions.preserveSave((ObjectNode) sheet, previous);
             if (previous.has("automationState")) ((ObjectNode) sheet).set("automationState", previous.get("automationState").deepCopy());
             else ((ObjectNode) sheet).remove("automationState");
-            automationHost.pruneResultWindows((ObjectNode) sheet);
             DmEffectProtection.validate(previous, sheet, null);
             BoneValorRules.validateSave(previous, (ObjectNode) sheet);
             String problem = CharacterSheetRules.problem(sheet, previous, actor.isTestingCharacter(), c.getFear());
@@ -1719,6 +1719,7 @@ public final class OnlineSessionServer {
                 for (var entry : changes.entrySet()) sendFeatureState(c.actor(entry.getKey()), entry.getValue());
                 if (report != null) deliver(report, null, false);
             } else {
+                pruneAutomationResultWindows(saved, actor);
                 if (renamed) store.renameActor(c, actor, name, saved);
                 else store.saveSheet(c.getId(), actor.getId(), saved.toString());
                 host.actorSheetChanged(actor.getId());
@@ -2699,6 +2700,7 @@ public final class OnlineSessionServer {
                     if (originalRoll != null) {
                         originalRoll.withArray("featureUses").add(sourceActor.getId() + ":" + key + ":" + actionId);
                         sourceSheet.put("featureRevision", sourceSheet.path("featureRevision").asLong() + 1);
+                        pruneAutomationResultWindows(changedSheets);
                         store.saveSheetsAndRoll(c.getId(), changedSheets, originalRoll);
                         broadcastRollUpdate(originalRoll);
                     } else commitFeatureSheets(changedSheets);
@@ -2956,6 +2958,7 @@ public final class OnlineSessionServer {
                 List<ObjectNode> reports = new ArrayList<>();
                 reports.add(benefitReport);
                 if (!deathReports.isEmpty()) reports.add(deathStateMessage("dm", "DM", "Party", deathReports));
+                pruneAutomationResultWindows(changedSheets);
                 store.saveFearReward(c.getId(), changedSheets, originalRoll, reports, fear);
                 c.setFear(fear);
                 if (current != null) {
@@ -3189,6 +3192,7 @@ public final class OnlineSessionServer {
         int fear = campaign.getFear() + fearGrant;
         normalizeDeathChanges(changed);
         for (ObjectNode sheet : changed.values()) sheet.put("featureRevision", sheet.path("featureRevision").asLong() + 1);
+        pruneAutomationResultWindows(changed);
         store.saveFearReward(campaign.getId(), changed, null, List.of(message), fear);
         campaign.setFear(fear);
         if (current != null && fearGrant > 0) {
@@ -4412,6 +4416,7 @@ public final class OnlineSessionServer {
                 roll.put("rewardClaimed", true);
                 ObjectNode report = actionReportMessage(actor, slayerSource, "Slayer", lines, roll);
                 sheet.put("featureRevision", sheet.path("featureRevision").asLong() + 1);
+                pruneAutomationResultWindows(sheet, actor);
                 store.saveSheetsAndResults(campaign.getId(), Map.of(actor.getId(), sheet), roll, List.of(report));
                 sendFeatureState(actor, sheet);
                 broadcastRollUpdate(roll);
@@ -4444,6 +4449,7 @@ public final class OnlineSessionServer {
                 roll.put("rewardClaimed", true);
                 ObjectNode report = actionReportMessage(actor, favorSource, "Favor", lines, roll);
                 sheet.put("featureRevision", sheet.path("featureRevision").asLong() + 1);
+                pruneAutomationResultWindows(sheet, actor);
                 store.saveSheetsAndResults(campaign.getId(), Map.of(actor.getId(), sheet), roll, List.of(report));
                 sendFeatureState(actor, sheet);
                 broadcastRollUpdate(roll);
@@ -4477,6 +4483,7 @@ public final class OnlineSessionServer {
                 sheet.put("featureRevision", sheet.path("featureRevision").asLong() + 1);
                 ObjectNode report = actionReportMessage(actor, alternativeSource, alternativeSource.path("name").asText(),
                         List.of("Removed " + amount + " GM Fear instead of gaining Hope (GM Fear: " + remaining + ")."), roll);
+                pruneAutomationResultWindows(sheet, actor);
                 store.saveFearReward(campaign.getId(), Map.of(actor.getId(), sheet), roll, List.of(report), remaining);
                 campaign.setFear(remaining);
                 if (current != null) {
@@ -4505,6 +4512,7 @@ public final class OnlineSessionServer {
             sheet.put("featureRevision", sheet.path("featureRevision").asLong(0) + 1);
             if (sheet.toString().getBytes(StandardCharsets.UTF_8).length > MAX_SHEET_BYTES)
                 throw new IllegalArgumentException("The character sheet is too large.");
+            pruneAutomationResultWindows(sheet, actor);
             store.saveSheetsAndRoll(campaign.getId(), Map.of(actor.getId(), sheet), roll);
             sendFeatureState(actor, sheet);
             broadcastRollUpdate(roll);
@@ -5253,6 +5261,7 @@ public final class OnlineSessionServer {
             if (sheet.toString().getBytes(StandardCharsets.UTF_8).length > MAX_SHEET_BYTES)
                 throw new IllegalArgumentException("The character sheet is too large.");
         }
+        pruneAutomationResultWindows(changedSheets);
         List<ObjectNode> newMessages = new ArrayList<>();
         if (newMessage && message != null) newMessages.add(message);
         if (report != null) newMessages.add(report);
@@ -5596,6 +5605,7 @@ public final class OnlineSessionServer {
             if (!changed.isEmpty()) {
                 for (ObjectNode sheet : changed.values())
                     sheet.put("featureRevision", sheet.path("featureRevision").asLong(0) + 1);
+                pruneAutomationResultWindows(changed);
                 store.saveSheets(campaign.getId(), changed);
                 for (var entry : changed.entrySet()) {
                     Campaign.Actor changedActor = campaign.actor(entry.getKey());
@@ -5901,6 +5911,23 @@ public final class OnlineSessionServer {
         commitAutomationResults(originals, changed, List.of(message), commands);
     }
 
+    private void pruneAutomationResultWindows(ObjectNode sheet, Campaign.Actor actor) throws IOException {
+        JsonNode state = sheet.path("automationState");
+        if (!(state instanceof ObjectNode object) || !state.has("resultWindows")) return;
+        try {
+            automationHost.pruneResultWindows(automationPack(), sheet, automationEvent("action.request", actor));
+        } catch (dmmt.online.automation.AutomationHost.NotReady unavailable) {
+            LOG.warning("Discarding stale automation result controls for " + actor.getId()
+                    + " because the current rules are unavailable: " + unavailable.getMessage());
+            object.remove("resultWindows");
+        }
+    }
+
+    private void pruneAutomationResultWindows(Map<String, ObjectNode> sheets) throws IOException {
+        for (var entry : sheets.entrySet())
+            pruneAutomationResultWindows(entry.getValue(), campaign.actor(entry.getKey()));
+    }
+
     private ObjectNode automationEvent(String type, Campaign.Actor actor) {
         return dmmt.online.automation.AutomationHost.event(type, actor.getId(), campaign.getFear()).put("sessionId", sessionId);
     }
@@ -5940,7 +5967,7 @@ public final class OnlineSessionServer {
 
     private void commitAutomationResults(Map<String, String> originals, Map<String, ObjectNode> changed,
                                          List<ObjectNode> messages, JsonNode commands) throws IOException {
-        changed.values().forEach(automationHost::pruneResultWindows);
+        pruneAutomationResultWindows(changed);
         int fear = campaign.getFear();
         List<Campaign.Countdown> countdowns = null;
         for (JsonNode command : commands) {
@@ -6208,6 +6235,7 @@ public final class OnlineSessionServer {
         ObjectNode shared = (ObjectNode)updated.get("sharedCard");
         shared.put("claimed", shared.path("claimed").asInt(0) + quantity);
         shared.put("available", remaining - quantity);
+        pruneAutomationResultWindows(target, targetActor);
         store.saveSheetsAndRoll(campaign.getId(), Map.of(targetActor.getId(), target), updated);
         sharedCards.put(cardId, updated);
         inventoryChanged(targetActor, target);

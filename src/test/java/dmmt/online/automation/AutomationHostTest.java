@@ -384,6 +384,57 @@ class AutomationHostTest {
         assertEquals(before, sheet);
     }
 
+    @Test
+    void derivedEffectProfilesFollowTheConditionAndDoNotReviveOldResults() throws Exception {
+        ObjectNode classes = fixture("rewrite/host-classes");
+        ObjectNode automation = (ObjectNode) classes.at("/entries/0/features/2/automation");
+        ObjectNode form = automation.putObject("effects").putObject("form").put("label", "Form");
+        form.set("while", RuleJson.parse("{\"gt\":[{\"read\":\"actor.hope.value\"},0]}"));
+        form.set("profile", RuleJson.parse("""
+                {"label":"Claws","trait":"Agility","range":"melee","damage":{"sides":8,"type":"physical"}}"""));
+        automation.set("rules", RuleJson.parse("""
+                [{"id":"off","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                  "costs":[{"op":"resource.spend","pool":"actor.hope","amount":1}],"do":[],"ui":{"label":"Off"}},
+                 {"id":"on","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"On"}},
+                 {"id":"after","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button"}],
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"After"}}]"""));
+        var pack = AutomationHost.compile("test", Map.of("classes", classes.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet(), origin = AutomationHost.event("action.request", "actor", 0).put("sessionId", "session");
+        JsonNode profile = HOST.describe(pack, sheet, origin, "sheet", "self").requiredAt("/profiles/1");
+        String effectId = profile.required("effectInstanceId").textValue();
+        assertEquals("f-steady/form/derived", effectId);
+        assertFalse(sheet.path("automationState").path("effects").isArray(), "Derived effects are not saved.");
+        ObjectNode damage = profileRequest("damage", 0, "f-steady", "effect.profile", "damage");
+        ((ObjectNode) damage.required("profileRoll")).put("effectInstanceId", effectId);
+        ObjectNode result = HOST.execute(pack, sheet, origin, damage, "self", "owner", new SplittableRandom(3));
+        String resultId = result.requiredAt("/event/resultId").textValue();
+        assertEquals(effectId, result.requiredAt("/event/effectInstanceId").textValue());
+        assertTrue(sheet.at("/automationState/effects").isMissingNode() || sheet.at("/automationState/effects").isEmpty());
+
+        HOST.execute(pack, sheet, origin, request("off", 1, "f-steady", "off"), "self", "owner", null);
+        assertEquals(1, HOST.describe(pack, sheet, origin, "sheet", "self").required("profiles").size());
+        assertFalse(sheet.at("/automationState/resultWindows").isObject());
+        ObjectNode staleRoll = profileRequest("stale", 2, "f-steady", "effect.profile", "attack");
+        ((ObjectNode) staleRoll.required("profileRoll")).put("effectInstanceId", effectId);
+        ObjectNode afterOff = sheet.deepCopy();
+        assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.execute(pack, sheet, origin, staleRoll, "self", "owner", StructuredRollTest.noRandom()));
+        assertEquals(afterOff, sheet);
+        HOST.execute(pack, sheet, origin, request("on", 2, "f-steady", "on"), "self", "owner", null);
+        assertEquals(effectId, HOST.describe(pack, sheet, origin, "sheet", "self").requiredAt("/profiles/1/effectInstanceId").textValue());
+        assertThrows(RuleRuntime.Unavailable.class, () -> HOST.describeResult(pack, sheet, resultId, "self", "owner", origin));
+
+        ObjectNode second = profileRequest("second", 3, "f-steady", "effect.profile", "attack");
+        ((ObjectNode) second.required("profileRoll")).put("effectInstanceId", effectId);
+        String secondId = HOST.execute(pack, sheet, origin, second, "self", "owner", new SplittableRandom(5))
+                .requiredAt("/event/resultId").textValue();
+        ((ObjectNode) sheet.required("hope")).put("on", 0);
+        HOST.pruneResultWindows(pack, sheet, origin);
+        ((ObjectNode) sheet.required("hope")).put("on", 1);
+        assertThrows(RuleRuntime.Unavailable.class, () -> HOST.describeResult(pack, sheet, secondId, "self", "owner", origin));
+    }
+
     private static ObjectNode profileRequest(String id, long revision, String instance, String profile, String kind) {
         ObjectNode request = RuleJson.JSON.createObjectNode().put("requestId", id).put("expectedRevision", revision);
         request.putArray("selections");

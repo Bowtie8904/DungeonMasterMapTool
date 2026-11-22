@@ -110,7 +110,7 @@ public final class AutomationHost {
         }
         Map<String, SheetProjection.SourceElement> active = new HashMap<>();
         sources.forEach(source -> active.put(source.instanceId(), source));
-        for (JsonNode effect : state.path("effects")) {
+        for (JsonNode effect : actor.path("effects")) {
             var source = active.get(effect.path("sourceInstanceId").textValue());
             if (source == null) continue;
             ObjectNode profile = effectProfile(pack, source, effect);
@@ -140,7 +140,7 @@ public final class AutomationHost {
     }
 
     private static ObjectNode effectProfile(Pack pack, SheetProjection.SourceElement source, JsonNode effect) {
-        if (!effect.has("profile") || effect.path("derived").asBoolean()) return null;
+        if (!effect.has("profile")) return null;
         String key = effect.path("effect").asText("");
         String prefix = source.sourceId() + "#";
         RuleCompiler.Program program = pack.programs().get(source.sourceId());
@@ -211,6 +211,7 @@ public final class AutomationHost {
             var intents = selections(request, candidates, revision, relation, false);
             response = applyEvent(pack, working, state, event, candidates, intents, random);
         }
+        pruneResultWindows(pack, working, event);
         response.put("requestId", requestId);
         ArrayNode journal = (ArrayNode) projection.state(working).get("journal");
         ObjectNode receipt = journal.addObject().put("requestId", requestId).put("principalId", principalId).put("intentHash", fingerprint);
@@ -319,13 +320,17 @@ public final class AutomationHost {
         var source = sources.stream().filter(item -> instance.equals(item.instanceId())).findFirst()
                 .orElseThrow(() -> new RuleRuntime.Unavailable("source", "This source is no longer active."));
         var program = pack.programs().get(source.sourceId());
-        JsonNode profile = null;
+        ObjectNode event = origin.deepCopy();
         String effectId = intent.has("effectInstanceId")
                 ? RuleJson.text(intent.get("effectInstanceId"), "/request/profileRoll/effectInstanceId") : null;
+        if (effectId != null) event.put("effectInstanceId", effectId);
+        ActorProjection projected = projectActor(pack, working, state, event, sources, true);
+        ObjectNode actor = projected.actor();
+        JsonNode profile = null;
         ArrayNode declared = program == null ? RuleJson.JSON.createArrayNode() : program.profiles();
         if (effectId != null) {
             if (EFFECT_PROFILE.equals(profileId))
-                for (JsonNode effect : state.path("effects"))
+                for (JsonNode effect : actor.path("effects"))
                     if (effectId.equals(effect.path("id").textValue())
                             && instance.equals(effect.path("sourceInstanceId").textValue()))
                         profile = effectProfile(pack, source, effect);
@@ -340,10 +345,6 @@ public final class AutomationHost {
         if (profile == null) throw new RuleRuntime.Unavailable("profile", "This profile is no longer available.");
 
         long revision = state.path("revision").longValue();
-        ObjectNode event = origin.deepCopy();
-        if (effectId != null) event.put("effectInstanceId", effectId);
-        ActorProjection projected = projectActor(pack, working, state, event, sources, true);
-        ObjectNode actor = projected.actor();
         ProfileRoll.prepare(event, source, profile, kind, actor, effectId == null && equippedWeapon(working, source),
                 projected.rollModifiers(), random);
         var candidates = candidates(pack, sources, state, actor, event);
@@ -372,15 +373,16 @@ public final class AutomationHost {
     private ObjectNode resultAction(Pack pack, ObjectNode working, ObjectNode state, ObjectNode origin,
                                     ObjectNode request, String principal, RandomGenerator random, PartyTargets party) {
         var sources = projection.sources(working);
-        ResultWindows.prune(state, ResultWindows.guards(sources, state.path("effects")));
+        ResultWindows.prune(state, ResultWindows.guards(sources, activationEffects(pack, working, state, origin, sources)));
         var window = ResultWindows.lookup(state, pack.revision(), principal, RuleJson.id(request.get("resultId"), "/request/resultId"));
         ObjectNode event = savedResultEvent(window, origin);
+        ObjectNode actor = actor(pack, working, state, event, sources);
         var selection = request.requiredAt("/selections/0");
         String instance = RuleJson.id(selection.get("sourceInstanceId"), "/request/selections/0/sourceInstanceId");
         var element = sources.stream().filter(e -> instance.equals(e.instanceId())).findFirst().orElseThrow(ResultWindows::stale);
         var program = pack.programs().get(element.sourceId());
         if (program == null) throw ResultWindows.stale();
-        var context = context(state, element, actor(pack, working, state, event, sources), event);
+        var context = context(state, element, actor, event);
         var intent = selections(request, List.of(new RuleDispatcher.Candidate(program, context)), state.required("revision").longValue(),
                 "self", false).getFirst();
         ResultWindows.take(window, new ResultWindows.Button(instance, intent.ruleId(), intent.bindingId(), intent.eachId()));
@@ -405,7 +407,6 @@ public final class AutomationHost {
                 ((ObjectNode) response.required("event")).set("roll", roll);
                 reviseResult(pack, working, response, principal, window);
             }
-            pruneResultWindows(working);
             return response;
         }
         // Dispatch only the chosen button: automatic roll.finished reactions already ran when the roll was made.
@@ -418,7 +419,6 @@ public final class AutomationHost {
         resolution.context().path("outbox").forEach(cmd -> commands.add((ObjectNode) cmd));
         var response = applyResolved(pack, working, state, event, List.of(resolution.context()), List.of(action), commands);
         if (!resolution.publishedRolls().isEmpty()) reviseResult(pack, working, response, principal, window);
-        pruneResultWindows(working);
         return response;
     }
 
@@ -439,21 +439,22 @@ public final class AutomationHost {
         if (sources.stream().noneMatch(source -> source.instanceId().equals(event.path("sourceInstanceId").textValue())))
             return; // Consuming the roll's source cannot leave an actionable result behind.
         ObjectNode state = projection.state(sheet);
+        ObjectNode actor = actor(pack, sheet, state, event, sources);
         if (event.has("effectInstanceId")) {
             boolean active = false;
-            for (JsonNode effect : state.path("effects"))
+            for (JsonNode effect : actor.path("effects"))
                 if (effect.path("id").equals(event.path("effectInstanceId"))
                         && effect.path("sourceInstanceId").equals(event.path("sourceInstanceId"))) active = true;
             if (!active) return;
         }
-        ArrayNode matches = resultButtons(pack, sources, state, actor(pack, sheet, state, event, sources), event, null, null);
+        ArrayNode matches = resultButtons(pack, sources, state, actor, event, null, null);
         if (used != null) {
             Set<ResultWindows.Button> spent = new java.util.HashSet<>();
             used.forEach(item -> spent.add(ResultWindows.Button.of(item)));
             for (int i = matches.size() - 1; i >= 0; i--)
                 if (spent.contains(ResultWindows.Button.of(matches.get(i)))) matches.remove(i);
         }
-        String id = ResultWindows.publish(state, pack.revision(), principal, event, matches, ResultWindows.guards(sources, state.path("effects")));
+        String id = ResultWindows.publish(state, pack.revision(), principal, event, matches, ResultWindows.guards(sources, actor.path("effects")));
         if (id != null) {
             if (used != null) ResultWindows.lookup(state, pack.revision(), principal, id).set("used", used.deepCopy());
             event.put("resultId", id);
@@ -491,13 +492,14 @@ public final class AutomationHost {
         if (!"self".equals(relation)) throw new SecurityException("Only the character owner may use this roll result.");
         ObjectNode copy = sheet.deepCopy(), state = projection.state(copy);
         var sources = projection.sources(copy);
-        ResultWindows.prune(state, ResultWindows.guards(sources, state.path("effects")));
+        ResultWindows.prune(state, ResultWindows.guards(sources, activationEffects(pack, copy, state, origin, sources)));
         var window = ResultWindows.lookup(state, pack.revision(), principal, id);
         Set<ResultWindows.Button> retained = new java.util.HashSet<>();
         window.required("buttons").forEach(item -> retained.add(ResultWindows.Button.of(item)));
         ObjectNode event = savedResultEvent(window, origin);
+        ObjectNode actor = actor(pack, copy, state, event, sources);
         return RuleJson.JSON.createObjectNode().put("revision", state.path("revision").asLong())
-                .set("actions", resultButtons(pack, sources, state, actor(pack, copy, state, event, sources), event, retained, party));
+                .set("actions", resultButtons(pack, sources, state, actor, event, retained, party));
     }
 
     private static ObjectNode savedResultEvent(ObjectNode window, ObjectNode origin) {
@@ -509,9 +511,10 @@ public final class AutomationHost {
     }
 
     /** Do not let removing and later re-equipping a source revive its old actions. */
-    public void pruneResultWindows(ObjectNode sheet) {
+    public void pruneResultWindows(Pack pack, ObjectNode sheet, ObjectNode event) {
         if (!(sheet.path(projection.stateField()) instanceof ObjectNode state) || !state.has("resultWindows")) return;
-        ResultWindows.prune(state, ResultWindows.guards(projection.sources(sheet), state.path("effects")));
+        var sources = projection.sources(sheet);
+        ResultWindows.prune(state, ResultWindows.guards(sources, activationEffects(pack, sheet, state, event, sources)));
     }
 
     /** Dispatch a host transition in the caller's staged sheet transaction, without creating a player retry record. */
@@ -673,6 +676,20 @@ public final class AutomationHost {
     }
 
     private record ActorProjection(ObjectNode actor, List<ProfileRoll.Modifier> rollModifiers) {}
+
+    private ArrayNode activationEffects(Pack pack, ObjectNode sheet, ObjectNode state, ObjectNode event,
+                                        List<SheetProjection.SourceElement> sources) {
+        ObjectNode actor = projection.actor(sheet);
+        if (event.hasNonNull("actorId")) actor.set("id", event.get("actorId"));
+        actor.set("stats", projection.stats(actor, List.of()));
+        ArrayNode effects = actor.path("effects").isArray()
+                ? (ArrayNode) actor.path("effects").deepCopy() : RuleJson.JSON.createArrayNode();
+        for (var element : sources) {
+            RuleCompiler.Program program = pack.programs().get(element.sourceId());
+            if (program != null) effects.addAll(RuleEffects.derived(program, context(state, element, actor, event)));
+        }
+        return effects;
+    }
 
     private ActorProjection projectActor(Pack pack, ObjectNode sheet, ObjectNode state, ObjectNode event,
                                          List<SheetProjection.SourceElement> sources, boolean collectRollModifiers) {

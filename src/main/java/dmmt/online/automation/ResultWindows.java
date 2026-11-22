@@ -23,7 +23,7 @@ final class ResultWindows {
         }
     }
 
-    /** Source definition plus stored activations, not mutable quantities, labels, or a global sheet revision. */
+    /** Source definition plus current activations, not mutable quantities, labels, or a global sheet revision. */
     static Map<String, ObjectNode> guards(List<SheetProjection.SourceElement> sources, JsonNode effects) {
         Map<String, ObjectNode> guards = new HashMap<>();
         for (var source : sources) {
@@ -33,7 +33,7 @@ final class ResultWindows {
         }
         for (var effect : effects) {
             var guard = guards.get(effect.path("sourceInstanceId").textValue());
-            if (guard != null && !effect.path("derived").asBoolean())
+            if (guard != null)
                 ((ObjectNode) guard.get("activations")).put(effect.required("id").textValue(), true);
         }
         return guards;

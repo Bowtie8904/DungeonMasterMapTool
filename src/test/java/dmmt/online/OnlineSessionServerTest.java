@@ -1878,6 +1878,16 @@ class OnlineSessionServerTest {
     @Test
     @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "dmmt.benchmark.automation", matches = "true")
     void measurePersistedMixedWeaponDamage() throws Exception {
+        measurePersistedMixedWeaponDamage(false);
+    }
+
+    @Test
+    @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "dmmt.benchmark.automation", matches = "true")
+    void measurePersistedDerivedActivationDamage() throws Exception {
+        measurePersistedMixedWeaponDamage(true);
+    }
+
+    private void measurePersistedMixedWeaponDamage(boolean derived) throws Exception {
         automationCompendium();
         Path file = compendiumDir.resolve("classes.json");
         ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
@@ -1904,6 +1914,14 @@ class OnlineSessionServerTest {
               "where":{"includes":[{"read":"event.roll.metadata.weaponBaseContributions"},{"read":"die.contributionId"}]},"as":"all"},
              {"op":"roll.dropLowestPerPool","from":{"read":"result.added"},"dice":{"read":"result.all"},"count":1,"as":"dropped"},
              {"op":"roll.publish","roll":{"read":"result.dropped"}}]}"""));
+        if (derived) {
+            ObjectNode effect = automation.putObject("effects").putObject("form").put("label", "Form");
+            effect.set("while", MAPPER.readTree("{\"gt\":[{\"read\":\"actor.hope.value\"},0]}"));
+            effect.set("profile", MAPPER.readTree("{\"label\":\"Claws\",\"trait\":\"Finesse\",\"damage\":{\"sides\":8}}"));
+            rules.add(MAPPER.readTree("""
+               {"id":"after","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button"}],
+                "ui":{"label":"After"},"do":[{"op":"resource.gain","pool":"actor.hope","amount":1}]}"""));
+        }
         java.nio.file.Files.writeString(file, catalog.toString());
         campaign.getActors().add(Campaign.Actor.builder().id("roller").name("Ada").ownerId(playerId()).build());
         ObjectNode sheet = performanceSheet().put("name", "Ada").put("notes", "Session notes. ".repeat(800));
@@ -1936,6 +1954,7 @@ class OnlineSessionServerTest {
             assertEquals(200, response.statusCode(), response.body());
             JsonNode result = MAPPER.readTree(response.body());
             assertEquals(i + 1, result.required("revision").intValue());
+            if (derived) assertTrue(result.requiredAt("/event/resultId").isTextual());
             JsonNode roll = result.requiredAt("/event/roll");
             assertEquals("[\"damage\",\"damage.2\"]", roll.requiredAt("/metadata/weaponBaseContributions").toString());
             assertEquals(3, roll.requiredAt("/contributions/0/dice").size());
@@ -1956,8 +1975,9 @@ class OnlineSessionServerTest {
         assertEquals(warmup + samples,
                 MAPPER.readTree(store.loadSheet(campaign.getId(), "roller")).requiredAt("/automationState/revision").intValue());
         java.util.Arrays.sort(nanos);
-        System.out.printf(java.util.Locale.ROOT, "automation-bench mixed weapon POST: n=%d p50=%.2fms p95=%.2fms mean=%.2fMiB allocated%n",
-                samples, nanos[samples / 2 - 1] / 1e6, nanos[(int) Math.ceil(samples * .95) - 1] / 1e6,
+        System.out.printf(java.util.Locale.ROOT, "automation-bench %s POST: n=%d p50=%.2fms p95=%.2fms mean=%.2fMiB allocated%n",
+                derived ? "mixed weapon with derived activation" : "mixed weapon", samples,
+                nanos[samples / 2 - 1] / 1e6, nanos[(int) Math.ceil(samples * .95) - 1] / 1e6,
                 java.util.Arrays.stream(bytes).average().orElseThrow() / (1024 * 1024));
     }
 
@@ -2436,6 +2456,149 @@ class OnlineSessionServerTest {
         assertEquals(409, automationHttp(cookie, "roller", body.toString()).statusCode());
         assertEquals(before, store.loadSheet(campaign.getId(), "roller"));
         assertEquals(history + 1, store.historyTail(campaign.getId(), 100).size());
+    }
+
+    @Test
+    void sheetSavesRetireDerivedProfileResultsBeforeTheConditionReturns() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        ObjectNode form = automation.putObject("effects").putObject("form").put("label", "Form");
+        form.set("while", MAPPER.readTree("{\"gt\":[{\"read\":\"actor.hope.value\"},0]}"));
+        form.set("profile", MAPPER.readTree("""
+            {"label":"Claws","trait":"Finesse","range":"melee","damage":{"sides":8,"type":"physical"}}"""));
+        automation.set("rules", MAPPER.readTree("""
+            [{"id":"after","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button"}],
+              "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"After"}}]"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        campaign.getActors().add(Campaign.Actor.builder().id("roller").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "roller", """
+            {"name":"Ada","level":2,"hope":{"on":1,"slots":6},"hp":{"on":1,"slots":6},
+             "traits":[{"name":"Finesse","mod":3}],
+             "features":[{"name":"Steady","instanceId":"s","automationSource":"classes:tester:features:steady"},
+              {"name":"Legacy heal","automation":{"actions":[{"id":"heal","label":"Heal","hostOwned":true,
+               "cost":{"hope":1},"steps":[{"op":"clear","resource":"hp","amount":1}]}]}}]}""");
+        String cookie = cookie();
+        JsonNode profile = MAPPER.readTree(automationHttp(cookie, "roller", null).body()).requiredAt("/profiles/1");
+        assertEquals("s/form/derived", profile.required("effectInstanceId").textValue());
+        String roll = """
+            {"request":{"requestId":"roll","expectedRevision":0,"selections":[],
+             "profileRoll":{"sourceInstanceId":"s","profileId":"effect.profile","effectInstanceId":"s/form/derived","kind":"attack"}}}""";
+        var response = automationHttp(cookie, "roller", roll);
+        assertEquals(200, response.statusCode(), response.body());
+        assertEquals(response.body(), automationHttp(cookie, "roller", roll).body());
+        assertEquals(403, automationHttp(allyCookie("outsider"), "roller", roll).statusCode());
+        String resultId = MAPPER.readTree(response.body()).requiredAt("/event/resultId").textValue();
+        String uri = "http://localhost:" + port + "/api/sheet/roller";
+        for (int hope : List.of(0, 1)) {
+            JsonNode loaded = MAPPER.readTree(sheetRead(cookie, "roller").body());
+            ObjectNode sheet = (ObjectNode) loaded.required("sheet").deepCopy();
+            sheet.withObject("/hope").put("on", hope);
+            var saved = http.send(HttpRequest.newBuilder(URI.create(uri)).header("Cookie", cookie)
+                    .header("Content-Type", "application/json").header("If-Match", loaded.required("version").textValue())
+                    .PUT(HttpRequest.BodyPublishers.ofString(sheet.toString())).build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, saved.statusCode(), saved.body());
+            if (hope == 0)
+                assertFalse(MAPPER.readTree(store.loadSheet(campaign.getId(), "roller")).at("/automationState/resultWindows").isObject());
+        }
+        assertEquals("s/form/derived", MAPPER.readTree(automationHttp(cookie, "roller", null).body())
+                .requiredAt("/profiles/1/effectInstanceId").textValue());
+        assertEquals(409, resultHttp(cookie, "roller", resultId).statusCode());
+
+        var next = automationHttp(cookie, "roller", roll.replace("\"roll\"", "\"next\"").replace("\"expectedRevision\":0", "\"expectedRevision\":1"));
+        assertEquals(200, next.statusCode(), next.body());
+        String nextId = MAPPER.readTree(next.body()).requiredAt("/event/resultId").textValue();
+        ObjectNode heal = MAPPER.createObjectNode().put("actorId", "roller").put("key", "feat:Legacy heal").put("actionId", "heal");
+        var healed = featureHttp(cookie, heal);
+        assertEquals(200, healed.statusCode(), healed.body());
+        JsonNode afterHeal = MAPPER.readTree(store.loadSheet(campaign.getId(), "roller"));
+        assertEquals(0, afterHeal.at("/hope/on").intValue());
+        assertFalse(afterHeal.at("/automationState/resultWindows").isObject());
+        JsonNode loaded = MAPPER.readTree(sheetRead(cookie, "roller").body());
+        ObjectNode sheet = (ObjectNode) loaded.required("sheet").deepCopy();
+        sheet.withObject("/hope").put("on", 1);
+        var restored = http.send(HttpRequest.newBuilder(URI.create(uri)).header("Cookie", cookie)
+                .header("Content-Type", "application/json").header("If-Match", loaded.required("version").textValue())
+                .PUT(HttpRequest.BodyPublishers.ofString(sheet.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, restored.statusCode(), restored.body());
+        assertEquals(409, resultHttp(cookie, "roller", nextId).statusCode());
+
+        var third = automationHttp(cookie, "roller", roll.replace("\"roll\"", "\"third\"").replace("\"expectedRevision\":0", "\"expectedRevision\":2"));
+        assertEquals(200, third.statusCode(), third.body());
+        String thirdId = MAPPER.readTree(third.body()).requiredAt("/event/resultId").textValue();
+        Path rulesFile = compendiumDir.resolve("rules.json");
+        String rules = java.nio.file.Files.readString(rulesFile);
+        java.nio.file.Files.delete(rulesFile);
+        try {
+            loaded = MAPPER.readTree(sheetRead(cookie, "roller").body());
+            sheet = (ObjectNode) loaded.required("sheet").deepCopy();
+            sheet.withObject("/hope").put("on", 0);
+            var saved = http.send(HttpRequest.newBuilder(URI.create(uri)).header("Cookie", cookie)
+                    .header("Content-Type", "application/json").header("If-Match", loaded.required("version").textValue())
+                    .PUT(HttpRequest.BodyPublishers.ofString(sheet.toString())).build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, saved.statusCode(), saved.body());
+            assertFalse(MAPPER.readTree(store.loadSheet(campaign.getId(), "roller")).at("/automationState/resultWindows").isObject());
+        } finally {
+            java.nio.file.Files.writeString(rulesFile, rules);
+        }
+        loaded = MAPPER.readTree(sheetRead(cookie, "roller").body());
+        sheet = (ObjectNode) loaded.required("sheet").deepCopy();
+        sheet.withObject("/hope").put("on", 1);
+        restored = http.send(HttpRequest.newBuilder(URI.create(uri)).header("Cookie", cookie)
+                .header("Content-Type", "application/json").header("If-Match", loaded.required("version").textValue())
+                .PUT(HttpRequest.BodyPublishers.ofString(sheet.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, restored.statusCode(), restored.body());
+        assertEquals(409, resultHttp(cookie, "roller", thirdId).statusCode());
+    }
+
+    @Test
+    void partyRecipientChangesRetireDerivedProfileResults() throws Exception {
+        ObjectNode catalog = installPartyAction();
+        ObjectNode rally = (ObjectNode) catalog.at("/entries/0/features/0/automation");
+        ((ObjectNode) rally.at("/rules/0/bindings/0/targetSelection")).put("scope", "activePlayerCharacters");
+        ObjectNode steady = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        ObjectNode form = steady.putObject("effects").putObject("form").put("label", "Form");
+        form.set("while", MAPPER.readTree("{\"gt\":[{\"read\":\"actor.stress.marked\"},0]}"));
+        form.set("profile", MAPPER.readTree("{\"label\":\"Claws\",\"trait\":\"Finesse\",\"damage\":{\"sides\":8}}"));
+        steady.set("rules", MAPPER.readTree("""
+            [{"id":"after","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button"}],
+              "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"After"}}]"""));
+        java.nio.file.Files.writeString(compendiumDir.resolve("classes.json"), catalog.toString());
+        String owner = cookie(), ally = allyCookie("other"), id = campaign.getId();
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Caster").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("recipient").name("Ally").ownerId("other").build());
+        store.saveSheet(id, "caster", """
+            {"name":"Caster","hope":{"on":2,"slots":6},"features":[
+             {"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"}]}""");
+        store.saveSheet(id, "recipient", """
+            {"name":"Ally","hope":{"on":1,"slots":6},"stress":{"on":1,"slots":6},
+             "traits":[{"name":"Finesse","mod":2}],"features":[
+              {"name":"Steady","automationSource":"classes:tester:features:steady","instanceId":"s"}]}""");
+        String roll = """
+            {"request":{"requestId":"roll","expectedRevision":0,"selections":[],
+             "profileRoll":{"sourceInstanceId":"s","profileId":"effect.profile","effectInstanceId":"s/form/derived","kind":"attack"}}}""";
+        var rolled = automationHttp(ally, "recipient", roll);
+        assertEquals(200, rolled.statusCode(), rolled.body());
+        String resultId = MAPPER.readTree(rolled.body()).requiredAt("/event/resultId").textValue();
+        JsonNode offer = MAPPER.readTree(automationHttp(owner, "caster", null).body()).requiredAt("/actions/0/targetSelection");
+        ObjectNode body = MAPPER.createObjectNode();
+        ObjectNode request = body.putObject("request").put("requestId", "party").put("expectedRevision", 0);
+        request.putArray("selections").addObject().put("sourceInstanceId", "r").put("ruleId", "rally").put("bindingId", "sheet");
+        request.putObject("target").set("version", offer.required("version"));
+        var applied = automationHttp(owner, "caster", body.toString());
+        assertEquals(200, applied.statusCode(), applied.body());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(id, "recipient"));
+        assertEquals(0, saved.requiredAt("/stress/on").intValue());
+        assertFalse(saved.at("/automationState/resultWindows").isObject());
+        JsonNode loaded = MAPPER.readTree(sheetRead(ally, "recipient").body());
+        ObjectNode restored = (ObjectNode) loaded.required("sheet").deepCopy();
+        restored.withObject("/stress").put("on", 1);
+        var response = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/recipient"))
+                .header("Cookie", ally).header("Content-Type", "application/json").header("If-Match", loaded.required("version").textValue())
+                .PUT(HttpRequest.BodyPublishers.ofString(restored.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, response.statusCode(), response.body());
+        assertEquals(409, resultHttp(ally, "recipient", resultId).statusCode());
     }
 
     @Test

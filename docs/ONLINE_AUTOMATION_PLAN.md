@@ -30,8 +30,12 @@ A stored effect whose source is active on its holder also offers its frozen atta
 and `request.profileRoll` include `effectInstanceId` and the reserved profile ID `effect.profile`; the host
 resolves and validates the stored instance, not submitted damage facts. The activation must still exist when
 using an offer or a result button, including after ending and recasting the effect. If a roll itself ends the
-effect, it completes without creating a result offer for that activation. Derived profiles and profiles on
-another character's effect remain pending cross-holder and activation integration.
+effect, it completes without creating a result offer for that activation. A derived effect on its own active
+source also offers its current profile while its condition holds, without persisting the effect. Host sheet
+transactions prune result controls when the condition stops holding, so they cannot reappear when it becomes
+true again. If the current pack is unavailable during a sheet save, the host logs the problem and discards
+the ephemeral controls rather than allowing an old activation to revive. Profiles on another character's
+effect remain pending cross-holder integration.
 
 Weapon damage records its base contribution IDs in roll metadata. Converted weapon-dice edits use those IDs
 and the source ID so a bonus contribution from the same source is not mistaken for a base pool.
@@ -73,6 +77,12 @@ Unused recipe bodies also validate concrete binding IDs, event/surface/mode name
 | Party POST | 38.56 ms | 48.23 ms | 13.50 MiB |
 
 The separate `mvn "-Ddmmt.benchmark.automation=true" "-Dtest=OnlineSessionServerTest#measurePersistedMixedWeaponDamage" test` samples a single sheet with 12 KB of notes and a full retry journal. Its weapon damage roll has two proficiency-scaled pools, conditional and unconditional passives, a stored effect, a selected option, and an automatic reaction adding and dropping one die per pool. After 20 warm-ups, 40 complete persisted POSTs measured 37.22 ms median, 51.55 ms p95, and 11.82 MiB mean allocation per request.
+
+`OnlineSessionServerTest#measurePersistedDerivedActivationDamage` uses the same workload with an active
+derived effect and a result button, including projection and persisted guard pruning. One run measured
+29.57 ms median, 44.88 ms p95, and 14.56 MiB mean allocation over 40 POSTs after 20 warm-ups; the
+ordinary mixed-weapon run in the same invocation measured 19.82 ms, 22.02 ms, and 11.85 MiB. The
+derived scenario also creates result controls, so the difference is not solely derived-effect overhead.
 
 These are separate single-run development measurements on Windows / Temurin 25, not release thresholds or directly comparable workloads. Allocation is JVM-wide (host and test HTTP client), not retained heap. The runs exclude browser rendering, WAN latency, connected-client broadcasts and unrelated concurrent play.
 
