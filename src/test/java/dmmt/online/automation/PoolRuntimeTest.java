@@ -140,6 +140,57 @@ class PoolRuntimeTest {
     }
 
     @Test
+    void resetExpressionsSeeDefaultsAndTheSamePreResetPoolsInAnyDeclarationOrder() throws Exception {
+        String a = """
+                "a":{"kind":"number","scope":"source","max":10,"initial":2,"resetOn":["scene.end"],"resetTo":5}
+                """;
+        String b = """
+                "b":{"kind":"number","scope":"source","max":{"add":[{"read":"state.cap"},4]},
+                     "resetOn":["scene.end"],"resetTo":{"add":[{"read":"state.bonus"},{"read":"sourcePools.a.value"}]}}
+                """;
+        for (String declarations : new String[]{a + "," + b, b + "," + a}) {
+            ObjectNode automation = (ObjectNode) RuleJson.parse("""
+                    {"state":{"bonus":1,"cap":6},"pools":{%s,
+                     "idle":{"kind":"number","scope":"source","max":10,"initial":4}}}
+                    """.formatted(declarations));
+            RuleCompiler.Program program = RuleCompiler.compile("classes:reset", automation, fixture("rewrite/recipes"));
+            ObjectNode before = context(program.sourceId(), "Reset");
+            before.withObject("/event").put("type", "scene.end");
+            ObjectNode untouched = before.deepCopy();
+            ObjectNode reset = RuleRuntime.resetLimits(program, before, "scene.end");
+            assertEquals(untouched, before);
+            assertEquals(1, reset.path("revision").intValue());
+            assertEquals(5, reset.at("/sourcePools/a/value").intValue());
+            assertEquals(3, reset.at("/sourcePools/b/value").intValue());
+            assertFalse(reset.path("sourcePools").has("idle"), "Unrelated default pools are not persisted.");
+        }
+    }
+
+    @Test
+    void resetNormalizesChangedComputedPoolsAndRejectsBadExpressionsAtomically() throws Exception {
+        ObjectNode automation = (ObjectNode) RuleJson.parse("""
+                {"state":{"cap":3},"pools":{
+                  "shared":{"kind":"number","scope":"actor","max":{"read":"state.cap"},"initial":1,
+                            "resetOn":["scene.end"],"resetTo":{"read":"actor.pools.shared.value"}}}}
+                """);
+        RuleCompiler.Program program = RuleCompiler.compile("classes:reset", automation, fixture("rewrite/recipes"));
+        ObjectNode before = context(program.sourceId(), "Reset");
+        before.withObject("/event").put("type", "scene.end");
+        before.withObject("/actor").putObject("pools").putObject("shared").put("value", 7).put("max", 8);
+        ObjectNode saved = before.deepCopy();
+        ObjectNode reset = RuleRuntime.resetLimits(program, before, "scene.end");
+        assertEquals(saved, before);
+        assertEquals(3, reset.at("/actor/pools/shared/value").intValue());
+        assertEquals(3, reset.at("/actor/pools/shared/max").intValue());
+        assertEquals(1, reset.path("revision").intValue());
+
+        ((ObjectNode) automation.at("/pools/shared")).set("resetTo", RuleJson.parse("{\"read\":\"actor.missing\"}"));
+        RuleCompiler.Program bad = RuleCompiler.compile("classes:reset", automation, fixture("rewrite/recipes"));
+        assertThrows(IllegalArgumentException.class, () -> RuleRuntime.resetLimits(bad, before, "scene.end"));
+        assertEquals(saved, before);
+    }
+
+    @Test
     void poolCapacityAndNumericGainAreCappedBeforeMutationOrRandomSampling() throws Exception {
         RuleCompiler.Program program = program("classes:capacity-test");
         ObjectNode before = context(program.sourceId(), "Pool");

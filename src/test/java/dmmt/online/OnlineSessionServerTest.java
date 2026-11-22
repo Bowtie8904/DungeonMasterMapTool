@@ -2654,11 +2654,12 @@ class OnlineSessionServerTest {
         Path file = compendiumDir.resolve("classes.json");
         ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
         ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        automation.withObject("/state").put("bonus", 1);
         automation.set("pools", MAPPER.readTree("""
                 {"charge":{"kind":"number","scope":"source","max":10,"resetOn":["scene.end"],
                   "resetTo":{"if":[{"and":[{"eq":[{"read":"actor.id"},{"read":"event.actorId"}]},
                                                {"exists":"event.sessionId"}]},
-                                      {"read":"event.table.fear"},0]}}}"""));
+                                      {"add":[{"read":"event.table.fear"},{"read":"state.bonus"}]},0]}}}"""));
         automation.set("effects", MAPPER.readTree("""
                 {"form":{"label":"Form","while":{"eq":[{"read":"actor.id"},"active"]}}}"""));
         java.nio.file.Files.writeString(file, catalog.toString());
@@ -2672,7 +2673,7 @@ class OnlineSessionServerTest {
         assertNull(server.endScene());
         for (String id : List.of("active", "offline")) {
             JsonNode sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), id));
-            assertEquals(3, sheet.requiredAt("/automationState/sources/s/sourcePools/charge/value").intValue());
+            assertEquals(4, sheet.requiredAt("/automationState/sources/s/sourcePools/charge/value").intValue());
             assertFalse(sheet.at("/automationState/effects").isArray());
         }
     }

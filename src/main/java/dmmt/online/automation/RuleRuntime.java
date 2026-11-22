@@ -290,21 +290,37 @@ public final class RuleRuntime {
             }
         }
         ObjectNode poolDefinitions = program.pools();
+        ObjectNode resetContext = null;
         var pools = poolDefinitions.fields();
         while (pools.hasNext()) {
             var definition = pools.next();
             boolean poolReset = false;
             for (JsonNode declared : definition.getValue().path("resetOn")) if (event.equals(declared.asText())) poolReset = true;
             if (poolReset) {
-                ObjectNode pool = poolState(program, next, definition.getKey());
+                if (resetContext == null) resetContext = context(program, null, hostContext);
+                boolean actorScoped = "actor".equals(definition.getValue().path("scope").asText());
+                JsonNode originalOwner = actorScoped ? hostContext.path("actor").path("pools") : hostContext.path("sourcePools");
+                JsonNode original = originalOwner.get(definition.getKey());
+                ObjectNode baselinePool = poolState(program, resetContext, definition.getKey());
+                ObjectNode pool = baselinePool.deepCopy();
                 if ("number".equals(definition.getValue().path("kind").asText())) {
                     JsonNode resetTo = definition.getValue().get("resetTo");
                     int initial = resetTo == null ? definition.getValue().path("initial").asInt(0)
                             : (int) Math.max(0, Math.min(pool.path("max").asInt(),
-                                    Math.floor(RuleExpression.number(RuleExpression.evaluate(resetTo, hostContext), "/pools/" + definition.getKey() + "/resetTo"))));
-                    if (pool.path("value").asInt() != initial) { pool.put("value", initial); changed = true; }
+                                    Math.floor(RuleExpression.number(RuleExpression.evaluate(resetTo, resetContext), "/pools/" + definition.getKey() + "/resetTo"))));
+                    pool.put("value", initial);
                 } else if (!pool.path("dice").isEmpty()) {
                     pool.putArray("dice");
+                }
+                if (original == null ? !baselinePool.equals(pool) : !original.equals(pool)) {
+                    ObjectNode owner;
+                    if (actorScoped) {
+                        ObjectNode actor = RuleJson.object(next.path("actor"), "/actor");
+                        owner = actor.has("pools") ? RuleJson.object(actor.get("pools"), "/actor/pools") : actor.putObject("pools");
+                    } else {
+                        owner = next.has("sourcePools") ? RuleJson.object(next.get("sourcePools"), "/sourcePools") : next.putObject("sourcePools");
+                    }
+                    owner.set(definition.getKey(), pool);
                     changed = true;
                 }
             }
