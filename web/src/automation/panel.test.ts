@@ -71,7 +71,7 @@ describe('automation panel', () => {
     button.click();
     await settle();
     await settle();
-    expect(submit).toHaveBeenCalledWith('a1', expect.objectContaining({ sourceInstanceId: 'f-rally', ruleId: 'rally', bindingId: 'use', expectedRevision: 4 }), 'action.request');
+    expect(submit).toHaveBeenCalledWith('a1', expect.objectContaining({ sourceInstanceId: 'f-rally', ruleId: 'rally', bindingId: 'use', expectedRevision: 4 }));
     expect(fetchActions).toHaveBeenCalledTimes(2);
     expect(fake(panel).text).toContain('Roll total: 14.');
   });
@@ -84,7 +84,7 @@ describe('automation panel', () => {
     fake(panel).all('button')[0].click();
     await settle();
     expect(fetchActions).toHaveBeenCalledWith('a1', 'downtime', 'downtime.move');
-    expect(submit).toHaveBeenCalledWith('a1', expect.objectContaining({ ruleId: 'rally' }), 'downtime.move');
+    expect(submit).toHaveBeenCalledWith('a1', expect.objectContaining({ ruleId: 'rally' }));
   });
 
   it('shows host failures instead of hiding them', async () => {
@@ -104,7 +104,6 @@ describe('automation panel', () => {
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('/api/automation/a1');
     expect(JSON.parse(String(init.body))).toEqual({
-      event: { type: 'action.request' },
       request: { requestId: 'r1', expectedRevision: 4, selections: [{ sourceInstanceId: 'f-rally', ruleId: 'rally', bindingId: 'use', eachId: 'd1', inputs: { amount: 2 } }] },
     });
   });

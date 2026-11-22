@@ -83,6 +83,8 @@ class AutomationHostTest {
         ObjectNode replay = HOST.execute(pack, sheet, action(), request("r1", 0, "f-rally", "rally"), "self", new SplittableRandom(1));
         assertEquals(response, replay);
         assertEquals(4, sheet.path("hope").path("on").asInt(), "a repeated request ID must not run twice");
+        assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, sheet, action(), request("r1", 0, "f-rally", "rally"),
+                "self", "another-player", new SplittableRandom(1)));
 
         var stale = assertThrows(RuleRuntime.Unavailable.class,
                 () -> HOST.execute(pack, sheet, action(), request("r2", 0, "f-rally", "rally"), "self", null));

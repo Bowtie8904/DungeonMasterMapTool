@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -110,6 +111,9 @@ public final class RuleCompiler {
     }
 
     public static final class Program {
+        record BindingKey(String event, String surface) {}
+        record BindingRef(String ruleId, String bindingId, boolean forEach) {}
+
         private final String sourceId;
         private final ObjectNode initialState;
         private final ObjectNode limits;
@@ -117,6 +121,7 @@ public final class RuleCompiler {
         private final ObjectNode effects;
         private final ArrayNode modifiers;
         private final Map<String, ObjectNode> rules;
+        private final Map<BindingKey, List<BindingRef>> bindingsByEventSurface;
         private ArrayNode profiles = RuleJson.JSON.createArrayNode();
 
         private Program(String sourceId, Decl decl, ArrayNode modifiers, Map<String, ObjectNode> rules) {
@@ -128,10 +133,25 @@ public final class RuleCompiler {
             this.modifiers = modifiers.deepCopy();
             this.rules = new LinkedHashMap<>();
             rules.forEach((id, rule) -> this.rules.put(id, rule.deepCopy()));
+            Map<BindingKey, List<BindingRef>> bindingIndex = new HashMap<>();
+            this.rules.forEach((ruleId, rule) -> {
+                for (JsonNode binding : rule.path("bindings")) {
+                    if (!Set.of("button", "option").contains(binding.path("mode").asText())) continue;
+                    BindingKey key = new BindingKey(binding.path("event").asText(), binding.path("surface").asText());
+                    bindingIndex.computeIfAbsent(key, ignored -> new ArrayList<>()).add(
+                            new BindingRef(ruleId, binding.path("id").asText(), binding.has("forEach")));
+                }
+            });
+            Map<BindingKey, List<BindingRef>> immutableIndex = new HashMap<>();
+            bindingIndex.forEach((key, refs) -> immutableIndex.put(key, List.copyOf(refs)));
+            this.bindingsByEventSurface = Map.copyOf(immutableIndex);
         }
 
         public String sourceId() { return sourceId; }
         public Set<String> ruleIds() { return Set.copyOf(rules.keySet()); }
+        List<BindingRef> bindings(String event, String surface) {
+            return bindingsByEventSurface.getOrDefault(new BindingKey(event, surface), List.of());
+        }
         public ObjectNode initialState() { return initialState.deepCopy(); }
         ObjectNode limits() { return limits.deepCopy(); }
         ObjectNode pools() { return pools.deepCopy(); }

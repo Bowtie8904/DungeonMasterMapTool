@@ -99,13 +99,23 @@ public final class AutomationHost {
      */
     public ObjectNode execute(Pack pack, ObjectNode sheet, ObjectNode event, ObjectNode request, String relation,
                               RandomGenerator random) {
+        return execute(pack, sheet, event, request, relation, "local", random);
+    }
+
+    public ObjectNode execute(Pack pack, ObjectNode sheet, ObjectNode event, ObjectNode request, String relation,
+                              String principalId, RandomGenerator random) {
         relation(relation);
+        if (principalId == null || principalId.isBlank()) throw new IllegalArgumentException("Missing automation principal.");
         RuleJson.fields(request, "/request", "requestId", "expectedRevision", "selections");
         String requestId = RuleJson.id(request.get("requestId"), "/request/requestId");
         ObjectNode working = sheet.deepCopy();
         ObjectNode state = projection.state(working);
         for (JsonNode entry : state.path("journal"))
-            if (requestId.equals(entry.path("requestId").asText())) return ((ObjectNode) entry.path("response")).deepCopy();
+            if (requestId.equals(entry.path("requestId").asText())) {
+                if (!principalId.equals(entry.path("principalId").asText()))
+                    throw new RuleRuntime.Unavailable("requestId", "This request ID was already used by another caller.");
+                return ((ObjectNode) entry.path("response")).deepCopy();
+            }
         long revision = state.path("revision").asLong();
         if (!request.path("expectedRevision").isIntegralNumber() || request.path("expectedRevision").asLong() != revision)
             throw new RuleRuntime.Unavailable("stale", "The character changed. Reopen this action.");
@@ -188,7 +198,7 @@ public final class AutomationHost {
         state = projection.state(working);
         state.put("revision", next);
         ArrayNode journal = (ArrayNode) state.get("journal");
-        journal.addObject().put("requestId", requestId).set("response", response.deepCopy());
+        journal.addObject().put("requestId", requestId).put("principalId", principalId).set("response", response.deepCopy());
         while (journal.size() > JOURNAL_LIMIT) journal.remove(0);
         replace(sheet, working);
         return response;

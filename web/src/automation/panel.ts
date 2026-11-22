@@ -39,7 +39,7 @@ export async function describeAutomation(actorId: string, surface = 'sheet', eve
 }
 
 /** Submits one selected binding as a host intent; the host recomputes everything from trusted JSON. */
-export async function executeAutomation(actorId: string, intent: RuleIntent, event = 'action.request'): Promise<unknown> {
+export async function executeAutomation(actorId: string, intent: RuleIntent): Promise<unknown> {
   const selection: Record<string, unknown> = {
     sourceInstanceId: intent.sourceInstanceId, ruleId: intent.ruleId, bindingId: intent.bindingId, inputs: intent.inputs,
   };
@@ -47,7 +47,6 @@ export async function executeAutomation(actorId: string, intent: RuleIntent, eve
   const response = await hostFetch(`/api/automation/${encodeURIComponent(actorId)}`, {
     method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      event: { type: event },
       request: { requestId: intent.requestId, expectedRevision: intent.expectedRevision, selections: [selection] },
     }),
   });
@@ -88,7 +87,7 @@ export function automationPanel(actorId: string, surface = 'sheet', title = 'Act
       if (current !== generation) return;
       const buttons = (described?.actions ?? []).filter(action => action.mode === 'button');
       list.replaceChildren(...buttons.map(action => ruleControl({ ...action, revision: described!.revision }, async intent => {
-        const result = await submit(actorId, intent, event);
+        const result = await submit(actorId, intent);
         output.textContent = actionReports(result).join('\n');
         void load();
       }, CONTROL_TEXT)));

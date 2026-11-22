@@ -157,19 +157,11 @@ public final class RuleDispatcher {
             RuleCompiler.Program program = candidate.program();
             ObjectNode context = candidate.context();
             String eventType = snapshot.eventType();
-            List<String> ruleIds = new ArrayList<>(program.ruleIds());
-            ruleIds.sort(String::compareTo);
-            for (String ruleId : ruleIds) {
-                ObjectNode rule = program.rule(ruleId);
-                for (JsonNode binding : rule.path("bindings")) {
-                    if (!Set.of("button", "option").contains(binding.path("mode").asText())
-                            || !surface.equals(binding.path("surface").asText())
-                            || !eventType.equals(binding.path("event").asText())) continue;
-                    String bindingId = binding.path("id").asText();
-                    if (binding.has("forEach"))
-                        RuleRuntime.describeEach(program, ruleId, bindingId, context).forEach(item -> descriptions.add((ObjectNode) item));
-                    else descriptions.add(RuleRuntime.describe(program, ruleId, bindingId, context));
-                }
+            for (RuleCompiler.Program.BindingRef binding : program.bindings(eventType, surface)) {
+                if (binding.forEach())
+                    RuleRuntime.describeEach(program, binding.ruleId(), binding.bindingId(), context)
+                            .forEach(item -> descriptions.add((ObjectNode) item));
+                else descriptions.add(RuleRuntime.describe(program, binding.ruleId(), binding.bindingId(), context));
             }
         }
 
