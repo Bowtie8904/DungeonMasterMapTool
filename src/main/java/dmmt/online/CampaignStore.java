@@ -437,8 +437,20 @@ public final class CampaignStore {
         saveSheetsAndResults(campaignId, sheets, replacement, messages, fear, null, null, null);
     }
 
-    synchronized void saveAutomationResults(String campaignId, java.util.Map<String, ObjectNode> sheets,
+    static final class StaleAutomationSheet extends IOException {
+        StaleAutomationSheet() {
+            super("A character sheet changed. Refresh the action before trying again.");
+        }
+    }
+
+    synchronized void saveAutomationResults(String campaignId, Map<String, String> expectedSheets, Map<String, ObjectNode> sheets,
                                             List<ObjectNode> messages, Integer fear, List<Campaign.Countdown> countdowns) throws IOException {
+        if (!expectedSheets.keySet().containsAll(sheets.keySet()))
+            throw new IllegalArgumentException("Missing original sheet for automation commit.");
+        for (var original : expectedSheets.entrySet()) {
+            if (!java.util.Objects.equals(original.getValue(), loadSheet(campaignId, original.getKey())))
+                throw new StaleAutomationSheet();
+        }
         saveSheetsAndResults(campaignId, sheets, null, messages, fear, countdowns, null, null);
     }
 

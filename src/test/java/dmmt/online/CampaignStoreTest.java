@@ -27,6 +27,32 @@ class CampaignStoreTest {
     Path dir;
 
     @Test
+    void automationCommitChecksEveryReadSheetEvenWhenItsAutomationRevisionDidNotChange() throws Exception {
+        var store = new CampaignStore(dir);
+        String id = store.create("Party").getId();
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        for (String actor : List.of("caster", "ally"))
+            store.saveSheet(id, actor, "{\"notes\":\"old\",\"automationState\":{\"revision\":4}}");
+        var originals = java.util.Map.of("caster", store.loadSheet(id, "caster"), "ally", store.loadSheet(id, "ally"));
+        var changed = java.util.Map.of("caster", mapper.createObjectNode().put("notes", "cast"));
+        var reports = List.of(mapper.createObjectNode().put("id", 1).put("ts", 10).put("text", "Cast"));
+        store.saveSheet(id, "ally", "{\"notes\":\"edited\",\"automationState\":{\"revision\":4}}");
+        int fear = store.load(id).getFear();
+        assertThrows(CampaignStore.StaleAutomationSheet.class,
+                () -> store.saveAutomationResults(id, originals, changed, reports, fear + 1, null));
+        assertEquals(originals.get("caster"), store.loadSheet(id, "caster"));
+        assertEquals("edited", mapper.readTree(store.loadSheet(id, "ally")).path("notes").asText());
+        assertEquals(fear, store.load(id).getFear());
+        assertTrue(store.historyTail(id, 10).isEmpty());
+        assertThrows(IllegalArgumentException.class,
+                () -> store.saveAutomationResults(id, java.util.Map.of(), changed, reports, null, null));
+        store.saveAutomationResults(id, java.util.Map.of("caster", originals.get("caster"), "ally", store.loadSheet(id, "ally")),
+                changed, reports, fear + 1, null);
+        assertEquals("cast", mapper.readTree(store.loadSheet(id, "caster")).path("notes").asText());
+        assertEquals(reports, store.historyTail(id, 10));
+    }
+
+    @Test
     void fullStressProvenanceSurvivesReloadAndAllSheetPersistencePaths() throws Exception {
         var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
         CampaignStore store = new CampaignStore(dir);
