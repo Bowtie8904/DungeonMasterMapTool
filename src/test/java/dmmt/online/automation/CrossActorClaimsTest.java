@@ -112,6 +112,30 @@ class CrossActorClaimsTest {
             ]}""";
 
     @Test
+    void offersMustLinkToAnAcceptanceBindingRatherThanAnUnrelatedClaim() throws Exception {
+        ObjectNode automation = (ObjectNode) RuleJson.parse(OFFER);
+        assertDoesNotThrow(() -> RuleCompiler.compile("features:offer", automation, fixture("rewrite/recipes")));
+        ObjectNode wrongEvent = automation.deepCopy();
+        for (int i = 1; i <= 2; i++)
+            ((ObjectNode) wrongEvent.at("/rules/" + i + "/bindings/0")).put("event", "roll.finished").put("surface", "roll");
+        var noAcceptance = assertThrows(IllegalArgumentException.class,
+                () -> RuleCompiler.compile("features:offer", wrongEvent, fixture("rewrite/recipes")));
+        assertTrue(noAcceptance.getMessage().contains("claim.accept chat group"), noAcceptance.getMessage());
+
+        ObjectNode wrongSurface = automation.deepCopy();
+        for (int i = 1; i <= 2; i++)
+            ((ObjectNode) wrongSurface.at("/rules/" + i + "/bindings/0")).put("surface", "sheet");
+        assertThrows(IllegalArgumentException.class,
+                () -> RuleCompiler.compile("features:offer", wrongSurface, fixture("rewrite/recipes")));
+
+        ObjectNode differentGroup = automation.deepCopy();
+        for (int i = 1; i <= 2; i++)
+            ((ObjectNode) differentGroup.at("/rules/" + i + "/bindings/0")).put("claimGroup", "elsewhere");
+        assertThrows(IllegalArgumentException.class,
+                () -> RuleCompiler.compile("features:offer", differentGroup, fixture("rewrite/recipes")));
+    }
+
+    @Test
     void claimOffersPublishLimitsAndScopesAllowSourceSelfClaims() throws Exception {
         RuleCompiler.Program program = RuleCompiler.compile("features:offer", RuleJson.parse(OFFER), fixture("rewrite/recipes"));
         ObjectNode context = (ObjectNode) RuleJson.parse("""

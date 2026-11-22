@@ -340,11 +340,13 @@ public final class RuleCompiler {
         if (expanded.size() > 256) throw RuleJson.error("/automation/rules", "Expanded rules exceed the limit.");
         Set<String> claimGroups = new HashSet<>();
         for (ObjectNode rule : expanded.values()) for (JsonNode binding : rule.path("bindings"))
-            if (binding.has("claimGroup")) claimGroups.add(binding.path("claimGroup").asText());
+            if (binding.has("claimGroup") && "claim.accept".equals(binding.path("event").asText())
+                    && "chat".equals(binding.path("surface").asText()))
+                claimGroups.add(binding.path("claimGroup").asText());
         for (ObjectNode rule : expanded.values()) for (JsonNode operation : rule.path("do"))
             if ("claim.offer".equals(operation.path("op").asText()) && !claimGroups.contains(operation.path("group").asText()))
                 throw RuleJson.error("/automation/rules/" + rule.path("id").asText() + "/do",
-                        "A claim offer must name a claim group declared by this source: " + operation.path("group").asText());
+                        "A claim offer must name a claim.accept chat group declared by this source: " + operation.path("group").asText());
         return new Program(sourceId, decl, modifiers, expanded).withProfiles(profiles).withAttachment(attachment).withGrants(grants).withLimitOverrides(limitOverrides);
     }
 
