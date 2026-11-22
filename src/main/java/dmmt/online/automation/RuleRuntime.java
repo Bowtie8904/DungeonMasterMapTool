@@ -939,6 +939,8 @@ public final class RuleRuntime {
             case "effect.start" -> result = RuleEffects.start(program, op.path("effect").asText(), op.path("target").asText(), context);
             case "effect.end" -> result = RuleExpression.numeric(
                     RuleEffects.end(program, op.path("effect").asText(), op.path("target").asText(), context), "/result");
+            case "effect.endLabeled" -> result = RuleExpression.numeric(RuleEffects.endLabeled(program,
+                    RuleTemplate.render(op.path("label").asText(), context), op.path("target").asText(), context), "/result");
             case "limit.reset" -> {
                 ObjectNode usage = usage(program, context);
                 String limit = op.path("limit").asText();

@@ -311,8 +311,12 @@ public final class LegacyCatalogConverter {
             String id = null;
             for (var effect : (Iterable<java.util.Map.Entry<String, JsonNode>>) effects::fields)
                 if (label.equals(effect.getValue().path("label").asText())) id = effect.getKey();
-            if (id == null) p.add(path, "Ending an effect requires it to be declared by the same source: " + op.path("effect").asText());
-            else ((ObjectNode) op).put("effect", id);
+            if (id == null) {
+                ObjectNode ending = (ObjectNode) op;
+                String target = ending.path("target").asText("actor");
+                ending.removeAll();
+                ending.put("op", "effect.endLabeled").put("label", label).put("target", target);
+            } else ((ObjectNode) op).put("effect", id);
         }
         if (legacy.has("spellcastDifficulty")) {
             ObjectNode rule = spellcastRoll(legacy, path, p, limited);
@@ -3711,7 +3715,7 @@ public final class LegacyCatalogConverter {
     }
 
     private static final Set<String> NONNEGATIVE = Set.of("actor.proficiency.value", "actor.level", "actor.hope.value", "input.amount",
-            "actor.stats.tier", "actor.stats.proficiency", "actor.stats.armorScore", "actor.stats.armorAvailable");
+            "actor.stats.tier", "actor.stats.proficiency", "actor.stats.armorScore", "actor.stats.armorAvailable", "event.table.fear");
 
     /**
      * Maps a legacy {@code @token} to the projected fact it names. Trait tokens read the base modifier; {@code total_}
@@ -3725,6 +3729,7 @@ public final class LegacyCatalogConverter {
             case "tier" -> read("actor.stats.tier");
             case "level" -> read("actor.level");
             case "hope" -> read("actor.hope.value");
+            case "fear" -> read("event.table.fear");
             case "amount" -> read("input.amount");
             case "sourcepool_protection" -> read("sourcePools.protection.value");
             case "proficiency" -> read("actor.proficiency.value");

@@ -1926,7 +1926,8 @@ class LegacyCatalogConverterTest {
 
         var missing = LegacyCatalogConverter.convert(catalog("""
                 {"id":"x","name":"X","automation":{"actions":[{"id":"stop","label":"Stop","endEffect":"Elsewhere"}]}}"""));
-        assertTrue(missing.diagnostics().stream().anyMatch(d -> d.message().contains("Elsewhere")), missing.diagnostics().toString());
+        assertEquals("effect.endLabeled", block(missing, 0).at("/rules/0/do/0/op").asText());
+        assertEquals("Elsewhere", block(missing, 0).at("/rules/0/do/0/label").asText());
     }
 
     @Test

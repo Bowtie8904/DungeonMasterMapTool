@@ -164,6 +164,16 @@ public final class RuleEffects {
         return removed;
     }
 
+    /** Ends every stored effect instance on {@code target}, whatever source started it, that carries {@code label}. */
+    static int endLabeled(RuleCompiler.Program program, String label, String target, ObjectNode context) {
+        ArrayNode list = owned(context, target);
+        int removed = 0;
+        for (int i = list.size() - 1; i >= 0; i--)
+            if (label.equals(list.get(i).path("label").asText()) && !list.get(i).path("derived").asBoolean()) { list.remove(i); removed++; }
+        refreshCounts(program, context);
+        return removed;
+    }
+
     /** Ends this source's active actor effect instances whose {@code endWhen} condition now holds. */
     static void settle(RuleCompiler.Program program, ObjectNode context) {
         boolean ended = false;

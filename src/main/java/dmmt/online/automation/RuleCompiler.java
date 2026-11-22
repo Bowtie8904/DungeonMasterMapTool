@@ -63,6 +63,7 @@ public final class RuleCompiler {
             Map.entry("set.subtract", List.of("from", "items")),
             Map.entry("effect.start", List.of("effect", "target")),
             Map.entry("effect.end", List.of("effect", "target")),
+            Map.entry("effect.endLabeled", List.of("label", "target")),
             Map.entry("limit.reset", List.of("limit")),
             Map.entry("limit.modify", List.of("limit", "by")),
             Map.entry("track.capacity", List.of("track", "by")),
@@ -970,7 +971,7 @@ public final class RuleCompiler {
             }
             else if ("group".equals(field) && "claim.offer".equals(op)) RuleJson.id(value, path + "/group");
             else if ("resource".equals(field) && Set.of("table.gain", "table.spend").contains(op)) RuleJson.id(value, path + "/resource");
-            else if (Set.of("id", "label").contains(field) && Set.of("damage.reduce", "damage.increase", "damage.deal", "countdown.start", "claim.offer", "table.gain", "table.spend").contains(op))
+            else if (Set.of("id", "label").contains(field) && Set.of("damage.reduce", "damage.increase", "damage.deal", "countdown.start", "claim.offer", "table.gain", "table.spend", "effect.endLabeled").contains(op))
                 RuleTemplate.validate(RuleJson.text(value, path + "/" + field));
             else if (Set.of("choose", "maxDice").contains(field)) continue;
             else if ("metadata".equals(field) && "roll.resolve".equals(op)) {

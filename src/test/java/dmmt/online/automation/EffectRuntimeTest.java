@@ -73,6 +73,18 @@ class EffectRuntimeTest {
     }
 
     @Test
+    void endLabeledRemovesEffectsOfAnySourceByLabelOnly() throws Exception {
+        ObjectNode state = context();
+        ArrayNode effects = state.withObject("/actor").putArray("effects");
+        effects.addObject().put("id", "a").put("effect", "other#x").put("label", "Wolf Form");
+        effects.addObject().put("id", "b").put("effect", "third#y").put("label", "Wolf Form");
+        effects.addObject().put("id", "c").put("effect", "third#z").put("label", "Calm");
+        assertEquals(2, RuleEffects.endLabeled(program(), "Wolf Form", "actor", state));
+        assertEquals(1, state.path("actor").path("effects").size());
+        assertEquals("Calm", state.at("/actor/effects/0/label").asText());
+    }
+
+    @Test
     void limitResetRestoresUseBudget() throws Exception {
         RuleCompiler.Program program = program();
         ObjectNode used = run(program, "guard", context(), "{}").context();
