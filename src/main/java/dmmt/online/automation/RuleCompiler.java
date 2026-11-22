@@ -640,6 +640,60 @@ public final class RuleCompiler {
         if (binding.has("defaultOn") && !(allowSubstitutions && substitution(binding.path("mode")))
                 && !"option".equals(binding.path("mode").asText()))
             throw RuleJson.error(path + "/defaultOn", "Defaults are only valid for option bindings.");
+        for (String group : List.of("exclusiveGroup", "claimGroup")) if (binding.has(group)) {
+            if (!(allowSubstitutions && substitution(binding.get(group)))) RuleJson.id(binding.get(group), path + "/" + group);
+            if (!(allowSubstitutions && substitution(binding.path("mode")))
+                    && !Set.of("button", "option").contains(binding.path("mode").asText()))
+                throw RuleJson.error(path + "/" + group, "Groups require selected bindings.");
+        }
+        if (binding.has("claimScope") && !binding.has("claimGroup"))
+            throw RuleJson.error(path + "/claimScope", "A claim scope requires a claim group.");
+        if (binding.has("claimScope") && !(allowSubstitutions && substitution(binding.get("claimScope")))) {
+            JsonNode scope = binding.get("claimScope");
+            String at = path + "/claimScope";
+            RuleJson.fields(scope, at, "recipients", "excludeSource");
+            if (!(allowSubstitutions && substitution(scope.path("recipients")))
+                    && !CLAIM_RECIPIENTS.contains(scope.path("recipients").asText()))
+                throw RuleJson.error(at + "/recipients", "Expected otherPlayersCharacters, playerCharacters or sourceActor.");
+            if (scope.has("excludeSource") && !(allowSubstitutions && substitution(scope.get("excludeSource")))
+                    && !scope.path("excludeSource").isBoolean())
+                throw RuleJson.error(at + "/excludeSource", "Expected a boolean.");
+            if (!(allowSubstitutions && (substitution(scope.path("recipients")) || substitution(scope.path("excludeSource"))))
+                    && "sourceActor".equals(scope.path("recipients").asText()) && scope.path("excludeSource").asBoolean(false))
+                throw RuleJson.error(at + "/excludeSource", "A source-actor claim cannot exclude the source.");
+        }
+        if (binding.has("targetSelection")) {
+            String at = path + "/targetSelection";
+            boolean eventUnknown = allowSubstitutions && substitution(binding.path("event"));
+            boolean surfaceUnknown = allowSubstitutions && substitution(binding.path("surface"));
+            boolean modeUnknown = allowSubstitutions && substitution(binding.path("mode"));
+            boolean sheetAction = (eventUnknown || "action.request".equals(binding.path("event").asText()))
+                    && (surfaceUnknown || "sheet".equals(binding.path("surface").asText()));
+            boolean rollAction = (eventUnknown || "roll.finished".equals(binding.path("event").asText()))
+                    && (surfaceUnknown || "roll".equals(binding.path("surface").asText()));
+            if (!modeUnknown && !"button".equals(binding.path("mode").asText()) || !sheetAction && !rollAction)
+                throw RuleJson.error(at, "Target selection requires a sheet action or roll trigger button.");
+            if (binding.has("claimGroup")) throw RuleJson.error(at, "Target selections use a transaction, not a claim group.");
+        }
+        if (binding.has("targetSelection") && !(allowSubstitutions && substitution(binding.get("targetSelection")))) {
+            JsonNode targets = binding.get("targetSelection");
+            String at = path + "/targetSelection";
+            RuleJson.fields(targets, at, "cardinality", "scope", "excludeSource", "where");
+            if (!(allowSubstitutions && substitution(targets.path("cardinality")))
+                    && !Set.of("one", "all").contains(targets.path("cardinality").asText()))
+                throw RuleJson.error(at + "/cardinality", "Expected one or all.");
+            if (!(allowSubstitutions && substitution(targets.path("scope")))
+                    && !Set.of("connectedPlayerCharacters", "activeCharacters", "activePlayerCharacters").contains(targets.path("scope").asText()))
+                throw RuleJson.error(at + "/scope", "Expected connectedPlayerCharacters, activeCharacters or activePlayerCharacters.");
+            if (targets.has("excludeSource") && !(allowSubstitutions && substitution(targets.get("excludeSource")))
+                    && !targets.path("excludeSource").isBoolean())
+                throw RuleJson.error(at + "/excludeSource", "Expected a boolean.");
+            if (targets.has("where") && !(allowSubstitutions && containsSubstitution(targets.get("where"))))
+                RuleExpression.validate(targets.get("where"), at + "/where");
+        }
+        if (binding.has("forEach") && !(allowSubstitutions && substitution(binding.path("mode")))
+                && !"button".equals(binding.path("mode").asText()))
+            throw RuleJson.error(path + "/forEach", "Per-die controls must be buttons.");
     }
 
     private static void validateRecipeShape(JsonNode rule, String path) {
@@ -775,53 +829,10 @@ public final class RuleCompiler {
         for (JsonNode binding : bindings) {
             validateBindingBasics(binding, path + "/bindings", false);
             if (!bindingIds.add(RuleJson.id(binding.path("id"), path + "/bindings/id"))) throw RuleJson.error(path, "Duplicate binding ID.");
-            if (binding.has("exclusiveGroup")) {
-                RuleJson.id(binding.get("exclusiveGroup"), path + "/bindings/exclusiveGroup");
-                if (!Set.of("button", "option").contains(binding.path("mode").asText()))
-                    throw RuleJson.error(path + "/bindings/exclusiveGroup", "Exclusive groups require selected bindings.");
-            }
-            if (binding.has("claimGroup")) {
-                RuleJson.id(binding.get("claimGroup"), path + "/bindings/claimGroup");
-                if (!Set.of("button", "option").contains(binding.path("mode").asText()))
-                    throw RuleJson.error(path + "/bindings/claimGroup", "Claim groups require a selected button or option.");
-            }
-            if (binding.has("claimScope")) {
-                JsonNode scope = binding.get("claimScope");
-                String scopePath = path + "/bindings/claimScope";
-                if (!binding.has("claimGroup")) throw RuleJson.error(scopePath, "A claim scope requires a claim group.");
-                RuleJson.fields(scope, scopePath, "recipients", "excludeSource");
-                if (!CLAIM_RECIPIENTS.contains(scope.path("recipients").asText()))
-                    throw RuleJson.error(scopePath + "/recipients", "Expected otherPlayersCharacters, playerCharacters or sourceActor.");
-                if (scope.has("excludeSource") && !scope.path("excludeSource").isBoolean())
-                    throw RuleJson.error(scopePath + "/excludeSource", "Expected a boolean.");
-                if ("sourceActor".equals(scope.path("recipients").asText()) && scope.path("excludeSource").asBoolean(false))
-                    throw RuleJson.error(scopePath + "/excludeSource", "A source-actor claim cannot exclude the source.");
-            }
-            if (binding.has("targetSelection")) {
-                JsonNode targets = binding.get("targetSelection");
-                String targetPath = path + "/bindings/targetSelection";
-                RuleJson.fields(targets, targetPath, "cardinality", "scope", "excludeSource", "where");
-                if (!Set.of("one", "all").contains(targets.path("cardinality").asText()))
-                    throw RuleJson.error(targetPath + "/cardinality", "Expected one or all.");
-                if (!Set.of("connectedPlayerCharacters", "activeCharacters", "activePlayerCharacters")
-                        .contains(targets.path("scope").asText()))
-                    throw RuleJson.error(targetPath + "/scope", "Expected connectedPlayerCharacters, activeCharacters or activePlayerCharacters.");
-                if (targets.has("excludeSource") && !targets.path("excludeSource").isBoolean())
-                    throw RuleJson.error(targetPath + "/excludeSource", "Expected a boolean.");
-                if (targets.has("where")) RuleExpression.validate(targets.get("where"), targetPath + "/where");
-                boolean sheetAction = "action.request".equals(binding.path("event").asText()) && "sheet".equals(binding.path("surface").asText());
-                boolean rollAction = "roll.finished".equals(binding.path("event").asText()) && "roll".equals(binding.path("surface").asText());
-                if (!"button".equals(binding.path("mode").asText()) || !sheetAction && !rollAction)
-                    throw RuleJson.error(targetPath, "Target selection requires a sheet action or roll trigger button.");
-                if (binding.has("claimGroup"))
-                    throw RuleJson.error(targetPath, "Target selections use a transaction, not a claim group.");
-            }
             if (binding.has("forEach")) {
                 String pool = RuleJson.text(binding.get("forEach"), path + "/bindings/forEach");
                 if (!pools.has(pool) || !"dice".equals(pools.path(pool).path("kind").asText()))
                     throw RuleJson.error(path + "/bindings/forEach", "Expected a declared dice pool.");
-                if (!"button".equals(binding.path("mode").asText()))
-                    throw RuleJson.error(path + "/bindings/forEach", "Per-die controls must be buttons.");
                 usesDieContext = true;
             }
             needsLabel |= !"automatic".equals(binding.path("mode").asText());

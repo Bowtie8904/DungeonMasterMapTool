@@ -132,6 +132,72 @@ class RuleCatalogTest {
     }
 
     @Test
+    void unusedRecipesValidateTargetAndClaimDeclarations() throws Exception {
+        String catalog = """
+                {"format":"dmmap-daggerheart","version":2,"category":"items","entries":[]}
+                """;
+        ObjectNode recipes = fixture("rewrite/recipes");
+        String bindingPath = "/recipes/0/rules/0/bindings/0";
+        for (String invalid : List.of(
+                """
+                {"targetSelection":{"cardinality":"several","scope":"activeCharacters"}}""",
+                """
+                {"targetSelection":{"cardinality":"one","scope":"unknown"}}""",
+                """
+                {"targetSelection":{"cardinality":"one","scope":"activeCharacters","excludeSource":"yes"}}""",
+                """
+                {"targetSelection":{"cardinality":"one","scope":"activeCharacters","where":{"unknown":true}}}""",
+                """
+                {"targetSelection":{"cardinality":"one","scope":"activeCharacters","extra":true}}""",
+                """
+                {"claimScope":{"recipients":"sourceActor"}}""",
+                """
+                {"claimGroup":"claim","claimScope":{"recipients":"unknown"}}""",
+                """
+                {"claimGroup":"claim","claimScope":{"recipients":"sourceActor","excludeSource":true}}""",
+                """
+                {"claimGroup":"claim","claimScope":{"recipients":"playerCharacters","excludeSource":"yes"}}""",
+                """
+                {"claimGroup":"claim","targetSelection":{"cardinality":"one","scope":"activeCharacters"}}""",
+                """
+                {"exclusiveGroup":"invalid group"}""",
+                """
+                {"mode":"automatic","claimGroup":"claim"}""",
+                """
+                {"mode":"option","forEach":"dice"}""",
+                """
+                {"event":"rest.long","targetSelection":{"cardinality":"one","scope":"activeCharacters"}}"""
+        )) {
+            ObjectNode bad = recipes.deepCopy();
+            ((ObjectNode) bad.at(bindingPath)).setAll((ObjectNode) RuleJson.parse(invalid));
+            var error = assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, bad.toString()), invalid);
+            assertTrue(error.getMessage().contains("/rules/0/bindings/0"), error.getMessage());
+        }
+
+        ObjectNode dynamic = recipes.deepCopy();
+        ((ObjectNode) dynamic.at("/recipes/0/args")).putObject("targetScope").put("type", "string").put("default", "unknown");
+        ObjectNode target = ((ObjectNode) dynamic.at(bindingPath)).putObject("targetSelection");
+        target.put("cardinality", "one").putObject("scope").put("$arg", "targetScope");
+        assertTrue(RuleCatalog.compile(catalog, dynamic.toString()).isEmpty());
+        var error = assertThrows(IllegalArgumentException.class,
+                () -> RuleCatalog.compile(fixture("rewrite/domain-cards").toString(), dynamic.toString()));
+        assertTrue(error.getMessage().contains("/targetSelection/scope"), error.getMessage());
+
+        ObjectNode conflicting = recipes.deepCopy();
+        ObjectNode binding = (ObjectNode) conflicting.at(bindingPath);
+        binding.put("claimGroup", "claim").putObject("targetSelection").put("$arg", "dieRole");
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, conflicting.toString()));
+        ObjectNode missingGroup = recipes.deepCopy();
+        ((ObjectNode) missingGroup.at(bindingPath)).putObject("claimScope").put("$arg", "dieRole");
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, missingGroup.toString()));
+        ObjectNode impossible = recipes.deepCopy();
+        binding = (ObjectNode) impossible.at(bindingPath);
+        binding.put("event", "rest.long").putObject("surface").put("$arg", "dieRole");
+        binding.putObject("targetSelection").put("cardinality", "one").put("scope", "activeCharacters");
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, impossible.toString()));
+    }
+
+    @Test
     void compiledProgramsIndexUserBindingsByEventAndSurface() throws Exception {
         var source = RuleCatalog.compile(fixture("rewrite/host-classes").toString(), fixture("rewrite/recipes").toString())
                 .stream().filter(item -> item.id().equals("classes:tester:features:rally")).findFirst().orElseThrow();
