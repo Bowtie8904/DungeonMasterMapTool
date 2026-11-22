@@ -152,6 +152,16 @@ class RuleCatalogTest {
                 """
                 {"claimScope":{"recipients":"sourceActor"}}""",
                 """
+                {"claimGroupScope":"result"}""",
+                """
+                {"claimGroup":"claim","claimGroupScope":"invalid"}""",
+                """
+                {"claimGroup":"claim","claimGroupScope":"result"}""",
+                """
+                {"claimGroup":"claim","claimGroupScope":"result","event":"roll.finished","surface":"roll","mode":"option"}""",
+                """
+                {"claimGroup":"claim","claimGroupScope":"result","event":"claim.accept","surface":"chat","mode":"button"}""",
+                """
                 {"claimGroup":"claim","claimScope":{"recipients":"unknown"}}""",
                 """
                 {"claimGroup":"claim","claimScope":{"recipients":"sourceActor","excludeSource":true}}""",

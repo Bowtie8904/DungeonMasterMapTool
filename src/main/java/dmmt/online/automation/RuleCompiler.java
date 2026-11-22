@@ -630,7 +630,7 @@ public final class RuleCompiler {
 
     private static void validateBindingBasics(JsonNode binding, String path, boolean allowSubstitutions) {
         RuleJson.fields(binding, path, "id", "event", "surface", "mode", "when", "group",
-                "defaultOn", "forEach", "exclusiveGroup", "priority", "claimGroup", "claimScope", "audience", "targetSelection");
+                "defaultOn", "forEach", "exclusiveGroup", "priority", "claimGroup", "claimGroupScope", "claimScope", "audience", "targetSelection");
         if (!(allowSubstitutions && substitution(binding.path("id")))) RuleJson.id(binding.path("id"), path + "/id");
         if (!(allowSubstitutions && substitution(binding.path("event"))) && !EVENTS.contains(binding.path("event").asText()))
             throw RuleJson.error(path + "/event", "Unknown event.");
@@ -658,6 +658,22 @@ public final class RuleCompiler {
             if (!(allowSubstitutions && substitution(binding.path("mode")))
                     && !Set.of("button", "option").contains(binding.path("mode").asText()))
                 throw RuleJson.error(path + "/" + group, "Groups require selected bindings.");
+        }
+        if (binding.has("claimGroupScope")) {
+            String at = path + "/claimGroupScope";
+            if (!binding.has("claimGroup")) throw RuleJson.error(at, "A group scope requires a claim group.");
+            boolean scopeUnknown = allowSubstitutions && substitution(binding.get("claimGroupScope"));
+            if (!scopeUnknown && !Set.of("source", "result").contains(binding.path("claimGroupScope").asText()))
+                throw RuleJson.error(at, "Expected source or result.");
+            if (!scopeUnknown && "result".equals(binding.path("claimGroupScope").asText())) {
+                boolean eventUnknown = allowSubstitutions && substitution(binding.path("event"));
+                boolean surfaceUnknown = allowSubstitutions && substitution(binding.path("surface"));
+                boolean modeUnknown = allowSubstitutions && substitution(binding.path("mode"));
+                if ((!eventUnknown && !"roll.finished".equals(binding.path("event").asText()))
+                        || (!surfaceUnknown && !Set.of("roll", "chat").contains(binding.path("surface").asText()))
+                        || (!modeUnknown && !"button".equals(binding.path("mode").asText())))
+                    throw RuleJson.error(at, "Result-wide groups require roll.finished result buttons.");
+            }
         }
         if (binding.has("claimScope") && !binding.has("claimGroup"))
             throw RuleJson.error(path + "/claimScope", "A claim scope requires a claim group.");

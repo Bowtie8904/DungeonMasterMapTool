@@ -1287,7 +1287,8 @@ public final class LegacyCatalogConverter {
         if (kinds.size() != 1) { p.add(path, "Expected exactly one of resource, favor or removeFear."); return null; }
         ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "hope-reward");
         ObjectNode binding = rule.putArray("bindings").addObject().put("id", "claim").put("event", "roll.finished")
-                .put("surface", "roll").put("mode", "button").put("claimGroup", "roll-reward").put("audience", "self");
+                .put("surface", "roll").put("mode", "button").put("claimGroup", "roll-reward")
+                .put("claimGroupScope", "result").put("audience", "self");
         binding.putObject("claimScope").put("recipients", "sourceActor");
         ArrayNode when = RuleJson.JSON.createArrayNode();
         rollCondition(reward.path("roll").asText("any"), path + "/roll", p, when);
@@ -1437,7 +1438,8 @@ public final class LegacyCatalogConverter {
         int hope = 1 + legacy.path("hope").asInt(), stress = 1 + legacy.path("stress").asInt();
         ObjectNode reward = RuleJson.JSON.createObjectNode().put("id", "critical-melee-reward");
         ObjectNode binding = reward.putArray("bindings").addObject().put("id", "claim").put("event", "roll.finished")
-                .put("surface", "roll").put("mode", "button").put("claimGroup", "roll-reward").put("audience", "self");
+                .put("surface", "roll").put("mode", "button").put("claimGroup", "roll-reward")
+                .put("claimGroupScope", "result").put("audience", "self");
         binding.putObject("claimScope").put("recipients", "sourceActor");
         applyWhen(reward, when.deepCopy());
         ArrayNode steps = reward.putArray("do");

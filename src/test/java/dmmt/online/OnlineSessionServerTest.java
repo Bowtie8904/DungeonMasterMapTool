@@ -2091,20 +2091,25 @@ class OnlineSessionServerTest {
         ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
         automation.set("rules", MAPPER.readTree("""
                 [{"id":"reward","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button",
-                   "claimGroup":"reward","claimScope":{"recipients":"sourceActor"}}],
+                   "claimGroup":"reward","claimGroupScope":"result","claimScope":{"recipients":"sourceActor"}}],
                   "do":[{"op":"resource.gain","pool":"recipient.hope","amount":2}],
                   "ui":{"label":"Reward {recipient.name}","report":"{recipient.name} claimed."}},
                  {"id":"alternative","bindings":[{"id":"use","event":"roll.finished","surface":"chat","mode":"button",
-                   "claimGroup":"reward","claimScope":{"recipients":"sourceActor"}}],
+                   "claimGroup":"reward","claimGroupScope":"result","claimScope":{"recipients":"sourceActor"}}],
                   "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"Alternative"}},
                  {"id":"other","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button"}],
                   "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"Other"}}]"""));
+        ((ObjectNode) catalog.at("/entries/0/features/1/automation")).withArray("rules").add(MAPPER.readTree("""
+                {"id":"base","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button",
+                   "claimGroup":"reward","claimGroupScope":"result","claimScope":{"recipients":"sourceActor"}}],
+                 "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"Base"}}"""));
         java.nio.file.Files.writeString(file, catalog.toString());
         String id = campaign.getId();
         campaign.getActors().add(Campaign.Actor.builder().id("roller").name("Ada").ownerId(playerId()).build());
         store.saveSheet(id, "roller", """
                 {"name":"Ada","level":2,"hope":{"slots":6,"on":1},"traits":[{"name":"Finesse","mod":2}],
-                 "features":[{"name":"Steady","instanceId":"s","automationSource":"classes:tester:features:steady"}]}""");
+                 "features":[{"name":"Steady","instanceId":"s","automationSource":"classes:tester:features:steady"},
+                             {"name":"Forage","instanceId":"f","automationSource":"classes:tester:features:forage"}]}""");
         String owner = cookie(), other = allyCookie("claim-viewer");
         String roll = """
                 {"request":{"requestId":"roll","expectedRevision":0,"selections":[],
@@ -2113,7 +2118,7 @@ class OnlineSessionServerTest {
         assertEquals(200, rolled.statusCode(), rolled.body());
         JsonNode receipt = MAPPER.readTree(rolled.body());
         String resultId = receipt.requiredAt("/event/resultId").textValue();
-        assertEquals(List.of("reward", "alternative", "other"), receipt.required("resultActions").findValuesAsText("ruleId"));
+        assertEquals(List.of("reward", "alternative", "other", "base"), receipt.required("resultActions").findValuesAsText("ruleId"));
         String claim = """
                 {"request":{"requestId":"claim","expectedRevision":1,"resultId":"%s",
                   "selections":[{"sourceInstanceId":"s","ruleId":"reward","bindingId":"use"}]}}""".formatted(resultId);
@@ -2138,6 +2143,7 @@ class OnlineSessionServerTest {
         assertEquals(1, usedGroups.size());
         assertEquals("s", usedGroups.get(0).required("sourceInstanceId").textValue());
         assertEquals("reward", usedGroups.get(0).required("claimGroup").textValue());
+        assertEquals("result", usedGroups.get(0).required("claimGroupScope").textValue());
     }
 
     @Test

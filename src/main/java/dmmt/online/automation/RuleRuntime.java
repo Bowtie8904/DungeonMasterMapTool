@@ -76,6 +76,7 @@ public final class RuleRuntime {
         if (binding.has("defaultOn")) description.set("defaultOn", binding.get("defaultOn"));
         if (binding.has("exclusiveGroup")) description.set("exclusiveGroup", binding.get("exclusiveGroup"));
         if (binding.has("claimGroup")) description.set("claimGroup", binding.get("claimGroup"));
+        if (binding.has("claimGroupScope")) description.set("claimGroupScope", binding.get("claimGroupScope"));
         if (binding.has("claimScope")) description.set("claimScope", binding.get("claimScope"));
         if (binding.has("targetSelection")) description.set("targetSelection", party == null
                 ? describeTargets(binding, context) : party.describe(binding, ruleId, context));

@@ -389,7 +389,8 @@ public final class AutomationHost {
                 "self", null, false).getFirst();
         JsonNode binding = RuleDispatcher.binding(program.rule(intent.ruleId()), intent.bindingId());
         String claimGroup = binding.path("claimGroup").textValue();
-        ResultWindows.take(window, new ResultWindows.Button(instance, intent.ruleId(), intent.bindingId(), intent.eachId()), claimGroup);
+        ResultWindows.take(window, new ResultWindows.Button(instance, intent.ruleId(), intent.bindingId(), intent.eachId()),
+                claimGroup, binding.path("claimGroupScope").asText("source"));
         if (binding.has("targetSelection") != request.has("target"))
             throw RuleJson.error("/request/target", "This result action requires its current target selection.");
         if (claimGroup != null) {
@@ -481,8 +482,8 @@ public final class AutomationHost {
                 usedClaimGroups.forEach(item -> spentGroups.add(ResultWindows.ClaimGroup.of(item)));
             for (int i = matches.size() - 1; i >= 0; i--)
                 if (spent.contains(ResultWindows.Button.of(matches.get(i)))
-                        || spentGroups.contains(new ResultWindows.ClaimGroup(matches.get(i).path("sourceInstanceId").textValue(),
-                        matches.get(i).path("claimGroup").textValue()))) matches.remove(i);
+                        || matches.get(i).has("claimGroup") && spentGroups.contains(ResultWindows.ClaimGroup.of(matches.get(i))))
+                    matches.remove(i);
         }
         String id = ResultWindows.publish(state, pack.revision(), principal, event, matches, ResultWindows.guards(sources, actor.path("effects")));
         if (id != null) {

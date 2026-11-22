@@ -724,6 +724,7 @@ class LegacyCatalogConverterTest {
                   "resources":[{"id":"slayer-dice","label":"Slayer Dice","initial":0,"max":3}]}}"""));
         JsonNode visage = block(result, 0);
         assertEquals("roll-reward", visage.at("/rules/0/bindings/0/claimGroup").asText(), visage.toString());
+        assertEquals("result", visage.at("/rules/0/bindings/0/claimGroupScope").asText());
         assertEquals("class", block(result, 1).at("/pools/slayer-dice/section").asText(), block(result, 1).toString());
         RuleCompiler.Program program = program(result, 0);
         String actor = "{\"id\":\"me\",\"hope\":{\"value\":2,\"max\":6},\"effects\":[]}";
@@ -788,6 +789,7 @@ class LegacyCatalogConverterTest {
         String melee = "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"attack\",\"critical\":true,\"range\":\"melee\",\"dominant\":\"hope\",\"outcome\":null}}";
         String me = "{\"id\":\"me\",\"hope\":{\"value\":2,\"max\":6},\"stress\":{\"marked\":3,\"capacity\":6},\"effects\":[]}";
         ObjectNode crit = context(brawler, me, melee);
+        assertEquals("result", brawler.rule("critical-melee-reward").at("/bindings/0/claimGroupScope").asText());
         assertEquals(List.of("critical-melee-reward"), available(brawler, crit, "roll"));
         assertEquals(List.of(), available(brawler, context(brawler, me, melee.replace("melee\"", "far\"")), "roll"));
         var claim = RuleDispatcher.executeClaims(List.of(new RuleDispatcher.Candidate(brawler, crit)),
