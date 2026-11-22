@@ -71,17 +71,20 @@ public final class AutomationHost {
     public ObjectNode describe(Pack pack, ObjectNode sheet, ObjectNode event, String surface, String relation) {
         relation(relation);
         ObjectNode copy = sheet.deepCopy();
-        ArrayNode all = RuleDispatcher.describe(candidates(pack, copy, event), surface);
+        ObjectNode state = projection.state(copy);
+        var sources = projection.sources(copy);
+        ObjectNode actor = actor(pack, copy, state, event, sources);
+        ArrayNode all = RuleDispatcher.describe(candidates(pack, sources, state, actor, event), surface);
         ArrayNode visible = RuleJson.JSON.createArrayNode();
         for (JsonNode item : all) if (allowed(item.path("audience").asText("self"), relation)) visible.add(item);
         ObjectNode result = RuleJson.JSON.createObjectNode();
         result.put("revision", revision(copy));
         result.set("actions", visible);
         ArrayNode derived = result.putArray("derivedEffects");
-        for (JsonNode effect : actor(pack, copy, projection.state(copy), event).path("effects"))
+        for (JsonNode effect : actor.path("effects"))
             if (effect.path("derived").asBoolean()) derived.add(effect);
         ArrayNode profiles = result.putArray("profiles");
-        for (SheetProjection.SourceElement element : projection.sources(copy)) {
+        for (SheetProjection.SourceElement element : sources) {
             RuleCompiler.Program program = pack.programs().get(element.sourceId());
             if (program == null) continue;
             for (JsonNode profile : program.profiles()) {
@@ -184,7 +187,9 @@ public final class AutomationHost {
         Map<String, SheetProjection.SourceElement> elements = new HashMap<>();
         for (SheetProjection.SourceElement element : projection.sources(working)) elements.put(element.instanceId(), element);
         List<SheetProjection.SourceElement> emptied = new ArrayList<>();
-        for (ObjectNode context : resolution.contexts()) {
+        var contexts = resolution.contexts();
+        JsonNode finalEvent = contexts.isEmpty() ? event.deepCopy() : contexts.getFirst().path("event");
+        for (ObjectNode context : contexts) {
             actor = (ObjectNode) context.path("actor");
             String instanceId = context.path("source").path("instanceId").asText();
             storeSource(state, instanceId, context);
@@ -222,7 +227,7 @@ public final class AutomationHost {
             result.diceRolls().forEach(dice::add);
         }
         response.set("outbox", outbox);
-        response.set("event", resolution.contexts().isEmpty() ? event.deepCopy() : resolution.contexts().getFirst().path("event").deepCopy());
+        response.set("event", finalEvent);
         state = projection.state(working);
         state.put("revision", next);
         return response;
@@ -261,11 +266,16 @@ public final class AutomationHost {
     }
 
     private List<RuleDispatcher.Candidate> candidates(Pack pack, ObjectNode sheet, ObjectNode event) {
-        RuleJson.text(RuleJson.object(event, "/event").get("type"), "/event/type");
         ObjectNode state = projection.state(sheet);
-        ObjectNode actor = actor(pack, sheet, state, event);
+        var sources = projection.sources(sheet);
+        return candidates(pack, sources, state, actor(pack, sheet, state, event, sources), event);
+    }
+
+    private List<RuleDispatcher.Candidate> candidates(Pack pack, List<SheetProjection.SourceElement> sources,
+                                                       ObjectNode state, ObjectNode actor, ObjectNode event) {
+        RuleJson.text(RuleJson.object(event, "/event").get("type"), "/event/type");
         List<RuleDispatcher.Candidate> result = new ArrayList<>();
-        for (SheetProjection.SourceElement element : projection.sources(sheet)) {
+        for (SheetProjection.SourceElement element : sources) {
             RuleCompiler.Program program = pack.programs().get(element.sourceId());
             if (program != null) result.add(new RuleDispatcher.Candidate(program, context(state, element, actor, event)));
         }
@@ -277,13 +287,18 @@ public final class AutomationHost {
      * so a modifier can never depend on itself; active effect instances contribute their frozen modifiers.
      */
     ObjectNode actor(Pack pack, ObjectNode sheet, ObjectNode state, ObjectNode event) {
+        return actor(pack, sheet, state, event, projection.sources(sheet));
+    }
+
+    private ObjectNode actor(Pack pack, ObjectNode sheet, ObjectNode state, ObjectNode event,
+                             List<SheetProjection.SourceElement> sources) {
         ObjectNode actor = projection.actor(sheet);
         ObjectNode base = actor.deepCopy();
         base.set("stats", projection.stats(actor, List.of()));
         List<JsonNode> modifiers = new ArrayList<>();
         ObjectNode limitOverrides = RuleJson.JSON.createObjectNode();
         ArrayNode derived = RuleJson.JSON.createArrayNode();
-        for (SheetProjection.SourceElement element : projection.sources(sheet)) {
+        for (SheetProjection.SourceElement element : sources) {
             RuleCompiler.Program program = pack.programs().get(element.sourceId());
             if (program == null) continue;
             for (JsonNode override : program.limitOverrides()) {
