@@ -183,6 +183,27 @@ class RuleRuntimeTest {
     }
 
     @Test
+    void limitOverridesRaiseTheUseBudgetOfTheNamedFeatureUsingTheHighestOverride() throws Exception {
+        ObjectNode automation = (ObjectNode) RuleJson.parse("""
+                {"limits":{"uses":{"max":1,"resetOn":["rest.long"]}},"rules":[
+                  {"id":"touch","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                   "limitRef":"uses","do":[{"op":"track.clear","track":"actor.stress","amount":1}],
+                   "ui":{"label":"Touch","report":"Touched."}}
+                ]}
+                """);
+        RuleCompiler.Program program = RuleCompiler.compile("domain-cards:example", automation, fixture("rewrite/recipes"));
+        ObjectNode context = context("example", "Example");
+        ((ObjectNode) context.path("actor").path("stress")).put("marked", 3);
+        for (int use = 0; use < 2; use++) {
+            if (use == 1) context.withObject("/actor").putObject("limitOverrides").put("Example:uses", 2).put("Other:uses", 9);
+            context = RuleRuntime.execute(program, intent("touch", "sheet", context, "{}"), context, noRandom()).context();
+        }
+        assertEquals(2, context.at("/usage/uses").asInt());
+        ObjectNode spent = context;
+        assertThrows(RuleRuntime.Unavailable.class, () -> RuleRuntime.execute(program, intent("touch", "sheet", spent, "{}"), spent, noRandom()));
+    }
+
+    @Test
     void independentUseBudgetsResetOnlyOnDeclaredEventsAndAggregateCostsRollback() throws Exception {
         ObjectNode automation = (ObjectNode) RuleJson.parse("""
                 {"limits":{"recover":{"max":1,"resetOn":["rest.short","rest.long"]}},"rules":[

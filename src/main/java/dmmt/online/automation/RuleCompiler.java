@@ -39,6 +39,7 @@ public final class RuleCompiler {
             Map.entry("inventory.consume", List.of("amount")),
             Map.entry("dice.roll", List.of("count", "sides")),
             Map.entry("dice.hits", List.of("count", "sides", "atLeast")),
+            Map.entry("dice.highest", List.of("count", "sides")),
             Map.entry("dice.table", List.of("count", "outcomes")),
             Map.entry("inventory.grant", List.of("catalog", "entry", "quantity", "label", "to", "tag", "max", "scope")),
             Map.entry("state.set", List.of("slot", "value")),
@@ -141,6 +142,10 @@ public final class RuleCompiler {
         /** The attachment declaration, or {@code null} when the source is not attached to gear. */
         public ObjectNode attachment() { return attachment == null ? null : attachment.deepCopy(); }
         private Program withAttachment(ObjectNode declaration) { attachment = declaration == null ? null : declaration.deepCopy(); return this; }
+        private ArrayNode limitOverrides = RuleJson.JSON.createArrayNode();
+        /** Limits of other sheet features this source raises while present. */
+        public ArrayNode limitOverrides() { return limitOverrides.deepCopy(); }
+        private Program withLimitOverrides(ArrayNode list) { limitOverrides = list.deepCopy(); return this; }
         private ObjectNode grants;
         /** Features granted alongside this source ({@code features}, {@code display}), or {@code null}. Sheet metadata only. */
         public ObjectNode grants() { return grants == null ? null : grants.deepCopy(); }
@@ -195,8 +200,9 @@ public final class RuleCompiler {
     public static Program compile(String sourceId, JsonNode automation, JsonNode recipeDocument) {
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(sourceId), "/sourceId");
         RuleJson.checkTree(automation, "/automation", 0, new int[]{0});
-        RuleJson.fields(automation, "/automation", "state", "limits", "pools", "effects", "modifiers", "profiles", "rules", "attachment", "grants");
+        RuleJson.fields(automation, "/automation", "state", "limits", "pools", "effects", "modifiers", "profiles", "rules", "attachment", "grants", "limitOverrides");
         ObjectNode grants = automation.has("grants") ? grants(automation.get("grants")) : null;
+        ArrayNode limitOverrides = automation.has("limitOverrides") ? limitOverrides(automation.get("limitOverrides")) : RuleJson.JSON.createArrayNode();
         ObjectNode attachment = automation.has("attachment") ? attachment(automation.get("attachment")) : null;
         ObjectNode state = automation.has("state") ? RuleJson.object(automation.get("state"), "/automation/state") : RuleJson.JSON.createObjectNode();
         state.fieldNames().forEachRemaining(slot -> slot(slot, "/automation/state"));
@@ -204,7 +210,13 @@ public final class RuleCompiler {
         pools.fields().forEachRemaining(field -> {
             String id = RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(field.getKey()), "/automation/pools");
             String path = "/automation/pools/" + id;
-            RuleJson.fields(field.getValue(), path, "kind", "scope", "label", "max", "initial", "resetOn", "resetTo", "section");
+            RuleJson.fields(field.getValue(), path, "kind", "scope", "label", "max", "initial", "resetOn", "resetTo", "section", "whileEffect");
+            if (field.getValue().has("whileEffect")) {
+                if (!"number".equals(field.getValue().path("kind").asText()) || !"actor".equals(field.getValue().path("scope").asText()))
+                    throw RuleJson.error(path + "/whileEffect", "Only numeric actor pools can follow an effect.");
+                String bound = RuleJson.id(field.getValue().get("whileEffect"), path + "/whileEffect");
+                if (!automation.path("effects").has(bound)) throw RuleJson.error(path + "/whileEffect", "Unknown effect: " + bound);
+            }
             if (field.getValue().has("section") && !Set.of("feature", "class").contains(field.getValue().path("section").asText()))
                 throw RuleJson.error(path + "/section", "Expected feature or class.");
             if (field.getValue().has("label")) RuleTemplate.validate(RuleJson.text(field.getValue().get("label"), path + "/label"));
@@ -244,8 +256,8 @@ public final class RuleCompiler {
         JsonNode definitions = automation.path("rules");
         boolean derived = false;
         for (JsonNode effect : effects) derived |= effect.has("while");
-        if (definitions.isMissingNode() && (!modifiers.isEmpty() || !pools.isEmpty() || !profiles.isEmpty() || attachment != null || grants != null || derived))
-            return new Program(sourceId, decl, modifiers, Map.of()).withProfiles(profiles).withAttachment(attachment).withGrants(grants);
+        if (definitions.isMissingNode() && (!modifiers.isEmpty() || !pools.isEmpty() || !profiles.isEmpty() || attachment != null || grants != null || derived || !limitOverrides.isEmpty()))
+            return new Program(sourceId, decl, modifiers, Map.of()).withProfiles(profiles).withAttachment(attachment).withGrants(grants).withLimitOverrides(limitOverrides);
         if (!definitions.isArray() || definitions.isEmpty() || definitions.size() > 256)
             throw RuleJson.error("/automation/rules", "Expected 1-256 rules (or only passive modifiers, pools, profiles, derived effects, grants and an attachment).");
         Map<String, ObjectNode> expanded = new LinkedHashMap<>();
@@ -278,7 +290,21 @@ public final class RuleCompiler {
             if ("claim.offer".equals(operation.path("op").asText()) && !claimGroups.contains(operation.path("group").asText()))
                 throw RuleJson.error("/automation/rules/" + rule.path("id").asText() + "/do",
                         "A claim offer must name a claim group declared by this source: " + operation.path("group").asText());
-        return new Program(sourceId, decl, modifiers, expanded).withProfiles(profiles).withAttachment(attachment).withGrants(grants);
+        return new Program(sourceId, decl, modifiers, expanded).withProfiles(profiles).withAttachment(attachment).withGrants(grants).withLimitOverrides(limitOverrides);
+    }
+
+    /** Raises another sheet feature's use limit while this source is present: {@code [{feature, limit, max}]}. */
+    private static ArrayNode limitOverrides(JsonNode declaration) {
+        String path = "/automation/limitOverrides";
+        if (!declaration.isArray() || declaration.isEmpty() || declaration.size() > 16) throw RuleJson.error(path, "Expected 1-16 limit overrides.");
+        for (int i = 0; i < declaration.size(); i++) {
+            String at = path + "/" + i;
+            RuleJson.fields(declaration.get(i), at, "feature", "limit", "max");
+            RuleJson.text(declaration.get(i).get("feature"), at + "/feature");
+            RuleJson.id(declaration.get(i).get("limit"), at + "/limit");
+            RuleJson.integer(declaration.get(i).get("max"), at + "/max", 1, 1000);
+        }
+        return (ArrayNode) declaration.deepCopy();
     }
 
     /** Sheet metadata: features the character gains together with this source, and whether they display grouped under it. */

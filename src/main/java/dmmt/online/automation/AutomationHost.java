@@ -240,10 +240,15 @@ public final class AutomationHost {
         ObjectNode base = actor.deepCopy();
         base.set("stats", projection.stats(actor, List.of()));
         List<JsonNode> modifiers = new ArrayList<>();
+        ObjectNode limitOverrides = RuleJson.JSON.createObjectNode();
         ArrayNode derived = RuleJson.JSON.createArrayNode();
         for (SheetProjection.SourceElement element : projection.sources(sheet)) {
             RuleCompiler.Program program = pack.programs().get(element.sourceId());
             if (program == null) continue;
+            for (JsonNode override : program.limitOverrides()) {
+                String key = override.path("feature").asText() + ":" + override.path("limit").asText();
+                limitOverrides.put(key, Math.max(limitOverrides.path(key).asInt(), override.path("max").asInt()));
+            }
             if (!program.modifiers().isEmpty()) RuleEffects.passives(program, context(state, element, base, event)).forEach(modifiers::add);
             derived.addAll(RuleEffects.derived(program, context(state, element, base, event)));
         }
@@ -253,6 +258,7 @@ public final class AutomationHost {
         }
         if (actor.path("effects").isArray()) RuleEffects.modifiers(actor.get("effects")).forEach(modifiers::add);
         actor.set("stats", projection.stats(actor, modifiers));
+        if (!limitOverrides.isEmpty()) actor.set("limitOverrides", limitOverrides);
         return actor;
     }
 

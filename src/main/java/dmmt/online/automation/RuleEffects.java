@@ -176,6 +176,19 @@ public final class RuleEffects {
                         context.path("source").path("instanceId").asText()) > 0;
         }
         if (ended) refreshCounts(program, context);
+        clearBoundPools(program, context);
+    }
+
+    /** A pool that follows an effect reads zero whenever this source's instance of that effect is not active. */
+    static void clearBoundPools(RuleCompiler.Program program, ObjectNode context) {
+        var pools = program.pools().fields();
+        while (pools.hasNext()) {
+            var pool = pools.next();
+            String bound = pool.getValue().path("whileEffect").asText("");
+            if (bound.isEmpty() || context.path("effects").path(bound).asInt() > 0) continue;
+            JsonNode state = context.path("actor").path("pools").path(pool.getKey());
+            if (state.path("value").asInt() != 0) ((ObjectNode) state).put("value", 0);
+        }
     }
 
     /** Exposes {@code effects.<id>} as this source instance's active instance count on the actor. */

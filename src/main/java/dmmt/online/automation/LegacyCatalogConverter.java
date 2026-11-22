@@ -33,7 +33,7 @@ public final class LegacyCatalogConverter {
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
             "damage", "alternateProfiles", "damageTypeChoice", "rest", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions", "conditionalRollOptions",
             "hopeReward", "classResourceOnly", "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "zeroHopeClearArmor",
-            "overflowHope", "criticalMelee", "deathMove", "manual", "creation");
+            "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides");
     private static final Set<String> DEATH_KINDS = Set.of("hopeBonus", "hopeSpend", "mask", "spectral", "egg", "battleHardened",
             "unbreakable", "undying", "lifeWard");
     /** Legacy gated families that are their base family plus extra conditions, which every family converts the same way. */
@@ -41,7 +41,7 @@ public final class LegacyCatalogConverter {
     private static final Map<String, String> RANGES = Map.of("melee", "melee", "very close", "veryClose", "veryclose", "veryClose",
             "close", "close", "far", "far", "very far", "veryFar", "veryfar", "veryFar");
     private static final Set<String> RESOURCE_FIELDS = Set.of("id", "label", "initial", "max", "resetOn", "resetValue", "minimumReset",
-            "session", "sessionHope", "sessionReset");
+            "session", "sessionHope", "sessionReset", "cardOnly", "whileEffect");
     private static final Set<String> OPTION_FIELDS = Set.of("id", "label", "description", "roll", "value", "dice", "advantage", "cost",
             "defaultOn", "exclusive", "requiresEffect", "excludesEffect", "weapon", "weaponRange", "excludeRolls", "effect", "uses",
             "usesSource", "endEffect", "hostOwned", "consumeItem", "quantity", "proficiency", "hopeDie", "diceResource", "condition", "loadoutDomain",
@@ -57,7 +57,7 @@ public final class LegacyCatalogConverter {
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
             "markedHpOnly", "finalSevere", "markStress", "gainHope", "giveFear", "clearStress", "gainTokens", "armorCost", "followUp", "hiddenRoll", "consumeItem", "preserveAfterIncomingDamage", "loadoutDomain",
-            "double", "recoveryChoice", "reflectHp", "quantity", "advancesSourcePool");
+            "double", "recoveryChoice", "reflectHp", "quantity", "advancesSourcePool", "patronDice");
     private static final List<String> MARKS_FIELDS = List.of("severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor");
     private static final List<String> PREPARE_FIELDS = List.of("negate", "halve", "reduce", "double");
     private static final List<String> SEVERITIES = List.of("minor", "major", "severe", "massive");
@@ -68,7 +68,7 @@ public final class LegacyCatalogConverter {
             "requiresEffect", "excludesEffect", "endEffect", "uses", "usesSource", "actionRoll", "target",
             "excludeSourceActor", "hostOwned", "selectAmount", "resourceRoll", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
             "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime", "table",
-            "hostRollAction", "bloodAutomation", "castTokens");
+            "hostRollAction", "bloodAutomation", "castTokens", "patronDice");
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
@@ -212,6 +212,7 @@ public final class LegacyCatalogConverter {
         if (!passive.isEmpty()) out.set("modifiers", passive);
         if (legacy.has("grantsFeatures")) grants(legacy, path, p, out);
         else if (legacy.has("groupGrantedFeatures")) p.add(path + "/groupGrantedFeatures", "Grouping needs granted features.");
+        if (legacy.has("usesOverrides")) usesOverrides(legacy.get("usesOverrides"), path + "/usesOverrides", p, out);
         ArrayNode rules = RuleJson.JSON.createArrayNode();
         ObjectNode effects = RuleJson.JSON.createObjectNode();
         Set<String> ruleIds = new HashSet<>();
@@ -366,7 +367,24 @@ public final class LegacyCatalogConverter {
             if (!legacy.path("classResourceOnly").isBoolean()) p.add(path + "/classResourceOnly", "Expected a boolean.");
             else if (legacy.path("classResourceOnly").asBoolean()) {
                 if (pools.local().isEmpty()) p.add(path + "/classResourceOnly", "Only declared pools can be shown with class resources.");
-                pools.local().forEach(pool -> ((ObjectNode) pool).put("section", "class"));
+                pools.local().forEach(pool -> {
+                    if ("feature".equals(pool.path("section").asText())) p.add(path + "/classResourceOnly", "A card-only resource cannot also be a class resource.");
+                    ((ObjectNode) pool).put("section", "class");
+                });
+            }
+        }
+        if (legacy.has("resources")) {
+            JsonNode list = legacy.get("resources");
+            for (int i = 0; i < list.size(); i++) {
+                JsonNode label = list.get(i).path("whileEffect");
+                if (!label.isTextual() || !pools.local().has(list.get(i).path("id").asText())) continue;
+                String bound = null;
+                for (var names = effects.fields(); names.hasNext(); ) {
+                    var entry = names.next();
+                    if (label.asText().equals(entry.getValue().path("label").asText())) bound = entry.getKey();
+                }
+                if (bound == null) p.add(path + "/resources/" + i + "/whileEffect", "No effect declared by this source is named " + label.asText() + ".");
+                else ((ObjectNode) pools.local().get(list.get(i).path("id").asText())).put("whileEffect", bound);
             }
         }
         if (legacy.has("manual")) manualNotes(legacy.get("manual"), path + "/manual", p, rules);
@@ -700,6 +718,19 @@ public final class LegacyCatalogConverter {
         rule.put("limitRef", id);
     }
 
+    /** {@code usesOverrides} keys name the sheet feature ({@code feat:<name>}) whose use limit this feature raises. */
+    private static void usesOverrides(JsonNode overrides, String path, Problems p, ObjectNode out) {
+        if (!overrides.isObject() || overrides.isEmpty()) { p.add(path, "Expected a map of overridden features."); return; }
+        ArrayNode list = RuleJson.JSON.createArrayNode();
+        overrides.fields().forEachRemaining(entry -> {
+            String at = path + "/" + entry.getKey();
+            if (!entry.getKey().startsWith("feat:") || entry.getKey().length() == 5) { p.add(at, "Expected a key of the form feat:<feature name>."); return; }
+            if (!entry.getValue().isInt() || entry.getValue().asInt() < 1) { p.add(at, "Expected a positive whole number."); return; }
+            list.addObject().put("feature", entry.getKey().substring(5)).put("limit", "uses").put("max", entry.getValue().asInt());
+        });
+        if (!list.isEmpty()) out.set("limitOverrides", list);
+    }
+
     private static void resource(JsonNode resource, String path, Problems p, ObjectNode pools, List<ObjectNode> lifecycle) {
         p.onlyFields(resource, path, RESOURCE_FIELDS);
         String id = resource.path("id").asText();
@@ -711,8 +742,12 @@ public final class LegacyCatalogConverter {
                 : max.isInt() && max.asInt() > 0 ? max : max.isTextual() ? computed(max.asText()) : null;
         if (capacity == null) { p.add(path + "/max", "Unsupported pool capacity: " + max); return; }
         pool.set("max", capacity);
-        if (resource.has("initial")) {
-            if (!resource.path("initial").isInt()) p.add(path + "/initial", "Expected a whole initial value.");
+        if (resource.has("cardOnly")) {
+            if (!resource.path("cardOnly").isBoolean()) p.add(path + "/cardOnly", "Expected a boolean.");
+            else if (resource.path("cardOnly").asBoolean()) pool.put("section", "feature");
+        }
+        if (resource.has("whileEffect") && !resource.path("whileEffect").isTextual()) p.add(path + "/whileEffect", "Expected an effect label.");
+        if (resource.has("initial")) {            if (!resource.path("initial").isInt()) p.add(path + "/initial", "Expected a whole initial value.");
             pool.put("initial", resource.path("initial").asInt());
         }
         boolean session = resource.path("session").asBoolean(false);
@@ -2180,6 +2215,12 @@ public final class LegacyCatalogConverter {
             default -> {}
         }
         appliedSteps(mitigation, path, p, pools, steps, stage);
+        String patronReport = null;
+        if (mitigation.has("patronDice")) {
+            if (!"vengeance".equals(mitigation.path("patronDice").asText()) || !"applied".equals(stage) || !steps.isEmpty())
+                p.add(path + "/patronDice", "Only an applied-stage Deadly Vengeance option can roll Patron Dice.");
+            else patronReport = patronDice("vengeance", read("event.applied.hitPoints"), path + "/patronDice", p, steps, "{event.applied.hitPoints}");
+        }
         if (!shared.isEmpty()) advanceSourcePool(shared, pools.local().path(shared).path("max").asInt(), steps);
         if (recovery) recoveryChoice(path, p, rule, steps, stage);
         if (mitigation.has("effect")) {
@@ -2189,6 +2230,7 @@ public final class LegacyCatalogConverter {
         endEffect(mitigation, steps);
         ObjectNode ui = labels(mitigation, path, p, rule);
         report(mitigation, path, p, ui);
+        if (patronReport != null && !ui.has("report")) ui.put("report", patronReport);
         if (mitigation.path("reflectHp").asBoolean(false)) {
             if (!"applied".equals(stage)) p.add(path + "/reflectHp", "Reflected Hit Points are only known once damage is applied.");
             else if (!ui.has("report")) ui.put("report", "{source.name}: the attacker marks {event.applied.hitPoints} Hit Points.");
@@ -2673,6 +2715,7 @@ public final class LegacyCatalogConverter {
         }
         if (action.has("sendRoll")) sentRoll(action.get("sendRoll"), path + "/sendRoll", action, p, steps);
         if (action.has("resourceRoll")) resourceRoll(action.get("resourceRoll"), path + "/resourceRoll", action, p, pools, rule, steps);
+        String patronReport = action.has("patronDice") ? patronAction(action, path, p, pools, rule, steps) : null;
         if (aura) {
             ObjectNode marker = RuleJson.JSON.createObjectNode().put("name", label).put("kind", "buff").put("until", "rest")
                     .put("text", "Active with the element currently channeled.");
@@ -2704,7 +2747,8 @@ public final class LegacyCatalogConverter {
         if (action.has("description")) ui.put("description", escape(action.path("description").asText()));
         if (aura) ui.put("unavailable", "Channel an element first.");
         if (!action.has("report")) {
-            if (transfer) ui.put("report", "Gave {input.amount} Hope to {recipient.name}.");
+            if (patronReport != null) ui.put("report", patronReport);
+            else if (transfer) ui.put("report", "Gave {input.amount} Hope to {recipient.name}.");
             else if (action.has("actionRoll") && action.has("damage"))
                 ui.put("report", "Roll total: {result.actionRoll.total}. Damage total: {result.actionDamage.total}.");
             else if (action.has("actionRoll")) ui.put("report", "Roll total: {result.actionRoll.total}.");
@@ -3228,6 +3272,60 @@ public final class LegacyCatalogConverter {
         if (!spec.path("heal").asBoolean(false)) return;
         if (!"hp".equals(spec.path("resource").asText())) { p.add(path + "/resource", "Only marked Hit Points can be healed."); return; }
         steps.addObject().put("op", "track.clear").put("track", TRACKS.get("hp")).set("amount", read("input.amount"));
+    }
+
+    private static final Set<String> PATRON_MODES = Set.of("heal", "ire", "vengeance");
+
+    /** Patron dice are d6, or d8 from level 5; the host evaluates the die size from the sheet's level. */
+    private static JsonNode patronSides() {
+        ObjectNode ratio = RuleJson.JSON.createObjectNode();
+        ratio.putArray("divide").add(read("actor.level")).add(5);
+        ObjectNode whole = RuleJson.JSON.createObjectNode().set("floor", ratio);
+        ObjectNode tier = RuleJson.JSON.createObjectNode();
+        tier.putArray("min").add(1).add(whole);
+        ObjectNode doubled = RuleJson.JSON.createObjectNode();
+        doubled.putArray("multiply").add(2).add(tier);
+        ObjectNode sides = RuleJson.JSON.createObjectNode();
+        sides.putArray("add").add(6).add(doubled);
+        return sides;
+    }
+
+    /**
+     * Rolls Patron Dice: {@code heal} clears marked Hit Points per 4+, {@code ire} reports the highest die and
+     * {@code vengeance} reports one marked Hit Point per 4+. The dice count is the chosen Favor (heal, ire), the chosen
+     * marked Hit Points (vengeance action) or the Hit Points just marked (vengeance damage option).
+     */
+    private static String patronDice(String mode, JsonNode count, String path, Problems p, ArrayNode steps, String countText) {
+        if (!PATRON_MODES.contains(mode)) { p.add(path, "Unsupported Patron Dice action: " + mode); return null; }
+        ObjectNode roll = steps.addObject().put("op", "ire".equals(mode) ? "dice.highest" : "dice.hits").put("as", "patron");
+        roll.set("count", count);
+        roll.set("sides", patronSides());
+        if (!"ire".equals(mode)) roll.put("atLeast", 4);
+        String rolled = "Rolled " + countText + " Patron Dice. ";
+        return switch (mode) {
+            case "heal" -> {
+                steps.addObject().put("op", "track.clear").put("track", "actor.hp").put("as", "healed").set("amount", read("result.patron"));
+                yield "Spent {input.amount} Favor. " + rolled + "{result.patron} results of 4+: cleared {result.healed} HP.";
+            }
+            case "ire" -> "Spent {input.amount} Favor. " + rolled + "Highest result: {result.patron}. Target that many creatures within Close range; each target marks 1 HP.";
+            default -> "Spent 1 Favor. " + rolled + "For " + countText + " HP marked from the attack, the attacker marks {result.patron} HP (one per 4+).";
+        };
+    }
+
+    private static String patronAction(JsonNode action, String path, Problems p, Pools pools, ObjectNode rule, ArrayNode steps) {
+        String mode = action.path("patronDice").asText();
+        if (!PATRON_MODES.contains(mode)) { p.add(path + "/patronDice", "Unsupported Patron Dice action: " + mode); return null; }
+        if (action.has("selectAmount") || action.has("steps")) { p.add(path + "/patronDice", "Patron Dice actions cannot add their own steps or amounts."); return null; }
+        if ("vengeance".equals(mode)) {
+            rule.withArray("inputs").addObject().put("id", "amount").put("kind", "integer").put("label", "HP marked").put("min", 1)
+                    .set("max", read("actor.hp.capacity"));
+            return patronDice(mode, read("input.amount"), path + "/patronDice", p, steps, "{input.amount}");
+        }
+        if (!pools.has("favor")) { p.add(path + "/patronDice", "Patron Dice need a Favor resource."); return null; }
+        JsonNode spec = RuleJson.JSON.createObjectNode().put("resource", "favor").put("label", "Favor to spend");
+        selectAmount(spec, path + "/patronDice", p, pools, rule);
+        amountCost(RuleJson.JSON.createObjectNode().set("selectAmount", spec), path + "/patronDice", p, pools, rule);
+        return patronDice(mode, read("input.amount"), path + "/patronDice", p, steps, "{input.amount}");
     }
 
     private static void actionDamage(JsonNode legacy, String path, JsonNode action, Problems p, ArrayNode steps) {

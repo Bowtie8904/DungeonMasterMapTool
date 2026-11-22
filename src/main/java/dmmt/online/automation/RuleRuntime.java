@@ -165,6 +165,13 @@ public final class RuleRuntime {
         return new Prepared(intent, next, revision);
     }
 
+    /** The declared maximum, raised by any other active source's limit override naming this source and limit. */
+    private static int maxUses(RuleCompiler.Program program, ObjectNode context, String limit) {
+        int declared = program.limits().path(limit).path("max").asInt();
+        String key = context.path("source").path("name").asText() + ":" + limit;
+        return Math.max(declared, context.path("actor").path("limitOverrides").path(key).asInt());
+    }
+
     static Prepared reserveCosts(RuleCompiler.Program program, Prepared preflight, ObjectNode currentContext) {
         return reserveCosts(program, preflight, currentContext, true);
     }
@@ -186,7 +193,7 @@ public final class RuleRuntime {
             String limit = rule.path("limitRef").asText();
             ObjectNode usage = (ObjectNode) next.get("usage");
             int current = RuleJson.integer(usage.get(limit), "/usage/" + limit, 0, 1000);
-            int maximum = program.limits().path(limit).path("max").asInt();
+            int maximum = maxUses(program, next, limit);
             if (current >= maximum) throw new Unavailable("limit", "No uses remain for this action.");
             usage.put(limit, current + 1);
         }
@@ -440,7 +447,7 @@ public final class RuleRuntime {
                 throw new Unavailable("condition", unavailableText(rule, context, "This action is not currently available."));
         if (rule.has("limitRef")) {
             String limit = rule.path("limitRef").asText();
-            if (context.path("usage").path(limit).asInt() >= program.limits().path(limit).path("max").asInt())
+            if (context.path("usage").path(limit).asInt() >= maxUses(program, context, limit))
                 throw new Unavailable("limit", "No uses remain for this action.");
         }
     }
@@ -728,7 +735,7 @@ public final class RuleRuntime {
                 table.put("count", count);
                 result = table;
             }
-            case "dice.roll", "dice.hits" -> {
+            case "dice.roll", "dice.hits", "dice.highest" -> {
                 if (preview) throw new Unavailable("randomPreview", "This preview requires a committed roll; no dice were rolled.");
                 int count = whole(op.path("count"), context, 1, 1024);
                 int sides = whole(op.path("sides"), context, 2, 1000);
@@ -750,6 +757,11 @@ public final class RuleRuntime {
                     for (JsonNode face : faces) if (face.asInt() >= atLeast) hits++;
                     roll.put("atLeast", atLeast).put("hits", hits);
                     result = RuleExpression.numeric(hits, "/result");
+                } else if ("dice.highest".equals(kind)) {
+                    int highest = 0;
+                    for (JsonNode face : faces) highest = Math.max(highest, face.asInt());
+                    roll.put("highest", highest);
+                    result = RuleExpression.numeric(highest, "/result");
                 } else result = RuleExpression.numeric(total, "/result");
             }
             case "state.set", "state.increment" -> {
@@ -1006,7 +1018,7 @@ public final class RuleRuntime {
                 ObjectNode usage = usage(program, context);
                 String limit = op.path("limit").asText();
                 int spent = usage.path(limit).asInt();
-                int max = program.limits().path(limit).path("max").asInt();
+                int max = maxUses(program, context, limit);
                 int by = whole(op.path("by"), context, -1000, 1000);
                 int next = Math.max(0, Math.min(max, spent - by));
                 usage.put(limit, next);

@@ -975,6 +975,45 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void usesOverridesCardOnlyAndEffectBoundResourcesConvert() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"devout","name":"Devout","automation":{"usesOverrides":{"feat:Sparing Touch":2}}},
+                {"id":"aura","name":"Aura","automation":{"actions":[{"id":"open","label":"Open","steps":[{"op":"effect","effect":{"name":"Aura source","kind":"buff","until":"rest","text":"Open."}}]}],
+                 "resources":[{"id":"charge","label":"Charge","initial":0,"max":3,"cardOnly":true,"whileEffect":"Aura source"}]}},
+                {"id":"bad","name":"Bad","automation":{"usesOverrides":{"Sparing Touch":2}}}"""));
+        assertEquals(2, result.converted(), result.diagnostics().toString());
+        JsonNode override = result.catalog().at("/entries/0/automation/limitOverrides/0");
+        assertEquals("Sparing Touch", override.path("feature").asText());
+        assertEquals("uses", override.path("limit").asText());
+        assertEquals(2, override.path("max").asInt());
+        JsonNode auraBlock = result.catalog().at("/entries/1/automation");
+        JsonNode pool = auraBlock.at("/pools/charge");
+        assertEquals("feature", pool.path("section").asText(), pool.toString());
+        assertTrue(auraBlock.at("/effects").has(pool.path("whileEffect").asText()), pool.toString());
+        assertEquals(1, result.diagnostics().size(), result.diagnostics().toString());
+    }
+
+    @Test
+    void patronDiceScaleWithLevelAndHealClearOrReportPerHit() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"heal","name":"Heal","automation":{"resources":[{"id":"favor","label":"Favor","initial":0,"max":4}],
+                 "actions":[{"id":"use","label":"Heal","patronDice":"heal"}]}},
+                {"id":"ire","name":"Ire","automation":{"resources":[{"id":"favor","label":"Favor","initial":0,"max":4}],
+                 "actions":[{"id":"use","label":"Ire","patronDice":"ire"}]}},
+                {"id":"ven","name":"Ven","automation":{"resources":[{"id":"favor","label":"Favor","initial":0,"max":4}],
+                 "actions":[{"id":"use","label":"Ven","patronDice":"vengeance","cost":{"favor":1}}],
+                 "mitigation":[{"id":"vengeance","label":"Ven","when":{"markingHp":true},"cost":{"favor":1},"patronDice":"vengeance"}]}}"""));
+        assertEquals(3, result.converted(), result.diagnostics().toString());
+        JsonNode heal = block(result, 0).at("/rules/0/do");
+        assertEquals("dice.hits", heal.at("/0/op").asText());
+        assertEquals(4, heal.at("/0/atLeast").asInt());
+        assertTrue(heal.at("/0/sides").toString().contains("actor.level"), heal.toString());
+        assertEquals("track.clear", heal.at("/1/op").asText());
+        assertEquals("dice.highest", block(result, 1).at("/rules/0/do/0/op").asText());
+        assertEquals("event.applied.hitPoints", block(result, 2).at("/rules/1/do/0/count/read").asText());
+    }
+
+    @Test
     void hostRollActionsAreValidatedAndSpentTokensFlowIntoTheRollMetadata() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"paid","name":"Paid","automation":{"actions":[
