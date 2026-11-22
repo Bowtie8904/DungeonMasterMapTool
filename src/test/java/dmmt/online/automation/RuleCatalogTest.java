@@ -27,6 +27,11 @@ class RuleCatalogTest {
                 source.program().bindings("action.request", "sheet"));
         assertTrue(source.program().bindings("rest.long", "sheet").isEmpty());
         assertTrue(source.program().bindings("action.request", "downtime").isEmpty());
+        var steady = RuleCatalog.compile(fixture("rewrite/host-classes").toString(), fixture("rewrite/recipes").toString())
+                .stream().filter(item -> item.id().equals("classes:tester:features:steady")).findFirst().orElseThrow().program();
+        assertEquals(List.of(new RuleCompiler.Program.AutomaticBinding("steady", "auto", 0)), steady.automatic("action.request"));
+        assertTrue(steady.automatic("roll.finished").isEmpty());
+        assertTrue(steady.bindings("action.request", "sheet").isEmpty());
     }
 
     @Test

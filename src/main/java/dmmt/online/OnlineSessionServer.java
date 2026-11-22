@@ -5661,21 +5661,23 @@ public final class OnlineSessionServer {
     /** Compiles format-2 catalogs plus rules.json once per combined compendium revision. */
     private dmmt.online.automation.AutomationHost.Pack automationPack() throws IOException {
         HostCatalog.Snapshot snapshot = catalogs();
-        Map<String, String> sources = new java.util.LinkedHashMap<>();
         StringBuilder key = new StringBuilder();
         for (String category : CatalogEditor.CATEGORIES) {
-            byte[] bytes = snapshot.bytes(category);
-            if (bytes == null) continue;
-            sources.put(category, new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
-            key.append(category).append('=').append(snapshot.revision(category)).append(';');
+            String revision = snapshot.revision(category);
+            if (revision != null) key.append(category).append('=').append(revision).append(';');
         }
-        byte[] recipes = snapshot.bytes("rules");
-        key.append("rules=").append(recipes == null ? "-" : snapshot.revision("rules"));
+        key.append("rules=").append(snapshot.revision("rules"));
         String revision = CampaignStore.sha256(key.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
         if (automationPack != null && automationPack.revision().equals(revision)) return automationPack;
         if (revision.equals(automationFailureRevision))
             throw new dmmt.online.automation.AutomationHost.NotReady(automationFailure);
         try {
+            Map<String, String> sources = new java.util.LinkedHashMap<>();
+            byte[] recipes = snapshot.bytes("rules");
+            if (recipes != null) for (String category : CatalogEditor.CATEGORIES) {
+                byte[] bytes = snapshot.bytes(category);
+                if (bytes != null) sources.put(category, new String(bytes, StandardCharsets.UTF_8));
+            }
             automationPack = dmmt.online.automation.AutomationHost.compile(revision, sources,
                     recipes == null ? null : new String(recipes, java.nio.charset.StandardCharsets.UTF_8));
             automationFailureRevision = null;

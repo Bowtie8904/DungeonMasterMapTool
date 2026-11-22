@@ -113,6 +113,7 @@ public final class RuleCompiler {
     public static final class Program {
         record BindingKey(String event, String surface) {}
         record BindingRef(String ruleId, String bindingId, boolean forEach) {}
+        record AutomaticBinding(String ruleId, String bindingId, int priority) {}
 
         private final String sourceId;
         private final ObjectNode initialState;
@@ -122,6 +123,7 @@ public final class RuleCompiler {
         private final ArrayNode modifiers;
         private final Map<String, ObjectNode> rules;
         private final Map<BindingKey, List<BindingRef>> bindingsByEventSurface;
+        private final Map<String, List<AutomaticBinding>> automaticByEvent;
         private ArrayNode profiles = RuleJson.JSON.createArrayNode();
 
         private Program(String sourceId, Decl decl, ArrayNode modifiers, Map<String, ObjectNode> rules) {
@@ -134,10 +136,15 @@ public final class RuleCompiler {
             this.rules = new LinkedHashMap<>();
             rules.forEach((id, rule) -> this.rules.put(id, rule.deepCopy()));
             Map<BindingKey, List<BindingRef>> bindingIndex = new HashMap<>();
+            Map<String, List<AutomaticBinding>> automatic = new HashMap<>();
             this.rules.forEach((ruleId, rule) -> {
                 for (JsonNode binding : rule.path("bindings")) {
-                    if (!Set.of("button", "option").contains(binding.path("mode").asText())) continue;
-                    BindingKey key = new BindingKey(binding.path("event").asText(), binding.path("surface").asText());
+                    String event = binding.path("event").asText(), mode = binding.path("mode").asText();
+                    if ("automatic".equals(mode) && !binding.has("forEach"))
+                        automatic.computeIfAbsent(event, ignored -> new ArrayList<>()).add(
+                                new AutomaticBinding(ruleId, binding.path("id").asText(), binding.path("priority").asInt()));
+                    if (!"button".equals(mode) && !"option".equals(mode)) continue;
+                    BindingKey key = new BindingKey(event, binding.path("surface").asText());
                     bindingIndex.computeIfAbsent(key, ignored -> new ArrayList<>()).add(
                             new BindingRef(ruleId, binding.path("id").asText(), binding.has("forEach")));
                 }
@@ -145,10 +152,13 @@ public final class RuleCompiler {
             Map<BindingKey, List<BindingRef>> immutableIndex = new HashMap<>();
             bindingIndex.forEach((key, refs) -> immutableIndex.put(key, List.copyOf(refs)));
             this.bindingsByEventSurface = Map.copyOf(immutableIndex);
+            automatic.replaceAll((key, refs) -> List.copyOf(refs));
+            this.automaticByEvent = Map.copyOf(automatic);
         }
 
         public String sourceId() { return sourceId; }
         public Set<String> ruleIds() { return Set.copyOf(rules.keySet()); }
+        List<AutomaticBinding> automatic(String event) { return automaticByEvent.getOrDefault(event, List.of()); }
         List<BindingRef> bindings(String event, String surface) {
             return bindingsByEventSurface.getOrDefault(new BindingKey(event, surface), List.of());
         }

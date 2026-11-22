@@ -221,24 +221,16 @@ public final class RuleDispatcher {
         }
         for (Candidate candidate : snapshot.sources()) {
             RuleCompiler.Program program = candidate.program();
+            var automatic = program.automatic(snapshot.eventType());
+            if (automatic.isEmpty()) continue;
             ObjectNode context = candidate.context();
-            List<String> ruleIds = new ArrayList<>(program.ruleIds());
-            ruleIds.sort(String::compareTo);
-            for (String ruleId : ruleIds) {
-                ObjectNode rule = program.rule(ruleId);
-                for (JsonNode binding : rule.path("bindings")) {
-                    if (!"automatic".equals(binding.path("mode").asText())
-                            || !snapshot.eventType().equals(binding.path("event").asText())) continue;
-                    String bindingId = binding.path("id").asText();
-                    if (binding.has("forEach")) continue;
-                    ObjectNode description = RuleRuntime.describe(program, ruleId, bindingId, context);
-                    if (!description.path("available").asBoolean()) continue;
-                    RuleRuntime.Intent intent = new RuleRuntime.Intent(ruleId, bindingId,
-                            context.path("source").path("instanceId").asText(),
-                            snapshot.revision(), RuleJson.JSON.createObjectNode());
-                    invocations.add(new Invocation(candidate, intent, "automatic",
-                            binding.path("priority").asInt(), null, true, null, null));
-                }
+            for (var binding : automatic) {
+                ObjectNode description = RuleRuntime.describe(program, binding.ruleId(), binding.bindingId(), context);
+                if (!description.path("available").asBoolean()) continue;
+                RuleRuntime.Intent intent = new RuleRuntime.Intent(binding.ruleId(), binding.bindingId(),
+                        context.path("source").path("instanceId").asText(),
+                        snapshot.revision(), RuleJson.JSON.createObjectNode());
+                invocations.add(new Invocation(candidate, intent, "automatic", binding.priority(), null, true, null, null));
             }
         }
 
