@@ -17,6 +17,8 @@ export interface RuleDescriptor {
   revision: number;
   surface: 'sheet' | 'chat' | 'roll' | 'damage' | 'effect' | 'resource' | 'rest';
   mode: 'button' | 'option' | 'automatic';
+  defaultOn?: boolean;
+  exclusiveGroup?: string;
   group?: 'result' | 'sourceFeature' | 'otherFeatures';
   label: string;
   description?: string;
@@ -65,8 +67,11 @@ export function ruleControl(descriptor: RuleDescriptor, submit: (intent: RuleInt
   }), text);
 }
 
-type ButtonIntent = Pick<RuleIntent, 'requestId' | 'expectedRevision' | 'inputs' | 'target'>;
-type ButtonDescriptor = Pick<RuleDescriptor, 'revision' | 'label' | 'description' | 'available' | 'reason' | 'inputs' | 'targetSelection'>;
+type RollSelection = Pick<RuleIntent, 'sourceInstanceId' | 'ruleId' | 'bindingId' | 'eachId' | 'inputs'>;
+type ButtonPayload = Pick<RuleIntent, 'inputs' | 'target'> & { selections?: RollSelection[] };
+type ButtonIntent = Pick<RuleIntent, 'requestId' | 'expectedRevision'> & ButtonPayload;
+type ButtonDescriptor = Pick<RuleDescriptor, 'revision' | 'label' | 'description' | 'available' | 'reason' | 'inputs' | 'targetSelection'>
+  & { options?: RuleDescriptor[] };
 
 export function intentControl(descriptor: ButtonDescriptor, submit: (intent: ButtonIntent) => Promise<void>, text: ControlText): HTMLElement {
   const error = el('div', { class: 'error', role: 'alert' });
@@ -75,6 +80,10 @@ export function intentControl(descriptor: ButtonDescriptor, submit: (intent: But
     title: descriptor.description ?? descriptor.reason ?? '' }, descriptor.label);
   const root = el('div', { class: 'dh' }, button, reason, error);
   const selection = descriptor.targetSelection;
+  const options = descriptor.options ?? [];
+  const hasChoices = options.some(option => option.available);
+  if (!hasChoices) for (const option of options)
+    root.append(el('span', { class: 'muted' }, `${option.label}: ${option.reason ?? ''}`));
   const party = selection?.cardinality === 'all' ? { version: selection.version } : undefined;
   if (selection?.cardinality === 'all') root.append(el('span', { class: 'muted' },
     `${text.recipients}: ${selection.options.map(option => option.label).join(', ')}`));
@@ -83,12 +92,11 @@ export function intentControl(descriptor: ButtonDescriptor, submit: (intent: But
   let retryIntent: ButtonIntent | undefined;
   let activeDialog: HTMLDialogElement | undefined;
 
-  const send = async (inputs: RuleIntent['inputs'], target?: RuleIntent['target'], go?: HTMLButtonElement, cancel?: HTMLButtonElement,
+  const send = async (payload: ButtonPayload, go?: HTMLButtonElement, cancel?: HTMLButtonElement,
     dialogError?: HTMLElement, fields: HTMLInputElement[] = []): Promise<void> => {
     if (pending || completed) return;
     retryIntent ??= {
-      requestId: randomId(), expectedRevision: descriptor.revision, inputs: structuredClone(inputs),
-      ...(target ? { target: { ...target } } : {}),
+      requestId: randomId(), expectedRevision: descriptor.revision, ...structuredClone(payload),
     };
     pending = true;
     error.textContent = '';
@@ -117,14 +125,15 @@ export function intentControl(descriptor: ButtonDescriptor, submit: (intent: But
 
   button.addEventListener('click', () => {
     if (pending || completed || !descriptor.available || activeDialog) return;
-    if (retryIntent) { void send(retryIntent.inputs, retryIntent.target); return; }
+    if (retryIntent) { void send(retryIntent); return; }
     const definitions = descriptor.inputs ?? [];
-    if (!definitions.length && selection?.cardinality !== 'one') { void send({}, party); return; }
+    if (!definitions.length && selection?.cardinality !== 'one' && !hasChoices) {
+      void send({ inputs: {}, ...(party ? { target: party } : {}) }); return;
+    }
     const dialog = el('dialog', { class: 'dh dh-rolldlg', ariaLabel: descriptor.label });
     activeDialog = dialog;
     button.disabled = true;
     const fields: HTMLInputElement[] = [];
-    const reads: Array<() => [string, RuleIntent['inputs'][string]]> = [];
     dialog.append(el('h4', {}, descriptor.label));
     let readTarget = (): RuleIntent['target'] => party;
     if (selection?.cardinality === 'one') {
@@ -143,6 +152,70 @@ export function intentControl(descriptor: ButtonDescriptor, submit: (intent: But
       };
       dialog.append(group);
     }
+    const readInputs = inputFields(dialog, definitions, fields, text);
+    const rows: Array<{ option: RuleDescriptor; toggle: HTMLInputElement; inputs: HTMLElement; read: () => RuleIntent['inputs'] }> = [];
+    for (const option of options) {
+      const toggle = el('input', { type: 'checkbox', disabled: !option.available,
+        checked: !!option.defaultOn && option.available && !(option.exclusiveGroup &&
+          rows.some(row => row.toggle.checked && row.option.exclusiveGroup === option.exclusiveGroup)) });
+      const legend = el('legend', {}, el('label', {}, toggle, option.label));
+      const group = el('fieldset', {}, legend);
+      if (option.description) group.append(el('p', {}, option.description));
+      if (!option.available && option.reason) group.append(el('span', { class: 'muted' }, option.reason));
+      const inputs = el('div', { hidden: !toggle.checked });
+      fields.push(toggle);
+      const read = inputFields(inputs, option.inputs ?? [], fields, text);
+      rows.push({ option, toggle, inputs, read });
+      toggle.addEventListener('change', () => {
+        inputs.hidden = !toggle.checked;
+        if (!toggle.checked || !option.exclusiveGroup) return;
+        for (const row of rows) if (row.toggle !== toggle && row.option.exclusiveGroup === option.exclusiveGroup) {
+          row.toggle.checked = false;
+          row.inputs.hidden = true;
+        }
+      });
+      group.append(inputs);
+      dialog.append(group);
+    }
+    const dialogError = el('div', { class: 'error', role: 'alert' });
+    const cancel = el('button', { type: 'button' }, text.cancel);
+    const go = el('button', { type: 'button', class: 'primary' }, descriptor.label);
+    cancel.addEventListener('click', () => { if (!pending) dialog.close(); });
+    dialog.addEventListener('cancel', event => { if (pending) event.preventDefault(); });
+    dialog.addEventListener('close', () => {
+      activeDialog = undefined;
+      dialog.remove();
+      button.disabled = pending || completed;
+      button.focus();
+    }, { once: true });
+    go.addEventListener('click', () => {
+      if (pending || completed) return;
+      let payload: ButtonPayload;
+      try {
+        if (retryIntent) payload = retryIntent;
+        else {
+          const target = readTarget();
+          payload = { inputs: readInputs(), ...(target ? { target } : {}) };
+          if (rows.length) payload.selections = rows.filter(row => row.toggle.checked && row.option.available)
+            .map(({ option, read }) => ({ sourceInstanceId: option.sourceInstanceId, ruleId: option.ruleId,
+              bindingId: option.bindingId, ...(option.eachId === undefined ? {} : { eachId: option.eachId }), inputs: read() }));
+        }
+      } catch (failure) {
+        dialogError.textContent = failure instanceof Error ? failure.message : text.failed;
+        return;
+      }
+      void send(payload, go, cancel, dialogError, fields);
+    });
+    dialog.append(dialogError, el('div', { class: 'acts' }, cancel, go));
+    document.body.append(dialog);
+    dialog.showModal();
+    fields.find(field => !field.disabled)?.focus();
+  });
+  return root;
+}
+
+function inputFields(container: HTMLElement, definitions: RuleInput[], fields: HTMLInputElement[], text: ControlText): () => RuleIntent['inputs'] {
+    const reads: Array<() => [string, RuleIntent['inputs'][string]]> = [];
     for (const input of definitions) {
       if (input.kind === 'choice') {
         const single = input.count === 1;
@@ -154,7 +227,7 @@ export function intentControl(descriptor: ButtonDescriptor, submit: (intent: But
           group.append(el('label', {}, field, option.label));
           return { field, id: option.id };
         });
-        dialog.append(group);
+        container.append(group);
         reads.push(() => {
           const selected = checks.filter(option => option.field.checked).map(option => option.id);
           if (selected.length !== input.count) throw new Error(text.selectOptions(input.count));
@@ -168,7 +241,7 @@ export function intentControl(descriptor: ButtonDescriptor, submit: (intent: But
           group.append(el('label', {}, option.label, field));
           return { field, id: option.id };
         });
-        dialog.append(group);
+        container.append(group);
         reads.push(() => {
           const allocation: Record<string, number> = {};
           let sum = 0;
@@ -185,7 +258,7 @@ export function intentControl(descriptor: ButtonDescriptor, submit: (intent: But
         const field = el('input', { type: 'number', min: String(input.min), max: String(input.max), step: '1',
           value: String(input.default ?? input.min), ariaLabel: input.label });
         fields.push(field);
-        dialog.append(el('label', {}, input.label, field));
+        container.append(el('label', {}, input.label, field));
         reads.push(() => {
           const value = field.valueAsNumber;
           if (!Number.isSafeInteger(value) || value < input.min || value > input.max)
@@ -200,7 +273,7 @@ export function intentControl(descriptor: ButtonDescriptor, submit: (intent: But
           group.append(el('label', {}, field, choice.label));
           return { field, id: choice.id };
         });
-        dialog.append(group);
+        container.append(group);
         reads.push(() => {
           const selected = checks.filter(choice => choice.field.checked).map(choice => choice.id);
           if (selected.length < (input.min ?? input.count) || selected.length > input.count)
@@ -209,35 +282,5 @@ export function intentControl(descriptor: ButtonDescriptor, submit: (intent: But
         });
       }
     }
-    const dialogError = el('div', { class: 'error', role: 'alert' });
-    const cancel = el('button', { type: 'button' }, text.cancel);
-    const go = el('button', { type: 'button', class: 'primary' }, descriptor.label);
-    cancel.addEventListener('click', () => { if (!pending) dialog.close(); });
-    dialog.addEventListener('cancel', event => { if (pending) event.preventDefault(); });
-    dialog.addEventListener('close', () => {
-      activeDialog = undefined;
-      dialog.remove();
-      button.disabled = pending || completed;
-      button.focus();
-    }, { once: true });
-    go.addEventListener('click', () => {
-      if (pending || completed) return;
-      let inputs: RuleIntent['inputs'];
-      let target: RuleIntent['target'];
-      try {
-        target = retryIntent ? retryIntent.target : readTarget();
-        inputs = retryIntent?.inputs ?? Object.fromEntries(reads.map(read => read()));
-      }
-      catch (failure) {
-        dialogError.textContent = failure instanceof Error ? failure.message : text.failed;
-        return;
-      }
-      void send(inputs, target, go, cancel, dialogError, fields);
-    });
-    dialog.append(dialogError, el('div', { class: 'acts' }, cancel, go));
-    document.body.append(dialog);
-    dialog.showModal();
-    fields[0]?.focus();
-  });
-  return root;
+    return () => Object.fromEntries(reads.map(read => read()));
 }

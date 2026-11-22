@@ -44,6 +44,7 @@ See the [rewrite design and implementation status](docs/ONLINE_AUTOMATION_PLAN.m
 In a format-2 pack, an owner can roll a declared attack profile or its damage. The host resolves
 the profile from the saved sheet and commits its edited dice, reactions and costs together. A blocked
 profile roll spends nothing, and a retry does not roll again. Typed chat dice stay separate.
+Choose any offered options and their inputs together before pressing Roll (the attack or damage button). If no options are available, the button rolls immediately. Opening the choices does not contact the host; **Retry** resends the same selection if the reply was lost.
 Format-2 authors must put choices based on the new faces or total on a result action, not a pre-roll option. A pre-roll option can use previously stored dice and can change the new dice when it executes.
 
 For a single-target sheet action, choose a character alongside the action's other inputs. A whole-party action lists its recipients next to the button and needs no second confirmation. If the host rejects a stale offer, the panel reloads the choices without reapplying the action. If the connection drops before the result arrives, **Retry** submits the original choice and request ID.

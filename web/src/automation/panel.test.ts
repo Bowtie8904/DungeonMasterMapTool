@@ -8,6 +8,9 @@ class Element {
   hidden = false;
   className = '';
   disabled = false;
+  checked = false;
+  value = '';
+  get valueAsNumber(): number { return Number(this.value); }
   constructor(readonly tagName: string) {}
   append(...children: Array<Element | string>): void {
     this.children.push(...children.map(child => {
@@ -21,6 +24,11 @@ class Element {
     this.listeners.set(event, [...(this.listeners.get(event) ?? []), handler]);
   }
   click(): void { this.listeners.get('click')?.forEach(handler => handler()); }
+  change(): void { this.listeners.get('change')?.forEach(handler => handler()); }
+  focus(): void {}
+  showModal(): void {}
+  close(): void { this.listeners.get('close')?.forEach(handler => handler()); }
+  remove(): void {}
   all(tag: string): Element[] { return [...(this.tagName === tag ? [this] : []), ...this.children.flatMap(child => child.all(tag))]; }
   get text(): string { return this.textContent + this.children.map(child => child.text).join(''); }
 }
@@ -29,7 +37,7 @@ const { automationPanel, executeAutomation } = await import('./panel');
 type DescribedActions = import('./panel').DescribedActions;
 const fake = (element: HTMLElement) => element as unknown as Element;
 
-beforeEach(() => vi.stubGlobal('document', { createElement: (tag: string) => new Element(tag) }));
+beforeEach(() => vi.stubGlobal('document', { createElement: (tag: string) => new Element(tag), body: new Element('body') }));
 const action = (overrides: Partial<RuleDescriptor> = {}): RuleDescriptor => ({
   sourceId: 'classes:tester:features:rally', sourceInstanceId: 'f-rally', ruleId: 'rally', bindingId: 'use',
   revision: 4, surface: 'sheet', mode: 'button', label: 'Rally (2 Hope)', available: true, ...overrides,
@@ -124,6 +132,68 @@ describe('automation panel', () => {
       request: { requestId: 'r1', expectedRevision: 4, selections: [{ sourceInstanceId: 'f-rally', ruleId: 'rally', bindingId: 'use', eachId: 'd1', inputs: { amount: 2 } }] },
     });
   });
+
+    it('chooses profile options locally, validates only their inputs, and freezes selections for retry', async () => {
+      const requests: string[] = [];
+      vi.stubGlobal('fetch', vi.fn(async (_url: string, options: RequestInit) => {
+        requests.push(String(options.body));
+        if (requests.length === 1) throw new Error('Lost response');
+        return new Response(JSON.stringify({ event: { check: { total: 8 } } }));
+      }));
+      const option = (ruleId: string, extra: Partial<RuleDescriptor> = {}) =>
+        action({ ruleId, label: ruleId, surface: 'roll', mode: 'option', ...extra });
+      const fetchActions = vi.fn(async () => ({ revision: 4, actions: [], profiles: [{
+        id: 'claw', label: 'Claw', sourceInstanceId: 'gear', sourceName: 'Weapon', options: { attack: [
+          option('first', { defaultOn: true, exclusiveGroup: 'stance', inputs: [
+            { kind: 'choice', label: 'Choose', id: 'choice', count: 1, options: [{ id: 'a', label: 'A' }] }] }),
+          option('second', { defaultOn: true, exclusiveGroup: 'stance', inputs: [
+            { kind: 'integer', id: 'n', label: 'Amount', min: 1, max: 3, default: 2 }] }),
+          option('spent', { defaultOn: true, available: false, reason: 'Not enough Hope' }),
+        ] } }] }));
+      const panel = fake(automationPanel('a1', 'sheet', 'Actions', fetchActions));
+      await settle();
+      panel.all('button')[0].click();
+      const dialog = fake(document.body).all('dialog')[0];
+      const [first, , second, amount, spent] = dialog.all('input');
+      expect([first.checked, second.checked, spent.checked, spent.disabled]).toEqual([true, false, false, true]);
+      expect(dialog.text).toContain('Not enough Hope');
+      dialog.all('button')[1].click();
+      expect(requests).toHaveLength(0);
+      expect(dialog.text).toContain('Select exactly 1 option.');
+      second.checked = true;
+      second.change();
+      expect(first.checked).toBe(false);
+      expect(amount.value).toBe('2');
+      amount.value = '3';
+      expect(fetchActions).toHaveBeenCalledTimes(1);
+      dialog.all('button')[1].click();
+      await settle();
+      expect(fetchActions).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(requests[0]).request).toEqual({ requestId: expect.any(String), expectedRevision: 4,
+        profileRoll: { sourceInstanceId: 'gear', profileId: 'claw', kind: 'attack' },
+        selections: [{ sourceInstanceId: 'f-rally', ruleId: 'second', bindingId: 'use', inputs: { n: 3 } }] });
+      amount.value = '1';
+      dialog.all('button')[1].click();
+      await settle();
+      expect(requests).toEqual([requests[0], requests[0]]);
+      expect(panel.text).toContain('Claw (attack): 8');
+    });
+
+    it('rolls directly if all options are unavailable and refreshes a rejection without rolling again', async () => {
+      const post = vi.fn(async () => new Response(JSON.stringify({error: 'Sheet changed'}), {status: 409}));
+      vi.stubGlobal('fetch', post);
+      const fetchActions = vi.fn(async () => ({ revision: 4, actions: [], profiles: [{ id: 'claw', label: 'Claw',
+        sourceInstanceId: 'gear', sourceName: 'Weapon', options: { attack: [action({ mode: 'option', available: false, reason: 'Spent' })] } }] }));
+      const panel = fake(automationPanel('a1', 'sheet', 'Actions', fetchActions));
+      await settle();
+      expect(panel.text).toContain('Spent');
+      panel.all('button')[0].click();
+      await settle();
+      expect(fake(document.body).all('dialog')).toHaveLength(0);
+      expect(panel.text).toContain('Sheet changed');
+      expect(post).toHaveBeenCalledTimes(1);
+      expect(fetchActions).toHaveBeenCalledTimes(2);
+    });
 
   it('shows the party inline, sends only its version, and refreshes a rejected offer without reapplying', async () => {
       const requests: string[] = [];

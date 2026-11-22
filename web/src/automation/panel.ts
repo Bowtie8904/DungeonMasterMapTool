@@ -5,7 +5,8 @@ import { intentControl, ruleControl, type ControlText, type RuleDescriptor, type
 export interface DescribedActions {
   revision: number;
   actions: RuleDescriptor[];
-  profiles?: Array<{ id: string; label: string; sourceInstanceId: string; sourceName: string; damage?: object }>;
+  profiles?: Array<{ id: string; label: string; sourceInstanceId: string; sourceName: string; damage?: object;
+    options?: Partial<Record<'attack' | 'damage', RuleDescriptor[]>> }>;
 }
 
 export const CONTROL_TEXT: ControlText = {
@@ -105,12 +106,20 @@ export function automationPanel(actorId: string, surface = 'sheet', title = 'Act
         void load();
       }, CONTROL_TEXT));
       for (const profile of described?.profiles ?? []) {
-        for (const kind of profile.damage ? ['attack', 'damage'] : ['attack']) {
+        for (const kind of ['attack', 'damage'] as const) {
+          if (kind === 'damage' && !profile.damage) continue;
           const label = `${profile.sourceName}: ${profile.label} (${kind})`;
-          controls.push(intentControl({ label, available: true, revision: described!.revision },
-            async ({ requestId, expectedRevision }) => {
-              const result = await postIntent(actorId, { requestId, expectedRevision, selections: [],
-                profileRoll: { sourceInstanceId: profile.sourceInstanceId, profileId: profile.id, kind } });
+          controls.push(intentControl({ label, available: true, revision: described!.revision, options: profile.options?.[kind] },
+            async ({ requestId, expectedRevision, selections = [] }) => {
+              let result: unknown;
+              try {
+                result = await postIntent(actorId, { requestId, expectedRevision, selections,
+                  profileRoll: { sourceInstanceId: profile.sourceInstanceId, profileId: profile.id, kind } });
+              } catch (failure) {
+                if (!(failure instanceof ApiError) || failure.status !== 409) throw failure;
+                void load(failure.message);
+                return;
+              }
               const event = (result as { event: { check: { total: number } } }).event;
               output.textContent = [`${label}: ${event.check.total}`, ...actionReports(result)].join('\n');
               void load();
