@@ -51,7 +51,7 @@ public final class LegacyCatalogConverter {
             "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
             "chatBenefits", "allowSourceOwner", "loadoutDomain", "primaryWeapon", "anyWeapon", "advantage", "giveFear", "check", "choices",
-            "magicOnly", "weaponRanges", "addDice", "damageDice", "disadvantage", "removeFear", "weaponDamage", "rollSection", "containsDie", "resourceRoll", "selectAmount",
+            "magicOnly", "weaponRanges", "addDice", "damageDice", "damageDiceBelow", "spendHopeAmount", "disadvantage", "removeFear", "weaponDamage", "rollSection", "containsDie", "resourceRoll", "selectAmount",
             "target", "excludeSourceActor", "splendorAction", "hostRollAction", "otherPlayerOnly", "spentTokenDamage", "bloodAutomation", "swapDuality", "repeatable");
     private static final Set<String> MITIGATION_FIELDS = Set.of("id", "label", "description", "when", "cost", "negate", "halve", "reduce",
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
@@ -64,7 +64,7 @@ public final class LegacyCatalogConverter {
     private static final Pattern DICE = Pattern.compile("([1-9][0-9]?)d([1-9][0-9]{0,2})");
     private static final Pattern ACTION_DAMAGE = Pattern.compile("(?i)(\\d*)d(\\d+)(?:([+-])(\\d+))?");
     private static final Pattern POOL_DICE = Pattern.compile("@([a-z][a-z0-9_]*)(d\\d+(?:[+-]\\d+)?)");
-    private static final Set<String> ACTION_FIELDS = Set.of("splendorAction", "id", "label", "description", "cost", "steps", "report", "damage",
+    private static final Set<String> ACTION_FIELDS = Set.of("toggleEffect", "splendorAction", "id", "label", "description", "cost", "steps", "report", "damage",
             "requiresEffect", "excludesEffect", "endEffect", "uses", "usesSource", "actionRoll", "target",
             "excludeSourceActor", "hostOwned", "selectAmount", "resourceRoll", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
             "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime", "table",
@@ -2044,6 +2044,10 @@ public final class LegacyCatalogConverter {
         sentRollConditions(trigger, when);
         applyWhen(rule, when);
         if (trigger.has("cost")) costs(trigger.get("cost"), path + "/cost", p, pools, rule);
+        if (trigger.has("spendHopeAmount")) {
+            if (!trigger.path("spendHopeAmount").asBoolean(false) || trigger.has("selectAmount")) p.add(path + "/spendHopeAmount", "Expected true and no other chosen amount.");
+            else trigger = withHopeAmount(trigger);
+        }
         if (trigger.has("selectAmount")) {
             selectAmount(trigger.get("selectAmount"), path + "/selectAmount", p, pools, rule);
             amountCost(trigger, path + "/selectAmount", p, pools, rule);
@@ -2126,6 +2130,14 @@ public final class LegacyCatalogConverter {
                 ArrayNode notDuality = where.putArray("and");
                 for (String role : List.of("hope", "fear", "advantage", "disadvantage"))
                     notDuality.addObject().putArray("ne").add(read("die.role")).add(role);
+                if (trigger.has("damageDiceBelow")) {
+                    if (!reroll || !trigger.path("damageDiceBelow").isInt() || trigger.path("damageDiceBelow").asInt() < 2)
+                        p.add(path + "/damageDiceBelow", "Expected a die face limit of 2 or more on a damage reroll.");
+                    else {
+                        notDuality.addObject().putArray("gt").add(read("die.face")).add(0);
+                        notDuality.addObject().putArray("lt").add(read("die.face")).add(trigger.path("damageDiceBelow").asInt());
+                    }
+                }
                 ObjectNode input = rule.withArray("inputs").addObject().put("id", "dice").put("kind", "die.select")
                         .put("label", reroll ? "Damage dice to reroll" : "Damage die to double").put("choiceLabel", "d{die.sides}: {die.face}");
                 input.set("from", read("event.roll"));
@@ -3128,6 +3140,16 @@ public final class LegacyCatalogConverter {
         amountHeal(action.path("selectAmount"), path + "/selectAmount", p, steps);
         if (action.has("table")) actionTable(action.get("table"), path + "/table", p, steps, effects, pools, operationTarget);
         endEffect(action, steps, operationTarget);
+        if (action.has("toggleEffect")) {
+            String toggled = declareEffect(action.get("toggleEffect"), path + "/toggleEffect", p, effects);
+            if (toggled != null) {
+                ObjectNode present = labelPresent(escape(action.path("toggleEffect").path("name").asText()));
+                steps.addObject().put("op", "effect.end").put("effect", toggled).put("target", "actor").set("if", present.deepCopy());
+                steps.addObject().put("op", "effect.start").put("effect", toggled).put("target", "actor")
+                        .putObject("if").set("not", present);
+
+            }
+        }
         if (secondWind) secondWind(rule, steps, "actor");
         if (transfer) steps.addObject().put("op", "resource.gain").put("pool", "recipient.hope").set("amount", read("input.amount"));
         if (action.has("refreshUses")) {
@@ -3154,6 +3176,7 @@ public final class LegacyCatalogConverter {
             else if (action.has("actionRoll")) ui.put("report", "Roll total: {result.actionRoll.total}.");
             else if (action.has("damage")) ui.put("report", "Damage total: {result.actionDamage.total}.");
             else if (action.has("table")) ui.put("report", "{source.name}: rolled {result.table.faces|list}. {result.table.outcomes|list}");
+            else if (action.has("toggleEffect")) ui.put("report", "{source.name}: toggled.");
         }
         report(action, path, p, ui);
         resourceRollReport(action, ui);
@@ -3661,6 +3684,14 @@ public final class LegacyCatalogConverter {
     }
 
     /** A player-chosen whole amount, bounded by what the named resource can currently pay; {@code @amount} reads it. */
+    /** {@code spendHopeAmount} is a chosen amount of Hope that is paid when the trigger is used. */
+    private static JsonNode withHopeAmount(JsonNode trigger) {
+        ObjectNode copy = trigger.deepCopy();
+        copy.remove("spendHopeAmount");
+        copy.putObject("selectAmount").put("resource", "hope").put("label", "Hope to spend");
+        return copy;
+    }
+
     private static void selectAmount(JsonNode legacy, String path, Problems p, Pools pools, ObjectNode rule) {
         p.onlyFields(legacy, path, Set.of("resource", "label", "min", "heal", "store", "base", "addToRoll"));
         String resource = legacy.path("resource").asText();
@@ -4228,7 +4259,7 @@ public final class LegacyCatalogConverter {
             p.nested().add(new Nested("slotModifier", option, path));
             return;
         }
-        Set<String> allowed = new HashSet<>(Set.of("value", "min", "max", "markedHpDivisor", "markedHpMultiplier", "markedStressMultiplier"));
+        Set<String> allowed = new HashSet<>(Set.of("value", "min", "max", "markedHpDivisor", "markedHpMultiplier", "markedStressMultiplier", "traitValue", "divisor", "round"));
         if (passive) allowed.addAll(MODIFIER_CONDITIONS);
         JsonNode value = modifierValue(modifier, path, p);
         if (value == null) return;
@@ -4274,7 +4305,19 @@ public final class LegacyCatalogConverter {
                 "markedHpMultiplier", new String[]{"actor.hp.marked", "multiply"}, "markedStressMultiplier", new String[]{"actor.stress.marked", "multiply"});
         List<String> present = scaled.keySet().stream().filter(modifier::has).sorted().toList();
         JsonNode value;
-        if (!present.isEmpty()) {
+        if (modifier.has("traitValue")) {
+            String trait = modifier.path("traitValue").asText();
+            String rounding = modifier.path("round").asText("down");
+            if (!TRAITS.contains(trait) || modifier.has("value") || !present.isEmpty()
+                    || !modifier.path("divisor").isInt() || modifier.path("divisor").asInt() < 1 || modifier.path("divisor").asInt() > 100
+                    || !Set.of("up", "down").contains(rounding)) {
+                p.add(path + "/traitValue", "Expected one trait, a divisor from 1 to 100 and round up or down.");
+                return null;
+            }
+            ObjectNode quotient = RuleJson.JSON.createObjectNode();
+            quotient.putArray("divide").add(read("actor.traits." + trait)).add(modifier.path("divisor").asInt());
+            value = RuleJson.JSON.createObjectNode().set("up".equals(rounding) ? "ceil" : "floor", quotient);
+        } else if (!present.isEmpty()) {
             String field = present.get(0);
             if (present.size() > 1 || modifier.has("value")) { p.add(path + "/" + field, "A modifier needs exactly one value source."); return null; }
             JsonNode factor = modifier.get(field);

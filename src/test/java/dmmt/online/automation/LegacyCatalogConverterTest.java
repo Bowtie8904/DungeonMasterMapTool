@@ -2582,6 +2582,26 @@ class LegacyCatalogConverterTest {
         assertNotNull(program(result, 0));
     }
     @Test
+    void traitHalvesToggledEffectsAndHopeAmountsConvert() throws Exception {
+        var half = LegacyCatalogConverter.convert(catalog("""
+                {"id":"untouchable","name":"Untouchable","automation":{"modifiers":[{"stat":"evasion","traitValue":"Agility","divisor":2,"round":"up"}]}}"""));
+        assertEquals(1, half.converted(), half.diagnostics().toString());
+        assertTrue(block(half, 0).toString().contains("\"ceil\""), block(half, 0).toString());
+        var toggle = LegacyCatalogConverter.convert(catalog("""
+                {"id":"phantom","name":"Phantom Retreat","automation":{"actions":[{"id":"use","label":"Phantom Retreat","cost":{"hope":1},
+                 "toggleEffect":{"name":"Phantom Retreat","kind":"buff","until":"rest","text":"Again to end."}}]}}"""));
+        assertEquals(1, toggle.converted(), toggle.diagnostics().toString());
+        assertNotNull(program(toggle, 0));
+        var below = LegacyCatalogConverter.convert(catalog("""
+                {"id":"ngd","name":"Not Good Enough","automation":{"conditionalRollTriggers":[{"id":"reroll","label":"Reroll 1s and 2s","on":"damage","damageDice":"reroll","damageDiceBelow":3,"repeatable":true}]}}"""));
+        assertEquals(1, below.converted(), below.diagnostics().toString());
+        assertNotNull(program(below, 0));
+        var blink = LegacyCatalogConverter.convert(catalog("""
+                {"id":"blink","name":"Blink Out","automation":{"conditionalRollTriggers":[{"id":"teleport","label":"Spend Hope","on":"card:Blink Out","when":"success","spendHopeAmount":true}]}}"""));
+        assertEquals(1, blink.converted(), blink.diagnostics().toString());
+        assertTrue(block(blink, 0).toString().contains("Hope to spend"), block(blink, 0).toString());
+    }
+    @Test
     void conditionalStepsSkipWhenFalseAndCannotNameResults() throws Exception {
         String base = """
                 {"rules":[{"id":"r","bindings":[{"id":"b","event":"action.request","surface":"sheet","mode":"button"}],
