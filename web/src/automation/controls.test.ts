@@ -110,6 +110,12 @@ describe('generic rule controls', () => {
     expect(submit).toHaveBeenCalledWith(expect.objectContaining({ inputs: { reroll: ['die-b'] } }));
   });
 
+  it('prefills an integer input with its declared default', () => {
+    const body = dom();
+    const root = asElement(ruleControl({ ...descriptor, inputs: [{ id: 'amount', kind: 'integer', label: 'Amount', min: 0, max: 20, default: 2 }] }, async () => {}, text));
+    root.all('button')[0].click();
+    expect(body.all('dialog')[0].all('input')[0].value).toBe('2');
+  });
   it('retains the request ID and inputs after an uncertain failure', async () => {
     const body = dom();
     const sent: RuleIntent[] = [];

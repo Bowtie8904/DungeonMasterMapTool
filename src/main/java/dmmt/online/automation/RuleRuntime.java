@@ -475,6 +475,7 @@ public final class RuleRuntime {
                 int min = whole(input.path("min"), context, -1_000_000, 1_000_000);
                 int max = whole(input.path("max"), context, min, 1_000_000);
                 descriptor.put("min", min).put("max", max);
+                if (input.has("default")) descriptor.put("default", Math.max(min, Math.min(max, input.path("default").asInt())));
             } else if ("choice".equals(input.path("kind").asText())) {
                 int count = input.path("count").asInt(1);
                 ArrayNode options = descriptor.putArray("options").addAll(options(input, context));

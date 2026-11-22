@@ -2527,6 +2527,47 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void typedInputsAndSpecialActionsConvert() throws Exception {
+        String text = catalog("""
+                {"id":"found","name":"Found","automation":{"uses":{"max":1,"per":"shortRest"},"rollOptions":[
+                  {"id":"family","label":"Found family","roll":"action","cost":{"hope":1},"input":{"label":"Bonus","default":2,"min":0,"max":20}}]}},
+                {"id":"leaf","name":"Leaf","automation":{"rollOptions":[
+                  {"id":"fear-leaf","label":"Fear Leaf","roll":"damage","input":{"label":"Bonus","default":1,"min":1,"max":20,"source":"attackFear"}}]}},
+                {"id":"disguise","name":"Disguise","automation":{"actions":[{"id":"use","label":"Mass Disguise","specialAction":"massDisguise","cost":{"stress":1}}]}},
+                {"id":"terror","name":"Terror","automation":{"uses":{"max":1,"per":"longRest"},"actions":[{"id":"use","label":"Night Terror","specialAction":"nightTerror"}]}},
+                {"id":"vital","name":"Vital","automation":{"actions":[{"id":"choose","label":"Choose","specialAction":"vitality"}]}}""");
+        var result = LegacyCatalogConverter.convert(text);
+        assertEquals(5, result.converted(), result.diagnostics().toString());
+        JsonNode found = block(result, 0).at("/rules/0");
+        assertEquals(2, found.at("/inputs/0/default").asInt(), found.toString());
+        assertTrue(found.toString().contains("input.bonus"), found.toString());
+        assertTrue(block(result, 1).toString().contains("\"role\":\"damage\""), block(result, 1).toString());
+        assertTrue(block(result, 2).toString().contains("countdown.start"), block(result, 2).toString());
+        String terror = block(result, 3).toString();
+        assertTrue(terror.contains("table.spend") && terror.contains("event.table.fear"), terror);
+        String vital = block(result, 4).toString();
+        assertTrue(vital.contains("track.capacity") && vital.contains("\"count\":2") && vital.contains("\"vault\""), vital);
+        assertTrue(block(result, 4).at("/effects").elements().next().at("/modifiers").toString().contains("thresholds"), vital);
+        for (int i = 0; i < 5; i++) assertNotNull(program(result, i));
+    }
+
+    @Test
+    void damageRewardsAndMaintainedEffectsConvert() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"blood","name":"Blood","automation":{"conditionalDamageRewards":[
+                  {"minHp":1,"noArmorMarked":true,"clearArmor":1,"gainHope":1,"loadoutDomain":{"domain":"Valor","min":4}}]}},
+                {"id":"avatar","name":"Avatar","automation":{"actions":[{"id":"use","label":"Avatar","cost":{"stress":1},"steps":[{"op":"effect","effect":{
+                  "name":"Avatar","kind":"buff","until":"manual","maintainOnAction":"maintain","text":"Spend Hope.","rollOptions":[
+                  {"id":"damage","label":"Avatar damage","roll":"damage","dice":"@feard6","defaultOn":true},
+                  {"id":"maintain","label":"Maintain","roll":"action","cost":{"hope":1},"defaultOn":true}]}}]}]}}"""));
+        assertEquals(2, result.converted(), result.diagnostics().toString());
+        String reward = block(result, 0).toString();
+        assertTrue(reward.contains("damage.applied") && reward.contains("armorMarked") && reward.contains("actor.armorTrack"), reward);
+        String avatar = block(result, 1).toString();
+        assertTrue(avatar.contains("revert-avatar") && avatar.contains("event.table.fear") && avatar.contains("roll.prepare"), avatar);
+        for (int i = 0; i < 2; i++) assertNotNull(program(result, i));
+    }
+    @Test
     void conditionalStepsSkipWhenFalseAndCannotNameResults() throws Exception {
         String base = """
                 {"rules":[{"id":"r","bindings":[{"id":"b","event":"action.request","surface":"sheet","mode":"button"}],

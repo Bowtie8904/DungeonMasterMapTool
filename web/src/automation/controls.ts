@@ -2,7 +2,7 @@ import { el } from '../login';
 import { drawingId as randomId } from '../tools';
 
 export type RuleInput =
-  | { id: string; kind: 'integer'; label: string; min: number; max: number }
+  | { id: string; kind: 'integer'; label: string; min: number; max: number; default?: number }
   | { id: string; kind: 'die.select'; label: string; count: number; min?: number; default?: string[];
       choices: Array<{ id: string; label: string; sides: number; face: number }> }
   | { id: string; kind: 'choice'; label: string; count: number; options: Array<{ id: string; label: string }> }
@@ -147,7 +147,7 @@ export function ruleControl(descriptor: RuleDescriptor, submit: (intent: RuleInt
         });
       } else if (input.kind === 'integer') {
         const field = el('input', { type: 'number', min: String(input.min), max: String(input.max), step: '1',
-          value: String(input.min), ariaLabel: input.label });
+          value: String(input.default ?? input.min), ariaLabel: input.label });
         fields.push(field);
         dialog.append(el('label', {}, input.label, field));
         reads.push(() => {

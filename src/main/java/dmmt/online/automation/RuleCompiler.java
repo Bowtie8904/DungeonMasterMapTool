@@ -665,7 +665,8 @@ public final class RuleCompiler {
                 RuleTemplate.validate(RuleJson.text(input.path("label"), path + "/inputs/label"));
                 switch (input.path("kind").asText()) {
                     case "integer" -> {
-                        RuleJson.fields(input, path + "/inputs", "id", "kind", "min", "max", "label");
+                        RuleJson.fields(input, path + "/inputs", "id", "kind", "min", "max", "default", "label");
+                        if (input.has("default")) RuleJson.integer(input.get("default"), path + "/inputs/default", -1_000_000, 1_000_000);
                         RuleExpression.validate(input.path("min"), path + "/inputs/min");
                         RuleExpression.validate(input.path("max"), path + "/inputs/max");
                     }
