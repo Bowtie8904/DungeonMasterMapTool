@@ -1,0 +1,17 @@
+{
+  "scenario": "healing-hands.hp-on-success",
+  "source": "domain-cards:healing-hands",
+  "before": { "healerStress": 0, "patientHpMarked": 3 },
+  "cast": { "roll": "2d12+30", "seed": 0, "choice": "hp", "target": "patient" },
+  "expected": {
+    "faces": [1, 5],
+    "total": 36,
+    "healerStress": 1,
+    "patientHpMarked": 1,
+    "reportLine": "patient: cleared 2 HP.",
+    "expires": "longRest",
+    "selfTargetAllowed": false,
+    "sameRollReusable": false,
+    "newRollBypassesLock": false
+  }
+}

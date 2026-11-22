@@ -612,7 +612,7 @@ domain-cards,/entries/98/automation,grace-touched [Grace-Touched],conditionalRol
 domain-cards,/entries/99/automation,grisly-harpoon [Grisly Harpoon],conditionalRollTriggers,converted-candidate,,not captured,unverified
 domain-cards,/entries/100/automation,ground-pound [Ground Pound],actions;rollTriggers,converted-candidate,,not captured,unverified
 domain-cards,/entries/101/automation,healing-field [Healing Field],actions;uses,converted-candidate,,not captured,unverified
-domain-cards,/entries/102/automation,healing-hands [Healing Hands],conditionalRollTriggers;spellcastDifficulty,converted-candidate,,not captured,unverified
+domain-cards,/entries/102/automation,healing-hands [Healing Hands],conditionalRollTriggers;spellcastDifficulty,converted-candidate,,parity/healing-hands.json (successful HP scenario only),unverified
 domain-cards,/entries/103/automation,healing-strike [Healing Strike],rollTriggers,converted-candidate,,not captured,unverified
 domain-cards,/entries/104/automation,hideous-retribution [Hideous Retribution],actions;conditionalRollTriggers,unconverted,/entries/104/automation/conditionalRollTriggers/0/actionRoll: Unsupported legacy field: actionRoll | /entries/104/automation/conditionalRollTriggers/0/on: Unsupported roll filter: incomingDamage,not captured,unverified
 domain-cards,/entries/105/automation,hold-the-line [Hold the Line],actions,converted-candidate,,not captured,unverified

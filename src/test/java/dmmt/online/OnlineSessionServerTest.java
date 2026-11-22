@@ -592,27 +592,39 @@ class OnlineSessionServerTest {
 
     @Test
     void splendorHealingHandsUsesActualSuccessAndTargetLongRestLock() throws Exception {
-        splendorActor("healer", "Healing Hands");
-        splendorActor("patient");
+        JsonNode scenario;
+        try (var input = getClass().getResourceAsStream("/dmmt/automation/parity/healing-hands.json")) {
+            scenario = MAPPER.readTree(input);
+        }
+        var cast = scenario.required("cast");
+        var expected = scenario.required("expected");
+        String target = cast.required("target").asText();
+        assertEquals(scenario.at("/before/healerStress"), splendorActor("healer", "Healing Hands").at("/stress/on"));
+        assertEquals(scenario.at("/before/patientHpMarked"), splendorActor(target).at("/hp/on"));
         String cookie = cookie();
         Inbox inbox = new Inbox();
         WebSocket ws = connect(cookie, inbox);
         try {
-            JsonNode roll = splendorRoll(ws, inbox, "healer", "Healing Hands", "2d12+30");
-            ObjectNode request = splendorRequest("healer", "Healing Hands", "hp", roll).put("choiceId", "hp")
+            diceSeed(cast.required("seed").asLong());
+            JsonNode roll = splendorRoll(ws, inbox, "healer", "Healing Hands", cast.required("roll").asText());
+            assertEquals(expected.required("faces"), roll.required("rolls"));
+            assertEquals(expected.required("total"), roll.required("total"));
+            String choice = cast.required("choice").asText();
+            ObjectNode request = splendorRequest("healer", "Healing Hands", choice, roll).put("choiceId", choice)
                     .put("targetActorId", "healer");
-            assertEquals(400, featureHttp(cookie, request).statusCode());
-            request.put("targetActorId", "patient");
+            assertEquals(expected.required("selfTargetAllowed").asBoolean() ? 200 : 400, featureHttp(cookie, request).statusCode());
+            request.put("targetActorId", target);
             var response = featureHttp(cookie, request);
             assertEquals(200, response.statusCode(), response.body());
-            JsonNode patient = MAPPER.readTree(store.loadSheet(campaign.getId(), "patient"));
-            assertEquals(1, patient.path("hp").path("on").asInt());
-            assertEquals("longRest", patient.path("effects").path(0).path("until").asText());
-            assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "healer")).path("stress").path("on").asInt());
-            assertEquals(400, featureHttp(cookie, request).statusCode(), "A roll cannot be replayed.");
+            JsonNode patient = MAPPER.readTree(store.loadSheet(campaign.getId(), target));
+            assertEquals(expected.required("patientHpMarked"), patient.at("/hp/on"));
+            assertEquals(expected.required("expires"), patient.at("/effects/0/until"));
+            assertEquals(expected.required("healerStress"), MAPPER.readTree(store.loadSheet(campaign.getId(), "healer")).at("/stress/on"));
+            assertTrue(dmMessages.stream().anyMatch(m -> m.path("text").asText().contains(expected.required("reportLine").asText())));
+            assertEquals(expected.required("sameRollReusable").asBoolean() ? 200 : 400, featureHttp(cookie, request).statusCode());
             JsonNode second = splendorRoll(ws, inbox, "healer", "Healing Hands", "2d12+30");
             request.set("roll", splendorRequest("healer", "Healing Hands", "hp", second).path("roll"));
-            assertEquals(400, featureHttp(cookie, request).statusCode(), "Another cast must respect the target lock.");
+            assertEquals(expected.required("newRollBypassesLock").asBoolean() ? 200 : 400, featureHttp(cookie, request).statusCode());
             ObjectNode rested = (ObjectNode) patient.deepCopy();
             rested.put("longRestRevision", 1);
             store.saveSheet(campaign.getId(), "patient", rested.toString());
