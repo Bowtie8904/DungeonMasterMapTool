@@ -1754,6 +1754,85 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "dmmt.benchmark.automation", matches = "true")
+    void measurePersistedProfileAndPartyActions() throws Exception {
+        ObjectNode catalog = installPartyAction();
+        ObjectNode rally = (ObjectNode) catalog.at("/entries/0/features/0/automation/rules/0");
+        rally.remove("limitRef");
+        ObjectNode targets = (ObjectNode) rally.at("/bindings/0/targetSelection");
+        targets.put("scope", "activePlayerCharacters").set("where", MAPPER.readTree("""
+                {"gt":[{"read":"recipient.stress.marked"},0]}"""));
+        // Restore the track and source cost between samples, without resetting the persistent receipt journal.
+        rally.set("do", MAPPER.readTree("""
+            [{"op":"track.clear","track":"recipient.stress","amount":1,"as":"cleared"},
+             {"op":"track.mark","track":"recipient.stress","amount":1}]"""));
+        ((ObjectNode) rally.path("ui")).put("report", "{recipient.name} cleared {result.cleared}.");
+        ((ArrayNode) catalog.at("/entries/0/features/2/automation/rules")).add(MAPPER.readTree("""
+            {"id":"reward","bindings":[{"id":"auto","surface":"roll","event":"roll.finished","mode":"automatic"}],
+             "ui":{"label":"Reward"},"do":[{"op":"resource.gain","pool":"actor.hope","amount":1}]}"""));
+        java.nio.file.Files.writeString(compendiumDir.resolve("classes.json"), catalog.toString());
+        String cookie = cookie(), campaignId = campaign.getId();
+        int partySize = 5, warmup = 20, samples = 40;
+        for (int i = 0; i <= partySize; i++) {
+            String id = i == 0 ? "caster" : "ally-" + i;
+            campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId()).build());
+            ObjectNode sheet = performanceSheet().put("name", id).put("notes", "Session notes. ".repeat(800));
+            sheet.withObject("/stress").put("on", i == 0 ? 0 : 2);
+            sheet.putArray("traits").addObject().put("name", "Finesse").put("mod", 3);
+            ArrayNode features = sheet.putArray("features");
+            if (i == 0) for (String feature : List.of("rally", "steady"))
+                features.addObject().put("name", feature).put("instanceId", feature)
+                        .put("automationSource", "classes:tester:features:" + feature);
+            store.saveSheet(campaignId, id, sheet.toString());
+        }
+        var alloc = java.lang.management.ManagementFactory.getPlatformMXBean(com.sun.management.ThreadMXBean.class);
+        if (alloc == null || !alloc.isThreadAllocatedMemorySupported())
+            throw new IllegalStateException("The benchmark requires JVM allocation counters.");
+        alloc.setThreadAllocatedMemoryEnabled(true);
+        long[][] nanos = new long[3][samples], bytes = new long[3][samples];
+        long revision = 0;
+        for (int i = -warmup; i < samples; i++) {
+            String partyVersion = null;
+            for (int stage = 0; stage < 3; stage++) {
+                String body = null;
+                if (stage == 0) body = """
+                        {"request":{"requestId":"roll-%d","expectedRevision":%d,"selections":[],
+                        "profileRoll":{"sourceInstanceId":"steady","profileId":"thrown","kind":"attack"}}}
+                        """.formatted(revision, revision);
+                if (stage == 2) body = """
+                        {"request":{"requestId":"party-%d","expectedRevision":%d,"selections":[
+                        {"sourceInstanceId":"rally","ruleId":"rally","bindingId":"sheet"}],"target":{"version":"%s"}}}
+                        """.formatted(revision, revision, partyVersion);
+                long allocated = alloc.getTotalThreadAllocatedBytes(), start = System.nanoTime();
+                var response = automationHttp(cookie, "caster", body);
+                long elapsed = System.nanoTime() - start, used = alloc.getTotalThreadAllocatedBytes() - allocated;
+                assertEquals(200, response.statusCode(), response.body());
+                JsonNode result = MAPPER.readTree(response.body());
+                if (stage == 1) {
+                    JsonNode offer = result.requiredAt("/actions/0/targetSelection");
+                    assertEquals(partySize, offer.required("options").size());
+                    partyVersion = offer.required("version").textValue();
+                } else {
+                    assertEquals(++revision, result.required("revision").longValue());
+                    if (stage == 0) assertEquals("roll.finished", result.requiredAt("/event/type").textValue());
+                    else assertEquals(partySize, result.required("actions").size());
+                }
+                if (i >= 0) { nanos[stage][i] = elapsed; bytes[stage][i] = used; }
+            }
+        }
+        assertEquals(revision, MAPPER.readTree(store.loadSheet(campaignId, "caster")).requiredAt("/automationState/revision").longValue());
+        for (int i = 1; i <= partySize; i++) assertEquals(warmup + samples,
+                MAPPER.readTree(store.loadSheet(campaignId, "ally-" + i)).requiredAt("/automationState/revision").intValue());
+        for (int stage = 0; stage < 3; stage++) {
+            java.util.Arrays.sort(nanos[stage]);
+            System.out.printf(java.util.Locale.ROOT, "automation-bench %s: n=%d p50=%.2fms p95=%.2fms mean=%.2fMiB allocated%n",
+                    List.of("profile POST", "party GET", "party POST").get(stage), samples,
+                    nanos[stage][samples / 2 - 1] / 1e6, nanos[stage][(int) Math.ceil(samples * .95) - 1] / 1e6,
+                    java.util.Arrays.stream(bytes[stage]).average().orElseThrow() / (1024 * 1024));
+        }
+    }
+
+    @Test
     void partyActionRefreshesOnMembershipOrSheetChangesAndCommitsOnlyOnce() throws Exception {
         ObjectNode catalog = installPartyAction();
         Path file = compendiumDir.resolve("classes.json");

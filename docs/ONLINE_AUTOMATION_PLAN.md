@@ -25,7 +25,17 @@ campaign DM from a player. The grant still authorizes only its original sheet.
 Timed expiry clears an actor's `whileEffect` pool in the same reset transaction when its last supporting
 effect expires; another surviving copy preserves the balance.
 
-**Started, not cut over.** The new implementation is a development foundation with a first host integration (`/api/automation/{actorId}`, see *Host integration* below). A sheet *Automation* panel and a one-time format converter (see *Format converter*) exist; chat/roll surfaces and the catalog editor are not yet connected, and live play still uses the old engine because the shipped catalogs are format 1 (the new endpoint answers 409 until they are converted). All nine production catalogs remain at format 1. Target selection, recipient snapshots and all-target fan-out now have an isolated generic JSON contract and dispatcher, but are not yet routed through `AutomationHost`, the endpoint or the browser panel. No compatibility version has changed because no new network contract is exposed. There is no live second-engine selector or legacy adapter; complete the remaining work before replacing the running engine.
+**Started, not cut over.** With a format-2 pack, the sheet panel and host endpoint support versioned single-target and whole-party actions and owner-initiated profile rolls. Result-chat actions, roll-option UI, catalog editing and migration remain incomplete. All nine shipped catalogs still use format 1; the replacement endpoint returns 409 for them. There is no live second-engine selector or legacy adapter.
+
+**Performance baseline.** Run `mvn "-Ddmmt.benchmark.automation=true" "-Dtest=OnlineSessionServerTest#measurePersistedProfileAndPartyActions" test` separately from other tests. It uses loopback HTTP and a temporary on-disk campaign, six sheets with 12 KB of notes each, a profile attack with a finished reaction, and a versioned action with a recipient filter and five recipients. After 20 warm-up cycles the retry journal is full. The next 40 cycles measure each request to receipt of its response, including persistence on POST. The party GET is the sheet offer, not an extra roll request.
+
+| Request | Median | p95 | Mean allocated per request |
+|---|---:|---:|---:|
+| Profile POST | 14.49 ms | 17.66 ms | 4.35 MiB |
+| Party GET | 8.74 ms | 10.93 ms | 5.69 MiB |
+| Party POST | 36.79 ms | 43.17 ms | 11.03 MiB |
+
+These are single-run development measurements on Windows / Temurin 25, not release thresholds. Allocation is JVM-wide (host and test HTTP client), not retained heap. The run excludes browser rendering, WAN latency, connected-client broadcasts and unrelated concurrent play.
 
 **Host-intent hardening (2026-11-22):** The automation POST now accepts only a rule request; browser-supplied event facts are rejected, and the initial sheet-action event is created by the host. Journal replays are bound to the authenticated player principal. This closes event-type/payload forgery for this endpoint, but authoritative roll and lifecycle event construction and their integration with the existing roll pipeline remain outstanding. Keep previews local and pure, reuse host-computed roll facts, and avoid additional network round trips. Compiled programs now index visible buttons/options by event and surface, avoiding a scan of unrelated rules for each action description; the host pack is reused by compendium revision. Any actor-projection cache must include every relevant sheet, catalog and event dependency, and must be justified by benchmarks before adding complexity.
 
