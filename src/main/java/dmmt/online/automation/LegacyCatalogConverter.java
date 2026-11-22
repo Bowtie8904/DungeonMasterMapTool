@@ -64,7 +64,7 @@ public final class LegacyCatalogConverter {
     private static final Pattern DICE = Pattern.compile("([1-9][0-9]?)d([1-9][0-9]{0,2})");
     private static final Pattern ACTION_DAMAGE = Pattern.compile("(?i)(\\d*)d(\\d+)(?:([+-])(\\d+))?");
     private static final Pattern POOL_DICE = Pattern.compile("@([a-z][a-z0-9_]*)(d\\d+(?:[+-]\\d+)?)");
-    private static final Set<String> ACTION_FIELDS = Set.of("id", "label", "description", "cost", "steps", "report", "damage",
+    private static final Set<String> ACTION_FIELDS = Set.of("splendorAction", "id", "label", "description", "cost", "steps", "report", "damage",
             "requiresEffect", "excludesEffect", "endEffect", "uses", "usesSource", "actionRoll", "target",
             "excludeSourceActor", "hostOwned", "selectAmount", "resourceRoll", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
             "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime", "table");
@@ -1718,9 +1718,15 @@ public final class LegacyCatalogConverter {
         }
         String operationTarget = targetSelection(trigger, path, p, (ObjectNode) rule.path("bindings").get(0));
         boolean healingHands = false;
+        boolean secondWindTrigger = "secondWind".equals(trigger.path("splendorAction").asText());
+        if (secondWindTrigger) {
+            operationTarget = targetSelection(RuleJson.JSON.createObjectNode().put("target", "actor").put("excludeSourceActor", true), path, p,
+                    (ObjectNode) rule.path("bindings").get(0));
+        }
         String splendor = trigger.path("splendorAction").asText("");
         if (trigger.has("splendorAction")) {
             if ("healingHands".equals(splendor) && "recipient".equals(operationTarget)) healingHands = true;
+            else if (secondWindTrigger) { }
             else if (!Set.of("sunlight", "resurrection").contains(splendor) || "recipient".equals(operationTarget))
                 p.add(path + "/splendorAction", "Unsupported Splendor action: " + splendor);
             else if ("sunlight".equals(splendor) && !trigger.has("selectAmount")) {
@@ -1730,6 +1736,11 @@ public final class LegacyCatalogConverter {
         }
         if (!trigger.has("target") && trigger.has("excludeSourceActor")) p.add(path + "/excludeSourceActor", "Source exclusion requires a target mode.");
         ArrayNode when = RuleJson.JSON.createArrayNode();
+        if (secondWindTrigger) {
+            ObjectNode hopeful = when.addObject().putArray("or").addObject();
+            hopeful.putArray("eq").add(read("event.check.critical")).add(true);
+            ((ArrayNode) when.get(when.size() - 1).get("or")).addObject().putArray("eq").add(read("event.check.dominant")).add("hope");
+        }
         if ("spellcast".equals(trigger.path("damage").path("count").asText()))
             when.addObject().put("exists", "actor.spellcastTrait.value");
         if (trigger.has("on")) rollCondition(trigger.path("on").asText(), path + "/on", p, when);
@@ -1908,6 +1919,7 @@ public final class LegacyCatalogConverter {
         amountStore(trigger.path("selectAmount"), path + "/selectAmount", p, pools, steps, effects);
         for (int i = 0; i < extra.size(); i++) step(extra.get(i), path + "/steps/" + i, p, steps, effects, pools, operationTarget);
         if (healingHands) healingHandsRecovery(rule, path, p, steps, effects);
+        if (secondWindTrigger) secondWind(rule, steps, "recipient");
         amountHeal(trigger.path("selectAmount"), path + "/selectAmount", p, steps);
         giveFear(trigger, path, p, steps);
         if (trigger.has("removeFear")) {
@@ -1929,6 +1941,18 @@ public final class LegacyCatalogConverter {
         sentRollReport(trigger, ui);
         checkReport(trigger, ui);
         return rule;
+    }
+
+    /** Second Wind: choose HP (1) or Stress (3) to clear on yourself or, after a hopeful attack, on an ally. */
+    private static void secondWind(ObjectNode rule, ArrayNode steps, String who) {
+        ArrayNode options = rule.withArray("inputs").addObject().put("id", "recovery").put("kind", "choice")
+                .put("label", "Choose your recovery").putArray("options");
+        options.addObject().put("id", "hp").put("label", "Clear 1 HP");
+        options.addObject().put("id", "stress").put("label", "Clear 3 Stress");
+        for (String[] clear : new String[][]{{"hp", "1"}, {"stress", "3"}}) {
+            ObjectNode step = steps.addObject().put("op", "track.clear").put("track", who + "." + clear[0]).put("amount", Integer.parseInt(clear[1]));
+            step.putObject("if").putArray("eq").add(read("input.recovery")).add(clear[0]);
+        }
     }
 
     /** Stunning Sunlight: the spent Hope sets the target count; damage is rolled once for each reaction outcome. */
@@ -2458,6 +2482,8 @@ public final class LegacyCatalogConverter {
             else binding.put("id", "downtime").put("event", "downtime.move").put("surface", "downtime");
         }
         String operationTarget = targetSelection(action, path, p, binding);
+        boolean secondWind = "secondWind".equals(action.path("splendorAction").asText());
+        if (action.has("splendorAction") && !secondWind) p.add(path + "/splendorAction", "Unsupported Splendor action: " + action.path("splendorAction").asText());
         if (!action.has("target") && action.has("excludeSourceActor") && !action.has("chatBenefits") && !action.has("benefitsPerAmount"))
             p.add(path + "/excludeSourceActor", "Source exclusion requires a target mode or chat benefits.");
         if (action.has("hostOwned") && !action.path("hostOwned").isBoolean())
@@ -2528,6 +2554,7 @@ public final class LegacyCatalogConverter {
         amountHeal(action.path("selectAmount"), path + "/selectAmount", p, steps);
         if (action.has("table")) actionTable(action.get("table"), path + "/table", p, steps, effects, pools, operationTarget);
         endEffect(action, steps, operationTarget);
+        if (secondWind) secondWind(rule, steps, "actor");
         if (transfer) steps.addObject().put("op", "resource.gain").put("pool", "recipient.hope").set("amount", read("input.amount"));
         if (action.has("refreshUses")) {
             String rest = action.path("refreshUses").asText();

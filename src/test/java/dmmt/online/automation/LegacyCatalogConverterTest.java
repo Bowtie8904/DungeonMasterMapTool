@@ -900,6 +900,28 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void secondWindClearsChosenRecoveryOnSelfOrAfterAHopefulAttackOnAnAlly() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"t","name":"T","automation":{"uses":{"max":1,"per":"rest"},
+                 "actions":[{"id":"self","label":"Second Wind","hostOwned":true,"splendorAction":"secondWind"}],
+                 "rollTriggers":[{"id":"ally","label":"Second Wind","on":"attack","successIfKnown":true,"hostOwned":true,"splendorAction":"secondWind"}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        RuleCompiler.Program program = program(result, 0);
+        String actor = "{\"id\":\"owner\",\"name\":\"Ari\",\"effects\":[],\"hp\":{\"marked\":3,\"capacity\":6},\"stress\":{\"marked\":5,\"capacity\":6}}";
+        ObjectNode action = context(program, actor, "{\"type\":\"action.request\"}");
+        RuleDispatcher.EventResolution done = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, action)),
+                List.of(new RuleRuntime.Intent("self", "sheet", "fixture", 0, (ObjectNode) RuleJson.parse("{\"recovery\":\"stress\"}"))), StructuredRollTest.noRandom());
+        assertEquals(2, done.contexts().getFirst().at("/actor/stress/marked").asInt());
+        assertEquals(3, done.contexts().getFirst().at("/actor/hp/marked").asInt());
+        String miss = "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"attack\",\"critical\":false,\"dominant\":\"fear\",\"outcome\":\"success\",\"total\":15},\"roll\":" + ROLL + "}";
+        assertFalse(available(program, context(program, actor, miss), "roll").contains("ally"));
+        String hopeful = miss.replace("\"fear\"", "\"hope\"");
+        ObjectNode withAlly = context(program, actor, hopeful);
+        withAlly.with("targetOptions").set("connectedPlayerCharacters", RuleJson.parse("[{\"id\":\"mira\",\"label\":\"Mira\",\"revision\":1}]"));
+        assertTrue(available(program, withAlly, "roll").contains("ally"));
+    }
+
+    @Test
     void resurrectionVaultsTheCardOnlyOnFiveOrLess() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"t","name":"T","automation":{"spellcastDifficulty":13,"rollTriggers":[
