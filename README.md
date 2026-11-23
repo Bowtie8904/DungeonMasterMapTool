@@ -51,6 +51,8 @@ effects and other sources' or recipients' conditional endings remains unfinished
 The staged rest-reset primitive can preserve effects started or replaced during downtime. Authored effects can
 freeze marked-track locks and expire before rest moves; Daggerheart healing respects an effect's frozen HP lock.
 This staged ordering is not yet connected to the live rest workflow, and legacy locks still require migration.
+The experimental runtime can observe ordered track changes inside a private transaction, including clamped
+Armor clears and damage marks. Automatic track reactions and live rest recovery are not yet connected.
 Converted downtime buttons now describe their host-validated move identity and rest restriction. This metadata
 and the shared ruleset's validated rest limits do not yet make the format-2 rest workflow available.
 The host can stage and validate rest preparation and individual moves on a private copy, retaining the

@@ -3,6 +3,9 @@ package dmmt.online.automation;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static dmmt.online.automation.RuleConformanceTest.fixture;
 import static dmmt.online.automation.StructuredRollTest.faces;
 import static dmmt.online.automation.StructuredRollTest.noRandom;
@@ -94,6 +97,47 @@ class StructuredDamageTest {
             assertThrows(IllegalArgumentException.class, () -> StructuredDamage.validatePlan(forged), forged.toString());
         assertThrows(IllegalArgumentException.class, () -> StructuredDamage.adjust(plan, "amount", 1, "a", "features:x", "A"));
         assertThrows(IllegalArgumentException.class, () -> StructuredDamage.adjust(plan, "severityReduction", 2, "dull", "features:x", "A"));
+    }
+
+    @Test
+    void damageMarksObserveArmorBeforeApplyingHpAndRespectReactedState() throws Exception {
+        ObjectNode context = marksContext(12, 2, 0);
+        ObjectNode plan = assess(context, 1, false);
+        List<ObjectNode> events = new ArrayList<>();
+        ObjectNode applied = StructuredDamage.mark(plan,
+                RuleJson.parse("{\"track\":\"actor.armor\",\"marked\":\"marked\",\"capacity\":\"capacity\"}"),
+                RuleJson.parse("{\"track\":\"actor.hp\",\"marked\":\"marked\",\"capacity\":\"capacity\"}"),
+                context, (staged, holder, event) -> {
+                    events.add(event.deepCopy());
+                    if ("armor".equals(event.path("track").asText())) staged.withObject("/actor/hp").put("marked", 5);
+                });
+        assertEquals(List.of("armor", "hp"), events.stream().map(event -> event.path("track").asText()).toList());
+        assertEquals(2, events.get(0).at("/before/marked").asInt());
+        assertEquals(3, events.get(0).at("/after/marked").asInt());
+        assertEquals(2, events.get(1).path("requested").asInt());
+        assertEquals(5, events.get(1).at("/before/marked").asInt());
+        assertEquals(6, events.get(1).at("/after/marked").asInt());
+        assertEquals(1, applied.path("hitPoints").asInt());
+        assertEquals(0, applied.path("hitPointsRemaining").asInt());
+    }
+
+    @Test
+    void directDamageResolutionObservesReactionsBetweenArmorAndHp() throws Exception {
+        ObjectNode context = marksContext(12, 2, 0);
+        List<ObjectNode> events = new ArrayList<>();
+        ObjectNode applied = StructuredDamage.resolve(context.at("/event/damage"),
+                RuleJson.parse("{\"majorAt\":5,\"severeAt\":10}"),
+                RuleJson.parse("{\"track\":\"actor.armor\",\"marked\":\"marked\",\"capacity\":\"capacity\",\"spend\":1,\"severitySteps\":1}"),
+                RuleJson.parse("{\"track\":\"actor.hp\",\"marked\":\"marked\",\"capacity\":\"capacity\",\"minor\":1,\"major\":2,\"severe\":3}"),
+                context, (staged, holder, event) -> {
+                    events.add(event.deepCopy());
+                    if ("armor".equals(event.path("track").asText())) staged.withObject("/actor/hp").put("marked", 5);
+                });
+        assertEquals(List.of("armor", "hp"), events.stream().map(event -> event.path("track").asText()).toList());
+        assertEquals(2, events.get(1).path("requested").asInt());
+        assertEquals(5, events.get(1).at("/before/marked").asInt());
+        assertEquals(6, events.get(1).at("/after/marked").asInt());
+        assertEquals(1, applied.at("/hitPoints/applied").asInt());
     }
 
     @Test

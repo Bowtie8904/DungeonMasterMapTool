@@ -26,6 +26,11 @@ public final class RuleRuntime {
     record Prepared(Intent intent, ObjectNode context, long revision) {}
     public record Resolution(ObjectNode context, String report, List<ObjectNode> publishedRolls, List<ObjectNode> diceRolls) {}
 
+    @FunctionalInterface
+    interface TrackObserver {
+        void changed(ObjectNode staged, String holder, ObjectNode event);
+    }
+
     public static final class Unavailable extends IllegalStateException {
         private final String code;
         Unavailable(String code, String message) { super(message); this.code = code; }
@@ -158,6 +163,13 @@ public final class RuleRuntime {
         return executePrepared(program, prepare(program, intent, hostContext), random, false, programs);
     }
 
+    static Resolution executeObserved(RuleCompiler.Program program, Intent intent, ObjectNode hostContext,
+                                      RandomGenerator random, Map<String, RuleCompiler.Program> programs,
+                                      TrackObserver observer) {
+        Prepared prepared = reserveCosts(program, preflight(program, intent, hostContext), hostContext, true, observer);
+        return executePrepared(program, prepared, random, false, programs, false, observer);
+    }
+
     public static Resolution preview(RuleCompiler.Program program, Intent intent, ObjectNode hostContext) {
         return preview(program, intent, hostContext, Map.of(program.sourceId(), program));
     }
@@ -233,6 +245,11 @@ public final class RuleRuntime {
 
     static Prepared reserveCosts(RuleCompiler.Program program, Prepared preflight, ObjectNode currentContext,
                                  boolean reserveSourceCosts) {
+        return reserveCosts(program, preflight, currentContext, reserveSourceCosts, null);
+    }
+
+    static Prepared reserveCosts(RuleCompiler.Program program, Prepared preflight, ObjectNode currentContext,
+                                 boolean reserveSourceCosts, TrackObserver observer) {
         Intent intent = preflight.intent();
         ObjectNode rule = program.rule(intent.ruleId());
         ObjectNode next = preflight.context().deepCopy();
@@ -249,7 +266,7 @@ public final class RuleRuntime {
         }
         if (reserveSourceCosts) {
             List<ObjectNode> published = new ArrayList<>(), rolls = new ArrayList<>();
-            for (JsonNode cost : rule.path("costs")) operation(program, cost, next, null, false, published, rolls);
+            for (JsonNode cost : rule.path("costs")) operation(program, cost, next, null, false, published, rolls, observer);
         }
         return new Prepared(intent, next, revision);
     }
@@ -261,6 +278,11 @@ public final class RuleRuntime {
 
     static Resolution executePrepared(RuleCompiler.Program program, Prepared prepared, RandomGenerator random, boolean preview,
                                       Map<String, RuleCompiler.Program> programs, boolean stagedMove) {
+        return executePrepared(program, prepared, random, preview, programs, stagedMove, null);
+    }
+
+    static Resolution executePrepared(RuleCompiler.Program program, Prepared prepared, RandomGenerator random, boolean preview,
+                                      Map<String, RuleCompiler.Program> programs, boolean stagedMove, TrackObserver observer) {
         if (programs == null) throw RuleJson.error("/programs", "Expected a compiled program registry.");
         Intent intent = prepared.intent();
         ObjectNode rule = program.rule(intent.ruleId());
@@ -282,11 +304,16 @@ public final class RuleRuntime {
         }
         String text = preview && rule.path("ui").has("preview") ? "preview" : "report";
         return executeSteps(program, prepared.context(), next, rule.path("do"), rule.path("ui").path(text),
-                random, preview, programs, revision);
+                random, preview, programs, revision, preview ? null : observer);
     }
 
     static Resolution executeAfter(RuleCompiler.Program program, Intent intent, ObjectNode hostContext,
                                    RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
+        return executeAfter(program, intent, hostContext, random, programs, null);
+    }
+
+    static Resolution executeAfter(RuleCompiler.Program program, Intent intent, ObjectNode hostContext,
+                                   RandomGenerator random, Map<String, RuleCompiler.Program> programs, TrackObserver observer) {
         if (programs == null) throw RuleJson.error("/programs", "Expected a compiled program registry.");
         ObjectNode rule = program.rule(intent.ruleId());
         if (!rule.has("after")) throw RuleJson.error("/ruleId", "This move benefit has no deferred operations.");
@@ -300,21 +327,22 @@ public final class RuleRuntime {
         if (!binding.path("event").asText().equals(next.at("/event/type").asText()))
             throw new Unavailable("event", "This benefit does not apply to this move.");
         for (JsonNode cost : rule.path("after").path("costs"))
-            operation(program, cost, next, null, false, new ArrayList<>(), new ArrayList<>());
+            operation(program, cost, next, null, false, new ArrayList<>(), new ArrayList<>(), observer);
         return executeSteps(program, next.deepCopy(), next, rule.path("after").path("do"),
-                rule.path("after").path("report"), random, false, programs, revision);
+                rule.path("after").path("report"), random, false, programs, revision, observer);
     }
 
     private static Resolution executeSteps(RuleCompiler.Program program, ObjectNode previous, ObjectNode next,
                                            JsonNode steps, JsonNode reportTemplate, RandomGenerator random,
-                                           boolean preview, Map<String, RuleCompiler.Program> programs, long revision) {
+                                           boolean preview, Map<String, RuleCompiler.Program> programs, long revision,
+                                           TrackObserver observer) {
         List<ObjectNode> published = new ArrayList<>(), rolls = new ArrayList<>();
         boolean effectOperation = false;
         Set<String> recipientPools = next.has("recipient") && !program.boundPoolIds().isEmpty()
                 ? new HashSet<>() : Set.of();
         for (JsonNode step : steps) {
             if (step.has("if") && !RuleExpression.bool(RuleExpression.evaluate(step.get("if"), next), "/do/if")) continue;
-            operation(program, step, next, random, preview, published, rolls);
+            operation(program, step, next, random, preview, published, rolls, observer);
             effectOperation |= step.path("op").asText().startsWith("effect.");
             touchedRecipientPool(program, step, recipientPools);
         }
@@ -758,6 +786,11 @@ public final class RuleRuntime {
 
     private static void operation(RuleCompiler.Program program, JsonNode op, ObjectNode context, RandomGenerator random, boolean preview,
                                   List<ObjectNode> published, List<ObjectNode> rolls) {
+        operation(program, op, context, random, preview, published, rolls, null);
+    }
+
+    private static void operation(RuleCompiler.Program program, JsonNode op, ObjectNode context, RandomGenerator random, boolean preview,
+                                  List<ObjectNode> published, List<ObjectNode> rolls, TrackObserver observer) {
         String kind = op.path("op").asText();
         JsonNode result;
         switch (kind) {
@@ -836,8 +869,13 @@ public final class RuleRuntime {
                     String[] parts = path.split("\\.");
                     JsonNode owner = context;
                     for (int i = 0; i < parts.length - 1; i++) owner = owner.path(parts[i]);
-                    RuleJson.object(owner, "/" + path).set(parts[parts.length - 1],
-                            RuleExpression.numeric(current + ("resource.spend".equals(kind) ? -amount : amount), "/" + path));
+                    JsonNode value = RuleExpression.numeric(current + ("resource.spend".equals(kind) ? -amount : amount), "/" + path);
+                    RuleJson.object(owner, "/" + path).set(parts[parts.length - 1], value);
+                    if (observer != null) {
+                        ObjectNode before = RuleJson.JSON.createObjectNode().set("value", target);
+                        ObjectNode after = RuleJson.JSON.createObjectNode().set("value", value);
+                        trackChanged(observer, context, path, "resource.spend".equals(kind) ? "spend" : "gain", amount, before, after);
+                    }
                     result = RuleExpression.numeric(amount, "/result");
                     break;
                 }
@@ -863,7 +901,15 @@ public final class RuleRuntime {
                 } else {
                     applied = uncapped ? amount : Math.min(amount, cap - current); value = current + applied;
                 }
+                ObjectNode before = observer == null ? null : track.deepCopy();
                 track.set(field, RuleExpression.numeric(value, "/" + path));
+                String change = switch (kind) {
+                    case "resource.spend" -> "spend";
+                    case "resource.gain" -> "gain";
+                    case "track.mark" -> "mark";
+                    default -> "clear";
+                };
+                trackChanged(observer, context, path, change, amount, before, track);
                 result = RuleExpression.numeric(applied, "/result");
             }
             case "inventory.consume" -> {
@@ -1136,7 +1182,7 @@ public final class RuleRuntime {
                 result = damage.get("amount");
             }
             case "damage.resolve" -> result = StructuredDamage.resolve(eval(op.path("from"), context),
-                    op.path("thresholds"), op.path("armor"), op.path("hitPoints"), context);
+                    op.path("thresholds"), op.path("armor"), op.path("hitPoints"), context, observer);
             case "damage.assess" -> result = StructuredDamage.assess(eval(op.path("from"), context), op.path("type"),
                     op.path("thresholds"), op.path("massive"), op.path("armor"), op.path("hitPoints"), context);
             case "damage.adjust" -> {
@@ -1184,7 +1230,7 @@ public final class RuleRuntime {
             }
             case "damage.mark" -> {
                 ObjectNode applied = StructuredDamage.mark(eval(op.path("from"), context), op.path("armor"),
-                        op.path("hitPoints"), context);
+                        op.path("hitPoints"), context, observer);
                 if (context.path("event").isObject()) ((ObjectNode) context.get("event")).set("applied", applied.deepCopy());
                 result = applied;
             }
@@ -1227,9 +1273,11 @@ public final class RuleRuntime {
                 if (track.has("minimumCapacity") && next < RuleJson.integer(track.get("minimumCapacity"),
                         "/" + path + "/minimumCapacity", 0, 1000))
                     throw new Unavailable("capacity", "Track capacity cannot be reduced below its permanent marks.");
+                ObjectNode before = observer == null ? null : track.deepCopy();
                 track.put(capacity, next);
                 if (track.has(filled) && track.path(filled).asInt() > next) track.put(filled, next);
                 if (owner != null) owner.put(counterName, reserved + current - next);
+                trackChanged(observer, context, path, "capacity", change, before, track);
                 result = RuleExpression.numeric(next - current, "/result");
             }
             case "collection.add", "collection.remove" -> {
@@ -1299,6 +1347,21 @@ public final class RuleRuntime {
             default -> throw RuleJson.error("/op", "Unsupported operation: " + kind);
         }
         if (op.has("as")) ((ObjectNode) context.get("result")).set(op.path("as").asText(), result.deepCopy());
+    }
+
+    static void trackChanged(TrackObserver observer, ObjectNode context, String path, String change, int requested,
+                             ObjectNode before, ObjectNode after) {
+        if (observer == null || RuleExpression.equal(before, after) && !("clear".equals(change) && requested > 0)) return;
+        int separator = path.indexOf('.');
+        String holder = path.substring(0, separator);
+        ObjectNode event = context.path("event").isObject()
+                ? ((ObjectNode) context.get("event")).deepCopy() : RuleJson.JSON.createObjectNode();
+        event.put("type", "track.changed").put("actorId",
+                RuleJson.id(context.path(holder).path("id"), "/" + holder + "/id"));
+        event.put("track", path.substring(separator + 1)).put("change", change).put("requested", requested);
+        event.set("before", before);
+        event.set("after", after.deepCopy());
+        observer.changed(context, holder, event);
     }
 
     private static void settleTableResource(ObjectNode context, ObjectNode request) {

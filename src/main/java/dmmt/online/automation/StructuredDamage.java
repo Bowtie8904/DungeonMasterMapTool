@@ -95,6 +95,11 @@ public final class StructuredDamage {
 
     static ObjectNode resolve(JsonNode value, JsonNode thresholds, JsonNode armor, JsonNode hitPoints,
                               ObjectNode context) {
+        return resolve(value, thresholds, armor, hitPoints, context, null);
+    }
+
+    static ObjectNode resolve(JsonNode value, JsonNode thresholds, JsonNode armor, JsonNode hitPoints,
+                              ObjectNode context, RuleRuntime.TrackObserver observer) {
         ObjectNode damage = validate(value);
         int majorAt = whole(thresholds.path("majorAt"), context, "/damage/thresholds/majorAt", 1, MAX_AMOUNT);
         int severeAt = whole(thresholds.path("severeAt"), context, "/damage/thresholds/severeAt", 1, MAX_AMOUNT);
@@ -121,7 +126,9 @@ public final class StructuredDamage {
                 throw new RuleRuntime.Unavailable("armorNoBenefit", "Armor cannot reduce this damage severity.");
             int before = marked;
             marked += spend;
+            ObjectNode beforeTrack = observer == null ? null : track.deepCopy();
             track.put(markedField, marked);
+            RuleRuntime.trackChanged(observer, context, trackPath, "mark", spend, beforeTrack, track);
             severity = Math.max(0, severity - spend * steps);
             ObjectNode armorResult = result.putObject("armor");
             armorResult.put("spent", spend).put("before", before).put("after", marked).put("capacity", capacity);
@@ -145,7 +152,9 @@ public final class StructuredDamage {
         };
         int appliedMarks = Math.min(requestedMarks, hpCapacity - hpMarked);
         int hpAfter = hpMarked + appliedMarks;
+        ObjectNode beforeHp = observer == null ? null : hpTrack.deepCopy();
         hpTrack.put(hpMarkedField, hpAfter);
+        RuleRuntime.trackChanged(observer, context, hpTrackPath, "mark", requestedMarks, beforeHp, hpTrack);
         result.put("severity", finalSeverity);
         result.putObject("hitPoints").put("requested", requestedMarks).put("applied", appliedMarks)
                 .put("before", hpMarked).put("after", hpAfter).put("capacity", hpCapacity);
@@ -271,6 +280,11 @@ public final class StructuredDamage {
      * still have the free capacity the plan was assessed against.
      */
     static ObjectNode mark(JsonNode value, JsonNode armor, JsonNode hitPoints, ObjectNode context) {
+        return mark(value, armor, hitPoints, context, null);
+    }
+
+    static ObjectNode mark(JsonNode value, JsonNode armor, JsonNode hitPoints, ObjectNode context,
+                           RuleRuntime.TrackObserver observer) {
         ObjectNode plan = validatePlan(value);
         int[] armorTrack = track(armor, context, "/damage/armor");
         int[] hpTrack = track(hitPoints, context, "/damage/hitPoints");
@@ -281,9 +295,18 @@ public final class StructuredDamage {
         int saved = Math.min(spent, plan.path("armor").path("saved").asInt());
         int marks = plan.path("hitPoints").path("marks").asInt();
         ObjectNode armorNode = RuleJson.object(RuleExpression.read(context, armor.path("track").asText()), "/damage/armor/track");
+        ObjectNode beforeArmor = observer == null ? null : armorNode.deepCopy();
         armorNode.put(armor.path("marked").asText(), armorTrack[0] + spent - saved);
+        RuleRuntime.trackChanged(observer, context, armor.path("track").asText(), "mark", spent - saved, beforeArmor, armorNode);
+        if (observer != null) {
+            hpTrack = track(hitPoints, context, "/damage/hitPoints");
+            marks = Math.min(marks, hpTrack[1] - hpTrack[0]);
+        }
         ObjectNode hpNode = RuleJson.object(RuleExpression.read(context, hitPoints.path("track").asText()), "/damage/hitPoints/track");
+        ObjectNode beforeHp = observer == null ? null : hpNode.deepCopy();
         hpNode.put(hitPoints.path("marked").asText(), hpTrack[0] + marks);
+        RuleRuntime.trackChanged(observer, context, hitPoints.path("track").asText(), "mark",
+                plan.path("hitPoints").path("marks").asInt(), beforeHp, hpNode);
         ObjectNode applied = RuleJson.JSON.createObjectNode().put("id", plan.path("id").asText()).put("stage", "applied");
         applied.set("type", plan.get("type").deepCopy());
         applied.put("amount", plan.path("amount").asInt()).put("incoming", plan.path("incoming").asInt())
