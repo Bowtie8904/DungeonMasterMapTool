@@ -843,6 +843,7 @@ public final class RuleCompiler {
                 throw RuleJson.error(path, "Automatic rules cannot require inputs or explicit costs.");
         }
         Set<String> outputs = new HashSet<>();
+        Decl recipeDeclarations = Decl.empty();
         for (String list : List.of("costs", "do")) {
             JsonNode steps = rule.path(list);
             if (steps.isMissingNode() || substitution(steps)) continue;
@@ -856,7 +857,9 @@ public final class RuleCompiler {
                 JsonNode name = step.path("op");
                 if (substitution(name)) continue;
                 String op = RuleJson.text(name, at + "/op");
-                validateOperationShape(step, "costs".equals(list), op, at);
+                if (containsSubstitution(step))
+                    validateOperationShape(step, "costs".equals(list), op, at);
+                else validateOperation(step, "costs".equals(list), recipeDeclarations, at, true);
                 if (step.has("as") && !substitution(step.get("as"))) {
                     String output = RuleJson.text(step.get("as"), at + "/as");
                     slot(output, at + "/as");
@@ -886,7 +889,7 @@ public final class RuleCompiler {
                 case "string" -> RuleJson.text(value, at);
                 case "costs" -> {
                     if (!value.isArray() || value.size() > 32) throw RuleJson.error(at, "Expected a bounded cost list.");
-                    for (JsonNode cost : value) validateOperation(cost, true, Decl.empty(), at);
+                    for (JsonNode cost : value) validateOperation(cost, true, Decl.empty(), at, true);
                 }
                 default -> throw RuleJson.error(at, "Unknown recipe argument type.");
             }
@@ -1262,6 +1265,10 @@ public final class RuleCompiler {
     }
 
     private static void validateOperation(JsonNode operation, boolean cost, Decl decl, String path) {
+        validateOperation(operation, cost, decl, path, false);
+    }
+
+    private static void validateOperation(JsonNode operation, boolean cost, Decl decl, String path, boolean deferSourceDeclarations) {
         ObjectNode state = decl.state(), pools = decl.pools();
         String op = RuleJson.text(operation.path("op"), path + "/op");
         List<String> fields = validateOperationShape(operation, cost, op, path);
@@ -1349,7 +1356,8 @@ public final class RuleCompiler {
             JsonNode value = operation.path(field);
             if ("pool".equals(field) && Set.of("pool.spend", "pool.gain", "pool.roll", "pool.removeDie", "roll.addPoolDie").contains(op)) {
                 String pool = RuleJson.id(value, path + "/pool");
-                if (!pools.isEmpty() && !pools.has(pool)) throw RuleJson.error(path + "/pool", "Undeclared pool: " + pool);
+                if (!deferSourceDeclarations && !pools.has(pool))
+                    throw RuleJson.error(path + "/pool", "Undeclared pool: " + pool);
                 if (pools.has(pool)) {
                     String requiredKind = "pool.roll".equals(op) || "pool.removeDie".equals(op) || "roll.addPoolDie".equals(op) ? "dice" : "number";
                     if (!requiredKind.equals(pools.path(pool).path("kind").asText()))
@@ -1367,13 +1375,16 @@ public final class RuleCompiler {
             } else if ("slot".equals(field)) {
                 String name = RuleJson.text(value, path + "/slot");
                 slot(name, path + "/slot");
-                if (!state.has(name)) throw RuleJson.error(path + "/slot", "Undeclared state slot: " + name);
+                if (!deferSourceDeclarations && !state.has(name)) throw RuleJson.error(path + "/slot", "Undeclared state slot: " + name);
             } else if ("role".equals(field)) RuleJson.id(value, path + "/role");
             else if ("effect".equals(field)) {
-                if (!decl.effects().has(RuleJson.text(value, path + "/effect")))
-                    throw RuleJson.error(path + "/effect", "Undeclared effect: " + value.asText());
-                if (decl.effects().get(value.asText()).has("while"))
-                    throw RuleJson.error(path + "/effect", "A derived effect follows its while condition and cannot be started or ended: " + value.asText());
+                String effect = RuleJson.id(value, path + "/effect");
+                if (!deferSourceDeclarations) {
+                    if (!decl.effects().has(effect))
+                        throw RuleJson.error(path + "/effect", "Undeclared effect: " + effect);
+                    if (decl.effects().get(effect).has("while"))
+                        throw RuleJson.error(path + "/effect", "A derived effect follows its while condition and cannot be started or ended: " + effect);
+                }
             } else if ("target".equals(field)) {
                 if (!Set.of("actor", "recipient").contains(value.asText()))
                     throw RuleJson.error(path + "/target", "Expected actor or recipient.");
@@ -1385,11 +1396,12 @@ public final class RuleCompiler {
                 if (cost && "recipient".equals(value.asText()))
                     throw RuleJson.error(path + "/owner", "Costs are charged to the source actor.");
                 String poolId = operation.path("pool").asText();
-                if (!pools.has(poolId) || !"actor".equals(pools.path(poolId).path("scope").asText()))
+                if (!deferSourceDeclarations && (!pools.has(poolId) || !"actor".equals(pools.path(poolId).path("scope").asText())))
                     throw RuleJson.error(path + "/owner", "Only declared actor-scoped pools can select an owner.");
             } else if ("limit".equals(field) && !"claim.offer".equals(op)) {
-                if (!decl.limits().has(RuleJson.text(value, path + "/limit")))
-                    throw RuleJson.error(path + "/limit", "Undeclared use budget: " + value.asText());
+                String limit = RuleJson.id(value, path + "/limit");
+                if (!deferSourceDeclarations && !decl.limits().has(limit))
+                    throw RuleJson.error(path + "/limit", "Undeclared use budget: " + limit);
             }
             else if ("collection".equals(field)) {
                 if (!COLLECTIONS.contains(RuleJson.text(value, path + "/collection")))

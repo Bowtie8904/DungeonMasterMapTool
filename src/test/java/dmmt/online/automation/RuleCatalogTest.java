@@ -168,6 +168,124 @@ class RuleCatalogTest {
     }
 
     @Test
+    void unusedRecipesValidateConcreteOperationSemantics() throws Exception {
+        String catalog = """
+            {"format":"dmmap-daggerheart","version":2,"category":"items","entries":[]}""";
+        String document = """
+            {"format":"dmmap-daggerheart-rules","version":2,"recipes":[{"id":"test","args":{},"ui":{},
+             "rules":[{"id":"rule","bindings":[{"id":"go","event":"action.request","surface":"sheet","mode":"button"}],
+                       "do":[%s],"ui":{"label":"Test"}}]}]}""";
+        for (String operation : List.of(
+                """
+                {"op":"resource.gain","pool":"actor.hope.extra","amount":1}""",
+                """
+                {"op":"track.clear","track":"recipient.hp.extra","amount":1}""",
+                """
+                {"op":"roll.reroll","from":{"read":"event.roll"},"dice":{"read":"event.dice"},"choose":"fast"}""",
+                """
+                {"op":"plan.adjust","plan":"actor.rest","field":"moves","by":1,"label":"Moves"}""",
+                """
+                {"op":"roll.contribute","from":{"read":"event.roll"},"contribution":{"id":"x",
+                 "kind":"dice","role":"bonus","label":"Bonus","count":1,"sides":6,"sign":0}}""",
+                """
+                {"op":"inventory.grant","catalog":"unknown","entry":"item","quantity":1,"label":"Item"}""",
+                """
+                {"op":"effect.start","effect":"bad effect","target":"actor"}""",
+                """
+                {"op":"value","value":1,"if":{"unknown":true}}""")) {
+            var failure = assertThrows(IllegalArgumentException.class,
+                    () -> RuleCatalog.compile(catalog, document.formatted(operation)), operation);
+            assertTrue(failure.getMessage().contains("/recipes/test/rules/0/do/0"), failure.getMessage());
+        }
+        String invalidCost = document.formatted("{\"op\":\"value\",\"value\":1}")
+                .replace("\"do\":[", "\"costs\":[{\"op\":\"resource.spend\",\"pool\":\"recipient.hope\",\"amount\":1}],\"do\":[");
+        var failure = assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, invalidCost));
+        assertTrue(failure.getMessage().contains("/recipes/test/rules/0/costs/0/pool"), failure.getMessage());
+    }
+
+    @Test
+    void unusedRecipeOperationsDeferOnlySourceDeclarationsAndSubstitutions() throws Exception {
+        String catalog = """
+            {"format":"dmmap-daggerheart","version":2,"category":"items","entries":[]}""";
+        String recipes = """
+            {"format":"dmmap-daggerheart-rules","version":2,"recipes":[{"id":"test",
+             "args":{"amount":{"type":"integer"}},"ui":{},"rules":[{"id":"rule",
+             "bindings":[{"id":"go","event":"action.request","surface":"sheet","mode":"button",
+                          "targetSelection":{"cardinality":"one","scope":"connectedPlayerCharacters"}}],
+             "do":[{"op":"state.increment","slot":"counter","by":1},
+                   {"op":"effect.start","effect":"ward","target":"actor"},
+                   {"op":"limit.reset","limit":"usage"},
+                   {"op":"pool.spend","pool":"reserve","amount":1,"owner":"recipient"},
+                   {"op":"value","value":{"$arg":"amount"}}],"ui":{"label":"Test"}}]}]}""";
+        assertTrue(RuleCatalog.compile(catalog, recipes).isEmpty());
+        String expanded = """
+            {"format":"dmmap-daggerheart","version":2,"category":"items","entries":[
+             {"id":"example","name":"Example","automation":{"rules":[
+               {"id":"use","useRecipe":"test","args":{"amount":1}}]}}]}""";
+        var failure = assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(expanded, recipes));
+        assertTrue(failure.getMessage().contains("Undeclared state slot"), failure.getMessage());
+
+        String declared = """
+            {"format":"dmmap-daggerheart","version":2,"category":"items","entries":[{"id":"item","name":"Item",
+             "automation":{"state":{"counter":0},"effects":{"ward":{"label":"Ward"}},
+              "limits":{"usage":{"max":1,"resetOn":["rest.short"]}},
+              "pools":{"reserve":{"kind":"number","scope":"actor","max":3}},
+              "rules":[{"id":"use","useRecipe":"test","args":{"amount":1}}]}}]}""";
+        assertDoesNotThrow(() -> RuleCatalog.compile(declared, recipes));
+        ObjectNode valid = (ObjectNode) RuleJson.JSON.readTree(declared);
+        for (String declaration : List.of("state", "effects", "limits", "pools")) {
+            ObjectNode missing = valid.deepCopy();
+            ((ObjectNode) missing.at("/entries/0/automation")).remove(declaration);
+            assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(missing.toString(), recipes), declaration);
+        }
+        ObjectNode sourcePool = valid.deepCopy();
+        ((ObjectNode) sourcePool.at("/entries/0/automation/pools/reserve")).put("scope", "source");
+        failure = assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(sourcePool.toString(), recipes));
+        assertTrue(failure.getMessage().contains("actor-scoped"), failure.getMessage());
+        ObjectNode derivedEffect = valid.deepCopy();
+        ((ObjectNode) derivedEffect.at("/entries/0/automation/effects/ward")).put("while", true);
+        failure = assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(derivedEffect.toString(), recipes));
+        assertTrue(failure.getMessage().contains("derived effect"), failure.getMessage());
+
+        String parameterized = """
+            {"format":"dmmap-daggerheart-rules","version":2,"recipes":[{"id":"test",
+             "args":{"choice":{"type":"string"}},"ui":{},"rules":[{"id":"rule",
+             "bindings":[{"id":"go","event":"action.request","surface":"sheet","mode":"button"}],
+             "do":[{"op":"roll.reroll","from":{"read":"event.roll"},"dice":{"read":"event.dice"},
+                    "choose":{"$arg":"choice"}}],"ui":{"label":"Test"}}]}]}""";
+        assertTrue(RuleCatalog.compile(catalog, parameterized).isEmpty());
+        String badChoice = """
+            {"format":"dmmap-daggerheart","version":2,"category":"items","entries":[{"id":"item","name":"Item",
+             "automation":{"rules":[{"id":"use","useRecipe":"test","args":{"choice":"fast"}}]}}]}""";
+        failure = assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(badChoice, parameterized));
+        assertTrue(failure.getMessage().contains("/choose"), failure.getMessage());
+    }
+
+    @Test
+    void expandedRecipePoolCostsUseTheActualSourceDeclarations() throws Exception {
+        String recipes = """
+            {"format":"dmmap-daggerheart-rules","version":2,"recipes":[{"id":"test",
+             "args":{"payment":{"type":"costs"}},"ui":{},"rules":[{"id":"rule",
+             "bindings":[{"id":"go","event":"action.request","surface":"sheet","mode":"button"}],
+             "costs":{"$arg":"payment"},"do":[{"op":"pool.gain","pool":"reserve","amount":1}],
+             "ui":{"label":"Test"}}]}]}""";
+        String catalog = """
+            {"format":"dmmap-daggerheart","version":2,"category":"items","entries":[{"id":"item","name":"Item",
+             "automation":{"pools":{"reserve":{"kind":"number","scope":"actor","max":3}},
+              "rules":[{"id":"use","useRecipe":"test","args":{"payment":[
+                {"op":"pool.spend","pool":"reserve","amount":1,"owner":"actor"}]}}]}}]}""";
+        assertDoesNotThrow(() -> RuleCatalog.compile(catalog, recipes));
+        ObjectNode missing = (ObjectNode) RuleJson.JSON.readTree(catalog);
+        ((ObjectNode) missing.at("/entries/0/automation")).remove("pools");
+        var failure = assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(missing.toString(), recipes));
+        assertTrue(failure.getMessage().contains("Undeclared pool"), failure.getMessage());
+        ObjectNode wrongKind = (ObjectNode) RuleJson.JSON.readTree(catalog);
+        ((ObjectNode) wrongKind.at("/entries/0/automation/pools/reserve")).put("kind", "dice");
+        failure = assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(wrongKind.toString(), recipes));
+        assertTrue(failure.getMessage().contains("requires a number pool"), failure.getMessage());
+    }
+
+    @Test
     void unusedRecipesValidateConcreteBindingsAndDeferSubstitutedValues() throws Exception {
         String catalog = """
                 {"format":"dmmap-daggerheart","version":2,"category":"items","entries":[]}
