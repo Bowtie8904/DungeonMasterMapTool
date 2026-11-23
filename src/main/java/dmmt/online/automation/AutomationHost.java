@@ -918,6 +918,8 @@ public final class AutomationHost {
         RestMoveGroup group = new RestMoveGroup(instanceId, metadata.path("group").asText(id));
         if (progress.groups().contains(group))
             throw new RuleRuntime.Unavailable("duplicateMove", "This downtime move was already chosen.");
+        if (metadata.path("ally").asBoolean(false) || binding.has("targetSelection"))
+            throw new RuleRuntime.Unavailable("restTarget", "This downtime move requires an authoritative recipient transaction.");
 
         ObjectNode event = RuleJson.object(origin, "/event").deepCopy().put("type", "downtime.move");
         ObjectNode rest = progress.plan();
@@ -1011,6 +1013,137 @@ public final class AutomationHost {
                 progress.count() + 1, groups, rest);
         replace(sheet, working);
         return new RestMoveResult(next, result);
+    }
+
+    private record RestChoiceKey(String source, String rule, String binding, String each) {}
+
+    /**
+     * Completes an already staged rest on a private copy. The caller must commit its outbox, reports and sheet
+     * atomically and must not expose this primitive as a complete player workflow.
+     */
+    ObjectNode completeRest(Pack pack, ObjectNode sheet, ObjectNode origin, RestProgress progress,
+                            Set<String> initialEffectIds, ArrayNode choices, RandomGenerator random) {
+        if (pack.rest() == null) throw new NotReady("The shared ruleset has no rest configuration.");
+        if (progress == null) throw RuleJson.error("/rest", "A prepared rest is required.");
+        if (initialEffectIds == null) throw RuleJson.error("/effects", "The initial rest effect snapshot is required.");
+        if (choices == null) throw RuleJson.error("/request/selections", "Expected completion options.");
+        ObjectNode working = sheet.deepCopy();
+        ObjectNode plan = progress.plan();
+        ObjectNode prepared = RuleJson.JSON.createObjectNode();
+        prepared.putObject("event").put("type", "rest.prepare").set("rest", plan.deepCopy());
+        RestProgress checked = restProgress(pack, prepared);
+        if (!checked.kind().equals(progress.kind()) || checked.moves() != progress.moves()
+                || checked.longMoves() != progress.longMoves() || progress.count() < 0 || progress.count() > 64
+                || progress.slotsUsed() < 0 || progress.slotsUsed() > progress.moves()
+                || progress.longMovesUsed() < 0 || progress.longMovesUsed() > progress.longMoves()
+                || progress.slotsUsed() > progress.count() || progress.longMovesUsed() > progress.count()
+                || progress.groups().size() != progress.count())
+            throw RuleJson.error("/rest", "The staged rest progress is invalid.");
+
+        int consecutive = working.has("shortRestsInRow")
+                ? RuleJson.integer(working.get("shortRestsInRow"), "/sheet/shortRestsInRow", 0, 1_000_000) : 0;
+        if ("short".equals(progress.kind()) && consecutive >= pack.rest().shortRest().consecutiveLimit())
+            throw new RuleRuntime.Unavailable("restLimit", "The party must take a long rest next.");
+        int longRevision = "long".equals(progress.kind()) && working.has("longRestRevision")
+                ? RuleJson.integer(working.get("longRestRevision"), "/sheet/longRestRevision", 0, Integer.MAX_VALUE - 1) : 0;
+
+        ObjectNode beforeEvent = restCompletionEvent(pack, working, origin, plan, "beforeReset");
+        var initialCandidates = candidates(pack, working, beforeEvent);
+        ObjectNode request = RuleJson.JSON.createObjectNode();
+        request.set("selections", choices);
+        RuleJson.checkTree(request, "/request", 0, new int[]{0});
+        var intents = selections(request, initialCandidates, revision(working), "self", "rest", false);
+        Map<String, RuleDispatcher.Candidate> byInstance = new HashMap<>();
+        initialCandidates.forEach(candidate -> byInstance.put(candidate.instanceId(), candidate));
+        Set<RestChoiceKey> seen = new java.util.HashSet<>();
+        Map<RestChoiceKey, String> approvedSources = new HashMap<>();
+        Set<String> exclusive = new java.util.HashSet<>();
+        ArrayNode beforeChoices = RuleJson.JSON.createArrayNode(), afterChoices = RuleJson.JSON.createArrayNode();
+        for (int i = 0; i < intents.size(); i++) {
+            var intent = intents.get(i);
+            JsonNode binding = RuleDispatcher.binding(byInstance.get(intent.sourceInstanceId()).program().rule(intent.ruleId()),
+                    intent.bindingId());
+            if (!beforeEvent.path("type").equals(binding.path("event")) || !"option".equals(binding.path("mode").asText())
+                    || binding.has("claimGroup") || binding.has("targetSelection"))
+                throw RuleJson.error("/request/selections", "Choose only self-scoped rest completion options.");
+            RestChoiceKey key = new RestChoiceKey(intent.sourceInstanceId(), intent.ruleId(), intent.bindingId(), intent.eachId());
+            if (!seen.add(key))
+                throw RuleJson.error("/request/selections", "A binding cannot be selected more than once.");
+            approvedSources.put(key, byInstance.get(intent.sourceInstanceId()).program().sourceId());
+            String group = binding.path("exclusiveGroup").asText(null);
+            if (group != null && !exclusive.add(group))
+                throw RuleJson.error("/request/selections", "Only one option in each exclusive group may be selected.");
+            ("afterReset".equals(binding.path("restPhase").asText()) ? afterChoices : beforeChoices)
+                    .add(choices.get(i).deepCopy());
+        }
+
+        ObjectNode response = RuleJson.JSON.createObjectNode();
+        response.putArray("actions");
+        response.putArray("outbox");
+        response.putArray("skipped");
+        runRestPhase(pack, working, beforeEvent, beforeChoices, approvedSources, response, random);
+        working.put("shortRestsInRow", "short".equals(progress.kind()) ? consecutive + 1 : 0);
+        if ("long".equals(progress.kind())) working.put("longRestRevision", longRevision + 1);
+        ObjectNode state = projection.state(working);
+        state.put("revision", state.path("revision").asLong() + 1);
+        resetRest(pack, working, beforeEvent, initialEffectIds);
+        ObjectNode afterEvent = restCompletionEvent(pack, working, origin, plan, "afterReset");
+        runRestPhase(pack, working, afterEvent, afterChoices, approvedSources, response, random);
+        response.put("revision", revision(working));
+        replace(sheet, working);
+        return response;
+    }
+
+    private ObjectNode restCompletionEvent(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode plan, String phase) {
+        ObjectNode event = RuleJson.object(origin, "/event").deepCopy().put("type", "rest." + plan.path("kind").asText());
+        ObjectNode rest = plan.deepCopy().put("phase", phase);
+        ObjectNode cleared = rest.putObject("cleared");
+        ObjectNode actor = projection.actor(sheet);
+        pack.rest().startFacts().forEach((name, path) -> {
+            JsonNode start = rest.path("start").path(name);
+            if (!start.isNumber()) return;
+            String at = "/event/rest/cleared/" + name;
+            double initial = RuleExpression.number(start, at);
+            double current = RuleExpression.number(SheetProjection.get(actor, path), at);
+            cleared.set(name, RuleExpression.numeric(initial - current, at));
+        });
+        event.set("rest", rest);
+        return event;
+    }
+
+    private void runRestPhase(Pack pack, ObjectNode sheet, ObjectNode event, ArrayNode choices,
+                              Map<RestChoiceKey, String> approvedSources, ObjectNode combined, RandomGenerator random) {
+        var candidates = candidates(pack, sheet, event);
+        ObjectNode request = RuleJson.JSON.createObjectNode();
+        request.set("selections", choices);
+        var intents = selections(request, candidates, revision(sheet), "self", "rest", false);
+        Map<String, RuleDispatcher.Candidate> byInstance = new HashMap<>();
+        candidates.forEach(candidate -> byInstance.put(candidate.instanceId(), candidate));
+        List<RuleRuntime.Intent> active = new ArrayList<>();
+        for (var intent : intents) {
+            var candidate = byInstance.get(intent.sourceInstanceId());
+            RestChoiceKey key = new RestChoiceKey(intent.sourceInstanceId(), intent.ruleId(), intent.bindingId(), intent.eachId());
+            if (!candidate.program().sourceId().equals(approvedSources.get(key)))
+                throw new RuleRuntime.Unavailable("source", "A selected rest benefit's source changed.");
+            try {
+                RuleRuntime.preflight(candidate.program(), intent, candidate.context());
+                active.add(intent);
+            } catch (RuleRuntime.Unavailable unavailable) {
+                if (!"condition".equals(unavailable.code())) throw unavailable;
+                RuleRuntime.validateSkippedInputs(candidate.program(), intent, candidate.context());
+                ((ArrayNode) combined.get("skipped")).addObject().put("sourceInstanceId", intent.sourceInstanceId())
+                        .put("ruleId", intent.ruleId()).put("bindingId", intent.bindingId())
+                        .put("phase", RuleRuntime.restPhase(event)).put("reason", unavailable.getMessage());
+            }
+        }
+        ObjectNode result = applyEvent(pack, sheet, projection.state(sheet), event, candidates, active, random);
+        JsonNode finalEvent = result.path("event");
+        if (!event.path("rest").equals(finalEvent.path("rest")))
+            throw RuleJson.error("/event/rest", "A rest completion rule cannot change the prepared rest.");
+        if (!finalEvent.path("blocked").isEmpty())
+            throw new RuleRuntime.Unavailable("blocked", finalEvent.at("/blocked/0/reason").asText());
+        for (String key : List.of("actions", "outbox")) ((ArrayNode) combined.get(key)).addAll((ArrayNode) result.get(key));
+        combined.set("event", finalEvent.deepCopy());
     }
 
     private static void validateRestMove(ObjectNode event, ObjectNode initial, ObjectNode rest) {

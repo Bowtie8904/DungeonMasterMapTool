@@ -70,12 +70,15 @@ class AutomationHostTest {
         assertEquals(1, converted.converted(), converted.diagnostics().toString());
         String catalog = converted.catalog().toString(), recipes = LegacyCatalogConverter.coreRecipes();
         String sourceId = RuleCatalog.compile(catalog, recipes).getFirst().id();
-        var pack = AutomationHost.compile("warden-parity", Map.of("classes", catalog), recipes);
+        var pack = AutomationHost.compile("warden-parity", Map.of("classes", catalog), recipes,
+                LegacyCatalogConverter.coreRuleset());
         JsonNode before = example.path("before"), expected = example.path("expected");
         for (JsonNode sample : example.path("cases")) {
             ObjectNode sheet = RuleJson.JSON.createObjectNode().put("name", "Warden").put("level", 8);
             sheet.putObject("hope").put("slots", before.path("hopeSlots").asInt()).put("on", before.path("hope").asInt());
             sheet.putObject("hp").put("slots", 6).put("on", before.path("hpMarked").asInt());
+            sheet.putObject("stress").put("slots", 6).put("on", 0);
+            sheet.putObject("armorTrack").put("slots", 3).put("on", 0);
             sheet.putArray("features").addObject().put("name", example.path("feature").asText())
                     .put("automationSource", sourceId).put("instanceId", "warden");
             ObjectNode poor = sheet.deepCopy();
@@ -97,10 +100,16 @@ class AutomationHostTest {
             assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, sheet, action(),
                     request("spent", 1, "warden", example.path("action").asText()), "self", StructuredRollTest.noRandom()));
             assertEquals(spent, sheet);
-            assertEquals(expected.path("shortRestResets").asBoolean(),
-                    HOST.resetLimits(pack, sheet, AutomationHost.event("rest.short", "warden", 0)));
-            assertEquals(expected.path("longRestResets").asBoolean(),
-                    HOST.resetLimits(pack, sheet, AutomationHost.event("rest.long", "warden", 0)));
+            for (String kind : List.of("short", "long")) {
+                var snapshot = HOST.restEffectSnapshot(sheet);
+                ObjectNode origin = AutomationHost.event("action.request", "warden", 0);
+                ObjectNode preparation = HOST.prepareRest(pack, sheet, origin, kind, HOST.revision(sheet),
+                        RuleJson.JSON.createArrayNode(), StructuredRollTest.noRandom());
+                HOST.completeRest(pack, sheet, origin, HOST.restProgress(pack, preparation), snapshot,
+                        RuleJson.JSON.createArrayNode(), StructuredRollTest.noRandom());
+                boolean reset = sheet.at("/automationState/sources/warden/usage/uses").asInt() == 0;
+                assertEquals(expected.path(kind + "RestResets").asBoolean(), reset);
+            }
             assertEquals(0, sheet.at("/automationState/sources/warden/usage/uses").asInt());
             ObjectNode second = HOST.execute(pack, sheet, action(), request("after-rest", HOST.revision(sheet), "warden",
                     example.path("action").asText()), "self", StructuredRollTest.faces(sample.path("face").asInt()));

@@ -50,9 +50,10 @@ Converted downtime buttons now describe their host-validated move identity and r
 and the shared ruleset's validated rest limits do not yet make the format-2 rest workflow available.
 The host can stage and validate rest preparation and individual moves on a private copy, retaining the
 ruleset's initial Hope, Armor and recovery facts across the moves. Move bonuses run before recovery; selected
-passive costs and modifier steps run afterward and failures roll back the move. Rest-rule bindings can
-distinguish before-reset and after-reset benefits. The final atomic rest transaction and player workflow
-are still required.
+passive costs and modifier steps run afterward and failures roll back the move. Staged completion derives
+signed recovery facts, runs benefits around the rest reset and advances rest counters; failures roll back
+that stage. Ally moves are rejected until recipient transactions are available. The final atomic rest
+transaction and player workflow are still required.
 The shared ruleset defines the base self-recovery, preparation and project moves for staged tests, including
 tier-scaled recovery, protected HP and capped Hope. Ally recovery, rerolls and armor overflow are not yet wired.
 Format-2 healing respects permanent HP and temporary locked HP on both the actor and targeted recipients;
@@ -71,7 +72,7 @@ coordinated replacement. A generic sheet *Automation* panel appears only once co
 one-time `LegacyCatalogConverter` writes converted copies and a coverage report to a separate staging directory; the current dry run converts 1,012 of 1,087 blocks (93.1%), including attachable items, reloading weapons, channel/aura features (derived effects and exclusive effect groups), rest allowances, passives and move modifiers, legacy target modes, downtime-timed actions (shown in a generic Downtime panel on the sheet), sent rolls, conditional roll triggers, fixed-trait/highest-trait/traitless/spellcast-trait action rolls and direct or triggered fixed, proficiency-scaled or spellcast-scaled damage rolls. Converted applicability checks treat missing and explicitly null event facts alike. With a format-2 pack, the sheet endpoint supports single-target and whole-party actions: the host checks the eligible characters again before it commits the cost, recipient sheets and reports together. If the party changed, refresh the action; nothing is spent. The shipped catalogs still use format 1.
 See the [rewrite design and implementation status](docs/ONLINE_AUTOMATION_PLAN.md#implementation-status).
 
-Converted action reports can roll bounded dice on the host before subsequent action steps, with the result, costs and use recorded together. The report remains narrative: it does not select or heal targets. Unsupported expressions or combinations with other ordered rolls are reported by the converter rather than guessed. A shared Warden's Protection fixture checks both engines' report and isolated reset behavior; the replacement's live rest workflow remains unfinished.
+Converted action reports can roll bounded dice on the host before subsequent action steps, with the result, costs and use recorded together. The report remains narrative: it does not select or heal targets. Unsupported expressions or combinations with other ordered rolls are reported by the converter rather than guessed. A shared Warden's Protection fixture checks both engines' report and staged-rest reset behavior; the replacement's live rest workflow remains unfinished.
 
 Shared Healing Hands fixtures exercise successful HP and Stress recovery, both failure choices and a
 below-difficulty critical through the legacy and converted hosts, including clamping, recipient locking,

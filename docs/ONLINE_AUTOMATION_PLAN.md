@@ -147,13 +147,17 @@ projected actor. Preparation captures these before any option costs or moves, an
 retains an immutable prepared plan. The bundled ruleset captures starting HP marks, Stress marks, Armor marks
 and Hope. Missing or non-scalar configured facts reject preparation. Converted passives use starting Hope for
 `minHope` and starting Armor for `noArmorMarked`; `armorMarked` reads current Armor marks. A `noRecovery` gate
-requires both HP and Stress changes to be zero separately. The eventual completed-rest event must provide
-these signed changes at the correct phase.
+requires both HP and Stress changes to be zero separately.
 `rest.short` and `rest.long` bindings may set `restPhase` to `beforeReset` (the default) or `afterReset`.
 Descriptions expose the phase, and dispatch rejects a selected binding or skips an automatic binding in the
 other phase. A missing phase means `beforeReset`; a malformed phase is rejected. Converted `noRecovery`
 passives run after the snapshot reset so their new effects survive, while ordinary rest passives run before it.
-The host still needs to orchestrate both phases in the same complete rest transaction.
+Staged completion derives `event.rest.cleared` for numeric start facts as starting minus current values,
+dispatches both phases around the snapshot reset, and advances the rest counters on a private copy.
+Conditional options that no longer apply are reported as skipped; invalid choices, inputs, costs and blocked
+outcomes reject the stage. Reports and host requests remain ordered for a future atomic commit. The self-only
+move primitive rejects ally or targeted moves rather than applying them to the wrong character. The host still
+needs to compose preparation, moves and completion with recipient handling, publication and persistence.
 The shared Daggerheart ruleset now supplies self-targeted short recovery (1d4 plus tier and move bonus), the two
 mutually exclusive preparation variants, long recovery and work on a project. Reports use the amount actually
 cleared or gained, including permanent and locked HP and capped Hope; a short rest needs a granted allowance for

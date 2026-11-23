@@ -173,6 +173,20 @@ public final class RuleRuntime {
 
     static Prepared preflight(RuleCompiler.Program program, Intent intent, ObjectNode hostContext) {
         ObjectNode rule = program.rule(intent.ruleId());
+        ObjectNode next = intentContext(program, intent, hostContext, rule);
+        JsonNode binding = binding(rule, intent.bindingId());
+        available(program, rule, binding, next);
+        validateInputs(rule, next, intent.inputs());
+        preflightAfterCosts(program, rule, next);
+        return new Prepared(intent, next, revision(next));
+    }
+
+    static void validateSkippedInputs(RuleCompiler.Program program, Intent intent, ObjectNode hostContext) {
+        ObjectNode rule = program.rule(intent.ruleId());
+        validateInputs(rule, intentContext(program, intent, hostContext, rule), intent.inputs());
+    }
+
+    private static ObjectNode intentContext(RuleCompiler.Program program, Intent intent, ObjectNode hostContext, ObjectNode rule) {
         ObjectNode next = context(program, rule, hostContext);
         if (!next.path("source").path("instanceId").asText().equals(intent.sourceInstanceId()))
             throw new Unavailable("source", "The source instance changed. Reopen this action.");
@@ -188,10 +202,7 @@ public final class RuleRuntime {
             if (selected == null) throw new Unavailable("poolItem", "This pool item is no longer available.");
             next.set("die", selected.deepCopy());
         } else if (intent.eachId() != null) throw RuleJson.error("/eachId", "This action does not select a pool item.");
-        available(program, rule, binding, next);
-        validateInputs(rule, next, intent.inputs());
-        preflightAfterCosts(program, rule, next);
-        return new Prepared(intent, next, revision);
+        return next;
     }
 
     /** The declared maximum, raised by any other active source's limit override naming this source and limit. */
