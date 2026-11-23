@@ -2347,6 +2347,150 @@ class OnlineSessionServerTest {
         assertEquals(gifted.body(), automationHttp(owner, "crafter", request.toString()).body());
     }
 
+    private void installRestInventoryRules() throws Exception {
+        installRestRules();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withArray("rules").addAll((ArrayNode) MAPPER.readTree("""
+                [
+                 {"id":"inventory-craft","bindings":[{"id":"move","event":"downtime.move","surface":"downtime",
+                    "mode":"button","restMove":{"id":"craft","kind":"short"}}],
+                  "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
+                         "quantity":2,"tag":"foraged","max":5,"scope":"party","label":"Forage"}],
+                  "ui":{"label":"Forage","report":"Found potions."}},
+                 {"id":"inventory-count","bindings":[{"id":"move","event":"downtime.move","surface":"downtime",
+                    "mode":"button","restMove":{"id":"count","kind":"short"}}],
+                  "do":[{"op":"resource.gain","pool":"actor.hope",
+                         "amount":{"size":{"read":"actor.inventory"}}}],
+                  "ui":{"label":"Count","report":"Counted inventory."}},
+                 {"id":"before-inventory","bindings":[{"id":"rest","event":"rest.short","surface":"rest","mode":"option"}],
+                  "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
+                         "quantity":1,"label":"Reward"}],
+                  "ui":{"label":"Receive potion","report":"Received a potion."}},
+                 {"id":"after-inventory","bindings":[{"id":"rest","event":"rest.short","surface":"rest",
+                    "mode":"option","restPhase":"afterReset"}],
+                  "when":{"gt":[{"size":{"read":"actor.inventory"}},0]},
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],
+                  "ui":{"label":"Use supplies","report":"Supplies are ready."}}
+                ]
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+    }
+
+    @Test
+    void directRestSettlesInventoryBeforeLaterMovesAndRejectsPartyCaps() throws Exception {
+        installRestInventoryRules();
+        String owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("resting").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("retired").name("Borin")
+                .ownerId(playerId()).disabled(true).build());
+        store.saveSheet(campaign.getId(), "resting", """
+                {"name":"Ada","hp":{"slots":6,"on":2},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},"inventory":[]}
+                """);
+        store.saveSheet(campaign.getId(), "retired", """
+                {"name":"Borin","inventory":[{"name":"Foraged Relic","type":"consumable","qty":4,"foraged":true}]}
+                """);
+        JsonNode offer = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode body = restRequest(offer, "rest-forage");
+        addRestMove((ObjectNode) body.path("request"), restDescriptor(offer.path("moves"), "inventory-craft"));
+        addRestMove((ObjectNode) body.path("request"), restDescriptor(offer.path("moves"), "inventory-count"));
+        String original = store.loadSheet(campaign.getId(), "resting");
+        var overCap = restHttp(owner, "resting", null, body.toString());
+        assertEquals(409, overCap.statusCode(), overCap.body());
+        assertTrue(overCap.body().contains("limit of 5"), overCap.body());
+        assertEquals(original, store.loadSheet(campaign.getId(), "resting"));
+        ObjectNode retired = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "retired"));
+        ((ObjectNode) retired.at("/inventory/0")).put("qty", 3);
+        store.saveSheet(campaign.getId(), "retired", retired.toString());
+        var completed = restHttp(owner, "resting", null, body.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(2, sheet.at("/inventory/0/qty").asInt());
+        assertTrue(sheet.at("/inventory/0/foraged").asBoolean());
+        assertEquals(1, sheet.at("/hope/on").asInt());
+        assertEquals(completed.body(), restHttp(owner, "resting", null, body.toString()).body());
+        assertEquals(sheet, MAPPER.readTree(store.loadSheet(campaign.getId(), "resting")));
+    }
+
+    @Test
+    void interactiveRestSettlesBeforeResetGrantsBeforeOfferingAfterResetChoices() throws Exception {
+        installRestInventoryRules();
+        String owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("resting").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "resting", """
+                {"name":"Ada","hp":{"slots":6,"on":2},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},"inventory":[]}
+                """);
+        String original = store.loadSheet(campaign.getId(), "resting");
+        JsonNode offer = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode body = restRequest(offer, "rest-inventory-choice");
+        var first = restChoiceHttp(owner, "resting", "choices", body);
+        assertEquals(200, first.statusCode(), first.body());
+        JsonNode before = MAPPER.readTree(first.body());
+        ObjectNode advance = MAPPER.createObjectNode().put("requestId", "rest-inventory-choice")
+                .put("choiceVersion", before.path("choiceVersion").asText());
+        advance.putArray("selections").add(restSelection(restDescriptor(before.path("actions"), "before-inventory")));
+        var second = restChoiceHttp(owner, "resting", "choices", advance);
+        assertEquals(200, second.statusCode(), second.body());
+        JsonNode after = MAPPER.readTree(second.body());
+        assertTrue(restDescriptor(after.path("actions"), "after-inventory").path("available").asBoolean());
+        assertEquals(original, store.loadSheet(campaign.getId(), "resting"));
+        ObjectNode request = ((ObjectNode) body.path("request")).deepCopy();
+        request.withArray("completion").add(advance.at("/selections/0").deepCopy())
+                .add(restSelection(restDescriptor(after.path("actions"), "after-inventory")));
+        ObjectNode complete = MAPPER.createObjectNode().put("choiceVersion", after.path("choiceVersion").asText());
+        complete.set("request", request);
+        var committed = restChoiceHttp(owner, "resting", "complete", complete);
+        assertEquals(200, committed.statusCode(), committed.body());
+        JsonNode sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(1, sheet.at("/inventory/0/qty").asInt());
+        assertEquals(1, sheet.at("/hope/on").asInt());
+        assertEquals(committed.body(), restChoiceHttp(owner, "resting", "complete", complete).body());
+        assertEquals(sheet, MAPPER.readTree(store.loadSheet(campaign.getId(), "resting")));
+    }
+
+    @Test
+    void interactiveRestInventoryRejectsChangedPartySheetsAndMembership() throws Exception {
+        installRestInventoryRules();
+        String owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("resting").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("retired").name("Borin")
+                .ownerId(playerId()).disabled(true).build());
+        store.saveSheet(campaign.getId(), "resting", """
+                {"name":"Ada","hp":{"slots":6,"on":2},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},"inventory":[]}
+                """);
+        store.saveSheet(campaign.getId(), "retired", "{\"name\":\"Borin\",\"inventory\":[]}");
+        String original = store.loadSheet(campaign.getId(), "resting");
+        int history = store.historyTail(campaign.getId(), 100).size();
+        for (String id : List.of("changed-sheet", "changed-membership")) {
+            JsonNode offer = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+            ObjectNode body = restRequest(offer, id);
+            addRestMove((ObjectNode) body.path("request"), restDescriptor(offer.path("moves"), "inventory-craft"));
+            var first = restChoiceHttp(owner, "resting", "choices", body);
+            assertEquals(200, first.statusCode(), first.body());
+            ObjectNode advance = MAPPER.createObjectNode().put("requestId", id)
+                    .put("choiceVersion", MAPPER.readTree(first.body()).path("choiceVersion").asText());
+            advance.putArray("selections");
+            var second = restChoiceHttp(owner, "resting", "choices", advance);
+            assertEquals(200, second.statusCode(), second.body());
+            if ("changed-sheet".equals(id))
+                store.saveSheet(campaign.getId(), "retired",
+                        "{\"name\":\"Borin\",\"inventory\":[{\"name\":\"Foraged Relic\",\"qty\":1,\"foraged\":true}]}");
+            else
+                campaign.getActors().add(Campaign.Actor.builder().id("late").name("Late")
+                        .ownerId(playerId()).disabled(true).build());
+            ObjectNode complete = MAPPER.createObjectNode()
+                    .put("choiceVersion", MAPPER.readTree(second.body()).path("choiceVersion").asText());
+            complete.set("request", body.path("request").deepCopy());
+            var rejected = restChoiceHttp(owner, "resting", "complete", complete);
+            assertEquals(409, rejected.statusCode(), rejected.body());
+            assertEquals(original, store.loadSheet(campaign.getId(), "resting"));
+            assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        }
+    }
+
     @Test
     void postOutcomeRestChoicesStageEachPhaseAndCommitTheSampledMovesOnce() throws Exception {
         installRestRules();

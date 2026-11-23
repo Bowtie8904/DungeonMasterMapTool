@@ -5921,6 +5921,7 @@ public final class OnlineSessionServer {
     private final class AutomationRestRoster {
         final Map<String, String> originals = new java.util.LinkedHashMap<>();
         final AutomationHost.RestRoster roster;
+        List<String> inventoryParty;
 
         AutomationRestRoster(Campaign.Actor source, String stored) {
             originals.put(source.getId(), stored);
@@ -5952,7 +5953,45 @@ public final class OnlineSessionServer {
                     throw new java.io.UncheckedIOException(ex);
                 }
                 return members;
-            });
+            }, this::grantInventory);
+        }
+
+        private void grantInventory(ObjectNode command, Map<String, ObjectNode> staged) {
+            String holder = command.path("holderId").asText();
+            ObjectNode target = staged.get(holder);
+            if (target == null) throw new IllegalArgumentException("The inventory recipient is not in this rest.");
+            List<ObjectNode> scope = new ArrayList<>();
+            scope.add(target);
+            try {
+                if ("party".equals(command.path("scope").asText())) {
+                    List<String> party = automationInventoryParty();
+                    if (inventoryParty != null && !inventoryParty.equals(party)) throw new StaleAutomationRoster();
+                    inventoryParty = party;
+                    for (String id : party) {
+                        String original = store.loadSheet(campaign.getId(), id);
+                        if (originals.containsKey(id) && !java.util.Objects.equals(originals.get(id), original))
+                            throw new StaleAutomationRoster();
+                        originals.put(id, original);
+                        if (holder.equals(id)) continue;
+                        ObjectNode sheet = staged.get(id);
+                        if (sheet == null && original != null) {
+                            JsonNode parsed = MAPPER.readTree(original);
+                            if (!(parsed instanceof ObjectNode saved))
+                                throw new IOException("Invalid stored sheet for " + id + ".");
+                            sheet = saved;
+                        }
+                        if (sheet != null) scope.add(sheet);
+                    }
+                }
+                grantAutomationInventory(command, target, scope, catalogs());
+            } catch (IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+        }
+
+        private void requireInventoryParty() {
+            if (inventoryParty != null && !inventoryParty.equals(automationInventoryParty()))
+                throw new StaleAutomationRoster();
         }
     }
 
@@ -6416,8 +6455,11 @@ public final class OnlineSessionServer {
                     + "; " + clear.path("label").asText() + ").";
             messages.add(actionReportMessage(actor, source, source.path("name").asText("Automation"), List.of(line), null));
         }
-        Runnable validateRoster = () -> AutomationHost.requireRestScopeSnapshots(actor.getId(),
-                transaction.scopeMembership(), transaction.scopeOrder(), roster.roster);
+        Runnable validateRoster = () -> {
+            AutomationHost.requireRestScopeSnapshots(actor.getId(),
+                    transaction.scopeMembership(), transaction.scopeOrder(), roster.roster);
+            roster.requireInventoryParty();
+        };
         commitAutomationResults(roster.originals, changed, messages, response.path("outbox"),
                 pack, actor.getId(), response, validateRoster);
     }
