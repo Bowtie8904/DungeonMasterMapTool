@@ -125,6 +125,8 @@ public final class RuleCompiler {
         private final Map<String, List<String>> poolsByEffect;
         private final ObjectNode effects;
         private final ArrayNode modifiers;
+        private final boolean hasTraitModifiers;
+        private final boolean readsDerivedTraits;
         private final Map<String, ObjectNode> rules;
         private final Map<BindingKey, List<BindingRef>> bindingsByEventSurface;
         private final List<BindingRef> resultButtons;
@@ -145,6 +147,11 @@ public final class RuleCompiler {
             this.poolsByEffect = Map.copyOf(bound);
             this.effects = decl.effects().deepCopy();
             this.modifiers = modifiers.deepCopy();
+            boolean traitModifiers = false;
+            for (JsonNode modifier : modifiers)
+                if (modifier.path("stat").asText().startsWith("trait.")) { traitModifiers = true; break; }
+            this.hasTraitModifiers = traitModifiers;
+            this.readsDerivedTraits = containsDerivedTraitRead(modifiers);
             this.rules = new LinkedHashMap<>();
             rules.forEach((id, rule) -> this.rules.put(id, rule.deepCopy()));
             Map<BindingKey, List<BindingRef>> bindingIndex = new HashMap<>();
@@ -195,6 +202,9 @@ public final class RuleCompiler {
         List<String> poolsBoundTo(String effectId) { return poolsByEffect.getOrDefault(effectId, List.of()); }
         boolean hasEffect(String effectId) { return effects.has(effectId); }
         ObjectNode effects() { return effects.deepCopy(); }
+        boolean hasModifiers() { return !modifiers.isEmpty(); }
+        boolean hasTraitModifiers() { return hasTraitModifiers; }
+        boolean readsDerivedTraits() { return readsDerivedTraits; }
         ArrayNode modifiers() { return modifiers.deepCopy(); }
         /** Additional attack profiles the source offers while it is active. */
         public ArrayNode profiles() { return profiles.deepCopy(); }
@@ -314,7 +324,7 @@ public final class RuleCompiler {
         ObjectNode effects = automation.has("effects") ? RuleJson.object(automation.get("effects"), "/automation/effects") : RuleJson.JSON.createObjectNode();
         if (effects.size() > 64) throw RuleJson.error("/automation/effects", "Expected at most 64 effects.");
         effects.fields().forEachRemaining(field -> validateEffect(field.getKey(), field.getValue(), state, effects));
-        ArrayNode modifiers = automation.has("modifiers") ? modifierList(automation.get("modifiers"), "/automation/modifiers", state) : RuleJson.JSON.createArrayNode();
+        ArrayNode modifiers = automation.has("modifiers") ? modifierList(automation.get("modifiers"), "/automation/modifiers", state, true) : RuleJson.JSON.createArrayNode();
         Decl decl = new Decl(state, limits, pools, effects, attachment != null);
         ArrayNode profiles = automation.has("profiles") ? profileList(automation.get("profiles")) : RuleJson.JSON.createArrayNode();
         JsonNode definitions = automation.path("rules");
@@ -464,7 +474,7 @@ public final class RuleCompiler {
         if (effect.has("until")) resetEvents(effect.get("until"), path + "/until");
         if (effect.has("profile")) validateProfile(effect.get("profile"), path + "/profile");
         if (effect.has("modifiers")) {
-            ArrayNode list = modifierList(effect.get("modifiers"), path + "/modifiers", state);
+            ArrayNode list = modifierList(effect.get("modifiers"), path + "/modifiers", state, false);
             for (JsonNode modifier : list) if (modifier.has("when"))
                 throw RuleJson.error(path + "/modifiers", "Effect modifiers are resolved when the effect starts; use separate effects instead of conditions.");
         }
@@ -517,7 +527,24 @@ public final class RuleCompiler {
                 throw RuleJson.error(path, "Unknown or duplicate reset event.");
     }
 
-    private static ArrayNode modifierList(JsonNode list, String path, ObjectNode state) {
+    private static boolean readsDerivedTrait(String ref) {
+        return "actor".equals(ref) || "actor.stats".equals(ref) || "actor.stats.trait".equals(ref)
+                || ref.startsWith("actor.stats.trait.") || "actor.stats.spellcast".equals(ref)
+                || "actor.stats.spellcast.total".equals(ref);
+    }
+
+    private static boolean containsDerivedTraitRead(JsonNode modifiers) {
+        for (JsonNode modifier : modifiers) {
+            for (String field : List.of("value", "when"))
+                if (modifier.has(field) && RuleExpression.references(modifier.get(field)).stream().anyMatch(RuleCompiler::readsDerivedTrait))
+                    return true;
+            if (modifier.has("label") && RuleTemplate.references(modifier.path("label").asText()).stream().anyMatch(RuleCompiler::readsDerivedTrait))
+                return true;
+        }
+        return false;
+    }
+
+    private static ArrayNode modifierList(JsonNode list, String path, ObjectNode state, boolean passive) {
         if (!list.isArray() || list.size() > 64) throw RuleJson.error(path, "Expected up to 64 modifiers.");
         for (int i = 0; i < list.size(); i++) {
             JsonNode modifier = list.get(i);
@@ -536,6 +563,8 @@ public final class RuleCompiler {
                     String root = ref.split("\\.")[0];
                     if (!Set.of("source", "actor", "state", "effects").contains(root) || "state".equals(root) && !state.has(ref.split("\\.")[1]))
                         throw RuleJson.error(at + "/" + field, "Passive modifiers may only read source, actor, effects and declared state: " + ref);
+                    if (passive && stat.startsWith("trait.") && readsDerivedTrait(ref))
+                        throw RuleJson.error(at + "/" + field, "A passive trait modifier cannot depend on derived trait totals: " + ref);
                 }
         }
         return (ArrayNode) list.deepCopy();

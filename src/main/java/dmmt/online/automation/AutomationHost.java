@@ -740,8 +740,8 @@ public final class AutomationHost {
     }
 
     /**
-     * Projects the actor and attaches {@code stats}. Passive modifiers are evaluated against the unmodified statistics
-     * so a modifier can never depend on itself; active effect instances contribute their frozen modifiers.
+     * Projects the actor and attaches {@code stats}. Trait bonuses are resolved before dependent non-trait passives;
+     * other passive-stat reads and derived-effect activation use the unmodified baseline.
      */
     ObjectNode actor(Pack pack, ObjectNode sheet, ObjectNode state, ObjectNode event) {
         return actor(pack, sheet, state, event, sources(pack, sheet));
@@ -753,6 +753,8 @@ public final class AutomationHost {
     }
 
     private record ActorProjection(ObjectNode actor, List<ProfileRoll.Modifier> rollModifiers) {}
+
+    private record PassiveProjection(SheetProjection.SourceElement source, RuleCompiler.Program program) {}
 
     private ArrayNode activationEffects(Pack pack, ObjectNode sheet, ObjectNode state, ObjectNode event,
                                         List<SheetProjection.SourceElement> sources) {
@@ -776,8 +778,10 @@ public final class AutomationHost {
         base.set("stats", projection.stats(actor, List.of()));
         List<JsonNode> modifiers = new ArrayList<>();
         List<ProfileRoll.Modifier> rollModifiers = new ArrayList<>();
+        List<PassiveProjection> passiveSources = new ArrayList<>();
         ObjectNode limitOverrides = RuleJson.JSON.createObjectNode();
         ArrayNode derived = RuleJson.JSON.createArrayNode();
+        boolean readsDerivedTraits = false;
         for (SheetProjection.SourceElement element : sources) {
             RuleCompiler.Program program = pack.programs().get(element.sourceId());
             if (program == null) continue;
@@ -785,13 +789,9 @@ public final class AutomationHost {
                 String key = override.path("feature").asText() + ":" + override.path("limit").asText();
                 limitOverrides.put(key, Math.max(limitOverrides.path(key).asInt(), override.path("max").asInt()));
             }
-            if (!program.modifiers().isEmpty()) {
-                for (JsonNode modifier : RuleEffects.passives(program, context(state, element, base, event))) {
-                    modifiers.add(modifier);
-                    if (collectRollModifiers && modifier.path("stat").asText().startsWith("roll."))
-                        rollModifiers.add(new ProfileRoll.Modifier(modifier, element.instanceId(),
-                                modifier.path("label").asText(element.name()), equippedWeapon(sheet, element)));
-                }
+            if (program.hasModifiers()) {
+                passiveSources.add(new PassiveProjection(element, program));
+                readsDerivedTraits |= program.readsDerivedTraits();
             }
             derived.addAll(RuleEffects.derived(program, context(state, element, base, event)));
         }
@@ -799,8 +799,33 @@ public final class AutomationHost {
             ArrayNode effects = actor.path("effects").isArray() ? (ArrayNode) actor.get("effects") : actor.putArray("effects");
             effects.addAll(derived);
         }
+        ArrayNode effectModifiers = actor.path("effects").isArray()
+                ? RuleEffects.modifiers(actor.get("effects")) : RuleJson.JSON.createArrayNode();
+        if (readsDerivedTraits) {
+            List<JsonNode> traitModifiers = new ArrayList<>();
+            for (PassiveProjection source : passiveSources)
+                if (source.program().hasTraitModifiers())
+                    RuleEffects.traitPassives(source.program(), context(state, source.source(), base, event)).forEach(traitModifiers::add);
+            for (JsonNode modifier : effectModifiers)
+                if (modifier.path("stat").asText().startsWith("trait.")) traitModifiers.add(modifier);
+            if (!traitModifiers.isEmpty()) {
+                ObjectNode preliminary = projection.traitStats(actor, traitModifiers);
+                ObjectNode baseStats = (ObjectNode) base.get("stats");
+                if (preliminary.has("trait")) baseStats.set("trait", preliminary.get("trait").deepCopy());
+                if (preliminary.path("spellcast").has("total") && baseStats.path("spellcast").isObject())
+                    ((ObjectNode) baseStats.get("spellcast")).set("total", preliminary.at("/spellcast/total").deepCopy());
+            }
+        }
+        for (PassiveProjection source : passiveSources) {
+            ArrayNode values = RuleEffects.passives(source.program(), context(state, source.source(), base, event));
+            values.forEach(modifiers::add);
+            if (collectRollModifiers) for (JsonNode modifier : values)
+                if (modifier.path("stat").asText().startsWith("roll."))
+                    rollModifiers.add(new ProfileRoll.Modifier(modifier, source.source().instanceId(),
+                            modifier.path("label").asText(source.source().name()), equippedWeapon(sheet, source.source())));
+        }
+        effectModifiers.forEach(modifiers::add);
         if (actor.path("effects").isArray()) {
-            RuleEffects.modifiers(actor.get("effects")).forEach(modifiers::add);
             if (collectRollModifiers) for (JsonNode effect : actor.get("effects"))
                 for (JsonNode modifier : effect.path("modifiers"))
                     if (modifier.path("stat").asText().startsWith("roll."))

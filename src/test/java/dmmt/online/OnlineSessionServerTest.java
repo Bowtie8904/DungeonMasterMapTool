@@ -2033,16 +2033,22 @@ class OnlineSessionServerTest {
     @Test
     @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "dmmt.benchmark.automation", matches = "true")
     void measurePersistedMixedWeaponDamage() throws Exception {
-        measurePersistedMixedWeaponDamage(false);
+        measurePersistedMixedWeaponDamage(false, false);
     }
 
     @Test
     @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "dmmt.benchmark.automation", matches = "true")
     void measurePersistedDerivedActivationDamage() throws Exception {
-        measurePersistedMixedWeaponDamage(true);
+        measurePersistedMixedWeaponDamage(true, false);
     }
 
-    private void measurePersistedMixedWeaponDamage(boolean derived) throws Exception {
+    @Test
+    @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "dmmt.benchmark.automation", matches = "true")
+    void measurePersistedTraitDependentDamage() throws Exception {
+        measurePersistedMixedWeaponDamage(false, true);
+    }
+
+    private void measurePersistedMixedWeaponDamage(boolean derived, boolean traitDependent) throws Exception {
         automationCompendium();
         Path file = compendiumDir.resolve("classes.json");
         ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
@@ -2051,6 +2057,11 @@ class OnlineSessionServerTest {
             [{"stat":"roll.damage","value":2,"label":"Damage passive"},
              {"stat":"roll.damage","value":1,"label":"Conditional damage",
               "when":{"gt":[{"read":"actor.hope.value"},0]}}]"""));
+        if (traitDependent) {
+            automation.withArray("modifiers").addObject().put("stat", "trait.Finesse").put("value", 1);
+            ObjectNode dependent = automation.withArray("modifiers").addObject().put("stat", "roll.damage").put("label", "Current Finesse");
+            dependent.set("value", MAPPER.readTree("{\"read\":\"actor.stats.trait.Finesse\"}"));
+        }
         ArrayNode rules = automation.withArray("rules");
         rules.removeAll();
         rules.add(MAPPER.readTree("""
@@ -2119,8 +2130,10 @@ class OnlineSessionServerTest {
             assertEquals(2, roll.required("excludedDice").size());
             assertTrue(roll.required("contributions").findValuesAsText("label")
                     .containsAll(List.of("Damage passive", "Conditional damage", "Stored effect", "Boost")));
+            if (traitDependent)
+                assertTrue(roll.required("contributions").findValuesAsText("label").contains("Current Finesse"));
             assertEquals(roll.requiredAt("/contributions/0/total").intValue()
-                            + roll.requiredAt("/contributions/1/total").intValue() + 9,
+                            + roll.requiredAt("/contributions/1/total").intValue() + (traitDependent ? 13 : 9),
                     roll.required("total").intValue());
             if (i >= warmup) {
                 nanos[i - warmup] = elapsed;
@@ -2131,7 +2144,7 @@ class OnlineSessionServerTest {
                 MAPPER.readTree(store.loadSheet(campaign.getId(), "roller")).requiredAt("/automationState/revision").intValue());
         java.util.Arrays.sort(nanos);
         System.out.printf(java.util.Locale.ROOT, "automation-bench %s POST: n=%d p50=%.2fms p95=%.2fms mean=%.2fMiB allocated%n",
-                derived ? "mixed weapon with derived activation" : "mixed weapon", samples,
+                derived ? "mixed weapon with derived activation" : traitDependent ? "mixed weapon with trait-dependent passive" : "mixed weapon", samples,
                 nanos[samples / 2 - 1] / 1e6, nanos[(int) Math.ceil(samples * .95) - 1] / 1e6,
                 java.util.Arrays.stream(bytes).average().orElseThrow() / (1024 * 1024));
     }

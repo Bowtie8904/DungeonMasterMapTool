@@ -18,15 +18,24 @@ public final class RuleEffects {
 
     /** Evaluates the program's passive modifiers whose conditions currently hold. */
     public static ArrayNode passives(RuleCompiler.Program program, ObjectNode hostContext) {
+        return passives(program, hostContext, false);
+    }
+
+    static ArrayNode traitPassives(RuleCompiler.Program program, ObjectNode hostContext) {
+        return passives(program, hostContext, true);
+    }
+
+    private static ArrayNode passives(RuleCompiler.Program program, ObjectNode hostContext, boolean traitsOnly) {
         ObjectNode context = RuleRuntime.context(program, null, hostContext);
         ArrayNode out = RuleJson.JSON.createArrayNode();
         for (JsonNode modifier : program.modifiers()) {
+            if (traitsOnly && !modifier.path("stat").asText().startsWith("trait.")) continue;
             if (modifier.has("when") && !RuleExpression.bool(RuleExpression.evaluate(modifier.get("when"), context), "/modifiers/when"))
                 continue;
             ObjectNode resolved = out.addObject().put("stat", modifier.path("stat").asText())
                     .put("op", modifier.path("op").asText("add"))
                     .put("value", RuleExpression.number(RuleExpression.evaluate(modifier.get("value"), context), "/modifiers/value"));
-            if (modifier.has("label")) resolved.put("label", RuleTemplate.render(modifier.path("label").asText(), context));
+            if (!traitsOnly && modifier.has("label")) resolved.put("label", RuleTemplate.render(modifier.path("label").asText(), context));
             resolved.put("sourceInstanceId", context.path("source").path("instanceId").asText());
         }
         return out;

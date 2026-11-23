@@ -49,6 +49,8 @@ See the [rewrite design and implementation status](docs/ONLINE_AUTOMATION_PLAN.m
 
 Converted action reports can roll bounded dice on the host before subsequent action steps, with the result, costs and use recorded together. The report remains narrative: it does not select or heal targets. Unsupported expressions or combinations with other ordered rolls are reported by the converter rather than guessed. A shared Warden's Protection fixture checks both engines' report and isolated reset behavior; the replacement's live rest workflow remains unfinished.
 
+Converted passive bonuses based on a trait use its current total, including passive and active-effect trait bonuses. This includes Untouchable's rounded Agility-to-Evasion bonus. Trait-modifying passives cannot themselves depend on derived trait totals. Legacy trait-derived effect modifiers remain dynamic and are rejected by the converter until that behavior is supported; explicitly authored format-2 started effects can instead freeze a value when activated.
+
 Candidate catalog validation checks recipe argument declarations, defaults, UI templates, substitutions, static binding values, target and claim declarations, concrete input definitions, locally resolvable argument/input/result references, and static rule and operation shapes even when no entry uses them. The host rejects format-2 catalog files whose declared category does not match their filename. Full semantic validation of unused rule bodies remains outstanding.
 
 For candidate format-2 packs, `rules\recipes.json` and `rules\ruleset.json` are loaded together as shared

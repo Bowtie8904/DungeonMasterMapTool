@@ -4374,6 +4374,10 @@ public final class LegacyCatalogConverter {
 
     /** Passive (source) modifiers may carry legacy conditions as a {@code when}; effect modifiers are frozen and unconditional. */
     private static void modifier(JsonNode modifier, String path, Problems p, ArrayNode out, boolean passive) {
+        if (!passive && modifier.has("traitValue")) {
+            p.add(path + "/traitValue", "Dynamic trait-derived effect modifiers cannot be converted to frozen values.");
+            return;
+        }
         if (passive && modifier.has("weapon")) {
             // A roll bonus for the equipped weapon in a slot (not rolls with this source) becomes a required, slot-filtered roll option.
             p.onlyFields(modifier, path, Set.of("roll", "value", "weapon"));
@@ -4443,7 +4447,7 @@ public final class LegacyCatalogConverter {
                 return null;
             }
             ObjectNode quotient = RuleJson.JSON.createObjectNode();
-            quotient.putArray("divide").add(read("actor.traits." + trait)).add(modifier.path("divisor").asInt());
+            quotient.putArray("divide").add(read("actor.stats.trait." + trait)).add(modifier.path("divisor").asInt());
             value = RuleJson.JSON.createObjectNode().set("up".equals(rounding) ? "ceil" : "floor", quotient);
         } else if (!present.isEmpty()) {
             String field = present.get(0);

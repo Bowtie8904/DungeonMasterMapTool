@@ -25,6 +25,7 @@ public final class SheetProjection {
 
     private final ObjectNode spec;
     private final String stateField, sourceField, instanceField, nameField;
+    private final List<JsonNode> traitStats;
 
     private SheetProjection(ObjectNode spec) {
         this.spec = spec;
@@ -32,6 +33,27 @@ public final class SheetProjection {
         sourceField = spec.path("sourceField").asText();
         instanceField = spec.path("instanceField").asText();
         nameField = spec.path("nameField").asText();
+        JsonNode stats = spec.path("stats");
+        boolean[] needed = new boolean[stats.size()];
+        for (int i = 0; i < stats.size(); i++) {
+            String id = stats.get(i).path("id").asText();
+            needed[i] = id.startsWith("trait.") || "spellcast.total".equals(id);
+        }
+        for (int i = stats.size() - 1; i >= 0; i--) {
+            if (!needed[i]) continue;
+            Set<String> refs = RuleExpression.references(stats.get(i).get("value"));
+            for (int j = 0; j < i; j++) {
+                String name = "actor.stats." + stats.get(j).path("id").asText();
+                for (String ref : refs)
+                    if ("actor.stats".equals(ref) || name.equals(ref) || name.startsWith(ref + ".") || ref.startsWith(name + ".")) {
+                        needed[j] = true;
+                        break;
+                    }
+            }
+        }
+        List<JsonNode> selected = new ArrayList<>();
+        for (int i = 0; i < stats.size(); i++) if (needed[i]) selected.add(stats.get(i));
+        traitStats = List.copyOf(selected);
     }
 
     public static SheetProjection parse(String json) throws java.io.IOException {
@@ -79,11 +101,20 @@ public final class SheetProjection {
      * the declared bounds. The result is exposed to rules as {@code actor.stats} and is never written back.
      */
     public ObjectNode stats(ObjectNode actor, List<JsonNode> modifiers) {
+        return stats(actor, modifiers, spec.path("stats"));
+    }
+
+    ObjectNode traitStats(ObjectNode actor, List<JsonNode> modifiers) {
+        if (traitStats.isEmpty()) return RuleJson.JSON.createObjectNode();
+        return stats(actor, modifiers, traitStats);
+    }
+
+    private ObjectNode stats(ObjectNode actor, List<JsonNode> modifiers, Iterable<JsonNode> declared) {
         ObjectNode working = actor.deepCopy();
         ObjectNode stats = working.putObject("stats");
         ObjectNode context = RuleJson.JSON.createObjectNode();
         context.set("actor", working);
-        for (JsonNode stat : spec.path("stats")) {
+        for (JsonNode stat : declared) {
             String id = stat.path("id").asText();
             double value = RuleEffects.stat(RuleExpression.number(RuleExpression.evaluate(stat.get("value"), context),
                     "/stats/" + id), id, modifiers);

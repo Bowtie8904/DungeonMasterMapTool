@@ -921,6 +921,196 @@ class AutomationHostTest {
     }
 
     @Test
+    void convertedUntouchableUsesCurrentAgilityFromPassiveAndFrozenEffects() throws Exception {
+        JsonNode shipped = RuleJson.parse(java.nio.file.Files.readString(java.nio.file.Path.of("dmmap-daggerheart", "domain-cards.json")));
+        JsonNode untouchable = null;
+        for (JsonNode entry : shipped.path("entries"))
+            if ("untouchable".equals(entry.path("id").asText())) untouchable = entry;
+        assertNotNull(untouchable);
+        ObjectNode legacy = RuleJson.JSON.createObjectNode().put("format", "dmmap-daggerheart").put("version", 1)
+                .put("category", "domain-cards").put("label", "Fixture");
+        legacy.putArray("entries").add(untouchable.deepCopy());
+        var converted = LegacyCatalogConverter.convert(legacy.toString());
+        assertEquals(1, converted.converted(), converted.diagnostics().toString());
+        ((com.fasterxml.jackson.databind.node.ArrayNode) converted.catalog().get("entries")).addObject()
+                .put("id", "training").put("name", "Training").putObject("automation")
+                .putArray("modifiers").addObject().put("stat", "trait.Agility").put("value", 2);
+        var pack = AutomationHost.compile("trait-parity", Map.of("domain-cards", converted.catalog().toString()),
+                LegacyCatalogConverter.coreRecipes());
+        for (int[] sample : new int[][]{{3, 2}, {-1, 0}, {0, 0}, {4, 2}, {-3, -1}}) {
+            ObjectNode sheet = sheet();
+            ((ObjectNode) sheet.at("/traits/0")).put("mod", sample[0] - 1);
+            sheet.withArray("loadout").addObject().put("name", "Untouchable")
+                    .put("automationSource", "domain-cards:untouchable").put("instanceId", "untouchable");
+            HOST.projection().state(sheet).putArray("effects").addObject().put("id", "agility")
+                    .putArray("modifiers").addObject().put("stat", "trait.Agility").put("value", 1);
+            ObjectNode actor = HOST.actor(pack, sheet, HOST.projection().state(sheet), action());
+            assertEquals(sample[0], actor.at("/stats/trait/Agility").asInt());
+            assertEquals(10 + sample[1], actor.at("/stats/evasion").asInt());
+            sheet.withArray("loadout").addObject().put("name", "Training")
+                    .put("automationSource", "domain-cards:training").put("instanceId", "training");
+            actor = HOST.actor(pack, sheet, HOST.projection().state(sheet), action());
+            assertEquals(sample[0] + 2, actor.at("/stats/trait/Agility").asInt());
+            assertEquals(10 + (int) Math.ceil((sample[0] + 2) / 2.0), actor.at("/stats/evasion").asInt());
+            sheet.withArray("loadout").remove(1);
+            actor = HOST.actor(pack, sheet, HOST.projection().state(sheet), action());
+            assertEquals(10 + sample[1], actor.at("/stats/evasion").asInt());
+        }
+    }
+
+    @Test
+    void dependentPassivesAndRollModifiersSeeCurrentTraitsButOtherStatsKeepTheirBaseline() throws Exception {
+        ObjectNode catalog = fixture("rewrite/host-classes");
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/1/automation");
+        automation.set("modifiers", RuleJson.parse("""
+                [{"stat":"trait.Agility","value":2},
+                 {"stat":"evasion","value":{"read":"actor.stats.trait.Agility"},
+                  "when":{"gte":[{"read":"actor.stats.trait.Agility"},3]}},
+                 {"stat":"thresholds.major","value":{"read":"actor.stats.spellcast.total"}},
+                 {"stat":"armorScore","value":{"read":"actor.stats.evasion"}},
+                 {"stat":"roll.attack","value":{"read":"actor.stats.trait.Agility"},"label":"Agility {actor.stats.trait.Agility}",
+                  "when":{"gte":[{"read":"actor.stats.trait.Agility"},3]}}]"""));
+        var pack = AutomationHost.compile("traits", Map.of("classes", catalog.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet();
+        ((ObjectNode) sheet.at("/traits/0")).put("spellcast", true);
+        sheet.withArray("traits").addObject().put("name", "Finesse").put("mod", 1);
+        ObjectNode actor = HOST.actor(pack, sheet, HOST.projection().state(sheet), action());
+        assertEquals(3, actor.at("/stats/trait/Agility").asInt());
+        assertEquals(3, actor.at("/stats/spellcast/total").asInt());
+        assertEquals(13, actor.at("/stats/evasion").asInt());
+        assertEquals(5, actor.at("/stats/thresholds/major").asInt());
+        assertEquals(10, actor.at("/stats/armorScore").asInt(), "Non-trait stat reads retain the unmodified baseline");
+        ObjectNode roll = RuleJson.JSON.createObjectNode().put("requestId", "traits").put("expectedRevision", 0);
+        roll.putArray("selections");
+        roll.putObject("profileRoll").put("sourceInstanceId", "f-steady").put("profileId", "thrown").put("kind", "attack");
+        JsonNode result = HOST.execute(pack, sheet, AutomationHost.event("action.request", "actor", 0),
+                roll, "self", StructuredRollTest.faces(2, 4));
+        assertEquals(10, result.at("/event/roll/total").asInt());
+        JsonNode contribution = null;
+        for (JsonNode part : result.at("/event/roll/contributions"))
+            if ("Agility 3".equals(part.path("label").asText())) contribution = part;
+        assertNotNull(contribution);
+        assertEquals("f-forage", contribution.path("sourceId").asText());
+        assertEquals(3, contribution.path("value").asInt());
+        ((ObjectNode) sheet.at("/traits/0")).put("mod", -3);
+        actor = HOST.actor(pack, sheet, HOST.projection().state(sheet), action());
+        assertEquals(-1, actor.at("/stats/trait/Agility").asInt());
+        assertEquals(10, actor.at("/stats/evasion").asInt(), "A false modified-trait condition removes the passive");
+        roll.put("requestId", "traits-changed").put("expectedRevision", 1);
+        result = HOST.execute(pack, sheet, AutomationHost.event("action.request", "actor", 0),
+                roll, "self", StructuredRollTest.faces(2, 4));
+        assertEquals(7, result.at("/event/roll/total").asInt());
+        assertFalse(result.at("/event/roll/contributions").findValuesAsText("label").contains("Agility 3"));
+    }
+
+    @Test
+    void preliminaryTraitProjectionDoesNotEvaluateOtherPassivesAgainstBaseTraits() throws Exception {
+        ObjectNode catalog = fixture("rewrite/host-classes");
+        ((ObjectNode) catalog.at("/entries/0/features/1/automation")).set("modifiers", RuleJson.parse("""
+                [{"stat":"trait.Agility","value":2,"label":"Agility {actor.stats.trait.Agility}"},
+                 {"stat":"evasion","value":{"divide":[6,{"read":"actor.stats.trait.Agility"}]}}]"""));
+        var pack = AutomationHost.compile("trait-order", Map.of("classes", catalog.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet();
+        ((ObjectNode) sheet.at("/traits/0")).put("mod", 0);
+        ObjectNode actor = HOST.actor(pack, sheet, HOST.projection().state(sheet), action());
+        assertEquals(2, actor.at("/stats/trait/Agility").asInt());
+        assertEquals(13, actor.at("/stats/evasion").asInt());
+    }
+
+    @Test
+    void conditionAndLabelOnlyDependenciesUseModifiedTraits() throws Exception {
+        ObjectNode catalog = fixture("rewrite/host-classes");
+        ((ObjectNode) catalog.at("/entries/0/features/1/automation")).set("modifiers", RuleJson.parse("""
+                [{"stat":"trait.Agility","value":2},
+                 {"stat":"evasion","value":4,"when":{"gte":[{"read":"actor.stats.trait.Agility"},2]}},
+                 {"stat":"roll.attack","value":1,"label":"Agility {actor.stats.trait.Agility}"}]"""));
+        var pack = AutomationHost.compile("trait-condition", Map.of("classes", catalog.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet();
+        ((ObjectNode) sheet.at("/traits/0")).put("mod", 0);
+        sheet.withArray("traits").addObject().put("name", "Finesse").put("mod", 0);
+        ObjectNode actor = HOST.actor(pack, sheet, HOST.projection().state(sheet), action());
+        assertEquals(14, actor.at("/stats/evasion").asInt());
+        ((com.fasterxml.jackson.databind.node.ArrayNode) catalog.at("/entries/0/features/1/automation/modifiers")).remove(1);
+        pack = AutomationHost.compile("trait-label", Map.of("classes", catalog.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode roll = RuleJson.JSON.createObjectNode().put("requestId", "labels").put("expectedRevision", 0);
+        roll.putArray("selections");
+        roll.putObject("profileRoll").put("sourceInstanceId", "f-steady").put("profileId", "thrown").put("kind", "attack");
+        JsonNode result = HOST.execute(pack, sheet, action(), roll, "self", StructuredRollTest.faces(2, 4));
+        assertTrue(result.at("/event/roll/contributions").findValuesAsText("label").contains("Agility 2"));
+    }
+
+    @Test
+    void customProjectionComputesItsDeclaredTraitAndRejectsMissingFacts() throws Exception {
+        ObjectNode projection = (ObjectNode) RuleJson.parse("""
+                {"format":"dmmap-sheet-projection","version":2,
+                 "stateField":"automationState","sourceField":"automationSource","instanceField":"instanceId","nameField":"name",
+                 "sources":[{"path":"features"}],
+                 "actor":{"traits":{"kind":"map","path":"traits","key":"name","value":"mod"}},
+                 "stats":[{"id":"base.seed","value":1},
+                          {"id":"trait.Agility","value":{"if":[{"exists":"actor.stats.later"},900,
+                             {"if":[{"exists":"actor.stats.base"},
+                               {"add":[{"read":"actor.traits.Agility"},{"read":"actor.stats.base.seed"}]},0]}]}},
+                          {"id":"spellcast.total","value":{"read":"actor.stats.trait.Agility"}},
+                          {"id":"later","value":900},
+                          {"id":"evasion","value":10}]}""");
+        ObjectNode catalog = fixture("rewrite/host-classes");
+        ((ObjectNode) catalog.at("/entries/0/features/1/automation")).set("modifiers", RuleJson.parse("""
+                [{"stat":"trait.Agility","value":2},{"stat":"evasion","value":{"read":"actor.stats.spellcast.total"}}]"""));
+        var pack = AutomationHost.compile("custom-trait", Map.of("classes", catalog.toString()), fixture("rewrite/recipes").toString());
+        AutomationHost host = new AutomationHost(SheetProjection.parse(projection.toString()));
+        ObjectNode sheet = sheet();
+        ((ObjectNode) sheet.at("/traits/0")).put("mod", 0);
+        assertEquals(13, host.actor(pack, sheet, host.projection().state(sheet), action()).at("/stats/evasion").asInt());
+        ((com.fasterxml.jackson.databind.node.ArrayNode) projection.get("stats")).remove(2);
+        AutomationHost missing = new AutomationHost(SheetProjection.parse(projection.toString()));
+        var failure = assertThrows(IllegalArgumentException.class,
+                () -> missing.actor(pack, sheet, missing.projection().state(sheet), action()));
+        assertTrue(failure.getMessage().contains("actor.stats.spellcast.total"), failure.getMessage());
+    }
+
+    @Test
+    void passiveTraitCyclesAreRejectedButFrozenEffectValuesMayReadCurrentTraits() throws Exception {
+        String catalog = """
+                {"format":"dmmap-daggerheart","version":2,"category":"classes","label":"Fixture","entries":[
+                 {"id":"source","name":"Source","automation":{"modifiers":[%s]}}]}""";
+        for (String expression : List.of(
+                "{\"stat\":\"trait.Agility\",\"value\":{\"read\":\"actor.stats.trait.Agility\"}}",
+                "{\"stat\":\"trait.Agility\",\"value\":1,\"when\":{\"gt\":[{\"read\":\"actor.stats.spellcast.total\"},0]}}")) {
+            var failure = assertThrows(AutomationHost.NotReady.class, () -> AutomationHost.compile("cycle",
+                    Map.of("classes", catalog.formatted(expression)), LegacyCatalogConverter.coreRecipes()));
+            assertTrue(failure.getMessage().contains("cannot depend on derived trait totals"), failure.getMessage());
+        }
+        String catalogWithEffect = """
+                {"format":"dmmap-daggerheart","version":2,"category":"classes","label":"Fixture","entries":[
+                 {"id":"source","name":"Source","automation":{
+                  "modifiers":[{"stat":"trait.Agility","value":2}],
+                  "effects":{"guard":{"label":"Guard","kind":"buff","until":["rest.short","rest.long"],
+                    "modifiers":[{"stat":"evasion","value":{"ceil":{"divide":[{"read":"actor.stats.trait.Agility"},2]}}}]}},
+                  "rules":[{"id":"start","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                    "do":[{"op":"effect.start","effect":"guard","target":"actor"}],"ui":{"label":"Start","report":"Started."}}]}}]}""";
+        var pack = AutomationHost.compile("effect", Map.of("classes", catalogWithEffect), LegacyCatalogConverter.coreRecipes());
+        ObjectNode sheet = sheet();
+        sheet.withArray("features").addObject().put("name", "Source").put("automationSource", "classes:source").put("instanceId", "source");
+        HOST.execute(pack, sheet, action(), request("start", 0, "source", "start"), "self", StructuredRollTest.noRandom());
+        assertEquals(2, sheet.at("/automationState/effects/0/modifiers/0/value").asInt());
+        ((ObjectNode) sheet.at("/traits/0")).put("mod", 5);
+        ObjectNode actor = HOST.actor(pack, sheet, HOST.projection().state(sheet), action());
+        assertEquals(12, actor.at("/stats/evasion").asInt(), "Stored effect modifiers stay frozen");
+    }
+
+    @Test
+    void converterRejectsDynamicTraitValuesOnLegacyEffects() throws Exception {
+        String legacy = """
+                {"format":"dmmap-daggerheart","version":1,"category":"classes","label":"Fixture","entries":[
+                 {"id":"source","name":"Source","automation":{"actions":[{"id":"start","label":"Start",
+                   "steps":[{"op":"effect","effect":{"name":"Guard","kind":"buff","until":"rest",
+                     "modifiers":[{"stat":"evasion","traitValue":"Agility","divisor":2,"round":"up"}]}}]}]}}]}""";
+        var converted = LegacyCatalogConverter.convert(legacy);
+        assertEquals(0, converted.converted());
+        assertTrue(converted.diagnostics().toString().contains("Dynamic trait-derived effect modifiers"), converted.diagnostics().toString());
+    }
+
+    @Test
     void projectionRejectsReservedOrForeignStatistics() throws Exception {
         String bundled;
         try (var in = SheetProjection.class.getResourceAsStream("daggerheart-projection.json")) {
