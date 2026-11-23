@@ -2452,6 +2452,7 @@ public final class AutomationHost {
         String ruleId = RuleJson.text(selection.get("ruleId"), "/selection/ruleId");
         String bindingId = RuleJson.text(selection.get("bindingId"), "/selection/bindingId");
         ObjectNode working = sheet.deepCopy();
+        ObjectNode moveStart = initialRestFacts(pack.rest(), projection.actor(working));
         var element = sources(pack, working).stream().filter(source -> instanceId.equals(source.instanceId())).findFirst()
                 .orElseThrow(() -> new RuleRuntime.Unavailable("source", "This source is no longer active."));
         var program = pack.programs().get(element.sourceId());
@@ -2674,6 +2675,36 @@ public final class AutomationHost {
             validateRestMove(finalEvent, move, rest, settlePartyRecovery);
             if (!completedMove.equals(finalEvent.path("move")))
                 throw RuleJson.error("/event/move", "A deferred benefit cannot change the completed move.");
+            for (String key : List.of("actions", "outbox"))
+                ((ArrayNode) result.get(key)).addAll((ArrayNode) response.get(key));
+            after = response;
+        }
+        ObjectNode completedEvent = finalEvent.deepCopy().put("type", "downtime.completed");
+        ObjectNode completedFacts = (ObjectNode) completedEvent.path("move");
+        completedFacts.set("start", moveStart);
+        ObjectNode cleared = completedFacts.putObject("cleared");
+        ObjectNode moveEnd = initialRestFacts(pack.rest(), projection.actor(working));
+        moveStart.fields().forEachRemaining(fact -> {
+            JsonNode end = moveEnd.path(fact.getKey());
+            if (fact.getValue().isNumber() && end.isNumber())
+                cleared.set(fact.getKey(), RuleExpression.numeric(
+                        Math.max(0, fact.getValue().asDouble() - end.asDouble()), "/event/move/cleared/" + fact.getKey()));
+        });
+        var completedCandidates = candidates(pack, working, completedEvent);
+        if (completedCandidates.stream().anyMatch(source -> !source.program().automatic("downtime.completed").isEmpty())) {
+            ObjectNode completedState = projection.state(working);
+            var completed = RuleDispatcher.executeOwnerTrackReactions(completedCandidates, List.of(), random,
+                    pack.programs(), ownerMoveProjection(pack, working, completedState, completedCandidates));
+            ObjectNode response = applyResolved(pack, working, completedState, completedEvent,
+                    completed.contexts(), completed.actions(), completed.outbox());
+            if (target != null) validateTargetRestCommands(response);
+            JsonNode resultingEvent = response.path("event");
+            if (!"downtime.completed".equals(resultingEvent.path("type").asText())
+                    || !completedFacts.equals(resultingEvent.path("move")) || !rest.equals(resultingEvent.path("rest")))
+                throw RuleJson.error("/event/move", "A completed-move reaction cannot change the move or rest.");
+            if (!resultingEvent.path("blocked").isEmpty())
+                throw new RuleRuntime.Unavailable("blocked", resultingEvent.at("/blocked/0/reason").asText());
+            carryRestTable(finalEvent, resultingEvent);
             for (String key : List.of("actions", "outbox"))
                 ((ArrayNode) result.get(key)).addAll((ArrayNode) response.get(key));
             after = response;

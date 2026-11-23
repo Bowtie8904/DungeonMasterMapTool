@@ -27,6 +27,10 @@
               { "path": "effects", "field": "locks.hp" }] } },
     "stress": { "kind": "object", "path": "stress", "fields": { "marked": "on", "capacity": "slots" },
                 "writable": ["marked", "capacity"], "atLeast": { "total": "capacity" }, "max": 1000 },
+    "companionStress": { "kind": "object", "path": "companion.stress",
+                         "fields": { "marked": "on", "capacity": "slots" }, "writable": ["marked"], "max": 1000 },
+    "companionUnavailable": { "kind": "value", "type": "boolean", "path": "companion.unavailable",
+                              "writable": true, "default": false },
     "armorTrack": { "kind": "object", "path": "armorTrack", "fields": { "marked": "on", "capacity": "slots" },
                     "writable": ["marked", "capacity"], "atLeast": { "total": "capacity" }, "max": 1000 },
     "hope": { "kind": "object", "path": "hope", "fields": { "value": "on", "max": "slots", "total": "total" },
@@ -51,6 +55,9 @@
     "conditions": { "kind": "engine", "path": "automationState.conditions", "default": [] },
     "companions": { "kind": "engine", "path": "automationState.companions", "default": [] }
   },
+  "poolTracks": [
+    { "pool": "companion-stress-slots", "track": "companionStress", "fullFlag": "companionUnavailable" }
+  ],
   "stats": [
     { "id": "level", "value": { "if": [{ "exists": "actor.level" }, { "read": "actor.level" }, 1] } },
     { "id": "tier", "value": { "if": [{ "gte": [{ "read": "actor.stats.level" }, 8] }, 4,

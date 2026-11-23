@@ -2051,6 +2051,57 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void formatTwoRestsReturnAndRecoverCompanionsInTheSavedSheet() throws Exception {
+        installRestRules();
+        var converted = dmmt.online.automation.LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"domain-cards","entries":[
+                 {"id":"pet","name":"Companion","automation":{"companion":{
+                   "evasion":10,"stress":3,"maxStress":6,"options":[]}}}]}
+                """);
+        assertEquals(1, converted.converted(), converted.diagnostics().toString());
+        java.nio.file.Files.writeString(compendiumDir.resolve("domain-cards.json"), converted.catalog().toString());
+        campaign.getActors().add(Campaign.Actor.builder().id("resting").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "resting", """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":1},"stress":{"slots":6,"on":5},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":1},
+                 "companion":{"name":"Fox","stress":{"slots":5,"on":5},"unavailable":true},
+                 "loadout":[{"name":"Companion","instanceId":"pet","automationSource":"domain-cards:pet"}],
+                 "automationState":{"pools":{"companion-stress-slots":{"max":6,"value":6}}}}
+                """);
+        String owner = cookie();
+        diceSeed(13);
+        JsonNode shortOffer = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode shortBody = restRequest(shortOffer, "companion-short");
+        addRestMove((ObjectNode) shortBody.path("request"), restDescriptor(shortOffer.path("moves"), "rest-stress"));
+        var shortResult = restHttp(owner, "resting", null, shortBody.toString());
+        assertEquals(200, shortResult.statusCode(), shortResult.body());
+        JsonNode afterShort = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        assertTrue(afterShort.at("/companion/unavailable").asBoolean());
+        assertEquals(5, afterShort.at("/companion/stress/on").asInt());
+        assertEquals(5, afterShort.at("/automationState/pools/companion-stress-slots/max").asInt());
+
+        JsonNode longOffer = MAPPER.readTree(restHttp(owner, "resting", "long", null).body());
+        ObjectNode longBody = restRequest(longOffer, "companion-long");
+        addRestMove((ObjectNode) longBody.path("request"), restDescriptor(longOffer.path("moves"), "rest-stress-all"));
+        var completed = restHttp(owner, "resting", null, longBody.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode receipt = MAPPER.readTree(completed.body());
+        var rules = receipt.path("actions").findValuesAsText("ruleId");
+        assertTrue(rules.indexOf("companion-returns") < rules.indexOf("rest-stress-all"), rules.toString());
+        assertTrue(rules.indexOf("rest-stress-all") < rules.indexOf("companion-recovers"), rules.toString());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        assertFalse(saved.at("/companion/unavailable").asBoolean());
+        int companionStress = Math.max(0, 4 - afterShort.at("/stress/on").asInt());
+        assertEquals(companionStress, saved.at("/companion/stress/on").asInt());
+        assertEquals(5 - companionStress, saved.at("/automationState/pools/companion-stress-slots/value").asInt());
+        String after = store.loadSheet(campaign.getId(), "resting");
+        int history = store.historyTail(campaign.getId(), 100).size();
+        assertEquals(completed.body(), restHttp(owner, "resting", null, longBody.toString()).body());
+        assertEquals(after, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+    }
+
+    @Test
     void formatTwoRestPublishesIndependentCardOffersAndClaimsThemAtomically() throws Exception {
         installRestRules();
         var converted = dmmt.online.automation.LegacyCatalogConverter.convert("""

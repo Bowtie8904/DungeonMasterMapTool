@@ -80,9 +80,8 @@ ruleset's initial Hope, Armor and recovery facts across the moves. Move bonuses 
 passive costs and modifier steps run afterward and failures roll back the move. A staged ally move can use a
 versioned host-selected recipient and its own healing floor; it returns a private recipient update only after
 the whole move succeeds. Repeated moves require applying each update to a private sheet and rebuilding the
-request-local roster. The base Tend and Repair ally choices remain narrative, as in the legacy client: they
-report recovery for the ally to apply rather than selecting or changing another character. A shared fixture
-checks short and long variants in both engines. Authored targeted ally moves offer eligible characters in the
+request-local roster. The base Tend and Repair ally choices select and update the recipient, including its
+track reactions and protected HP floor. Authored targeted ally moves offer eligible characters in the
 live dialog and save both holders' reactions with the rest. Completion derives signed recovery facts, runs benefits
 around the rest reset and advances rest counters; failures roll back the transaction.
 An internal coordinator composes these stages on private source and recipient sheets, reprojects each recipient
@@ -100,9 +99,9 @@ client-supplied rests and downtime rerolls.
 Owner and DM sheet saves cannot change host-owned rest counters, and legacy damage snapshots retain those counters
 and the host's automation state. An unreadable or unrecognized catalog cannot silently enable legacy rest;
 the shipped format-1 catalogs retain their existing rest behavior.
-The shared ruleset defines the base self-recovery, preparation and project moves for staged tests, including
-tier-scaled recovery, protected HP and capped Hope. Narrative ally variants report recovery for manual
-application; rerolls and companion recovery remain incomplete. Ordered adjustment records retain each requested
+The shared ruleset defines the base recovery, preparation and project moves, including tier-scaled recovery,
+protected HP and capped Hope. Converted companions recover the owner's net cleared Stress and return before
+long-rest moves; downtime rerolls remain incomplete. Ordered adjustment records retain each requested
 amount, source, rule, binding and compiled step; converted party-repair modifiers identify the recipient scope
 and track and settle recipient Armor-overflow reactions atomically. An indexed post-rest declaration can schedule a fixed recovery from a named initial
 sheet-source location for matching self moves even if its ordinary modifier was filtered or the source disappeared.

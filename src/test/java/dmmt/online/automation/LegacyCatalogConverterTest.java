@@ -1107,6 +1107,8 @@ class LegacyCatalogConverterTest {
                            assertEquals(2, result.converted(), result.diagnostics().toString());
                            JsonNode pet = block(result, 0);
         assertEquals(3, pet.at("/pools/companion-stress-slots/initial").asInt(), pet.toString());
+                           assertTrue(pet.at("/pools/companion-stress-slots/max").toString().contains("actor.companionStress.capacity"), pet.toString());
+                           assertTrue(pet.path("rules").toString().contains("downtime.completed"), pet.toString());
         assertTrue(pet.at("/pools").has("companion-armored") && !pet.at("/pools").has("companion-resilient"), pet.toString());
         String loyal = block(result, 1).toString();
         assertTrue(loyal.contains("companion-stress-slots") && loyal.contains("companion-armored"), loyal);

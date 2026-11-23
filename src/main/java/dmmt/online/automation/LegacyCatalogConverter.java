@@ -833,10 +833,7 @@ public final class LegacyCatalogConverter {
 
     private static final String COMPANION_SLOTS = "companion-stress-slots";
 
-    /**
-     * A companion is generic pool state: one pool of unmarked Stress slots (marking spends, an unavailable companion has none
-     * left) plus one counter pool per training option that is a plain flag. Option stats and choices stay sheet data.
-     */
+    /** A companion's unmarked Stress is a projected actor pool; training flags remain separate pools. */
     private static void companion(JsonNode companion, String path, Problems p, ObjectNode pools, List<ObjectNode> lifecycle) {
         if (!companion.isObject()) { p.add(path, "Expected a companion object."); return; }
         p.onlyFields(companion, path, Set.of("evasion", "stress", "maxStress", "damage", "range", "dice", "ranges", "options"));
@@ -845,8 +842,11 @@ public final class LegacyCatalogConverter {
             p.add(path + "/stress", "Expected starting and maximum Stress slots."); return;
         }
         if (pools.has(COMPANION_SLOTS)) { p.add(path, "Only one companion can be declared."); return; }
-        pools.putObject(COMPANION_SLOTS).put("kind", "number").put("scope", "actor").put("label", "Companion Stress slots left")
-                .put("max", max.asInt()).put("initial", slots.asInt());
+        ObjectNode stressPool = pools.putObject(COMPANION_SLOTS).put("kind", "number").put("scope", "actor")
+                .put("label", "Companion Stress slots left").put("initial", slots.asInt());
+        stressPool.putObject("max").putArray("if")
+                .addObject().put("exists", "actor.companionStress.capacity");
+        ((ArrayNode) stressPool.path("max").path("if")).add(read("actor.companionStress.capacity")).add(max.asInt());
         JsonNode options = companion.path("options");
         for (int i = 0; i < options.size(); i++) {
             JsonNode option = options.get(i);
@@ -858,11 +858,26 @@ public final class LegacyCatalogConverter {
             pools.putObject(id).put("kind", "number").put("scope", "actor").put("label", escape(option.path("name").asText(id)))
                     .put("max", option.path("max").asInt());
         }
-        ObjectNode rule = restRule("companion-returns", "rest.long", "rest-long", "rest", "automatic");
-        rule.putObject("when").putArray("eq").add(read("actor.pools." + COMPANION_SLOTS + ".value")).add(0);
-        rule.putArray("do").addObject().put("op", "pool.gain").put("pool", COMPANION_SLOTS).put("amount", 1);
+        ObjectNode rule = restRule("companion-returns", "rest.prepare", "rest", "rest", "automatic");
+        ArrayNode returns = rule.putObject("when").putArray("and");
+        returns.addObject().putArray("eq").add(read("event.rest.kind")).add("long");
+        returns.addObject().put("exists", "actor.companionStress");
+        returns.add(read("actor.companionUnavailable"));
+        ArrayNode returning = rule.putArray("do");
+        returning.addObject().put("op", "flag.set").put("flag", "actor.companionUnavailable").put("value", false);
+        returning.addObject().put("op", "pool.gain").put("pool", COMPANION_SLOTS).put("amount", 1);
         ((ObjectNode) rule.get("ui")).put("label", "Companion returns").put("report", "Your companion returns and clears 1 Stress.");
         lifecycle.add(rule);
+        ObjectNode recovery = restRule("companion-recovers", "downtime.completed", "downtime", "downtime", "automatic");
+        ArrayNode canRecover = recovery.putObject("when").putArray("and");
+        canRecover.addObject().put("exists", "actor.companionStress");
+        canRecover.addObject().putObject("not").set("read", RuleJson.JSON.getNodeFactory().textNode("actor.companionUnavailable"));
+        canRecover.addObject().putArray("gt").add(read("event.move.cleared.stress")).add(0);
+        canRecover.addObject().putArray("gt").add(read("actor.companionStress.marked")).add(0);
+        ObjectNode clear = recovery.putArray("do").addObject().put("op", "pool.gain").put("pool", COMPANION_SLOTS).put("as", "cleared");
+        clear.set("amount", read("event.move.cleared.stress"));
+        ((ObjectNode) recovery.get("ui")).put("label", "Companion recovery").put("report", "Your companion clears {result.cleared} Stress.");
+        lifecycle.add(recovery);
     }
 
     /** {@code requiresCompanion} and the intercept options need an available companion; Armored also needs that training. */
@@ -871,7 +886,11 @@ public final class LegacyCatalogConverter {
         if (legacy.has("requiresCompanion") && !legacy.path("requiresCompanion").isBoolean()) p.add(path + "/requiresCompanion", "Expected a boolean.");
         if (needs) {
             if (!pools.has(COMPANION_SLOTS)) p.add(path, "A companion rule needs a companion declaration.");
-            else when.addObject().putArray("gt").add(read("actor.pools." + COMPANION_SLOTS + ".value")).add(0);
+            else {
+                when.addObject().put("exists", "actor.companionStress");
+                when.addObject().putObject("not").set("read", RuleJson.JSON.getNodeFactory().textNode("actor.companionUnavailable"));
+                when.addObject().putArray("gt").add(read("actor.pools." + COMPANION_SLOTS + ".value")).add(0);
+            }
         }
         if (legacy.path("companionArmored").asBoolean(false)) {
             if (!pools.has("companion-armored")) p.add(path + "/companionArmored", "Armored needs the companion's Armored training option.");

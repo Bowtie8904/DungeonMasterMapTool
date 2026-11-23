@@ -93,7 +93,7 @@ public final class SheetProjection {
 
     public static SheetProjection parse(String json) throws java.io.IOException {
         ObjectNode spec = RuleCompiler.parseDocument(json, FORMAT);
-        RuleJson.fields(spec, "/", "format", "version", "stateField", "sourceField", "instanceField", "nameField", "sources", "actor", "stats");
+        RuleJson.fields(spec, "/", "format", "version", "stateField", "sourceField", "instanceField", "nameField", "sources", "actor", "stats", "poolTracks");
         for (String field : List.of("stateField", "sourceField", "instanceField", "nameField")) path(spec.get(field), "/" + field);
         if (!spec.path("sources").isArray() || spec.path("sources").isEmpty()) throw RuleJson.error("/sources", "Expected source locations.");
         for (int i = 0; i < spec.path("sources").size(); i++) {
@@ -107,6 +107,37 @@ public final class SheetProjection {
         ObjectNode actor = RuleJson.object(spec.get("actor"), "/actor");
         actor.fields().forEachRemaining(field -> validateFact(field.getKey(), field.getValue()));
         if (actor.has("stats")) throw RuleJson.error("/actor/stats", "The stats fact is reserved for derived statistics.");
+        if (spec.has("poolTracks")) {
+            JsonNode mappings = spec.get("poolTracks");
+            if (!mappings.isArray() || mappings.size() > 32)
+                throw RuleJson.error("/poolTracks", "Expected at most 32 pool-to-track mappings.");
+            if (!"engine".equals(actor.path("pools").path("kind").asText())
+                    || !actor.path("pools").path("default").isObject())
+                throw RuleJson.error("/poolTracks", "Mapped pools require an object-valued actor pools fact.");
+            Set<String> pools = new HashSet<>(), tracks = new HashSet<>(), flags = new HashSet<>();
+            for (int i = 0; i < mappings.size(); i++) {
+                JsonNode mapping = mappings.get(i);
+                String at = "/poolTracks/" + i;
+                RuleJson.fields(mapping, at, "pool", "track", "fullFlag");
+                String pool = RuleJson.id(mapping.get("pool"), at + "/pool");
+                String track = RuleJson.id(mapping.get("track"), at + "/track");
+                JsonNode definition = actor.path(track);
+                if (!pools.add(pool) || !tracks.add(track) || !"object".equals(definition.path("kind").asText())
+                        || !definition.path("fields").has("marked") || !definition.path("fields").has("capacity")
+                        || !contains(definition.path("writable"), "marked")
+                        || definition.has("markedFloor") || definition.has("capacityReserve"))
+                    throw RuleJson.error(at, "Each mapping needs a unique, writable plain marked track and pool.");
+                if (mapping.has("fullFlag")) {
+                    String flag = RuleJson.id(mapping.get("fullFlag"), at + "/fullFlag");
+                    JsonNode flagFact = actor.path(flag);
+                    if (!flags.add(flag) || !"value".equals(flagFact.path("kind").asText())
+                            || !"boolean".equals(flagFact.path("type").asText())
+                            || !flagFact.path("writable").asBoolean()
+                            || overlaps(flagFact.path("path").asText(), definition.path("path").asText()))
+                        throw RuleJson.error(at + "/fullFlag", "Expected a unique writable boolean outside the mapped track.");
+                }
+            }
+        }
         actor.fields().forEachRemaining(field -> {
             for (JsonNode sum : field.getValue().path("markedFloor").path("actorSum")) {
                 String name = sum.path("path").asText();
@@ -196,9 +227,15 @@ public final class SheetProjection {
         path(fact.get("path"), at + "/path");
         switch (kind) {
             case "value" -> {
-                RuleJson.fields(fact, at, "kind", "path", "writable", "min", "max", "default");
+                RuleJson.fields(fact, at, "kind", "path", "writable", "min", "max", "default", "type");
                 bounds(fact, at);
                 if (fact.has("default") && !fact.get("default").isValueNode()) throw RuleJson.error(at + "/default", "Expected a plain default value.");
+                if (fact.has("type") && !"boolean".equals(fact.path("type").asText()))
+                    throw RuleJson.error(at + "/type", "The only explicit value type is boolean.");
+                if ("boolean".equals(fact.path("type").asText())) {
+                    if (fact.has("min") || fact.has("max")) throw RuleJson.error(at, "Boolean facts cannot have numeric bounds.");
+                    if (fact.has("default")) RuleExpression.bool(fact.get("default"), at + "/default");
+                }
             }
             case "object" -> {
                 RuleJson.fields(fact, at, "kind", "path", "fields", "writable", "atLeast", "max", "markedFloor", "capacityReserve");
@@ -360,6 +397,8 @@ public final class SheetProjection {
             JsonNode value = get(sheet, fact.path("path").asText());
             switch (fact.path("kind").asText()) {
                 case "value" -> {
+                    if ("boolean".equals(fact.path("type").asText()) && !value.isMissingNode() && !value.isNull())
+                        RuleExpression.bool(value, "/actor/" + entry.getKey());
                     if (value.isNumber() || value.isTextual() || value.isBoolean()) actor.set(entry.getKey(), value.deepCopy());
                     else if (fact.has("default")) actor.set(entry.getKey(), fact.get("default").deepCopy());
                 }
@@ -412,6 +451,15 @@ public final class SheetProjection {
             if (fact.has("markedFloor") && actor.path(entry.getKey()).isObject())
                 projectMarkedFloor(sheet, fact.get("markedFloor"), (ObjectNode) actor.get(entry.getKey()), "/actor/" + entry.getKey());
         });
+        for (JsonNode mapping : spec.path("poolTracks")) {
+            JsonNode track = actor.path(mapping.path("track").asText());
+            if (track.isMissingNode() || track.isNull()) continue;
+            String at = "/actor/" + mapping.path("track").asText();
+            int capacity = RuleJson.integer(track.get("capacity"), at + "/capacity", 0, 1_000_000);
+            int marked = RuleJson.integer(track.get("marked"), at + "/marked", 0, capacity);
+            ObjectNode pools = RuleJson.object(actor.get("pools"), "/actor/pools");
+            pools.putObject(mapping.path("pool").asText()).put("max", capacity).put("value", capacity - marked);
+        }
         return actor;
     }
 
@@ -480,13 +528,30 @@ public final class SheetProjection {
             String key = entry.getKey();
             JsonNode fact = entry.getValue();
             JsonNode next = after.path(key);
-            if (next.equals(before.path(key))) return;
+            boolean syncMappedPool = false;
+            if ("pools".equals(key) && "engine".equals(fact.path("kind").asText())) {
+                JsonNode stored = get(sheet, fact.path("path").asText());
+                for (JsonNode mapping : spec.path("poolTracks")) {
+                    String pool = mapping.path("pool").asText();
+                    if (after.path(mapping.path("track").asText()).isObject()
+                            && !stored.path(pool).equals(next.path(pool))) {
+                        syncMappedPool = true;
+                        break;
+                    }
+                }
+            }
+            if (next.equals(before.path(key)) && !syncMappedPool) return;
             String at = "/actor/" + key;
             switch (fact.path("kind").asText()) {
                 case "value" -> {
                     if (!fact.path("writable").asBoolean()) throw RuleJson.error(at, "This actor fact is read-only.");
-                    set(sheet, fact.path("path").asText(), RuleExpression.numeric(RuleJson.integer(next, at,
-                            fact.path("min").asInt(0), fact.path("max").asInt(1_000_000)), at));
+                    if ("boolean".equals(fact.path("type").asText())) {
+                        set(sheet, fact.path("path").asText(),
+                                RuleJson.JSON.getNodeFactory().booleanNode(RuleExpression.bool(next, at)));
+                    } else {
+                        set(sheet, fact.path("path").asText(), RuleExpression.numeric(RuleJson.integer(next, at,
+                                fact.path("min").asInt(0), fact.path("max").asInt(1_000_000)), at));
+                    }
                 }
                 case "object" -> {
                     ObjectNode target = RuleJson.object(get(sheet, fact.path("path").asText()), at);
@@ -512,6 +577,26 @@ public final class SheetProjection {
                 default -> throw RuleJson.error(at, "This actor fact is read-only.");
             }
         });
+        for (JsonNode mapping : spec.path("poolTracks")) {
+            String pool = mapping.path("pool").asText(), trackName = mapping.path("track").asText();
+            JsonNode previous = before.path("pools").path(pool), next = after.path("pools").path(pool);
+            if (previous.equals(next)) continue;
+            JsonNode track = after.path(trackName);
+            if (!track.isObject()) throw RuleJson.error("/actor/" + trackName, "The mapped track is unavailable.");
+            int capacity = RuleJson.integer(track.get("capacity"), "/actor/" + trackName + "/capacity", 0, 1_000_000);
+            int value = RuleJson.integer(next.get("value"), "/actor/pools/" + pool + "/value", 0, capacity);
+            if (RuleJson.integer(next.get("max"), "/actor/pools/" + pool + "/max", 0, 1_000_000) != capacity)
+                throw RuleJson.error("/actor/pools/" + pool, "The pool capacity must match its mapped track.");
+            if (!before.path(trackName).equals(track) && value != capacity - track.path("marked").asInt())
+                throw RuleJson.error("/actor/" + trackName, "A mapped track and pool cannot be changed inconsistently.");
+            JsonNode definition = spec.path("actor").path(trackName);
+            set(sheet, definition.path("path").asText() + "." + definition.path("fields").path("marked").asText(),
+                    RuleJson.JSON.getNodeFactory().numberNode(capacity - value));
+            if (mapping.has("fullFlag") && value == 0 && previous.path("value").asInt() > 0) {
+                JsonNode flag = spec.path("actor").path(mapping.path("fullFlag").asText());
+                set(sheet, flag.path("path").asText(), RuleJson.JSON.getNodeFactory().booleanNode(true));
+            }
+        }
     }
 
     private void validateCapacityReserves(ObjectNode sheet, ObjectNode before, ObjectNode after) {

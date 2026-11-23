@@ -17,7 +17,7 @@ public final class RuleCompiler {
     public static final int FORMAT_VERSION = 2;
     private static final Set<String> EVENTS = Set.of("action.request", "roll.prepare", "roll.finished",
             "damage.prepare", "damage.marks", "damage.applied", "claim.accept", "rest.prepare", "rest.short", "rest.long", "scene.end", "session.start",
-            "downtime.move", "death.options", "track.changed", "pool.changed", "equipment.changed", "effect.started",
+            "downtime.move", "downtime.completed", "death.options", "track.changed", "pool.changed", "equipment.changed", "effect.started",
             "effect.ended", "creation.apply");
     static final Set<String> SURFACES = Set.of("sheet", "chat", "roll", "damage", "effect", "resource", "rest",
             "death", "downtime", "creation", "companion");
@@ -46,6 +46,7 @@ public final class RuleCompiler {
             Map.entry("inventory.grant", List.of("catalog", "entry", "quantity", "label", "to", "tag", "max", "scope")),
             Map.entry("state.set", List.of("slot", "value")),
             Map.entry("state.increment", List.of("slot", "by")),
+            Map.entry("flag.set", List.of("flag", "value")),
             Map.entry("value", List.of("value")),
             Map.entry("roll.resolve", List.of("plan", "metadata")),
             Map.entry("roll.capture", List.of("from")),
@@ -1282,6 +1283,7 @@ public final class RuleCompiler {
             String target = Set.of("resource.spend", "resource.gain").contains(kind)
                     ? operation.path("pool").asText()
                     : Set.of("track.mark", "track.clear", "track.capacity").contains(kind) ? operation.path("track").asText()
+                    : "flag.set".equals(kind) ? operation.path("flag").asText()
                     : (kind.startsWith("effect.") || kind.startsWith("collection."))
                     && "recipient".equals(operation.path("target").asText()) ? "recipient." : "";
             if (target.startsWith("recipient.") || "recipient".equals(operation.path("owner").asText())
@@ -1595,6 +1597,10 @@ public final class RuleCompiler {
                     if (!requiredKind.equals(pools.path(pool).path("kind").asText()))
                         throw RuleJson.error(path + "/pool", "Operation requires a " + requiredKind + " pool.");
                 }
+            } else if ("flag".equals(field)) {
+                String target = RuleJson.text(value, path + "/flag");
+                if (!target.matches("(actor|recipient)\\.[a-zA-Z][a-zA-Z0-9_-]*"))
+                    throw RuleJson.error(path + "/flag", "Expected an actor or recipient boolean fact.");
             } else if (Set.of("pool", "track").contains(field)) {
                 String target = RuleJson.text(value, path + "/" + field);
                 if (("resource.spend".equals(op) || "resource.gain".equals(op)) && "pool".equals(field)

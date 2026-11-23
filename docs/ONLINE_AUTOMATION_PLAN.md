@@ -139,13 +139,15 @@ supported commands, reports and retry receipt. The browser flushes pending edits
 and completion controls. Authored targeted ally moves and party recovery commit recipient sheets, reactions and
 reports with the rest. A two-phase signed choice flow presents completion benefits after the actual move outcomes
 and again after pre-reset benefits and the reset; the private staged rest is committed only after both phases.
-Bundled ally healing and armor-repair moves now target an active character's saved sheet rather than reporting manual recovery; negative recovery is clamped to zero.
 Pending choices live in the running host and expire on restart or cache eviction; committed retries use the saved journal.
 `POST .../rest/choices` first accepts `{request}` with no completion selections, then
 `{requestId, choiceVersion, selections}` for before-reset choices. `POST .../rest/complete` accepts
 `{choiceVersion, request}` with both phases' selections in order. Each response supplies the next signed
 choice version and host-derived descriptors; exact retries reuse the staged outcomes.
 Automatic preparation rolls are rejected during preview until interactive post-roll choices exist.
+Converted companions use their current sheet Stress track as the source of their unmarked-slot pool. They return
+before long-rest moves and clear the owner's net Stress recovered by each completed move; unavailable companions
+do not recover during short rests. `CompanionRestRecoveryTest` and the live HTTP fixture cover this ordering.
 Single-action, claim and rest `inventory.grant` commands settle catalog-linked item/consumable stacks and actor or party caps atomically; self and targeted rest grants follow earlier track reactions and are visible to later moves and completion phases. Later inventory-dependent reads or track reactions in the granting action, deferred benefits after a targeted grant, and grants that require dynamic effect/pool projection are rejected until ordered settlement is available.
 
 The live host rejects legacy client-supplied rests and downtime rerolls when any category declares format 2,
@@ -183,13 +185,12 @@ and short-rest long-move allowances. It returns dice, reports and commands witho
 `downtime.move` button must declare `restMove.ally: true` and select exactly one other character. The host resolves
 the versioned roster offer before adjustments so their conditions can read that recipient, rechecks eligibility
 after adjustments, and applies source costs once against the chosen recipient's current protected tracks.
-The bundled Tend and Repair ally variants instead preserve the legacy report-only boundary. Short moves report
-the rolled face plus tier and ally-specific bonus without clamping against the source sheet; long moves report
-the choice. A shared fixture checks these outcomes and unchanged source tracks in both engines.
+The bundled Tend and Repair ally variants target an active character's saved sheet. They report the actual recovery
+after the recipient's healing floor and clamp negative short-rest recovery to zero.
 Deferred bodies see a freshly reprojected recipient, including derived statistics; only after they succeed is the recipient update staged. Commands
 needing interstage settlement are rejected. The caller must apply that update to a private sheet and construct
 a fresh request-local roster before a later target move; reusing a roster with an unapplied update is rejected.
-Post-outcome choices and complete multi-character rest transactions remain release gaps.
+The live transaction commits these recipient updates together with post-outcome choices.
 An automatic or option `downtime.move` rule may declare `after: {costs?, do?, report?}`. Its pre-move
 operations set the move plan; after the button resolves, the host executes deferred bodies of rules that actually
 ran, in their original order. Deferred costs are checked initially and paid against the post-move sheet. Results
@@ -295,7 +296,7 @@ additional command settlement remains unfinished.
 The shared Daggerheart ruleset now supplies self-targeted short recovery (1d4 plus tier and move bonus), the two
 mutually exclusive preparation variants, long recovery and work on a project. Reports use the amount actually
 cleared or gained, including permanent and locked HP and capped Hope; a short rest needs a granted allowance for
-a long move. Narrative ally variants are available as reports; rerolls and companion recovery remain unfinished.
+a long move. The ally variants update the selected recipient; rest rerolls remain unfinished.
 The sheet projection supplies permanent and temporary marked-HP floors to generic track clearing. The
 engine recomputes locks held in its effect list as operations run, so ending a lock before healing in the same
 action allows the newly recoverable HP to clear. Recipient healing uses the recipient's floor, and capacity
@@ -489,7 +490,7 @@ the current source, recipient and claim revisions plus action descriptors. POST 
 The compiler links each `claim.offer` to a matching `claim.accept` chat binding in the same expanded source;
 a roll-result claim with the same group is not an acceptance handler.
 
-- **Sheet projection.** `SheetProjection` interprets the app-owned `src/main/resources/dmmt/online/automation/daggerheart-projection.json` (`format: dmmap-sheet-projection`, `version: 2`). It declares which sheet lists are active sources (`features`, `heritage`, `loadout`, `inventory` with quantity `qty`, `activeWeapons`, `activeArmor`; the vault is inactive), the instance/source fields (`instanceId`, `automationSource`), and every actor fact: plain `value`s with bounds and writability, `object` tracks (`hp`/`stress`/`armorTrack` map `marked`/`capacity` to `on`/`slots`; `hope` exposes writable `value` and `max`, plus a read-only base `total` linked to the `scars` reserve), read-only `map`s (`traits`), `collection`s with stable item IDs and defaults (`inventory`, `features`) and `engine` facts persisted under `automationState` (`pools`, `effects`, `conditions`, `companions`). Writes change only declared, writable, in-bounds facts that actually differ; anything else is rejected. Sheet mapping is therefore JSON, not code.
+- **Sheet projection.** `SheetProjection` interprets the app-owned `src/main/resources/dmmt/online/automation/daggerheart-projection.json` (`format: dmmap-sheet-projection`, `version: 2`). It declares active source lists and bounded writable actor facts. `poolTracks` maps an actor numeric pool to the unmarked slots of a writable plain track; an optional writable boolean `fullFlag` becomes true when the pool is exhausted and stays set until a `flag.set` rule clears it. The sheet track is authoritative, including its current capacity. `downtime.completed` automatic rules receive `event.move.start` and nonnegative net `event.move.cleared` values for the ruleset's numeric `startFacts`, after the selected move and deferred benefits. Tests: `ProjectedPoolTrackTest` and `CompanionRestRecoveryTest`.
 - **State.** `automationState` holds the actor `revision`, per-source-instance `state`, `usage` and `sourcePools`, and a 32-entry request journal. Duplicate source instance IDs are rejected. A consumed source whose quantity reaches 0 is removed from its list.
 - **`AutomationHost`.** Compiles every present catalog and the effective shared rules into a pack keyed by their combined content revision (failures are cached per revision too); any format-1 catalog or missing required rules makes the pack unavailable. `describe` returns `{revision, actions[]}` filtered by audience; `execute` validates `{requestId, expectedRevision, selections[{sourceInstanceId, ruleId, bindingId, eachId?, inputs?}]}`, replays a journaled `requestId`, rejects stale revisions, runs automatic reactions before selections, writes through the projection and returns reports, rolls and an `outbox` of host requests. `resetLimits` applies lifecycle resets.
 - **Endpoints.** `GET /api/automation/{version}/{actorId}?surface=&event=` and `POST /api/automation/{version}/{actorId}` with `{request}`. Event facts are host-generated. The actor's owner has relation `self`, other session players have `other`, and a scoped DM sheet grant has `dm`. Audience checks and owner-specific receipts still apply. Errors: 409 for a compatibility mismatch, unavailable automation or a stale/spent request, 403 for an audience violation, and 400 for invalid input. A successful change bumps `featureRevision`, commits the staged sheets and supported host commands, pushes feature state and publishes action reports.

@@ -885,6 +885,7 @@ public final class RuleRuntime {
                 || ("recipient".equals(op.path("owner").asText())
                 && (kind.startsWith("pool.") || "roll.addPoolDie".equals(kind)))
                 || (kind.startsWith("resource.") && op.path("pool").asText().startsWith("recipient."))
+                || ("flag.set".equals(kind) && op.path("flag").asText().startsWith("recipient."))
                 || (kind.startsWith("track.") && (op.path("track").asText().startsWith("recipient.")
                 || op.path("counter").asText().startsWith("recipient.")))))
             observer.mutated(context, kind, null, "recipient");
@@ -892,6 +893,15 @@ public final class RuleRuntime {
                 ? ((ObjectNode) context.path("actor")).deepCopy() : null;
         JsonNode result;
         switch (kind) {
+            case "flag.set" -> {
+                String path = op.path("flag").asText();
+                String[] parts = path.split("\\.");
+                ObjectNode holder = RuleJson.object(context.get(parts[0]), "/" + parts[0]);
+                RuleExpression.bool(holder.get(parts[1]), "/" + path);
+                boolean value = RuleExpression.bool(eval(op.path("value"), context), "/value");
+                holder.put(parts[1], value);
+                result = RuleJson.JSON.getNodeFactory().booleanNode(value);
+            }
             case "pool.spend", "pool.gain" -> {
                 String id = op.path("pool").asText();
                 ObjectNode state = poolState(program, context, id, op.has("owner") ? op.path("owner").asText() : null);
@@ -1450,13 +1460,14 @@ public final class RuleRuntime {
             default -> throw RuleJson.error("/op", "Unsupported operation: " + kind);
         }
         if (op.has("as")) ((ObjectNode) context.get("result")).set(op.path("as").asText(), result.deepCopy());
-        if (observer != null && (kind.startsWith("state.") || kind.startsWith("pool.")
+        if (observer != null && (kind.startsWith("state.") || kind.startsWith("pool.") || "flag.set".equals(kind)
                 || kind.startsWith("effect.") || kind.startsWith("collection.")
                 || "inventory.consume".equals(kind) || "roll.addPoolDie".equals(kind)
                 || "limits.refresh".equals(kind) || "limit.restore".equals(kind)
                 || "inventory.grant".equals(kind) || "damage.deal".equals(kind))) {
             String target = kind.startsWith("pool.") || "roll.addPoolDie".equals(kind)
-                    ? op.path("owner").asText(null) : op.path("target").asText(null);
+                    ? op.path("owner").asText(null)
+                    : "flag.set".equals(kind) ? op.path("flag").asText().split("\\.")[0] : op.path("target").asText(null);
             observer.mutated(context, kind, previousActor, target);
         }
     }
