@@ -1536,6 +1536,96 @@ class AutomationHostTest {
     }
 
     @Test
+    void restExpiryPreservesEffectsStartedDuringDowntimeAndTheirSharedPools() throws Exception {
+        ObjectNode catalog = fixture("rewrite/host-classes");
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        automation.putObject("effects").putObject("stance").put("label", "Stance").put("stacking", "stack")
+                .putArray("until").add("rest.short").add("rest.long");
+        automation.putObject("pools").putObject("charge").put("kind", "number").put("scope", "actor")
+                .put("whileEffect", "stance").put("max", 4);
+        automation.withArray("rules").add(RuleJson.parse("""
+                {"id":"start","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                 "do":[{"op":"effect.start","effect":"stance","target":"actor"}],"ui":{"label":"Start stance"}}"""));
+        var pack = AutomationHost.compile("test", Map.of("classes", catalog.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet();
+        ObjectNode state = HOST.projection().state(sheet);
+        state.putObject("pools").putObject("charge").put("value", 3).put("max", 4);
+        state.putArray("effects").addObject().put("id", "old").put("effect", "classes:tester:features:steady#stance")
+                .put("sourceInstanceId", "f-steady").put("sourceActorId", "ada").putArray("until").add("rest.short");
+        var initial = HOST.restEffectSnapshot(sheet);
+        assertEquals(java.util.Set.of("old"), initial);
+        HOST.execute(pack, sheet, AutomationHost.event("action.request", "ada", 0),
+                request("start", 0, "f-steady", "start"), "self", StructuredRollTest.noRandom());
+        String created = sheet.at("/automationState/effects/1/id").asText();
+        assertFalse(initial.contains(created));
+
+        assertTrue(HOST.resetRest(pack, sheet, AutomationHost.event("rest.short", "ada", 0), initial));
+        assertEquals(1, sheet.at("/automationState/effects").size());
+        assertEquals(created, sheet.at("/automationState/effects/0/id").asText());
+        assertEquals(3, sheet.at("/automationState/pools/charge/value").asInt());
+        assertTrue(HOST.resetLimits(pack, sheet, AutomationHost.event("rest.short", "ada", 0)));
+        assertTrue(sheet.at("/automationState/effects").isEmpty());
+        assertEquals(0, sheet.at("/automationState/pools/charge/value").asInt());
+    }
+
+    @Test
+    void restEffectSnapshotAndExpiryRejectInvalidStateAtomically() throws Exception {
+        var pack = pack();
+        ObjectNode sheet = sheet();
+        ObjectNode state = HOST.projection().state(sheet);
+        state.putArray("effects").addObject().put("id", "same").putArray("until").add("rest.short");
+        var initial = HOST.restEffectSnapshot(sheet);
+        state.withArray("effects").addObject().put("id", "same").putArray("until").add("rest.short");
+        ObjectNode before = sheet.deepCopy();
+        assertThrows(IllegalArgumentException.class, () -> HOST.restEffectSnapshot(sheet));
+        assertThrows(IllegalArgumentException.class, () -> HOST.resetRest(pack, sheet,
+                AutomationHost.event("rest.short", "ada", 0), initial));
+        assertEquals(before, sheet);
+        assertThrows(IllegalArgumentException.class, () -> HOST.resetRest(pack, sheet,
+                AutomationHost.event("scene.end", "ada", 0), initial));
+        assertEquals(before, sheet);
+    }
+
+    @Test
+    void restExpiryKeepsAReplacementAndRejectsAnUnresolvedOldEffect() throws Exception {
+        ObjectNode catalog = fixture("rewrite/host-classes");
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        automation.putObject("effects").putObject("stance").put("label", "Stance").put("stacking", "replace")
+                .putArray("until").add("rest.long");
+        automation.putObject("pools").putObject("charge").put("kind", "number").put("scope", "actor")
+                .put("whileEffect", "stance").put("max", 4);
+        automation.withArray("rules").add(RuleJson.parse("""
+                {"id":"start","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                 "do":[{"op":"effect.start","effect":"stance","target":"actor"}],"ui":{"label":"Start stance"}}"""));
+        var pack = AutomationHost.compile("test", Map.of("classes", catalog.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet();
+        ObjectNode state = HOST.projection().state(sheet);
+        state.putObject("pools").putObject("charge").put("value", 3).put("max", 4);
+        state.putArray("effects").addObject().put("id", "old").put("effect", "classes:tester:features:steady#stance")
+                .put("sourceInstanceId", "f-steady").put("sourceActorId", "ada").putArray("until").add("rest.long");
+        var initial = HOST.restEffectSnapshot(sheet);
+        HOST.execute(pack, sheet, AutomationHost.event("action.request", "ada", 0),
+                request("replace", 0, "f-steady", "start"), "self", StructuredRollTest.noRandom());
+        String replacement = sheet.at("/automationState/effects/0/id").asText();
+        assertNotEquals("old", replacement);
+        HOST.resetRest(pack, sheet, AutomationHost.event("rest.long", "ada", 0), initial);
+        assertEquals(replacement, sheet.at("/automationState/effects/0/id").asText());
+        assertEquals(3, sheet.at("/automationState/pools/charge/value").asInt());
+
+        ObjectNode unknown = sheet();
+        ObjectNode unknownState = HOST.projection().state(unknown);
+        unknownState.putObject("pools").putObject("charge").put("value", 2).put("max", 4);
+        unknownState.putArray("effects").addObject().put("id", "unknown").put("effect", "missing#stance")
+                .put("sourceInstanceId", "source").putArray("until").add("rest.long");
+        var unknownSnapshot = HOST.restEffectSnapshot(unknown);
+        ObjectNode before = unknown.deepCopy();
+        var failure = assertThrows(IllegalArgumentException.class,
+                () -> HOST.resetRest(pack, unknown, AutomationHost.event("rest.long", "ada", 0), unknownSnapshot));
+        assertTrue(failure.getMessage().contains("missing#stance"), failure.getMessage());
+        assertEquals(before, unknown);
+    }
+
+    @Test
     void lifecycleResetsUseTheFullHostEventAndLeaveFailedSheetsUnchanged() throws Exception {
         ObjectNode catalog = fixture("rewrite/host-classes");
         ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");

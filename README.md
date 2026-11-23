@@ -44,6 +44,8 @@ including effects from a different source or a source no longer on the sheet. En
 supporting effect and timed expiry clear the pool in the same transaction. An unresolved automation effect or
 malformed affected pool rejects a potentially unsafe change instead of losing resources. Recomputing derived
 effects and other sources' or recipients' conditional endings remains unfinished.
+The staged rest-reset primitive can preserve effects started or replaced during downtime, but it is not yet
+connected to the live rest workflow.
 New automation effects record their source character as well as their source instance, so another character
 using the same instance ID cannot take over local effect actions or profiles. Starting a single-holder effect
 now removes that source's copies from other saved characters, including offline or disabled ones, in the same

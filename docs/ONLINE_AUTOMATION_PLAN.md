@@ -111,6 +111,10 @@ The converted path also covers engine-owned effect protection, version conflicts
 choices and transaction replay. Recipient long-rest expiry is exercised in isolation; a live format-2 rest
 transaction remains a release gap.
 
+The staged rest-reset primitive snapshots the original stored effect IDs and expires only those IDs, preserving
+effects started or replaced during the same downtime and reconciling surviving effect-bound pools. It is not yet
+connected to the live rest workflow.
+
 Ordinary and targeted sheet requests accept only `sheet` bindings, even when another surface uses the same event.
 Roll options and saved-result actions use their own validated surfaces. The planned authoritative rest flow has not
 yet been connected to the separate downtime descriptors; a sheet request is not a rest or downtime transaction.

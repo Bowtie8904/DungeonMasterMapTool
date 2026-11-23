@@ -821,9 +821,29 @@ public final class AutomationHost {
 
     /** Applies limit and pool resets for a lifecycle event. Returns whether anything changed. */
     public boolean resetLimits(Pack pack, ObjectNode sheet, ObjectNode event) {
+        return resetLimits(pack, sheet, event, null, false);
+    }
+
+    /** Captures the stored effects present before any downtime move is executed. */
+    Set<String> restEffectSnapshot(ObjectNode sheet) {
+        Set<String> ids = new java.util.HashSet<>();
+        for (JsonNode effect : RuleEffects.instances(projection.actorFact(sheet, "effects"), "/actor/effects"))
+            ids.add(effect.path("id").asText());
+        return Set.copyOf(ids);
+    }
+
+    /** Resets a rest without expiring effects created after its validated initial snapshot. */
+    boolean resetRest(Pack pack, ObjectNode sheet, ObjectNode event, Set<String> initialEffectIds) {
+        if (initialEffectIds == null) throw RuleJson.error("/effects", "The initial rest effect snapshot is required.");
+        return resetLimits(pack, sheet, event, Set.copyOf(initialEffectIds), true);
+    }
+
+    private boolean resetLimits(Pack pack, ObjectNode sheet, ObjectNode event, Set<String> eligibleEffectIds, boolean restOnly) {
         String type = RuleJson.text(RuleJson.object(event, "/event").get("type"), "/event/type");
         if (!Set.of("rest.short", "rest.long", "scene.end", "session.start").contains(type))
             throw RuleJson.error("/event/type", "Unknown limit-reset event.");
+        if (restOnly && !Set.of("rest.short", "rest.long").contains(type))
+            throw RuleJson.error("/event/type", "A rest effect snapshot requires a short or long rest.");
         ObjectNode working = sheet.deepCopy();
         ObjectNode state = projection.state(working);
         ObjectNode actor = actor(pack, working, state, event);
@@ -840,7 +860,7 @@ public final class AutomationHost {
             }
         }
         if (actor.path("effects").isArray()) {
-            ArrayNode kept = RuleEffects.expire(actor.path("effects"), type);
+            ArrayNode kept = RuleEffects.expire(actor.path("effects"), type, eligibleEffectIds);
             if (kept.size() != actor.path("effects").size()) {
                 ObjectNode beforeExpiry = actor.deepCopy();
                 actor.set("effects", kept);

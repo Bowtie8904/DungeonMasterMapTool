@@ -82,11 +82,16 @@ public final class RuleEffects {
 
     /** Returns the effects that survive {@code event}; manual effects (no {@code until}) always survive. */
     public static ArrayNode expire(JsonNode effects, String event) {
+        return expire(effects, event, null);
+    }
+
+    static ArrayNode expire(JsonNode effects, String event, Set<String> eligibleIds) {
         if (!RuleCompiler.RESET_EVENTS.contains(event)) throw RuleJson.error("/event", "Unknown expiry event.");
         ArrayNode kept = RuleJson.JSON.createArrayNode();
         for (JsonNode effect : instances(effects, "/effects")) {
             boolean ends = false;
-            for (JsonNode until : effect.path("until")) ends |= event.equals(until.asText());
+            if (eligibleIds == null || eligibleIds.contains(effect.path("id").asText()))
+                for (JsonNode until : effect.path("until")) ends |= event.equals(until.asText());
             if (!ends) kept.add(effect.deepCopy());
         }
         return kept;
