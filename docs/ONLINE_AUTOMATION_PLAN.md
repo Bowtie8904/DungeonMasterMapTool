@@ -201,7 +201,9 @@ completion on private source and recipient sheets. Recipient offers retain their
 moves reproject earlier staged changes; every changed sheet advances once, and failure discards the sequence.
 Recipient sheets are loaded only when selected or needed for eligibility. It accepts ordered Fear changes,
 countdowns and already-applied limit refresh commands; a self-only rest can also emit single-holder cleanup.
-Other commands that could change facts read by later stages are rejected. It is not a live
+Other commands that could change facts read by later stages are rejected. The result separately identifies every
+recipient sheet read and its original host version, including unchanged sheets used by eligibility predicates;
+the eventual caller must compare their original stored bytes atomically with the changed sheets. It is not a live
 workflow: authenticated offers, post-roll choices, command settlement, persisted reports, retries and the atomic
 campaign commit remain necessary.
 The shared Daggerheart ruleset now supplies self-targeted short recovery (1d4 plus tier and move bonus), the two

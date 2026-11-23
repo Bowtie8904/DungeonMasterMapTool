@@ -63,8 +63,9 @@ advances rest counters; failures roll back that stage. The final multi-character
 workflow are still required.
 An internal coordinator composes these stages on private source and recipient sheets, reprojects each recipient
 after earlier moves, carries Fear through the rest, and advances each changed sheet once. Other commands needing
-intervening host settlement are rejected rather than evaluated against stale facts; offer authentication, persistence, retry receipts and
-interactive choices are not yet connected.
+intervening host settlement are rejected rather than evaluated against stale facts. The staged result identifies
+all recipient sheets read, including unchanged eligibility dependencies, for a future atomic commit; offer
+authentication, persistence, retry receipts and interactive choices are not yet connected.
 Until that workflow is connected, format-2 catalogs reject legacy client-supplied rests and downtime rerolls.
 Owner and DM sheet saves cannot change host-owned rest counters, and legacy damage snapshots retain those counters
 and the host's automation state. An unreadable or unrecognized catalog cannot silently enable legacy rest;

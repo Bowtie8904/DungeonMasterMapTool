@@ -823,10 +823,11 @@ public final class AutomationHost {
         }
     }
 
-    record RestTransaction(ObjectNode response, Map<String, ObjectNode> recipients) {
+    record RestTransaction(ObjectNode response, Map<String, ObjectNode> recipients, Map<String, String> readVersions) {
         RestTransaction {
             response = response.deepCopy();
             recipients = copySheets(recipients);
+            readVersions = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(readVersions));
         }
         @Override public ObjectNode response() { return response.deepCopy(); }
         @Override public Map<String, ObjectNode> recipients() { return copySheets(recipients); }
@@ -847,8 +848,8 @@ public final class AutomationHost {
     }
 
     /**
-     * Stages a rest and its recipient sheets on private copies. The roster supplies original host versions and must
-     * retain every read sheet for the caller's eventual atomic comparison and commit.
+     * Stages a rest and its recipient sheets on private copies. The roster supplies original host versions; the
+     * returned read versions identify every recipient sheet the caller must compare during the eventual commit.
      */
     RestTransaction stageRest(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request,
                               RandomGenerator random, RestRoster roster) {
@@ -923,7 +924,8 @@ public final class AutomationHost {
         projection.state(working).put("revision", revision + 1);
         RuleJson.checkTree(response, "/response", 0, new int[]{0});
         Map<String, ObjectNode> changed = recipients == null ? Map.of() : recipients.changed();
-        RestTransaction transaction = new RestTransaction(response, changed);
+        Map<String, String> readVersions = recipients == null ? Map.of() : recipients.readVersions();
+        RestTransaction transaction = new RestTransaction(response, changed, readVersions);
         replace(sheet, working);
         return transaction;
     }
@@ -1035,6 +1037,14 @@ public final class AutomationHost {
                 projection.state(sheet).put("revision", participant.member.revision() + 1);
                 result.put(id, sheet);
             }
+            return result;
+        }
+
+        private Map<String, String> readVersions() {
+            Map<String, String> result = new LinkedHashMap<>();
+            participants.forEach((id, participant) -> {
+                if (participant.sheet != null) result.put(id, participant.member.sheetVersion());
+            });
             return result;
         }
     }

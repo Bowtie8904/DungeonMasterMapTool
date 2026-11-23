@@ -402,6 +402,9 @@ class RestTargetTest {
         assertEquals(8, HOST.revision(staged), "Two changes still produce one published revision.");
         staged.withObject("/hp").put("on", 0);
         assertEquals(4, result.recipients().get("mira").at("/hp/on").asInt());
+        assertEquals(Map.of("mira", originalRecipient.toString(), "healthy", setup.healthy().toString()),
+                result.readVersions(), "An unchanged character used by target eligibility is a read dependency.");
+        assertThrows(UnsupportedOperationException.class, () -> result.readVersions().put("other", "version"));
     }
 
     @Test
@@ -509,10 +512,11 @@ class RestTargetTest {
         ObjectNode request = transaction(setup);
         transactionMove(request, "heal", targetRequest(setup, offers, "heal"));
         Map<String, AtomicInteger> loads = new java.util.HashMap<>();
-        stage(setup, request, roster(setup, loads), 4);
+        var result = stage(setup, request, roster(setup, loads), 4);
         assertEquals(1, loads.get("mira").get());
         assertFalse(loads.containsKey("ada"));
         assertFalse(loads.containsKey("healthy"));
+        assertEquals(Map.of("mira", setup.recipient().toString()), result.readVersions());
 
         Setup stale = setup(ruleset, 4);
         PartyTargets staleOffers = party(stale, stale.recipient(), new AtomicReference<>());
