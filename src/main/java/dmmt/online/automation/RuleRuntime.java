@@ -779,7 +779,9 @@ public final class RuleRuntime {
                     if (amount > cap - current) throw new Unavailable("cost", "Not enough free slots in " + path + ".");
                     applied = amount; value = current + amount;
                 } else if ("track.clear".equals(kind)) {
-                    applied = Math.min(amount, current); value = current - applied;
+                    ObjectNode owner = RuleJson.object(context.path(path.substring(0, path.indexOf('.'))), "/" + path);
+                    int floor = SheetProjection.markedFloor(owner, track, (int) cap, "/" + path);
+                    applied = Math.min(amount, Math.max(0, current - floor)); value = current - applied;
                 } else {
                     applied = uncapped ? amount : Math.min(amount, cap - current); value = current + applied;
                 }
@@ -1122,6 +1124,9 @@ public final class RuleRuntime {
                 String filled = track.has("marked") ? "marked" : "value";
                 int current = RuleJson.integer(track.get(capacity), "/" + path + "/" + capacity, 0, 1000);
                 int next = Math.max(0, Math.min(1000, current + whole(op.path("by"), context, -1000, 1000)));
+                if (track.has("minimumCapacity") && next < RuleJson.integer(track.get("minimumCapacity"),
+                        "/" + path + "/minimumCapacity", 0, 1000))
+                    throw new Unavailable("capacity", "Track capacity cannot be reduced below its permanent marks.");
                 track.put(capacity, next);
                 if (track.has(filled) && track.path(filled).asInt() > next) track.put(filled, next);
                 result = RuleExpression.numeric(next - current, "/result");

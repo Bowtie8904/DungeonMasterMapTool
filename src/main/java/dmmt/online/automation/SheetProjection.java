@@ -72,6 +72,14 @@ public final class SheetProjection {
         ObjectNode actor = RuleJson.object(spec.get("actor"), "/actor");
         actor.fields().forEachRemaining(field -> validateFact(field.getKey(), field.getValue()));
         if (actor.has("stats")) throw RuleJson.error("/actor/stats", "The stats fact is reserved for derived statistics.");
+        actor.fields().forEachRemaining(field -> {
+            for (JsonNode sum : field.getValue().path("markedFloor").path("actorSum")) {
+                String name = sum.path("path").asText();
+                if (!Set.of("collection", "engine").contains(actor.path(name).path("kind").asText()))
+                    throw RuleJson.error("/actor/" + field.getKey() + "/markedFloor/actorSum",
+                            "A live lock collection must name a projected collection or engine fact.");
+            }
+        });
         if (spec.has("stats")) {
             JsonNode stats = spec.get("stats");
             if (!stats.isArray() || stats.size() > 64) throw RuleJson.error("/stats", "Expected up to 64 derived statistics.");
@@ -138,7 +146,7 @@ public final class SheetProjection {
                 if (fact.has("default") && !fact.get("default").isValueNode()) throw RuleJson.error(at + "/default", "Expected a plain default value.");
             }
             case "object" -> {
-                RuleJson.fields(fact, at, "kind", "path", "fields", "writable", "atLeast", "max");
+                RuleJson.fields(fact, at, "kind", "path", "fields", "writable", "atLeast", "max", "markedFloor");
                 ObjectNode fields = RuleJson.object(fact.get("fields"), at + "/fields");
                 if (fields.isEmpty()) throw RuleJson.error(at + "/fields", "Expected mapped fields.");
                 fields.fields().forEachRemaining(field -> path(field.getValue(), at + "/fields/" + field.getKey()));
@@ -149,6 +157,26 @@ public final class SheetProjection {
                     if (!fields.has(field.getValue().asText())) throw RuleJson.error(at + "/atLeast", "Expected a mapped field.");
                 });
                 if (fact.has("max")) RuleJson.integer(fact.get("max"), at + "/max", 1, 1_000_000);
+                if (fact.has("markedFloor")) {
+                    if (!fields.has("marked") || !fields.has("capacity") || fields.has("minimumMarkedBase")
+                            || fields.has("minimumMarkedCollections") || fields.has("minimumCapacity"))
+                        throw RuleJson.error(at + "/markedFloor", "A marked floor requires marked and capacity fields and reserves its minimum fields.");
+                    JsonNode floor = fact.get("markedFloor");
+                    RuleJson.fields(floor, at + "/markedFloor", "base", "sum", "actorSum");
+                    path(floor.get("base"), at + "/markedFloor/base");
+                    for (String list : List.of("sum", "actorSum")) {
+                        JsonNode sums = floor.path(list);
+                        if (sums.isMissingNode()) continue;
+                        if (!sums.isArray() || sums.size() > 8)
+                            throw RuleJson.error(at + "/markedFloor/" + list, "Expected at most 8 lock collections.");
+                        for (int i = 0; i < sums.size(); i++) {
+                            String where = at + "/markedFloor/" + list + "/" + i;
+                            RuleJson.fields(sums.get(i), where, "path", "field");
+                            path(sums.get(i).get("path"), where + "/path");
+                            path(sums.get(i).get("field"), where + "/field");
+                        }
+                    }
+                }
             }
             case "map" -> {
                 RuleJson.fields(fact, at, "kind", "path", "key", "value");
@@ -288,7 +316,51 @@ public final class SheetProjection {
                 default -> { }
             }
         });
+        spec.path("actor").fields().forEachRemaining(entry -> {
+            JsonNode fact = entry.getValue();
+            if (fact.has("markedFloor") && actor.path(entry.getKey()).isObject())
+                projectMarkedFloor(sheet, fact.get("markedFloor"), (ObjectNode) actor.get(entry.getKey()), "/actor/" + entry.getKey());
+        });
         return actor;
+    }
+
+    private static void projectMarkedFloor(ObjectNode sheet, JsonNode definition, ObjectNode track, String at) {
+        int capacity = RuleJson.integer(track.get("capacity"), at + "/capacity", 0, 1_000_000);
+        JsonNode base = get(sheet, definition.path("base").asText());
+        int permanent = base.isMissingNode() || base.isNull() ? 0
+                : RuleJson.integer(base, at + "/markedFloor/base", 0, 1_000_000);
+        if (permanent > capacity) throw RuleJson.error(at + "/capacity", "Track capacity is below its permanent marks.");
+        long minimum = permanent;
+        for (JsonNode sum : definition.path("sum")) {
+            JsonNode entries = get(sheet, sum.path("path").asText());
+            if (entries.isMissingNode() || entries.isNull()) continue;
+            if (!entries.isArray()) throw RuleJson.error(at + "/markedFloor", "Expected a lock collection.");
+            for (JsonNode entry : entries) {
+                JsonNode lock = get(RuleJson.object(entry, at + "/markedFloor"), sum.path("field").asText());
+                if (!lock.isMissingNode() && !lock.isNull())
+                    minimum += Math.max(0, RuleJson.integer(lock, at + "/markedFloor/lock", -1_000_000, 1_000_000));
+            }
+        }
+        track.put("minimumCapacity", permanent);
+        track.put("minimumMarkedBase", (int) Math.min(1_000_000, minimum));
+        if (definition.has("actorSum")) track.set("minimumMarkedCollections", definition.get("actorSum").deepCopy());
+    }
+
+    static int markedFloor(ObjectNode owner, ObjectNode track, int capacity, String at) {
+        long minimum = track.has("minimumMarkedBase")
+                ? RuleJson.integer(track.get("minimumMarkedBase"), at + "/minimumMarkedBase", 0, 1_000_000) : 0;
+        JsonNode sums = track.path("minimumMarkedCollections");
+        if (!sums.isMissingNode() && !sums.isArray()) throw RuleJson.error(at, "Expected floor lock collections.");
+        for (JsonNode sum : sums) {
+            JsonNode entries = get(owner, sum.path("path").asText());
+            if (!entries.isArray()) throw RuleJson.error(at, "Expected a lock collection.");
+            for (JsonNode entry : entries) {
+                JsonNode lock = get(RuleJson.object(entry, at), sum.path("field").asText());
+                if (!lock.isMissingNode() && !lock.isNull())
+                    minimum += Math.max(0, RuleJson.integer(lock, at + "/lock", -1_000_000, 1_000_000));
+            }
+        }
+        return (int) Math.min(capacity, minimum);
     }
 
     /** A read-only view of one engine-owned fact, without projecting unrelated sheet fields. */

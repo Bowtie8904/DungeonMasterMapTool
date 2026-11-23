@@ -135,6 +135,10 @@ An isolated move primitive derives its event identity and target flag from compi
 and selected move adjustments before the chosen button, and tracks source-scoped duplicate groups, move slots
 and short-rest long-move allowances. It returns dice, reports and commands without persisting. Post-move ordering,
 recipient and post-outcome choices, complete rest transactions and browser integration remain release gaps.
+The sheet projection supplies permanent and temporary marked-HP floors to generic track clearing. The
+engine recomputes locks held in its effect list as operations run, so ending a lock before healing in the same
+action allows the newly recoverable HP to clear. Recipient healing uses the recipient's floor, and capacity
+cannot be reduced below permanent marks. Malformed floor data rejects the staged action.
 
 Ordinary and targeted sheet requests accept only `sheet` bindings, even when another surface uses the same event.
 Roll options and saved-result actions use their own validated surfaces. The planned authoritative rest flow has not

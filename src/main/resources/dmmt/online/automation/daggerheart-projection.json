@@ -20,7 +20,10 @@
     "gold": { "kind": "value", "path": "gold", "writable": true, "min": 0, "max": 1000000 },
     "scars": { "kind": "value", "path": "scars", "writable": true, "min": 0, "max": 1000, "default": 0 },
     "hp": { "kind": "object", "path": "hp", "fields": { "marked": "on", "capacity": "slots" },
-            "writable": ["marked", "capacity"], "atLeast": { "total": "capacity" }, "max": 1000 },
+            "writable": ["marked", "capacity"], "atLeast": { "total": "capacity" }, "max": 1000,
+            "markedFloor": { "base": "permanentHp", "sum": [
+              { "path": "effects", "field": "lockedHp" }
+            ], "actorSum": [{ "path": "effects", "field": "lockedHp" }] } },
     "stress": { "kind": "object", "path": "stress", "fields": { "marked": "on", "capacity": "slots" },
                 "writable": ["marked", "capacity"], "atLeast": { "total": "capacity" }, "max": 1000 },
     "armorTrack": { "kind": "object", "path": "armorTrack", "fields": { "marked": "on", "capacity": "slots" },
