@@ -204,7 +204,7 @@ class PartyRecoveryTest {
     }
 
     @Test
-    void reprojectsSourcesAfterAnEarlierRequestConsumesOne() throws Exception {
+    void rejectsConsumptionThatWouldInvalidateSourcesDuringAReaction() throws Exception {
         RuleCompiler.Program item = program("items:ward", "", """
                 {"op":"inventory.consume","amount":1},
                 {"op":"resource.gain","pool":"actor.hope","amount":1}
@@ -214,14 +214,12 @@ class PartyRecoveryTest {
         mira.putArray("inventory").addObject().put("name", "Ward").put("qty", 1)
                 .put("instanceId", "ward").put("automationSource", item.sourceId());
         var roster = new AutomationHost.RestRoster("source", scope -> List.of(member("mira", mira)));
-        var result = HOST.stagePartyRecovery(pack, AutomationHost.event("downtime.move", "ada", 0), roster,
-                "activePlayerCharacters", List.of(request("one", "armorTrack", 1),
-                        request("two", "armorTrack", 1)), noRandom());
-        ObjectNode changed = result.recipients().get("mira");
-        assertEquals(1, changed.at("/hope/on").asInt());
-        assertTrue(changed.path("inventory").isEmpty());
-        assertEquals(8, HOST.revision(changed));
-        assertEquals(1, result.response().path("actions").size());
+        ObjectNode original = mira.deepCopy();
+        assertEquals("reactionSource", assertThrows(RuleRuntime.Unavailable.class, () ->
+                HOST.stagePartyRecovery(pack, AutomationHost.event("downtime.move", "ada", 0), roster,
+                        "activePlayerCharacters", List.of(request("one", "armorTrack", 1),
+                                request("two", "armorTrack", 1)), noRandom())).code());
+        assertEquals(original, mira);
         assertEquals(1, mira.at("/inventory/0/qty").asInt());
     }
 
@@ -247,7 +245,7 @@ class PartyRecoveryTest {
 
         equip(nia, unsupported.sourceId());
         beforeNia = nia.deepCopy();
-        assertEquals("restCommand", assertThrows(RuleRuntime.Unavailable.class, () ->
+        assertEquals("reactionCommand", assertThrows(RuleRuntime.Unavailable.class, () ->
                 HOST.stagePartyRecovery(pack, event, roster, "activePlayerCharacters", requests, noRandom())).code());
         assertEquals(beforeMira, mira);
         assertEquals(beforeNia, nia);

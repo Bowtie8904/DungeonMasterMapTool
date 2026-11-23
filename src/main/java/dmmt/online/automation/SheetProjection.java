@@ -26,6 +26,7 @@ public final class SheetProjection {
     private final ObjectNode spec;
     private final String stateField, sourceField, instanceField, nameField;
     private final List<JsonNode> traitStats;
+    private final Set<String> sourceFacts;
 
     private SheetProjection(ObjectNode spec) {
         this.spec = spec;
@@ -54,6 +55,17 @@ public final class SheetProjection {
         List<JsonNode> selected = new ArrayList<>();
         for (int i = 0; i < stats.size(); i++) if (needed[i]) selected.add(stats.get(i));
         traitStats = List.copyOf(selected);
+        Set<String> sourceFacts = new HashSet<>();
+        spec.path("actor").fields().forEachRemaining(fact -> {
+            String factPath = fact.getValue().path("path").asText();
+            for (JsonNode source : spec.path("sources")) {
+                if (overlaps(factPath, source.path("path").asText())) {
+                    sourceFacts.add(fact.getKey());
+                    break;
+                }
+            }
+        });
+        this.sourceFacts = Set.copyOf(sourceFacts);
     }
 
     public static SheetProjection parse(String json) throws java.io.IOException {
@@ -280,6 +292,8 @@ public final class SheetProjection {
     }
 
     public String stateField() { return stateField; }
+
+    Set<String> sourceFacts() { return sourceFacts; }
 
     public List<String> sourcePaths() {
         List<String> paths = new ArrayList<>();

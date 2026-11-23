@@ -126,6 +126,7 @@ public final class RuleCompiler {
         private final ObjectNode pools;
         private final boolean hasComputedActorPools;
         private final boolean computedActorPoolsReadSourcePools;
+        private final boolean hasComputedSourcePools;
         private final Map<String, List<String>> poolsByEffect;
         private final Set<String> boundPoolIds;
         private final ObjectNode effects;
@@ -145,6 +146,7 @@ public final class RuleCompiler {
             this.pools = decl.pools().deepCopy();
             boolean computedActorPools = false;
             boolean readsSourcePools = false;
+            boolean computedSourcePools = false;
             var poolDefinitions = this.pools.elements();
             while (poolDefinitions.hasNext()) {
                 JsonNode definition = poolDefinitions.next();
@@ -152,10 +154,12 @@ public final class RuleCompiler {
                     computedActorPools = true;
                     readsSourcePools |= RuleExpression.references(definition.path("max")).stream()
                             .anyMatch(ref -> ref.startsWith("sourcePools."));
-                }
+                } else if ("source".equals(definition.path("scope").asText()) && !definition.path("max").isInt())
+                    computedSourcePools = true;
             }
             this.hasComputedActorPools = computedActorPools;
             this.computedActorPoolsReadSourcePools = readsSourcePools;
+            this.hasComputedSourcePools = computedSourcePools;
             Map<String, List<String>> bound = new HashMap<>();
             this.pools.fields().forEachRemaining(entry -> {
                 if (entry.getValue().has("whileEffect"))
@@ -222,6 +226,10 @@ public final class RuleCompiler {
         ObjectNode pools() { return pools.deepCopy(); }
         boolean hasComputedActorPools() { return hasComputedActorPools; }
         boolean computedActorPoolsReadSourcePools() { return computedActorPoolsReadSourcePools; }
+        boolean hasComputedSourcePools() { return hasComputedSourcePools; }
+        boolean stateMayAffectProjection() {
+            return hasComputedActorPools || hasComputedSourcePools || !modifiers.isEmpty() || !effects.isEmpty();
+        }
         List<String> poolsBoundTo(String effectId) { return poolsByEffect.getOrDefault(effectId, List.of()); }
         Set<String> boundPoolIds() { return boundPoolIds; }
         boolean hasEffect(String effectId) { return effects.has(effectId); }

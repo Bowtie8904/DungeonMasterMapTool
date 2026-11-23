@@ -266,6 +266,38 @@ class OwnerTrackReactionsTest {
     }
 
     @Test
+    void nestedReactionsPropagateSharedEventChangesWithoutReplacingParentIdentity() throws Exception {
+        RuleCompiler.Program program = program("features:event", """
+                {"rules":[
+                 {"id":"use","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"track.clear","track":"actor.armorTrack","amount":1},
+                        {"op":"value","value":{"read":"event.move.bonus"},"as":"bonus"}],
+                  "ui":{"label":"Use","report":"Bonus {result.bonus}."}},
+                 {"id":"reaction","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                  "do":[{"op":"plan.adjust","plan":"event.move","field":"bonus","by":1,"label":"Reaction"},
+                        {"op":"event.block","reason":"Blocked by reaction"}],"ui":{}}
+                ]}
+                """);
+        ObjectNode before = context(program.sourceId(), "event");
+        ObjectNode event = before.withObject("/event").put("actorId", "original").put("track", "original-track")
+                .put("change", "original-change").put("requested", 7);
+        event.putObject("before").put("value", 8);
+        event.putObject("after").put("value", 9);
+        event.putObject("move").put("bonus", 0).putObject("adjustable").putObject("bonus").put("min", 0).put("max", 3);
+        ObjectNode original = before.deepCopy();
+        var result = RuleDispatcher.executeOwnerTrackReactions(List.of(new RuleDispatcher.Candidate(program, before)),
+                List.of(select("use", "event")), noRandom(), Map.of(program.sourceId(), program));
+        ObjectNode completed = result.contexts().getFirst().withObject("/event");
+        assertEquals("Bonus 1.", result.actions().getLast().report());
+        assertEquals(1, completed.at("/move/bonus").asInt());
+        assertEquals("Reaction", completed.at("/move/adjustments/0/label").asText());
+        assertEquals("Blocked by reaction", completed.at("/blocked/0/reason").asText());
+        for (String field : List.of("type", "actorId", "track", "change", "requested", "before", "after"))
+            assertEquals(original.path("event").path(field), completed.path(field), field);
+        assertEquals(original, before);
+    }
+
+    @Test
     void recursiveTrackChangesAreBoundedAndLeaveTheInputUntouched() throws Exception {
         RuleCompiler.Program program = program("features:loop", """
                 {"rules":[
@@ -302,6 +334,49 @@ class OwnerTrackReactionsTest {
                 RuleDispatcher.executeOwnerTrackReactions(List.of(new RuleDispatcher.Candidate(program, before)),
                         List.of(select("use", "budget")), noRandom(), Map.of(program.sourceId(), program)));
         assertEquals("reactionLimit", failure.code());
+        assertEquals(original, before);
+    }
+
+    @Test
+    void isolatedReactionsRejectProjectedSnapshotsAndChangingSources() throws Exception {
+        RuleCompiler.Program track = program("features:track", """
+                {"rules":[{"id":"use","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"track.clear","track":"actor.armorTrack","amount":1}],"ui":{"label":"Use"}}]}
+                """);
+        ObjectNode projected = context(track.sourceId(), "track");
+        projected.withObject("/actor").putObject("stats").put("armorAvailable", 2);
+        ObjectNode original = projected.deepCopy();
+        assertEquals("reactionProjection", assertThrows(RuleRuntime.Unavailable.class, () ->
+                RuleDispatcher.executeOwnerTrackReactions(List.of(new RuleDispatcher.Candidate(track, projected)),
+                        List.of(select("use", "track")), noRandom(), Map.of(track.sourceId(), track))).code());
+        assertEquals(original, projected);
+
+        RuleCompiler.Program item = program("items:item", """
+                {"rules":[{"id":"use","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"inventory.consume","amount":1}],"ui":{"label":"Use"}}]}
+                """);
+        ObjectNode consumed = context(item.sourceId(), "item");
+        consumed.withObject("/source").put("quantity", 1);
+        ObjectNode before = consumed.deepCopy();
+        assertEquals("reactionSource", assertThrows(RuleRuntime.Unavailable.class, () ->
+                RuleDispatcher.executeOwnerTrackReactions(List.of(new RuleDispatcher.Candidate(item, consumed)),
+                        List.of(select("use", "item")), noRandom(), Map.of(item.sourceId(), item))).code());
+        assertEquals(before, consumed);
+    }
+
+    @Test
+    void isolatedReactionsRejectComputedSourcePoolsBeforeReadingStaleValues() throws Exception {
+        RuleCompiler.Program program = program("features:pool", """
+                {"pools":{"tokens":{"kind":"number","scope":"source","max":{"read":"actor.hope.value"}}},
+                 "rules":[{"id":"use","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                   "do":[{"op":"resource.spend","pool":"actor.hope","amount":1},
+                         {"op":"value","value":{"read":"sourcePools.tokens.max"},"as":"maximum"}],
+                   "ui":{"label":"Use","report":"Maximum {result.maximum}."}}]}
+                """);
+        ObjectNode before = context(program.sourceId(), "pool"), original = before.deepCopy();
+        assertEquals("reactionSourcePool", assertThrows(RuleRuntime.Unavailable.class, () ->
+                RuleDispatcher.executeOwnerTrackReactions(List.of(new RuleDispatcher.Candidate(program, before)),
+                        List.of(select("use", "pool")), noRandom(), Map.of(program.sourceId(), program))).code());
         assertEquals(original, before);
     }
 

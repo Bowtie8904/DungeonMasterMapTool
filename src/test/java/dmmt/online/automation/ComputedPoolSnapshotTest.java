@@ -354,7 +354,7 @@ class ComputedPoolSnapshotTest {
     }
 
     @Test
-    void stagedRecoveryRejectsPoolChangesThatNeedMidReactionReprojection() throws Exception {
+    void stagedRecoveryReprojectsPoolChangesDuringTheTrackMutation() throws Exception {
         RuleCompiler.Program pool = program("features:stress-pool", """
                 {"pools":{"shared":{"kind":"number","scope":"actor","max":{"read":"actor.stress.marked"}}}}
                 """);
@@ -365,10 +365,12 @@ class ComputedPoolSnapshotTest {
                  "features":[{"name":"Pool","automationSource":"features:stress-pool","instanceId":"pool"}],
                  "automationState":{"revision":4,"pools":{"shared":{"value":3,"max":3}}}}
                 """);
-        ObjectNode original = sheet.deepCopy();
-        assertEquals("computedPoolProjection", assertThrows(RuleRuntime.Unavailable.class, () ->
-                host.stageHolderRecovery(pack, sheet, AutomationHost.event("downtime.move", "source", 0),
-                        "owner", "stress", 1, noRandom())).code());
-        assertEquals(original, sheet);
+        ObjectNode result = host.stageHolderRecovery(pack, sheet, AutomationHost.event("downtime.move", "source", 0),
+                "owner", "stress", 1, noRandom());
+        assertEquals(1, result.path("cleared").asInt());
+        assertEquals(2, sheet.at("/stress/on").asInt());
+        assertEquals(2, sheet.at("/automationState/pools/shared/value").asInt());
+        assertEquals(2, sheet.at("/automationState/pools/shared/max").asInt());
+        assertEquals(5, host.revision(sheet));
     }
 }

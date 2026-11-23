@@ -29,6 +29,7 @@ public final class RuleRuntime {
     @FunctionalInterface
     interface TrackObserver {
         void changed(ObjectNode staged, String holder, ObjectNode event);
+        default void mutated(ObjectNode staged, String operation, ObjectNode previousActor, String target) {}
     }
 
     public static final class Unavailable extends IllegalStateException {
@@ -347,9 +348,12 @@ public final class RuleRuntime {
             effectOperation |= step.path("op").asText().startsWith("effect.");
             touchedRecipientPool(program, step, recipientPools);
         }
+        ObjectNode beforeSettlement = observer == null ? null : ((ObjectNode) next.path("actor")).deepCopy();
         boolean effectEnded = RuleEffects.settle(program, next);
         if (effectOperation || effectEnded || !program.boundPoolIds().isEmpty())
             RuleEffects.reconcilePools(program, previous, next, programs, recipientPools);
+        if (observer != null && (effectOperation || effectEnded || !beforeSettlement.equals(next.path("actor"))))
+            observer.mutated(next, "effect.settle", beforeSettlement, "actor");
         String report = reportTemplate.isMissingNode() ? "" : RuleTemplate.render(reportTemplate.asText(), next);
         next.remove("die");
         next.set("revision", RuleExpression.numeric(revision + 1d, "/revision"));
@@ -843,6 +847,8 @@ public final class RuleRuntime {
     private static void operation(RuleCompiler.Program program, JsonNode op, ObjectNode context, RandomGenerator random, boolean preview,
                                   List<ObjectNode> published, List<ObjectNode> rolls, TrackObserver observer) {
         String kind = op.path("op").asText();
+        ObjectNode previousActor = observer != null && kind.startsWith("effect.")
+                ? ((ObjectNode) context.path("actor")).deepCopy() : null;
         JsonNode result;
         switch (kind) {
             case "pool.spend", "pool.gain" -> {
@@ -1399,6 +1405,12 @@ public final class RuleRuntime {
             default -> throw RuleJson.error("/op", "Unsupported operation: " + kind);
         }
         if (op.has("as")) ((ObjectNode) context.get("result")).set(op.path("as").asText(), result.deepCopy());
+        if (observer != null && (kind.startsWith("state.") || kind.startsWith("pool.")
+                || kind.startsWith("effect.") || kind.startsWith("collection.")
+                || "inventory.consume".equals(kind) || "roll.addPoolDie".equals(kind)
+                || "limits.refresh".equals(kind) || "limit.restore".equals(kind)
+                || "inventory.grant".equals(kind) || "damage.deal".equals(kind)))
+            observer.mutated(context, kind, previousActor, op.path("target").asText(null));
     }
 
     static void trackChanged(TrackObserver observer, ObjectNode context, String path, String change, int requested,

@@ -60,8 +60,11 @@ positive clears with no marks, and returns the actual clear and staged state. So
 recovery and live rest recovery are not yet connected. A sheet-backed recovery stage selects the affected
 holder's own sources and state even when another character initiated the parent event; it is not a live action.
 Existing computed actor pools are clamped before action descriptions, target eligibility and rule execution, with
-pool-dependent effects and stats reprojected. Unstable dependencies and mid-reaction changes needing reprojection
-are rejected; inspecting an action does not write the adjusted pool to the sheet.
+pool-dependent effects and stats reprojected. Sheet-backed holder reactions also reproject stats, derived effects
+and actor pools between relevant mutations, including holder-owned effect changes and their bound pools. They reject
+changing sources, cross-holder effect cleanup, computed source pools, deferred inventory/use-budget/damage changes
+and unsettled conditional endings until those lifecycles are supported. Unstable dependencies are rejected, and
+inspecting an action does not write the adjusted pool to the sheet.
 An isolated party stage applies each host-supplied clear separately, preserving request order across different
 host-selected scopes and retaining each inspected membership and read version. It is not connected to the rest workflow.
 Converted downtime buttons now describe their host-validated move identity and rest restriction. This metadata

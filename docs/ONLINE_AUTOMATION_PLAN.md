@@ -229,6 +229,15 @@ the offer, and is checked before offer freshness. Thus an exact owner retry stil
 after a restart without rolling, reading a roster or staging another recipient write; changed intents, other
 principals, DM receipts and older un-fingerprinted receipts cannot be reused as a rest. It shares the ordinary
 bounded request-ID journal. This offer is a concurrency primitive, not an interactive rest API.
+Sheet-backed owner recovery now reprojects the holder's statistics, derived effects and computed actor pools
+before nested track reactions and after projection-relevant state or pool changes. It uses the staged state of all
+active sources, not another host request. Explicit or derived holder-effect changes reconcile effect-bound actor
+pools and reproject until stable before later reaction steps, with a bounded pass limit. Reactions that change
+source activation, need cross-holder effect cleanup,
+involve a computed source pool, request deferred inventory, use-budget or damage changes, or need an unresolved
+conditional effect ending fail atomically instead of reading stale facts. The fixed-source isolated dispatcher also
+rejects projected snapshots when it cannot reproject them. Nested reactions propagate shared event changes back to
+the parent while retaining each event's own type, actor and track-change details.
 Converted `repairAllies` adjustments require party recovery and recipient track-change reactions, including
 Armor overflow. Until those transactions are implemented, a staged self move with a positive party-recovery
 request is rejected rather than silently omitting recipient changes, including when later adjustments cancel
@@ -350,6 +359,13 @@ reacting and 64 unrelated sources, four track clears, 10 warmups and 20 measurem
 measured 14.91 ms median, 22.58 ms p95 and 19.75 MiB mean calling-thread allocation; one indexed run measured
 5.49 ms, 7.44 ms and 2.78 MiB. Sources with computed actor pools remain in the nested dispatch so those pools
 still clamp in source order. This synthetic sample excludes the host, storage and recipient reactions.
+
+`HolderReactionProjectionTest#measureSheetBackedRecovery` measures one private holder recovery with a reacting
+source and 32 passive sources, including reprojection after the clear and its state mutation. After 10 warmups,
+20 runs measured 10.83 ms median, 12.96 ms p95 and 12.06 MiB mean calling-thread allocation before eliminating
+redundant projection-input copies; a later run measured 6.99 ms, 9.82 ms and 10.49 MiB. After adding effect
+settlement checks, another run measured 8.37 ms, 12.03 ms and 10.67 MiB. These single runs are not latency
+guarantees and exclude storage, network traffic and concurrent play.
 
 These are separate single-run development measurements on Windows / Temurin 25, not release thresholds or directly comparable workloads. The HTTP allocation figures are JVM-wide (host and test client); the cold-load and isolated-track figures are calling-thread allocation. None is retained heap. The runs exclude browser rendering, WAN latency, connected-client broadcasts and unrelated concurrent play.
 

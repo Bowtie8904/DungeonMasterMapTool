@@ -35,6 +35,7 @@ public final class AutomationHost {
     // Runtime revisions pass through double-valued expressions; reserve room for intermediate stages.
     private static final long MAX_REST_REVISION = 1L << 52;
     private static final int MAX_PARTY_RECOVERIES = 1024;
+    private static final int MAX_REACTION_PROJECTION_PASSES = 16;
     private static final Set<String> STAGED_REST_COMMANDS = Set.of(
             "countdown.start", "limits.refresh", "effect.endElsewhere", "table.gain", "table.spend");
     private static final Set<String> STAGED_TARGET_REST_COMMANDS = Set.of(
@@ -923,7 +924,8 @@ public final class AutomationHost {
         ObjectNode actor = actor(pack, working, state, projectionEvent, sources);
         var candidates = candidates(pack, sources, state, actor, parentEvent);
         var recovered = RuleDispatcher.clearOwnerTrack(candidates, actor, parentEvent, revision,
-                track, requested, random, pack.programs());
+                track, requested, random, pack.programs(),
+                ownerRecoveryProjection(pack, working, state, sources, actor, holderId));
         if (recovered.revision() > MAX_REST_REVISION)
             throw new RuleRuntime.Unavailable("revision", "The holder's recovery revision cannot be advanced.");
 
@@ -946,6 +948,107 @@ public final class AutomationHost {
             replace(sheet, working);
         }
         return response;
+    }
+
+    private RuleDispatcher.OwnerProjection ownerRecoveryProjection(Pack pack, ObjectNode sheet, ObjectNode state,
+                                                                    List<SheetProjection.SourceElement> sources,
+                                                                    ObjectNode initialActor, String holderId) {
+        Map<String, ObjectNode> initialSources = new HashMap<>();
+        boolean hasTrackObservers = false;
+        boolean hasComputedActorPools = false;
+        boolean hasComputedSourcePools = false;
+        for (var element : sources) {
+            RuleCompiler.Program program = pack.programs().get(element.sourceId());
+            if (program == null) continue;
+            initialSources.put(element.instanceId(), sourceContext(element));
+            hasTrackObservers |= !program.automatic("track.changed").isEmpty();
+            hasComputedActorPools |= program.hasComputedActorPools();
+            hasComputedSourcePools |= program.hasComputedSourcePools();
+        }
+        boolean needsTrackProjection = hasTrackObservers || hasComputedActorPools || hasComputedSourcePools
+                || !initialActor.path("effects").isEmpty();
+        boolean needsSourcePoolGuard = hasComputedSourcePools;
+        return (staged, contexts, operation, previousActor, target) -> {
+            if ("track.changed".equals(operation) && !needsTrackProjection)
+                return (ObjectNode) staged.get("actor");
+            if (operation.startsWith("state.")) {
+                ObjectNode current = contexts.get(staged.at("/source/instanceId").asText());
+                RuleCompiler.Program program = current == null ? null : pack.programs().get(current.at("/source/id").asText());
+                if (program != null && !program.stateMayAffectProjection())
+                    return (ObjectNode) staged.get("actor");
+            }
+            if (operation.startsWith("effect.")) {
+                if ("recipient".equals(target) && staged.get("recipient") != staged.get("actor"))
+                    throw new RuleRuntime.Unavailable("reactionEffect",
+                            "Changing another holder's effects requires a recipient transaction.");
+                for (JsonNode command : staged.path("outbox"))
+                    if ("effect.endElsewhere".equals(command.path("kind").asText()))
+                        throw new RuleRuntime.Unavailable("reactionEffect",
+                                "A single-holder effect requires cross-holder lifecycle settlement.");
+                if (previousActor != null)
+                    RuleEffects.reconcileHolder(previousActor, staged.path("actor"), Set.of(), pack.programs(), "/actor");
+            }
+            for (String fact : projection.sourceFacts())
+                if (!initialActor.path(fact).equals(staged.path("actor").path(fact)))
+                    throw new RuleRuntime.Unavailable("reactionSource",
+                            "Changing source-bearing character fields during a track reaction requires source activation settlement.");
+            for (var entry : initialSources.entrySet()) {
+                ObjectNode current = contexts.get(entry.getKey());
+                if (current == null || !entry.getValue().equals(current.path("source")))
+                    throw new RuleRuntime.Unavailable("reactionSource",
+                            "Changing a source during a track reaction requires source activation settlement.");
+            }
+            ObjectNode currentState = state.deepCopy();
+            contexts.forEach((instance, source) -> storeSource(currentState, instance, source));
+            if (needsSourcePoolGuard)
+                throw new RuleRuntime.Unavailable("reactionSourcePool",
+                        "A computed source pool cannot yet be settled during a track reaction.");
+            ObjectNode event = ((ObjectNode) staged.get("event")).deepCopy().put("actorId", holderId);
+            ObjectNode prior = (ObjectNode) staged.get("actor");
+            for (int pass = 0; pass < MAX_REACTION_PROJECTION_PASSES; pass++) {
+                ObjectNode projected = projectActor(pack, sheet, currentState, event, sources, false,
+                        persisted(prior)).actor();
+                JsonNode pools = projected.path("pools").deepCopy();
+                RuleEffects.reconcileHolder(prior, projected, Set.of(), pack.programs(), "/actor");
+                if (pools.equals(projected.path("pools"))) {
+                    requireSettledReactionEffects(pack, projected, contexts, event, holderId);
+                    return projected;
+                }
+                prior = projected;
+            }
+            throw new RuleRuntime.Unavailable("reactionEffectDependencies",
+                    "Effect-bound pools did not stabilize during this reaction.");
+        };
+    }
+
+    private static void requireSettledReactionEffects(Pack pack, ObjectNode actor, Map<String, ObjectNode> contexts,
+                                                       ObjectNode event, String holderId) {
+        for (JsonNode effect : actor.path("effects")) {
+            if (effect.path("derived").asBoolean()
+                    || !effect.has("effect") && !effect.has("sourceInstanceId")) continue;
+            String key = effect.path("effect").asText("");
+            int split = key.lastIndexOf('#');
+            RuleCompiler.Program program = split > 0 ? pack.programs().get(key.substring(0, split)) : null;
+            String effectId = split > 0 ? key.substring(split + 1) : "";
+            if (program == null || !program.hasEffect(effectId))
+                throw new RuleRuntime.Unavailable("reactionEffect",
+                        "A track reaction cannot resolve an active effect's automation definition.");
+            ObjectNode definition = program.effect(effectId);
+            if (!definition.has("endWhen")) continue;
+            String instanceId = effect.path("sourceInstanceId").asText();
+            ObjectNode source = contexts.get(instanceId);
+            if (!RuleEffects.hasSourceActorId(effect) || !holderId.equals(effect.path("sourceActorId").asText())
+                    || source == null || !program.sourceId().equals(source.at("/source/id").asText()))
+                throw new RuleRuntime.Unavailable("reactionEffect",
+                        "A conditional effect requires its original source character and state before recovery.");
+            ObjectNode view = source.deepCopy();
+            view.set("actor", actor.deepCopy());
+            view.set("event", event.deepCopy());
+            view = RuleRuntime.projectionContext(program, view);
+            if (RuleExpression.bool(RuleExpression.evaluate(definition.get("endWhen"), view), "/effects/" + effectId + "/endWhen"))
+                throw new RuleRuntime.Unavailable("reactionEffect",
+                        "A conditional effect must end during this reaction; lifecycle settlement is not available yet.");
+        }
     }
 
     /** Stages trusted recovery requests for a host-selected scope without persisting or publishing them. */
@@ -2098,9 +2201,15 @@ public final class AutomationHost {
 
     private ActorProjection projectActor(Pack pack, ObjectNode sheet, ObjectNode state, ObjectNode event,
                                          List<SheetProjection.SourceElement> sources, boolean collectRollModifiers) {
+        return projectActor(pack, sheet, state, event, sources, collectRollModifiers, projection.actor(sheet));
+    }
+
+    private ActorProjection projectActor(Pack pack, ObjectNode sheet, ObjectNode state, ObjectNode event,
+                                         List<SheetProjection.SourceElement> sources, boolean collectRollModifiers,
+                                         ObjectNode originalActor) {
         List<SheetProjection.SourceElement> computedPools = new ArrayList<>();
         ActorProjection result = projectActorView(pack, sheet, state, event, sources, collectRollModifiers,
-                projection.actor(sheet), computedPools);
+                originalActor.deepCopy(), computedPools);
         if (computedPools.isEmpty()) return result;
         if (computedPools.size() > 1)
             computedPools.sort(java.util.Comparator.comparing(SheetProjection.SourceElement::instanceId));
@@ -2112,7 +2221,7 @@ public final class AutomationHost {
             actor = (ObjectNode) view.get("actor");
         }
         if (!before.equals(actor.path("pools"))) {
-            ObjectNode original = projection.actor(sheet);
+            ObjectNode original = originalActor.deepCopy();
             original.set("pools", actor.path("pools").deepCopy());
             result = projectActorView(pack, sheet, state, event, sources, collectRollModifiers, original, null);
             actor = result.actor();
@@ -2147,7 +2256,7 @@ public final class AutomationHost {
                 passiveSources.add(new PassiveProjection(element, program));
                 readsDerivedTraits |= program.readsDerivedTraits();
             }
-            derived.addAll(RuleEffects.projectedDerived(program, context(state, element, base, event)));
+            derived.addAll(RuleEffects.projectedDerived(program, projectionInput(state, element, base, event)));
         }
         if (!derived.isEmpty()) {
             ArrayNode effects = actor.path("effects").isArray() ? (ArrayNode) actor.get("effects") : actor.putArray("effects");
@@ -2159,7 +2268,7 @@ public final class AutomationHost {
             List<JsonNode> traitModifiers = new ArrayList<>();
             for (PassiveProjection source : passiveSources)
                 if (source.program().hasTraitModifiers())
-                    RuleEffects.projectedPassives(source.program(), context(state, source.source(), base, event), true)
+                    RuleEffects.projectedPassives(source.program(), projectionInput(state, source.source(), base, event), true)
                             .forEach(traitModifiers::add);
             for (JsonNode modifier : effectModifiers)
                 if (modifier.path("stat").asText().startsWith("trait.")) traitModifiers.add(modifier);
@@ -2172,7 +2281,7 @@ public final class AutomationHost {
             }
         }
         for (PassiveProjection source : passiveSources) {
-            ArrayNode values = RuleEffects.projectedPassives(source.program(), context(state, source.source(), base, event), false);
+            ArrayNode values = RuleEffects.projectedPassives(source.program(), projectionInput(state, source.source(), base, event), false);
             values.forEach(modifiers::add);
             if (collectRollModifiers) for (JsonNode modifier : values)
                 if (modifier.path("stat").asText().startsWith("roll."))
@@ -2213,17 +2322,32 @@ public final class AutomationHost {
     }
 
     private static ObjectNode context(ObjectNode state, SheetProjection.SourceElement element, ObjectNode actor, ObjectNode event) {
+        return context(state, element, actor, event, true);
+    }
+
+    private static ObjectNode projectionInput(ObjectNode state, SheetProjection.SourceElement element, ObjectNode actor, ObjectNode event) {
+        // Effect and passive projection validate and copy this private view before evaluating it.
+        return context(state, element, actor, event, false);
+    }
+
+    private static ObjectNode context(ObjectNode state, SheetProjection.SourceElement element, ObjectNode actor,
+                                      ObjectNode event, boolean copy) {
         ObjectNode context = RuleJson.JSON.createObjectNode();
-        ObjectNode source = context.putObject("source");
-        source.put("id", element.sourceId()).put("instanceId", element.instanceId()).put("name", element.name());
-        if (element.quantityField() != null) source.put("quantity", element.element().path(element.quantityField()).asInt(1));
+        context.set("source", sourceContext(element));
         context.put("revision", state.path("revision").asLong());
-        context.set("actor", actor.deepCopy());
-        context.set("event", event.deepCopy());
+        context.set("actor", copy ? actor.deepCopy() : actor);
+        context.set("event", copy ? event.deepCopy() : event);
         JsonNode stored = state.path("sources").path(element.instanceId());
         for (String field : List.of("state", "usage", "sourcePools"))
-            if (stored.path(field).isObject()) context.set(field, stored.get(field).deepCopy());
+            if (stored.path(field).isObject()) context.set(field, copy ? stored.get(field).deepCopy() : stored.get(field));
         return context;
+    }
+
+    private static ObjectNode sourceContext(SheetProjection.SourceElement element) {
+        ObjectNode source = RuleJson.JSON.createObjectNode();
+        source.put("id", element.sourceId()).put("instanceId", element.instanceId()).put("name", element.name());
+        if (element.quantityField() != null) source.put("quantity", element.element().path(element.quantityField()).asInt(1));
+        return source;
     }
 
     private static void storeSource(ObjectNode state, String instanceId, ObjectNode context) {
