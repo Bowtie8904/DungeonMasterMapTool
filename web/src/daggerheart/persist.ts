@@ -181,6 +181,7 @@ export interface FeatureSheetState {
   scars?: number;
   permanentHp?: number;
   longRestRevision?: number;
+  shortRestsInRow?: number;
   vitalityBenefits?: CharacterSheet['vitalityBenefits'];
   vitalityEffectRemoved?: boolean;
   spectralBlocked?: boolean;
@@ -207,6 +208,7 @@ export function applyFeatureState(c: CharacterSheet, update: FeatureSheetState):
   if (update.scars !== undefined) c.scars = update.scars;
   if (update.permanentHp !== undefined) c.permanentHp = update.permanentHp;
   if (update.longRestRevision !== undefined) c.longRestRevision = update.longRestRevision;
+  if (update.shortRestsInRow !== undefined) c.shortRestsInRow = update.shortRestsInRow;
   if (update.vitalityBenefits !== undefined) c.vitalityBenefits = [...update.vitalityBenefits];
   if (update.vitalityEffectRemoved !== undefined) c.vitalityEffectRemoved = update.vitalityEffectRemoved;
   if (update.spectralBlocked !== undefined) c.spectralBlocked = update.spectralBlocked;

@@ -50,7 +50,7 @@ malformed affected pool rejects a potentially unsafe change instead of losing re
 effects and other sources' or recipients' conditional endings remains unfinished.
 The staged rest-reset primitive can preserve effects started or replaced during downtime. Authored effects can
 freeze marked-track locks and expire before rest moves; Daggerheart healing respects an effect's frozen HP lock.
-This staged ordering is not yet connected to the live rest workflow, and legacy locks still require migration.
+This ordering is used by live format-2 self rests; legacy locks still require migration.
 The experimental runtime can observe ordered track changes inside a private transaction, including clamped
 Armor clears and damage marks. A bounded isolated dispatcher can run the owner's supplied automatic reactions
 in order without copying unrelated sources for each event; computed actor pools still refresh even when no
@@ -59,8 +59,8 @@ the parent event's automatic adjustments. Private self downtime moves now use th
 move and deferred phases, including Armor overflow and zero-mark clears; target-recipient reactions still need a
 separate transaction. Active bindings and computed-pool dependencies restrict dispatch without dropping passive
 projections, and moves without relevant dependencies avoid the observer. An isolated host-owned clear also applies the holder's healing floor and reactions, including
-positive clears with no marks, and returns the actual clear and staged state. Source activation, cross-character
-recovery and live rest recovery are not yet connected. A sheet-backed recovery stage selects the affected
+positive clears with no marks, and returns the actual clear and staged state. Source activation and live
+cross-character recovery are not yet connected. A sheet-backed recovery stage selects the affected
 holder's own sources and state even when another character initiated the parent event; it is not a live action.
 Existing computed actor pools are clamped before action descriptions, target eligibility and rule execution, with
 pool-dependent effects and stats reprojected. Sheet-backed holder reactions also reproject stats, derived effects
@@ -71,8 +71,10 @@ inspecting an action does not write the adjusted pool to the sheet.
 An isolated party stage applies each host-supplied clear separately, preserving request order across different
 host-selected scopes and retaining each inspected membership and read version. A separate variant follows the
 host roster's character order and records it as an additional dependency. It is not connected to the rest workflow.
-Converted downtime buttons now describe their host-validated move identity and rest restriction. This metadata
-and the shared ruleset's validated rest limits do not yet make the format-2 rest workflow available.
+Converted downtime buttons describe their host-validated move identity and rest restriction. With a format-2
+ruleset, the owner can choose a short or long self rest and its offered downtime moves in the sheet. The host
+checks the signed offer, resolves the complete rest, and saves its sheet, supported commands, reports and retry
+receipt together. Reopen a stale offer; retrying a lost response does not roll or spend twice.
 The host can stage and validate rest preparation and individual moves on a private copy, retaining the
 ruleset's initial Hope, Armor and recovery facts across the moves. Move bonuses run before recovery; selected
 passive costs and modifier steps run afterward and failures roll back the move. A staged ally move can use a
@@ -81,8 +83,8 @@ the whole move succeeds. Repeated moves require applying each update to a privat
 request-local roster. The base Tend and Repair ally choices remain narrative, as in the legacy client: they
 report recovery for the ally to apply rather than selecting or changing another character. A shared fixture
 checks short and long variants in both engines. Staged completion derives signed recovery facts, runs benefits
-around the rest reset and advances rest counters; failures roll back that stage. The live multi-character rest
-transaction and player workflow are still required.
+around the rest reset and advances rest counters; failures roll back that stage. Live multi-character rest
+transactions remain required.
 An internal coordinator composes these stages on private source and recipient sheets, reprojects each recipient
 after earlier moves, carries Fear through the rest, and advances each changed sheet once. Other commands needing
 intervening host settlement are rejected rather than evaluated against stale facts. The staged result identifies
@@ -91,14 +93,16 @@ The transaction also retains any host-order dependencies; both can be rechecked 
 scope without loading sheets, but must be compared with the read versions inside the future atomic commit. A host-signed
 snapshot offer and owner-bound retry receipt can reject stale or forged rest intents and replay committed results
 without rolling or staging recipients again. Offers expire on host restart; already committed receipts still replay.
-The live host must authenticate owners, compare and commit all dependencies, and provide interactive choices.
-Until that workflow is connected, format-2 catalogs reject legacy client-supplied rests and downtime rerolls.
+The live self-rest workflow authenticates owners and commits its sheet; multi-character rests still need to
+compare and commit all dependencies and provide post-outcome choices. Format-2 catalogs reject legacy
+client-supplied rests and downtime rerolls.
 Owner and DM sheet saves cannot change host-owned rest counters, and legacy damage snapshots retain those counters
 and the host's automation state. An unreadable or unrecognized catalog cannot silently enable legacy rest;
 the shipped format-1 catalogs retain their existing rest behavior.
 The shared ruleset defines the base self-recovery, preparation and project moves for staged tests, including
-tier-scaled recovery, protected HP and capped Hope. Its ally recovery variants, rerolls and armor overflow are
-not yet connected to a live format-2 rest. A staged self move that requests additional party recovery is
+tier-scaled recovery, protected HP and capped Hope. Narrative ally variants report recovery for manual
+application; rerolls, armor overflow and automated party recovery remain incomplete. A self move that requests
+additional party recovery is
 rejected until all affected recipients and their Armor-overflow reactions can be settled atomically, even if a
 later adjustment cancels the total. Ordered adjustment records retain each requested amount, source, rule,
 binding and compiled step; converted party-repair modifiers additionally identify the recipient scope and track
@@ -139,8 +143,8 @@ Converted action reports can roll bounded dice on the host before subsequent act
 
 Shared Healing Hands fixtures exercise successful HP and Stress recovery, both failure choices and a
 below-difficulty critical through the legacy and converted hosts, including clamping, recipient locking,
-transactional reporting and retry safety. Recipient long-rest expiry matches in isolation, but the live
-format-2 rest workflow remains unwired.
+transactional reporting and retry safety. Recipient long-rest expiry matches in isolation, but live
+multi-character rests remain unfinished.
 
 Converted passive bonuses based on a trait use its current total, including passive and active-effect trait bonuses. This includes Untouchable's rounded Agility-to-Evasion bonus. Trait-modifying passives cannot themselves depend on derived trait totals. Legacy trait-derived effect modifiers remain dynamic and are rejected by the converter until that behavior is supported; explicitly authored format-2 started effects can instead freeze a value when activated.
 

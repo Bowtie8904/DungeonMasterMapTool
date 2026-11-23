@@ -36,6 +36,7 @@ import { openCompanionMancer, openLevelUp, openMancer, openTransformation } from
 import { companionAvailable, companionFeatures, companionRules, companionWeapon, hasCompanionTraining, markCompanionDamage, resolveBonded } from './companion';
 import { rich, inline } from './rich';
 import { automationPanel } from '../automation/panel';
+import { openAutomationRestDialog } from '../automation/rest';
 import { MAX_LEVEL, replaceAncestry } from './rules';
 import { chooseAncestryFeature } from './ancestry-choice';
 import { openTestingEditor } from './testing-view';
@@ -127,6 +128,7 @@ export interface SheetViewOptions {
   onRoll: (roll: RollRequest) => boolean | Promise<boolean>;
   onRest?: (rest: NonNullable<import('../api').FeatureRequest['rest']>,
     rebase?: (sheet: CharacterSheet) => NonNullable<import('../api').FeatureRequest['rest']>) => Promise<void>;
+  beforeAutomationRest?: () => Promise<void>;
   restActors?: () => import('../protocol').Actor[];
   /** Posts a short message (action results) to the shared chat. */
   onLog?: (text: string, rollSource?: RollSource, restDice?: import('./rest').RestDie[], incomingDamage?: boolean) => void;
@@ -1176,11 +1178,18 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       ...([['Short rest', 'short', 'Short rest: refreshes short-rest abilities and ends effects lasting until a rest'], ['Long rest', 'long', 'Long rest: refreshes all rest abilities and ends effects lasting until a rest']] as const)
         .map(([label, kind, title]) => {
           const b = el('button', { class: 'small', type: 'button', title }, label);
-          b.addEventListener('click', () => openRestDialog(root, c, kind, (summary, result) => { opts.onLog?.(summary, undefined, kind === 'short' ? result.dice : undefined); opts.onChange?.(); render(); },
-            async (key, actionId) => {
-              if (!opts.supportsDomainCardAutomation?.() || !opts.onFeature) throw new Error('Update the host to cast this spell during downtime.');
-              await opts.onFeature(key, actionId);
-            }, opts.restActors, opts.onRest));
+          b.addEventListener('click', () => {
+            const legacy = () => openRestDialog(root, c, kind, (summary, result) => { opts.onLog?.(summary, undefined, kind === 'short' ? result.dice : undefined); opts.onChange?.(); render(); },
+              async (key, actionId) => {
+                if (!opts.supportsDomainCardAutomation?.() || !opts.onFeature) throw new Error('Update the host to cast this spell during downtime.');
+                await opts.onFeature(key, actionId);
+              }, opts.restActors, opts.onRest);
+            if (!opts.actorId || !opts.beforeAutomationRest) { legacy(); return; }
+            b.disabled = true;
+            void openAutomationRestDialog(opts.actorId, kind, opts.beforeAutomationRest)
+              .then(handled => { if (!handled) legacy(); })
+              .finally(() => { b.disabled = false; });
+          });
           return b;
         }),
       death,

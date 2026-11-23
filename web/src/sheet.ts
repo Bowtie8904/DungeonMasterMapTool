@@ -139,6 +139,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
         });
       },
       restActors: () => (store.state?.actors ?? []).filter(a => !a.disabled && a.id !== actorId && !!a.ownerId),
+      beforeAutomationRest: () => changed!.flush(),
       onRest: async (rest, rebase) => {
         if (!conn.boneValorAutomation) throw new Error('Update the host to resolve Bone/Valor rest benefits.');
         await changed!.flush();

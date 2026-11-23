@@ -1600,6 +1600,73 @@ public final class AutomationHost {
         }
     }
 
+    /** Describes an owner's rest without sampling dice or modifying the supplied sheet. */
+    public ObjectNode describeRest(Pack pack, ObjectNode sheet, ObjectNode origin, String kind,
+                                   String principalId, String sourceVersion) {
+        String version = restOfferVersion(pack, sheet, origin, kind, principalId, sourceVersion);
+        ObjectNode working = sheet.deepCopy();
+        long revision = restRevision(working);
+        Set<String> initial = restEffectSnapshot(working);
+        ObjectNode expiry = origin.deepCopy().put("type", "rest." + kind);
+        expireRestBeforeMoves(pack, working, expiry, initial);
+        projection.state(working).put("revision", revision);
+        ObjectNode initialEvent = restPreparationEvent(pack, working, origin, kind, initial);
+        ArrayNode preparation = RuleDispatcher.describeOptions(candidates(pack, working, initialEvent), "rest",
+                audience -> allowed(audience, "self"));
+
+        ObjectNode preview = working.deepCopy();
+        RandomGenerator noSampling = () -> {
+            throw new RuleRuntime.Unavailable("randomPreview",
+                    "This rest requires an automatic preparation roll before choices, which is not supported yet.");
+        };
+        ObjectNode prepared = prepareRest(pack, preview, origin, kind, revision, RuleJson.JSON.createArrayNode(), noSampling, initial);
+        projection.state(preview).put("revision", revision);
+        RestProgress progress = restProgress(pack, prepared);
+        ObjectNode stagedOrigin = origin.deepCopy();
+        carryRestTable(stagedOrigin, prepared.required("event"));
+        ArrayNode moves = RuleJson.JSON.createArrayNode();
+        var initialCandidates = candidates(pack, preview, prepared.path("event").deepCopy());
+        for (var candidate : initialCandidates) {
+            for (var ref : candidate.program().bindings("downtime.move", "downtime")) {
+                JsonNode binding = RuleDispatcher.binding(candidate.program().rule(ref.ruleId()), ref.bindingId());
+                JsonNode metadata = binding.path("restMove");
+                if (!metadata.isObject() || !"button".equals(binding.path("mode").asText())
+                        || ref.forEach() || !allowed(ref.audience(), "self")
+                        || binding.has("targetSelection")
+                        || metadata.path("ally").asBoolean() && !metadata.path("narrative").asBoolean())
+                    continue;
+                String availability = metadata.path("kind").asText();
+                if ("short".equals(availability) && !"short".equals(kind)
+                        || "long".equals(availability) && !"long".equals(kind))
+                    continue;
+                ObjectNode event = restMoveEvent(stagedOrigin, progress, metadata);
+                var sources = candidates(pack, preview, event);
+                var source = sources.stream().filter(item -> item.instanceId().equals(candidate.instanceId()))
+                        .findFirst().orElseThrow();
+                ObjectNode descriptor = RuleRuntime.describe(source.program(), ref.ruleId(), ref.bindingId(), source.context());
+                descriptor.put("sourceName", source.context().path("source").path("name").asText());
+                descriptor.set("options", RuleDispatcher.describeOptions(sources, "downtime",
+                        audience -> allowed(audience, "self")));
+                moves.add(descriptor);
+            }
+        }
+        ArrayNode completion = RuleJson.JSON.createArrayNode();
+        for (String phase : List.of("beforeReset", "afterReset")) {
+            ObjectNode event = restCompletionEvent(pack, preview, stagedOrigin, progress.plan(), phase);
+            for (JsonNode option : RuleDispatcher.describeOptions(candidates(pack, preview, event), "rest",
+                    audience -> allowed(audience, "self")))
+                if (phase.equals(option.path("restPhase").asText())) completion.add(option);
+        }
+        ObjectNode offer = RuleJson.JSON.createObjectNode().put("kind", kind).put("revision", revision)
+                .put("offerVersion", version);
+        offer.set("plan", progress.plan());
+        offer.set("preparation", preparation);
+        offer.set("moves", moves);
+        offer.set("completion", completion);
+        RuleJson.checkTree(offer, "/offer", 0, new int[]{0});
+        return offer;
+    }
+
     /** Stages a signed rest; the caller must authenticate ownership and atomically commit all dependencies. */
     public RestTransaction stageOfferedRest(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request,
                                             String principalId, String sourceVersion, RandomGenerator random, RestRoster roster) {
@@ -1868,28 +1935,15 @@ public final class AutomationHost {
 
     ObjectNode prepareRest(Pack pack, ObjectNode sheet, ObjectNode origin, String kind, long expectedRevision,
                            ArrayNode choices, RandomGenerator random, Set<String> initialEffectIds) {
-        if (pack.rest() == null) throw new NotReady("The shared ruleset has no rest configuration.");
-        if (!Set.of("short", "long").contains(kind)) throw RuleJson.error("/rest/kind", "Expected short or long.");
         ObjectNode working = sheet.deepCopy();
         ObjectNode state = projection.state(working);
         long revision = state.path("revision").asLong();
         if (expectedRevision < 0 || expectedRevision != revision)
             throw new RuleRuntime.Unavailable("stale", "The character changed. Reopen this rest.");
-        if (RuleEffects.hasEarlyRestExpiry(projection.actorFact(working, "effects"), "rest." + kind, initialEffectIds))
-            throw new RuleRuntime.Unavailable("restExpiry", "Rest effects that end before downtime must be released first.");
-        int consecutive = working.has("shortRestsInRow")
-                ? RuleJson.integer(working.get("shortRestsInRow"), "/sheet/shortRestsInRow", 0, 1_000_000) : 0;
+        ObjectNode event = restPreparationEvent(pack, working, origin, kind, initialEffectIds);
+        JsonNode plan = event.path("rest");
+        JsonNode start = plan.path("start"), adjustable = plan.path("adjustable");
         RestLimits limits = "short".equals(kind) ? pack.rest().shortRest() : pack.rest().longRest();
-        if ("short".equals(kind) && consecutive >= limits.consecutiveLimit())
-            throw new RuleRuntime.Unavailable("restLimit", "The party has taken " + limits.consecutiveLimit()
-                    + " short rests in a row and must take a long rest next.");
-        ObjectNode event = RuleJson.object(origin, "/event").deepCopy().put("type", "rest.prepare");
-        ObjectNode plan = event.putObject("rest").put("kind", kind).put("moves", limits.moves()).put("longMoves", 0);
-        ObjectNode start = initialRestFacts(pack.rest(), projection.actor(working));
-        plan.set("start", start.deepCopy());
-        ObjectNode adjustable = plan.putObject("adjustable");
-        adjustable.putObject("moves").put("min", 0).put("max", limits.maxMoves());
-        adjustable.putObject("longMoves").put("min", 0).put("max", limits.maxLongMoves());
         var candidates = candidates(pack, working, event);
         ObjectNode request = RuleJson.JSON.createObjectNode();
         request.set("selections", choices);
@@ -1914,6 +1968,28 @@ public final class AutomationHost {
             throw new RuleRuntime.Unavailable("blocked", response.at("/event/blocked/0/reason").asText());
         replace(sheet, working);
         return response;
+    }
+
+    private ObjectNode restPreparationEvent(Pack pack, ObjectNode working, ObjectNode origin, String kind,
+                                            Set<String> initialEffectIds) {
+        if (pack.rest() == null) throw new NotReady("The shared ruleset has no rest configuration.");
+        if (!Set.of("short", "long").contains(kind)) throw RuleJson.error("/rest/kind", "Expected short or long.");
+        if (RuleEffects.hasEarlyRestExpiry(projection.actorFact(working, "effects"), "rest." + kind, initialEffectIds))
+            throw new RuleRuntime.Unavailable("restExpiry", "Rest effects that end before downtime must be released first.");
+        int consecutive = working.has("shortRestsInRow")
+                ? RuleJson.integer(working.get("shortRestsInRow"), "/sheet/shortRestsInRow", 0, 1_000_000) : 0;
+        RestLimits limits = "short".equals(kind) ? pack.rest().shortRest() : pack.rest().longRest();
+        if ("short".equals(kind) && consecutive >= limits.consecutiveLimit())
+            throw new RuleRuntime.Unavailable("restLimit", "The party has taken " + limits.consecutiveLimit()
+                    + " short rests in a row and must take a long rest next.");
+        ObjectNode event = RuleJson.object(origin, "/event").deepCopy().put("type", "rest.prepare");
+        ObjectNode plan = event.putObject("rest").put("kind", kind).put("moves", limits.moves()).put("longMoves", 0);
+        ObjectNode start = initialRestFacts(pack.rest(), projection.actor(working));
+        plan.set("start", start.deepCopy());
+        ObjectNode adjustable = plan.putObject("adjustable");
+        adjustable.putObject("moves").put("min", 0).put("max", limits.maxMoves());
+        adjustable.putObject("longMoves").put("min", 0).put("max", limits.maxLongMoves());
+        return event;
     }
 
     private static ObjectNode initialRestFacts(RestConfiguration configuration, ObjectNode actor) {
@@ -2019,16 +2095,9 @@ public final class AutomationHost {
             throw new RuleRuntime.Unavailable("restCommand",
                     "This downtime move requires party recovery and recipient track-change settlement, which are not available yet.");
 
-        ObjectNode event = RuleJson.object(origin, "/event").deepCopy().put("type", "downtime.move");
+        ObjectNode event = restMoveEvent(origin, progress, metadata);
         ObjectNode rest = progress.plan();
-        event.set("rest", rest.deepCopy());
-        ObjectNode move = event.putObject("move").put("id", id).put("rest", progress.kind())
-                .put("long", "longMove".equals(availability)).put("ally", metadata.path("ally").asBoolean(false))
-                .put("slots", 1).put("bonus", 0).put("allies", 0);
-        ObjectNode adjustable = move.putObject("adjustable");
-        adjustable.putObject("slots").put("min", 0).put("max", 1);
-        adjustable.putObject("bonus").put("min", -1000).put("max", 1000);
-        adjustable.putObject("allies").put("min", 0).put("max", 128);
+        ObjectNode move = (ObjectNode) event.path("move");
 
         ObjectNode state = projection.state(working);
         var candidates = candidates(pack, working, event);
@@ -2204,6 +2273,20 @@ public final class AutomationHost {
         if (target != null) target.party().stage(recipientUpdates);
         replace(sheet, working);
         return new RestMoveResult(next, result);
+    }
+
+    private static ObjectNode restMoveEvent(ObjectNode origin, RestProgress progress, JsonNode metadata) {
+        ObjectNode event = RuleJson.object(origin, "/event").deepCopy().put("type", "downtime.move");
+        event.set("rest", progress.plan());
+        ObjectNode move = event.putObject("move").put("id", metadata.path("id").asText()).put("rest", progress.kind())
+                .put("long", "longMove".equals(metadata.path("kind").asText()))
+                .put("ally", metadata.path("ally").asBoolean(false))
+                .put("slots", 1).put("bonus", 0).put("allies", 0);
+        ObjectNode adjustable = move.putObject("adjustable");
+        adjustable.putObject("slots").put("min", 0).put("max", 1);
+        adjustable.putObject("bonus").put("min", -1000).put("max", 1000);
+        adjustable.putObject("allies").put("min", 0).put("max", 128);
+        return event;
     }
 
     private boolean needsOwnerMoveReactions(List<RuleDispatcher.Candidate> candidates) {

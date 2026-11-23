@@ -126,12 +126,19 @@ Shared Healing Hands fixtures run through the converted card and HTTP host as we
 cover successful HP and clamped Stress recovery, failed HP and Stress recovery, and a critical below the written
 difficulty. Both observe the seeded casts, choice eligibility, actual recovery, reports and recipient locks.
 The converted path also covers engine-owned effect protection, version conflicts, duplicate and exclusive
-choices and transaction replay. Recipient long-rest expiry is exercised in isolation; a live format-2 rest
-transaction remains a release gap.
+choices and transaction replay. Recipient long-rest expiry is exercised in isolation; multi-character format-2
+rest transactions remain a release gap.
 
 The staged rest-reset primitive snapshots the original stored effect IDs and expires only those IDs, preserving
-effects started or replaced during the same downtime and reconciling surviving effect-bound pools. It is not yet
-connected to the live rest workflow.
+effects started or replaced during the same downtime and reconciling surviving effect-bound pools. It is used by
+the live self-rest workflow; legacy effect locks still need conversion.
+
+The versioned `/api/automation/{version}/{actorId}/rest` endpoint offers and commits owner-only self rests.
+The host derives descriptors and facts, signs the offer, stages the complete rest, and atomically saves the sheet,
+supported commands, reports and retry receipt. The browser flushes pending edits and renders preparation, move
+and completion controls. Cross-holder moves and party recovery remain rejected; completion choices currently use
+pre-move availability and must be offered again after outcomes. Automatic preparation rolls are rejected during
+preview until interactive post-roll choices are supported.
 
 The live host rejects legacy client-supplied rests and downtime rerolls when any category declares format 2,
 including an incomplete pack. It cannot classify malformed, unreadable or unknown-version categories as legacy.
@@ -139,7 +146,7 @@ The shared rules directory alongside valid format-1 catalogs is not a cutover ma
 replacement candidate. Full and compact owner or DM sheet saves cannot change the rest counters: omitted fields
 are preserved, and explicit changes or compact removals are rejected. Legacy incoming-damage snapshots preserve
 the host's automation state and cannot change those counters under the replacement policy. These guards do not
-implement the format-2 rest transaction or affect ordinary edits and valid format-1 rests.
+affect ordinary edits and valid format-1 rests.
 
 Scene and session resets use the same fail-closed catalog classification. Malformed, unreadable or
 unknown-version categories and incomplete replacement packs reject the reset without changing sheets, campaign
@@ -151,8 +158,8 @@ group defaults to the move ID and identifies mutually exclusive variants within 
 to false. `narrative: true` requires `ally: true` and forbids a `targetSelection`: it reports the move without
 selecting or changing an ally. Other ally moves still require an authoritative recipient transaction. The compiler
 validates this metadata and exposes it in descriptors, and the converter emits it for legacy timed actions.
-The future rest host must derive move facts from the compiled binding, not a client request. These descriptors
-alone neither execute downtime nor establish general parity.
+The rest host derives move facts from the compiled binding, not a client request. These descriptors alone do
+not establish general parity.
 The shared ruleset may also declare `rest.short` (`moves`, `maxMoves`, `maxLongMoves`, `consecutiveLimit`) and
 `rest.long` (`moves`, `maxMoves`). Counts are validated against a 32-move safety bound. Daggerheart starts with
 two moves, permits at most one granted long-rest move in a short rest, and requires a long rest after three
@@ -161,8 +168,7 @@ plan until it is present.
 The staged preparation primitive constructs its facts from those limits and the stored short-rest count,
 checks the expected revision, and applies authorized selected `rest.prepare` options and automatic adjustments
 on a copy. Invalid choices, an exhausted short-rest allowance and invalid plans leave the sheet unchanged.
-It does not finish a rest, advance the counters or persist anything; a live transaction still has to compose
-preparation with downtime, effect expiry, resets, receipts and the outbox.
+The self-rest endpoint composes this stage with downtime, effect expiry, resets, receipts and the supported outbox.
 An isolated move primitive derives its event identity and target flag from compiled metadata, applies automatic
 and selected move adjustments before the chosen button, and tracks source-scoped duplicate groups, move slots
 and short-rest long-move allowances. It returns dice, reports and commands without persisting. A targeted
@@ -175,7 +181,7 @@ the choice. A shared fixture checks these outcomes and unchanged source tracks i
 Deferred bodies see a freshly reprojected recipient, including derived statistics; only after they succeed is the recipient update staged. Commands
 needing interstage settlement are rejected. The caller must apply that update to a private sheet and construct
 a fresh request-local roster before a later target move; reusing a roster with an unapplied update is rejected.
-Post-outcome choices, complete multi-character rest transactions and browser integration remain release gaps.
+Post-outcome choices and complete multi-character rest transactions remain release gaps.
 An automatic or option `downtime.move` rule may declare `after: {costs?, do?, report?}`. Its pre-move
 operations set the move plan; after the button resolves, the host executes deferred bodies of rules that actually
 ran, in their original order. Deferred costs are checked initially and paid against the post-move sheet. Results
@@ -202,13 +208,13 @@ An effect with a short- or long-rest `until` event can also declare `"restExpiry
 staged host removes matching effects from the initial validated snapshot before preparation and moves, without
 refreshing uses or removing other effects. It reconciles supported pools and rejects invalid or unresolved
 effects atomically. Effects started or replaced after that snapshot survive the current rest; effects without
-early expiry retain normal reset ordering. Conversion of legacy locks and the live rest transaction are pending.
+early expiry retain normal reset ordering. Conversion of legacy locks and multi-character rests are pending.
 Staged completion derives `event.rest.cleared` for numeric start facts as starting minus current values,
 dispatches both phases around the snapshot reset, and advances the rest counters on a private copy.
 Conditional options that no longer apply are reported as skipped; invalid choices, inputs, costs and blocked
-outcomes reject the stage. Reports and host requests remain ordered for a future atomic commit. Moves without
-the required recipient transaction reject ally or targeted bindings rather than applying them to the wrong
-character. The host still needs full recipient coordination, publication and persistence.
+outcomes reject the stage. The live self-rest transaction publishes reports and persists supported host requests.
+Moves without the required recipient transaction reject targeted bindings rather than applying them to the wrong
+character. Full recipient coordination remains pending.
 The internal rest coordinator composes the initial effect snapshot, early expiry, preparation, ordered moves and
 completion on private source and recipient sheets. Recipient offers retain their original host versions while later
 moves reproject earlier staged changes; every changed sheet advances once, and failure discards the sequence.
@@ -216,8 +222,9 @@ Recipient sheets are loaded only when selected or needed for eligibility. It acc
 countdowns and already-applied limit refresh commands; a self-only rest can also emit single-holder cleanup.
 Other commands that could change facts read by later stages are rejected. The result separately identifies every
 recipient sheet read and its original host version, including unchanged sheets used by eligibility predicates;
-the eventual caller must compare their original stored bytes atomically with the changed sheets. It is not a live
-workflow: post-roll choices, command settlement, persisted reports and the atomic campaign commit remain necessary.
+the eventual multi-character caller must compare their original stored bytes atomically with the changed sheets.
+The live self-rest workflow commits supported commands and reports; post-roll choices and multi-holder settlement
+remain necessary.
 A staged rest also retains the sorted members of every inspected host scope, including unloaded characters,
 and rejects a membership change between moves. The rest result and its receipt wrapper also retain any host-order
 dependencies. The host can recheck membership and order from one roster snapshot per scope without hydrating
@@ -230,7 +237,7 @@ instance, so outstanding offers expire on restart. The staged receipt fingerprin
 the offer, and is checked before offer freshness. Thus an exact owner retry still replays a committed response
 after a restart without rolling, reading a roster or staging another recipient write; changed intents, other
 principals, DM receipts and older un-fingerprinted receipts cannot be reused as a rest. It shares the ordinary
-bounded request-ID journal. This offer is a concurrency primitive, not an interactive rest API.
+bounded request-ID journal. The live self-rest API authenticates its owner before using this offer.
 Sheet-backed owner recovery now reprojects the holder's statistics, derived effects and computed actor pools
 before nested track reactions and after projection-relevant state or pool changes. It uses the staged state of all
 active sources, not another host request. Explicit or derived holder-effect changes reconcile effect-bound actor
@@ -279,13 +286,13 @@ originating move facts, carries the post-rest table state, and rejects attempts 
 An internal-only coordinator variant shares its lazy recipient sheets with earlier targeted moves, so recovery
 reactions see prior changes and each affected sheet advances once. Its result and optional receipt retain every
 read version, membership and host-order dependency; exact retries do not reload recipients. Unannotated recovery,
-changed scopes and unsettled ally offers or other unsupported commands fail the entire private stage. This is not
-a live rest: targeted-move recipient reactions, per-card ally-passives, authenticated choices, command settlement
-and atomic persistence remain release prerequisites.
+changed scopes and unsettled ally offers or other unsupported commands fail the entire private stage. Live
+multi-character rests still require recipient reactions, per-card ally passives, authenticated post-outcome
+choices, command settlement and atomic multi-sheet persistence.
 The shared Daggerheart ruleset now supplies self-targeted short recovery (1d4 plus tier and move bonus), the two
 mutually exclusive preparation variants, long recovery and work on a project. Reports use the amount actually
 cleared or gained, including permanent and locked HP and capped Hope; a short rest needs a granted allowance for
-a long move. Narrative ally variants are staged as reports; rerolls, armor overflow and companion recovery
+a long move. Narrative ally variants are available as reports; rerolls, armor overflow and companion recovery
 remain unfinished.
 The sheet projection supplies permanent and temporary marked-HP floors to generic track clearing. The
 engine recomputes locks held in its effect list as operations run, so ending a lock before healing in the same
@@ -507,7 +514,7 @@ Supported legacy families:
 - **Roll triggers** and **conditional roll triggers** — `roll.finished` `button` rules: `reroll` (`hope`/`duality`), extra `damage`, `steps`, `when` (`hope`/`fear`, `hopeOrCritical`, `success`/`failure`, `hopeDie` with `die`, `always`), `successIfKnown`, explicit `difficulty` for known-success checks, `outcome`, `failedOnly`, `criticalOnly`, `weaponAttack`, generic `on: trait`, `audience`; `exclusiveRollGroup` maps to a binding exclusive group so only one selected button in that group executes. Trigger `addDice` (`NdM`, `@tierdM` or a flat number) becomes an added `roll.contribute` (damage role on damage rolls, modifier otherwise). `damageDice` (damage rolls only) becomes a `die.select` input over the non-duality dice of `event.roll` (selected with a per-die `where` predicate): `reroll` takes 1..32 dice (`min: 1`) and rerolls them with `roll.reroll`; `double` takes one die and adds its face as a flat damage contribution via the `roll.diceTotal` op. `die.select` inputs accept `where` instead of `eligible` and an optional `min`, so the player may pick between `min` and `count` dice. Block `hopeReward` (`resource`/`favor`/`removeFear` with an `amount` and a legacy `roll` filter) becomes a `roll.finished` self-claim button in claim group `roll-reward` (recipient `sourceActor`), available on non-critical Hope-dominant rolls that match the filter, excluding reactions and known failures; `removeFear` emits the generic `table.spend` host request for the `fear` table resource and the others `pool.gain`. The ruleset's base Hope reward must share the `roll-reward` group so only one reward is claimed. `classResourceOnly` sets pool `section: "class"` (pools accept `section` `feature` or `class`, a display hint for the class-resources section). `cardOnly` sets `section: "feature"`. `whileEffect` resolves the legacy effect label to a declared effect id and sets the pool field `whileEffect`; the pool is cleared when its last supporting instance on the holder ends. `usesOverrides` (`feat:<Name>`) become top-level `limitOverrides` (`{feature, limit, max}`); the host exposes `actor.limitOverrides` and the runtime uses the highest max across active sources. `patronDice` (`heal`/`ire`/`vengeance`) maps to `dice.hits` (4+) or the new `dice.highest` op over `6 + 2*min(1, floor(level/5))`-sided dice. Witch grants/actions remain unconverted. Cross-source `endEffect`/`requiresEffect` labels that no local effect declares compile to the generic `effect.endLabeled` op (`{label, target}`), which removes every effect on the target with that label regardless of source. `@fear` compiles to the host-supplied read-only fact `event.table.fear`; the live host must supply it on every event.
 - **Armor slot states** — `armorHalfEffect`/`armorFullHeldEffect` become derived effects whose `while` compares `actor.armorTrack.marked` with its capacity; `armorFullEffect`, `zeroHopeClearArmor` and `overflowHope` become automatic `track.changed` rules. The `track.changed` payload is `event.track` (actor field), `event.before`/`event.after` snapshots, `event.change` (`mark`/`clear`) and `event.requested`; the host does not dispatch it yet. `criticalMelee` becomes a `roll-reward` self claim plus carried Proficiency damage.
 - **Weapon damage handling** (block `damage`) — one `roll.finished` `automatic` rule filtered on `event.check.kind = damage` and `event.check.weaponSource = source.instanceId`, editing dice whose source and contribution ID match the host-recorded weapon base pools: `extraDice` → `roll.addDicePerPool`, `dropLowest` → `roll.dropLowestPerPool`, `explode` `once`/`repeat` → `roll.explode` (once skips exploded dice), `onesAs` → a flat contribution of `(N-1) times ones`, `maximumOnes` → `roll.setFaces` to `die.sides`, `onesBonus` → a dN dice contribution per one, `proficiencyOnly` → `event.check.fixedDice = false`, `label` → the contribution/rule label. **Alternate profiles** → source `profiles` (legacy ranges become `melee`/`veryClose`/`close`/`far`/`veryFar`; `1d8+3` becomes `{sides:8, flat:3}` with Proficiency dice; `phys`/`mag` become `physical`/`magic`).
-- **Rest.** A `rest` block (top level or carried by an effect, then gated on that effect) converts to rules on the rest events. Host contract: `rest.prepare` publishes `event.rest = {kind, start, moves, longMoves, adjustable}` before moves are chosen; `downtime.move` publishes `event.move = {id, rest, long, ally, bonus, allies, adjustable}` per chosen move; `rest.short`/`rest.long` must supply the original `start` and signed `cleared: {hitPoints, stress, armor}` facts at the appropriate completion phase. The ordering of ordinary passives, resets and no-recovery passives, as well as dispatch of effect-source programs for the effect holder, remains a live-integration requirement. `extraMoves` and `longMovesInShort` become automatic `rest.prepare` rules using `plan.adjust`; passives become `option` rules (`defaultOn` kept) on `rest.prepare` (passive `extraMoves`), `downtime.move` (`move` + `bonus`) or `rest.short`/`rest.long` (`rest` filter), with `armorMarked`/`noArmorMarked`/`noRecovery`/`minHope` conditions, `cost` and `consumeItem` costs; `castBeforeRest` must name an action of the same source. `chooseAlly` passives publish a one-claim offer and a `claim.accept` rule that applies the steps to the recipient. Move `modifiers` become automatic `downtime.move` rules (`bonus`/`repairAllies` adjust the move plan, `target: ally`, `note` becomes the report). An effect's `consumeLongRestMove` ends it when its holder takes a long-rest move during a short rest. An empty legacy automation block converts to no automation. Rest/downtime plan dispatch is not yet wired into the live host.
+- **Rest.** A `rest` block (top level or carried by an effect, then gated on that effect) converts to rules on the rest events. Host contract: `rest.prepare` publishes `event.rest = {kind, start, moves, longMoves, adjustable}` before moves are chosen; `downtime.move` publishes `event.move = {id, rest, long, ally, bonus, allies, adjustable}` per chosen move; `rest.short`/`rest.long` must supply the original `start` and signed `cleared: {hitPoints, stress, armor}` facts at the appropriate completion phase. The ordering of ordinary passives, resets and no-recovery passives, as well as dispatch of effect-source programs for the effect holder, remains a live-integration requirement. `extraMoves` and `longMovesInShort` become automatic `rest.prepare` rules using `plan.adjust`; passives become `option` rules (`defaultOn` kept) on `rest.prepare` (passive `extraMoves`), `downtime.move` (`move` + `bonus`) or `rest.short`/`rest.long` (`rest` filter), with `armorMarked`/`noArmorMarked`/`noRecovery`/`minHope` conditions, `cost` and `consumeItem` costs; `castBeforeRest` must name an action of the same source. `chooseAlly` passives publish a one-claim offer and a `claim.accept` rule that applies the steps to the recipient. Move `modifiers` become automatic `downtime.move` rules (`bonus`/`repairAllies` adjust the move plan, `target: ally`, `note` becomes the report). An effect's `consumeLongRestMove` ends it when its holder takes a long-rest move during a short rest. An empty legacy automation block converts to no automation. Self-rest dispatch is live; cross-holder and post-outcome choices remain pending.
 - **Attach.** A legacy `attach` block becomes a top-level `attachment`: legacy blockers become ordered requirements with the same reasons (generated weapons, `noFeature` as `not gear.hasFeature`, `range`/`damageType` equality, a second trait attachment, `nameIncludes` as `containsText` alternatives). Nested automation converts normally, and its weapon identity reads (`source.id`/`source.instanceId`) are retargeted to `source.attachedTo.*`. Gap: the host does not yet move items onto gear, supply gear facts, show the granted feature, apply the trait or activate attached programs.
 - **Channels and auras.** `channelBenefit` becomes a derived effect whose `while` tests that the required channel effect label is active (aura benefits named "Aura: Element" also require "Channeling: Element"); a legacy effect `group` becomes `exclusiveGroup`; `endOnDamage: N` becomes an automatic `damage.applied` rule that ends the effect when `event.applied.severity >= N` (`endOnSourceSevere` uses severity 3, `endAfterIncomingDamage` uses `event.applied.incoming >= 1`); a mitigation option with `preserveAfterIncomingDamage` becomes a `damage.prepare` button that sets a declared `keep-<effect>` state slot, and the damage ending skips `effect.end` while that slot is set and then clears it (prepare-time choice because automatic rules run before selected options); effect `damage` (one extra Proficiency die) becomes an automatic `roll.finished` weapon-damage rule gated by the effect; an `aura` action is available only while an effect in the `channel` group is active and starts a marker effect lasting until the next rest labelled with the action; `grantsFeatures`/`groupGrantedFeatures` become `grants`. Known fidelity gap: the aura marker lasts until rest, so switching channels within the same rest shows the aura for the new element, whereas legacy ended the aura with its channel.
 - **Reloading.** A `reloading` block (`dice` `1dN`, `fail` face) becomes one declared debuff effect "{source.name}: Unloaded" and three rules: an automatic `roll.prepare` rule that blocks attacks with this weapon while the effect is active, an automatic `roll.finished` rule that rolls the reload die after each non-reroll attack with the weapon and starts the effect when the face equals `fail`, and a sheet **Reload** button that costs 1 Stress and ends the effect. Two generic constructs support it: the `event.block` operation (`reason` template) appends `{sourceId, sourceInstanceId, reason}` to `event.blocked`, and any non-cost `do` step may carry an `if` expression that skips it when false (a conditional step may not name a result with `as`). Host contract: attack roll events publish `event.check.weaponSource` (the weapon instance) and `event.check.reroll` on rerolls, and the host refuses a `roll.prepare` whose `event.blocked` is non-empty. Gap: the host does not yet dispatch `roll.prepare` or enforce `event.blocked`.
@@ -523,7 +530,7 @@ Supported legacy families:
 - **Resource rolls.** `resourceRoll` (actions and roll triggers) becomes a bounded integer `amount` input (max: available Hope, gold or free track slots), a `track.mark`/`resource.spend` cost of `input.amount`, and a `roll.resolve` of `input.amount` dice with an optional `multiply(input.amount, bonusPerDie)` flat contribution. A typed roll is a fixed-dice damage roll stored as `resourceDamage`; an untyped one is a plain roll stored as `resourceRoll`. A generated report line is prepended to any authored report.
 - **Roll sections and die faces.** `rollSection` becomes the binding `group` (`result`, `sourceFeature`, `otherFeatures`); `containsDie: N` becomes `includes(pluck(flatten(pluck(event.roll.contributions, "dice")), "face"), N)`. The unary `flatten` expression concatenates array elements one level.
 
-Duplicate rule IDs within a block are made unique (`use`, `use-2`, ...). Template braces in legacy text are escaped. A rule may omit `do` when it only pays costs, consumes a limit or reports. Tests: `LegacyCatalogConverterTest` compiles inline fixtures and the shipped Warden's Protection block, then executes them through `RuleDispatcher`; the latter also has a persisted HTTP transaction test. The browser and replacement host share a deterministic Warden report-and-reset fixture, but live format-2 rest integration remains unwired.
+Duplicate rule IDs within a block are made unique (`use`, `use-2`, ...). Template braces in legacy text are escaped. A rule may omit `do` when it only pays costs, consumes a limit or reports. Tests: `LegacyCatalogConverterTest` compiles inline fixtures and the shipped Warden's Protection block, then executes them through `RuleDispatcher`; the latter also has a persisted HTTP transaction test. The browser and replacement host share a deterministic Warden report-and-reset fixture, but live multi-character rest integration remains unfinished.
 
 **Event context contract.** Converted rules read these facts, which the host must supply with every key present (`null` when not applicable), because reading an absent value is an error: `event.roll`; `event.check.{kind, trait, weapon, range, dominant, outcome, critical, hopeDie, spell, origin, total, difficulty, weaponSource, weaponSourceId, fixedDice}` (`weaponSource` is the attacking weapon's source instance ID and `weaponSourceId` its source ID, which base weapon damage dice carry as `sourceId`); `event.damage` (structured damage) and `event.damageType`; `event.thresholds.{major, severe}`; actor `effects` instances carry `label`. Selected options run in dispatcher order and chain: each `roll.publish`/`damage.publish` replaces `event.roll`/`event.damage` for the next rule.
 

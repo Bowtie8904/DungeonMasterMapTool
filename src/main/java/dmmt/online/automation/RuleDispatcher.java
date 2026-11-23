@@ -215,6 +215,10 @@ public final class RuleDispatcher {
         return describe(sources, "roll", binding -> binding.option() && visible.test(binding.audience()), null, true);
     }
 
+    static ArrayNode describeOptions(List<Candidate> sources, String surface, java.util.function.Predicate<String> visible) {
+        return describe(sources, surface, binding -> binding.option() && visible.test(binding.audience()), null, false);
+    }
+
     private static ArrayNode describe(List<Candidate> activeSources, String surface,
                                       java.util.function.Predicate<RuleCompiler.Program.BindingRef> visible,
                                       PartyTargets party, boolean skipUnmatched) {

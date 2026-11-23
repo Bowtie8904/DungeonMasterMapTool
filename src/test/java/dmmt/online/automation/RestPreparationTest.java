@@ -61,6 +61,18 @@ class RestPreparationTest {
     }
 
     @Test
+    void restOfferPreviewsAutomaticAllowancesWithoutChangingTheSheet() throws Exception {
+        var pack = pack();
+        ObjectNode sheet = sheet(), original = sheet.deepCopy();
+        ObjectNode offer = HOST.describeRest(pack, sheet, origin(), "short", "owner", "sheet-version");
+        assertEquals(3, offer.at("/plan/moves").asInt());
+        assertEquals(1, offer.at("/plan/longMoves").asInt());
+        assertEquals("shelter", offer.at("/preparation/1/ruleId").asText(), offer.toString());
+        assertEquals(original, sheet);
+        assertTrue(offer.path("offerVersion").asText().startsWith("rest-v1."));
+    }
+
+    @Test
     void preparationUsesAuthoredBoundsAndStagesCostsAndEffectsInOrder() throws Exception {
         var pack = pack();
         ObjectNode sheet = sheet();

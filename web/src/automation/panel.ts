@@ -31,7 +31,7 @@ export const CONTROL_TEXT: ControlText = {
   allocate: (total, max) => `Distribute exactly ${total}, at most ${max} each.`,
 };
 
-async function errorDetails(response: Response): Promise<{ text: string; code?: string }> {
+export async function errorDetails(response: Response): Promise<{ text: string; code?: string }> {
   try {
     const body = await response.json() as { error?: string; code?: string };
     return { text: body.error || `Request failed (${response.status}).`, code: body.code };
@@ -40,7 +40,7 @@ async function errorDetails(response: Response): Promise<{ text: string; code?: 
   }
 }
 
-function automationUrl(actorId: string): string {
+export function automationUrl(actorId: string): string {
   return `/api/automation/${AUTOMATION_COMPATIBILITY_VERSION}/${encodeURIComponent(actorId)}`;
 }
 
@@ -85,7 +85,7 @@ async function postIntent(actorId: string, request: object): Promise<unknown> {
   return response.json();
 }
 
-function actionReports(response: unknown): string[] {
+export function actionReports(response: unknown): string[] {
   if (!response || typeof response !== 'object' || Array.isArray(response)) return [];
   const actions = (response as Record<string, unknown>).actions;
   if (!Array.isArray(actions)) return [];

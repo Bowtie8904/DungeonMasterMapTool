@@ -15,7 +15,7 @@ export interface RuleDescriptor {
   ruleId: string;
   bindingId: string;
   revision: number;
-  surface: 'sheet' | 'chat' | 'roll' | 'damage' | 'effect' | 'resource' | 'rest';
+  surface: 'sheet' | 'chat' | 'roll' | 'damage' | 'effect' | 'resource' | 'rest' | 'downtime' | 'creation' | 'companion';
   mode: 'button' | 'option' | 'automatic';
   defaultOn?: boolean;
   exclusiveGroup?: string;
@@ -154,30 +154,7 @@ export function intentControl(descriptor: ButtonDescriptor, submit: (intent: But
       dialog.append(group);
     }
     const readInputs = inputFields(dialog, definitions, fields, text);
-    const rows: Array<{ option: RuleDescriptor; toggle: HTMLInputElement; inputs: HTMLElement; read: () => RuleIntent['inputs'] }> = [];
-    for (const option of options) {
-      const toggle = el('input', { type: 'checkbox', disabled: !option.available,
-        checked: !!option.defaultOn && option.available && !(option.exclusiveGroup &&
-          rows.some(row => row.toggle.checked && row.option.exclusiveGroup === option.exclusiveGroup)) });
-      const legend = el('legend', {}, el('label', {}, toggle, option.label));
-      const group = el('fieldset', {}, legend);
-      if (option.description) group.append(el('p', {}, option.description));
-      if (!option.available && option.reason) group.append(el('span', { class: 'muted' }, option.reason));
-      const inputs = el('div', { hidden: !toggle.checked });
-      fields.push(toggle);
-      const read = inputFields(inputs, option.inputs ?? [], fields, text);
-      rows.push({ option, toggle, inputs, read });
-      toggle.addEventListener('change', () => {
-        inputs.hidden = !toggle.checked;
-        if (!toggle.checked || !option.exclusiveGroup) return;
-        for (const row of rows) if (row.toggle !== toggle && row.option.exclusiveGroup === option.exclusiveGroup) {
-          row.toggle.checked = false;
-          row.inputs.hidden = true;
-        }
-      });
-      group.append(inputs);
-      dialog.append(group);
-    }
+    const readOptions = optionFields(dialog, options, fields, text);
     const dialogError = el('div', { class: 'error', role: 'alert' });
     const cancel = el('button', { type: 'button' }, text.cancel);
     const go = el('button', { type: 'button', class: 'primary' }, descriptor.label);
@@ -197,9 +174,7 @@ export function intentControl(descriptor: ButtonDescriptor, submit: (intent: But
         else {
           const target = readTarget();
           payload = { inputs: readInputs(), ...(target ? { target } : {}) };
-          if (rows.length) payload.selections = rows.filter(row => row.toggle.checked && row.option.available)
-            .map(({ option, read }) => ({ sourceInstanceId: option.sourceInstanceId, ruleId: option.ruleId,
-              bindingId: option.bindingId, ...(option.eachId === undefined ? {} : { eachId: option.eachId }), inputs: read() }));
+          if (options.length) payload.selections = readOptions();
         }
       } catch (failure) {
         dialogError.textContent = failure instanceof Error ? failure.message : text.failed;
@@ -215,7 +190,38 @@ export function intentControl(descriptor: ButtonDescriptor, submit: (intent: But
   return root;
 }
 
-function inputFields(container: HTMLElement, definitions: RuleInput[], fields: HTMLInputElement[], text: ControlText): () => RuleIntent['inputs'] {
+export function optionFields(container: HTMLElement, options: RuleDescriptor[], fields: HTMLInputElement[],
+                             text: ControlText): () => RollSelection[] {
+  const rows: Array<{ option: RuleDescriptor; toggle: HTMLInputElement; inputs: HTMLElement; read: () => RuleIntent['inputs'] }> = [];
+  for (const option of options) {
+    const toggle = el('input', { type: 'checkbox', disabled: !option.available,
+      checked: !!option.defaultOn && option.available && !(option.exclusiveGroup &&
+        rows.some(row => row.toggle.checked && row.option.exclusiveGroup === option.exclusiveGroup)) });
+    const legend = el('legend', {}, el('label', {}, toggle, option.label));
+    const group = el('fieldset', {}, legend);
+    if (option.description) group.append(el('p', {}, option.description));
+    if (!option.available && option.reason) group.append(el('span', { class: 'muted' }, option.reason));
+    const inputs = el('div', { hidden: !toggle.checked });
+    fields.push(toggle);
+    const read = inputFields(inputs, option.inputs ?? [], fields, text);
+    rows.push({ option, toggle, inputs, read });
+    toggle.addEventListener('change', () => {
+      inputs.hidden = !toggle.checked;
+      if (!toggle.checked || !option.exclusiveGroup) return;
+      for (const row of rows) if (row.toggle !== toggle && row.option.exclusiveGroup === option.exclusiveGroup) {
+        row.toggle.checked = false;
+        row.inputs.hidden = true;
+      }
+    });
+    group.append(inputs);
+    container.append(group);
+  }
+  return () => rows.filter(row => row.toggle.checked && row.option.available)
+    .map(({ option, read }) => ({ sourceInstanceId: option.sourceInstanceId, ruleId: option.ruleId,
+      bindingId: option.bindingId, ...(option.eachId === undefined ? {} : { eachId: option.eachId }), inputs: read() }));
+}
+
+export function inputFields(container: HTMLElement, definitions: RuleInput[], fields: HTMLInputElement[], text: ControlText): () => RuleIntent['inputs'] {
     const reads: Array<() => [string, RuleIntent['inputs'][string]]> = [];
     for (const input of definitions) {
       if (input.kind === 'choice') {

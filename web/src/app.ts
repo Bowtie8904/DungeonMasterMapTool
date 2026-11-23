@@ -1647,6 +1647,7 @@ export class App {
             },
             onFeature: (key, actionId, amount) => this.useSheetFeature(a.id, character, changed, key, actionId, amount),
             restActors: () => (this.store.state?.actors ?? []).filter(actor => !actor.disabled && actor.id !== a.id && !!actor.ownerId),
+            beforeAutomationRest: () => changed.flush(),
             onRest: async (rest, rebase) => {
               if (!this.conn.boneValorAutomation) throw new Error('Update the host to resolve Bone/Valor rest benefits.');
               await changed.flush();

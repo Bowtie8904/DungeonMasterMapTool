@@ -1872,6 +1872,208 @@ class OnlineSessionServerTest {
         return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    private HttpResponse<String> restHttp(String cookie, String actorId, String kind, String body) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/automation/"
+                + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + "/" + actorId + "/rest"
+                + (body == null ? "?kind=" + kind : ""))).header("Cookie", cookie);
+        if (body == null) request.GET();
+        else request.header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body));
+        return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private static ObjectNode restSelection(JsonNode descriptor) {
+        ObjectNode selection = MAPPER.createObjectNode()
+                .put("sourceInstanceId", descriptor.path("sourceInstanceId").asText())
+                .put("ruleId", descriptor.path("ruleId").asText())
+                .put("bindingId", descriptor.path("bindingId").asText());
+        selection.putObject("inputs");
+        return selection;
+    }
+
+    private static JsonNode restDescriptor(JsonNode choices, String rule) {
+        for (JsonNode choice : choices) if (rule.equals(choice.path("ruleId").asText())) return choice;
+        throw new AssertionError("Missing rest rule " + rule + " in " + choices);
+    }
+
+    private static ObjectNode restRequest(JsonNode offer, String requestId) {
+        ObjectNode body = MAPPER.createObjectNode();
+        ObjectNode request = body.putObject("request").put("requestId", requestId)
+                .put("offerVersion", offer.path("offerVersion").asText()).put("kind", offer.path("kind").asText())
+                .put("expectedRevision", offer.path("revision").asLong());
+        request.putArray("preparation");
+        request.putArray("moves");
+        request.putArray("completion");
+        return body;
+    }
+
+    private static ObjectNode addRestMove(ObjectNode request, JsonNode descriptor) {
+        ObjectNode move = request.withArray("moves").addObject();
+        move.set("selection", restSelection(descriptor));
+        move.putArray("options");
+        return move;
+    }
+
+    private void installRestRules() throws Exception {
+        automationCompendium();
+        Path rules = java.nio.file.Files.createDirectories(compendiumDir.resolve("rules"));
+        java.nio.file.Files.writeString(rules.resolve("recipes.json"), dmmt.online.automation.LegacyCatalogConverter.coreRecipes());
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(dmmt.online.automation.LegacyCatalogConverter.coreRuleset());
+        ArrayNode definitions = ruleset.withObject("/automation").withArray("rules");
+        definitions.add(MAPPER.readTree("""
+                {"id":"test-extra","bindings":[{"id":"rest","event":"rest.prepare","surface":"rest","mode":"option"}],
+                 "do":[{"op":"plan.adjust","plan":"event.rest","field":"moves","by":1,"label":"Extra"}],
+                 "ui":{"label":"Extra move","report":"Made extra time."}}
+                """));
+        definitions.add(MAPPER.readTree("""
+                {"id":"test-care","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"option"}],
+                 "when":{"eq":[{"read":"event.move.id"},"tend"]},
+                 "do":[{"op":"plan.adjust","plan":"event.move","field":"bonus","by":1,"label":"Care"}],
+                 "ui":{"label":"Care","report":"Added care."}}
+                """));
+        definitions.add(MAPPER.readTree("""
+                {"id":"test-benefit","bindings":[{"id":"rest","event":"rest.short","surface":"rest","mode":"option"}],
+                 "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],
+                 "ui":{"label":"Rest benefit","report":"Gained a benefit."}}
+                """));
+        java.nio.file.Files.writeString(rules.resolve("ruleset.json"), ruleset.toString());
+    }
+
+    @Test
+    void formatTwoRestOffersAndCommitsOwnerChoicesOnce() throws Exception {
+        installRestRules();
+        campaign.getActors().add(Campaign.Actor.builder().id("resting").name("Ada").ownerId(playerId()).build());
+        String original = """
+                {"name":"Ada","level":2,"hp":{"slots":6,"total":6,"on":5},
+                 "stress":{"slots":6,"total":6,"on":5},"armorTrack":{"slots":4,"total":4,"on":2},
+                 "hope":{"slots":6,"total":6,"on":1},"features":[],"inventory":[]}
+                """;
+        store.saveSheet(campaign.getId(), "resting", original);
+        String before = store.loadSheet(campaign.getId(), "resting");
+        String owner = cookie(), other = allyCookie("rest-viewer");
+        assertEquals(403, restHttp(other, "resting", "short", null).statusCode());
+        var old = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/automation/0/resting/rest?kind=short"))
+                .header("Cookie", owner).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(409, old.statusCode());
+        assertEquals("automationCompatibilityMismatch", MAPPER.readTree(old.body()).path("code").asText());
+        diceSeed(13);
+        var described = restHttp(owner, "resting", "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode offer = MAPPER.readTree(described.body());
+        assertEquals(2, offer.at("/plan/moves").asInt());
+        assertTrue(restDescriptor(offer.path("preparation"), "test-extra").path("available").asBoolean());
+        assertTrue(restDescriptor(offer.path("completion"), "test-benefit").path("available").asBoolean());
+        JsonNode tend = restDescriptor(offer.path("moves"), "rest-tend");
+        JsonNode care = restDescriptor(tend.path("options"), "test-care");
+        assertTrue(care.path("available").asBoolean());
+        assertFalse(restDescriptor(restDescriptor(offer.path("moves"), "rest-stress").path("options"), "test-care")
+                .path("available").asBoolean());
+        assertEquals(before, store.loadSheet(campaign.getId(), "resting"), "Describing does not save or sample.");
+        JsonNode staleLong = MAPPER.readTree(restHttp(owner, "resting", "long", null).body());
+        ObjectNode body = restRequest(offer, "rest-1");
+        ObjectNode request = (ObjectNode) body.path("request");
+        request.withArray("preparation").add(restSelection(restDescriptor(offer.path("preparation"), "test-extra")));
+        ObjectNode first = addRestMove(request, tend);
+        first.withArray("options").add(restSelection(care));
+        addRestMove(request, restDescriptor(offer.path("moves"), "rest-prepare"));
+        addRestMove(request, restDescriptor(offer.path("moves"), "rest-stress"));
+        request.withArray("completion").add(restSelection(restDescriptor(offer.path("completion"), "test-benefit")));
+        assertEquals(403, restHttp(other, "resting", null, body.toString()).statusCode());
+        ObjectNode targeted = body.deepCopy();
+        ((ObjectNode) targeted.at("/request/moves/0")).putObject("target").put("recipientId", "forged");
+        assertEquals(409, restHttp(owner, "resting", null, targeted.toString()).statusCode());
+        assertEquals(before, store.loadSheet(campaign.getId(), "resting"));
+
+        var executed = restHttp(owner, "resting", null, body.toString());
+        assertEquals(200, executed.statusCode(), executed.body());
+        JsonNode receipt = MAPPER.readTree(executed.body());
+        assertEquals(3, receipt.at("/progress/moves").asInt());
+        assertEquals(3, receipt.at("/progress/slotsUsed").asInt());
+        int firstFace = new java.util.Random(13).nextInt(4) + 1;
+        assertEquals(firstFace, receipt.at("/actions/2/diceRolls/0/faces/0").asInt(), receipt.toString());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(Math.max(0, 5 - firstFace - 2 - 1), saved.at("/hp/on").asInt());
+        assertEquals(3, saved.at("/hope/on").asInt());
+        assertEquals(1, saved.path("shortRestsInRow").asInt());
+        assertEquals(1, saved.at("/automationState/revision").asInt());
+        int history = store.historyTail(campaign.getId(), 100).size();
+        assertTrue(history >= 4, "Rest reports are published with the transaction.");
+        String after = store.loadSheet(campaign.getId(), "resting");
+        assertEquals(executed.body(), restHttp(owner, "resting", null, body.toString()).body());
+        assertEquals(after, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        ObjectNode reused = body.deepCopy();
+        ((ArrayNode) reused.at("/request/completion")).removeAll();
+        assertEquals(409, restHttp(owner, "resting", null, reused.toString()).statusCode());
+        assertEquals(409, restHttp(owner, "resting", null, restRequest(staleLong, "stale").toString()).statusCode());
+        assertEquals(after, store.loadSheet(campaign.getId(), "resting"));
+
+        var longOffer = restHttp(owner, "resting", "long", null);
+        assertEquals(200, longOffer.statusCode(), longOffer.body());
+        JsonNode longRest = MAPPER.readTree(longOffer.body());
+        ObjectNode longBody = restRequest(longRest, "rest-2");
+        addRestMove((ObjectNode) longBody.path("request"), restDescriptor(longRest.path("moves"), "rest-stress-all"));
+        var completed = restHttp(owner, "resting", null, longBody.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode afterLong = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(0, afterLong.at("/stress/on").asInt());
+        assertEquals(0, afterLong.path("shortRestsInRow").asInt());
+        assertEquals(1, afterLong.path("longRestRevision").asInt());
+        assertEquals(2, afterLong.at("/automationState/revision").asInt());
+    }
+
+    @Test
+    void formatTwoRestDoesNotFallBackWhenRulesAreBroken() throws Exception {
+        installRestRules();
+        campaign.getActors().add(Campaign.Actor.builder().id("resting").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "resting", """
+                {"name":"Ada","hp":{"slots":6,"on":1},"stress":{"slots":6,"on":1},
+                 "armorTrack":{"slots":4,"on":1},"hope":{"slots":6,"on":1}}
+                """);
+        String owner = cookie();
+        java.nio.file.Files.delete(compendiumDir.resolve("rules").resolve("ruleset.json"));
+        var broken = restHttp(owner, "resting", "short", null);
+        assertEquals(409, broken.statusCode(), broken.body());
+        assertTrue(broken.body().contains("ruleset.json"));
+        for (String category : List.of("classes", "consumables")) {
+            Path file = compendiumDir.resolve(category + ".json");
+            ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+            catalog.put("version", 1);
+            java.nio.file.Files.writeString(file, catalog.toString());
+        }
+        var legacy = restHttp(owner, "resting", "short", null);
+        assertEquals(200, legacy.statusCode(), legacy.body());
+        assertTrue(MAPPER.readTree(legacy.body()).path("legacy").asBoolean());
+        String grant = URI.create(server.dmSheetUrl("resting")).getFragment();
+        var dmLegacy = http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/automation/"
+                        + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + "/resting/rest?kind=short"))
+                .header("Authorization", "Bearer " + grant).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, dmLegacy.statusCode(), dmLegacy.body());
+        assertTrue(MAPPER.readTree(dmLegacy.body()).path("legacy").asBoolean());
+    }
+
+    @Test
+    void formatTwoRestRejectsRandomPreparationPreviewWithoutRolling() throws Exception {
+        installRestRules();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withArray("rules").add(MAPPER.readTree("""
+                {"id":"random-before-choice","bindings":[{"id":"rest","event":"rest.prepare","surface":"rest","mode":"automatic"}],
+                 "do":[{"op":"dice.roll","count":1,"sides":4,"as":"roll"}],"ui":{"label":"Roll before rest"}}
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        campaign.getActors().add(Campaign.Actor.builder().id("resting").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "resting", """
+                {"name":"Ada","hp":{"slots":6,"on":1},"stress":{"slots":6,"on":1},
+                 "armorTrack":{"slots":4,"on":1},"hope":{"slots":6,"on":1}}
+                """);
+        String before = store.loadSheet(campaign.getId(), "resting");
+        var rejected = restHttp(cookie(), "resting", "short", null);
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertEquals("randomPreview", MAPPER.readTree(rejected.body()).path("code").asText());
+        assertTrue(rejected.body().contains("automatic preparation roll"));
+        assertEquals(before, store.loadSheet(campaign.getId(), "resting"));
+    }
+
     private HttpResponse<String> resultHttp(String cookie, String actorId, String resultId) throws Exception {
         return http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/automation/"
                 + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + "/" + actorId

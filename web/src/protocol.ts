@@ -299,6 +299,7 @@ export interface FeatureSheetMessage {
   scars?: number;
   permanentHp?: number;
   longRestRevision?: number;
+  shortRestsInRow?: number;
   vitalityBenefits?: Array<'hp' | 'stress' | 'thresholds'>;
   vitalityEffectRemoved?: boolean;
   spectralBlocked?: boolean;

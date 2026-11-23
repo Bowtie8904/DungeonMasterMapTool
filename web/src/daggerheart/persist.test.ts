@@ -187,10 +187,12 @@ describe('chat inventory synchronization', () => {
     const armor = c.activeArmor;
     const weapons = c.activeWeapons;
     expect(applyFeatureState(c, { actorId: 'a', featureRevision: 1, inventoryRevision: 1,
-      inventory: [], compendiumRevision: 1, loadout: [], vault: [], longRestRevision: 3, permanentHp: 2, pendingDeathRoll: { id: 4, ts: 5 } })).toBe(true);
+      inventory: [], compendiumRevision: 1, loadout: [], vault: [], longRestRevision: 3, shortRestsInRow: 2,
+      permanentHp: 2, pendingDeathRoll: { id: 4, ts: 5 } })).toBe(true);
     expect(c.activeArmor).toBe(armor);
     expect(c.activeWeapons).toBe(weapons);
     expect(c.longRestRevision).toBe(3);
+    expect(c.shortRestsInRow).toBe(2);
     expect(c.pendingDeathRoll).toEqual({ id: 4, ts: 5 });
     const card = { ...mockCharacter().loadout[0], name: 'Unbreakable' };
     expect(applyFeatureState(c, { actorId: 'a', featureRevision: 2, compendiumRevision: 2, vault: [card] })).toBe(true);

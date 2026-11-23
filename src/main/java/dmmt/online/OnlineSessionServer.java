@@ -332,6 +332,8 @@ public final class OnlineSessionServer {
         javalin.post("/api/automation/{id}", this::handleUnversionedAutomation);
         javalin.get("/api/automation/{version}/{id}", ctx -> withSheetOperation(ctx, this::handleAutomationDescribe));
         javalin.post("/api/automation/{version}/{id}", ctx -> withSheetOperation(ctx, this::handleAutomationExecute));
+        javalin.get("/api/automation/{version}/{id}/rest", ctx -> withSheetOperation(ctx, this::handleRestDescribe));
+        javalin.post("/api/automation/{version}/{id}/rest", ctx -> withSheetOperation(ctx, this::handleRestExecute));
         javalin.put("/api/sheet/{id}", ctx -> withSheetOperation(ctx, this::handleSheetSave));
         javalin.post("/api/sheet/{id}/demiplane", this::handleDemiplaneImport);
         javalin.post("/api/feature", ctx -> withSheetOperation(ctx, this::handleFeature));
@@ -5338,7 +5340,7 @@ public final class OnlineSessionServer {
         ObjectNode message = MAPPER.createObjectNode().put("type", "sheetFeature").put("actorId", actor.getId())
                 .put("featureRevision", sheet.path("featureRevision").asLong(0));
         for (String field : List.of("hp", "stress", "hope", "scars", "armorTrack", "effects", "usage", "resources",
-                "permanentHp", "spectralBlocked", "deathNarrative", "longRestRevision", "vitalityBenefits", "vitalityEffectRemoved", "resurrectionVaulted",
+                "permanentHp", "spectralBlocked", "deathNarrative", "longRestRevision", "shortRestsInRow", "vitalityBenefits", "vitalityEffectRemoved", "resurrectionVaulted",
                 "inventoryRevision", "compendiumRevision", "inventory", "loadout", "vault")) {
             if (sheet.has(field)) message.set(field, sheet.get(field));
         }
@@ -5988,13 +5990,7 @@ public final class OnlineSessionServer {
                 List<ObjectNode> messages = new ArrayList<>();
                 if (body.path("request").has("profileRoll") || response.path("resultPublished").asBoolean())
                     messages.add(profileRollMessage(actor, response.path("event")));
-                for (JsonNode action : response.path("actions")) {
-                    String report = action.path("report").asText("");
-                    if (report.isBlank()) continue;
-                    JsonNode source = sourceNames.getOrDefault(action.path("sourceInstanceId").asText(),
-                            MAPPER.createObjectNode().put("name", "Automation"));
-                    messages.add(actionReportMessage(actor, source, source.path("name").asText("Automation"), List.of(report), null));
-                }
+                messages.addAll(automationReports(actor, sourceNames, response));
                 commitAutomationResults(roster == null ? java.util.Collections.singletonMap(actor.getId(), original) : roster.originals,
                         changed, messages, response.path("outbox"), pack, actor.getId(), response);
             }
@@ -6013,6 +6009,112 @@ public final class OnlineSessionServer {
             json(ctx, 400, errorBody(e.getMessage()));
         } catch (IOException | java.io.UncheckedIOException e) {
             json(ctx, 500, errorBody("Could not save the automation result."));
+        }
+    }
+
+    private List<ObjectNode> automationReports(Campaign.Actor actor, Map<String, JsonNode> sourceNames, JsonNode response) {
+        List<ObjectNode> messages = new ArrayList<>();
+        for (JsonNode action : response.path("actions")) {
+            String report = action.path("report").asText("");
+            if (report.isBlank()) continue;
+            JsonNode source = sourceNames.getOrDefault(action.path("sourceInstanceId").asText(),
+                    MAPPER.createObjectNode().put("name", "Automation"));
+            messages.add(actionReportMessage(actor, source, source.path("name").asText("Automation"), List.of(report), null));
+        }
+        return messages;
+    }
+
+    private Campaign.Actor restActor(Context ctx, String playerId) {
+        Campaign.Actor actor = automationActor(ctx.pathParam("id"));
+        if (!"self".equals(automationRelation(ctx, playerId, actor)))
+            throw new SecurityException("Only the character's owner can choose a rest.");
+        return actor;
+    }
+
+    private synchronized void handleRestDescribe(Context ctx) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null || !requireAutomationVersion(ctx)) return;
+        try {
+            Campaign.Actor actor = automationActor(ctx.pathParam("id"));
+            String relation = automationRelation(ctx, playerId, actor);
+            if (!"self".equals(relation) && !"dm".equals(relation))
+                throw new SecurityException("Only the character's owner can choose a rest.");
+            if (!requiresAuthoritativeRest()) {
+                json(ctx, 200, MAPPER.createObjectNode().put("legacy", true));
+                return;
+            }
+            if (!"self".equals(relation))
+                throw new SecurityException("Only the character's owner can choose a rest.");
+            String original = store.loadSheet(campaign.getId(), actor.getId());
+            ObjectNode sheet = original == null ? MAPPER.createObjectNode() : hydrateSheet(actor.getId(), original);
+            var pack = automationPack();
+            ObjectNode offer = automationHost.describeRest(pack, sheet, automationEvent("rest.prepare", actor),
+                    ctx.queryParam("kind"), playerId, sheetVersion(original, actor));
+            ctx.header("Cache-Control", "no-store");
+            json(ctx, 200, offer);
+        } catch (dmmt.online.automation.AutomationHost.NotReady e) {
+            json(ctx, 409, errorBody("Automation is unavailable: " + e.getMessage()));
+        } catch (dmmt.online.automation.RuleRuntime.Unavailable e) {
+            json(ctx, 409, errorBody(e.getMessage()).put("code", e.code()));
+        } catch (SecurityException e) {
+            json(ctx, 403, errorBody(e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            json(ctx, 400, errorBody(e.getMessage()));
+        } catch (RestPolicyException e) {
+            json(ctx, 409, errorBody(e.getMessage()));
+        } catch (IOException | java.io.UncheckedIOException e) {
+            json(ctx, 500, errorBody("Could not read the rest offer."));
+        }
+    }
+
+    private synchronized void handleRestExecute(Context ctx) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null || !requireAutomationVersion(ctx)) return;
+        if (ctx.bodyAsBytes().length > config.maxMessageBytes()) {
+            json(ctx, 413, errorBody("Rest request is too large."));
+            return;
+        }
+        try {
+            JsonNode body = MAPPER.readTree(ctx.body());
+            if (body == null || !body.isObject() || body.size() != 1 || !body.path("request").isObject())
+                throw new IllegalArgumentException("Invalid rest request; event facts are generated by the host.");
+            Campaign.Actor actor = restActor(ctx, playerId);
+            if (!requiresAuthoritativeRest())
+                throw new dmmt.online.automation.AutomationHost.NotReady("The host is using legacy rest rules.");
+            String original = store.loadSheet(campaign.getId(), actor.getId());
+            ObjectNode sheet = original == null ? MAPPER.createObjectNode() : hydrateSheet(actor.getId(), original);
+            var pack = automationPack();
+            Map<String, JsonNode> sourceNames = new java.util.HashMap<>();
+            for (var element : automationHost.sources(pack, sheet))
+                sourceNames.put(element.instanceId(), element.element().deepCopy());
+            var transaction = automationHost.stageOfferedRest(pack, sheet, automationEvent("rest.prepare", actor),
+                    (ObjectNode) body.get("request"), playerId, sheetVersion(original, actor), diceRandom, null);
+            ObjectNode response = transaction.response();
+            if (!transaction.replayed()) {
+                sheet.put("featureRevision", sheet.path("featureRevision").asLong(0) + 1);
+                Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
+                changed.put(actor.getId(), sheet);
+                List<ObjectNode> messages = automationReports(actor, sourceNames, response);
+                commitAutomationResults(java.util.Collections.singletonMap(actor.getId(), original), changed,
+                        messages, response.path("outbox"), pack, actor.getId(), response);
+            }
+            json(ctx, 200, response);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            json(ctx, 400, errorBody("Invalid rest request."));
+        } catch (dmmt.online.automation.AutomationHost.NotReady e) {
+            json(ctx, 409, errorBody("Automation is unavailable: " + e.getMessage()));
+        } catch (dmmt.online.automation.RuleRuntime.Unavailable e) {
+            json(ctx, 409, errorBody(e.getMessage()).put("code", e.code()));
+        } catch (CampaignStore.StaleAutomationSheet e) {
+            json(ctx, 409, errorBody(e.getMessage()));
+        } catch (SecurityException e) {
+            json(ctx, 403, errorBody(e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            json(ctx, 400, errorBody(e.getMessage()));
+        } catch (RestPolicyException e) {
+            json(ctx, 409, errorBody(e.getMessage()));
+        } catch (IOException | java.io.UncheckedIOException e) {
+            json(ctx, 500, errorBody("Could not save the rest."));
         }
     }
 
