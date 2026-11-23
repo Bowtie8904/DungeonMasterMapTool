@@ -149,6 +149,99 @@ class RestTransactionTest {
     }
 
     @Test
+    void stagedReceiptReplaysOnlyTheSameOwnersExactIntentWithoutRollingAgain() throws Exception {
+        var pack = pack();
+        ObjectNode sheet = sheet(), rest = request("short").put("requestId", "rest-1");
+        rest.withArray("preparation").add(choice("prepare", "rest"));
+        move(rest, "mend");
+        var staged = HOST.stageRestWithReceipt(pack, sheet, origin(), rest, "owner",
+                StructuredRollTest.faces(4), null);
+        assertFalse(staged.replayed());
+        assertEquals("rest-1", staged.response().path("requestId").asText());
+        assertEquals(1, sheet.at("/hp/on").asInt());
+        assertEquals(1, sheet.at("/automationState/journal").size());
+        assertEquals(staged.response(), sheet.at("/automationState/journal/0/response"));
+        ObjectNode saved = sheet.deepCopy();
+
+        ObjectNode reordered = (ObjectNode) RuleJson.parse("""
+                {"moves":[{"options":[],"selection":{"bindingId":"move","ruleId":"mend","sourceInstanceId":"ruleset:base"}}],
+                 "completion":[],"preparation":[{"bindingId":"rest","ruleId":"prepare","sourceInstanceId":"ruleset:base"}],
+                 "expectedRevision":9,"kind":"short","requestId":"rest-1"}
+                """);
+        var replay = HOST.stageRestWithReceipt(pack, sheet, origin().put("sessionId", "later-session"), reordered,
+                "owner", StructuredRollTest.noRandom(), null);
+        assertTrue(replay.replayed());
+        assertEquals(staged.response(), replay.response());
+        assertTrue(replay.recipients().isEmpty());
+        assertTrue(replay.readVersions().isEmpty());
+        assertEquals(saved, sheet);
+
+        ObjectNode changed = rest.deepCopy().put("kind", "long");
+        assertEquals("requestId", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageRestWithReceipt(pack, sheet, origin(), changed, "owner",
+                        StructuredRollTest.noRandom(), null)).code());
+        assertEquals("requestId", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageRestWithReceipt(pack, sheet, origin(), rest, "other",
+                        StructuredRollTest.noRandom(), null)).code());
+        ObjectNode action = RuleJson.JSON.createObjectNode().put("requestId", "rest-1").put("expectedRevision", 9);
+        action.putArray("selections");
+        assertEquals("requestId", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.execute(pack, sheet, origin(), action, "self", "owner",
+                        StructuredRollTest.noRandom())).code());
+        assertEquals(saved, sheet);
+
+        ((ObjectNode) sheet.at("/automationState/journal/0")).remove("intentHash");
+        assertEquals("requestId", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageRestWithReceipt(pack, sheet, origin(), rest, "owner",
+                        StructuredRollTest.noRandom(), null)).code());
+        ((ObjectNode) sheet.at("/automationState/journal/0")).put("dmPrincipal", true);
+        assertEquals("requestId", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageRestWithReceipt(pack, sheet, origin(), rest, "owner",
+                        StructuredRollTest.noRandom(), null)).code());
+    }
+
+    @Test
+    void failedStagedRestDoesNotRecordAReceiptAndTheJournalStaysBounded() throws Exception {
+        var pack = pack();
+        ObjectNode sheet = sheet(), failed = request("short").put("requestId", "failed");
+        move(failed, "mend");
+        move(failed, "mend");
+        ObjectNode before = sheet.deepCopy();
+        assertEquals("duplicateMove", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageRestWithReceipt(pack, sheet, origin(), failed, "owner",
+                        StructuredRollTest.faces(4), null)).code());
+        assertEquals(before, sheet);
+
+        var journal = sheet.withObject("/automationState").withArray("journal");
+        for (int i = 0; i < AutomationHost.JOURNAL_LIMIT; i++)
+            journal.addObject().put("requestId", "old-" + i).put("principalId", "owner");
+        ObjectNode successful = request("short").put("requestId", "new");
+        HOST.stageRestWithReceipt(pack, sheet, origin(), successful, "owner", StructuredRollTest.noRandom(), null);
+        assertEquals(AutomationHost.JOURNAL_LIMIT, sheet.at("/automationState/journal").size());
+        assertEquals("old-1", sheet.at("/automationState/journal/0/requestId").asText());
+        assertEquals("new", sheet.at("/automationState/journal/31/requestId").asText());
+    }
+
+    @Test
+    void revisionLimitStillAllowsTheLastReceiptToReplay() throws Exception {
+        var pack = pack();
+        long limit = 1L << 52;
+        ObjectNode sheet = sheet(), rest = request("short").put("requestId", "last").put("expectedRevision", limit - 1);
+        sheet.withObject("/automationState").put("revision", limit - 1);
+        var last = HOST.stageRestWithReceipt(pack, sheet, origin(), rest, "owner", StructuredRollTest.noRandom(), null);
+        assertEquals(limit, HOST.revision(sheet));
+        ObjectNode saved = sheet.deepCopy();
+        var replay = HOST.stageRestWithReceipt(pack, sheet, origin(), rest, "owner", StructuredRollTest.noRandom(), null);
+        assertTrue(replay.replayed());
+        assertEquals(last.response(), replay.response());
+        ObjectNode next = request("long").put("requestId", "next").put("expectedRevision", limit);
+        assertEquals("revision", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageRestWithReceipt(pack, sheet, origin(), next, "owner",
+                        StructuredRollTest.noRandom(), null)).code());
+        assertEquals(saved, sheet);
+    }
+
+    @Test
     void staleMalformedAndRecipientRequestsCannotMutateTheSheet() throws Exception {
         var pack = pack();
         ObjectNode sheet = sheet(), before = sheet.deepCopy();

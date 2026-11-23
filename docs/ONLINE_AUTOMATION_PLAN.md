@@ -204,8 +204,11 @@ countdowns and already-applied limit refresh commands; a self-only rest can also
 Other commands that could change facts read by later stages are rejected. The result separately identifies every
 recipient sheet read and its original host version, including unchanged sheets used by eligibility predicates;
 the eventual caller must compare their original stored bytes atomically with the changed sheets. It is not a live
-workflow: authenticated offers, post-roll choices, command settlement, persisted reports, retries and the atomic
-campaign commit remain necessary.
+workflow: authenticated offers, post-roll choices, command settlement, persisted reports and the atomic
+campaign commit remain necessary. An internal retry wrapper records a principal-bound, intent-fingerprinted
+receipt on the staged source sheet. An exact retry returns that response without rolling, reading a roster or
+staging another recipient write; changed intents, other principals, DM receipts and older un-fingerprinted
+receipts cannot be reused as a rest. It shares the ordinary bounded request-ID journal.
 The shared Daggerheart ruleset now supplies self-targeted short recovery (1d4 plus tier and move bonus), the two
 mutually exclusive preparation variants, long recovery and work on a project. Reports use the amount actually
 cleared or gained, including permanent and locked HP and capped Hope; a short rest needs a granted allowance for

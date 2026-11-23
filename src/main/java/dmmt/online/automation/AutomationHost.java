@@ -282,18 +282,11 @@ public final class AutomationHost {
         if (request.has("profileRoll") && !"self".equals(relation))
             throw new SecurityException("Only the character owner may roll an attack profile.");
         String requestId = RuleJson.id(request.get("requestId"), "/request/requestId");
-        String fingerprint = CampaignStore.sha256(canonical(request).toString().getBytes(StandardCharsets.UTF_8));
+        String fingerprint = intentFingerprint(request);
         ObjectNode working = sheet.deepCopy();
         ObjectNode state = projection.state(working);
-        for (JsonNode entry : state.path("journal"))
-            if (requestId.equals(entry.path("requestId").asText())) {
-                if (!principalId.equals(entry.path("principalId").asText()) ||
-                        "dm".equals(relation) != entry.path("dmPrincipal").asBoolean(false))
-                    throw new RuleRuntime.Unavailable("requestId", "This request ID was already used by another caller.");
-                if (entry.has("intentHash") && !fingerprint.equals(entry.path("intentHash").asText()))
-                    throw new RuleRuntime.Unavailable("requestId", "This request ID was already used for a different action.");
-                return ((ObjectNode) entry.path("response")).deepCopy();
-            }
+        ObjectNode replay = replayReceipt(state, requestId, principalId, "dm".equals(relation), fingerprint, true);
+        if (replay != null) return replay;
         long revision = state.path("revision").asLong();
         if (!request.path("expectedRevision").isIntegralNumber() || request.path("expectedRevision").asLong() != revision)
             throw new RuleRuntime.Unavailable("stale", "The character changed. Reopen this action.");
@@ -314,13 +307,36 @@ public final class AutomationHost {
         }
         pruneResultWindows(pack, working, event);
         response.put("requestId", requestId);
-        ArrayNode journal = (ArrayNode) projection.state(working).get("journal");
-        ObjectNode receipt = journal.addObject().put("requestId", requestId).put("principalId", principalId).put("intentHash", fingerprint);
-        if ("dm".equals(relation)) receipt.put("dmPrincipal", true);
-        receipt.set("response", response.deepCopy());
-        while (journal.size() > JOURNAL_LIMIT) journal.remove(0);
+        recordReceipt(projection.state(working), requestId, principalId, "dm".equals(relation), fingerprint, response);
         replace(sheet, working);
         return response;
+    }
+
+    private static String intentFingerprint(ObjectNode request) {
+        return CampaignStore.sha256(canonical(request).toString().getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static ObjectNode replayReceipt(ObjectNode state, String requestId, String principalId,
+                                            boolean dmPrincipal, String fingerprint, boolean allowLegacy) {
+        for (JsonNode entry : state.path("journal"))
+            if (requestId.equals(entry.path("requestId").asText())) {
+                if (!principalId.equals(entry.path("principalId").asText())
+                        || dmPrincipal != entry.path("dmPrincipal").asBoolean(false))
+                    throw new RuleRuntime.Unavailable("requestId", "This request ID was already used by another caller.");
+                if (!entry.has("intentHash") ? !allowLegacy : !fingerprint.equals(entry.path("intentHash").asText()))
+                    throw new RuleRuntime.Unavailable("requestId", "This request ID was already used for a different action.");
+                return RuleJson.object(entry.get("response"), "/journal/response").deepCopy();
+            }
+        return null;
+    }
+
+    private static void recordReceipt(ObjectNode state, String requestId, String principalId,
+                                      boolean dmPrincipal, String fingerprint, ObjectNode response) {
+        ArrayNode journal = (ArrayNode) state.get("journal");
+        ObjectNode receipt = journal.addObject().put("requestId", requestId).put("principalId", principalId).put("intentHash", fingerprint);
+        if (dmPrincipal) receipt.put("dmPrincipal", true);
+        receipt.set("response", response.deepCopy());
+        while (journal.size() > JOURNAL_LIMIT) journal.remove(0);
     }
 
     private static JsonNode canonical(JsonNode value) {
@@ -823,7 +839,8 @@ public final class AutomationHost {
         }
     }
 
-    record RestTransaction(ObjectNode response, Map<String, ObjectNode> recipients, Map<String, String> readVersions) {
+    record RestTransaction(ObjectNode response, Map<String, ObjectNode> recipients, Map<String, String> readVersions,
+                           boolean replayed) {
         RestTransaction {
             response = response.deepCopy();
             recipients = copySheets(recipients);
@@ -884,6 +901,8 @@ public final class AutomationHost {
         long revision = restRevision(working);
         if (expected.longValue() != revision)
             throw new RuleRuntime.Unavailable("stale", "The character changed. Reopen this rest.");
+        if (revision == MAX_REST_REVISION)
+            throw new RuleRuntime.Unavailable("revision", "The character's rest revision cannot be advanced.");
         StagedRestRecipients recipients = targeted ? new StagedRestRecipients(pack, actorId, roster) : null;
 
         Set<String> initial = restEffectSnapshot(working);
@@ -925,7 +944,34 @@ public final class AutomationHost {
         RuleJson.checkTree(response, "/response", 0, new int[]{0});
         Map<String, ObjectNode> changed = recipients == null ? Map.of() : recipients.changed();
         Map<String, String> readVersions = recipients == null ? Map.of() : recipients.readVersions();
-        RestTransaction transaction = new RestTransaction(response, changed, readVersions);
+        RestTransaction transaction = new RestTransaction(response, changed, readVersions, false);
+        replace(sheet, working);
+        return transaction;
+    }
+
+    /**
+     * Adds a retry receipt to a fully staged rest. The caller must authenticate the owner and commit the source
+     * and all dependencies atomically; a replay never contains recipient updates or requires another commit.
+     */
+    RestTransaction stageRestWithReceipt(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request,
+                                         String principalId, RandomGenerator random, RestRoster roster) {
+        if (principalId == null || principalId.isBlank()) throw new IllegalArgumentException("Missing automation principal.");
+        RuleJson.fields(request, "/request", "requestId", "kind", "expectedRevision", "preparation", "moves", "completion");
+        RuleJson.checkTree(request, "/request", 0, new int[]{0});
+        String requestId = RuleJson.id(request.get("requestId"), "/request/requestId");
+        String fingerprint = intentFingerprint(request);
+        ObjectNode working = sheet.deepCopy();
+        restRevision(working);
+        ObjectNode replay = replayReceipt(projection.state(working), requestId, principalId, false, fingerprint, false);
+        if (replay != null) return new RestTransaction(replay, Map.of(), Map.of(), true);
+
+        ObjectNode rest = request.deepCopy();
+        rest.remove("requestId");
+        RestTransaction staged = stageRest(pack, working, origin, rest, random, roster);
+        ObjectNode response = staged.response().put("requestId", requestId);
+        RuleJson.checkTree(response, "/response", 0, new int[]{0});
+        recordReceipt(projection.state(working), requestId, principalId, false, fingerprint, response);
+        RestTransaction transaction = new RestTransaction(response, staged.recipients(), staged.readVersions(), false);
         replace(sheet, working);
         return transaction;
     }
@@ -1015,6 +1061,8 @@ public final class AutomationHost {
             StagedRecipient participant = participants.get(update.actorId());
             if (participant == null || participant.sheet == null)
                 throw RuleJson.error("/recipients", "The staged recipient was not read from the host roster.");
+            if (participant.member.revision() == MAX_REST_REVISION)
+                throw new RuleRuntime.Unavailable("revision", "The recipient's rest revision cannot be advanced.");
             writeRecipient(participant.sheet, update);
             projection.state(participant.sheet).put("revision", participant.member.revision());
             changed.add(update.actorId());

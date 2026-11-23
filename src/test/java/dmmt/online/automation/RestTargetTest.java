@@ -408,6 +408,50 @@ class RestTargetTest {
     }
 
     @Test
+    void targetedRestReceiptReplaysWithoutReadingOrStagingRecipientsAgain() throws Exception {
+        Setup setup = setup(ruleset(), 4);
+        PartyTargets offers = party(setup, setup.recipient(), new AtomicReference<>());
+        ObjectNode request = transaction(setup).put("requestId", "ally-rest");
+        transactionMove(request, "heal", targetRequest(setup, offers, "heal"));
+        var first = HOST.stageRestWithReceipt(setup.pack(), setup.source(),
+                AutomationHost.event("action.request", "ada", 1).put("sessionId", "session"),
+                request, "owner", StructuredRollTest.faces(4), roster(setup, new java.util.HashMap<>()));
+        assertFalse(first.replayed());
+        assertEquals(Set.of("mira"), first.recipients().keySet());
+        assertEquals(Set.of("mira", "healthy"), first.readVersions().keySet());
+        ObjectNode saved = setup.source().deepCopy();
+        var forbiddenRoster = new AutomationHost.RestRoster("unchanged", scope -> {
+            fail("A retry must not load a roster.");
+            return List.of();
+        });
+        var replay = HOST.stageRestWithReceipt(setup.pack(), setup.source(),
+                AutomationHost.event("action.request", "ada", 0), request, "owner",
+                StructuredRollTest.noRandom(), forbiddenRoster);
+        assertTrue(replay.replayed());
+        assertEquals(first.response(), replay.response());
+        assertTrue(replay.recipients().isEmpty());
+        assertTrue(replay.readVersions().isEmpty());
+        assertEquals(saved, setup.source());
+        assertEquals(6, setup.recipient().at("/hp/on").asInt());
+    }
+
+    @Test
+    void recipientAtRevisionLimitRejectsTheEntireRest() throws Exception {
+        Setup setup = setup(ruleset(), 4);
+        setup.recipient().withObject("/automationState").put("revision", 1L << 52);
+        PartyTargets offers = party(setup, setup.recipient(), new AtomicReference<>());
+        ObjectNode request = transaction(setup).put("requestId", "limit");
+        transactionMove(request, "heal", targetRequest(setup, offers, "heal"));
+        ObjectNode source = setup.source().deepCopy(), recipient = setup.recipient().deepCopy();
+        assertEquals("revision", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageRestWithReceipt(setup.pack(), setup.source(),
+                        AutomationHost.event("action.request", "ada", 1), request, "owner",
+                        StructuredRollTest.faces(4), roster(setup, new java.util.HashMap<>()))).code());
+        assertEquals(source, setup.source());
+        assertEquals(recipient, setup.recipient());
+    }
+
+    @Test
     void deferredBenefitsReadFreshlyRecomputedRecipientStatistics() throws Exception {
         ObjectNode ruleset = ruleset();
         ((ObjectNode) ruleset.at("/automation/rules/0/after")).put("report",
