@@ -2865,6 +2865,147 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void storedTargetRevisionsMatchSheetProjection() throws Exception {
+        var host = dmmt.online.automation.AutomationHost.bundled();
+        String field = host.projection().stateField();
+        for (String json : List.of(
+                "{}", "{\"automationState\":null}", "{\"automationState\":[]}",
+                "{\"automationState\":{}}", "{\"automationState\":{\"revision\":null}}",
+                "{\"automationState\":{\"revision\":\"42\"}}", "{\"automationState\":{\"revision\":\"bad\"}}",
+                "{\"automationState\":{\"revision\":true}}", "{\"automationState\":{\"revision\":3.9}}",
+                "{\"automationState\":{\"revision\":9223372036854775808123}}",
+                "{\"automationState\":{\"revision\":{\"nested\":1}}}",
+                "{\"automationState\":{\"revision\":[1,2]}}",
+                "{\"automationState\":{\"revision\":1,\"revision\":9}}",
+                "{\"automationState\":{\"revision\":1},\"automationState\":{\"revision\":6}}",
+                "{\"automationState\":{\"revision\":1},\"automationState\":null}",
+                "{\"nested\":{\"automationState\":{\"revision\":99}},\"automationState\":{\"revision\":4}}",
+                "{\"automationState\":{\"revision\":4}} {\"ignored\":true}")) {
+            long expected = host.revision((ObjectNode) MAPPER.readTree(json));
+            assertEquals(expected, OnlineSessionServer.storedAutomationRevision(json, field), json);
+        }
+        for (String json : List.of("", "null", "[]", "{\"automationState\":", "{\"x\":[1,2}"))
+            assertThrows(java.io.IOException.class, () -> OnlineSessionServer.storedAutomationRevision(json, field), json);
+    }
+
+    @Test
+    void unfilteredSingleTargetHydratesOnlyTheSelectedSheetAndKeepsVersionChecks() throws Exception {
+        ObjectNode catalog = installPartyAction();
+        ((ObjectNode) catalog.at("/entries/0/features/0/automation/rules/0/bindings/0/targetSelection"))
+                .put("cardinality", "one").put("scope", "activePlayerCharacters");
+        java.nio.file.Files.writeString(compendiumDir.resolve("classes.json"), catalog.toString());
+        String cookie = cookie(), campaignId = campaign.getId();
+        for (String id : List.of("caster", "ally-a", "ally-b", "ally-c"))
+            campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId()).build());
+        store.saveSheet(campaignId, "caster", """
+            {"name":"Caster","hope":{"on":3,"slots":6},"features":[
+             {"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"}]}""");
+        store.saveSheet(campaignId, "ally-a", """
+            {"name":"A","stress":{"on":2,"slots":6},"automationState":{"revision":5}}""");
+        store.saveSheet(campaignId, "ally-b", """
+            {"name":"B","stress":{"on":2,"slots":6},"vitalityBenefits":["hp"],"automationState":{"revision":"7"}}""");
+        store.saveSheet(campaignId, "ally-c", """
+            {"name":"C","stress":{"on":0,"slots":6},"automationState":{"revision":2}}""");
+        String originalCaster = store.loadSheet(campaignId, "caster");
+        String originalA = store.loadSheet(campaignId, "ally-a");
+        String originalC = store.loadSheet(campaignId, "ally-c");
+        JsonNode options = partyOptions(cookie);
+        assertEquals(1, server.sheetDiagnostics().hydrations());
+        assertEquals(List.of("ally-a", "ally-b", "ally-c"), options.findValuesAsText("id"));
+        assertEquals(List.of(5L, 7L, 2L), List.of(options.get(0).path("revision").asLong(),
+                options.get(1).path("revision").asLong(), options.get(2).path("revision").asLong()));
+        store.saveSheet(campaignId, "ally-c", "[]");
+        var malformed = automationHttp(cookie, "caster", null);
+        assertEquals(500, malformed.statusCode(), malformed.body());
+        assertEquals(originalCaster, store.loadSheet(campaignId, "caster"));
+        store.saveSheet(campaignId, "ally-c", originalC);
+        ObjectNode request = MAPPER.createObjectNode().put("requestId", "choose").put("expectedRevision", 0);
+        request.putArray("selections").addObject().put("sourceInstanceId", "r").put("ruleId", "rally").put("bindingId", "sheet");
+        ObjectNode target = request.putObject("target").put("recipientId", "ally-b");
+        target.set("version", options.get(1).required("version"));
+        ObjectNode body = MAPPER.createObjectNode().set("request", request);
+        ObjectNode edited = (ObjectNode) MAPPER.readTree(store.loadSheet(campaignId, "ally-b"));
+        store.saveSheet(campaignId, "ally-b", edited.put("notes", "changed").toString());
+        assertEquals(409, automationHttp(cookie, "caster", body.toString()).statusCode());
+        assertEquals(1, server.sheetDiagnostics().hydrations());
+        assertEquals(originalCaster, store.loadSheet(campaignId, "caster"));
+        options = partyOptions(cookie);
+        assertEquals(1, server.sheetDiagnostics().hydrations());
+        target.set("version", options.get(1).required("version"));
+        var applied = automationHttp(cookie, "caster", body.toString());
+        assertEquals(200, applied.statusCode(), applied.body());
+        assertEquals(2, server.sheetDiagnostics().hydrations());
+        assertEquals(originalA, store.loadSheet(campaignId, "ally-a"));
+        assertEquals(originalC, store.loadSheet(campaignId, "ally-c"));
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaignId, "ally-b"));
+        assertEquals(1, saved.at("/stress/on").asInt());
+        assertEquals(8, saved.at("/automationState/revision").asLong());
+        assertEquals(2, MAPPER.readTree(store.loadSheet(campaignId, "caster")).at("/hope/on").asInt());
+        assertEquals(applied.body(), automationHttp(cookie, "caster", body.toString()).body());
+        assertEquals(1, server.sheetDiagnostics().hydrations());
+    }
+
+    @Test
+    @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "dmmt.benchmark.automation", matches = "true")
+    void measurePersistedSingleRecipientAction() throws Exception {
+        ObjectNode catalog = installPartyAction();
+        ObjectNode rule = (ObjectNode) catalog.at("/entries/0/features/0/automation/rules/0");
+        rule.remove(List.of("limitRef", "costs"));
+        ((ObjectNode) rule.at("/bindings/0/targetSelection")).put("cardinality", "one").put("scope", "activePlayerCharacters");
+        rule.set("do", MAPPER.readTree("""
+                [{"op":"track.clear","track":"recipient.stress","amount":1},
+                 {"op":"track.mark","track":"recipient.stress","amount":1}]"""));
+        ((ObjectNode) rule.path("ui")).remove("report");
+        java.nio.file.Files.writeString(compendiumDir.resolve("classes.json"), catalog.toString());
+        String cookie = cookie(), campaignId = campaign.getId();
+        int partySize = 12, warmup = 10, samples = 24;
+        for (int i = 0; i <= partySize; i++) {
+            String id = i == 0 ? "caster" : String.format(java.util.Locale.ROOT, "ally-%02d", i);
+            campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId()).build());
+            ObjectNode sheet = performanceSheet().put("name", id).put("notes", "Session notes. ".repeat(800));
+            sheet.withObject("/stress").put("on", 2);
+            if (i == 0) sheet.putArray("features").addObject().put("name", "Rally").put("instanceId", "rally")
+                    .put("automationSource", "classes:tester:features:rally");
+            store.saveSheet(campaignId, id, sheet.toString());
+        }
+        var alloc = java.lang.management.ManagementFactory.getPlatformMXBean(com.sun.management.ThreadMXBean.class);
+        if (alloc == null || !alloc.isThreadAllocatedMemorySupported())
+            throw new IllegalStateException("The benchmark requires JVM allocation counters.");
+        alloc.setThreadAllocatedMemoryEnabled(true);
+        long[][] nanos = new long[2][samples], bytes = new long[2][samples];
+        for (int i = -warmup; i < samples; i++) {
+            long allocated = alloc.getTotalThreadAllocatedBytes(), start = System.nanoTime();
+            var described = automationHttp(cookie, "caster", null);
+            long elapsed = System.nanoTime() - start, used = alloc.getTotalThreadAllocatedBytes() - allocated;
+            assertEquals(200, described.statusCode(), described.body());
+            JsonNode options = MAPPER.readTree(described.body()).requiredAt("/actions/0/targetSelection/options");
+            assertEquals(partySize, options.size());
+            JsonNode chosen = null;
+            for (JsonNode option : options) if ("ally-01".equals(option.path("id").asText())) chosen = option;
+            assertNotNull(chosen);
+            if (i >= 0) { nanos[0][i] = elapsed; bytes[0][i] = used; }
+            int revision = i + warmup;
+            ObjectNode request = MAPPER.createObjectNode().put("requestId", "sample-" + revision).put("expectedRevision", revision);
+            request.putArray("selections").addObject().put("sourceInstanceId", "rally").put("ruleId", "rally").put("bindingId", "sheet");
+            request.putObject("target").put("recipientId", "ally-01").set("version", chosen.required("version"));
+            ObjectNode body = MAPPER.createObjectNode().set("request", request);
+            allocated = alloc.getTotalThreadAllocatedBytes(); start = System.nanoTime();
+            var applied = automationHttp(cookie, "caster", body.toString());
+            elapsed = System.nanoTime() - start; used = alloc.getTotalThreadAllocatedBytes() - allocated;
+            assertEquals(200, applied.statusCode(), applied.body());
+            assertEquals(revision + 1, MAPPER.readTree(applied.body()).path("revision").asInt());
+            if (i >= 0) { nanos[1][i] = elapsed; bytes[1][i] = used; }
+        }
+        for (int stage = 0; stage < 2; stage++) {
+            java.util.Arrays.sort(nanos[stage]);
+            System.out.printf(java.util.Locale.ROOT, "automation-bench single-target %s: n=%d p50=%.2fms p95=%.2fms mean=%.2fMiB allocated%n",
+                    stage == 0 ? "GET" : "POST", samples, nanos[stage][samples / 2 - 1] / 1e6,
+                    nanos[stage][(int) Math.ceil(samples * .95) - 1] / 1e6,
+                    java.util.Arrays.stream(bytes[stage]).average().orElseThrow() / (1024 * 1024));
+        }
+    }
+
+    @Test
     @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "dmmt.benchmark.automation", matches = "true")
     void measurePersistedProfileAndPartyActions() throws Exception {
         ObjectNode catalog = installPartyAction();
@@ -3119,6 +3260,7 @@ class OnlineSessionServerTest {
         String original = store.loadSheet(id, "caster");
         var described = automationHttp(cookie, "caster", null);
         assertEquals(200, described.statusCode(), described.body());
+        assertEquals(3, server.sheetDiagnostics().hydrations(), "Eligibility must inspect every scoped saved recipient.");
         JsonNode offer = MAPPER.readTree(described.body()).at("/actions/0/targetSelection");
         assertEquals(List.of("ally"), offer.path("options").findValuesAsText("id"));
         assertFalse(offer.toString().contains("snapshot"));
@@ -3142,7 +3284,9 @@ class OnlineSessionServerTest {
         target.set("version", MAPPER.readTree(automationHttp(cookie, "caster", null).body()).at("/actions/0/targetSelection/version"));
         campaign.setFear(1); // second recipient cannot pay
         int history = store.historyTail(id, 100).size();
-        assertEquals(400, automationHttp(cookie, "caster", body.toString()).statusCode());
+        var insufficientFear = automationHttp(cookie, "caster", body.toString());
+        assertEquals(409, insufficientFear.statusCode(), insufficientFear.body());
+        assertTrue(insufficientFear.body().contains("Not enough GM Fear"));
         assertEquals(1, campaign.getFear());
         assertEquals(original, store.loadSheet(id, "caster"));
         assertEquals(2, MAPPER.readTree(store.loadSheet(id, "ally")).at("/stress/on").asInt());
@@ -3150,6 +3294,7 @@ class OnlineSessionServerTest {
         campaign.setFear(2);
         var applied = automationHttp(cookie, "caster", body.toString());
         assertEquals(200, applied.statusCode(), applied.body());
+        assertEquals(4, server.sheetDiagnostics().hydrations(), "Filtered fanout must inspect even an ineligible recipient.");
         assertEquals(List.of("ally", "late"), MAPPER.readTree(applied.body()).path("actions").findValuesAsText("recipientId"));
         assertEquals(0, campaign.getFear());
         assertEquals(1, MAPPER.readTree(store.loadSheet(id, "caster")).at("/hope/on").asInt());
@@ -3422,6 +3567,7 @@ class OnlineSessionServerTest {
         assertEquals(403, resultHttp(other, "caster", resultId).statusCode());
         JsonNode offer = MAPPER.readTree(resultHttp(cookie, "caster", resultId).body()).requiredAt("/actions/0/targetSelection");
         assertEquals(List.of("ally", "late"), offer.path("options").findValuesAsText("id"));
+        assertEquals(1, server.sheetDiagnostics().hydrations(), "Unfiltered offers need no recipient projection.");
         assertFalse(offer.toString().contains("snapshot"));
         ObjectNode body = MAPPER.createObjectNode();
         ObjectNode request = body.putObject("request").put("requestId", "after").put("expectedRevision", 1).put("resultId", resultId);
@@ -3438,13 +3584,17 @@ class OnlineSessionServerTest {
         target.set("version", "one".equals(cardinality) ? offer.requiredAt("/options/0/version") : offer.required("version"));
         campaign.setFear("one".equals(cardinality) ? 0 : 1);
         int history = store.historyTail(id, 100).size();
-        assertEquals(400, automationHttp(cookie, "caster", body.toString()).statusCode());
+        var insufficientFear = automationHttp(cookie, "caster", body.toString());
+        assertEquals(409, insufficientFear.statusCode(), insufficientFear.body());
+        assertTrue(insufficientFear.body().contains("Not enough GM Fear"));
         assertEquals(before, store.loadSheet(id, "caster"), "A failed multi-sheet action preserves its result button and cost.");
         assertEquals(2, MAPPER.readTree(store.loadSheet(id, "ally")).at("/stress/on").asInt());
         assertEquals(history, store.historyTail(id, 100).size());
         campaign.setFear("one".equals(cardinality) ? 1 : 2);
         var applied = automationHttp(cookie, "caster", body.toString());
         assertEquals(200, applied.statusCode(), applied.body());
+        assertEquals("one".equals(cardinality) ? 2 : 3, server.sheetDiagnostics().hydrations(),
+                "Only selected recipients are projected when the target is unfiltered.");
         assertEquals("one".equals(cardinality) ? List.of("ally") : List.of("ally", "late"),
                 MAPPER.readTree(applied.body()).path("actions").findValuesAsText("recipientId"));
         assertEquals(1, MAPPER.readTree(store.loadSheet(id, "caster")).at("/hope/on").asInt());

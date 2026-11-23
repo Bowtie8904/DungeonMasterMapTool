@@ -1,5 +1,6 @@
 package dmmt.online;
 
+import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -5733,6 +5734,44 @@ public final class OnlineSessionServer {
         return object;
     }
 
+    static long storedAutomationRevision(String stored, String stateField) throws IOException {
+        try (var parser = MAPPER.getFactory().createParser(stored)) {
+            if (parser.nextToken() != JsonToken.START_OBJECT) throw new IOException("Invalid stored sheet");
+            long revision = 0;
+            while (parser.nextToken() != JsonToken.END_OBJECT) {
+                if (!parser.hasToken(JsonToken.FIELD_NAME)) throw new IOException("Invalid stored sheet");
+                String name = parser.currentName();
+                JsonToken value = parser.nextToken();
+                if (value == null) throw new IOException("Invalid stored sheet");
+                if (!stateField.equals(name)) {
+                    parser.skipChildren();
+                    continue;
+                }
+                revision = 0;
+                if (value != JsonToken.START_OBJECT) {
+                    parser.skipChildren();
+                    continue;
+                }
+                while (parser.nextToken() != JsonToken.END_OBJECT) {
+                    if (!parser.hasToken(JsonToken.FIELD_NAME)) throw new IOException("Invalid stored sheet");
+                    name = parser.currentName();
+                    value = parser.nextToken();
+                    if (value == null) throw new IOException("Invalid stored sheet");
+                    if (!"revision".equals(name)) {
+                        parser.skipChildren();
+                    } else if (value.isStructStart()) {
+                        parser.skipChildren();
+                        revision = 0;
+                    } else {
+                        JsonNode node = MAPPER.readTree(parser);
+                        revision = node == null ? 0 : node.asLong();
+                    }
+                }
+            }
+            return revision;
+        }
+    }
+
     /** Compiles format-2 catalogs and shared rules once per combined compendium revision. */
     private dmmt.online.automation.AutomationHost.Pack automationPack() throws IOException {
         return automationPack(catalogs());
@@ -5813,10 +5852,22 @@ public final class OnlineSessionServer {
                         if (eligible.size() == 128) throw new IllegalArgumentException("An action is limited to 128 characters.");
                         var member = members.get(id);
                         if (member == null) {
-                            if (!sheets.containsKey(id)) sheets.put(id, hydrateSheet(id, original));
-                            ObjectNode saved = sheets.get(id);
-                            member = new PartyTargets.Member(id, actor.getName(), sheetVersion(original, actor), automationHost.revision(saved),
-                                    event -> automationHost.recipientSnapshot(pack, saved, event, id));
+                            long revision = sheets.containsKey(id) ? automationHost.revision(sheets.get(id))
+                                    : storedAutomationRevision(original, automationHost.projection().stateField());
+                            member = new PartyTargets.Member(id, actor.getName(), sheetVersion(original, actor), revision, event -> {
+                                try {
+                                    ObjectNode saved = sheets.get(id);
+                                    if (saved == null) {
+                                        saved = hydrateSheet(id, original);
+                                        if (automationHost.revision(saved) != revision)
+                                            throw new IOException("Catalog refresh changed the stored automation revision.");
+                                        sheets.put(id, saved);
+                                    }
+                                    return automationHost.recipientSnapshot(pack, saved, event, id);
+                                } catch (IOException ex) {
+                                    throw new java.io.UncheckedIOException(ex);
+                                }
+                            });
                             members.put(id, member);
                         }
                         eligible.add(member);

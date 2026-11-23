@@ -288,6 +288,18 @@ After adding effect-bound pool reconciliation, another run of this same sample m
 31.45 / 34.61 ms / 13.50 MiB. Actions without bound pools or effect changes avoid the new effect-support scan; this
 single-client sample is not a concurrency guarantee.
 
+For an unfiltered single-target action, the request-local roster now reads each stored revision and sheet
+digest without refreshing every candidate through the catalog. Only a selected recipient is hydrated for
+execution; an authored `where` predicate still projects every candidate, and whole-party execution hydrates
+every selected recipient. The original stored sheets remain compare-and-set dependencies. Malformed stored
+JSON is rejected, and hydration verifies that catalog refresh did not change the stored automation revision.
+Run `mvn "-Ddmmt.benchmark.automation=true" "-Dtest=OnlineSessionServerTest#measurePersistedSingleRecipientAction" test`
+for a loopback sample with 12 saved recipients, about 12 KB of notes per sheet, 10 warmups and 24 persisted
+actions. One run before this change measured GET 8.53 ms median / 12.43 ms p95 / 1.89 MiB allocation and
+POST 20.81 ms / 27.05 ms / 3.63 MiB; one afterward measured GET 8.05 ms / 10.56 ms / 1.65 MiB and POST
+20.25 ms / 24.37 ms / 3.41 MiB. These small single runs show reduced allocation, not a reliable latency
+guarantee; the journal fills during the sample.
+
 Run `mvn "-Ddmmt.benchmark.automation=true" "-Dtest=OnlineSessionServerTest#measureSingleHolderRosterScans" test`
 for a separate loopback sample of single-holder starts with 32 saved, unrelated offline or disabled sheets.
 After 10 warmups, 30 POSTs measured 34.82 ms median, 43.71 ms p95 and 2.79 MiB mean allocation in one local run.
