@@ -1538,14 +1538,19 @@ public final class AutomationHost {
             PartyTargets party = move.has("target") ? recipients.party() : null;
             RestTarget target = party == null ? null : new RestTarget(
                     party, (ObjectNode) move.get("target"), recipients::reproject, recipients::reactions);
+            BiConsumer<ObjectNode, ObjectNode> settleSelected = target == null && roster != null
+                    && roster.grantInventory() != null
+                    ? (current, stage) -> settleRestInventory(current, stage, recipients, roster, true) : null;
+            boolean settleTargetInventory = target != null && roster != null && roster.grantInventory() != null;
             RestMoveResult result = restMove(pack, working, stagedOrigin, progress, (ObjectNode) move.get("selection"),
-                    (ArrayNode) move.get("options"), random, target, initialSources, settlePartyRecovery);
+                    (ArrayNode) move.get("options"), random, target, initialSources, settlePartyRecovery,
+                    settleSelected, settleTargetInventory);
             progress = result.progress();
             ObjectNode completedMove = RuleJson.object(result.response().get("event"), "/event").deepCopy();
             if (completedMoves != null) completedMoves.add(completedMove);
             moveEvents.add(completedMove);
             if (party != null) recipients.apply(party.updates());
-            settleRestInventory(working, result.response(), recipients, roster);
+            settleRestInventory(working, result.response(), recipients, roster, settleTargetInventory);
             appendRestStage(result.response(), actions, outbox, targeted);
             carryRestTable(stagedOrigin, result.response().required("event"));
             projection.state(working).put("revision", revision);
@@ -1999,6 +2004,11 @@ public final class AutomationHost {
 
     private void settleRestInventory(ObjectNode source, ObjectNode stage, StagedRestRecipients recipients,
                                      RestRoster roster) {
+        settleRestInventory(source, stage, recipients, roster, false);
+    }
+
+    private void settleRestInventory(ObjectNode source, ObjectNode stage, StagedRestRecipients recipients,
+                                     RestRoster roster, boolean allowPriorReactions) {
         ArrayNode outbox = (ArrayNode) stage.get("outbox");
         for (int i = 0; i < outbox.size();) {
             ObjectNode command = RuleJson.object(outbox.get(i), "/outbox");
@@ -2008,7 +2018,7 @@ public final class AutomationHost {
             }
             if (roster == null || roster.grantInventory() == null)
                 throw new RuleRuntime.Unavailable("restCommand", "This rest requires inventory grant settlement.");
-            if (stage.path("actions").size() != 1)
+            if (!allowPriorReactions && stage.path("actions").size() != 1)
                 throw new RuleRuntime.Unavailable("inventorySettlement",
                         "A rest inventory grant cannot yet be combined with multiple actions in the same stage.");
             Map<String, ObjectNode> sheets = recipients == null ? new LinkedHashMap<>() : recipients.currentSheets();
@@ -2427,12 +2437,14 @@ public final class AutomationHost {
 
     RestMoveResult restMove(Pack pack, ObjectNode sheet, ObjectNode origin, RestProgress progress,
                             ObjectNode selection, ArrayNode options, RandomGenerator random, RestTarget target) {
-        return restMove(pack, sheet, origin, progress, selection, options, random, target, sources(pack, sheet), false);
+        return restMove(pack, sheet, origin, progress, selection, options, random, target, sources(pack, sheet),
+                false, null, false);
     }
 
     private RestMoveResult restMove(Pack pack, ObjectNode sheet, ObjectNode origin, RestProgress progress,
                                     ObjectNode selection, ArrayNode options, RandomGenerator random, RestTarget target,
-                                    List<SheetProjection.SourceElement> initialSources, boolean settlePartyRecovery) {
+                                    List<SheetProjection.SourceElement> initialSources, boolean settlePartyRecovery,
+                                    BiConsumer<ObjectNode, ObjectNode> settleSelected, boolean settleTargetInventory) {
         if (progress.count() >= 64) throw RuleJson.error("/rest/moves", "A rest may contain at most 64 moves.");
         RuleJson.fields(selection, "/selection", "sourceInstanceId", "ruleId", "bindingId", "inputs");
         RuleJson.checkTree(selection, "/selection", 0, new int[]{0});
@@ -2540,8 +2552,11 @@ public final class AutomationHost {
             ObjectNode currentState = projection.state(working);
             if (observeOwner) {
                 var selectedSources = ownerMoveSources(candidates, Set.of(instanceId), false);
+                boolean canSettleInventory = settleSelected != null
+                        && candidates.stream().noneMatch(source -> source.program().stateMayAffectProjection())
+                        && candidates.getFirst().context().path("actor").path("effects").isEmpty();
                 var resolution = RuleDispatcher.executeSelectedWithOwnerReactions(selectedSources, intent, random, pack.programs(),
-                        ownerMoveProjection(pack, working, currentState, candidates));
+                        ownerMoveProjection(pack, working, currentState, candidates), canSettleInventory);
                 after = applyResolved(pack, working, currentState, adjusted,
                         resolution.contexts(), resolution.actions(), resolution.outbox());
             } else {
@@ -2560,8 +2575,13 @@ public final class AutomationHost {
                 resolved = RuleDispatcher.executeTargets(candidates, chosen.intent(), chosen.recipients(), random, pack.programs());
             } else {
                 recipientReactions = target.reactions().apply(chosen.recipients().getFirst().actorId(), random);
+                boolean canSettleInventory = settleTargetInventory
+                        && candidates.stream().noneMatch(source -> source.program().stateMayAffectProjection())
+                        && candidates.getFirst().context().path("actor").path("effects").isEmpty()
+                        && chosen.recipients().getFirst().snapshot().path("effects").isEmpty();
                 resolved = RuleDispatcher.executeTargetsWithReactions(candidates, chosen.intent(), chosen.recipients(), random,
-                        pack.programs(), ownerMoveProjection(pack, working, projection.state(working), candidates), recipientReactions);
+                        pack.programs(), ownerMoveProjection(pack, working, projection.state(working), candidates),
+                        recipientReactions, canSettleInventory);
             }
             if (resolved.recipients().size() != 1)
                 throw RuleJson.error("/target", "An ally move requires one other recipient.");
@@ -2574,9 +2594,15 @@ public final class AutomationHost {
                 if (action.recipientId() != null) item.put("recipientId", action.recipientId());
                 if (action.actorId() != null) item.put("actorId", action.actorId());
             }
-            validateTargetRestCommands(after);
+            validateTargetRestCommands(after, settleTargetInventory);
             recipientUpdates = resolved.recipients();
         }
+        if (target != null && after.path("outbox").findValuesAsText("kind").contains("inventory.grant")
+                && adjustments.actions().stream().anyMatch(adjustment ->
+                byInstance.get(adjustment.sourceInstanceId()).program().rule(adjustment.ruleId()).has("after")))
+            throw new RuleRuntime.Unavailable("inventorySettlement",
+                    "A deferred benefit requires the ally inventory grant to be settled first.");
+        if (settleSelected != null) settleSelected.accept(working, after);
         ObjectNode finalEvent = RuleJson.object(after.get("event"), "/event");
         validateRestMove(finalEvent, move, rest, settlePartyRecovery);
         int slots = finalEvent.at("/move/slots").intValue();
@@ -2714,9 +2740,13 @@ public final class AutomationHost {
     }
 
     private static void validateTargetRestCommands(ObjectNode response) {
+        validateTargetRestCommands(response, false);
+    }
+
+    private static void validateTargetRestCommands(ObjectNode response, boolean allowInventory) {
         for (JsonNode command : response.path("outbox")) {
             String kind = command.path("kind").asText();
-            if (!STAGED_TARGET_REST_COMMANDS.contains(kind))
+            if (!STAGED_TARGET_REST_COMMANDS.contains(kind) && !(allowInventory && "inventory.grant".equals(kind)))
                 throw new RuleRuntime.Unavailable("restCommand",
                         "This ally move requires host settlement before later stages: " + kind + ".");
         }

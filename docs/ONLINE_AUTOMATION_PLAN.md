@@ -145,7 +145,7 @@ Pending choices live in the running host and expire on restart or cache eviction
 `{choiceVersion, request}` with both phases' selections in order. Each response supplies the next signed
 choice version and host-derived descriptors; exact retries reuse the staged outcomes.
 Automatic preparation rolls are rejected during preview until interactive post-roll choices exist.
-Single-action, claim and self-rest `inventory.grant` commands settle catalog-linked item/consumable stacks and actor or party caps atomically; staged self-rest grants are visible to later moves and completion phases. Grants combined with later inventory reads in the same action, multiple actions in one stage, or targeted-rest reactions are rejected until ordered settlement is available.
+Single-action, claim and rest `inventory.grant` commands settle catalog-linked item/consumable stacks and actor or party caps atomically; self and targeted rest grants follow earlier track reactions and are visible to later moves and completion phases. Later inventory-dependent reads or track reactions in the granting action, deferred benefits after a targeted grant, and grants that require dynamic effect/pool projection are rejected until ordered settlement is available.
 
 The live host rejects legacy client-supplied rests and downtime rerolls when any category declares format 2,
 including an incomplete pack. It cannot classify malformed, unreadable or unknown-version categories as legacy.

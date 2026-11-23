@@ -188,6 +188,8 @@ public final class RuleDispatcher {
     private static final class ReactionBudget {
         int depth;
         int events;
+        boolean allowSelectedInventory;
+        boolean inventoryPending;
         final OwnerProjection projection;
         Map<String, ObjectNode> contexts;
 
@@ -302,8 +304,16 @@ public final class RuleDispatcher {
     static EventResolution executeSelectedWithOwnerReactions(List<Candidate> activeSources, RuleRuntime.Intent selection,
                                                             RandomGenerator random, Map<String, RuleCompiler.Program> programs,
                                                             OwnerProjection projection) {
+        return executeSelectedWithOwnerReactions(activeSources, selection, random, programs, projection, false);
+    }
+
+    static EventResolution executeSelectedWithOwnerReactions(List<Candidate> activeSources, RuleRuntime.Intent selection,
+                                                            RandomGenerator random, Map<String, RuleCompiler.Program> programs,
+                                                            OwnerProjection projection, boolean allowInventory) {
         if (selection == null) throw RuleJson.error("/selection", "A selected binding is required.");
-        return executeEvent(activeSources, List.of(selection), random, programs, false, new ReactionBudget(projection), false);
+        ReactionBudget budget = new ReactionBudget(projection);
+        budget.allowSelectedInventory = allowInventory;
+        return executeEvent(activeSources, List.of(selection), random, programs, false, budget, false);
     }
 
     static EventResolution executeDeferredWithOwnerReactions(List<Candidate> activeSources, RuleRuntime.Intent intent,
@@ -593,6 +603,13 @@ public final class RuleDispatcher {
                 .map(Map.Entry::getKey).sorted().toList();
         return new RuleRuntime.TrackObserver() {
             private void reproject(ObjectNode staged, String operation, ObjectNode previousActor, String target) {
+                if ("inventory.grant".equals(operation) && budget.allowSelectedInventory && budget.depth == 0) {
+                    budget.inventoryPending = true;
+                    return;
+                }
+                if (budget.inventoryPending)
+                    throw new RuleRuntime.Unavailable("inventorySettlement",
+                            "A later reaction requires the inventory grant to be settled first.");
                 if ("limits.refresh".equals(operation))
                     throw new RuleRuntime.Unavailable("reactionLimits",
                             "Refreshing other sources' use budgets requires host settlement before later reactions.");
@@ -632,6 +649,9 @@ public final class RuleDispatcher {
 
             @Override
             public void changed(ObjectNode staged, String holder, ObjectNode event) {
+                if (budget.inventoryPending)
+                    throw new RuleRuntime.Unavailable("inventorySettlement",
+                            "A later track reaction requires the inventory grant to be settled first.");
                 String actorId = staged.path("actor").path("id").asText();
                 if (!actorId.equals(staged.path(holder).path("id").asText()))
                     throw new RuleRuntime.Unavailable("recipientReactions",
@@ -931,22 +951,33 @@ public final class RuleDispatcher {
     public static TargetResolution executeTargets(List<Candidate> activeSources, TargetIntent selection,
                                                    List<RecipientCandidate> eligibleRecipients,
                                                    RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
-        return executeTargets(activeSources, selection, eligibleRecipients, random, programs, null, null);
+        return executeTargets(activeSources, selection, eligibleRecipients, random, programs, null, null, false);
     }
 
     static TargetResolution executeTargetsWithReactions(List<Candidate> activeSources, TargetIntent selection,
                                                          List<RecipientCandidate> eligibleRecipients,
                                                          RandomGenerator random, Map<String, RuleCompiler.Program> programs,
                                                          OwnerProjection sourceProjection, RecipientTrackReactions recipientReactions) {
+        return executeTargetsWithReactions(activeSources, selection, eligibleRecipients, random, programs,
+                sourceProjection, recipientReactions, false);
+    }
+
+    static TargetResolution executeTargetsWithReactions(List<Candidate> activeSources, TargetIntent selection,
+                                                         List<RecipientCandidate> eligibleRecipients,
+                                                         RandomGenerator random, Map<String, RuleCompiler.Program> programs,
+                                                         OwnerProjection sourceProjection, RecipientTrackReactions recipientReactions,
+                                                         boolean allowInventory) {
         if (sourceProjection == null || recipientReactions == null)
             throw RuleJson.error("/target", "Both character reaction handlers are required.");
-        return executeTargets(activeSources, selection, eligibleRecipients, random, programs, sourceProjection, recipientReactions);
+        return executeTargets(activeSources, selection, eligibleRecipients, random, programs,
+                sourceProjection, recipientReactions, allowInventory);
     }
 
     private static TargetResolution executeTargets(List<Candidate> activeSources, TargetIntent selection,
                                                     List<RecipientCandidate> eligibleRecipients,
                                                     RandomGenerator random, Map<String, RuleCompiler.Program> programs,
-                                                    OwnerProjection sourceProjection, RecipientTrackReactions recipientReactions) {
+                                                    OwnerProjection sourceProjection, RecipientTrackReactions recipientReactions,
+                                                    boolean allowInventory) {
         Snapshot snapshot = validateSources(activeSources);
         if (selection == null || eligibleRecipients == null)
             throw RuleJson.error("/target", "A selection and eligible recipient set are required.");
@@ -1030,12 +1061,16 @@ public final class RuleDispatcher {
         if (recipientReactions != null) {
             List<ActionResult> sourceReactions = new ArrayList<>();
             ReactionBudget budget = new ReactionBudget(sourceProjection);
+            budget.allowSelectedInventory = allowInventory;
             budget.contexts = workingContexts;
             RuleRuntime.TrackObserver sourceObserver = ownerTrackObserver(
                     snapshot, byInstance, workingContexts, random, programs, budget, sourceReactions, outbox);
             observer = new RuleRuntime.TrackObserver() {
                 @Override
                 public void changed(ObjectNode staged, String holder, ObjectNode event) {
+                    if (budget.inventoryPending)
+                        throw new RuleRuntime.Unavailable("inventorySettlement",
+                                "A later track reaction requires the inventory grant to be settled first.");
                     if ("recipient".equals(holder)) {
                         drainOutbox(staged, outbox);
                         recipientReactions.changed(staged, event, actionResults, outbox);
@@ -1049,6 +1084,9 @@ public final class RuleDispatcher {
 
                 @Override
                 public void mutated(ObjectNode staged, String operation, ObjectNode previousActor, String target) {
+                    if (budget.inventoryPending && !"inventory.grant".equals(operation))
+                        throw new RuleRuntime.Unavailable("inventorySettlement",
+                                "A later reaction requires the inventory grant to be settled first.");
                     if ("recipient".equals(target)) {
                         if ("track.capacity".equals(operation)
                                 || !operation.startsWith("track.") && !operation.startsWith("resource."))

@@ -2355,14 +2355,40 @@ class OnlineSessionServerTest {
                 [
                  {"id":"inventory-craft","bindings":[{"id":"move","event":"downtime.move","surface":"downtime",
                     "mode":"button","restMove":{"id":"craft","kind":"short"}}],
+                  "costs":[{"op":"track.mark","track":"actor.stress","amount":1}],
                   "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
                          "quantity":2,"tag":"foraged","max":5,"scope":"party","label":"Forage"}],
                   "ui":{"label":"Forage","report":"Found potions."}},
+                 {"id":"inventory-craft-reaction","bindings":[{"id":"change","event":"track.changed",
+                    "surface":"resource","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.track"},"stress"]},
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],
+                  "ui":{"report":"Recovered Hope."}},
                  {"id":"inventory-count","bindings":[{"id":"move","event":"downtime.move","surface":"downtime",
                     "mode":"button","restMove":{"id":"count","kind":"short"}}],
                   "do":[{"op":"resource.gain","pool":"actor.hope",
                          "amount":{"size":{"read":"actor.inventory"}}}],
                   "ui":{"label":"Count","report":"Counted inventory."}},
+                 {"id":"inventory-then-stress","bindings":[{"id":"move","event":"downtime.move","surface":"downtime",
+                    "mode":"button","restMove":{"id":"unsafe","kind":"short"}}],
+                  "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
+                         "quantity":1,"label":"Reward"},
+                        {"op":"track.mark","track":"actor.stress","amount":1}],
+                  "ui":{"label":"Unsafe order","report":"Updated inventory and Stress."}},
+                 {"id":"inventory-gift","bindings":[{"id":"move","event":"downtime.move","surface":"downtime",
+                    "mode":"button","restMove":{"id":"gift","kind":"short","ally":true},
+                    "targetSelection":{"scope":"activePlayerCharacters","cardinality":"one","excludeSource":true}}],
+                  "costs":[{"op":"track.mark","track":"actor.stress","amount":1}],
+                  "do":[{"op":"track.clear","track":"recipient.stress","amount":1},
+                        {"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
+                         "quantity":1,"to":"recipient","label":"Gift"}],
+                  "ui":{"label":"Give potion","report":"Gave a potion to {recipient.name}."}},
+                 {"id":"inventory-gift-count","bindings":[{"id":"move","event":"downtime.move","surface":"downtime",
+                    "mode":"button","restMove":{"id":"gift-count","kind":"short","ally":true},
+                    "targetSelection":{"scope":"activePlayerCharacters","cardinality":"one","excludeSource":true}}],
+                  "do":[{"op":"resource.gain","pool":"recipient.hope",
+                         "amount":{"size":{"read":"recipient.inventory"}}}],
+                  "ui":{"label":"Count ally supplies","report":"Counted ally supplies."}},
                  {"id":"before-inventory","bindings":[{"id":"rest","event":"rest.short","surface":"rest","mode":"option"}],
                   "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
                          "quantity":1,"label":"Reward"}],
@@ -2392,10 +2418,16 @@ class OnlineSessionServerTest {
                 {"name":"Borin","inventory":[{"name":"Foraged Relic","type":"consumable","qty":4,"foraged":true}]}
                 """);
         JsonNode offer = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode unsafe = restRequest(offer, "unsafe-grant");
+        addRestMove((ObjectNode) unsafe.path("request"), restDescriptor(offer.path("moves"), "inventory-then-stress"));
+        String original = store.loadSheet(campaign.getId(), "resting");
+        var unsafeResult = restHttp(owner, "resting", null, unsafe.toString());
+        assertEquals(409, unsafeResult.statusCode(), unsafeResult.body());
+        assertTrue(unsafeResult.body().contains("later track reaction"), unsafeResult.body());
+        assertEquals(original, store.loadSheet(campaign.getId(), "resting"));
         ObjectNode body = restRequest(offer, "rest-forage");
         addRestMove((ObjectNode) body.path("request"), restDescriptor(offer.path("moves"), "inventory-craft"));
         addRestMove((ObjectNode) body.path("request"), restDescriptor(offer.path("moves"), "inventory-count"));
-        String original = store.loadSheet(campaign.getId(), "resting");
         var overCap = restHttp(owner, "resting", null, body.toString());
         assertEquals(409, overCap.statusCode(), overCap.body());
         assertTrue(overCap.body().contains("limit of 5"), overCap.body());
@@ -2408,7 +2440,7 @@ class OnlineSessionServerTest {
         JsonNode sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
         assertEquals(2, sheet.at("/inventory/0/qty").asInt());
         assertTrue(sheet.at("/inventory/0/foraged").asBoolean());
-        assertEquals(1, sheet.at("/hope/on").asInt());
+        assertEquals(2, sheet.at("/hope/on").asInt());
         assertEquals(completed.body(), restHttp(owner, "resting", null, body.toString()).body());
         assertEquals(sheet, MAPPER.readTree(store.loadSheet(campaign.getId(), "resting")));
     }
@@ -2489,6 +2521,38 @@ class OnlineSessionServerTest {
             assertEquals(original, store.loadSheet(campaign.getId(), "resting"));
             assertEquals(history, store.historyTail(campaign.getId(), 100).size());
         }
+    }
+
+    @Test
+    void targetedRestGrantsAreVisibleToLaterAllyMovesAndKeepTrackReactions() throws Exception {
+        installRestInventoryRules();
+        String owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("resting").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Mira").ownerId(playerId()).build());
+        for (String id : List.of("resting", "ally"))
+            store.saveSheet(campaign.getId(), id, """
+                    {"name":"%s","hp":{"slots":6,"on":2},"stress":{"slots":6,"on":1},
+                     "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},"inventory":[]}
+                    """.formatted(id));
+        JsonNode offer = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode body = restRequest(offer, "target-gift");
+        for (String rule : List.of("inventory-gift", "inventory-gift-count")) {
+            JsonNode descriptor = restDescriptor(offer.path("moves"), rule);
+            JsonNode option = descriptor.at("/targetSelection/options/0");
+            assertEquals("ally", option.path("id").asText());
+            addRestMove((ObjectNode) body.path("request"), descriptor).putObject("target")
+                    .put("recipientId", "ally").put("version", option.path("version").asText());
+        }
+        var completed = restHttp(owner, "resting", null, body.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode source = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        JsonNode ally = MAPPER.readTree(store.loadSheet(campaign.getId(), "ally"));
+        assertEquals(1, source.at("/hope/on").asInt());
+        assertEquals(0, ally.at("/stress/on").asInt());
+        assertEquals(2, ally.at("/hope/on").asInt());
+        assertEquals(1, ally.at("/inventory/0/qty").asInt());
+        assertEquals("consumables:minor-health-potion", ally.at("/inventory/0/automationSource").asText());
+        assertEquals(completed.body(), restHttp(owner, "resting", null, body.toString()).body());
     }
 
     @Test

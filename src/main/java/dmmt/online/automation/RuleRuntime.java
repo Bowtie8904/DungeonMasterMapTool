@@ -381,8 +381,16 @@ public final class RuleRuntime {
     }
 
     private static boolean inventoryReferences(Set<String> references) {
-        return references.stream().anyMatch(path -> path.equals("actor.inventory") || path.startsWith("actor.inventory.")
-                || path.equals("recipient.inventory") || path.startsWith("recipient.inventory."));
+        return references.stream().anyMatch(path -> {
+            for (String holder : List.of("actor", "recipient")) {
+                if (path.equals(holder)) return true;
+                for (String field : List.of("inventory", "stats", "derived", "effects", "pools")) {
+                    String prefix = holder + "." + field;
+                    if (path.equals(prefix) || path.startsWith(prefix + ".")) return true;
+                }
+            }
+            return false;
+        });
     }
 
     private static void touchedRecipientPool(RuleCompiler.Program program, JsonNode operation, Set<String> pools) {
