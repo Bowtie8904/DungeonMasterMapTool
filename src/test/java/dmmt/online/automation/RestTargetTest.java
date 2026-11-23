@@ -58,6 +58,31 @@ class RestTargetTest {
                 """);
     }
 
+    private static ObjectNode rulesetWithPartyRecovery(String scope) throws Exception {
+        ObjectNode ruleset = ruleset();
+        ArrayNode rules = ruleset.withObject("/automation").withArray("rules");
+        ObjectNode share = (ObjectNode) RuleJson.parse("""
+                {"id":"share","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.move.id"},"brace"]},
+                                  {"eq":[{"read":"event.move.ally"},false]}]},
+                 "do":[{"op":"plan.adjust","plan":"event.move","field":"allies","by":2,"label":"Share",
+                        "partyRecovery":{"track":"armorTrack","scope":"activePlayerCharacters"}}],"ui":{}}
+                """);
+        ((ObjectNode) share.at("/do/0/partyRecovery")).put("scope", scope);
+        rules.add(share);
+        rules.add(RuleJson.parse("""
+                {"id":"overflow","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"armorTrack"]},
+                                  {"eq":[{"read":"event.change"},"clear"]},
+                                  {"gt":[{"read":"event.requested"},
+                                         {"subtract":[{"read":"event.before.marked"},{"read":"event.after.marked"}]}]}]},
+                 "do":[{"op":"resource.gain","pool":"actor.hope","amount":1},
+                       {"op":"table.gain","resource":"fear","amount":1,"label":"Overflow"}],
+                 "ui":{"report":"Overflow for {actor.name}."}}
+                """));
+        return ruleset;
+    }
+
     private static AutomationHost.Pack pack(ObjectNode ruleset) {
         return AutomationHost.compile("target-rest", Map.of(), LegacyCatalogConverter.coreRecipes(), ruleset.toString());
     }
@@ -426,6 +451,167 @@ class RestTargetTest {
         assertTrue(result.scopeOrder().isEmpty(), "Ordinary targeted moves do not depend on host roster order.");
         assertThrows(UnsupportedOperationException.class, () -> result.scopeMembership().put("other", List.of()));
         assertThrows(UnsupportedOperationException.class, () -> result.scopeMembership().get("activeCharacters").add("other"));
+    }
+
+    @Test
+    void privatePartyRecoverySharesTargetedRecipientChangesAndRetainsAllDependencies() throws Exception {
+        Setup setup = setup(rulesetWithPartyRecovery("activePlayerCharacters"), 4);
+        PartyTargets offers = party(setup, setup.recipient(), new AtomicReference<>());
+        ObjectNode request = transaction(setup);
+        transactionMove(request, "repair", targetRequest(setup, offers, "repair"));
+        transactionMove(request, "brace", null);
+        ObjectNode sourceBefore = setup.source().deepCopy(), miraBefore = setup.recipient().deepCopy();
+        ObjectNode healthyBefore = setup.healthy().deepCopy();
+        AtomicInteger miraLoads = new AtomicInteger(), healthyLoads = new AtomicInteger();
+        var mira = new AutomationHost.RestMember("mira", "Mira", miraBefore.toString(), 7, () -> {
+            miraLoads.incrementAndGet();
+            return setup.recipient();
+        });
+        var healthy = new AutomationHost.RestMember("healthy", "Healthy", healthyBefore.toString(), 2, () -> {
+            healthyLoads.incrementAndGet();
+            return setup.healthy();
+        });
+        var roster = new AutomationHost.RestRoster(sourceBefore.toString(), scope -> List.of(healthy, mira));
+
+        assertEquals("restCommand", assertThrows(RuleRuntime.Unavailable.class,
+                () -> stage(setup, request, roster)).code(), "The ordinary staged-rest guard remains in place.");
+        assertEquals(sourceBefore, setup.source());
+        miraLoads.set(0);
+        healthyLoads.set(0);
+        var result = HOST.stageRestWithPartyRecovery(setup.pack(), setup.source(),
+                AutomationHost.event("action.request", "ada", 1).put("sessionId", "session"),
+                request, StructuredRollTest.noRandom(), roster);
+
+        assertEquals(List.of("healthy", "mira"), result.response().path("partyRecoveries").findValuesAsText("holderId"));
+        assertEquals(List.of(2, 1), result.response().path("partyRecoveries").findValues("cleared").stream()
+                .map(JsonNode::asInt).toList());
+        assertEquals(List.of(1, 1), result.response().path("partyRecoveries").findValues("moveIndex").stream()
+                .map(JsonNode::asInt).toList());
+        assertEquals(2, result.response().at("/event/table/fear").asInt());
+        assertTrue(result.response().path("actions").findValuesAsText("report").contains("Overflow for Mira."));
+        assertEquals(3, result.recipients().get("mira").at("/hope/on").asInt(),
+                "The reaction must see the armor already cleared by the targeted move.");
+        assertEquals(0, result.recipients().get("mira").at("/armorTrack/on").asInt());
+        assertEquals(0, result.recipients().get("healthy").at("/armorTrack/on").asInt());
+        assertEquals(8, HOST.revision(result.recipients().get("mira")));
+        assertEquals(3, HOST.revision(result.recipients().get("healthy")));
+        assertEquals(HOST.revision(sourceBefore) + 1, HOST.revision(setup.source()));
+        assertEquals(miraBefore, setup.recipient());
+        assertEquals(healthyBefore, setup.healthy());
+        assertEquals(1, miraLoads.get(), "The earlier target and recovery must reuse one private sheet.");
+        assertEquals(1, healthyLoads.get());
+        assertEquals(Map.of("mira", miraBefore.toString(), "healthy", healthyBefore.toString()), result.readVersions());
+        assertEquals(Map.of("activeCharacters", List.of("healthy", "mira"),
+                "activePlayerCharacters", List.of("healthy", "mira")), result.scopeMembership());
+        assertEquals(Map.of("activePlayerCharacters", List.of("healthy", "mira")), result.scopeOrder());
+        assertThrows(UnsupportedOperationException.class,
+                () -> result.scopeOrder().get("activePlayerCharacters").add("other"));
+    }
+
+    @Test
+    void sharedRecipientReceiptReplaysWithoutReloadingAnyScope() throws Exception {
+        Setup setup = setup(rulesetWithPartyRecovery("activePlayerCharacters"), 4);
+        PartyTargets offers = party(setup, setup.recipient(), new AtomicReference<>());
+        ObjectNode request = transaction(setup).put("requestId", "shared-recovery");
+        transactionMove(request, "repair", targetRequest(setup, offers, "repair"));
+        transactionMove(request, "brace", null);
+        var first = HOST.stageRestWithPartyRecoveryReceipt(setup.pack(), setup.source(),
+                AutomationHost.event("action.request", "ada", 1).put("sessionId", "session"),
+                request, "owner", StructuredRollTest.noRandom(), roster(setup, new java.util.HashMap<>()));
+        assertFalse(first.replayed());
+        assertEquals(Set.of("mira", "healthy"), first.readVersions().keySet());
+        assertEquals(Set.of("activePlayerCharacters"), first.scopeOrder().keySet());
+        ObjectNode saved = setup.source().deepCopy();
+        var forbidden = new AutomationHost.RestRoster("unchanged", scope -> {
+            fail("An exact replay must not reload the roster.");
+            return List.of();
+        });
+        var replay = HOST.stageRestWithPartyRecoveryReceipt(setup.pack(), setup.source(),
+                AutomationHost.event("action.request", "ada", 0), request, "owner",
+                StructuredRollTest.noRandom(), forbidden);
+        assertTrue(replay.replayed());
+        assertEquals(first.response(), replay.response());
+        assertTrue(replay.recipients().isEmpty());
+        assertTrue(replay.readVersions().isEmpty());
+        assertTrue(replay.scopeMembership().isEmpty());
+        assertTrue(replay.scopeOrder().isEmpty());
+        assertEquals(saved, setup.source());
+    }
+
+    @Test
+    void recoveryStagingLoadsNoScopeWithoutARequestAndRejectsUnsettledAllyOffers() throws Exception {
+        ObjectNode ruleset = rulesetWithPartyRecovery("activePlayerCharacters");
+        ArrayNode rules = ruleset.withObject("/automation").withArray("rules");
+        rules.add(RuleJson.parse("""
+                {"id":"gift","bindings":[{"id":"rest","event":"rest.short","surface":"rest","mode":"option"}],
+                 "do":[{"op":"claim.offer","group":"gift","label":"Gift","limit":1}],"ui":{"label":"Gift"}}
+                """));
+        rules.add(RuleJson.parse("""
+                {"id":"gift-claim","bindings":[{"id":"claim","event":"claim.accept","surface":"chat","mode":"button",
+                 "claimGroup":"gift","claimScope":{"recipients":"otherPlayersCharacters"}}],
+                 "do":[{"op":"resource.gain","pool":"recipient.hope","amount":1}],"ui":{"label":"Accept"}}
+                """));
+        Setup setup = setup(ruleset, 4);
+        var noScope = new AutomationHost.RestRoster(setup.source().toString(), scope -> {
+            fail("A rest without party recovery must not load a recipient scope.");
+            return List.of();
+        });
+        ObjectNode empty = transaction(setup);
+        var staged = HOST.stageRestWithPartyRecovery(setup.pack(), setup.source(),
+                AutomationHost.event("action.request", "ada", 1).put("sessionId", "session"),
+                empty, StructuredRollTest.noRandom(), noScope);
+        assertTrue(staged.response().path("partyRecoveries").isEmpty());
+        assertTrue(staged.readVersions().isEmpty());
+        assertTrue(staged.scopeMembership().isEmpty());
+        assertTrue(staged.scopeOrder().isEmpty());
+
+        ObjectNode before = setup.source().deepCopy();
+        ObjectNode gift = transaction(setup);
+        gift.withArray("completion").addObject().put("sourceInstanceId", "ruleset:base")
+                .put("ruleId", "gift").put("bindingId", "rest");
+        var error = assertThrows(RuleRuntime.Unavailable.class, () ->
+                HOST.stageRestWithPartyRecovery(setup.pack(), setup.source(),
+                        AutomationHost.event("action.request", "ada", 1).put("sessionId", "session"),
+                        gift, StructuredRollTest.noRandom(), noScope));
+        assertEquals("restCommand", error.code());
+        assertTrue(error.getMessage().contains("claim.offer"));
+        assertEquals(before, setup.source());
+    }
+
+    @Test
+    void sharedRecipientFailuresDiscardEarlierTargetChangesAndReceipts() throws Exception {
+        ObjectNode ruleset = rulesetWithPartyRecovery("activeCharacters");
+        ((ObjectNode) ruleset.at("/automation/rules/7/do/1")).put("op", "table.spend").put("amount", 6);
+        Setup setup = setup(ruleset, 4);
+        PartyTargets offers = party(setup, setup.recipient(), new AtomicReference<>());
+        ObjectNode request = transaction(setup).put("requestId", "failed-recovery");
+        transactionMove(request, "repair", targetRequest(setup, offers, "repair"));
+        transactionMove(request, "brace", null);
+        ObjectNode beforeSource = setup.source().deepCopy(), beforeMira = setup.recipient().deepCopy();
+        ObjectNode beforeHealthy = setup.healthy().deepCopy();
+        assertEquals("tableResource", assertThrows(RuleRuntime.Unavailable.class, () ->
+                HOST.stageRestWithPartyRecoveryReceipt(setup.pack(), setup.source(),
+                        AutomationHost.event("action.request", "ada", 1).put("sessionId", "session"),
+                        request, "owner", StructuredRollTest.noRandom(), roster(setup, new java.util.HashMap<>()))).code());
+        assertEquals(beforeSource, setup.source());
+        assertEquals(beforeMira, setup.recipient());
+        assertEquals(beforeHealthy, setup.healthy());
+
+        var mira = new AutomationHost.RestMember("mira", "Mira", beforeMira.toString(), 7, setup::recipient);
+        var healthy = new AutomationHost.RestMember("healthy", "Healthy", beforeHealthy.toString(), 2, setup::healthy);
+        AtomicInteger scopes = new AtomicInteger();
+        var shifting = new AutomationHost.RestRoster(beforeSource.toString(), scope ->
+                scopes.getAndIncrement() == 0 ? List.of(mira, healthy) : List.of(mira));
+        ObjectNode noReceipt = request.deepCopy();
+        noReceipt.remove("requestId");
+        assertEquals("staleRecipient", assertThrows(RuleRuntime.Unavailable.class, () ->
+                HOST.stageRestWithPartyRecovery(setup.pack(), setup.source(),
+                        AutomationHost.event("action.request", "ada", 1).put("sessionId", "session"),
+                        noReceipt, StructuredRollTest.noRandom(), shifting)).code());
+        assertEquals(2, scopes.get());
+        assertEquals(beforeSource, setup.source());
+        assertEquals(beforeMira, setup.recipient());
+        assertEquals(beforeHealthy, setup.healthy());
     }
 
     @Test

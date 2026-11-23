@@ -248,7 +248,7 @@ listeners, projection dependencies, collection additions or mutable derived-stat
 One opt-in, single-thread
 32-idle-source private-rest sample allocated about 38.8 MiB per move both with and without one Armor reaction;
 timings varied substantially between runs. This is not a live persistence, concurrency or release benchmark.
-Targeted-move recipient reactions and the whole-rest recovery guard remain unresolved.
+Targeted-move recipient reactions remain unresolved, and the ordinary whole-rest recovery guard stays in place.
 Converted `repairAllies` adjustments require party recovery and recipient track-change reactions, including
 Armor overflow. Until those transactions are implemented, a staged self move with a positive party-recovery
 request is rejected rather than silently omitting recipient changes, including when later adjustments cancel
@@ -256,8 +256,8 @@ the total. `plan.adjust` records each requested and applied delta, before/after 
 rule and binding, phase and expanded step index in order, even when clamped. Nested reactions retain their own
 operation identities. A move adjustment may declare `partyRecovery: {track, scope}`; conversion uses
 `armorTrack` and `activePlayerCharacters` for `repairAllies`. The host copies this validated, authored metadata
-into the adjustment record, rather than deriving recovery mechanics from a client-supplied amount. Applying
-each request to affected characters in a staged rest is still pending. Narrative ally moves remain report-only.
+into the adjustment record, rather than deriving recovery mechanics from a client-supplied amount. The ordinary
+staged rest still rejects these requests. Narrative ally moves remain report-only.
 A recovery may additionally declare `afterRest: {sourcePath, move}`. It must have a fixed positive integer
 `by` of at most 1,000, a literal label and exactly one automatic `downtime.move`/`downtime` binding, without a
 conditional step or use budget. The compiler indexes these declarations by move. For matching self moves the
@@ -275,8 +275,12 @@ host roster's original character order rather than sorted IDs, recording both me
 before commit without loading sheets. Existing sorted targeting and recovery remain unchanged. A whole-rest
 recovery stage combines these primitives after a completed private rest, supplies each reaction with its
 originating move facts, carries the post-rest table state, and rejects attempts to change completed event facts.
-It returns private recipient changes and dependencies but is not yet composed with targeted moves, per-card ally
-passives or the rest coordinator.
+An internal-only coordinator variant shares its lazy recipient sheets with earlier targeted moves, so recovery
+reactions see prior changes and each affected sheet advances once. Its result and optional receipt retain every
+read version, membership and host-order dependency; exact retries do not reload recipients. Unannotated recovery,
+changed scopes and unsettled ally offers or other unsupported commands fail the entire private stage. This is not
+a live rest: targeted-move recipient reactions, per-card ally-passives, authenticated choices, command settlement
+and atomic persistence remain release prerequisites.
 The shared Daggerheart ruleset now supplies self-targeted short recovery (1d4 plus tier and move bonus), the two
 mutually exclusive preparation variants, long recovery and work on a project. Reports use the amount actually
 cleared or gained, including permanent and locked HP and capped Hope; a short rest needs a granted allowance for

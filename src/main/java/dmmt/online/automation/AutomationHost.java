@@ -1321,17 +1321,30 @@ public final class AutomationHost {
     /** Stages trusted recovery from all moves after a private rest has completed; it does not commit any sheets. */
     PartyRecovery stageRestPartyRecoveries(Pack pack, ObjectNode initialSheet, ObjectNode completedEvent,
                                            List<ObjectNode> moveEvents, RestRoster roster, RandomGenerator random) {
+        if (roster == null || random == null)
+            throw RuleJson.error("/recovery", "A host roster and random source are required.");
+        String actorId = RuleJson.id(RuleJson.object(completedEvent, "/event").get("actorId"), "/event/actorId");
+        StagedRestRecipients recipients = new StagedRestRecipients(pack, actorId, roster);
+        ObjectNode response = stageRestPartyRecoveries(pack, initialSheet, completedEvent, moveEvents, recipients, random);
+        return new PartyRecovery(response, recipients.changed(), recipients.readVersions(),
+                recipients.scopeMembership(), recipients.scopeOrder());
+    }
+
+    private ObjectNode stageRestPartyRecoveries(Pack pack, ObjectNode initialSheet, ObjectNode completedEvent,
+                                                List<ObjectNode> moveEvents, StagedRestRecipients recipients,
+                                                RandomGenerator random) {
+        if (random == null) throw RuleJson.error("/recovery", "A random source is required.");
         RuleJson.object(completedEvent, "/event");
         RuleJson.checkTree(completedEvent, "/event", 0, new int[]{0});
         String actorId = RuleJson.id(completedEvent.get("actorId"), "/event/actorId");
+        if (!actorId.equals(recipients.sourceId))
+            throw RuleJson.error("/event/actorId", "The completed rest belongs to a different character.");
         String type = RuleJson.text(completedEvent.get("type"), "/event/type");
         if (!RuleRuntime.isRestEvent(type)) throw RuleJson.error("/event/type", "Expected a completed rest.");
         String kind = type.substring("rest.".length());
         if (!kind.equals(completedEvent.at("/rest/kind").asText())
                 || !"afterReset".equals(completedEvent.at("/rest/phase").asText()))
             throw RuleJson.error("/event/rest", "Expected the completed rest's after-reset facts.");
-        if (roster == null || random == null)
-            throw RuleJson.error("/recovery", "A host roster and random source are required.");
         List<RestPartyRecovery> ordered = orderRestPartyRecoveries(pack, initialSheet, actorId, moveEvents);
         for (ObjectNode move : moveEvents) {
             if (!kind.equals(move.at("/move/rest").asText())
@@ -1340,10 +1353,7 @@ public final class AutomationHost {
         }
         List<RecoveryTask> tasks = ordered.stream().map(item -> new RecoveryTask(item.request(),
                 moveEvents.get(item.moveIndex()), item.moveIndex(), item.adjustmentIndex())).toList();
-        StagedRestRecipients recipients = new StagedRestRecipients(pack, actorId, roster);
-        ObjectNode response = recoverParty(recipients, completedEvent, tasks, random, true);
-        return new PartyRecovery(response, recipients.changed(), recipients.readVersions(),
-                recipients.scopeMembership(), recipients.scopeOrder());
+        return recoverParty(recipients, completedEvent, tasks, random, true);
     }
 
     private ObjectNode recoverParty(StagedRestRecipients recipients, ObjectNode parentEvent,
@@ -1442,6 +1452,17 @@ public final class AutomationHost {
      */
     RestTransaction stageRest(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request,
                               RandomGenerator random, RestRoster roster) {
+        return stageRest(pack, sheet, origin, request, random, roster, false);
+    }
+
+    /** Private staging prerequisite; it does not authorize or commit a live rest. */
+    RestTransaction stageRestWithPartyRecovery(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request,
+                                                RandomGenerator random, RestRoster roster) {
+        return stageRest(pack, sheet, origin, request, random, roster, true);
+    }
+
+    private RestTransaction stageRest(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request,
+                                      RandomGenerator random, RestRoster roster, boolean settlePartyRecovery) {
         RuleJson.fields(request, "/request", "kind", "expectedRevision", "preparation", "moves", "completion");
         RuleJson.checkTree(request, "/request", 0, new int[]{0});
         String kind = RuleJson.text(request.get("kind"), "/request/kind");
@@ -1466,7 +1487,7 @@ public final class AutomationHost {
         }
         String actorId = RuleJson.id(RuleJson.object(origin, "/event").get("actorId"), "/event/actorId");
         if (pack.rest() == null) throw new NotReady("The shared ruleset has no rest configuration.");
-        if (targeted && roster == null)
+        if ((targeted || settlePartyRecovery) && roster == null)
             throw new RuleRuntime.Unavailable("restTarget", "A host recipient roster is required for this rest.");
 
         ObjectNode working = sheet.deepCopy();
@@ -1476,7 +1497,7 @@ public final class AutomationHost {
         if (revision == MAX_REST_REVISION)
             throw new RuleRuntime.Unavailable("revision", "The character's rest revision cannot be advanced.");
         List<SheetProjection.SourceElement> initialSources = sources(pack, sheet);
-        StagedRestRecipients recipients = targeted ? new StagedRestRecipients(pack, actorId, roster) : null;
+        StagedRestRecipients recipients = targeted || settlePartyRecovery ? new StagedRestRecipients(pack, actorId, roster) : null;
 
         Set<String> initial = restEffectSnapshot(working);
         ObjectNode restEvent = origin.deepCopy().put("type", "rest." + kind);
@@ -1491,23 +1512,33 @@ public final class AutomationHost {
         ObjectNode response = RuleJson.JSON.createObjectNode();
         ArrayNode actions = response.putArray("actions"), outbox = response.putArray("outbox");
         ArrayNode moveEvents = response.putArray("moveEvents");
+        List<ObjectNode> completedMoves = settlePartyRecovery ? new ArrayList<>() : null;
         response.set("preparationEvent", prepared.path("event").deepCopy());
-        appendRestStage(prepared, actions, outbox, targeted);
+        appendRestStage(prepared, actions, outbox, targeted || settlePartyRecovery);
         for (JsonNode move : moves) {
             PartyTargets party = move.has("target") ? recipients.party() : null;
             RestTarget target = party == null ? null : new RestTarget(party, (ObjectNode) move.get("target"), recipients::reproject);
             RestMoveResult result = restMove(pack, working, stagedOrigin, progress, (ObjectNode) move.get("selection"),
-                    (ArrayNode) move.get("options"), random, target, initialSources);
+                    (ArrayNode) move.get("options"), random, target, initialSources, settlePartyRecovery);
             progress = result.progress();
-            moveEvents.add(result.response().path("event").deepCopy());
-            appendRestStage(result.response(), actions, outbox, targeted);
+            ObjectNode completedMove = RuleJson.object(result.response().get("event"), "/event").deepCopy();
+            if (completedMoves != null) completedMoves.add(completedMove);
+            moveEvents.add(completedMove);
+            appendRestStage(result.response(), actions, outbox, targeted || settlePartyRecovery);
             carryRestTable(stagedOrigin, result.response().required("event"));
             if (party != null) recipients.apply(party.updates());
             projection.state(working).put("revision", revision);
         }
         ObjectNode finished = completeRest(pack, working, stagedOrigin, progress, initial, completion, random);
-        appendRestStage(finished, actions, outbox, targeted);
-        response.set("event", finished.path("event").deepCopy());
+        appendRestStage(finished, actions, outbox, targeted || settlePartyRecovery);
+        ObjectNode finalEvent = RuleJson.object(finished.get("event"), "/event");
+        if (settlePartyRecovery) {
+            ObjectNode recovery = stageRestPartyRecoveries(pack, sheet, finalEvent, completedMoves, recipients, random);
+            appendRestStage(recovery, actions, outbox, true);
+            response.set("partyRecoveries", recovery.path("clears").deepCopy());
+            finalEvent = RuleJson.object(recovery.get("event"), "/event");
+        }
+        response.set("event", finalEvent.deepCopy());
         response.set("skipped", finished.path("skipped").deepCopy());
         response.putObject("progress").put("moves", progress.moves()).put("longMoves", progress.longMoves())
                 .put("slotsUsed", progress.slotsUsed()).put("longMovesUsed", progress.longMovesUsed())
@@ -1530,7 +1561,13 @@ public final class AutomationHost {
      */
     RestTransaction stageRestWithReceipt(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request,
                                          String principalId, RandomGenerator random, RestRoster roster) {
-        return stageRestReceipt(pack, sheet, origin, request, principalId, random, roster, null, false);
+        return stageRestReceipt(pack, sheet, origin, request, principalId, random, roster, null, false, false);
+    }
+
+    /** Adds a receipt to the private shared-recipient staging prerequisite. */
+    RestTransaction stageRestWithPartyRecoveryReceipt(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request,
+                                                      String principalId, RandomGenerator random, RestRoster roster) {
+        return stageRestReceipt(pack, sheet, origin, request, principalId, random, roster, null, false, true);
     }
 
     /**
@@ -1565,12 +1602,12 @@ public final class AutomationHost {
     /** Stages a signed rest; the caller must authenticate ownership and atomically commit all dependencies. */
     public RestTransaction stageOfferedRest(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request,
                                             String principalId, String sourceVersion, RandomGenerator random, RestRoster roster) {
-        return stageRestReceipt(pack, sheet, origin, request, principalId, random, roster, sourceVersion, true);
+        return stageRestReceipt(pack, sheet, origin, request, principalId, random, roster, sourceVersion, true, false);
     }
 
     private RestTransaction stageRestReceipt(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request,
                                              String principalId, RandomGenerator random, RestRoster roster,
-                                             String sourceVersion, boolean offered) {
+                                             String sourceVersion, boolean offered, boolean settlePartyRecovery) {
         if (principalId == null || principalId.isBlank()) throw new IllegalArgumentException("Missing automation principal.");
         if (offered)
             RuleJson.fields(request, "/request", "requestId", "offerVersion", "kind", "expectedRevision", "preparation", "moves", "completion");
@@ -1594,7 +1631,7 @@ public final class AutomationHost {
         ObjectNode rest = request.deepCopy();
         rest.remove("requestId");
         rest.remove("offerVersion");
-        RestTransaction staged = stageRest(pack, working, origin, rest, random, roster);
+        RestTransaction staged = stageRest(pack, working, origin, rest, random, roster, settlePartyRecovery);
         ObjectNode response = staged.response().put("requestId", requestId);
         RuleJson.checkTree(response, "/response", 0, new int[]{0});
         recordReceipt(projection.state(working), requestId, principalId, false, fingerprint, response);
@@ -1938,12 +1975,12 @@ public final class AutomationHost {
 
     RestMoveResult restMove(Pack pack, ObjectNode sheet, ObjectNode origin, RestProgress progress,
                             ObjectNode selection, ArrayNode options, RandomGenerator random, RestTarget target) {
-        return restMove(pack, sheet, origin, progress, selection, options, random, target, sources(pack, sheet));
+        return restMove(pack, sheet, origin, progress, selection, options, random, target, sources(pack, sheet), false);
     }
 
     private RestMoveResult restMove(Pack pack, ObjectNode sheet, ObjectNode origin, RestProgress progress,
                                     ObjectNode selection, ArrayNode options, RandomGenerator random, RestTarget target,
-                                    List<SheetProjection.SourceElement> initialSources) {
+                                    List<SheetProjection.SourceElement> initialSources, boolean settlePartyRecovery) {
         if (progress.count() >= 64) throw RuleJson.error("/rest/moves", "A rest may contain at most 64 moves.");
         RuleJson.fields(selection, "/selection", "sourceInstanceId", "ruleId", "bindingId", "inputs");
         RuleJson.checkTree(selection, "/selection", 0, new int[]{0});
@@ -1977,7 +2014,7 @@ public final class AutomationHost {
             throw RuleJson.error("/target", "This downtime move does not select an ally.");
         if (target != null && !target.party().updates().isEmpty())
             throw new RuleRuntime.Unavailable("restTarget", "Apply the previous staged recipient update before another move.");
-        if (!metadata.path("ally").asBoolean(false) && hasScheduledRestRecovery(pack, initialSources, id))
+        if (!settlePartyRecovery && !metadata.path("ally").asBoolean(false) && hasScheduledRestRecovery(pack, initialSources, id))
             throw new RuleRuntime.Unavailable("restCommand",
                     "This downtime move requires party recovery and recipient track-change settlement, which are not available yet.");
 
@@ -2037,7 +2074,7 @@ public final class AutomationHost {
                 adjustments.actions(), adjustments.outbox());
         if (target != null) validateTargetRestCommands(result);
         ObjectNode adjusted = RuleJson.object(result.get("event"), "/event");
-        validateRestMove(adjusted, move, rest);
+        validateRestMove(adjusted, move, rest, settlePartyRecovery);
         candidates = candidates(pack, working, adjusted);
         var candidate = candidates.stream().filter(item -> instanceId.equals(item.instanceId())
                         && element.sourceId().equals(item.program().sourceId())).findFirst()
@@ -2079,7 +2116,7 @@ public final class AutomationHost {
             recipientUpdates = resolved.recipients();
         }
         ObjectNode finalEvent = RuleJson.object(after.get("event"), "/event");
-        validateRestMove(finalEvent, move, rest);
+        validateRestMove(finalEvent, move, rest, settlePartyRecovery);
         int slots = finalEvent.at("/move/slots").intValue();
         if (progress.slotsUsed() + slots > progress.moves())
             throw new RuleRuntime.Unavailable("restMoves", "No downtime move slots remain.");
@@ -2130,7 +2167,7 @@ public final class AutomationHost {
             }
             if (target != null) validateTargetRestCommands(response);
             finalEvent = RuleJson.object(response.get("event"), "/event");
-            validateRestMove(finalEvent, move, rest);
+            validateRestMove(finalEvent, move, rest, settlePartyRecovery);
             if (!completedMove.equals(finalEvent.path("move")))
                 throw RuleJson.error("/event/move", "A deferred benefit cannot change the completed move.");
             for (String key : List.of("actions", "outbox"))
@@ -2327,7 +2364,7 @@ public final class AutomationHost {
         combined.set("event", finalEvent.deepCopy());
     }
 
-    private static void validateRestMove(ObjectNode event, ObjectNode initial, ObjectNode rest) {
+    private static void validateRestMove(ObjectNode event, ObjectNode initial, ObjectNode rest, boolean settlePartyRecovery) {
         if (!rest.equals(event.path("rest")))
             throw RuleJson.error("/event/rest", "A downtime move cannot change the prepared rest.");
         JsonNode move = event.path("move");
@@ -2337,22 +2374,26 @@ public final class AutomationHost {
         RuleJson.integer(move.get("slots"), "/event/move/slots", 0, 1);
         RuleJson.integer(move.get("bonus"), "/event/move/bonus", -1000, 1000);
         int allies = RuleJson.integer(move.get("allies"), "/event/move/allies", 0, 128);
-        boolean partyRecovery = false;
-        int ignoredScheduledAllies = 0;
-        for (JsonNode adjustment : move.path("adjustments")) {
-            if (adjustment.path("requested").asInt() <= 0) continue;
-            if (adjustment.path("partyRecovery").has("afterRest")) {
-                if ("allies".equals(adjustment.path("field").asText()))
-                    ignoredScheduledAllies += adjustment.path("by").asInt();
-            } else if (adjustment.has("partyRecovery") || "allies".equals(adjustment.path("field").asText())) {
-                partyRecovery = true;
-                break;
+        if (settlePartyRecovery) {
+            partyRecoveryRequests(event);
+        } else {
+            boolean partyRecovery = false;
+            int ignoredScheduledAllies = 0;
+            for (JsonNode adjustment : move.path("adjustments")) {
+                if (adjustment.path("requested").asInt() <= 0) continue;
+                if (adjustment.path("partyRecovery").has("afterRest")) {
+                    if ("allies".equals(adjustment.path("field").asText()))
+                        ignoredScheduledAllies += adjustment.path("by").asInt();
+                } else if (adjustment.has("partyRecovery") || "allies".equals(adjustment.path("field").asText())) {
+                    partyRecovery = true;
+                    break;
+                }
             }
+            partyRecovery |= allies > ignoredScheduledAllies;
+            if (!move.path("ally").asBoolean() && partyRecovery)
+                throw new RuleRuntime.Unavailable("restCommand",
+                        "This downtime move requires party recovery and recipient track-change settlement, which are not available yet.");
         }
-        partyRecovery |= allies > ignoredScheduledAllies;
-        if (!move.path("ally").asBoolean() && partyRecovery)
-            throw new RuleRuntime.Unavailable("restCommand",
-                    "This downtime move requires party recovery and recipient track-change settlement, which are not available yet.");
         if (!event.path("blocked").isEmpty())
             throw new RuleRuntime.Unavailable("blocked", event.at("/blocked/0/reason").asText());
     }

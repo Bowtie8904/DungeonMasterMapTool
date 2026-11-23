@@ -422,6 +422,17 @@ class RestTransactionTest {
         assertTrue(error.getMessage().contains("party recovery"));
         assertEquals(before, sheet, "Preparation, recovery and the retry receipt must all roll back.");
 
+        ObjectNode unannotated = rest.deepCopy();
+        unannotated.remove("requestId");
+        var unusedRoster = new AutomationHost.RestRoster("source", scope -> {
+            fail("An unannotated recovery must fail before loading a scope.");
+            return List.of();
+        });
+        assertEquals("restCommand", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageRestWithPartyRecovery(pack, sheet, origin(), unannotated,
+                        StructuredRollTest.noRandom(), unusedRoster)).code());
+        assertEquals(before, sheet);
+
         ObjectNode late = request("short");
         ObjectNode lateMove = late.withArray("moves").addObject();
         lateMove.set("selection", choice("late", "move").put("sourceInstanceId", "sharing"));
@@ -503,6 +514,20 @@ class RestTransactionTest {
         assertEquals("restCommand", assertThrows(RuleRuntime.Unavailable.class,
                 () -> HOST.stageSelfRest(pack, initial, origin(), consumeThenMove, StructuredRollTest.noRandom())).code());
         assertEquals(before, initial, "The removed source and every staged change must roll back.");
+
+        ObjectNode recipient = sheet();
+        recipient.withObject("/armorTrack").put("on", 2);
+        ObjectNode recipientBefore = recipient.deepCopy();
+        var member = new AutomationHost.RestMember("mira", "Mira", "stored-mira", 9, () -> recipient);
+        var roster = new AutomationHost.RestRoster("source", scope -> List.of(member));
+        ObjectNode stagedSource = before.deepCopy();
+        var staged = HOST.stageRestWithPartyRecovery(pack, stagedSource, origin(), consumeThenMove,
+                StructuredRollTest.faces(4), roster);
+        assertTrue(stagedSource.path("inventory").isEmpty());
+        assertEquals(-1, staged.response().at("/partyRecoveries/0/adjustmentIndex").asInt());
+        assertEquals(1, staged.recipients().get("mira").at("/armorTrack/on").asInt());
+        assertEquals(10, HOST.revision(staged.recipients().get("mira")));
+        assertEquals(recipientBefore, recipient);
 
         ObjectNode elsewhere = sheet();
         elsewhere.putArray("features").addObject().put("name", "Camp").put("instanceId", "camp")

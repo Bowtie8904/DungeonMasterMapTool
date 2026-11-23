@@ -106,10 +106,11 @@ without settling them yet. An indexed post-rest declaration can schedule a fixed
 sheet-source location for matching self moves even if its ordinary modifier was filtered or the source disappeared.
 Converted source-rest party repairs use the initial loadout and the legacy host's move matching; effect-carried
 rest blocks are not included. Nonpositive legacy integer requests are ignored and unsupported amounts are
-diagnosed. A separate private stage applies the ordered requests in host roster order after a completed rest,
-with each recipient's reactions and the final rest's table state. The guard also rejects scheduled requests that
-never produced a move adjustment. This is not yet composed with targeted moves, interleaved ally passives or the
-live workflow.
+diagnosed. A private stage applies the ordered requests in host roster order after a completed rest, with each
+recipient's reactions and the final rest's table state. An internal-only coordinator variant shares recipient
+sheets between earlier targeted moves and these recoveries, retains their original dependencies, and rolls back
+the whole stage on failure. The ordinary guard also rejects scheduled requests that never produced a move
+adjustment. Targeted-move recipient reactions, interleaved ally passives and the live workflow remain unfinished.
 Format-2 healing respects permanent HP and temporary locked HP on both the actor and targeted recipients;
 reports use the amount actually cleared.
 Converted scar gains and healing update the affected character's Hope capacity atomically. Gaining a scar
