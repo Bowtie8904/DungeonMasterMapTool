@@ -685,7 +685,7 @@ public final class RuleCompiler {
 
     private static void validateBindingBasics(JsonNode binding, String path, boolean allowSubstitutions) {
         RuleJson.fields(binding, path, "id", "event", "surface", "mode", "when", "group",
-                "defaultOn", "forEach", "exclusiveGroup", "priority", "claimGroup", "claimGroupScope", "claimScope", "audience", "targetSelection", "repeatable");
+                "defaultOn", "forEach", "exclusiveGroup", "priority", "claimGroup", "claimGroupScope", "claimScope", "audience", "targetSelection", "repeatable", "restMove");
         if (!(allowSubstitutions && substitution(binding.path("id")))) RuleJson.id(binding.path("id"), path + "/id");
         if (!(allowSubstitutions && substitution(binding.path("event"))) && !EVENTS.contains(binding.path("event").asText()))
             throw RuleJson.error(path + "/event", "Unknown event.");
@@ -718,6 +718,28 @@ public final class RuleCompiler {
                     || (!surfaceUnknown && !"roll".equals(binding.path("surface").asText()))
                     || (!modeUnknown && !"button".equals(binding.path("mode").asText())))
                 throw RuleJson.error(path + "/repeatable", "Only roll.finished result buttons can be repeatable.");
+        }
+        if (binding.has("restMove")) {
+            String at = path + "/restMove";
+            boolean eventUnknown = allowSubstitutions && substitution(binding.path("event"));
+            boolean surfaceUnknown = allowSubstitutions && substitution(binding.path("surface"));
+            boolean modeUnknown = allowSubstitutions && substitution(binding.path("mode"));
+            if ((!eventUnknown && !"downtime.move".equals(binding.path("event").asText()))
+                    || (!surfaceUnknown && !"downtime".equals(binding.path("surface").asText()))
+                    || (!modeUnknown && !"button".equals(binding.path("mode").asText())) || binding.has("forEach"))
+                throw RuleJson.error(at, "A rest move requires a downtime.move button without forEach.");
+            if (!(allowSubstitutions && substitution(binding.get("restMove")))) {
+                JsonNode move = binding.get("restMove");
+                RuleJson.fields(move, at, "id", "kind", "group", "ally");
+                if (!(allowSubstitutions && substitution(move.path("id")))) RuleJson.id(move.path("id"), at + "/id");
+                if (!(allowSubstitutions && substitution(move.path("kind")))
+                        && !Set.of("any", "short", "long", "longMove").contains(move.path("kind").asText()))
+                    throw RuleJson.error(at + "/kind", "Expected any, short, long or longMove.");
+                if (move.has("group") && !(allowSubstitutions && substitution(move.get("group"))))
+                    RuleJson.id(move.get("group"), at + "/group");
+                if (move.has("ally") && !(allowSubstitutions && substitution(move.get("ally"))) && !move.get("ally").isBoolean())
+                    throw RuleJson.error(at + "/ally", "Expected a boolean.");
+            }
         }
         for (String group : List.of("exclusiveGroup", "claimGroup")) if (binding.has(group)) {
             if (!(allowSubstitutions && substitution(binding.get(group)))) RuleJson.id(binding.get(group), path + "/" + group);

@@ -168,6 +168,25 @@ class RuleCatalogTest {
     }
 
     @Test
+    void unusedRecipesValidateConcreteRestMoveMetadataAndDeferSubstitutedKinds() throws Exception {
+        String catalog = "{\"format\":\"dmmap-daggerheart\",\"version\":2,\"category\":\"items\",\"entries\":[]}";
+        ObjectNode recipes = fixture("rewrite/recipes");
+        ObjectNode binding = (ObjectNode) recipes.at("/recipes/0/rules/0/bindings/0");
+        binding.put("event", "downtime.move").put("surface", "downtime");
+        ObjectNode move = binding.putObject("restMove").put("id", "rest").put("kind", "any");
+        assertDoesNotThrow(() -> RuleCatalog.compile(catalog, recipes.toString()));
+        move.put("ally", "yes");
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, recipes.toString()));
+        move.remove("ally");
+        move.putObject("kind").put("$arg", "dieRole");
+        assertDoesNotThrow(() -> RuleCatalog.compile(catalog, recipes.toString()));
+        assertThrows(IllegalArgumentException.class,
+                () -> RuleCatalog.compile(fixture("rewrite/domain-cards").toString(), recipes.toString()));
+        ((ObjectNode) recipes.at("/recipes/0/args/dieRole")).put("default", "any");
+        assertDoesNotThrow(() -> RuleCatalog.compile(fixture("rewrite/domain-cards").toString(), recipes.toString()));
+    }
+
+    @Test
     void unusedRecipesValidateConcreteOperationSemantics() throws Exception {
         String catalog = """
             {"format":"dmmap-daggerheart","version":2,"category":"items","entries":[]}""";

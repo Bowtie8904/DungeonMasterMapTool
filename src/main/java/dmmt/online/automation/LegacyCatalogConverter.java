@@ -3267,7 +3267,12 @@ public final class LegacyCatalogConverter {
         if (action.has("timing")) {
             if (!Set.of("downtime", "rest").contains(action.path("timing").asText()))
                 p.add(path + "/timing", "Unsupported action timing: " + action.path("timing").asText());
-            else binding.put("id", "downtime").put("event", "downtime.move").put("surface", "downtime");
+            else {
+                binding.put("id", "downtime").put("event", "downtime.move").put("surface", "downtime");
+                String rest = action.path("downtime").path("rest").asText("");
+                binding.putObject("restMove").put("id", id)
+                        .put("kind", Set.of("short", "long").contains(rest) ? rest : "any");
+            }
         }
         String operationTarget = targetSelection(action, path, p, binding);
         boolean secondWind = "secondWind".equals(action.path("splendorAction").asText());

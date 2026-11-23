@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static dmmt.online.automation.RuleConformanceTest.fixture;
 import static dmmt.online.automation.StructuredRollTest.noRandom;
 import static org.junit.jupiter.api.Assertions.*;
@@ -41,6 +43,50 @@ class LifecycleRuntimeTest {
         ObjectNode spent = result.context().put("revision", 0);
         assertEquals("limit", assertThrows(RuleRuntime.Unavailable.class,
                 () -> run("fortify", "rest", spent, "{\"card\":\"card-c\"}")).code());
+    }
+
+    @Test
+    void restMoveMetadataIsValidatedAndDescribedWithoutEnablingExecution() throws Exception {
+        ObjectNode automation = fixture("rewrite/lifecycle");
+        ObjectNode binding = (ObjectNode) automation.at("/rules/0/bindings/0");
+        ObjectNode metadata = binding.putObject("restMove").put("id", "fortify").put("kind", "longMove")
+                .put("group", "preparation").put("ally", true);
+        RuleCompiler.Program compiled = RuleCompiler.compile("features:lifecycle", automation, fixture("rewrite/recipes"));
+        ObjectNode described = RuleRuntime.describe(compiled, "fortify", "rest", context("downtime.move"));
+        assertEquals(metadata, described.path("restMove"));
+        ((ObjectNode) described.path("restMove")).put("id", "altered");
+        assertEquals("fortify", compiled.rule("fortify").at("/bindings/0/restMove/id").asText());
+        assertTrue(compiled.bindings("action.request", "sheet").stream()
+                .noneMatch(ref -> "fortify".equals(ref.ruleId())));
+        for (String kind : List.of("any", "short", "long", "longMove")) {
+            metadata.put("kind", kind);
+            assertDoesNotThrow(() -> RuleCompiler.compile("features:lifecycle", automation, fixture("rewrite/recipes")));
+        }
+        for (String bad : List.of(
+                "{\"id\":\"\",\"kind\":\"any\"}",
+                "{\"id\":\"fortify\",\"kind\":\"sometimes\"}",
+                "{\"id\":\"fortify\",\"kind\":\"any\",\"group\":\"!\"}",
+                "{\"id\":\"fortify\",\"kind\":\"any\",\"ally\":\"yes\"}",
+                "{\"id\":\"fortify\",\"kind\":\"any\",\"slots\":0}")) {
+            binding.set("restMove", RuleJson.parse(bad));
+            assertThrows(IllegalArgumentException.class,
+                    () -> RuleCompiler.compile("features:lifecycle", automation, fixture("rewrite/recipes")), bad);
+        }
+        binding.set("restMove", metadata);
+        for (String field : List.of("event", "surface", "mode")) {
+            String original = binding.path(field).asText();
+            binding.put(field, switch (field) {
+                case "event" -> "action.request";
+                case "surface" -> "sheet";
+                default -> "automatic";
+            });
+            assertThrows(IllegalArgumentException.class,
+                    () -> RuleCompiler.compile("features:lifecycle", automation, fixture("rewrite/recipes")), field);
+            binding.put(field, original);
+        }
+        binding.put("forEach", "dice");
+        assertThrows(IllegalArgumentException.class,
+                () -> RuleCompiler.compile("features:lifecycle", automation, fixture("rewrite/recipes")));
     }
 
     @Test

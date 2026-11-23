@@ -1463,6 +1463,8 @@ class LegacyCatalogConverterTest {
         JsonNode binding = block(result, 0).at("/rules/0/bindings/0");
         assertEquals("downtime.move", binding.path("event").asText());
         assertEquals("downtime", binding.path("surface").asText());
+        assertEquals("rest", binding.at("/restMove/id").asText());
+        assertEquals("any", binding.at("/restMove/kind").asText());
         RuleCompiler.Program program = program(result, 0);
         ObjectNode downtime = context(program, "{\"stress\":{\"marked\":2,\"capacity\":6}}", "{\"type\":\"downtime.move\"}");
         assertEquals(List.of("later", "rest"), available(program, downtime, "downtime"));
@@ -1470,6 +1472,19 @@ class LegacyCatalogConverterTest {
         assertEquals(1, run(program, downtime, "rest").contexts().getFirst().at("/actor/stress/marked").asInt());
         assertFalse(LegacyCatalogConverter.convert(catalog("""
                 {"id":"x","name":"X","automation":{"actions":[{"id":"a","label":"A","timing":"combat"}]}}""")).diagnostics().isEmpty());
+    }
+
+    @Test
+    void timedActionRestRestrictionsBecomeHostReadableMoveMetadata() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"bedroll","name":"Bedroll","automation":{"actions":[
+                  {"id":"short-only","label":"Short","timing":"downtime","downtime":{"rest":"short"}},
+                  {"id":"long-only","label":"Long","timing":"rest","downtime":{"rest":"long"}}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        assertEquals("short", block(result, 0).at("/rules/0/bindings/0/restMove/kind").asText());
+        assertEquals("long", block(result, 0).at("/rules/1/bindings/0/restMove/kind").asText());
+        assertEquals("long-only", block(result, 0).at("/rules/1/bindings/0/restMove/id").asText());
+        assertDoesNotThrow(() -> program(result, 0));
     }
 
     @Test

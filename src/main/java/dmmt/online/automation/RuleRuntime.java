@@ -77,6 +77,7 @@ public final class RuleRuntime {
         if (binding.has("defaultOn")) description.set("defaultOn", binding.get("defaultOn"));
         if (binding.has("exclusiveGroup")) description.set("exclusiveGroup", binding.get("exclusiveGroup"));
         if (binding.has("repeatable")) description.set("repeatable", binding.get("repeatable"));
+        if (binding.has("restMove")) description.set("restMove", binding.get("restMove").deepCopy());
         if (binding.has("claimGroup")) description.set("claimGroup", binding.get("claimGroup"));
         if (binding.has("claimGroupScope")) description.set("claimGroupScope", binding.get("claimGroupScope"));
         if (binding.has("claimScope")) description.set("claimScope", binding.get("claimScope"));
