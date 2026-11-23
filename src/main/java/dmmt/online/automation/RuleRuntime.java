@@ -1365,6 +1365,24 @@ public final class RuleRuntime {
         observer.changed(context, holder, event);
     }
 
+    static int clearOwnerTrack(ObjectNode context, String track, int requested, TrackObserver observer) {
+        if (track == null || !track.matches("[a-zA-Z][a-zA-Z0-9_-]*"))
+            throw RuleJson.error("/track", "Expected an actor track name.");
+        if (requested < 0 || requested > 1_000_000)
+            throw RuleJson.error("/requested", "Expected a nonnegative recovery amount up to 1000000.");
+        JsonNode previous = context.get("result");
+        context.putObject("result");
+        ObjectNode operation = RuleJson.JSON.createObjectNode().put("op", "track.clear")
+                .put("track", "actor." + track).put("amount", requested).put("as", "cleared");
+        try {
+            operation(null, operation, context, null, false, new ArrayList<>(), new ArrayList<>(), observer);
+            return context.at("/result/cleared").intValue();
+        } finally {
+            if (previous == null) context.remove("result");
+            else context.set("result", previous);
+        }
+    }
+
     private static void settleTableResource(ObjectNode context, ObjectNode request) {
         String resource = request.path("resource").asText();
         if (!"fear".equals(resource))

@@ -150,6 +150,21 @@ public final class RuleDispatcher {
         @Override public List<ObjectNode> outbox() { return copyNodes(outbox); }
     }
 
+    record OwnerTrackClear(ObjectNode actor, ObjectNode event, long revision, int requested, int cleared,
+                           List<ObjectNode> contexts, List<ActionResult> actions, List<ObjectNode> outbox) {
+        OwnerTrackClear {
+            actor = actor.deepCopy();
+            event = event.deepCopy();
+            contexts = copyNodes(contexts);
+            actions = List.copyOf(actions);
+            outbox = copyNodes(outbox);
+        }
+        @Override public ObjectNode actor() { return actor.deepCopy(); }
+        @Override public ObjectNode event() { return event.deepCopy(); }
+        @Override public List<ObjectNode> contexts() { return copyNodes(contexts); }
+        @Override public List<ObjectNode> outbox() { return copyNodes(outbox); }
+    }
+
     private record Invocation(Candidate candidate, RuleRuntime.Intent intent, String mode, int priority,
                               String exclusiveGroup, boolean automatic, String recipientId, String claimGroup) {}
     private record ActionKey(String sourceInstanceId, String ruleId, String bindingId, String eachId, String recipientId) {}
@@ -231,6 +246,55 @@ public final class RuleDispatcher {
     static EventResolution executeOwnerTrackReactions(List<Candidate> activeSources, List<RuleRuntime.Intent> selections,
                                                       RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
         return executeEvent(activeSources, selections, random, programs, false, new ReactionBudget());
+    }
+
+    static OwnerTrackClear clearOwnerTrack(List<Candidate> activeSources, ObjectNode actor, ObjectNode event, long revision,
+                                           String track, int requested, RandomGenerator random,
+                                           Map<String, RuleCompiler.Program> programs) {
+        if (actor == null || event == null || programs == null)
+            throw RuleJson.error("/recovery", "Actor, event and compiled programs are required.");
+        RuleJson.checkTree(actor, "/actor", 0, new int[]{0});
+        RuleJson.checkTree(event, "/event", 0, new int[]{0});
+        RuleJson.id(actor.path("id"), "/actor/id");
+        RuleJson.text(event.get("type"), "/event/type");
+        ObjectNode staged = RuleJson.JSON.createObjectNode().put("revision", revision);
+        RuleRuntime.revision(staged);
+        Snapshot snapshot = validateSources(activeSources);
+        if (!snapshot.sources().isEmpty()) {
+            for (Candidate candidate : snapshot.sources()) {
+                ObjectNode context = candidate.context();
+                if (!actor.equals(context.get("actor")) || !event.equals(context.get("event"))
+                        || RuleRuntime.revision(context) != revision)
+                    throw new RuleRuntime.Unavailable("stale", "Recovery sources must match the holder and event snapshot.");
+            }
+            staged.set("actor", snapshot.actor().deepCopy());
+        } else staged.set("actor", actor.deepCopy());
+        staged.set("event", event.deepCopy());
+        Map<String, Candidate> byInstance = new HashMap<>();
+        Map<String, ObjectNode> workingContexts = new HashMap<>();
+        for (Candidate candidate : snapshot.sources()) {
+            byInstance.put(candidate.instanceId(), candidate);
+            workingContexts.put(candidate.instanceId(), candidate.context());
+        }
+        List<ActionResult> actions = new ArrayList<>();
+        List<ObjectNode> outbox = new ArrayList<>();
+        RuleRuntime.TrackObserver observer = snapshot.sources().isEmpty() ? null : ownerTrackObserver(
+                snapshot, byInstance, workingContexts, random, programs, new ReactionBudget(), actions, outbox);
+        int cleared = RuleRuntime.clearOwnerTrack(staged, track, requested, observer);
+        drainOutbox(staged, outbox);
+        boolean changed = !RuleExpression.equal(actor, staged.get("actor")) || !actions.isEmpty() || !outbox.isEmpty()
+                || !RuleExpression.equal(event, staged.get("event"));
+        long nextRevision = changed ? RuleExpression.numeric(revision + 1d, "/revision").longValue() : revision;
+        List<ObjectNode> updated = new ArrayList<>();
+        for (Candidate candidate : snapshot.sources()) {
+            ObjectNode context = workingContexts.get(candidate.instanceId()).deepCopy();
+            context.set("actor", staged.get("actor").deepCopy());
+            context.set("event", staged.get("event").deepCopy());
+            context.put("revision", nextRevision);
+            updated.add(context);
+        }
+        return new OwnerTrackClear((ObjectNode) staged.get("actor"), (ObjectNode) staged.get("event"),
+                nextRevision, requested, cleared, updated, actions, outbox);
     }
 
     private static EventResolution executeEvent(List<Candidate> activeSources, List<RuleRuntime.Intent> selections,
@@ -380,8 +444,6 @@ public final class RuleDispatcher {
             Snapshot snapshot, Map<String, Candidate> byInstance, Map<String, ObjectNode> workingContexts,
             RandomGenerator random, Map<String, RuleCompiler.Program> programs, ReactionBudget budget,
             List<ActionResult> results, List<ObjectNode> outbox) {
-        boolean hasReactions = byInstance.values().stream().anyMatch(candidate ->
-                !candidate.program().automatic("track.changed").isEmpty());
         List<String> relevant = byInstance.entrySet().stream()
                 .filter(entry -> entry.getValue().program().hasComputedActorPools()
                         || !entry.getValue().program().automatic("track.changed").isEmpty())
@@ -393,10 +455,10 @@ public final class RuleDispatcher {
                         "A different recipient requires that character's own track reactions.");
             if (++budget.events > MAX_TRACK_EVENTS || budget.depth >= MAX_TRACK_REACTION_DEPTH)
                 throw new RuleRuntime.Unavailable("reactionLimit", "Track reactions exceeded the transaction limit.");
-            if (!hasReactions) return;
+            if (relevant.isEmpty()) return;
             drainOutbox(staged, outbox);
             String currentId = staged.path("source").path("instanceId").asText();
-            mergeSourceState(workingContexts.get(currentId), staged);
+            if (!currentId.isEmpty()) mergeSourceState(workingContexts.get(currentId), staged);
             List<Candidate> candidates = new ArrayList<>();
             for (String instanceId : relevant) {
                 ObjectNode context = workingContexts.get(instanceId).deepCopy();
@@ -418,8 +480,7 @@ public final class RuleDispatcher {
                 String instance = context.path("source").path("instanceId").asText();
                 mergeSourceState(workingContexts.get(instance), context);
             }
-            ObjectNode parentState = workingContexts.get(currentId);
-            mergeSourceState(staged, parentState);
+            if (!currentId.isEmpty()) mergeSourceState(staged, workingContexts.get(currentId));
             if (!contexts.isEmpty()) {
                 boolean selfRecipient = staged.has("recipient")
                         && actorId.equals(staged.path("recipient").path("id").asText());
