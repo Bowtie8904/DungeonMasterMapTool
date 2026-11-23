@@ -1864,7 +1864,8 @@ class OnlineSessionServerTest {
     }
 
     private HttpResponse<String> automationHttp(String cookie, String actorId, String body) throws Exception {
-        var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/automation/" + actorId
+        var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/automation/"
+                + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + "/" + actorId
                 + (body == null ? "?surface=sheet" : ""))).header("Cookie", cookie);
         if (body == null) request.GET();
         else request.header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body));
@@ -1872,8 +1873,56 @@ class OnlineSessionServerTest {
     }
 
     private HttpResponse<String> resultHttp(String cookie, String actorId, String resultId) throws Exception {
-        return http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/automation/" + actorId
+        return http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/automation/"
+                + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + "/" + actorId
                 + "?resultId=" + resultId)).header("Cookie", cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    @Test
+    void automationVersionIsEnforcedBeforeReadingOrMutatingAnySheet() throws Exception {
+        automationCompendium();
+        campaign.getActors().add(Campaign.Actor.builder().id("auto").name("Auto").ownerId(playerId()).build());
+        String original = """
+            {"name":"Auto","hope":{"slots":6,"on":1},"features":[
+             {"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"}]}""";
+        store.saveSheet(campaign.getId(), "auto", original);
+        String saved = store.loadSheet(campaign.getId(), "auto");
+        String cookie = cookie();
+        String request = """
+            {"request":{"requestId":"version-test","expectedRevision":0,
+            "selections":[{"sourceInstanceId":"r","ruleId":"rally","bindingId":"sheet"}]}}""";
+
+        String browser = java.nio.file.Files.readString(Path.of("web", "src", "automation", "panel.ts"));
+        assertTrue(browser.contains("export const AUTOMATION_COMPATIBILITY_VERSION = "
+                + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + ";"),
+                "The browser and host must use the same automation compatibility version.");
+
+        for (String version : List.of("unknown", "0", "999", "invalid")) {
+            String path = "unknown".equals(version) ? "/api/automation/auto" : "/api/automation/" + version + "/auto";
+            URI uri = URI.create("http://localhost:" + port + path);
+            for (boolean post : List.of(false, true)) {
+                var builder = HttpRequest.newBuilder(uri).header("Cookie", cookie);
+                if (post) builder.POST(HttpRequest.BodyPublishers.ofString(request));
+                else builder.GET();
+                var denied = http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+                assertEquals(409, denied.statusCode(), denied.body());
+                JsonNode error = MAPPER.readTree(denied.body());
+                assertEquals("automationCompatibilityMismatch", error.path("code").asText());
+                assertEquals(version, error.path("clientVersion").asText());
+                assertEquals(OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION, error.path("hostVersion").asInt());
+                assertTrue(error.path("error").asText().contains("client version " + version));
+                assertTrue(error.path("error").asText().contains("host version " + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION));
+                assertEquals(saved, store.loadSheet(campaign.getId(), "auto"));
+            }
+        }
+        var unauthenticated = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port
+                + "/api/automation/0/auto")).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(401, unauthenticated.statusCode());
+        assertEquals(200, automationHttp(cookie, "auto", null).statusCode());
+        var applied = automationHttp(cookie, "auto", request);
+        assertEquals(200, applied.statusCode(), applied.body());
+        assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "auto")).at("/hope/on").asInt());
+        assertEquals(applied.body(), automationHttp(cookie, "auto", request).body());
     }
 
     @Test
@@ -2642,7 +2691,7 @@ class OnlineSessionServerTest {
         campaign.setFear(0);
         String beforeInsufficientFear = store.loadSheet(campaign.getId(), "auto");
         var unpaid = automationHttp(cookie, "auto", request);
-        assertEquals(400, unpaid.statusCode(), unpaid.body());
+        assertEquals(409, unpaid.statusCode(), unpaid.body());
         assertTrue(unpaid.body().contains("Not enough GM Fear"));
         assertEquals(beforeInsufficientFear, store.loadSheet(campaign.getId(), "auto"));
         assertTrue(campaign.getCountdowns().isEmpty(), "A later failed payment must also roll back the countdown");
@@ -2784,8 +2833,17 @@ class OnlineSessionServerTest {
             {"name":"Ada","hope":{"slots":6,"on":1},"features":[
              {"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"},
              {"name":"Forage","automationSource":"classes:tester:features:forage","instanceId":"f"}]}""");
-        var dm = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/automation/ada"))
-                .header("Authorization", "Bearer " + URI.create(server.dmSheetUrl("ada")).getFragment());
+        String authorization = "Bearer " + URI.create(server.dmSheetUrl("ada")).getFragment();
+        for (String path : List.of("/api/automation/ada", "/api/automation/0/ada")) {
+            var incompatible = http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path))
+                    .header("Authorization", authorization).GET().build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(409, incompatible.statusCode(), incompatible.body());
+        }
+        var foreign = http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/automation/0/other"))
+                .header("Authorization", authorization).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(403, foreign.statusCode());
+        var dm = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/automation/"
+                + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + "/ada")).header("Authorization", authorization);
         var description = http.send(dm.GET().build(), HttpResponse.BodyHandlers.ofString());
         assertEquals(200, description.statusCode(), description.body());
         assertEquals(List.of("Rally (1 Hope)"), MAPPER.readTree(description.body()).path("actions").findValuesAsText("label"));

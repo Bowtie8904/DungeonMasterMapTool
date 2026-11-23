@@ -328,8 +328,10 @@ public final class OnlineSessionServer {
         javalin.get("/api/sheet/{id}", ctx -> withSheetOperation(ctx, this::handleSheet));
         javalin.get("/api/copycat/{id}", ctx -> withSheetOperation(ctx, this::handleCopycatCandidates));
         javalin.get("/api/splendor/{id}", ctx -> withSheetOperation(ctx, this::handleSplendorCandidates));
-        javalin.get("/api/automation/{id}", ctx -> withSheetOperation(ctx, this::handleAutomationDescribe));
-        javalin.post("/api/automation/{id}", ctx -> withSheetOperation(ctx, this::handleAutomationExecute));
+        javalin.get("/api/automation/{id}", this::handleUnversionedAutomation);
+        javalin.post("/api/automation/{id}", this::handleUnversionedAutomation);
+        javalin.get("/api/automation/{version}/{id}", ctx -> withSheetOperation(ctx, this::handleAutomationDescribe));
+        javalin.post("/api/automation/{version}/{id}", ctx -> withSheetOperation(ctx, this::handleAutomationExecute));
         javalin.put("/api/sheet/{id}", ctx -> withSheetOperation(ctx, this::handleSheetSave));
         javalin.post("/api/sheet/{id}/demiplane", this::handleDemiplaneImport);
         javalin.post("/api/feature", ctx -> withSheetOperation(ctx, this::handleFeature));
@@ -1274,7 +1276,7 @@ public final class OnlineSessionServer {
                         || path.equals("/api/actors/" + grant.actorId() + "/artwork")
                         || path.equals("/api/copycat/" + grant.actorId())
                         || path.equals("/api/splendor/" + grant.actorId())
-                        || path.equals("/api/automation/" + grant.actorId())
+                        || (path.startsWith("/api/automation/") && grant.actorId().equals(ctx.pathParam("id")))
                         || path.equals("/api/death-move/" + grant.actorId())
                         || path.startsWith("/api/compendium") || path.startsWith("/a/") || path.startsWith("/t/"))
                     return grant.ownerId();
@@ -5880,9 +5882,32 @@ public final class OnlineSessionServer {
         }
     }
 
+    private synchronized void handleUnversionedAutomation(Context ctx) {
+        if (requirePlayer(ctx) != null) rejectAutomationVersion(ctx, null);
+    }
+
+    private boolean requireAutomationVersion(Context ctx) {
+        String version = ctx.pathParam("version");
+        if (Integer.toString(OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION).equals(version)) return true;
+        rejectAutomationVersion(ctx, version);
+        return false;
+    }
+
+    private void rejectAutomationVersion(Context ctx, String version) {
+        String client = version == null ? "unknown" :
+                version.matches("[A-Za-z0-9._-]{1,32}") ? version : "invalid";
+        int hostVersion = OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION;
+        ctx.header("Cache-Control", "no-store");
+        json(ctx, 409, errorBody("Online automation compatibility mismatch (client version " + client
+                + "; host version " + hostVersion + "). Update the browser and host to matching versions and reload.")
+                .put("code", "automationCompatibilityMismatch")
+                .put("clientVersion", client)
+                .put("hostVersion", hostVersion));
+    }
+
     private synchronized void handleAutomationDescribe(Context ctx) {
         String playerId = requirePlayer(ctx);
-        if (playerId == null) return;
+        if (playerId == null || !requireAutomationVersion(ctx)) return;
         try {
             Campaign.Actor actor = automationActor(ctx.pathParam("id"));
             String surface = ctx.queryParam("surface");
@@ -5921,7 +5946,7 @@ public final class OnlineSessionServer {
 
     private synchronized void handleAutomationExecute(Context ctx) {
         String playerId = requirePlayer(ctx);
-        if (playerId == null) return;
+        if (playerId == null || !requireAutomationVersion(ctx)) return;
         if (ctx.bodyAsBytes().length > config.maxMessageBytes()) {
             json(ctx, 413, errorBody("Automation request is too large."));
             return;

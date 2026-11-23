@@ -5,6 +5,8 @@ import { intentControl, ruleControl, type ControlText, type RuleDescriptor, type
 
 type ProfileRollKind = 'attack' | 'damage' | 'action' | 'reaction' | 'spellcast';
 
+export const AUTOMATION_COMPATIBILITY_VERSION = 1;
+
 export interface DescribedActions {
   revision: number;
   actions: RuleDescriptor[];
@@ -29,13 +31,17 @@ export const CONTROL_TEXT: ControlText = {
   allocate: (total, max) => `Distribute exactly ${total}, at most ${max} each.`,
 };
 
-async function errorText(response: Response): Promise<string> {
+async function errorDetails(response: Response): Promise<{ text: string; code?: string }> {
   try {
-    const body = await response.json() as { error?: string };
-    return body.error || `Request failed (${response.status}).`;
+    const body = await response.json() as { error?: string; code?: string };
+    return { text: body.error || `Request failed (${response.status}).`, code: body.code };
   } catch {
-    return `Request failed (${response.status}).`;
+    return { text: `Request failed (${response.status}).` };
   }
+}
+
+function automationUrl(actorId: string): string {
+  return `/api/automation/${AUTOMATION_COMPATIBILITY_VERSION}/${encodeURIComponent(actorId)}`;
 }
 
 /** Reads host-described automation actions. Resolves null when the host has no format-2 automation pack. */
@@ -44,9 +50,14 @@ export async function describeAutomation(actorId: string, surface = 'sheet', eve
 }
 
 async function fetchDescription(actorId: string, query: URLSearchParams): Promise<DescribedActions | null> {
-  const response = await hostFetch(`/api/automation/${encodeURIComponent(actorId)}?${query}`, { credentials: 'same-origin', cache: 'no-store' });
-  if (response.status === 409) return null;
-  if (!response.ok) throw new Error(await errorText(response));
+  const response = await hostFetch(`${automationUrl(actorId)}?${query}`, { credentials: 'same-origin', cache: 'no-store' });
+  if (response.status === 404) return null;
+  if (response.status === 409) {
+    const error = await errorDetails(response);
+    if (error.code === 'automationCompatibilityMismatch') throw new ApiError(error.text, response.status);
+    return null;
+  }
+  if (!response.ok) throw new Error((await errorDetails(response)).text);
   return await response.json() as DescribedActions;
 }
 
@@ -62,11 +73,15 @@ export async function executeAutomation(actorId: string, intent: RuleIntent, res
 }
 
 async function postIntent(actorId: string, request: object): Promise<unknown> {
-  const response = await hostFetch(`/api/automation/${encodeURIComponent(actorId)}`, {
+  const response = await hostFetch(automationUrl(actorId), {
     method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ request }),
   });
-  if (!response.ok) throw new ApiError(await errorText(response), response.status);
+  if (response.status === 404) throw new ApiError(
+    `Online automation compatibility mismatch (client version ${AUTOMATION_COMPATIBILITY_VERSION}; host version unknown). Update the browser and host to matching versions and reload.`,
+    response.status,
+  );
+  if (!response.ok) throw new ApiError((await errorDetails(response)).text, response.status);
   return response.json();
 }
 

@@ -33,7 +33,7 @@ class Element {
   get text(): string { return this.textContent + this.children.map(child => child.text).join(''); }
 }
 
-const { automationPanel, executeAutomation, historyResultControls } = await import('./panel');
+const { AUTOMATION_COMPATIBILITY_VERSION, automationPanel, describeAutomation, executeAutomation, historyResultControls } = await import('./panel');
 type DescribedActions = import('./panel').DescribedActions;
 const fake = (element: HTMLElement) => element as unknown as Element;
 
@@ -66,7 +66,7 @@ describe('saved roll controls', () => {
     toggleOpen(cards[3]);
     await settle();
     expect(get).toHaveBeenCalledTimes(1);
-    expect(get).toHaveBeenCalledWith('/api/automation/hero?resultId=r1', expect.objectContaining({ cache: 'no-store' }));
+    expect(get).toHaveBeenCalledWith(`/api/automation/${AUTOMATION_COMPATIBILITY_VERSION}/hero?resultId=r1`, expect.objectContaining({ cache: 'no-store' }));
     expect(fake(cards[3]).text).toContain('No current actions');
   });
 
@@ -281,7 +281,7 @@ describe('automation panel', () => {
     panel.all('button')[0].click();
     await settle();
     await settle();
-    expect(calls.map(call => call.url)).toEqual(['/api/automation/a1', '/api/automation/a1?resultId=r1']);
+    expect(calls.map(call => call.url)).toEqual([`/api/automation/${AUTOMATION_COMPATIBILITY_VERSION}/a1`, `/api/automation/${AUTOMATION_COMPATIBILITY_VERSION}/a1?resultId=r1`]);
     expect(panel.text).toContain('Recipients: Bea');
     panel.all('button').find(button => button.text === 'Rally (2 Hope)')!.click();
     await settle();
@@ -312,7 +312,7 @@ describe('automation panel', () => {
     panel.all('button').find(button => button.text === 'Edit')!.click();
     await settle();
     await settle();
-    expect(calls).toEqual(['/api/automation/a1', '/api/automation/a1', '/api/automation/a1?resultId=r2']);
+    expect(calls).toEqual([`/api/automation/${AUTOMATION_COMPATIBILITY_VERSION}/a1`, `/api/automation/${AUTOMATION_COMPATIBILITY_VERSION}/a1`, `/api/automation/${AUTOMATION_COMPATIBILITY_VERSION}/a1?resultId=r2`]);
     expect(panel.text).toContain('Revised total: 19');
     expect(panel.text).toContain('Recipients: Bea');
   });
@@ -325,10 +325,35 @@ describe('automation panel', () => {
       ruleId: 'rally', bindingId: 'use', eachId: 'd1', inputs: { amount: 2 },
     } as RuleIntent);
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('/api/automation/a1');
+    expect(url).toBe(`/api/automation/${AUTOMATION_COMPATIBILITY_VERSION}/a1`);
     expect(JSON.parse(String(init.body))).toEqual({
       request: { requestId: 'r1', expectedRevision: 4, selections: [{ sourceInstanceId: 'f-rally', ruleId: 'rally', bindingId: 'use', eachId: 'd1', inputs: { amount: 2 } }] },
     });
+  });
+
+  it('distinguishes an incompatible host from an unavailable format-2 pack', async () => {
+    const fetchMock = vi.fn(async () => Response.json({
+      code: 'automationCompatibilityMismatch',
+      error: `Online automation compatibility mismatch (client version ${AUTOMATION_COMPATIBILITY_VERSION}; host version 9). Update the browser and host to matching versions and reload.`,
+    }, { status: 409 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(describeAutomation('a1')).rejects.toThrow(`client version ${AUTOMATION_COMPATIBILITY_VERSION}; host version 9`);
+    fetchMock.mockResolvedValueOnce(Response.json({ error: 'Automation is unavailable.' }, { status: 409 }));
+    await expect(describeAutomation('a1')).resolves.toBeNull();
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 404 }));
+    await expect(describeAutomation('a1')).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('never retries a mutation against an older unversioned automation endpoint', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response(null, { status: 404 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(executeAutomation('a1', {
+      requestId: 'r1', expectedRevision: 4, sourceId: 'classes:tester:features:rally', sourceInstanceId: 'f-rally',
+      ruleId: 'rally', bindingId: 'use', inputs: {},
+    } as RuleIntent)).rejects.toThrow(`client version ${AUTOMATION_COMPATIBILITY_VERSION}; host version unknown`);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe(`/api/automation/${AUTOMATION_COMPATIBILITY_VERSION}/a1`);
   });
 
     it('chooses profile options locally, validates only their inputs, and freezes selections for retry', async () => {
