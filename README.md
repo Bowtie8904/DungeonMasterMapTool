@@ -56,7 +56,8 @@ Armor clears and damage marks. A bounded isolated dispatcher can run the owner's
 in order without copying unrelated sources for each event; computed actor pools still refresh even when no
 reaction is bound. An isolated host-owned clear also applies the holder's healing floor and reactions, including
 positive clears with no marks, and returns the actual clear and staged state. Source activation, cross-character
-recovery and live rest recovery are not yet connected.
+recovery and live rest recovery are not yet connected. A sheet-backed recovery stage selects the affected
+holder's own sources and state even when another character initiated the parent event; it is not a live action.
 Converted downtime buttons now describe their host-validated move identity and rest restriction. This metadata
 and the shared ruleset's validated rest limits do not yet make the format-2 rest workflow available.
 The host can stage and validate rest preparation and individual moves on a private copy, retaining the

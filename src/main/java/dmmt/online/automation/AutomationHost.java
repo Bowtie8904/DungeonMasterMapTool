@@ -864,6 +864,46 @@ public final class AutomationHost {
         return java.util.Collections.unmodifiableMap(result);
     }
 
+    /** Stages a host-owned clear against the holder's sheet; the caller must settle commands and commit it. */
+    ObjectNode stageHolderRecovery(Pack pack, ObjectNode sheet, ObjectNode parentEvent, String holderId,
+                                   String track, int requested, RandomGenerator random) {
+        RuleJson.object(sheet, "/sheet");
+        RuleJson.object(parentEvent, "/event");
+        RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(holderId), "/holderId");
+        if (pack == null || random == null) throw RuleJson.error("/recovery", "A compiled pack and random source are required.");
+        ObjectNode working = sheet.deepCopy();
+        long revision = restRevision(working);
+        ObjectNode state = projection.state(working);
+        var sources = sources(pack, working);
+        ObjectNode projectionEvent = parentEvent.deepCopy().put("actorId", holderId);
+        ObjectNode actor = actor(pack, working, state, projectionEvent, sources);
+        var candidates = candidates(pack, sources, state, actor, parentEvent);
+        var recovered = RuleDispatcher.clearOwnerTrack(candidates, actor, parentEvent, revision,
+                track, requested, random, pack.programs());
+        if (recovered.revision() > MAX_REST_REVISION)
+            throw new RuleRuntime.Unavailable("revision", "The holder's recovery revision cannot be advanced.");
+
+        ObjectNode response;
+        if (recovered.actions().isEmpty()) {
+            response = RuleJson.JSON.createObjectNode();
+            response.putArray("actions");
+            recovered.outbox().forEach(response.putArray("outbox")::add);
+            if (recovered.revision() != revision)
+                projection.write(working, projection.actor(working), persisted(recovered.actor()));
+        } else {
+            response = applyResolved(pack, working, state, parentEvent, recovered.contexts(),
+                    recovered.actions(), recovered.outbox());
+        }
+        response.put("holderId", holderId).put("track", track).put("requested", requested)
+                .put("cleared", recovered.cleared()).put("revision", recovered.revision());
+        response.set("event", recovered.event());
+        if (recovered.revision() != revision) {
+            projection.state(working).put("revision", recovered.revision());
+            replace(sheet, working);
+        }
+        return response;
+    }
+
     /**
      * Stages a self-only rest without publishing or persistence. A live caller must authenticate offered choices,
      * settle the outbox and journal and commit the resulting sheet and reports as one transaction.
