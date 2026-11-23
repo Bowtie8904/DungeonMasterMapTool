@@ -606,6 +606,106 @@ class AutomationHostTest {
         }
     }
 
+    @Test
+    void sharedRulesetParticipatesInDispatchResultsAndPerCharacterState() throws Exception {
+        String ruleset = """
+                {"format":"dmmap-daggerheart-ruleset","version":2,"name":"Shared rules",
+                 "automation":{"state":{"uses":0},"limits":{"once":{"max":1,"resetOn":["scene.end"]}},
+                  "profiles":[{"id":"shared-roll","label":"Shared roll","trait":"Finesse","range":"far","damage":{"sides":6}}],
+                  "rules":[
+                   {"id":"shared","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                    "limitRef":"once","do":[{"op":"state.increment","slot":"uses","by":1}],
+                    "ui":{"label":"Shared action","report":"Uses: {state.uses}"}},
+                   {"id":"watch","bindings":[{"id":"auto","event":"roll.finished","surface":"roll","mode":"automatic"}],
+                    "do":[{"op":"state.increment","slot":"uses","by":1}],"ui":{"label":"Watch"}},
+                   {"id":"option","bindings":[{"id":"use","event":"roll.prepare","surface":"roll","mode":"option"}],
+                    "do":[{"op":"state.increment","slot":"uses","by":1}],"ui":{"label":"Shared option"}},
+                   {"id":"reward","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button",
+                    "claimGroup":"reward","claimGroupScope":"result","claimScope":{"recipients":"sourceActor"}}],
+                    "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"Shared reward"}}]}}
+                """;
+        var pack = AutomationHost.compile("shared", Map.of("classes", fixture("rewrite/host-classes").toString()),
+                fixture("rewrite/recipes").toString(), ruleset);
+        ObjectNode first = sheet(), second = sheet();
+        ((ObjectNode) first.get("stress")).put("on", 0);
+        ((ObjectNode) second.get("stress")).put("on", 0);
+        assertTrue(labels(HOST.describe(pack, first, action(), "sheet", "self")).contains("Shared action"));
+        assertFalse(labels(HOST.describe(pack, first, action(), "sheet", "other")).contains("Shared action"));
+        ObjectNode shared = request("shared", 0, "ruleset:base", "shared");
+        HOST.execute(pack, first, action(), shared, "self", null);
+        assertEquals(1, first.requiredAt("/automationState/sources/ruleset:base/state/uses").intValue());
+        assertFalse(second.has("automationState"), "Shared source state belongs to the individual sheet");
+        assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.execute(pack, first, action(), request("again", 1, "ruleset:base", "shared"), "self", null));
+        HOST.execute(pack, second, action(), request("other", 0, "ruleset:base", "shared"), "self", null);
+        assertEquals(1, second.requiredAt("/automationState/sources/ruleset:base/state/uses").intValue());
+
+        assertTrue(HOST.resetLimits(pack, first, AutomationHost.event("scene.end", "actor", 0)));
+        HOST.execute(pack, first, action(), request("after-reset", 2, "ruleset:base", "shared"), "self", null);
+        assertEquals(2, first.requiredAt("/automationState/sources/ruleset:base/state/uses").intValue());
+        ObjectNode origin = AutomationHost.event("action.request", "actor", 0).put("sessionId", "session");
+        JsonNode profile = HOST.describe(pack, first, origin, "sheet", "self").requiredAt("/profiles/1");
+        assertEquals("ruleset:base", profile.required("sourceInstanceId").textValue());
+        assertEquals("option", profile.requiredAt("/options/damage/0/ruleId").textValue());
+        ObjectNode rollRequest = profileRequest("roll-shared", 3, "ruleset:base", "shared-roll", "damage");
+        rollRequest.withArray("selections").addObject().put("sourceInstanceId", "ruleset:base")
+                .put("ruleId", "option").put("bindingId", "use");
+        ObjectNode roll = HOST.execute(pack, first, origin, rollRequest, "self", "owner", new SplittableRandom(2));
+        assertEquals(4, first.requiredAt("/automationState/sources/ruleset:base/state/uses").intValue());
+        String resultId = roll.requiredAt("/event/resultId").textValue();
+        assertEquals(List.of("reward"), roll.required("resultActions").findValuesAsText("ruleId"));
+        assertEquals(List.of("reward"), HOST.describeResult(pack, first, resultId, "self", "owner", origin)
+                .required("actions").findValuesAsText("ruleId"));
+        ObjectNode claim = request("claim-shared", 4, "ruleset:base", "reward").put("resultId", resultId);
+        ((ObjectNode) claim.requiredAt("/selections/0")).put("bindingId", "use");
+        HOST.execute(pack, first, origin, claim, "self", "owner", null);
+        assertEquals(2, first.requiredAt("/hope/on").intValue());
+        assertThrows(RuleRuntime.Unavailable.class, () -> HOST.describeResult(pack, first, resultId, "self", "owner", origin));
+    }
+
+    @Test
+    void sharedRulesetRejectsInvalidDocumentsAndImpersonatedSources() throws Exception {
+        String recipes = fixture("rewrite/recipes").toString();
+        String ruleset = """
+                {"format":"dmmap-daggerheart-ruleset","version":2,"name":"Shared",
+                 "automation":{"modifiers":[{"stat":"evasion","value":1}]}}
+                """;
+        for (String invalid : List.of(ruleset.replace("ruleset", "other"), ruleset.replace("\"version\":2", "\"version\":1"),
+                ruleset.replace("\"name\":\"Shared\",", ""), ruleset.replace("\"automation\":", "\"unexpected\":"))) {
+            assertThrows(AutomationHost.NotReady.class, () -> AutomationHost.compile("test", Map.of(), recipes, invalid));
+        }
+        String conflictingCatalog = """
+                {"format":"dmmap-daggerheart","version":2,"category":"ruleset","entries":[
+                 {"id":"base","name":"Impersonator","automation":{"rules":[]}}]}
+                """;
+        assertThrows(AutomationHost.NotReady.class,
+                () -> AutomationHost.compile("test", Map.of("ruleset", conflictingCatalog), recipes, ruleset));
+        var pack = AutomationHost.compile("test", Map.of(), recipes, ruleset);
+        ObjectNode sheet = sheet();
+        ((ObjectNode) sheet.requiredAt("/features/0")).put("instanceId", "ruleset:base");
+        assertThrows(IllegalArgumentException.class, () -> HOST.describe(pack, sheet, action(), "sheet", "self"));
+        ((ObjectNode) sheet.requiredAt("/features/0")).put("instanceId", "other").put("automationSource", "ruleset:base");
+        assertThrows(IllegalArgumentException.class, () -> HOST.describe(pack, sheet, action(), "sheet", "self"));
+    }
+
+    @Test
+    void sharedRulesetExpandsTheSameValidatedRecipesAsCatalogSources() throws Exception {
+        String recipes = """
+                {"format":"dmmap-daggerheart-rules","version":2,"recipes":[{"id":"test:grant",
+                 "args":{},"ui":{},"rules":[{"id":"grant",
+                  "bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"Recipe action"}}]}]}
+                """;
+        String ruleset = """
+                {"format":"dmmap-daggerheart-ruleset","version":2,"name":"Shared",
+                 "automation":{"rules":[{"id":"shared","useRecipe":"test:grant"}]}}
+                """;
+        var pack = AutomationHost.compile("test", Map.of(), recipes, ruleset);
+        assertEquals(List.of("Recipe action"), labels(HOST.describe(pack, sheet(), action(), "sheet", "self")));
+        assertThrows(AutomationHost.NotReady.class, () -> AutomationHost.compile("test", Map.of(), recipes,
+                ruleset.replace("test:grant", "test:missing")));
+    }
+
     private static ObjectNode profileRequest(String id, long revision, String instance, String profile, String kind) {
         ObjectNode request = RuleJson.JSON.createObjectNode().put("requestId", id).put("expectedRevision", revision);
         request.putArray("selections");

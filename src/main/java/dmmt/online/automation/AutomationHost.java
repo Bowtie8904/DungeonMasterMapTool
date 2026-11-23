@@ -23,10 +23,12 @@ public final class AutomationHost {
     public static final int JOURNAL_LIMIT = 32;
     private static final Set<String> RELATIONS = Set.of("self", "other", "dm");
     private static final String EFFECT_PROFILE = "effect.profile";
+    static final String RULESET_SOURCE = "ruleset:base";
 
     /** Compiled automation keyed by fully qualified source ID. */
-    public record Pack(String revision, Map<String, RuleCompiler.Program> programs) {
+    public record Pack(String revision, Map<String, RuleCompiler.Program> programs, String rulesetName) {
         public Pack { programs = Map.copyOf(programs); }
+        public Pack(String revision, Map<String, RuleCompiler.Program> programs) { this(revision, programs, null); }
     }
 
     /** Raised when the configured catalogs cannot drive automation (for example a pack that is not format 2). */
@@ -53,6 +55,11 @@ public final class AutomationHost {
 
     /** Compiles every catalog that is present. Any catalog that is not format 2 makes the pack unavailable. */
     public static Pack compile(String revision, Map<String, String> catalogs, String recipes) {
+        return compile(revision, catalogs, recipes, null);
+    }
+
+    /** Compiles the optional always-active ruleset with the same recipes as the catalogs. */
+    public static Pack compile(String revision, Map<String, String> catalogs, String recipes, String ruleset) {
         if (recipes == null) throw new NotReady("The compendium has no rules.json recipe document.");
         Map<String, RuleCompiler.Program> programs = new LinkedHashMap<>();
         Map<String, ObjectNode> compiledRecipes;
@@ -70,7 +77,32 @@ public final class AutomationHost {
                 throw new NotReady(entry.getKey() + ": " + ex.getMessage());
             }
         }
-        return new Pack(revision, programs);
+        String rulesetName = null;
+        if (ruleset != null) {
+            try {
+                ObjectNode document = RuleCompiler.parseDocument(ruleset, "dmmap-daggerheart-ruleset");
+                RuleJson.fields(document, "/", "format", "version", "name", "automation");
+                rulesetName = RuleJson.text(document.get("name"), "/name");
+                RuleCompiler.Program program =
+                        RuleCompiler.compileWithRecipes(RULESET_SOURCE, document.get("automation"), compiledRecipes);
+                if (programs.putIfAbsent(RULESET_SOURCE, program) != null)
+                    throw new NotReady("The shared ruleset source identity is reserved.");
+            } catch (IOException | IllegalArgumentException ex) {
+                throw new NotReady("ruleset.json: " + ex.getMessage());
+            }
+        }
+        return new Pack(revision, programs, rulesetName);
+    }
+
+    private List<SheetProjection.SourceElement> sources(Pack pack, ObjectNode sheet) {
+        List<SheetProjection.SourceElement> sources = projection.sources(sheet);
+        if (pack.rulesetName() == null) return sources;
+        for (var source : sources)
+            if (RULESET_SOURCE.equals(source.instanceId()) || RULESET_SOURCE.equals(source.sourceId()))
+                throw RuleJson.error("/sources", "The shared ruleset source identity is reserved.");
+        sources.add(new SheetProjection.SourceElement(RULESET_SOURCE, RULESET_SOURCE, pack.rulesetName(),
+                RuleJson.JSON.createObjectNode(), null));
+        return sources;
     }
 
     public long revision(ObjectNode sheet) {
@@ -89,7 +121,7 @@ public final class AutomationHost {
         relation(relation);
         ObjectNode copy = sheet.deepCopy();
         ObjectNode state = projection.state(copy);
-        var sources = projection.sources(copy);
+        var sources = sources(pack, copy);
         ObjectNode actor = actor(pack, copy, state, event, sources);
         ArrayNode visible = RuleDispatcher.describe(candidates(pack, sources, state, actor, event), surface,
                 audience -> allowed(audience, relation), "dm".equals(relation) ? null : party);
@@ -324,7 +356,7 @@ public final class AutomationHost {
         String instance = RuleJson.id(intent.get("sourceInstanceId"), "/request/profileRoll/sourceInstanceId");
         String profileId = RuleJson.id(intent.get("profileId"), "/request/profileRoll/profileId");
         String kind = RuleJson.text(intent.get("kind"), "/request/profileRoll/kind");
-        var sources = projection.sources(working);
+        var sources = sources(pack, working);
         var source = sources.stream().filter(item -> instance.equals(item.instanceId())).findFirst()
                 .orElseThrow(() -> new RuleRuntime.Unavailable("source", "This source is no longer active."));
         var program = pack.programs().get(source.sourceId());
@@ -380,7 +412,7 @@ public final class AutomationHost {
 
     private ObjectNode resultAction(Pack pack, ObjectNode working, ObjectNode state, ObjectNode origin,
                                     ObjectNode request, String principal, RandomGenerator random, PartyTargets party) {
-        var sources = projection.sources(working);
+        var sources = sources(pack, working);
         ResultWindows.prune(state, ResultWindows.guards(sources, activationEffects(pack, working, state, origin, sources)));
         var window = ResultWindows.lookup(state, pack.revision(), principal, RuleJson.id(request.get("resultId"), "/request/resultId"));
         ObjectNode event = savedResultEvent(window, origin);
@@ -463,7 +495,7 @@ public final class AutomationHost {
     private void offerResult(Pack pack, ObjectNode sheet, ObjectNode response, String principal, ArrayNode used,
                              JsonNode usedClaimGroups) {
         ObjectNode event = (ObjectNode) response.required("event");
-        var sources = projection.sources(sheet);
+        var sources = sources(pack, sheet);
         if (sources.stream().noneMatch(element -> {
             var program = pack.programs().get(element.sourceId());
             return program != null && !program.resultButtons().isEmpty();
@@ -532,7 +564,7 @@ public final class AutomationHost {
                                      ObjectNode origin, PartyTargets party) {
         if (!"self".equals(relation)) throw new SecurityException("Only the character owner may use this roll result.");
         ObjectNode copy = sheet.deepCopy(), state = projection.state(copy);
-        var sources = projection.sources(copy);
+        var sources = sources(pack, copy);
         ResultWindows.prune(state, ResultWindows.guards(sources, activationEffects(pack, copy, state, origin, sources)));
         var window = ResultWindows.lookup(state, pack.revision(), principal, id);
         Set<ResultWindows.Button> retained = new java.util.HashSet<>();
@@ -554,13 +586,13 @@ public final class AutomationHost {
     /** Do not let removing and later re-equipping a source revive its old actions. */
     public void pruneResultWindows(Pack pack, ObjectNode sheet, ObjectNode event) {
         if (!(sheet.path(projection.stateField()) instanceof ObjectNode state) || !state.has("resultWindows")) return;
-        var sources = projection.sources(sheet);
+        var sources = sources(pack, sheet);
         ResultWindows.prune(state, ResultWindows.guards(sources, activationEffects(pack, sheet, state, event, sources)));
     }
 
     /** Dispatch a host transition in the caller's staged sheet transaction, without creating a player retry record. */
     public ObjectNode automatic(Pack pack, ObjectNode working, ObjectNode event, RandomGenerator random) {
-        var sources = projection.sources(working);
+        var sources = sources(pack, working);
         String type = RuleJson.text(event.path("type"), "/event/type");
         if (sources.stream().noneMatch(source -> {
             var program = pack.programs().get(source.sourceId());
@@ -589,7 +621,7 @@ public final class AutomationHost {
         commands.forEach(outbox::add);
         ObjectNode actor = before;
         Map<String, SheetProjection.SourceElement> elements = new HashMap<>();
-        for (SheetProjection.SourceElement element : projection.sources(working)) elements.put(element.instanceId(), element);
+        for (SheetProjection.SourceElement element : sources(pack, working)) elements.put(element.instanceId(), element);
         List<SheetProjection.SourceElement> emptied = new ArrayList<>();
         JsonNode finalEvent = contexts.isEmpty() ? event.deepCopy() : contexts.getFirst().path("event");
         for (ObjectNode context : contexts) {
@@ -645,7 +677,7 @@ public final class AutomationHost {
         ObjectNode state = projection.state(working);
         ObjectNode actor = actor(pack, working, state, event);
         boolean changed = "session.start".equals(type) && state.remove("resultWindows") != null;
-        for (SheetProjection.SourceElement element : projection.sources(working)) {
+        for (SheetProjection.SourceElement element : sources(pack, working)) {
             RuleCompiler.Program program = pack.programs().get(element.sourceId());
             if (program == null) continue;
             ObjectNode context = context(state, element, actor, event);
@@ -691,7 +723,7 @@ public final class AutomationHost {
 
     private List<RuleDispatcher.Candidate> candidates(Pack pack, ObjectNode sheet, ObjectNode event) {
         ObjectNode state = projection.state(sheet);
-        var sources = projection.sources(sheet);
+        var sources = sources(pack, sheet);
         return candidates(pack, sources, state, actor(pack, sheet, state, event, sources), event);
     }
 
@@ -711,7 +743,7 @@ public final class AutomationHost {
      * so a modifier can never depend on itself; active effect instances contribute their frozen modifiers.
      */
     ObjectNode actor(Pack pack, ObjectNode sheet, ObjectNode state, ObjectNode event) {
-        return actor(pack, sheet, state, event, projection.sources(sheet));
+        return actor(pack, sheet, state, event, sources(pack, sheet));
     }
 
     private ObjectNode actor(Pack pack, ObjectNode sheet, ObjectNode state, ObjectNode event,
