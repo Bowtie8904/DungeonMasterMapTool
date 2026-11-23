@@ -827,9 +827,23 @@ public final class RuleCompiler {
                     && (surfaceUnknown || "sheet".equals(binding.path("surface").asText()));
             boolean rollAction = (eventUnknown || "roll.finished".equals(binding.path("event").asText()))
                     && (surfaceUnknown || "roll".equals(binding.path("surface").asText()));
-            if (!modeUnknown && !"button".equals(binding.path("mode").asText()) || !sheetAction && !rollAction)
-                throw RuleJson.error(at, "Target selection requires a sheet action or roll trigger button.");
+            boolean restAction = (eventUnknown || "downtime.move".equals(binding.path("event").asText()))
+                    && (surfaceUnknown || "downtime".equals(binding.path("surface").asText())) && binding.has("restMove");
+            if (!modeUnknown && !"button".equals(binding.path("mode").asText()) || !sheetAction && !rollAction && !restAction)
+                throw RuleJson.error(at, "Target selection requires a sheet, roll result or ally downtime button.");
             if (binding.has("claimGroup")) throw RuleJson.error(at, "Target selections use a transaction, not a claim group.");
+            if (restAction && !sheetAction && !rollAction) {
+                JsonNode move = binding.path("restMove"), targets = binding.path("targetSelection");
+                if (!(allowSubstitutions && (substitution(move) || substitution(move.path("ally"))))
+                        && !move.path("ally").asBoolean(false))
+                    throw RuleJson.error(at, "A targeted downtime move must declare ally: true.");
+                if (!(allowSubstitutions && (substitution(targets) || substitution(targets.path("cardinality"))))
+                        && !"one".equals(targets.path("cardinality").asText()))
+                    throw RuleJson.error(at + "/cardinality", "An ally downtime move selects one character.");
+                if (!(allowSubstitutions && (substitution(targets) || substitution(targets.path("excludeSource"))))
+                        && !targets.path("excludeSource").asBoolean(false))
+                    throw RuleJson.error(at + "/excludeSource", "An ally downtime move must exclude its source.");
+            }
         }
         if (binding.has("targetSelection") && !(allowSubstitutions && substitution(binding.get("targetSelection")))) {
             JsonNode targets = binding.get("targetSelection");

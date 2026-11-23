@@ -51,16 +51,19 @@ Converted downtime buttons now describe their host-validated move identity and r
 and the shared ruleset's validated rest limits do not yet make the format-2 rest workflow available.
 The host can stage and validate rest preparation and individual moves on a private copy, retaining the
 ruleset's initial Hope, Armor and recovery facts across the moves. Move bonuses run before recovery; selected
-passive costs and modifier steps run afterward and failures roll back the move. Staged completion derives
-signed recovery facts, runs benefits around the rest reset and advances rest counters; failures roll back
-that stage. Ally moves are rejected until recipient transactions are available. The final atomic rest
-transaction and player workflow are still required.
+passive costs and modifier steps run afterward and failures roll back the move. A staged ally move can use a
+versioned host-selected recipient and its own healing floor; it returns a private recipient update only after
+the whole move succeeds. Repeated moves require applying each update to a private sheet and rebuilding the
+request-local roster. Staged completion derives signed recovery facts, runs benefits around the rest reset and
+advances rest counters; failures roll back that stage. The final multi-character rest transaction and player
+workflow are still required.
 An internal self-only coordinator now composes these stages on one private copy, retaining ordered reports and
 dice and advancing the sheet revision once. Commands needing intervening host settlement are rejected rather than
 evaluated against stale facts; offer authentication, persistence, retry receipts and interactive choices are not
 yet connected.
 The shared ruleset defines the base self-recovery, preparation and project moves for staged tests, including
-tier-scaled recovery, protected HP and capped Hope. Ally recovery, rerolls and armor overflow are not yet wired.
+tier-scaled recovery, protected HP and capped Hope. Its ally recovery variants, rerolls and armor overflow are
+not yet wired.
 Format-2 healing respects permanent HP and temporary locked HP on both the actor and targeted recipients;
 reports use the amount actually cleared.
 New automation effects record their source character as well as their source instance, so another character

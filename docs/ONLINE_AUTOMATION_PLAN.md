@@ -133,8 +133,14 @@ It does not finish a rest, advance the counters or persist anything; a live tran
 preparation with downtime, effect expiry, resets, receipts and the outbox.
 An isolated move primitive derives its event identity and target flag from compiled metadata, applies automatic
 and selected move adjustments before the chosen button, and tracks source-scoped duplicate groups, move slots
-and short-rest long-move allowances. It returns dice, reports and commands without persisting. Recipient and
-post-outcome choices, complete rest transactions and browser integration remain release gaps.
+and short-rest long-move allowances. It returns dice, reports and commands without persisting. A targeted
+`downtime.move` button must declare `restMove.ally: true` and select exactly one other character. The host resolves
+the versioned roster offer before adjustments so their conditions can read that recipient, rechecks eligibility
+after adjustments, and applies source costs once against the chosen recipient's current protected tracks.
+Deferred bodies see the updated recipient; only after they succeed is the recipient update staged. Commands
+needing interstage settlement are rejected. The caller must apply that update to a private sheet and construct
+a fresh request-local roster before a later target move; reusing a roster with an unapplied update is rejected.
+Post-outcome choices, complete multi-character rest transactions and browser integration remain release gaps.
 An automatic or option `downtime.move` rule may declare `after: {costs?, do?, report?}`. Its pre-move
 operations set the move plan; after the button resolves, the host executes deferred bodies of rules that actually
 ran, in their original order. Deferred costs are checked initially and paid against the post-move sheet. Results
@@ -165,9 +171,9 @@ early expiry retain normal reset ordering. Conversion of legacy locks and the li
 Staged completion derives `event.rest.cleared` for numeric start facts as starting minus current values,
 dispatches both phases around the snapshot reset, and advances the rest counters on a private copy.
 Conditional options that no longer apply are reported as skipped; invalid choices, inputs, costs and blocked
-outcomes reject the stage. Reports and host requests remain ordered for a future atomic commit. The self-only
-move primitive rejects ally or targeted moves rather than applying them to the wrong character. The host still
-needs recipient handling, publication and persistence.
+outcomes reject the stage. Reports and host requests remain ordered for a future atomic commit. Moves without
+the required recipient transaction reject ally or targeted bindings rather than applying them to the wrong
+character. The host still needs full recipient coordination, publication and persistence.
 The internal self-rest coordinator composes the initial effect snapshot, early expiry, preparation, ordered
 self moves and completion on one private sheet copy. It checks the original revision once, returns ordered
 actions, dice and commands with the preparation and move events, and advances the sheet revision once; any

@@ -974,6 +974,13 @@ public final class AutomationHost {
         RestProgress { groups = Set.copyOf(groups); plan = plan.deepCopy(); }
         @Override public ObjectNode plan() { return plan.deepCopy(); }
     }
+    record RestTarget(PartyTargets party, ObjectNode request) {
+        RestTarget {
+            if (party == null || request == null) throw RuleJson.error("/target", "A host roster and target selection are required.");
+            request = request.deepCopy();
+        }
+        @Override public ObjectNode request() { return request.deepCopy(); }
+    }
     record RestMoveResult(RestProgress progress, ObjectNode response) {}
 
     RestProgress restProgress(Pack pack, ObjectNode preparation) {
@@ -997,6 +1004,11 @@ public final class AutomationHost {
     /** Stages one move. Progress and the caller's sheet change only after all move checks succeed. */
     RestMoveResult restMove(Pack pack, ObjectNode sheet, ObjectNode origin, RestProgress progress,
                             ObjectNode selection, ArrayNode options, RandomGenerator random) {
+        return restMove(pack, sheet, origin, progress, selection, options, random, null);
+    }
+
+    RestMoveResult restMove(Pack pack, ObjectNode sheet, ObjectNode origin, RestProgress progress,
+                            ObjectNode selection, ArrayNode options, RandomGenerator random, RestTarget target) {
         if (progress.count() >= 64) throw RuleJson.error("/rest/moves", "A rest may contain at most 64 moves.");
         RuleJson.fields(selection, "/selection", "sourceInstanceId", "ruleId", "bindingId", "inputs");
         RuleJson.checkTree(selection, "/selection", 0, new int[]{0});
@@ -1022,8 +1034,13 @@ public final class AutomationHost {
         RestMoveGroup group = new RestMoveGroup(instanceId, metadata.path("group").asText(id));
         if (progress.groups().contains(group))
             throw new RuleRuntime.Unavailable("duplicateMove", "This downtime move was already chosen.");
-        if (metadata.path("ally").asBoolean(false) || binding.has("targetSelection"))
+        boolean targeted = binding.has("targetSelection");
+        if (target == null && (metadata.path("ally").asBoolean(false) || targeted))
             throw new RuleRuntime.Unavailable("restTarget", "This downtime move requires an authoritative recipient transaction.");
+        if (target != null && (!targeted || !metadata.path("ally").asBoolean(false)))
+            throw RuleJson.error("/target", "This downtime move does not select an ally.");
+        if (target != null && !target.party().updates().isEmpty())
+            throw new RuleRuntime.Unavailable("restTarget", "Apply the previous staged recipient update before another move.");
 
         ObjectNode event = RuleJson.object(origin, "/event").deepCopy().put("type", "downtime.move");
         ObjectNode rest = progress.plan();
@@ -1050,9 +1067,29 @@ public final class AutomationHost {
             if (!"downtime.move".equals(option.path("event").asText()) || !"option".equals(option.path("mode").asText()))
                 throw RuleJson.error("/request/selections", "Choose only downtime move options.");
         }
+        ObjectNode inputs = selection.has("inputs") ? RuleJson.object(selection.get("inputs"), "/selection/inputs")
+                : RuleJson.JSON.createObjectNode();
+        if (target != null) {
+            var candidate = byInstance.get(instanceId);
+            var selected = new RuleRuntime.Intent(ruleId, bindingId, instanceId, revision(working), inputs);
+            var chosen = target.party().resolve(binding, candidate.context(), selected, target.request());
+            if (chosen.recipients().size() != 1)
+                throw RuleJson.error("/target", "An ally move requires one other recipient.");
+            ObjectNode recipient = chosen.recipients().getFirst().snapshot();
+            List<RuleDispatcher.Candidate> withRecipient = new ArrayList<>();
+            for (var source : candidates) {
+                ObjectNode context = source.context();
+                context.set("recipient", recipient.deepCopy());
+                withRecipient.add(new RuleDispatcher.Candidate(source.program(), context));
+            }
+            candidates = withRecipient;
+            byInstance.clear();
+            candidates.forEach(candidateWithRecipient -> byInstance.put(candidateWithRecipient.instanceId(), candidateWithRecipient));
+        }
         var adjustments = RuleDispatcher.executeStagedMove(candidates, intents, random, pack.programs());
         ObjectNode result = applyResolved(pack, working, state, event, adjustments.contexts(),
                 adjustments.actions(), adjustments.outbox());
+        if (target != null) validateTargetRestCommands(result);
         ObjectNode adjusted = RuleJson.object(result.get("event"), "/event");
         validateRestMove(adjusted, move, rest);
         candidates = candidates(pack, working, adjusted);
@@ -1062,16 +1099,30 @@ public final class AutomationHost {
         JsonNode currentBinding = RuleDispatcher.binding(candidate.program().rule(ruleId), bindingId);
         if (!metadata.equals(currentBinding.path("restMove")))
             throw new RuleRuntime.Unavailable("move", "This downtime move changed.");
-        ObjectNode inputs = selection.has("inputs") ? RuleJson.object(selection.get("inputs"), "/selection/inputs")
-                : RuleJson.JSON.createObjectNode();
         var intent = new RuleRuntime.Intent(ruleId, bindingId, instanceId, revision(working), inputs);
-        var resolution = RuleRuntime.execute(candidate.program(), intent, candidate.context(), random, pack.programs());
-        var action = new RuleDispatcher.ActionResult(instanceId, ruleId, bindingId, resolution.report(),
-                resolution.publishedRolls(), resolution.diceRolls());
-        List<ObjectNode> commands = new ArrayList<>();
-        resolution.context().path("outbox").forEach(command -> commands.add((ObjectNode) command));
-        ObjectNode after = applyResolved(pack, working, projection.state(working), adjusted,
-                List.of(resolution.context()), List.of(action), commands);
+        ObjectNode after;
+        List<RuleDispatcher.RecipientUpdate> recipientUpdates = List.of();
+        if (target == null) {
+            var resolution = RuleRuntime.execute(candidate.program(), intent, candidate.context(), random, pack.programs());
+            var action = new RuleDispatcher.ActionResult(instanceId, ruleId, bindingId, resolution.report(),
+                    resolution.publishedRolls(), resolution.diceRolls());
+            List<ObjectNode> commands = new ArrayList<>();
+            resolution.context().path("outbox").forEach(command -> commands.add((ObjectNode) command));
+            after = applyResolved(pack, working, projection.state(working), adjusted,
+                    List.of(resolution.context()), List.of(action), commands);
+        } else {
+            var chosen = target.party().resolve(currentBinding, candidate.context(), intent, target.request());
+            var resolved = RuleDispatcher.executeTargets(candidates, chosen.intent(), chosen.recipients(), random, pack.programs());
+            if (resolved.recipients().size() != 1)
+                throw RuleJson.error("/target", "An ally move requires one other recipient.");
+            var actions = resolved.actions().stream().map(RuleDispatcher.TargetActionResult::action).toList();
+            after = applyResolved(pack, working, projection.state(working), adjusted,
+                    resolved.sourceContexts(), actions, resolved.outbox());
+            for (int i = 0; i < resolved.actions().size(); i++)
+                ((ObjectNode) after.path("actions").get(i)).put("recipientId", resolved.actions().get(i).recipientId());
+            validateTargetRestCommands(after);
+            recipientUpdates = resolved.recipients();
+        }
         ObjectNode finalEvent = RuleJson.object(after.get("event"), "/event");
         validateRestMove(finalEvent, move, rest);
         int slots = finalEvent.at("/move/slots").intValue();
@@ -1092,14 +1143,17 @@ public final class AutomationHost {
             ObjectNode currentActor = actor(pack, working, currentState, finalEvent, activeSources);
             var deferred = new RuleRuntime.Intent(adjustment.ruleId(), adjustment.bindingId(),
                     adjustment.sourceInstanceId(), currentState.path("revision").asLong(), RuleJson.JSON.createObjectNode());
+            ObjectNode deferredContext = context(currentState, active, currentActor, finalEvent);
+            if (target != null) deferredContext.set("recipient", recipientUpdates.getFirst().snapshot());
             var completed = RuleRuntime.executeAfter(original.program(), deferred,
-                    context(currentState, active, currentActor, finalEvent), random, pack.programs());
+                    deferredContext, random, pack.programs());
             var deferredAction = new RuleDispatcher.ActionResult(adjustment.sourceInstanceId(), adjustment.ruleId(),
                     adjustment.bindingId(), completed.report(), completed.publishedRolls(), completed.diceRolls());
             List<ObjectNode> deferredCommands = new ArrayList<>();
             completed.context().path("outbox").forEach(command -> deferredCommands.add((ObjectNode) command));
             ObjectNode response = applyResolved(pack, working, currentState, finalEvent,
                     List.of(completed.context()), List.of(deferredAction), deferredCommands);
+            if (target != null) validateTargetRestCommands(response);
             finalEvent = RuleJson.object(response.get("event"), "/event");
             validateRestMove(finalEvent, move, rest);
             if (!completedMove.equals(finalEvent.path("move")))
@@ -1115,8 +1169,18 @@ public final class AutomationHost {
         RestProgress next = new RestProgress(progress.kind(), progress.moves(), progress.longMoves(),
                 progress.slotsUsed() + slots, progress.longMovesUsed() + (usesLongAllowance ? 1 : 0),
                 progress.count() + 1, groups, rest);
+        if (target != null) target.party().stage(recipientUpdates);
         replace(sheet, working);
         return new RestMoveResult(next, result);
+    }
+
+    private static void validateTargetRestCommands(ObjectNode response) {
+        for (JsonNode command : response.path("outbox")) {
+            String kind = command.path("kind").asText();
+            if (!Set.of("countdown.start", "limits.refresh").contains(kind))
+                throw new RuleRuntime.Unavailable("restCommand",
+                        "This ally move requires host settlement before later stages: " + kind + ".");
+        }
     }
 
     private record RestChoiceKey(String source, String rule, String binding, String each) {}
