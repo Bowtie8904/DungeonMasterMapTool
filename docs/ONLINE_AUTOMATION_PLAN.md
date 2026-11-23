@@ -218,6 +218,9 @@ the offer, and is checked before offer freshness. Thus an exact owner retry stil
 after a restart without rolling, reading a roster or staging another recipient write; changed intents, other
 principals, DM receipts and older un-fingerprinted receipts cannot be reused as a rest. It shares the ordinary
 bounded request-ID journal. This offer is a concurrency primitive, not an interactive rest API.
+Converted `repairAllies` adjustments require party recovery and recipient track-change reactions, including
+Armor overflow. Until those transactions are implemented, a staged self move with a nonzero `event.move.allies`
+is rejected rather than silently omitting recipient changes. Narrative ally moves remain report-only.
 The shared Daggerheart ruleset now supplies self-targeted short recovery (1d4 plus tier and move bonus), the two
 mutually exclusive preparation variants, long recovery and work on a project. Reports use the amount actually
 cleared or gained, including permanent and locked HP and capped Hope; a short rest needs a granted allowance for

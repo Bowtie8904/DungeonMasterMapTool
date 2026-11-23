@@ -389,6 +389,58 @@ class RestTransactionTest {
     }
 
     @Test
+    void unsettledPartyRecoveryRejectsSelfMovesWithoutStagingAReceipt() throws Exception {
+        var base = pack();
+        ObjectNode automation = (ObjectNode) RuleJson.parse("""
+                {"rules":[
+                  {"id":"share","bindings":[{"id":"auto","event":"downtime.move","surface":"downtime","mode":"automatic"}],
+                   "when":{"eq":[{"read":"event.move.id"},"mend"]},
+                   "do":[{"op":"plan.adjust","plan":"event.move","field":"allies","by":1,"label":"Share"}],
+                   "ui":{"label":"Share"}},
+                  {"id":"narrative","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"button",
+                    "restMove":{"id":"mend","kind":"any","ally":true,"narrative":true}}],
+                   "ui":{"label":"Narrative ally"}},
+                  {"id":"late","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"button",
+                    "restMove":{"id":"late","kind":"any"}}],
+                   "do":[{"op":"plan.adjust","plan":"event.move","field":"allies","by":1,"label":"Late"}],
+                   "ui":{"label":"Late adjustment"}}
+                ]}""");
+        var programs = new java.util.HashMap<>(base.programs());
+        programs.put("features:sharing", RuleCompiler.compile("features:sharing", automation,
+                RuleJson.parse(LegacyCatalogConverter.coreRecipes())));
+        var pack = new AutomationHost.Pack("sharing", programs, base.rulesetName(), base.rest());
+        ObjectNode sheet = sheet();
+        sheet.putArray("features").addObject().put("name", "Sharing").put("instanceId", "sharing")
+                .put("automationSource", "features:sharing");
+        ObjectNode before = sheet.deepCopy(), rest = request("short").put("requestId", "unsettled");
+        rest.withArray("preparation").add(choice("prepare", "rest"));
+        move(rest, "mend");
+        var error = assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageRestWithReceipt(pack, sheet, origin(), rest, "owner",
+                        StructuredRollTest.noRandom(), null));
+        assertEquals("restCommand", error.code());
+        assertTrue(error.getMessage().contains("party recovery"));
+        assertEquals(before, sheet, "Preparation, recovery and the retry receipt must all roll back.");
+
+        ObjectNode late = request("short");
+        ObjectNode lateMove = late.withArray("moves").addObject();
+        lateMove.set("selection", choice("late", "move").put("sourceInstanceId", "sharing"));
+        lateMove.putArray("options");
+        assertEquals("restCommand", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageSelfRest(pack, sheet, origin(), late, StructuredRollTest.noRandom())).code());
+        assertEquals(before, sheet);
+
+        ObjectNode narrative = request("short");
+        ObjectNode narrativeMove = narrative.withArray("moves").addObject();
+        narrativeMove.set("selection", choice("narrative", "move").put("sourceInstanceId", "sharing"));
+        narrativeMove.putArray("options");
+        ObjectNode result = HOST.stageSelfRest(pack, sheet, origin(), narrative, StructuredRollTest.noRandom());
+        assertTrue(result.at("/moveEvents/0/move/ally").asBoolean());
+        assertEquals(1, result.at("/moveEvents/0/move/allies").asInt());
+        assertEquals(10, HOST.revision(sheet));
+    }
+
+    @Test
     void fearCarriesThroughEveryRestStageAndLifecyclePoolReset() throws Exception {
         var base = pack();
         ObjectNode automation = (ObjectNode) RuleJson.parse("""

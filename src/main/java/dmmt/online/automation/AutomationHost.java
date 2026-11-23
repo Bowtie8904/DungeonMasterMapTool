@@ -1627,7 +1627,10 @@ public final class AutomationHost {
                 throw RuleJson.error("/event/move/" + field, "The move identity or bounds changed.");
         RuleJson.integer(move.get("slots"), "/event/move/slots", 0, 1);
         RuleJson.integer(move.get("bonus"), "/event/move/bonus", -1000, 1000);
-        RuleJson.integer(move.get("allies"), "/event/move/allies", 0, 128);
+        int allies = RuleJson.integer(move.get("allies"), "/event/move/allies", 0, 128);
+        if (!move.path("ally").asBoolean() && allies > 0)
+            throw new RuleRuntime.Unavailable("restCommand",
+                    "This downtime move requires party recovery and recipient track-change settlement, which are not available yet.");
         if (!event.path("blocked").isEmpty())
             throw new RuleRuntime.Unavailable("blocked", event.at("/blocked/0/reason").asText());
     }
