@@ -218,7 +218,7 @@ public final class SheetProjection {
         if (fact.has("max")) RuleJson.integer(fact.get("max"), at + "/max", -1_000_000, 1_000_000);
     }
 
-    private static String path(JsonNode node, String at) {
+    static String path(JsonNode node, String at) {
         String path = RuleJson.text(node, at);
         if (!path.matches("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*){0,7}"))
             throw RuleJson.error(at, "Expected a dotted sheet path.");

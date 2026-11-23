@@ -3,6 +3,8 @@
   "version": 2,
   "name": "Daggerheart rules",
   "rest": {
+    "startFacts": { "hitPoints": "hp.marked", "stress": "stress.marked",
+      "armor": "armorTrack.marked", "hope": "hope.value" },
     "short": { "moves": 2, "maxMoves": 32, "maxLongMoves": 1, "consecutiveLimit": 3 },
     "long": { "moves": 2, "maxMoves": 32 }
   },

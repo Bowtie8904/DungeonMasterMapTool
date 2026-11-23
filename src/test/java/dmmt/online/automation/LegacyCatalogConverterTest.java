@@ -2546,14 +2546,16 @@ class LegacyCatalogConverterTest {
                 () -> run(program, context(program, actor, move("tend", "short", false, false)), "pipe")).code());
 
         ObjectNode rested = context(program, actor, """
-                {"type":"rest.short","rest":{"kind":"short","cleared":{"hitPoints":0,"stress":0,"armor":0}}}""");
+                {"type":"rest.short","rest":{"kind":"short","start":{"hope":2,"armor":1},
+                 "cleared":{"hitPoints":0,"stress":0,"armor":0}}}""");
         assertEquals(List.of("idle", "plate", "share"), available(program, rested, "rest"));
         ObjectNode idle = run(program, rested, "idle").contexts().getFirst();
         assertEquals(1, idle.at("/actor/hope/value").asInt());
         assertEquals(2, idle.at("/actor/stress/marked").asInt());
         assertEquals("Share", run(program, rested, "share").contexts().getFirst().at("/outbox/0/label").asText());
         ObjectNode recovered = context(program, actor.replace("\"armorTrack\":{\"marked\":1", "\"armorTrack\":{\"marked\":0"), """
-                {"type":"rest.long","rest":{"kind":"long","cleared":{"hitPoints":2,"stress":0,"armor":0}}}""");
+                {"type":"rest.long","rest":{"kind":"long","start":{"hope":2,"armor":1},
+                 "cleared":{"hitPoints":2,"stress":0,"armor":0}}}""");
         assertEquals(List.of("share"), available(program, recovered, "rest"));
 
         var invalid = LegacyCatalogConverter.convert(catalog("""
@@ -2566,6 +2568,34 @@ class LegacyCatalogConverterTest {
         assertTrue(messages.contains("Cast-before-rest must name an action of the same source: nowhere"), messages.toString());
         assertTrue(messages.contains("Recovery is only known after the rest moves."), messages.toString());
         assertTrue(messages.contains("A rest block needs allowances, passives or move modifiers."), messages.toString());
+    }
+
+    @Test
+    void restConditionsUseStartingFactsAndIndependentRecovery() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"camp","name":"Camp","automation":{"rest":{"passives":[
+                  {"id":"hope","label":"Hope","minHope":6,"steps":[{"op":"gain","resource":"hope","amount":1}]},
+                  {"id":"initial-armor","label":"Initial Armor","condition":"noArmorMarked",
+                   "steps":[{"op":"clear","resource":"stress","amount":1}]},
+                  {"id":"current-armor","label":"Current Armor","condition":"armorMarked",
+                   "steps":[{"op":"clear","resource":"stress","amount":1}]},
+                  {"id":"no-recovery","label":"No Recovery","condition":"noRecovery",
+                   "steps":[{"op":"gain","resource":"hope","amount":1}]}
+                ]}}}"""));
+        RuleCompiler.Program program = program(result, 0);
+        String actor = """
+                {"id":"me","name":"Ash","hope":{"value":1,"max":6},"stress":{"marked":3,"capacity":6},
+                 "hp":{"marked":3,"capacity":6},"armorTrack":{"marked":1,"capacity":3},"effects":[]}""";
+        ObjectNode context = context(program, actor, """
+                {"type":"rest.short","rest":{"kind":"short","start":{"hope":6,"armor":0},
+                 "cleared":{"hitPoints":1,"stress":-1,"armor":0}}}""");
+        assertEquals(List.of("current-armor", "hope", "initial-armor"), available(program, context, "rest"));
+
+        context.withObject("/actor/hope").put("value", 6);
+        context.withObject("/actor/armorTrack").put("marked", 0);
+        context.withObject("/event/rest/start").put("hope", 5).put("armor", 1);
+        context.withObject("/event/rest/cleared").put("hitPoints", 0).put("stress", 0);
+        assertEquals(List.of("no-recovery"), available(program, context, "rest"));
     }
 
     @Test

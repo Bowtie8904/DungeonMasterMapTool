@@ -27,7 +27,12 @@ public final class AutomationHost {
 
     /** Compiled automation keyed by fully qualified source ID. */
     public record RestLimits(int moves, int maxMoves, int maxLongMoves, int consecutiveLimit) {}
-    public record RestConfiguration(RestLimits shortRest, RestLimits longRest) {}
+    public record RestConfiguration(RestLimits shortRest, RestLimits longRest, Map<String, String> startFacts) {
+        public RestConfiguration {
+            startFacts = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(startFacts));
+        }
+        public RestConfiguration(RestLimits shortRest, RestLimits longRest) { this(shortRest, longRest, Map.of()); }
+    }
 
     public record Pack(String revision, Map<String, RuleCompiler.Program> programs, String rulesetName,
                        RestConfiguration rest) {
@@ -106,9 +111,19 @@ public final class AutomationHost {
     }
 
     private static RestConfiguration restConfiguration(JsonNode rest) {
-        RuleJson.fields(rest, "/rest", "short", "long");
+        RuleJson.fields(rest, "/rest", "short", "long", "startFacts");
+        Map<String, String> startFacts = new LinkedHashMap<>();
+        if (rest.has("startFacts")) {
+            ObjectNode facts = RuleJson.object(rest.get("startFacts"), "/rest/startFacts");
+            if (facts.size() > 32) throw RuleJson.error("/rest/startFacts", "Expected at most 32 initial facts.");
+            facts.fields().forEachRemaining(field -> {
+                if (!field.getKey().matches("[A-Za-z][A-Za-z0-9_]{0,63}"))
+                    throw RuleJson.error("/rest/startFacts/" + field.getKey(), "Expected an initial fact name.");
+                startFacts.put(field.getKey(), SheetProjection.path(field.getValue(), "/rest/startFacts/" + field.getKey()));
+            });
+        }
         return new RestConfiguration(restLimits(rest.path("short"), "/rest/short", true),
-                restLimits(rest.path("long"), "/rest/long", false));
+                restLimits(rest.path("long"), "/rest/long", false), startFacts);
     }
 
     private static RestLimits restLimits(JsonNode value, String path, boolean shortRest) {
@@ -801,6 +816,8 @@ public final class AutomationHost {
                     + " short rests in a row and must take a long rest next.");
         ObjectNode event = RuleJson.object(origin, "/event").deepCopy().put("type", "rest.prepare");
         ObjectNode plan = event.putObject("rest").put("kind", kind).put("moves", limits.moves()).put("longMoves", 0);
+        ObjectNode start = initialRestFacts(pack.rest(), projection.actor(working));
+        plan.set("start", start.deepCopy());
         ObjectNode adjustable = plan.putObject("adjustable");
         adjustable.putObject("moves").put("min", 0).put("max", limits.maxMoves());
         adjustable.putObject("longMoves").put("min", 0).put("max", limits.maxLongMoves());
@@ -819,7 +836,8 @@ public final class AutomationHost {
         }
         ObjectNode response = applyEvent(pack, working, state, event, candidates, intents, random);
         JsonNode result = response.path("event").path("rest");
-        if (!kind.equals(result.path("kind").asText()) || !adjustable.equals(result.path("adjustable")))
+        if (!kind.equals(result.path("kind").asText()) || !adjustable.equals(result.path("adjustable"))
+                || !start.equals(result.path("start")))
             throw RuleJson.error("/event/rest", "The rest plan's identity or bounds changed.");
         RuleJson.integer(result.get("moves"), "/event/rest/moves", 0, limits.maxMoves());
         RuleJson.integer(result.get("longMoves"), "/event/rest/longMoves", 0, limits.maxLongMoves());
@@ -829,10 +847,28 @@ public final class AutomationHost {
         return response;
     }
 
+    private static ObjectNode initialRestFacts(RestConfiguration configuration, ObjectNode actor) {
+        ObjectNode start = RuleJson.JSON.createObjectNode();
+        configuration.startFacts().forEach((name, path) -> {
+            JsonNode value = SheetProjection.get(actor, path);
+            String at = "/event/rest/start/" + name;
+            validateRestFact(value, at);
+            start.set(name, value.deepCopy());
+        });
+        return start;
+    }
+
+    private static void validateRestFact(JsonNode value, String at) {
+        if (value == null || !value.isNumber() && !value.isBoolean() && !value.isTextual())
+            throw RuleJson.error(at, "The configured initial actor fact must be a scalar value.");
+        RuleJson.checkTree(value, at, 0, new int[]{0});
+    }
+
     record RestMoveGroup(String sourceInstanceId, String group) {}
     record RestProgress(String kind, int moves, int longMoves, int slotsUsed, int longMovesUsed, int count,
-                        Set<RestMoveGroup> groups) {
-        RestProgress { groups = Set.copyOf(groups); }
+                        Set<RestMoveGroup> groups, ObjectNode plan) {
+        RestProgress { groups = Set.copyOf(groups); plan = plan.deepCopy(); }
+        @Override public ObjectNode plan() { return plan.deepCopy(); }
     }
     record RestMoveResult(RestProgress progress, ObjectNode response) {}
 
@@ -846,7 +882,12 @@ public final class AutomationHost {
         RestLimits limits = "short".equals(kind) ? pack.rest().shortRest() : pack.rest().longRest();
         int moves = RuleJson.integer(plan.get("moves"), "/event/rest/moves", 0, limits.maxMoves());
         int longMoves = RuleJson.integer(plan.get("longMoves"), "/event/rest/longMoves", 0, limits.maxLongMoves());
-        return new RestProgress(kind, moves, longMoves, 0, 0, 0, Set.of());
+        ObjectNode start = RuleJson.object(plan.get("start"), "/event/rest/start");
+        if (start.size() != pack.rest().startFacts().size())
+            throw RuleJson.error("/event/rest/start", "The initial rest facts do not match the ruleset.");
+        for (String name : pack.rest().startFacts().keySet())
+            validateRestFact(start.get(name), "/event/rest/start/" + name);
+        return new RestProgress(kind, moves, longMoves, 0, 0, 0, Set.of(), RuleJson.object(plan, "/event/rest"));
     }
 
     /** Stages one move. Progress and the caller's sheet change only after all move checks succeed. */
@@ -879,6 +920,8 @@ public final class AutomationHost {
             throw new RuleRuntime.Unavailable("duplicateMove", "This downtime move was already chosen.");
 
         ObjectNode event = RuleJson.object(origin, "/event").deepCopy().put("type", "downtime.move");
+        ObjectNode rest = progress.plan();
+        event.set("rest", rest.deepCopy());
         ObjectNode move = event.putObject("move").put("id", id).put("rest", progress.kind())
                 .put("long", "longMove".equals(availability)).put("ally", metadata.path("ally").asBoolean(false))
                 .put("slots", 1).put("bonus", 0).put("allies", 0);
@@ -905,7 +948,7 @@ public final class AutomationHost {
         ObjectNode result = applyResolved(pack, working, state, event, adjustments.contexts(),
                 adjustments.actions(), adjustments.outbox());
         ObjectNode adjusted = RuleJson.object(result.get("event"), "/event");
-        validateRestMove(adjusted, move);
+        validateRestMove(adjusted, move, rest);
         candidates = candidates(pack, working, adjusted);
         var candidate = candidates.stream().filter(item -> instanceId.equals(item.instanceId())
                         && element.sourceId().equals(item.program().sourceId())).findFirst()
@@ -924,7 +967,7 @@ public final class AutomationHost {
         ObjectNode after = applyResolved(pack, working, projection.state(working), adjusted,
                 List.of(resolution.context()), List.of(action), commands);
         ObjectNode finalEvent = RuleJson.object(after.get("event"), "/event");
-        validateRestMove(finalEvent, move);
+        validateRestMove(finalEvent, move, rest);
         int slots = finalEvent.at("/move/slots").intValue();
         if (progress.slotsUsed() + slots > progress.moves())
             throw new RuleRuntime.Unavailable("restMoves", "No downtime move slots remain.");
@@ -952,7 +995,7 @@ public final class AutomationHost {
             ObjectNode response = applyResolved(pack, working, currentState, finalEvent,
                     List.of(completed.context()), List.of(deferredAction), deferredCommands);
             finalEvent = RuleJson.object(response.get("event"), "/event");
-            validateRestMove(finalEvent, move);
+            validateRestMove(finalEvent, move, rest);
             if (!completedMove.equals(finalEvent.path("move")))
                 throw RuleJson.error("/event/move", "A deferred benefit cannot change the completed move.");
             for (String key : List.of("actions", "outbox"))
@@ -965,12 +1008,14 @@ public final class AutomationHost {
         groups.add(group);
         RestProgress next = new RestProgress(progress.kind(), progress.moves(), progress.longMoves(),
                 progress.slotsUsed() + slots, progress.longMovesUsed() + (usesLongAllowance ? 1 : 0),
-                progress.count() + 1, groups);
+                progress.count() + 1, groups, rest);
         replace(sheet, working);
         return new RestMoveResult(next, result);
     }
 
-    private static void validateRestMove(ObjectNode event, ObjectNode initial) {
+    private static void validateRestMove(ObjectNode event, ObjectNode initial, ObjectNode rest) {
+        if (!rest.equals(event.path("rest")))
+            throw RuleJson.error("/event/rest", "A downtime move cannot change the prepared rest.");
         JsonNode move = event.path("move");
         for (String field : List.of("id", "rest", "long", "ally", "adjustable"))
             if (!initial.path(field).equals(move.path(field)))

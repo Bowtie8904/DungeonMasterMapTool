@@ -14,7 +14,8 @@ class RestMoveTest {
     private static AutomationHost.Pack pack(int moves) {
         String ruleset = """
                 {"format":"dmmap-daggerheart-ruleset","version":2,"name":"Rest rules",
-                 "rest":{"short":{"moves":%1$d,"maxMoves":%1$d,"maxLongMoves":1,"consecutiveLimit":3},
+                 "rest":{"startFacts":{"hope":"hope.value"},
+                         "short":{"moves":%1$d,"maxMoves":%1$d,"maxLongMoves":1,"consecutiveLimit":3},
                          "long":{"moves":2,"maxMoves":2}},
                  "automation":{"rules":[
                    {"id":"long-allowance","bindings":[{"id":"rest","event":"rest.prepare","surface":"rest","mode":"automatic"}],
@@ -78,8 +79,11 @@ class RestMoveTest {
         ObjectNode sheet = sheet();
         ObjectNode prepared = HOST.prepareRest(pack, sheet, origin(), "short", 0, options(), StructuredRollTest.noRandom());
         var progress = HOST.restProgress(pack, prepared);
+        progress.plan().withObject("/start").put("hope", 999);
+        prepared.withObject("/event/rest/start").put("hope", 999);
         var result = HOST.restMove(pack, sheet, (ObjectNode) prepared.get("event"), progress, select("mend"),
                 options("more"), StructuredRollTest.faces(1));
+        assertEquals(2, result.response().at("/event/rest/start/hope").asInt());
         assertEquals(1, result.progress().slotsUsed());
         assertEquals(3, result.response().at("/event/move/bonus").asInt());
         assertEquals("mend", result.response().at("/event/move/id").asText());
@@ -142,6 +146,30 @@ class RestMoveTest {
                 progress, forged, options(), StructuredRollTest.noRandom()));
         assertThrows(IllegalArgumentException.class, () -> HOST.restMove(pack, sheet, (ObjectNode) prepared.get("event"),
                 progress, select("free"), options("mend"), StructuredRollTest.noRandom()));
+        assertEquals(before, sheet);
+        assertEquals(0, progress.count());
+    }
+
+    @Test
+    void movesCannotAlterTheAlreadyPreparedRestPlan() throws Exception {
+        var base = pack(2);
+        ObjectNode automation = (ObjectNode) RuleJson.parse("""
+                {"rules":[{"id":"alter","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"automatic"}],
+                 "do":[{"op":"plan.adjust","plan":"event.rest","field":"moves","by":1,"label":"Extra"}],
+                 "ui":{"label":"Alter"}}]}
+                """);
+        var programs = new java.util.HashMap<>(base.programs());
+        programs.put("features:alter", RuleCompiler.compile("features:alter", automation,
+                RuleJson.parse(LegacyCatalogConverter.coreRecipes())));
+        var pack = new AutomationHost.Pack("test", programs, base.rulesetName(), base.rest());
+        ObjectNode sheet = sheet();
+        sheet.putArray("features").addObject().put("name", "Alter").put("instanceId", "alter")
+                .put("automationSource", "features:alter");
+        ObjectNode prepared = HOST.prepareRest(pack, sheet, origin(), "short", 0, options(), StructuredRollTest.noRandom());
+        var progress = HOST.restProgress(pack, prepared);
+        ObjectNode before = sheet.deepCopy();
+        assertThrows(IllegalArgumentException.class, () -> HOST.restMove(pack, sheet, (ObjectNode) prepared.get("event"),
+                progress, select("mend"), options(), StructuredRollTest.faces(1)));
         assertEquals(before, sheet);
         assertEquals(0, progress.count());
     }

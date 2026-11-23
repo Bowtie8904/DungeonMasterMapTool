@@ -14,7 +14,8 @@ class RestPreparationTest {
     private static AutomationHost.Pack pack() throws Exception {
         String ruleset = """
                 {"format":"dmmap-daggerheart-ruleset","version":2,"name":"Rest rules",
-                 "rest":{"short":{"moves":2,"maxMoves":4,"maxLongMoves":1,"consecutiveLimit":3},
+                 "rest":{"startFacts":{"hope":"hope.value","armor":"armorTrack.marked"},
+                         "short":{"moves":2,"maxMoves":4,"maxLongMoves":1,"consecutiveLimit":3},
                          "long":{"moves":2,"maxMoves":4}},
                  "automation":{
                    "effects":{"shelter":{"label":"Shelter","until":["rest.short","rest.long"]}},
@@ -69,9 +70,17 @@ class RestPreparationTest {
         assertEquals(4, prepared.at("/event/rest/moves").asInt());
         assertEquals(1, prepared.at("/event/rest/longMoves").asInt());
         assertEquals(4, prepared.at("/event/rest/adjustable/moves/max").asInt());
+        assertEquals(2, prepared.at("/event/rest/start/hope").asInt());
+        assertEquals(1, prepared.at("/event/rest/start/armor").asInt());
         assertEquals(3, prepared.at("/event/rest/adjustments").size());
         assertEquals("extra", prepared.at("/actions/0/ruleId").asText());
         assertEquals("shelter", prepared.at("/actions/1/ruleId").asText());
+        ObjectNode missingStart = prepared.deepCopy();
+        missingStart.withObject("/event/rest/start").remove("hope");
+        assertThrows(IllegalArgumentException.class, () -> HOST.restProgress(pack, missingStart));
+        ObjectNode malformedStart = prepared.deepCopy();
+        malformedStart.withObject("/event/rest/start").putObject("hope");
+        assertThrows(IllegalArgumentException.class, () -> HOST.restProgress(pack, malformedStart));
         assertEquals(1, sheet.at("/hope/on").asInt());
         assertEquals(1, HOST.revision(sheet));
         assertEquals(2, sheet.path("shortRestsInRow").asInt(), "Preparation does not finish a rest.");
@@ -137,5 +146,23 @@ class RestPreparationTest {
         assertThrows(AutomationHost.NotReady.class, () -> HOST.prepareRest(noConfig, sheet, origin(), "long", 0,
                 RuleJson.JSON.createArrayNode(), StructuredRollTest.noRandom()));
         assertEquals(before, sheet);
+    }
+
+    @Test
+    void missingOrNonScalarInitialFactsRejectPreparationWithoutChangingTheSheet() throws Exception {
+        var pack = pack();
+        ObjectNode missing = sheet();
+        missing.remove("hope");
+        ObjectNode before = missing.deepCopy();
+        assertThrows(IllegalArgumentException.class, () -> HOST.prepareRest(pack, missing, origin(), "short", 0,
+                RuleJson.JSON.createArrayNode(), StructuredRollTest.noRandom()));
+        assertEquals(before, missing);
+
+        ObjectNode invalid = sheet();
+        invalid.withObject("/hope").putObject("on");
+        before = invalid.deepCopy();
+        assertThrows(IllegalArgumentException.class, () -> HOST.prepareRest(pack, invalid, origin(), "short", 0,
+                RuleJson.JSON.createArrayNode(), StructuredRollTest.noRandom()));
+        assertEquals(before, invalid);
     }
 }

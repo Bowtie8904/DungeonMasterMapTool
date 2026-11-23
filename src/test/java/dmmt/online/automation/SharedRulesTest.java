@@ -51,6 +51,9 @@ class SharedRulesTest {
         var limits = AutomationHost.compile("test", Map.of(), LegacyCatalogConverter.coreRecipes(), ruleset.toString()).rest();
         assertEquals(new AutomationHost.RestLimits(2, 32, 1, 3), limits.shortRest());
         assertEquals(new AutomationHost.RestLimits(2, 32, 0, 0), limits.longRest());
+        assertEquals(Map.of("hitPoints", "hp.marked", "stress", "stress.marked",
+                "armor", "armorTrack.marked", "hope", "hope.value"), limits.startFacts());
+        assertThrows(UnsupportedOperationException.class, () -> limits.startFacts().put("hope", "other"));
 
         ObjectNode homeRules = ruleset.deepCopy();
         ((ObjectNode) homeRules.at("/rest/short")).put("moves", 1).put("maxMoves", 4)
@@ -68,6 +71,9 @@ class SharedRulesTest {
                 "{\"short\":{\"moves\":2,\"maxMoves\":2,\"maxLongMoves\":1,\"consecutiveLimit\":0},\"long\":{\"moves\":2,\"maxMoves\":2}}",
                 "{\"short\":{\"moves\":2,\"maxMoves\":2,\"maxLongMoves\":1},\"long\":{\"moves\":2,\"maxMoves\":2}}",
                 "{\"short\":{\"moves\":2,\"maxMoves\":2,\"maxLongMoves\":1,\"consecutiveLimit\":3},\"long\":{\"moves\":2,\"maxMoves\":2,\"extra\":1}}",
+                "{\"startFacts\":{\"hope\":\"hope..value\"},\"short\":{\"moves\":2,\"maxMoves\":2,\"maxLongMoves\":1,\"consecutiveLimit\":3},\"long\":{\"moves\":2,\"maxMoves\":2}}",
+                "{\"startFacts\":{\"bad.name\":\"hope.value\"},\"short\":{\"moves\":2,\"maxMoves\":2,\"maxLongMoves\":1,\"consecutiveLimit\":3},\"long\":{\"moves\":2,\"maxMoves\":2}}",
+                "{\"startFacts\":null,\"short\":{\"moves\":2,\"maxMoves\":2,\"maxLongMoves\":1,\"consecutiveLimit\":3},\"long\":{\"moves\":2,\"maxMoves\":2}}",
                 "{\"short\":{},\"long\":{}}")) {
             ObjectNode bad = ruleset.deepCopy();
             bad.set("rest", RuleJson.parse(invalid));
@@ -75,6 +81,11 @@ class SharedRulesTest {
                     () -> AutomationHost.compile("bad", Map.of(), LegacyCatalogConverter.coreRecipes(), bad.toString()), invalid);
             assertTrue(failure.getMessage().contains("ruleset.json: /rest"), failure.getMessage());
         }
+        ObjectNode tooMany = ruleset.deepCopy();
+        ObjectNode facts = ((ObjectNode) tooMany.path("rest")).putObject("startFacts");
+        for (int i = 0; i < 33; i++) facts.put("fact" + i, "hope.value");
+        assertThrows(AutomationHost.NotReady.class,
+                () -> AutomationHost.compile("bad", Map.of(), LegacyCatalogConverter.coreRecipes(), tooMany.toString()));
     }
 
     @Test

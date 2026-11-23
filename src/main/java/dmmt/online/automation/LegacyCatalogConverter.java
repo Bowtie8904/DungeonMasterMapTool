@@ -4736,18 +4736,17 @@ public final class LegacyCatalogConverter {
         }
         if (passive.has("minHope")) {
             if (!passive.path("minHope").isInt() || passive.path("minHope").asInt() < 1) p.add(path + "/minHope", "Expected a positive whole number.");
-            else when.addObject().putArray("gte").add(read("actor.hope.value")).add(passive.path("minHope").asInt());
+            else when.addObject().putArray("gte").add(read("event.rest.start.hope")).add(passive.path("minHope").asInt());
         }
         if (passive.has("condition")) {
             String condition = passive.path("condition").asText();
             switch (condition) {
                 case "armorMarked" -> when.addObject().putArray("gt").add(read("actor.armorTrack.marked")).add(0);
-                case "noArmorMarked" -> when.addObject().putArray("eq").add(read("actor.armorTrack.marked")).add(0);
+                case "noArmorMarked" -> when.addObject().putArray("eq").add(read("event.rest.start.armor")).add(0);
                 case "noRecovery" -> {
                     if (prepare || move) p.add(path + "/condition", "Recovery is only known after the rest moves.");
-                    ObjectNode cleared = RuleJson.JSON.createObjectNode();
-                    cleared.putArray("add").add(read("event.rest.cleared.hitPoints")).add(read("event.rest.cleared.stress"));
-                    when.addObject().putArray("eq").add(cleared).add(0);
+                    when.addObject().putArray("eq").add(read("event.rest.cleared.hitPoints")).add(0);
+                    when.addObject().putArray("eq").add(read("event.rest.cleared.stress")).add(0);
                 }
                 default -> p.add(path + "/condition", "Unsupported rest condition: " + condition);
             }
