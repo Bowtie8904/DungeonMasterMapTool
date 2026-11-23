@@ -218,6 +218,9 @@ Other commands that could change facts read by later stages are rejected. The re
 recipient sheet read and its original host version, including unchanged sheets used by eligibility predicates;
 the eventual caller must compare their original stored bytes atomically with the changed sheets. It is not a live
 workflow: post-roll choices, command settlement, persisted reports and the atomic campaign commit remain necessary.
+A staged rest also retains the sorted members of every inspected host scope, including unloaded characters,
+and rejects a membership change between moves. The host can recheck those memberships without hydrating sheets;
+the eventual commit must compare them and all read sheet bytes under the same lock or atomic transaction.
 A host-signed offer binds the owner principal, actor, session and other host event facts, rest kind, pack revision,
 source sheet revision and original stored-sheet version. A fresh request must present the offer before staging;
 the caller must independently verify ownership and derive all event facts. Signing keys are local to the host

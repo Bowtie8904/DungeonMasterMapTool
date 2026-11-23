@@ -868,25 +868,38 @@ public final class AutomationHost {
         }
     }
 
-    record PartyRecovery(ObjectNode response, Map<String, ObjectNode> recipients, Map<String, String> readVersions) {
+    record PartyRecovery(ObjectNode response, Map<String, ObjectNode> recipients, Map<String, String> readVersions,
+                         Map<String, List<String>> scopeMembership) {
         PartyRecovery {
             response = response.deepCopy();
             recipients = copySheets(recipients);
             readVersions = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(readVersions));
+            scopeMembership = copyScopeMembership(scopeMembership);
         }
         @Override public ObjectNode response() { return response.deepCopy(); }
         @Override public Map<String, ObjectNode> recipients() { return copySheets(recipients); }
     }
 
     public record RestTransaction(ObjectNode response, Map<String, ObjectNode> recipients, Map<String, String> readVersions,
-                                  boolean replayed) {
+                                  Map<String, List<String>> scopeMembership, boolean replayed) {
         public RestTransaction {
             response = response.deepCopy();
             recipients = copySheets(recipients);
             readVersions = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(readVersions));
+            scopeMembership = copyScopeMembership(scopeMembership);
+        }
+        public RestTransaction(ObjectNode response, Map<String, ObjectNode> recipients, Map<String, String> readVersions,
+                               boolean replayed) {
+            this(response, recipients, readVersions, Map.of(), replayed);
         }
         @Override public ObjectNode response() { return response.deepCopy(); }
         @Override public Map<String, ObjectNode> recipients() { return copySheets(recipients); }
+    }
+
+    private static Map<String, List<String>> copyScopeMembership(Map<String, List<String>> scopes) {
+        Map<String, List<String>> result = new LinkedHashMap<>();
+        scopes.forEach((scope, members) -> result.put(scope, List.copyOf(members)));
+        return java.util.Collections.unmodifiableMap(result);
     }
 
     private static Map<String, ObjectNode> copySheets(Map<String, ObjectNode> sheets) {
@@ -948,7 +961,7 @@ public final class AutomationHost {
         ObjectNode response = staged.response().put("scope", scope).put("scopeInspected", !requests.isEmpty());
         response.set("membership", requests.isEmpty() ? RuleJson.JSON.createArrayNode()
                 : response.at("/scopeSnapshots/0/membership").deepCopy());
-        return new PartyRecovery(response, staged.recipients(), staged.readVersions());
+        return new PartyRecovery(response, staged.recipients(), staged.readVersions(), staged.scopeMembership());
     }
 
     /** Reads only host-produced move adjustments; it does not authorize or settle the resulting requests. */
@@ -1006,7 +1019,7 @@ public final class AutomationHost {
             throw RuleJson.error("/recovery/requests", "Expected at most 128 recovery requests.");
         StagedRestRecipients recipients = new StagedRestRecipients(pack, sourceId, roster);
         ObjectNode response = recoverParty(recipients, event, requests, random);
-        return new PartyRecovery(response, recipients.changed(), recipients.readVersions());
+        return new PartyRecovery(response, recipients.changed(), recipients.readVersions(), recipients.scopeMembership());
     }
 
     private ObjectNode recoverParty(StagedRestRecipients recipients, ObjectNode parentEvent,
@@ -1154,7 +1167,8 @@ public final class AutomationHost {
         RuleJson.checkTree(response, "/response", 0, new int[]{0});
         Map<String, ObjectNode> changed = recipients == null ? Map.of() : recipients.changed();
         Map<String, String> readVersions = recipients == null ? Map.of() : recipients.readVersions();
-        RestTransaction transaction = new RestTransaction(response, changed, readVersions, false);
+        Map<String, List<String>> scopes = recipients == null ? Map.of() : recipients.scopeMembership();
+        RestTransaction transaction = new RestTransaction(response, changed, readVersions, scopes, false);
         replace(sheet, working);
         return transaction;
     }
@@ -1233,7 +1247,8 @@ public final class AutomationHost {
         ObjectNode response = staged.response().put("requestId", requestId);
         RuleJson.checkTree(response, "/response", 0, new int[]{0});
         recordReceipt(projection.state(working), requestId, principalId, false, fingerprint, response);
-        RestTransaction transaction = new RestTransaction(response, staged.recipients(), staged.readVersions(), false);
+        RestTransaction transaction = new RestTransaction(response, staged.recipients(), staged.readVersions(),
+                staged.scopeMembership(), false);
         replace(sheet, working);
         return transaction;
     }
@@ -1277,12 +1292,41 @@ public final class AutomationHost {
         outbox.addAll((ArrayNode) stage.get("outbox"));
     }
 
+    /** Rechecks only membership; the caller must compare read sheet bytes within the same commit boundary. */
+    public static void requireRestScopeMembership(String sourceId, Map<String, List<String>> expected, RestRoster roster) {
+        RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(sourceId), "/event/actorId");
+        if (expected == null || roster == null) throw RuleJson.error("/recipients", "Expected host scope snapshots and roster.");
+        for (var entry : expected.entrySet()) {
+            if (!RuleCompiler.TARGET_SCOPES.contains(entry.getKey()) || entry.getValue() == null)
+                throw RuleJson.error("/recipients", "Invalid host scope snapshot.");
+            List<String> current = restScopeMembers(sourceId, roster.loadScope().apply(entry.getKey())).stream()
+                    .map(RestMember::id).toList();
+            if (!current.equals(entry.getValue()))
+                throw new RuleRuntime.Unavailable("staleRecipient", "The eligible characters changed. Reopen this rest.");
+        }
+    }
+
+    private static List<RestMember> restScopeMembers(String sourceId, List<RestMember> members) {
+        if (members == null || members.size() > 128)
+            throw RuleJson.error("/recipients", "A rest is limited to 128 characters.");
+        List<RestMember> result = new ArrayList<>();
+        Set<String> seen = new java.util.HashSet<>();
+        for (RestMember member : members) {
+            if (member == null || !seen.add(member.id()))
+                throw RuleJson.error("/recipients", "Duplicate or missing target.");
+            if (!sourceId.equals(member.id())) result.add(member);
+        }
+        result.sort(java.util.Comparator.comparing(RestMember::id));
+        return List.copyOf(result);
+    }
+
     private final class StagedRestRecipients {
         private final Pack pack;
         private final String sourceId;
         private final RestRoster roster;
         private final Map<String, StagedRecipient> participants = new LinkedHashMap<>();
         private final Set<String> changed = new java.util.LinkedHashSet<>();
+        private final Map<String, List<String>> scopeMembership = new LinkedHashMap<>();
 
         private StagedRestRecipients(Pack pack, String sourceId, RestRoster roster) {
             this.pack = pack;
@@ -1303,15 +1347,15 @@ public final class AutomationHost {
         }
 
         private List<StagedRecipient> scoped(String scope) {
-            List<RestMember> members = roster.loadScope().apply(scope);
-            if (members == null || members.size() > 128)
-                throw RuleJson.error("/recipients", "A rest is limited to 128 characters.");
+            if (!RuleCompiler.TARGET_SCOPES.contains(scope))
+                throw RuleJson.error("/recipients", "Expected a host character scope.");
+            List<RestMember> members = restScopeMembers(sourceId, roster.loadScope().apply(scope));
+            List<String> ids = members.stream().map(RestMember::id).toList();
+            List<String> previous = scopeMembership.putIfAbsent(scope, ids);
+            if (previous != null && !previous.equals(ids))
+                throw new RuleRuntime.Unavailable("staleRecipient", "The eligible characters changed. Reopen this rest.");
             List<StagedRecipient> result = new ArrayList<>();
-            Set<String> seen = new java.util.HashSet<>();
             for (RestMember member : members) {
-                if (member == null || !seen.add(member.id()))
-                    throw RuleJson.error("/recipients", "Duplicate or missing target.");
-                if (sourceId.equals(member.id())) continue;
                 StagedRecipient participant = participants.get(member.id());
                 if (participant == null) {
                     if (participants.size() == 128) throw RuleJson.error("/recipients", "A rest is limited to 128 characters.");
@@ -1322,7 +1366,6 @@ public final class AutomationHost {
                 }
                 result.add(participant);
             }
-            result.sort(java.util.Comparator.comparing(participant -> participant.member.id()));
             return List.copyOf(result);
         }
 
@@ -1365,6 +1408,10 @@ public final class AutomationHost {
                 if (participant.sheet != null) result.put(id, participant.member.sheetVersion());
             });
             return result;
+        }
+
+        private Map<String, List<String>> scopeMembership() {
+            return copyScopeMembership(scopeMembership);
         }
     }
 

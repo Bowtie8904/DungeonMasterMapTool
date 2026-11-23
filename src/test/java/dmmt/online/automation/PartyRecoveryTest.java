@@ -138,6 +138,10 @@ class PartyRecoveryTest {
         assertEquals(3, result.recipients().get("zara").at("/hope/on").asInt());
         assertEquals(5, HOST.revision(result.recipients().get("zara")));
         assertEquals(Map.of("mira", "stored-mira", "nia", "stored-nia", "zara", "stored-zara"), result.readVersions());
+        assertEquals(Map.of("activePlayerCharacters", List.of("mira", "zara"),
+                "connectedPlayerCharacters", List.of("nia", "zara")), result.scopeMembership());
+        assertThrows(UnsupportedOperationException.class, () -> result.scopeMembership().get("activePlayerCharacters").add("new"));
+        assertDoesNotThrow(() -> AutomationHost.requireRestScopeMembership("ada", result.scopeMembership(), roster));
         assertEquals(0, zara.at("/hope/on").asInt());
     }
 

@@ -405,6 +405,9 @@ class RestTargetTest {
         assertEquals(Map.of("mira", originalRecipient.toString(), "healthy", setup.healthy().toString()),
                 result.readVersions(), "An unchanged character used by target eligibility is a read dependency.");
         assertThrows(UnsupportedOperationException.class, () -> result.readVersions().put("other", "version"));
+        assertEquals(Map.of("activeCharacters", List.of("healthy", "mira")), result.scopeMembership());
+        assertThrows(UnsupportedOperationException.class, () -> result.scopeMembership().put("other", List.of()));
+        assertThrows(UnsupportedOperationException.class, () -> result.scopeMembership().get("activeCharacters").add("other"));
     }
 
     @Test
@@ -419,6 +422,7 @@ class RestTargetTest {
         assertFalse(first.replayed());
         assertEquals(Set.of("mira"), first.recipients().keySet());
         assertEquals(Set.of("mira", "healthy"), first.readVersions().keySet());
+        assertEquals(Map.of("activeCharacters", List.of("healthy", "mira")), first.scopeMembership());
         ObjectNode saved = setup.source().deepCopy();
         var forbiddenRoster = new AutomationHost.RestRoster("unchanged", scope -> {
             fail("A retry must not load a roster.");
@@ -431,6 +435,7 @@ class RestTargetTest {
         assertEquals(first.response(), replay.response());
         assertTrue(replay.recipients().isEmpty());
         assertTrue(replay.readVersions().isEmpty());
+        assertTrue(replay.scopeMembership().isEmpty());
         assertEquals(saved, setup.source());
         assertEquals(6, setup.recipient().at("/hp/on").asInt());
     }
@@ -561,6 +566,26 @@ class RestTargetTest {
         assertFalse(loads.containsKey("ada"));
         assertFalse(loads.containsKey("healthy"));
         assertEquals(Map.of("mira", setup.recipient().toString()), result.readVersions());
+        assertEquals(Map.of("activeCharacters", List.of("healthy", "mira")), result.scopeMembership(),
+                "Unloaded members still contribute to scope membership.");
+        AutomationHost.requireRestScopeMembership("ada", result.scopeMembership(), roster(setup, loads));
+        assertEquals(1, loads.get("mira").get());
+        assertFalse(loads.containsKey("healthy"), "Checking membership must not load sheets.");
+        var mira = new AutomationHost.RestMember("mira", "Mira", "new-version", 8,
+                () -> { throw new AssertionError("Membership must not load a sheet."); });
+        var removed = new AutomationHost.RestRoster("source", scope -> List.of(mira));
+        assertEquals("staleRecipient", assertThrows(RuleRuntime.Unavailable.class,
+                () -> AutomationHost.requireRestScopeMembership("ada", result.scopeMembership(), removed)).code());
+        var healthy = new AutomationHost.RestMember("healthy", "Healthy", "version", 2,
+                () -> { throw new AssertionError("Membership must not load a sheet."); });
+        var added = new AutomationHost.RestMember("new", "New", "version", 0,
+                () -> { throw new AssertionError("Membership must not load a sheet."); });
+        var expanded = new AutomationHost.RestRoster("source", scope -> List.of(added, mira, healthy));
+        assertEquals("staleRecipient", assertThrows(RuleRuntime.Unavailable.class,
+                () -> AutomationHost.requireRestScopeMembership("ada", result.scopeMembership(), expanded)).code());
+        var unchangedIds = new AutomationHost.RestRoster("source", scope -> List.of(mira, healthy));
+        assertDoesNotThrow(() -> AutomationHost.requireRestScopeMembership("ada", result.scopeMembership(), unchangedIds),
+                "Stored sheet versions are checked separately from membership.");
 
         Setup stale = setup(ruleset, 4);
         PartyTargets staleOffers = party(stale, stale.recipient(), new AtomicReference<>());
@@ -607,6 +632,26 @@ class RestTargetTest {
         assertThrows(IllegalArgumentException.class, () -> stage(setup, single, oversized, 4));
         assertEquals(beforeSource, setup.source());
         assertEquals(beforeRecipient, setup.recipient());
+    }
+
+    @Test
+    void changingTheSameScopeBetweenMovesRejectsTheEntireStagedRest() throws Exception {
+        Setup setup = setup(ruleset(), 4);
+        PartyTargets offers = party(setup, setup.recipient(), new AtomicReference<>());
+        ObjectNode request = transaction(setup);
+        transactionMove(request, "heal", targetRequest(setup, offers, "heal"));
+        transactionMove(request, "repair", targetRequest(setup, offers, "repair"));
+        var mira = new AutomationHost.RestMember("mira", "Mira", setup.recipient().toString(), 7, setup::recipient);
+        var healthy = new AutomationHost.RestMember("healthy", "Healthy", setup.healthy().toString(), 2, setup::healthy);
+        AtomicInteger scopes = new AtomicInteger();
+        var shifting = new AutomationHost.RestRoster(setup.source().toString(), scope ->
+                scopes.getAndIncrement() == 0 ? List.of(mira, healthy) : List.of(mira));
+        ObjectNode source = setup.source().deepCopy(), recipient = setup.recipient().deepCopy();
+        assertEquals("staleRecipient", assertThrows(RuleRuntime.Unavailable.class,
+                () -> stage(setup, request, shifting, 4)).code());
+        assertEquals(2, scopes.get());
+        assertEquals(source, setup.source());
+        assertEquals(recipient, setup.recipient());
     }
 
     @Test
