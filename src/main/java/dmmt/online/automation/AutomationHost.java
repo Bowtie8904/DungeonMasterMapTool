@@ -1572,12 +1572,12 @@ public final class AutomationHost {
             boolean settleTargetInventory = target != null && roster != null && roster.grantInventory() != null;
             RestMoveResult result = restMove(pack, working, stagedOrigin, progress, (ObjectNode) move.get("selection"),
                     (ArrayNode) move.get("options"), random, target, initialSources, staged.settlePartyRecovery,
-                    settleSelected, settleTargetInventory);
+                    settleSelected, settleTargetInventory, recipients);
             progress = result.progress();
             ObjectNode completedMove = RuleJson.object(result.response().get("event"), "/event").deepCopy();
             if (completedMoves != null) completedMoves.add(completedMove);
             moveEvents.add(completedMove);
-            if (party != null) recipients.apply(party.updates());
+            if (party != null && !result.recipientApplied()) recipients.apply(party.updates());
             settleRestInventory(working, result.response(), recipients, roster, settleTargetInventory);
             appendRestStage(result.response(), actions, outbox, targeted);
             carryRestTable(stagedOrigin, result.response().required("event"));
@@ -2311,6 +2311,13 @@ public final class AutomationHost {
             return recipientSnapshot(pack, after, event, update.actorId());
         }
 
+        private ObjectNode snapshot(String id, ObjectNode event) {
+            StagedRecipient participant = participants.get(id);
+            if (participant == null || participant.sheet == null)
+                throw RuleJson.error("/recipients", "The staged recipient was not read from the host roster.");
+            return recipientSnapshot(pack, participant.sheet, event, id);
+        }
+
         private StagedRecipientReactions reactions(String actorId, RandomGenerator random) {
             StagedRecipient participant = participants.get(actorId);
             if (participant == null || participant.sheet == null)
@@ -2530,7 +2537,7 @@ public final class AutomationHost {
         }
         @Override public ObjectNode request() { return request.deepCopy(); }
     }
-    record RestMoveResult(RestProgress progress, ObjectNode response) {}
+    record RestMoveResult(RestProgress progress, ObjectNode response, boolean recipientApplied) {}
 
     RestProgress restProgress(Pack pack, ObjectNode preparation) {
         if (pack.rest() == null) throw new NotReady("The shared ruleset has no rest configuration.");
@@ -2559,13 +2566,14 @@ public final class AutomationHost {
     RestMoveResult restMove(Pack pack, ObjectNode sheet, ObjectNode origin, RestProgress progress,
                             ObjectNode selection, ArrayNode options, RandomGenerator random, RestTarget target) {
         return restMove(pack, sheet, origin, progress, selection, options, random, target, sources(pack, sheet),
-                false, null, false);
+                false, null, false, null);
     }
 
     private RestMoveResult restMove(Pack pack, ObjectNode sheet, ObjectNode origin, RestProgress progress,
                                     ObjectNode selection, ArrayNode options, RandomGenerator random, RestTarget target,
                                     List<SheetProjection.SourceElement> initialSources, boolean settlePartyRecovery,
-                                    BiConsumer<ObjectNode, ObjectNode> settleSelected, boolean settleTargetInventory) {
+                                    BiConsumer<ObjectNode, ObjectNode> settleSelected, boolean settleTargetInventory,
+                                    StagedRestRecipients stagedRecipients) {
         if (progress.count() >= 64) throw RuleJson.error("/rest/moves", "A rest may contain at most 64 moves.");
         RuleJson.fields(selection, "/selection", "sourceInstanceId", "ruleId", "bindingId", "inputs");
         RuleJson.checkTree(selection, "/selection", 0, new int[]{0});
@@ -2719,11 +2727,18 @@ public final class AutomationHost {
             validateTargetRestCommands(after, settleTargetInventory);
             recipientUpdates = resolved.recipients();
         }
-        if (target != null && after.path("outbox").findValuesAsText("kind").contains("inventory.grant")
+        boolean recipientApplied = target != null && after.path("outbox").findValuesAsText("kind").contains("inventory.grant")
                 && adjustments.actions().stream().anyMatch(adjustment ->
-                byInstance.get(adjustment.sourceInstanceId()).program().rule(adjustment.ruleId()).has("after")))
-            throw new RuleRuntime.Unavailable("inventorySettlement",
-                    "A deferred benefit requires the ally inventory grant to be settled first.");
+                byInstance.get(adjustment.sourceInstanceId()).program().rule(adjustment.ruleId()).has("after"));
+        if (recipientApplied) {
+            if (!settleTargetInventory || stagedRecipients == null)
+                throw new RuleRuntime.Unavailable("inventorySettlement",
+                        "A deferred benefit requires the ally inventory grant to be settled first.");
+            target.party().stage(recipientUpdates);
+            if (recipientReactions != null) recipientReactions.commit();
+            stagedRecipients.apply(target.party().updates());
+            settleRestInventory(working, after, stagedRecipients, stagedRecipients.roster, true);
+        }
         if (settleSelected != null) settleSelected.accept(working, after);
         ObjectNode finalEvent = RuleJson.object(after.get("event"), "/event");
         validateRestMove(finalEvent, move, rest, settlePartyRecovery);
@@ -2751,9 +2766,10 @@ public final class AutomationHost {
             if (target != null) {
                 var update = recipientUpdates.getFirst();
                 ObjectNode currentEvent = finalEvent.deepCopy();
-                recipient = recipientViews.computeIfAbsent(currentEvent,
-                        ignored -> stagedReactions == null ? target.reproject().apply(update, currentEvent.deepCopy())
-                                : stagedReactions.reproject(update, currentEvent.deepCopy()));
+                recipient = recipientViews.computeIfAbsent(currentEvent, ignored -> recipientApplied
+                        ? stagedRecipients.snapshot(update.actorId(), currentEvent.deepCopy())
+                        : stagedReactions == null ? target.reproject().apply(update, currentEvent.deepCopy())
+                        : stagedReactions.reproject(update, currentEvent.deepCopy()));
                 if (recipient == null || !update.actorId().equals(recipient.path("id").asText()))
                     throw RuleJson.error("/recipient", "The host must reproject the updated recipient.");
             }
@@ -2837,12 +2853,12 @@ public final class AutomationHost {
         RestProgress next = new RestProgress(progress.kind(), progress.moves(), progress.longMoves(),
                 progress.slotsUsed() + slots, progress.longMovesUsed() + (usesLongAllowance ? 1 : 0),
                 progress.count() + 1, groups, rest);
-        if (target != null) {
+        if (target != null && !recipientApplied) {
             target.party().stage(recipientUpdates);
             if (stagedReactions != null) stagedReactions.commit();
         }
         replace(sheet, working);
-        return new RestMoveResult(next, result);
+        return new RestMoveResult(next, result, recipientApplied);
     }
 
     private static ObjectNode restMoveEvent(ObjectNode origin, RestProgress progress, JsonNode metadata) {

@@ -2615,6 +2615,18 @@ class OnlineSessionServerTest {
                   "do":[{"op":"resource.gain","pool":"recipient.hope",
                          "amount":{"size":{"read":"recipient.inventory"}}}],
                   "ui":{"label":"Count ally supplies","report":"Counted ally supplies."}},
+                 {"id":"inventory-gift-benefit","bindings":[{"id":"move","event":"downtime.move",
+                    "surface":"downtime","mode":"option"}],
+                  "when":{"eq":[{"read":"event.move.id"},"gift"]},
+                  "after":{"do":[{"op":"resource.gain","pool":"actor.hope",
+                                    "amount":{"size":{"read":"recipient.inventory"}}}],
+                           "report":"The ally's supplies are ready."},
+                  "ui":{"label":"Benefit from ally supplies"}},
+                 {"id":"inventory-gift-failure","bindings":[{"id":"move","event":"downtime.move",
+                    "surface":"downtime","mode":"option"}],
+                  "when":{"eq":[{"read":"event.move.id"},"gift"]},
+                  "after":{"costs":[{"op":"resource.spend","pool":"actor.hope","amount":6}]},
+                  "ui":{"label":"Unaffordable benefit"}},
                  {"id":"before-inventory","bindings":[{"id":"rest","event":"rest.short","surface":"rest","mode":"option"}],
                   "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
                          "quantity":1,"label":"Reward"}],
@@ -2779,6 +2791,62 @@ class OnlineSessionServerTest {
         assertEquals(1, ally.at("/inventory/0/qty").asInt());
         assertEquals("consumables:minor-health-potion", ally.at("/inventory/0/automationSource").asText());
         assertEquals(completed.body(), restHttp(owner, "resting", null, body.toString()).body());
+    }
+
+    @Test
+    void targetedRestSettlesInventoryBeforeDeferredBenefitsAndRollsBackOnFailure() throws Exception {
+        installRestInventoryRules();
+        String owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("resting").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Mira").ownerId(playerId()).build());
+        for (String id : List.of("resting", "ally"))
+            store.saveSheet(campaign.getId(), id, """
+                    {"name":"%s","hp":{"slots":6,"on":2},"stress":{"slots":6,"on":1},
+                     "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},"inventory":[]}
+                    """.formatted(id));
+        String originalSource = store.loadSheet(campaign.getId(), "resting");
+        String originalAlly = store.loadSheet(campaign.getId(), "ally");
+        int history = store.historyTail(campaign.getId(), 100).size();
+        JsonNode offer = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        JsonNode gift = restDescriptor(offer.path("moves"), "inventory-gift");
+        JsonNode target = gift.at("/targetSelection/options/0");
+
+        ObjectNode failure = restRequest(offer, "failed-gift-benefit");
+        ObjectNode failedMove = addRestMove((ObjectNode) failure.path("request"), gift);
+        failedMove.putObject("target").put("recipientId", "ally").put("version", target.path("version").asText());
+        failedMove.withArray("options").add(restSelection(restDescriptor(gift.path("options"), "inventory-gift-failure")));
+        var rejected = restChoiceHttp(owner, "resting", "choices", failure);
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertEquals(originalSource, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(originalAlly, store.loadSheet(campaign.getId(), "ally"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+
+        ObjectNode body = restRequest(offer, "gift-benefit");
+        ObjectNode move = addRestMove((ObjectNode) body.path("request"), gift);
+        move.putObject("target").put("recipientId", "ally").put("version", target.path("version").asText());
+        move.withArray("options").add(restSelection(restDescriptor(gift.path("options"), "inventory-gift-benefit")));
+        var first = restChoiceHttp(owner, "resting", "choices", body);
+        assertEquals(200, first.statusCode(), first.body());
+        assertTrue(MAPPER.readTree(first.body()).path("reports").toString().contains("The ally's supplies are ready."));
+        assertEquals(originalSource, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(originalAlly, store.loadSheet(campaign.getId(), "ally"));
+        ObjectNode advance = MAPPER.createObjectNode().put("requestId", "gift-benefit")
+                .put("choiceVersion", MAPPER.readTree(first.body()).path("choiceVersion").asText());
+        advance.putArray("selections");
+        var after = restChoiceHttp(owner, "resting", "choices", advance);
+        assertEquals(200, after.statusCode(), after.body());
+        ObjectNode complete = MAPPER.createObjectNode()
+                .put("choiceVersion", MAPPER.readTree(after.body()).path("choiceVersion").asText());
+        complete.set("request", body.path("request").deepCopy());
+        var committed = restChoiceHttp(owner, "resting", "complete", complete);
+        assertEquals(200, committed.statusCode(), committed.body());
+        JsonNode source = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        JsonNode ally = MAPPER.readTree(store.loadSheet(campaign.getId(), "ally"));
+        assertEquals(2, source.at("/hope/on").asInt());
+        assertEquals(1, ally.at("/hope/on").asInt());
+        assertEquals(0, ally.at("/stress/on").asInt());
+        assertEquals(1, ally.at("/inventory/0/qty").asInt());
+        assertEquals(committed.body(), restChoiceHttp(owner, "resting", "complete", complete).body());
     }
 
     @Test
