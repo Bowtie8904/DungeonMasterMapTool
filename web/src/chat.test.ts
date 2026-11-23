@@ -255,6 +255,25 @@ describe('roll breakdowns', () => {
     } finally { vi.unstubAllGlobals(); }
   });
 
+  it('renders controls for a saved automation claim', () => {
+    class Element {
+      className = '';
+      children: Array<Element | string> = [];
+      append(...children: Array<Element | string>) { this.children.push(...children); }
+      setAttribute() {}
+    }
+    vi.stubGlobal('document', { createElement: () => new Element() });
+    try {
+      const message: ChatMessage = { id: 2, ts: 1, fromId: 'player', from: 'Player', text: 'Share',
+        automationClaim: { sourceActorId: 'caster', sourceInstanceId: 'card', group: 'gift' } };
+      const controls = document.createElement('div');
+      const renderActions = vi.fn(() => controls);
+      const card = renderLogEntry({ kind: 'chat', m: message }, 'ally', undefined, undefined, renderActions) as unknown as Element;
+      expect(renderActions).toHaveBeenCalledWith(message);
+      expect(card.children).toContain(controls);
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   it('shows sender portraits for chat and rolls and falls back when artwork fails', () => {
     class Element {
       className = '';

@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dmmt.online.automation.AutomationHost;
 import dmmt.online.automation.PartyTargets;
+import dmmt.online.automation.RuleDispatcher;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import io.javalin.http.staticfiles.Location;
@@ -334,6 +335,8 @@ public final class OnlineSessionServer {
         javalin.post("/api/automation/{version}/{id}", ctx -> withSheetOperation(ctx, this::handleAutomationExecute));
         javalin.get("/api/automation/{version}/{id}/rest", ctx -> withSheetOperation(ctx, this::handleRestDescribe));
         javalin.post("/api/automation/{version}/{id}/rest", ctx -> withSheetOperation(ctx, this::handleRestExecute));
+        javalin.get("/api/automation/{version}/{id}/claims/{messageId}/{timestamp}", ctx -> withSheetOperation(ctx, this::handleClaimDescribe));
+        javalin.post("/api/automation/{version}/{id}/claims/{messageId}/{timestamp}", ctx -> withSheetOperation(ctx, this::handleClaimExecute));
         javalin.put("/api/sheet/{id}", ctx -> withSheetOperation(ctx, this::handleSheetSave));
         javalin.post("/api/sheet/{id}/demiplane", this::handleDemiplaneImport);
         javalin.post("/api/feature", ctx -> withSheetOperation(ctx, this::handleFeature));
@@ -1121,9 +1124,13 @@ public final class OnlineSessionServer {
 
     /** The message as players may see it: without the DM-only real values of a secret roll. */
     static JsonNode playerView(JsonNode message) {
-        if (message.has("secretReal") && message instanceof ObjectNode node) {
+        if ((message.has("secretReal") || message.path("automationClaim").isObject()) && message instanceof ObjectNode node) {
             ObjectNode copy = node.deepCopy();
             copy.remove("secretReal");
+            if (copy.path("automationClaim") instanceof ObjectNode claim) {
+                claim.remove("originEvent");
+                claim.remove("receipts");
+            }
             return copy;
         }
         return message;
@@ -6086,6 +6093,203 @@ public final class OnlineSessionServer {
         return messages;
     }
 
+    private static final class ClaimUnavailable extends IllegalArgumentException {
+        ClaimUnavailable(String message) { super(message); }
+    }
+
+    private record ClaimParticipants(Campaign.Actor source, Campaign.Actor recipient, ObjectNode sourceSheet,
+                                     ObjectNode recipientSheet, Map<String, String> originals,
+                                     AutomationHost.Pack pack, String relation) {}
+
+    private ObjectNode claimOffer(Context ctx) throws IOException {
+        long id, timestamp;
+        try {
+            id = Long.parseLong(ctx.pathParam("messageId"));
+            timestamp = Long.parseLong(ctx.pathParam("timestamp"));
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid claim message identity.");
+        }
+        JsonNode entry = store.automationClaimEntry(campaign.getId(), id, timestamp);
+        if (!(entry instanceof ObjectNode offer) || !offer.path("automationClaim").isObject()
+                || !ctx.pathParam("id").equals(offer.at("/automationClaim/sourceActorId").asText()))
+            throw new ClaimUnavailable("This offer is no longer available.");
+        return offer;
+    }
+
+    private ClaimParticipants claimParticipants(String playerId, JsonNode claim, String recipientId) throws IOException {
+        Campaign.Actor source = automationActor(claim.path("sourceActorId").asText());
+        Campaign.Actor recipient = automationActor(recipientId);
+        if (!playerId.equals(recipient.getOwnerId()) || campaign.player(playerId) == null)
+            throw new SecurityException("Choose an active character you own.");
+        var pack = automationPack();
+        if (!pack.revision().equals(claim.path("packRevision").asText()))
+            throw new ClaimUnavailable("The automation catalog changed. This offer is no longer available.");
+        Map<String, String> originals = new java.util.LinkedHashMap<>();
+        String sourceStored = store.loadSheet(campaign.getId(), source.getId());
+        if (sourceStored == null) throw new ClaimUnavailable("The offering character no longer has a sheet.");
+        originals.put(source.getId(), sourceStored);
+        ObjectNode sourceSheet = hydrateSheet(source.getId(), sourceStored);
+        ObjectNode recipientSheet = sourceSheet;
+        if (!source.getId().equals(recipient.getId())) {
+            String recipientStored = store.loadSheet(campaign.getId(), recipient.getId());
+            if (recipientStored == null) throw new ClaimUnavailable("The recipient no longer has a sheet.");
+            originals.put(recipient.getId(), recipientStored);
+            recipientSheet = hydrateSheet(recipient.getId(), recipientStored);
+        }
+        return new ClaimParticipants(source, recipient, sourceSheet, recipientSheet, originals, pack,
+                playerId.equals(source.getOwnerId()) ? "self" : "other");
+    }
+
+    private ObjectNode claimEvent(JsonNode claim, Campaign.Actor source) {
+        if (!(claim.path("originEvent") instanceof ObjectNode origin))
+            throw new IllegalArgumentException("The saved claim event is invalid.");
+        ObjectNode event = origin.deepCopy().put("type", "claim.accept").put("actorId", source.getId())
+                .put("sessionId", sessionId);
+        event.remove("resultId");
+        event.withObject("/table").put("fear", campaign.getFear());
+        return event;
+    }
+
+    private RuleDispatcher.ClaimLedger claimLedger(JsonNode claim) {
+        long revision = claimLong(claim.get("revision"), "claim revision");
+        String group = claim.path("group").asText();
+        if (!claim.path("claims").isArray() || claim.path("claims").size() > 128)
+            throw new IllegalArgumentException("The saved claim ledger is invalid.");
+        Set<RuleDispatcher.ClaimKey> claims = new LinkedHashSet<>();
+        for (JsonNode recipient : claim.path("claims")) {
+            if (!recipient.isTextual() || !claims.add(new RuleDispatcher.ClaimKey(group, recipient.asText())))
+                throw new IllegalArgumentException("The saved claim ledger is invalid.");
+        }
+        Map<String, Integer> limits = Map.of();
+        if (claim.has("limit")) {
+            long limit = claimLong(claim.get("limit"), "claim limit");
+            if (limit > 64) throw new IllegalArgumentException("The saved claim limit is invalid.");
+            limits = Map.of(group, (int) limit);
+        }
+        return new RuleDispatcher.ClaimLedger(revision, claims, limits);
+    }
+
+    private static long claimLong(JsonNode value, String name) {
+        if (value == null || !value.isIntegralNumber() || !value.canConvertToLong() || value.longValue() < 0)
+            throw new IllegalArgumentException("Invalid " + name + ".");
+        return value.longValue();
+    }
+
+    private synchronized void handleClaimDescribe(Context ctx) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null || !requireAutomationVersion(ctx)) return;
+        try {
+            ObjectNode offer = claimOffer(ctx);
+            JsonNode claim = offer.path("automationClaim");
+            ClaimParticipants participants = claimParticipants(playerId, claim, ctx.queryParam("recipientId"));
+            var ledger = claimLedger(claim);
+            ObjectNode result = automationHost.describeClaim(participants.pack(), participants.sourceSheet(),
+                    participants.recipientSheet(), claimEvent(claim, participants.source()),
+                    claim.path("sourceInstanceId").asText(), claim.path("group").asText(),
+                    participants.recipient().getId(), participants.relation());
+            result.put("claimRevision", ledger.revision());
+            long taken = ledger.claims().stream().filter(key -> key.group().equals(claim.path("group").asText())).count();
+            if (ledger.claims().contains(new RuleDispatcher.ClaimKey(claim.path("group").asText(), participants.recipient().getId()))
+                    || ledger.limits().containsKey(claim.path("group").asText())
+                    && taken >= ledger.limits().get(claim.path("group").asText()))
+                result.withArray("actions").removeAll();
+            ctx.header("Cache-Control", "no-store");
+            json(ctx, 200, result);
+        } catch (ClaimUnavailable | dmmt.online.automation.AutomationHost.NotReady | dmmt.online.automation.RuleRuntime.Unavailable e) {
+            json(ctx, 409, errorBody(e.getMessage()));
+        } catch (SecurityException e) {
+            json(ctx, 403, errorBody(e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            json(ctx, 400, errorBody(e.getMessage()));
+        } catch (IOException | java.io.UncheckedIOException e) {
+            json(ctx, 500, errorBody("Could not read the claim offer."));
+        }
+    }
+
+    private synchronized void handleClaimExecute(Context ctx) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null || !requireAutomationVersion(ctx)) return;
+        if (ctx.bodyAsBytes().length > config.maxMessageBytes()) {
+            json(ctx, 413, errorBody("Claim request is too large."));
+            return;
+        }
+        try {
+            JsonNode body = MAPPER.readTree(ctx.body());
+            if (!(body instanceof ObjectNode) || body.size() != 1 || !(body.path("request") instanceof ObjectNode request))
+                throw new IllegalArgumentException("Invalid claim request.");
+            Set<String> fields = Set.of("requestId", "recipientId", "expectedRevision", "expectedRecipientRevision",
+                    "expectedClaimRevision", "selection");
+            request.fieldNames().forEachRemaining(field -> {
+                if (!fields.contains(field)) throw new IllegalArgumentException("Unknown claim request field: " + field);
+            });
+            String requestId = request.path("requestId").asText();
+            if (!requestId.matches("[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}"))
+                throw new IllegalArgumentException("Invalid claim request ID.");
+            ObjectNode offer = claimOffer(ctx);
+            ObjectNode claim = (ObjectNode) offer.path("automationClaim");
+            if (!claim.path("receipts").isArray()) throw new IllegalArgumentException("The saved claim receipts are invalid.");
+            for (JsonNode receipt : claim.path("receipts")) {
+                if (!requestId.equals(receipt.path("requestId").asText())) continue;
+                if (!playerId.equals(receipt.path("principalId").asText()) || !request.equals(receipt.path("request")))
+                    throw new ClaimUnavailable("This request ID was already used for a different claim.");
+                json(ctx, 200, receipt.path("response"));
+                return;
+            }
+            if (!(request.path("selection") instanceof ObjectNode selection))
+                throw new IllegalArgumentException("Choose an action from this claim offer.");
+            ClaimParticipants participants = claimParticipants(playerId, claim, request.path("recipientId").asText());
+            var ledger = claimLedger(claim);
+            ObjectNode event = claimEvent(claim, participants.source());
+            Map<String, JsonNode> sourceNames = new java.util.HashMap<>();
+            for (var element : automationHost.sources(participants.pack(), participants.sourceSheet()))
+                sourceNames.put(element.instanceId(), element.element().deepCopy());
+            ObjectNode result = automationHost.stageClaim(participants.pack(), participants.sourceSheet(),
+                    participants.recipientSheet(), event, claim.path("sourceInstanceId").asText(),
+                    claim.path("group").asText(), participants.recipient().getId(), participants.relation(), selection,
+                    claimLong(request.get("expectedRevision"), "source revision"),
+                    claimLong(request.get("expectedRecipientRevision"), "recipient revision"),
+                    claimLong(request.get("expectedClaimRevision"), "claim revision"), ledger, diceRandom);
+            result.put("requestId", requestId);
+            ObjectNode replacement = offer.deepCopy();
+            ObjectNode updated = (ObjectNode) replacement.path("automationClaim");
+            updated.put("revision", result.path("claimRevision").asLong());
+            updated.withArray("claims").add(participants.recipient().getId());
+            ArrayNode receipts = updated.withArray("receipts");
+            ObjectNode receipt = receipts.addObject().put("requestId", requestId).put("principalId", playerId);
+            receipt.set("request", request.deepCopy());
+            receipt.set("response", result.deepCopy());
+            while (receipts.size() > 32) receipts.remove(0);
+            Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
+            changed.put(participants.source().getId(), participants.sourceSheet());
+            changed.put(participants.recipient().getId(), participants.recipientSheet());
+            changed.values().forEach(sheet -> sheet.put("featureRevision", sheet.path("featureRevision").asLong(0) + 1));
+            List<ObjectNode> messages = automationReports(participants.source(), sourceNames, result);
+            String sourceOwner = participants.source().getOwnerId(), recipientOwner = participants.recipient().getOwnerId();
+            Runnable validateRoster = () -> {
+                Campaign.Actor source = campaign.actor(participants.source().getId());
+                Campaign.Actor recipient = campaign.actor(participants.recipient().getId());
+                if (source == null || recipient == null || source.isDisabled() || recipient.isDisabled()
+                        || !sourceOwner.equals(source.getOwnerId()) || !recipientOwner.equals(recipient.getOwnerId())
+                        || campaign.player(recipientOwner) == null)
+                    throw new ClaimUnavailable("The claim participants changed. Reopen this offer.");
+            };
+            commitAutomationResults(participants.originals(), changed, messages, result.path("outbox"),
+                    participants.pack(), participants.source().getId(), result, validateRoster, offer, replacement);
+            json(ctx, 200, result);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            json(ctx, 400, errorBody("Invalid claim request."));
+        } catch (ClaimUnavailable | dmmt.online.automation.AutomationHost.NotReady | dmmt.online.automation.RuleRuntime.Unavailable
+                 | CampaignStore.StaleAutomationClaim | CampaignStore.StaleAutomationSheet e) {
+            json(ctx, 409, errorBody(e.getMessage()));
+        } catch (SecurityException e) {
+            json(ctx, 403, errorBody(e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            json(ctx, 400, errorBody(e.getMessage()));
+        } catch (IOException | java.io.UncheckedIOException e) {
+            json(ctx, 500, errorBody("Could not save the claim."));
+        }
+    }
+
     private Campaign.Actor restActor(Context ctx, String playerId) {
         Campaign.Actor actor = automationActor(ctx.pathParam("id"));
         if (!"self".equals(automationRelation(ctx, playerId, actor)))
@@ -6361,8 +6565,18 @@ public final class OnlineSessionServer {
                                          List<ObjectNode> messages, JsonNode commands,
                                          dmmt.online.automation.AutomationHost.Pack pack,
                                          String responseActorId, ObjectNode response, Runnable validateRoster) throws IOException {
+        commitAutomationResults(originals, changed, messages, commands, pack, responseActorId, response,
+                validateRoster, null, null);
+    }
+
+    private void commitAutomationResults(Map<String, String> originals, Map<String, ObjectNode> changed,
+                                         List<ObjectNode> messages, JsonNode commands,
+                                         dmmt.online.automation.AutomationHost.Pack pack,
+                                         String responseActorId, ObjectNode response, Runnable validateRoster,
+                                         ObjectNode expectedOffer, ObjectNode replacementOffer) throws IOException {
         Map<String, String> expected = new java.util.LinkedHashMap<>(originals);
         Set<String> affected = settleSingleHolderEffects(pack, expected, changed, commands);
+        List<ObjectNode> publishedMessages = new ArrayList<>(messages);
         pruneAutomationResultWindows(changed);
         if (response != null && affected.contains(responseActorId)) {
             String resultId = response.path("event").path("resultId").textValue();
@@ -6402,6 +6616,30 @@ public final class OnlineSessionServer {
                         throw new IllegalArgumentException("The automation table state is inconsistent. Retry the action.");
                     fear = next;
                 }
+                case "claim.offer" -> {
+                    Campaign.Actor source = automationActor(command.path("sourceActorId").asText());
+                    ObjectNode sourceSheet = changed.get(source.getId());
+                    if (sourceSheet == null || campaign.player(source.getOwnerId()) == null
+                            || automationHost.sources(pack, sourceSheet).stream()
+                            .noneMatch(element -> element.instanceId().equals(command.path("sourceInstanceId").asText())))
+                        throw new ClaimUnavailable("The offering source is no longer active.");
+                    if (!(command.path("originEvent") instanceof ObjectNode))
+                        throw new IllegalArgumentException("The claim offer has no originating event.");
+                    ObjectNode message = chatMessage(source.getOwnerId(), campaign.player(source.getOwnerId()).getName(),
+                            null, clip(command.path("label").asText("Benefit offered")));
+                    message.put("actorId", source.getId());
+                    ObjectNode claim = message.putObject("automationClaim")
+                            .put("sourceActorId", source.getId())
+                            .put("sourceInstanceId", command.path("sourceInstanceId").asText())
+                            .put("packRevision", pack.revision()).put("group", command.path("group").asText())
+                            .put("revision", 0);
+                    if (command.has("limit")) claim.set("limit", command.get("limit").deepCopy());
+                    claim.set("originEvent", command.get("originEvent").deepCopy());
+                    claim.putArray("claims");
+                    claim.putArray("receipts");
+                    claimLedger(claim);
+                    publishedMessages.add(message);
+                }
                 default -> throw new IllegalArgumentException("The host cannot apply this automation operation yet: " + kind);
             }
         }
@@ -6409,8 +6647,12 @@ public final class OnlineSessionServer {
             if (sheet.toString().getBytes(StandardCharsets.UTF_8).length > MAX_SHEET_BYTES)
                 throw new IllegalArgumentException("The character sheet is too large.");
         boolean fearChanged = fear != campaign.getFear();
-        store.saveAutomationResults(campaign.getId(), expected, changed, messages, fearChanged ? fear : null, countdowns,
-                validateRoster);
+        if (expectedOffer == null)
+            store.saveAutomationResults(campaign.getId(), expected, changed, publishedMessages, fearChanged ? fear : null, countdowns,
+                    validateRoster);
+        else
+            store.saveAutomationClaimResults(campaign.getId(), expected, changed, expectedOffer, replacementOffer,
+                    publishedMessages, fearChanged ? fear : null, countdowns, validateRoster);
         if (fearChanged || countdowns != null) {
             campaign.setFear(fear);
             if (countdowns != null) campaign.setCountdowns(countdowns);
@@ -6423,7 +6665,7 @@ public final class OnlineSessionServer {
             host.campaignChanged(campaign);
         }
         changed.forEach((id, sheet) -> sendFeatureState(campaign.actor(id), sheet));
-        for (ObjectNode message : messages) deliver(message, null, false);
+        for (ObjectNode message : publishedMessages) deliver(message, null, false);
     }
 
     private Campaign.Actor ownedActor(String playerId, String actorId) {

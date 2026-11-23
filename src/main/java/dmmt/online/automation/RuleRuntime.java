@@ -1395,7 +1395,9 @@ public final class RuleRuntime {
                 if ("damage.deal".equals(kind)) request.put("to", op.path("to").asText())
                         .put("amount", whole(op.path("amount"), context, 0, 1_000_000));
                 else if ("claim.offer".equals(kind)) {
-                    request.put("group", op.path("group").asText());
+                    request.put("group", op.path("group").asText())
+                            .put("sourceActorId", context.path("actor").path("id").asText());
+                    request.set("originEvent", context.path("event").deepCopy());
                     if (op.has("limit")) request.put("limit", whole(op.path("limit"), context, 0, 64));
                 }
                 else if (Set.of("table.gain", "table.spend").contains(kind)) {

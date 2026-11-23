@@ -20,7 +20,7 @@ The **Online Play** tab (next to DM Link) lets you host an optional, DM-controll
 who join from a browser. **It is not DM control** (that is DM Link below); players get restricted access.
 Nothing starts until you click **Start online session**, so offline play and the second-screen view are unchanged.
 
-**Automation rewrite (in development, not enabled in live play):** The replacement now has a generic
+**Automation rewrite (in development, available with format-2 catalogs):** The replacement now has a generic
 rule compiler, isolated host resolver, configurable text/choice controls, structured saved-roll calculations,
 numeric and individually identified dice pools with per-die controls. Executable JSON examples cover Deathrun,
 a mechanically different homebrew copy, a healing potion, and Prayer-Dice-shaped pool rules that contribute a
@@ -31,10 +31,11 @@ spending and bounded HP marks; and apply recipient-targeted actions guarded by a
 Independent fixtures exercise offline recipients and stale claim revisions. For format-2 sheet actions the host
 saves reports, the sheet and any Fear or countdown changes in one transaction. Unsupported host operations
 reject the action without spending its costs.
-The claim transaction storage can strictly look up an unambiguous offer and compare and journal it with participating sheets;
-recovery rejects conflicting offer or report history. Live
-cross-player claim offers and acceptance are not yet connected. An authored claim offer must name an acceptance group
-on the `claim.accept` chat surface of the same source.
+Authored claim offers, including per-card ally rest benefits, appear in chat with choices for eligible owned
+characters. The host checks the offering source and saved claim ledger, then journals the offer, participating
+sheets and reports together; retrying the same request does not apply the benefit twice. A claim offer must name
+an acceptance group on the `claim.accept` chat surface of the same active source. Inventory grants and other
+unsupported claim commands still reject without spending the claim.
 Ending a scene or starting a new session with a format-2 pack applies its automatic rules, limit and pool
 resets, and timed effect expiry to saved active characters, including offline ones, in a single campaign commit.
 Reset expressions use the same host-generated actor, table and session facts as lifecycle rules. Pool reset

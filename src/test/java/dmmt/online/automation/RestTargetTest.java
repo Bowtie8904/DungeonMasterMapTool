@@ -748,7 +748,7 @@ class RestTargetTest {
     }
 
     @Test
-    void recoveryStagingLoadsNoScopeWithoutARequestAndRejectsUnsettledAllyOffers() throws Exception {
+    void recoveryStagingLoadsNoScopeForDeferredAllyOffers() throws Exception {
         ObjectNode ruleset = rulesetWithPartyRecovery("activePlayerCharacters");
         ArrayNode rules = ruleset.withObject("/automation").withArray("rules");
         rules.add(RuleJson.parse("""
@@ -774,17 +774,16 @@ class RestTargetTest {
         assertTrue(staged.scopeMembership().isEmpty());
         assertTrue(staged.scopeOrder().isEmpty());
 
-        ObjectNode before = setup.source().deepCopy();
         ObjectNode gift = transaction(setup);
         gift.withArray("completion").addObject().put("sourceInstanceId", "ruleset:base")
                 .put("ruleId", "gift").put("bindingId", "rest");
-        var error = assertThrows(RuleRuntime.Unavailable.class, () ->
-                HOST.stageRestWithPartyRecovery(setup.pack(), setup.source(),
-                        AutomationHost.event("action.request", "ada", 1).put("sessionId", "session"),
-                        gift, StructuredRollTest.noRandom(), noScope));
-        assertEquals("restCommand", error.code());
-        assertTrue(error.getMessage().contains("claim.offer"));
-        assertEquals(before, setup.source());
+        var offered = HOST.stageRestWithPartyRecovery(setup.pack(), setup.source(),
+                AutomationHost.event("action.request", "ada", 1).put("sessionId", "session"),
+                gift, StructuredRollTest.noRandom(), noScope);
+        assertEquals("claim.offer", offered.response().at("/outbox/0/kind").asText());
+        assertEquals("ada", offered.response().at("/outbox/0/sourceActorId").asText());
+        assertEquals("rest.short", offered.response().at("/outbox/0/originEvent/type").asText());
+        assertTrue(offered.scopeMembership().isEmpty());
     }
 
     @Test

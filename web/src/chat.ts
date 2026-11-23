@@ -255,7 +255,7 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
       el('strong', {}, report.kind === 'long' ? 'Long rest' : 'Short rest')),
     el('div', { class: 'rest-subtitle' }, report.subtitle),
     el('ul', { class: 'rest-moves' }, ...report.lines.map((l) => el('li', {}, l))));
-    if (e.kind === 'chat' && rollActions && (e.m.restDice?.length || e.m.actionBenefits)) {
+    if (e.kind === 'chat' && rollActions && (e.m.restDice?.length || e.m.actionBenefits || e.m.automationClaim)) {
       const actions = rollActions(e.m);
       if (actions) card.append(actions);
     }
@@ -286,7 +286,7 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
           el('div', { class: 'shared-source' }, m.rollSource.source),
           el('strong', {}, m.rollSource.name), rich(m.rollSource.text))));
     }
-    if (e.kind === 'chat' && e.m.actionBenefits && rollActions) {
+    if (e.kind === 'chat' && (e.m.actionBenefits || e.m.automationClaim) && rollActions) {
       const actions = rollActions(e.m);
       if (actions) card.append(actions);
     }
@@ -313,7 +313,7 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
         el('div', { class: 'shared-source' }, m.rollSource.source),
         el('strong', {}, m.rollSource.name), rich(m.rollSource.text))));
   }
-  if (rollActions && (e.kind === 'roll' || e.m.actionBenefits || e.m.reactionPrompt)) {
+  if (rollActions && (e.kind === 'roll' || e.m.actionBenefits || e.m.automationClaim || e.m.reactionPrompt)) {
     const actions = rollActions(e.m);
     if (actions) card.append(actions);
   }

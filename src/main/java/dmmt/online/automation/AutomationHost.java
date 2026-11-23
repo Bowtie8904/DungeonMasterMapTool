@@ -37,9 +37,9 @@ public final class AutomationHost {
     private static final int MAX_PARTY_RECOVERIES = 1024;
     private static final int MAX_REACTION_PROJECTION_PASSES = 16;
     private static final Set<String> STAGED_REST_COMMANDS = Set.of(
-            "countdown.start", "limits.refresh", "effect.endElsewhere", "table.gain", "table.spend");
+            "countdown.start", "limits.refresh", "effect.endElsewhere", "table.gain", "table.spend", "claim.offer");
     private static final Set<String> STAGED_TARGET_REST_COMMANDS = Set.of(
-            "countdown.start", "limits.refresh", "table.gain", "table.spend");
+            "countdown.start", "limits.refresh", "table.gain", "table.spend", "claim.offer");
     static final String RULESET_SOURCE = "ruleset:base";
 
     /** Compiled automation keyed by fully qualified source ID. */
@@ -2922,6 +2922,85 @@ public final class AutomationHost {
 
     public ObjectNode recipientSnapshot(Pack pack, ObjectNode sheet, ObjectNode event, String recipientId) {
         return actor(pack, sheet, projection.state(sheet), event.deepCopy().put("actorId", recipientId));
+    }
+
+    /** Describes one saved offer against the current source and recipient sheets. */
+    public ObjectNode describeClaim(Pack pack, ObjectNode sourceSheet, ObjectNode recipientSheet, ObjectNode event,
+                                    String sourceInstanceId, String group, String recipientId, String relation) {
+        relation(relation);
+        RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(sourceInstanceId), "/claim/sourceInstanceId");
+        RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(group), "/claim/group");
+        ObjectNode source = sourceSheet.deepCopy(), recipient = recipientSheet.deepCopy();
+        var candidates = candidates(pack, source, event);
+        var candidate = candidates.stream().filter(item -> sourceInstanceId.equals(item.instanceId())).findFirst()
+                .orElseThrow(() -> new RuleRuntime.Unavailable("source", "The offering source is no longer active."));
+        ObjectNode recipientActor = recipientSnapshot(pack, recipient, event, recipientId);
+        String sourceId = candidate.context().path("actor").path("id").asText();
+        ObjectNode context = candidate.context().deepCopy();
+        context.set("recipient", recipientActor);
+        ObjectNode result = RuleJson.JSON.createObjectNode()
+                .put("revision", revision(source)).put("recipientRevision", revision(recipient));
+        ArrayNode actions = result.putArray("actions");
+        for (var ref : candidate.program().bindings("claim.accept", "chat")) {
+            if (!group.equals(ref.claimGroup())) continue;
+            JsonNode binding = RuleDispatcher.binding(candidate.program().rule(ref.ruleId()), ref.bindingId());
+            if (!claimAllowed(binding, sourceId, recipientId, relation)) continue;
+            if (ref.forEach()) actions.addAll(RuleRuntime.describeEach(candidate.program(), ref.ruleId(), ref.bindingId(), context));
+            else actions.add(RuleRuntime.describe(candidate.program(), ref.ruleId(), ref.bindingId(), context));
+        }
+        return result;
+    }
+
+    /** Applies a selected claim to private sheets; the caller commits these with the saved offer and ledger. */
+    public ObjectNode stageClaim(Pack pack, ObjectNode sourceSheet, ObjectNode recipientSheet, ObjectNode event,
+                                 String sourceInstanceId, String group, String recipientId, String relation, ObjectNode selection,
+                                 long expectedSourceRevision, long expectedRecipientRevision,
+                                 long expectedClaimRevision, RuleDispatcher.ClaimLedger ledger, RandomGenerator random) {
+        relation(relation);
+        if (revision(sourceSheet) != expectedSourceRevision)
+            throw new RuleRuntime.Unavailable("stale", "The offering character changed. Reopen this offer.");
+        if (revision(recipientSheet) != expectedRecipientRevision)
+            throw new RuleRuntime.Unavailable("staleRecipient", "The recipient changed. Reopen this offer.");
+        ObjectNode request = RuleJson.JSON.createObjectNode();
+        request.putArray("selections").add(selection);
+        var candidates = candidates(pack, sourceSheet, event);
+        var intent = selections(request, candidates, expectedSourceRevision, relation, "chat", false).getFirst();
+        if (!sourceInstanceId.equals(intent.sourceInstanceId()))
+            throw RuleJson.error("/claim/selection", "The selected source does not match this offer.");
+        var candidate = candidates.stream().filter(item -> sourceInstanceId.equals(item.instanceId())).findFirst()
+                .orElseThrow(() -> new RuleRuntime.Unavailable("source", "The offering source is no longer active."));
+        JsonNode binding = RuleDispatcher.binding(candidate.program().rule(intent.ruleId()), intent.bindingId());
+        ObjectNode recipient = recipientSnapshot(pack, recipientSheet, event, recipientId);
+        String sourceId = candidate.context().path("actor").path("id").asText();
+        if (!"claim.accept".equals(binding.path("event").asText())
+                || !group.equals(binding.path("claimGroup").asText()))
+            throw RuleJson.error("/claim/selection", "This action does not belong to the offer.");
+        if (!claimAllowed(binding, sourceId, recipientId, relation))
+            throw new SecurityException("This character cannot accept the offer.");
+        var resolved = RuleDispatcher.executeClaims(candidates,
+                List.of(new RuleDispatcher.ClaimIntent(intent, recipientId, expectedRecipientRevision, expectedClaimRevision)),
+                List.of(new RuleDispatcher.RecipientCandidate(recipientId, recipient, expectedRecipientRevision)),
+                ledger, random, pack.programs());
+        var actions = resolved.actions().stream().map(RuleDispatcher.ClaimActionResult::action).toList();
+        if (actions.stream().anyMatch(action -> !action.publishedRolls().isEmpty()))
+            throw RuleJson.error("/claim/selection", "Claim actions cannot publish or revise rolls yet.");
+        ObjectNode result = applyResolved(pack, sourceSheet, projection.state(sourceSheet), event,
+                resolved.sourceContexts(), actions, resolved.outbox());
+        for (var update : resolved.recipients()) writeRecipient(recipientSheet, update);
+        result.put("claimRevision", resolved.ledger().revision());
+        return result;
+    }
+
+    private static boolean claimAllowed(JsonNode binding, String sourceId, String recipientId, String relation) {
+        if (!allowed(binding.path("audience").asText("self"), relation)) return false;
+        boolean self = sourceId.equals(recipientId);
+        if (self && binding.path("claimScope").path("excludeSource").asBoolean(false)) return false;
+        return switch (binding.path("claimScope").path("recipients").asText("otherPlayersCharacters")) {
+            case "sourceActor" -> self;
+            case "playerCharacters" -> !"dm".equals(relation);
+            case "otherPlayersCharacters" -> !self && "other".equals(relation);
+            default -> false;
+        };
     }
 
     public void writeRecipient(ObjectNode stagedSheet, RuleDispatcher.RecipientUpdate update) {

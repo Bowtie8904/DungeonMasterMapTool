@@ -115,6 +115,14 @@ class CampaignStoreTest {
         assertEquals(fear, store.load(id).getFear());
 
         var current = java.util.Map.of("source", store.loadSheet(id, "source"), "recipient", store.loadSheet(id, "recipient"));
+        assertThrows(IllegalStateException.class, () -> store.saveAutomationClaimResults(id, current, changed,
+                offer, claimed, List.of(report), fear + 1, null, () -> {
+                    assertTrue(Thread.holdsLock(store));
+                    throw new IllegalStateException("Roster changed.");
+                }));
+        assertEquals(current.get("recipient"), store.loadSheet(id, "recipient"));
+        assertEquals(List.of(offer), store.historyTail(id, 10));
+        assertEquals(fear, store.load(id).getFear());
         assertThrows(IllegalArgumentException.class, () -> store.saveAutomationClaimResults(id, current, changed,
                 offer, claimed.deepCopy().put("id", 9), List.of(report), fear + 1, null));
         assertThrows(IllegalArgumentException.class, () -> store.saveAutomationClaimResults(id, current, changed,

@@ -477,12 +477,21 @@ public final class CampaignStore {
                                                  Map<String, ObjectNode> sheets, ObjectNode expectedOffer,
                                                  ObjectNode replacement, List<ObjectNode> messages, Integer fear,
                                                  List<Campaign.Countdown> countdowns) throws IOException {
+        saveAutomationClaimResults(campaignId, expectedSheets, sheets, expectedOffer, replacement, messages, fear,
+                countdowns, null);
+    }
+
+    synchronized void saveAutomationClaimResults(String campaignId, Map<String, String> expectedSheets,
+                                                 Map<String, ObjectNode> sheets, ObjectNode expectedOffer,
+                                                 ObjectNode replacement, List<ObjectNode> messages, Integer fear,
+                                                 List<Campaign.Countdown> countdowns, Runnable validateRoster) throws IOException {
         HistoryIdentity identity = historyIdentity(expectedOffer);
         if (!identity.equals(historyIdentity(replacement)))
             throw new IllegalArgumentException("The replacement claim message must retain its identity.");
         recoverSheetTransfer(campaignId);
         HistoryIndex history = historyIndex(campaignId);
         if (!expectedOffer.equals(history.uniqueEntry(identity.id(), identity.timestamp()))) throw new StaleAutomationClaim();
+        if (validateRoster != null) validateRoster.run();
         checkAutomationSheets(campaignId, expectedSheets, sheets);
         java.util.Set<HistoryIdentity> newIdentities = new java.util.HashSet<>();
         for (ObjectNode message : messages) {

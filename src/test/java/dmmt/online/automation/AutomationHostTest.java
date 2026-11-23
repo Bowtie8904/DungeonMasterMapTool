@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.SplittableRandom;
 
 import static dmmt.online.automation.RuleConformanceTest.fixture;
@@ -986,6 +987,31 @@ class AutomationHostTest {
         assertEquals(List.of("stay"), HOST.describeResult(pack, sheet, resultId, "self", "owner", origin)
                 .required("actions").findValuesAsText("ruleId"));
         assertThrows(RuleRuntime.Unavailable.class, () -> HOST.describeResult(pack, sheet, oldId, "self", "owner", origin));
+    }
+
+    @Test
+    void deferredClaimCannotPublishAnUncommittedRollRevision() throws Exception {
+        ObjectNode classes = fixture("rewrite/host-classes");
+        ObjectNode automation = (ObjectNode) classes.at("/entries/0/features/2/automation");
+        automation.set("rules", RuleJson.parse("""
+                [{"id":"claim","bindings":[{"id":"use","event":"claim.accept","surface":"chat","mode":"button",
+                   "claimGroup":"reward","claimScope":{"recipients":"sourceActor"}}],
+                  "do":[{"op":"roll.contribute","from":{"read":"event.roll"},"as":"edited",
+                         "contribution":{"id":"claim-extra","kind":"flat","role":"damage","label":"Bonus","value":2}},
+                        {"op":"roll.publish","roll":{"read":"result.edited"}}],"ui":{"label":"Claim"}}]"""));
+        var pack = AutomationHost.compile("test", Map.of("classes", classes.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet(), origin = AutomationHost.event("action.request", "actor", 0).put("sessionId", "session");
+        ObjectNode rolled = HOST.execute(pack, sheet, origin, profileRequest("roll", 0, "f-steady", "thrown", "damage"),
+                "self", "owner", new SplittableRandom(2));
+        ObjectNode event = ((ObjectNode) rolled.required("event")).deepCopy().put("type", "claim.accept");
+        ObjectNode before = sheet.deepCopy();
+        ObjectNode selection = ((ObjectNode) request("claim", 1, "f-steady", "claim").requiredAt("/selections/0"))
+                .put("bindingId", "use");
+        var ledger = new RuleDispatcher.ClaimLedger(0, Set.of());
+        var error = assertThrows(IllegalArgumentException.class, () -> HOST.stageClaim(pack, sheet, sheet, event,
+                "f-steady", "reward", "actor", "self", selection, 1, 1, 0, ledger, null));
+        assertTrue(error.getMessage().contains("cannot publish or revise rolls"), error.getMessage());
+        assertEquals(before, sheet);
     }
 
     @Test

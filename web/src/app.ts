@@ -16,6 +16,7 @@ import { rosterPlayerName } from './roster';
 import { setGmFear } from './daggerheart/engine';
 import { rollButtons } from './daggerheart/rollbuttons';
 import { historyResultControls } from './automation/panel';
+import { historyClaimControls } from './automation/claims';
 import { ChatActionReports } from './chat-action-reports';
 import { addToSheet, needsInventoryRarityCatalogs, refreshInventoryRarities } from './daggerheart/compendium';
 import { CompendiumPanel } from './compendium';
@@ -1403,6 +1404,9 @@ export class App {
   private actionReports?: ChatActionReports;
 
   private rollActions(m: RollMessage | import('./protocol').ChatMessage): HTMLElement | null {
+    if ('automationClaim' in m && m.automationClaim) {
+      return historyClaimControls(m, this.myActors.filter(actor => !actor.disabled));
+    }
     if ('automationEvent' in m && m.automationEvent) {
       return historyResultControls(m, this.playerId, this.conn.sessionId,
         this.myActors.some(actor => actor.id === m.actorId && !actor.disabled));
