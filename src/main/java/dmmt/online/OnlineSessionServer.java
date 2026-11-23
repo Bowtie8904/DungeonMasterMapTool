@@ -5864,7 +5864,7 @@ public final class OnlineSessionServer {
                     messages.add(actionReportMessage(actor, source, source.path("name").asText("Automation"), List.of(report), null));
                 }
                 commitAutomationResults(roster == null ? java.util.Collections.singletonMap(actor.getId(), original) : roster.originals,
-                        changed, messages, response.path("outbox"));
+                        changed, messages, response.path("outbox"), pack, actor.getId(), response);
             }
             json(ctx, 200, response);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
@@ -5915,7 +5915,7 @@ public final class OnlineSessionServer {
         String title = session ? "NEW SESSION\nSession and scene limits reset." : "SCENE ENDED\nScene limits reset.";
         var message = chatMessage("dm", "DM", null, clip(lines.isEmpty() ? title : title + "\n" + String.join("\n", lines)));
         message.put("system", session ? "newSession" : "sceneEnd");
-        commitAutomationResults(originals, changed, List.of(message), commands);
+        commitAutomationResults(originals, changed, List.of(message), commands, pack, null, null);
     }
 
     private void pruneAutomationResultWindows(ObjectNode sheet, Campaign.Actor actor) throws IOException {
@@ -5972,15 +5972,76 @@ public final class OnlineSessionServer {
         return message.put("expression", formula.startsWith("+") ? formula.substring(1) : formula);
     }
 
+    private record SingleHolderKey(String sourceActorId, String sourceInstanceId, String effect) {}
+
+    private Set<String> settleSingleHolderEffects(dmmt.online.automation.AutomationHost.Pack pack,
+                                                  Map<String, String> originals, Map<String, ObjectNode> changed,
+                                                  JsonNode commands) throws IOException {
+        Map<SingleHolderKey, dmmt.online.automation.AutomationHost.SingleHolderEffect> latest = new java.util.LinkedHashMap<>();
+        for (JsonNode command : commands) {
+            if (!"effect.endElsewhere".equals(command.path("kind").asText())) continue;
+            var effect = automationHost.singleHolderCommand(pack, command);
+            if (campaign.actor(effect.sourceActorId()) == null || campaign.actor(effect.holder()) == null
+                    || !changed.containsKey(effect.holder()))
+                throw new IllegalArgumentException("The source or holder of a single-holder effect is no longer available.");
+            var key = new SingleHolderKey(effect.sourceActorId(), effect.sourceInstanceId(), effect.effect());
+            latest.remove(key);
+            latest.put(key, effect);
+        }
+        if (latest.isEmpty()) return Set.of();
+        List<dmmt.online.automation.AutomationHost.SingleHolderEffect> effects = List.copyOf(latest.values());
+        Set<String> affected = new java.util.HashSet<>();
+        for (Campaign.Actor actor : campaign.getActors()) {
+            String id = actor.getId();
+            if (!originals.containsKey(id)) originals.put(id, store.loadSheet(campaign.getId(), id));
+            boolean alreadyChanged = changed.containsKey(id);
+            ObjectNode sheet = changed.get(id);
+            if (sheet == null) {
+                String original = originals.get(id);
+                if (original == null) continue;
+                JsonNode parsed;
+                try {
+                    parsed = MAPPER.readTree(original);
+                } catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
+                    throw new IOException("Invalid stored sheet for " + id + ".", ex);
+                }
+                if (!(parsed instanceof ObjectNode saved))
+                    throw new IOException("Invalid stored sheet for " + id + ".");
+                sheet = saved;
+            }
+            if (automationHost.endEffectsElsewhere(pack, sheet, automationEvent("action.request", actor), effects, !alreadyChanged)) {
+                affected.add(id);
+                if (!alreadyChanged) {
+                    sheet.put("featureRevision", sheet.path("featureRevision").asLong(0) + 1);
+                    changed.put(id, sheet);
+                }
+            }
+        }
+        return affected;
+    }
+
     private void commitAutomationResults(Map<String, String> originals, Map<String, ObjectNode> changed,
-                                         List<ObjectNode> messages, JsonNode commands) throws IOException {
+                                         List<ObjectNode> messages, JsonNode commands,
+                                         dmmt.online.automation.AutomationHost.Pack pack,
+                                         String responseActorId, ObjectNode response) throws IOException {
+        Map<String, String> expected = new java.util.LinkedHashMap<>(originals);
+        Set<String> affected = settleSingleHolderEffects(pack, expected, changed, commands);
         pruneAutomationResultWindows(changed);
+        if (response != null && affected.contains(responseActorId)) {
+            String resultId = response.path("event").path("resultId").textValue();
+            if (automationHost.reconcileResultOffer(pack, changed.get(responseActorId), response)
+                    && resultId != null && !response.path("event").has("resultId"))
+                for (ObjectNode message : messages)
+                    if (message.path("automationEvent") instanceof ObjectNode event
+                            && resultId.equals(event.path("resultId").textValue())) event.remove("resultId");
+        }
         int fear = campaign.getFear();
         List<Campaign.Countdown> countdowns = null;
         for (JsonNode command : commands) {
             String kind = command.required("kind").asText();
             switch (kind) {
                 case "limits.refresh" -> { /* Already applied by AutomationHost. */ }
+                case "effect.endElsewhere" -> { /* Reconciled across staged sheets above. */ }
                 case "countdown.start" -> {
                     if (countdowns == null) countdowns = new ArrayList<>(campaign.getCountdowns());
                     int value = command.required("value").intValue();
@@ -6003,7 +6064,7 @@ public final class OnlineSessionServer {
             if (sheet.toString().getBytes(StandardCharsets.UTF_8).length > MAX_SHEET_BYTES)
                 throw new IllegalArgumentException("The character sheet is too large.");
         boolean fearChanged = fear != campaign.getFear();
-        store.saveAutomationResults(campaign.getId(), originals, changed, messages, fearChanged ? fear : null, countdowns);
+        store.saveAutomationResults(campaign.getId(), expected, changed, messages, fearChanged ? fear : null, countdowns);
         if (fearChanged || countdowns != null) {
             campaign.setFear(fear);
             if (countdowns != null) campaign.setCountdowns(countdowns);

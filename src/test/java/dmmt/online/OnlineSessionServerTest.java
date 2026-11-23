@@ -1726,6 +1726,464 @@ class OnlineSessionServerTest {
         assertEquals(history + 1, store.historyTail(campaignId, 100).size());
     }
 
+    private void installSingleHolderActions() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/0/automation");
+        automation.removeAll();
+        automation.setAll((ObjectNode) MAPPER.readTree("""
+                {"pools":{"charge":{"kind":"number","scope":"actor","max":4,"whileEffect":"ward"}},
+                 "effects":{"ward":{"label":"Ward","singleHolder":true,"stacking":"stack"}},
+                 "rules":[
+                  {"id":"cast","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                   "costs":[{"op":"resource.spend","pool":"actor.hope","amount":1}],
+                   "do":[{"op":"effect.start","effect":"ward","target":"actor"},
+                         {"op":"table.gain","resource":"fear","amount":1,"label":"Fear"}],
+                   "ui":{"label":"Cast","report":"Cast ward."}},
+                  {"id":"cast-end","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                   "do":[{"op":"effect.start","effect":"ward","target":"actor"},
+                         {"op":"effect.end","effect":"ward","target":"actor"}],
+                   "ui":{"label":"Cast and end"}},
+                  {"id":"cast-all","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button",
+                    "targetSelection":{"cardinality":"all","scope":"activePlayerCharacters","excludeSource":true}}],
+                   "costs":[{"op":"resource.spend","pool":"actor.hope","amount":1}],
+                   "do":[{"op":"effect.start","effect":"ward","target":"recipient"},
+                         {"op":"pool.gain","pool":"charge","owner":"recipient","amount":1}],
+                   "ui":{"label":"Cast party","report":"Ward for {recipient.name}."}}]}"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+    }
+
+    @Test
+    void singleHolderTransfersOfflineAndDisabledEffectsAtomicallyAndNeverGuessesIdentity() throws Exception {
+        installSingleHolderActions();
+        String id = campaign.getId();
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("offline").name("Offline").ownerId("other").build());
+        campaign.getActors().add(Campaign.Actor.builder().id("disabled").name("Disabled").ownerId("other").disabled(true).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("other-caster").name("Other").build());
+        store.saveSheet(id, "caster", """
+                {"name":"Ada","hope":{"slots":6,"on":3},"features":[
+                 {"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"}]}""");
+        store.saveSheet(id, "offline", """
+                {"name":"Offline","automationState":{"revision":0,"pools":{"charge":{"value":3,"max":4}},"effects":[
+                 {"id":"old","effect":"classes:tester:features:rally#ward","sourceInstanceId":"r","label":"Ward"},
+                 {"id":"unknown","effect":"classes:missing:features:source#guard","sourceInstanceId":"missing","label":"Unknown"}]}}""");
+        store.saveSheet(id, "disabled", """
+                {"name":"Disabled","automationState":{"revision":0,"pools":{"charge":{"value":2,"max":4}},"effects":[
+                 {"id":"old-disabled","effect":"classes:tester:features:rally#ward","sourceInstanceId":"r","sourceActorId":"caster","label":"Ward"},
+                 {"id":"foreign","effect":"classes:tester:features:rally#ward","sourceInstanceId":"r","sourceActorId":"other-caster","label":"Ward"}]}}""");
+        String cookie = cookie(), casterBefore = store.loadSheet(id, "caster"), disabledBefore = store.loadSheet(id, "disabled");
+        int history = store.historyTail(id, 100).size(), fear = campaign.getFear();
+        String request = """
+                {"request":{"requestId":"transfer","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"r","ruleId":"cast","bindingId":"sheet"}]}}""";
+
+        String before = store.loadSheet(id, "offline");
+        var ambiguous = automationHttp(cookie, "caster", request);
+        assertEquals(400, ambiguous.statusCode(), ambiguous.body());
+        assertTrue(ambiguous.body().contains("Migrate or repair"), ambiguous.body());
+        assertEquals(before, store.loadSheet(id, "offline"));
+        assertEquals(casterBefore, store.loadSheet(id, "caster"));
+        assertEquals(disabledBefore, store.loadSheet(id, "disabled"));
+        assertEquals(fear, campaign.getFear());
+        assertEquals(history, store.historyTail(id, 100).size());
+
+        ObjectNode repaired = (ObjectNode) MAPPER.readTree(before);
+        ((ObjectNode) repaired.at("/automationState/effects/0")).put("sourceActorId", "caster");
+        store.saveSheet(id, "offline", repaired.toString());
+        var unresolved = automationHttp(cookie, "caster", request);
+        assertEquals(400, unresolved.statusCode(), unresolved.body());
+        assertTrue(unresolved.body().contains("unknown effect definition"), unresolved.body());
+        assertEquals(repaired.toString(), store.loadSheet(id, "offline"));
+        assertEquals(casterBefore, store.loadSheet(id, "caster"));
+        assertEquals(disabledBefore, store.loadSheet(id, "disabled"));
+        assertEquals(history, store.historyTail(id, 100).size());
+
+        repaired.withArray("/automationState/effects").remove(1);
+        ((ObjectNode) repaired.at("/automationState/pools/charge")).put("value", "bad");
+        store.saveSheet(id, "offline", repaired.toString());
+        var malformed = automationHttp(cookie, "caster", request);
+        assertEquals(400, malformed.statusCode(), malformed.body());
+        assertEquals(repaired.toString(), store.loadSheet(id, "offline"));
+        assertEquals(casterBefore, store.loadSheet(id, "caster"));
+        assertEquals(disabledBefore, store.loadSheet(id, "disabled"));
+        assertEquals(fear, campaign.getFear());
+        assertEquals(history, store.historyTail(id, 100).size());
+
+        ((ObjectNode) repaired.at("/automationState/pools/charge")).put("value", 3);
+        store.saveSheet(id, "offline", repaired.toString());
+        var applied = automationHttp(cookie, "caster", request);
+        assertEquals(200, applied.statusCode(), applied.body());
+        assertEquals(applied.body(), automationHttp(cookie, "caster", request).body());
+        var reopened = new CampaignStore(temp.resolve("campaigns"));
+        JsonNode caster = MAPPER.readTree(reopened.loadSheet(id, "caster"));
+        JsonNode offline = MAPPER.readTree(reopened.loadSheet(id, "offline"));
+        JsonNode disabled = MAPPER.readTree(reopened.loadSheet(id, "disabled"));
+        assertEquals(2, caster.at("/hope/on").asInt());
+        assertEquals("caster", caster.at("/automationState/effects/0/sourceActorId").asText());
+        assertEquals(1, caster.at("/automationState/revision").asInt());
+        assertTrue(offline.at("/automationState/effects").isEmpty());
+        assertEquals(0, offline.at("/automationState/pools/charge/value").asInt());
+        assertEquals(1, offline.at("/automationState/revision").asInt());
+        assertEquals(1, offline.path("featureRevision").asInt());
+        assertEquals(List.of("foreign"), disabled.at("/automationState/effects").findValuesAsText("id"));
+        assertEquals(2, disabled.at("/automationState/pools/charge/value").asInt());
+        assertEquals(1, disabled.at("/automationState/revision").asInt());
+        assertEquals(fear + 1, campaign.getFear());
+        assertEquals(history + 1, store.historyTail(id, 100).size());
+    }
+
+    @Test
+    void singleHolderFanoutKeepsTheLastTargetAndPrunesThePriorSourcesResult() throws Exception {
+        installSingleHolderActions();
+        String cookie = cookie(), id = campaign.getId();
+        allyCookie("other");
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally-a").name("A").ownerId("other").build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally-z").name("Z").ownerId("other").build());
+        campaign.getActors().add(Campaign.Actor.builder().id("retired").name("Retired").ownerId("other").disabled(true).build());
+        store.saveSheet(id, "caster", """
+                {"name":"Ada","hope":{"slots":6,"on":3},"features":[
+                 {"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"}],
+                 "automationState":{"revision":0,"pools":{"charge":{"value":3,"max":4}},"effects":[
+                  {"id":"self-old","effect":"classes:tester:features:rally#ward","sourceInstanceId":"r","sourceActorId":"caster","label":"Ward"}],
+                  "resultWindows":{"pack":"old","principal":"owner","results":[{"id":"result","origin":"r",
+                   "guard":{"sourceId":"classes:tester:features:rally","activations":{"self-old":true}},
+                   "buttons":[{"sourceInstanceId":"r","ruleId":"unused","bindingId":"button",
+                    "guard":{"sourceId":"classes:tester:features:rally","activations":{"self-old":true}}}]}]}}}""");
+        store.saveSheet(id, "ally-a", "{\"name\":\"A\"}");
+        store.saveSheet(id, "ally-z", "{\"name\":\"Z\"}");
+        store.saveSheet(id, "retired", """
+                {"name":"Retired","automationState":{"revision":0,"pools":{"charge":{"value":2,"max":4}},"effects":[
+                 {"id":"old","effect":"classes:tester:features:rally#ward","sourceInstanceId":"r","sourceActorId":"caster","label":"Ward"}]}}""");
+        var described = automationHttp(cookie, "caster", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode offer = null;
+        for (JsonNode action : MAPPER.readTree(described.body()).path("actions"))
+            if ("cast-all".equals(action.path("ruleId").asText())) offer = action.path("targetSelection");
+        assertNotNull(offer);
+        assertEquals(List.of("ally-a", "ally-z"), offer.path("options").findValuesAsText("id"));
+        ObjectNode body = MAPPER.createObjectNode();
+        ObjectNode request = body.putObject("request").put("requestId", "party").put("expectedRevision", 0);
+        request.putArray("selections").addObject().put("sourceInstanceId", "r").put("ruleId", "cast-all").put("bindingId", "sheet");
+        request.putObject("target").set("version", offer.required("version"));
+        var applied = automationHttp(cookie, "caster", body.toString());
+        assertEquals(200, applied.statusCode(), applied.body());
+        assertEquals(List.of("ally-a", "ally-z"), MAPPER.readTree(applied.body()).path("actions").findValuesAsText("recipientId"));
+        JsonNode caster = MAPPER.readTree(store.loadSheet(id, "caster"));
+        JsonNode first = MAPPER.readTree(store.loadSheet(id, "ally-a"));
+        JsonNode last = MAPPER.readTree(store.loadSheet(id, "ally-z"));
+        JsonNode retired = MAPPER.readTree(store.loadSheet(id, "retired"));
+        assertEquals(2, caster.at("/hope/on").asInt());
+        assertTrue(caster.at("/automationState/effects").isEmpty());
+        assertEquals(0, caster.at("/automationState/pools/charge/value").asInt());
+        assertFalse(caster.path("automationState").has("resultWindows"));
+        assertTrue(first.at("/automationState/effects").isEmpty());
+        assertEquals(0, first.at("/automationState/pools/charge/value").asInt());
+        assertEquals(1, first.at("/automationState/revision").asInt());
+        assertEquals(1, first.path("featureRevision").asInt());
+        assertEquals("caster", last.at("/automationState/effects/0/sourceActorId").asText());
+        assertEquals(1, last.at("/automationState/pools/charge/value").asInt());
+        assertEquals(1, last.at("/automationState/revision").asInt());
+        assertTrue(retired.at("/automationState/effects").isEmpty());
+        assertEquals(0, retired.at("/automationState/pools/charge/value").asInt());
+        assertEquals(1, retired.at("/automationState/revision").asInt());
+        String firstSaved = store.loadSheet(id, "ally-a"), lastSaved = store.loadSheet(id, "ally-z");
+        int history = store.historyTail(id, 100).size();
+        assertEquals(applied.body(), automationHttp(cookie, "caster", body.toString()).body());
+        assertEquals(firstSaved, store.loadSheet(id, "ally-a"));
+        assertEquals(lastSaved, store.loadSheet(id, "ally-z"));
+        assertEquals(history, store.historyTail(id, 100).size());
+    }
+
+    @Test
+    void singleHolderReplacementDoesNotGuessAnUnmigratedTargetEffect() throws Exception {
+        installSingleHolderActions();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/0/automation");
+        ((ObjectNode) automation.at("/effects/ward")).put("stacking", "replace");
+        ((ObjectNode) automation.at("/rules/2/bindings/0/targetSelection")).put("cardinality", "one");
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String cookie = cookie(), id = campaign.getId();
+        allyCookie("other");
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Ally").ownerId("other").build());
+        store.saveSheet(id, "caster", """
+                {"name":"Ada","hope":{"slots":6,"on":3},"features":[
+                 {"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"}]}""");
+        store.saveSheet(id, "ally", """
+                {"name":"Ally","automationState":{"revision":0,"pools":{"charge":{"value":3,"max":4}},"effects":[
+                 {"id":"unknown-owner","effect":"classes:tester:features:rally#ward","sourceInstanceId":"r","label":"Ward"}]}}""");
+        JsonNode offer = null;
+        var description = automationHttp(cookie, "caster", null);
+        assertEquals(200, description.statusCode(), description.body());
+        for (JsonNode action : MAPPER.readTree(description.body()).path("actions"))
+            if ("cast-all".equals(action.path("ruleId").asText())) offer = action.path("targetSelection");
+        assertNotNull(offer);
+        ObjectNode body = MAPPER.createObjectNode();
+        ObjectNode request = body.putObject("request").put("requestId", "target").put("expectedRevision", 0);
+        request.putArray("selections").addObject().put("sourceInstanceId", "r").put("ruleId", "cast-all").put("bindingId", "sheet");
+        ObjectNode target = request.putObject("target").put("recipientId", "ally");
+        target.set("version", offer.requiredAt("/options/0/version"));
+        String casterBefore = store.loadSheet(id, "caster"), allyBefore = store.loadSheet(id, "ally");
+        var refused = automationHttp(cookie, "caster", body.toString());
+        assertEquals(400, refused.statusCode(), refused.body());
+        assertTrue(refused.body().contains("Migrate or repair"), refused.body());
+        assertEquals(casterBefore, store.loadSheet(id, "caster"));
+        assertEquals(allyBefore, store.loadSheet(id, "ally"));
+
+        ObjectNode repaired = (ObjectNode) MAPPER.readTree(allyBefore);
+        ((ObjectNode) repaired.at("/automationState/effects/0")).put("sourceActorId", "different-caster");
+        store.saveSheet(id, "ally", repaired.toString());
+        var refreshed = automationHttp(cookie, "caster", null);
+        for (JsonNode action : MAPPER.readTree(refreshed.body()).path("actions"))
+            if ("cast-all".equals(action.path("ruleId").asText())) offer = action.path("targetSelection");
+        target.set("version", offer.requiredAt("/options/0/version"));
+        var applied = automationHttp(cookie, "caster", body.toString());
+        assertEquals(200, applied.statusCode(), applied.body());
+        JsonNode ally = MAPPER.readTree(store.loadSheet(id, "ally"));
+        assertEquals(2, ally.at("/automationState/effects").size());
+        assertEquals("different-caster", ally.at("/automationState/effects/0/sourceActorId").asText());
+        assertEquals("caster", ally.at("/automationState/effects/1/sourceActorId").asText());
+        assertEquals(4, ally.at("/automationState/pools/charge/value").asInt());
+    }
+
+    @Test
+    void endingANewSingleHolderEffectStillEndsItsEarlierHolder() throws Exception {
+        installSingleHolderActions();
+        String id = campaign.getId();
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("old").name("Old").ownerId("other").build());
+        store.saveSheet(id, "caster", """
+                {"name":"Ada","features":[
+                 {"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"}]}""");
+        store.saveSheet(id, "old", """
+                {"name":"Old","automationState":{"revision":0,"effects":[
+                 {"id":"old-effect","effect":"classes:tester:features:rally#ward","sourceInstanceId":"r","sourceActorId":"caster","label":"Ward"}]}}""");
+        String request = """
+                {"request":{"requestId":"transient","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"r","ruleId":"cast-end","bindingId":"sheet"}]}}""";
+        var applied = automationHttp(cookie(), "caster", request);
+        assertEquals(200, applied.statusCode(), applied.body());
+        assertTrue(MAPPER.readTree(store.loadSheet(id, "caster")).at("/automationState/effects").isEmpty());
+        assertTrue(MAPPER.readTree(store.loadSheet(id, "old")).at("/automationState/effects").isEmpty());
+    }
+
+    @Test
+    void singleHolderLifecycleRequestsTransferBothSourcesOrRollBackTogether() throws Exception {
+        installSingleHolderActions();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ((ArrayNode) catalog.at("/entries/0/features/0/automation/rules")).add(MAPPER.readTree("""
+                {"id":"scene","bindings":[{"id":"auto","event":"scene.end","surface":"sheet","mode":"automatic"}],
+                 "do":[{"op":"effect.start","effect":"ward","target":"actor"}],
+                 "ui":{"label":"Scene ward","report":"Scene ward started."}}"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String id = campaign.getId();
+        for (String actor : List.of("source-a", "source-b")) {
+            campaign.getActors().add(Campaign.Actor.builder().id(actor).name(actor).ownerId(playerId()).build());
+            store.saveSheet(id, actor, """
+                    {"name":"Source","features":[
+                     {"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"}]}""");
+        }
+        campaign.getActors().add(Campaign.Actor.builder().id("retired").name("Retired").ownerId(playerId()).disabled(true).build());
+        store.saveSheet(id, "retired", """
+                {"name":"Retired","automationState":{"revision":0,"pools":{"charge":{"value":3,"max":4}},"effects":[
+                 {"id":"old-a","effect":"classes:tester:features:rally#ward","sourceInstanceId":"r","sourceActorId":"source-a","label":"Ward"},
+                 {"id":"old-b","effect":"classes:tester:features:rally#ward","sourceInstanceId":"r","label":"Ward"}]}}""");
+        String a = store.loadSheet(id, "source-a"), b = store.loadSheet(id, "source-b"), old = store.loadSheet(id, "retired");
+        int history = store.historyTail(id, 100).size();
+        String failure = server.endScene();
+        assertNotNull(failure);
+        assertTrue(failure.contains("Migrate or repair"), failure);
+        assertEquals(a, store.loadSheet(id, "source-a"));
+        assertEquals(b, store.loadSheet(id, "source-b"));
+        assertEquals(old, store.loadSheet(id, "retired"));
+        assertEquals(history, store.historyTail(id, 100).size());
+        ObjectNode repaired = (ObjectNode) MAPPER.readTree(old);
+        ((ObjectNode) repaired.at("/automationState/effects/1")).put("sourceActorId", "source-b");
+        store.saveSheet(id, "retired", repaired.toString());
+        assertNull(server.endScene());
+        JsonNode sourceA = MAPPER.readTree(store.loadSheet(id, "source-a"));
+        JsonNode sourceB = MAPPER.readTree(store.loadSheet(id, "source-b"));
+        JsonNode retired = MAPPER.readTree(store.loadSheet(id, "retired"));
+        assertEquals("source-a", sourceA.at("/automationState/effects/0/sourceActorId").asText());
+        assertEquals("source-b", sourceB.at("/automationState/effects/0/sourceActorId").asText());
+        assertTrue(retired.at("/automationState/effects").isEmpty());
+        assertEquals(0, retired.at("/automationState/pools/charge/value").asInt());
+        assertEquals(1, retired.at("/automationState/revision").asInt());
+        assertEquals(history + 1, store.historyTail(id, 100).size());
+    }
+
+    @Test
+    void transferringARolledEffectDoesNotPublishARevokedResultOffer() throws Exception {
+        installSingleHolderActions();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/0/automation");
+        JsonNode profile = MAPPER.readTree("""
+                {"label":"Claw","trait":"Finesse","range":"melee","damage":{"sides":6}}""");
+        ((ObjectNode) automation.at("/effects/ward")).set("profile", profile);
+        ArrayNode rules = (ArrayNode) automation.path("rules");
+        rules.add(MAPPER.readTree("""
+                {"id":"revise","bindings":[{"id":"after","event":"roll.finished","surface":"roll","mode":"button",
+                 "targetSelection":{"cardinality":"one","scope":"activePlayerCharacters","excludeSource":true}}],
+                 "do":[{"op":"effect.start","effect":"ward","target":"recipient"},
+                  {"op":"roll.contribute","from":{"read":"event.roll"},"as":"edited",
+                   "contribution":{"id":"bonus","kind":"flat","role":"damage","label":"Bonus","value":2}},
+                  {"op":"roll.publish","roll":{"read":"result.edited"}}],"ui":{"label":"Transfer and revise"}}"""));
+        rules.add(MAPPER.readTree("""
+                {"id":"follow","bindings":[{"id":"after","event":"roll.finished","surface":"roll","mode":"button"}],
+                 "do":[{"op":"value","value":1}],"ui":{"label":"Follow up"}}"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String cookie = cookie(), id = campaign.getId();
+        allyCookie("other");
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Ally").ownerId("other").build());
+        ObjectNode caster = (ObjectNode) MAPPER.readTree("""
+                {"name":"Ada","features":[
+                 {"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"}],
+                 "automationState":{"revision":0,"effects":[
+                  {"id":"own","effect":"classes:tester:features:rally#ward","sourceInstanceId":"r","sourceActorId":"caster","label":"Ward"}]}}""");
+        ((ObjectNode) caster.at("/automationState/effects/0")).set("profile", profile.deepCopy());
+        store.saveSheet(id, "caster", caster.toString());
+        store.saveSheet(id, "ally", "{\"name\":\"Ally\"}");
+        String roll = """
+                {"request":{"requestId":"roll","expectedRevision":0,"selections":[],
+                 "profileRoll":{"sourceInstanceId":"r","profileId":"effect.profile","effectInstanceId":"own","kind":"damage"}}}""";
+        var rolled = automationHttp(cookie, "caster", roll);
+        assertEquals(200, rolled.statusCode(), rolled.body());
+        String resultId = MAPPER.readTree(rolled.body()).requiredAt("/event/resultId").asText();
+        var described = resultHttp(cookie, "caster", resultId);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode offer = null;
+        for (JsonNode action : MAPPER.readTree(described.body()).path("actions"))
+            if ("revise".equals(action.path("ruleId").asText())) offer = action.path("targetSelection");
+        assertNotNull(offer);
+        ObjectNode body = MAPPER.createObjectNode();
+        ObjectNode request = body.putObject("request").put("requestId", "transfer-revise")
+                .put("expectedRevision", 1).put("resultId", resultId);
+        request.putArray("selections").addObject().put("sourceInstanceId", "r").put("ruleId", "revise").put("bindingId", "after");
+        request.putObject("target").put("recipientId", "ally").set("version", offer.requiredAt("/options/0/version"));
+        var applied = automationHttp(cookie, "caster", body.toString());
+        assertEquals(200, applied.statusCode(), applied.body());
+        JsonNode response = MAPPER.readTree(applied.body());
+        assertTrue(response.path("resultPublished").asBoolean());
+        assertFalse(response.path("event").has("resultId"), response.toString());
+        assertFalse(response.has("resultActions"), response.toString());
+        assertFalse(MAPPER.readTree(store.loadSheet(id, "caster")).path("automationState").has("resultWindows"));
+        List<JsonNode> rolls = store.historyTail(id, 100).stream().filter(message -> "roll".equals(message.path("type").asText())).toList();
+        assertEquals(2, rolls.size());
+        assertFalse(rolls.getLast().path("automationEvent").has("resultId"), rolls.getLast().toString());
+        assertEquals(applied.body(), automationHttp(cookie, "caster", body.toString()).body());
+    }
+
+    @Test
+    void transferRemovesOnlyInvalidButtonsFromAnotherSourcesRevisedResult() throws Exception {
+        installSingleHolderActions();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode rally = (ObjectNode) catalog.at("/entries/0/features/0/automation");
+        ArrayNode rallyRules = (ArrayNode) rally.path("rules");
+        rallyRules.add(MAPPER.readTree("""
+                {"id":"revise","bindings":[{"id":"after","event":"roll.finished","surface":"roll","mode":"button",
+                 "targetSelection":{"cardinality":"one","scope":"activePlayerCharacters","excludeSource":true}}],
+                 "do":[{"op":"effect.start","effect":"ward","target":"recipient"},
+                  {"op":"roll.contribute","from":{"read":"event.roll"},"as":"edited",
+                   "contribution":{"id":"bonus","kind":"flat","role":"modifier","label":"Bonus","value":2}},
+                  {"op":"roll.publish","roll":{"read":"result.edited"}}],"ui":{"label":"Transfer and revise"}}"""));
+        rallyRules.add(MAPPER.readTree("""
+                {"id":"rally-follow","bindings":[{"id":"after","event":"roll.finished","surface":"roll","mode":"button"}],
+                 "do":[{"op":"value","value":1}],"ui":{"label":"Rally follow"}}"""));
+        ((ArrayNode) catalog.at("/entries/0/features/2/automation/rules")).add(MAPPER.readTree("""
+                {"id":"steady-follow","bindings":[{"id":"after","event":"roll.finished","surface":"roll","mode":"button"}],
+                 "do":[{"op":"value","value":1}],"ui":{"label":"Steady follow"}}"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String cookie = cookie(), id = campaign.getId();
+        allyCookie("other");
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Ally").ownerId("other").build());
+        store.saveSheet(id, "caster", """
+                {"name":"Ada","traits":[{"name":"Finesse","mod":2}],"features":[
+                 {"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"},
+                 {"name":"Steady","automationSource":"classes:tester:features:steady","instanceId":"s"}],
+                 "automationState":{"revision":0,"effects":[
+                  {"id":"own","effect":"classes:tester:features:rally#ward","sourceInstanceId":"r","sourceActorId":"caster","label":"Ward"}]}}""");
+        store.saveSheet(id, "ally", "{\"name\":\"Ally\"}");
+        String roll = """
+                {"request":{"requestId":"roll","expectedRevision":0,"selections":[],
+                 "profileRoll":{"sourceInstanceId":"s","profileId":"thrown","kind":"attack"}}}""";
+        var rolled = automationHttp(cookie, "caster", roll);
+        assertEquals(200, rolled.statusCode(), rolled.body());
+        String resultId = MAPPER.readTree(rolled.body()).requiredAt("/event/resultId").asText();
+        var described = resultHttp(cookie, "caster", resultId);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode offer = null;
+        for (JsonNode action : MAPPER.readTree(described.body()).path("actions"))
+            if ("revise".equals(action.path("ruleId").asText())) offer = action.path("targetSelection");
+        assertNotNull(offer);
+        ObjectNode body = MAPPER.createObjectNode();
+        ObjectNode request = body.putObject("request").put("requestId", "transfer-revise")
+                .put("expectedRevision", 1).put("resultId", resultId);
+        request.putArray("selections").addObject().put("sourceInstanceId", "r").put("ruleId", "revise").put("bindingId", "after");
+        request.putObject("target").put("recipientId", "ally").set("version", offer.requiredAt("/options/0/version"));
+        var applied = automationHttp(cookie, "caster", body.toString());
+        assertEquals(200, applied.statusCode(), applied.body());
+        JsonNode response = MAPPER.readTree(applied.body());
+        String revisedId = response.requiredAt("/event/resultId").asText();
+        assertEquals(List.of("steady-follow"), response.required("resultActions").findValuesAsText("ruleId"), response.toString());
+        var remaining = resultHttp(cookie, "caster", revisedId);
+        assertEquals(200, remaining.statusCode(), remaining.body());
+        assertEquals(List.of("steady-follow"), MAPPER.readTree(remaining.body()).required("actions").findValuesAsText("ruleId"));
+        assertEquals(applied.body(), automationHttp(cookie, "caster", body.toString()).body());
+    }
+
+    @Test
+    @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "dmmt.benchmark.automation", matches = "true")
+    void measureSingleHolderRosterScans() throws Exception {
+        installSingleHolderActions();
+        String id = campaign.getId();
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(id, "caster", """
+                {"name":"Ada","features":[
+                 {"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"}]}""");
+        for (int i = 0; i < 32; i++) {
+            String actor = "holder-" + i;
+            campaign.getActors().add(Campaign.Actor.builder().id(actor).name(actor).ownerId("offline").disabled(i % 2 == 0).build());
+            store.saveSheet(id, actor, """
+                    {"name":"Offline","level":4,"hope":{"slots":6,"on":2},"stress":{"slots":6,"on":1},
+                     "features":[],"inventory":[],"automationState":{"revision":0,"effects":[]}}
+                    """);
+        }
+        String cookie = cookie();
+        var alloc = java.lang.management.ManagementFactory.getPlatformMXBean(com.sun.management.ThreadMXBean.class);
+        if (alloc == null || !alloc.isThreadAllocatedMemorySupported())
+            throw new IllegalStateException("The benchmark requires JVM allocation counters.");
+        int warmup = 10, samples = 30;
+        long[] nanos = new long[samples], bytes = new long[samples];
+        for (int i = 0; i < warmup + samples; i++) {
+            String request = """
+                    {"request":{"requestId":"scan-%d","expectedRevision":%d,
+                     "selections":[{"sourceInstanceId":"r","ruleId":"cast-end","bindingId":"sheet"}]}}
+                    """.formatted(i, i);
+            long allocated = alloc.getTotalThreadAllocatedBytes(), start = System.nanoTime();
+            var response = automationHttp(cookie, "caster", request);
+            long elapsed = System.nanoTime() - start, used = alloc.getTotalThreadAllocatedBytes() - allocated;
+            assertEquals(200, response.statusCode(), response.body());
+            if (i >= warmup) {
+                nanos[i - warmup] = elapsed;
+                bytes[i - warmup] = used;
+            }
+        }
+        java.util.Arrays.sort(nanos);
+        System.out.printf(java.util.Locale.ROOT,
+                "Single-holder POST, 32 saved unrelated sheets: median %.2f ms, p95 %.2f ms, mean %.2f MiB%n",
+                nanos[samples / 2 - 1] / 1e6, nanos[(int) Math.ceil(samples * .95) - 1] / 1e6,
+                java.util.Arrays.stream(bytes).average().orElseThrow() / (1024 * 1024));
+    }
+
     @Test
     void automationEndpointsDescribeExecuteJournalAndRejectStaleOrForeignUse() throws Exception {
         automationCompendium();

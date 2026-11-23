@@ -31,6 +31,8 @@ public final class AutomationHost {
         public Pack(String revision, Map<String, RuleCompiler.Program> programs) { this(revision, programs, null); }
     }
 
+    public record SingleHolderEffect(String sourceActorId, String sourceInstanceId, String effect, String holder) {}
+
     /** Raised when the configured catalogs cannot drive automation (for example a pack that is not format 2). */
     public static final class NotReady extends IllegalStateException {
         public NotReady(String message) { super(message); }
@@ -594,6 +596,96 @@ public final class AutomationHost {
         var sources = sources(pack, sheet);
         ResultWindows.prune(state, ResultWindows.guards(sources, activationEffects(pack, sheet, state, event, sources),
                 event.path("actorId").textValue()));
+    }
+
+    /** Keeps a newly published receipt and its retry record consistent with the final staged result windows. */
+    public boolean reconcileResultOffer(Pack pack, ObjectNode sheet, ObjectNode response) {
+        JsonNode origin = response.path("event");
+        String resultId = origin.path("resultId").textValue();
+        if (resultId == null) return false;
+        JsonNode state = sheet.path(projection.stateField());
+        ObjectNode current = null;
+        for (JsonNode window : state.path("resultWindows").path("results"))
+            if (resultId.equals(window.path("id").textValue())) current = RuleJson.object(window, "/result");
+        ArrayNode actions = null;
+        if (current != null) {
+            Set<ResultWindows.Button> retained = new java.util.HashSet<>();
+            current.required("buttons").forEach(item -> retained.add(ResultWindows.Button.of(item)));
+            ObjectNode event = savedResultEvent(current, RuleJson.object(origin, "/response/event"));
+            var sources = sources(pack, sheet);
+            ObjectNode actor = actor(pack, sheet, RuleJson.object(state, "/" + projection.stateField()), event, sources);
+            actions = resultButtons(pack, sources, (ObjectNode) state, actor, event, retained, null);
+            if (actions.equals(response.path("resultActions"))) return false;
+        }
+        String requestId = RuleJson.id(response.get("requestId"), "/response/requestId");
+        ObjectNode receipt = null;
+        for (JsonNode entry : state.path("journal")) {
+            if (!requestId.equals(entry.path("requestId").textValue())) continue;
+            if (receipt != null || !(entry instanceof ObjectNode object))
+                throw RuleJson.error("/journal", "The action receipt is not unique.");
+            receipt = object;
+        }
+        if (receipt == null) throw RuleJson.error("/journal", "The action receipt is missing.");
+        if (current == null) {
+            ((ObjectNode) origin).remove("resultId");
+            response.remove("resultActions");
+        } else response.set("resultActions", actions);
+        receipt.set("response", response.deepCopy());
+        return true;
+    }
+
+    public SingleHolderEffect singleHolderCommand(Pack pack, JsonNode command) {
+        RuleJson.fields(command, "/outbox", "kind", "sourceActorId", "sourceInstanceId", "effect", "holder", "label", "recipientId");
+        if (!"effect.endElsewhere".equals(RuleJson.text(command.get("kind"), "/outbox/kind")))
+            throw RuleJson.error("/outbox/kind", "Expected a single-holder effect request.");
+        String sourceActor = RuleJson.id(command.get("sourceActorId"), "/outbox/sourceActorId");
+        String instance = RuleJson.id(command.get("sourceInstanceId"), "/outbox/sourceInstanceId");
+        String effect = RuleJson.text(command.get("effect"), "/outbox/effect");
+        String holder = RuleJson.id(command.get("holder"), "/outbox/holder");
+        int split = effect.lastIndexOf('#');
+        RuleCompiler.Program program = split > 0 ? pack.programs().get(effect.substring(0, split)) : null;
+        String definition = split > 0 ? effect.substring(split + 1) : "";
+        if (program == null || !program.hasEffect(definition) || !program.effect(definition).path("singleHolder").asBoolean())
+            throw RuleJson.error("/outbox/effect", "The requested single-holder effect is not declared by the current pack.");
+        return new SingleHolderEffect(sourceActor, instance, effect, holder);
+    }
+
+    /** Removes other holders' matching stored effects, preserving supporting pools and the original sheet on failure. */
+    public boolean endEffectsElsewhere(Pack pack, ObjectNode sheet, ObjectNode event,
+                                       List<SingleHolderEffect> commands, boolean advanceRevision) {
+        String holder = RuleJson.id(event.get("actorId"), "/event/actorId");
+        ObjectNode stored = projection.actor(sheet);
+        ArrayNode effects = RuleEffects.instances(stored.path("effects"), "/actor/effects");
+        boolean removed = false;
+        for (int i = effects.size() - 1; i >= 0; i--) {
+            JsonNode effect = effects.get(i);
+            for (SingleHolderEffect command : commands) {
+                if (holder.equals(command.holder()) || !command.effect().equals(effect.path("effect").asText())
+                        || !command.sourceInstanceId().equals(effect.path("sourceInstanceId").asText())) continue;
+                if (!RuleEffects.hasSourceActorId(effect))
+                    throw RuleJson.error("/actor/effects", "Cannot determine the source character for effect '"
+                            + effect.path("id").asText() + "' on character '" + holder
+                            + "'. Migrate or repair its source identity before transferring it.");
+                if (effect.path("sourceActorId").textValue().equals(command.sourceActorId())) {
+                    effects.remove(i);
+                    removed = true;
+                    break;
+                }
+            }
+        }
+        if (!removed) return false;
+        ObjectNode working = sheet.deepCopy();
+        ObjectNode state = projection.state(working);
+        ObjectNode before = actor(pack, working, state, event);
+        ObjectNode after = before.deepCopy();
+        for (JsonNode effect : before.path("effects"))
+            if (effect.path("derived").asBoolean()) effects.add(effect.deepCopy());
+        after.set("effects", effects);
+        RuleEffects.reconcileHolder(before, after, Set.of(), pack.programs(), "/actor");
+        projection.write(working, projection.actor(working), persisted(after));
+        if (advanceRevision) state.put("revision", state.path("revision").asLong() + 1);
+        replace(sheet, working);
+        return true;
     }
 
     /** Dispatch a host transition in the caller's staged sheet transaction, without creating a player retry record. */

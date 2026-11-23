@@ -130,6 +130,8 @@ public final class RuleEffects {
             holder = RuleJson.id(context.path(target).get("id"), "/" + target + "/id");
         }
         String stacking = definition.path("stacking").asText("replace");
+        if (("unique".equals(stacking) || "replace".equals(stacking)) && (singleHolder || otherRecipient(context, target)))
+            requireSourceOwners(list, key, instanceId);
         if ("unique".equals(stacking)) for (JsonNode effect : list)
             if (matches(effect, key, instanceId, sourceActorId)) throw new RuleRuntime.Unavailable("effectActive", "This effect is already active.");
         if ("replace".equals(stacking)) remove(list, key, instanceId, sourceActorId);
@@ -175,9 +177,13 @@ public final class RuleEffects {
     }
 
     static int end(RuleCompiler.Program program, String effectId, String target, ObjectNode context) {
-        program.effect(effectId);
-        int removed = remove(owned(context, target), program.sourceId() + "#" + effectId,
-                context.path("source").path("instanceId").asText(), context.path("actor").path("id").textValue());
+        ObjectNode definition = program.effect(effectId);
+        ArrayNode effects = owned(context, target);
+        String key = program.sourceId() + "#" + effectId;
+        String instanceId = context.path("source").path("instanceId").asText();
+        if (definition.path("singleHolder").asBoolean() || otherRecipient(context, target))
+            requireSourceOwners(effects, key, instanceId);
+        int removed = remove(effects, key, instanceId, context.path("actor").path("id").textValue());
         refreshCounts(program, context);
         return removed;
     }
@@ -199,9 +205,13 @@ public final class RuleEffects {
         while (definitions.hasNext()) {
             var definition = definitions.next();
             if (!definition.getValue().has("endWhen") || context.path("effects").path(definition.getKey()).asInt() == 0) continue;
-            if (RuleExpression.bool(RuleExpression.evaluate(definition.getValue().get("endWhen"), context), "/effects/" + definition.getKey() + "/endWhen"))
-                ended |= remove(owned(context, "actor"), program.sourceId() + "#" + definition.getKey(),
-                        context.path("source").path("instanceId").asText(), context.path("actor").path("id").textValue()) > 0;
+            if (RuleExpression.bool(RuleExpression.evaluate(definition.getValue().get("endWhen"), context), "/effects/" + definition.getKey() + "/endWhen")) {
+                ArrayNode effects = owned(context, "actor");
+                String key = program.sourceId() + "#" + definition.getKey();
+                String instanceId = context.path("source").path("instanceId").asText();
+                if (definition.getValue().path("singleHolder").asBoolean()) requireSourceOwners(effects, key, instanceId);
+                ended |= remove(effects, key, instanceId, context.path("actor").path("id").textValue()) > 0;
+            }
         }
         if (ended) refreshCounts(program, context);
         return ended;
@@ -294,7 +304,7 @@ public final class RuleEffects {
         return (ArrayNode) owner.get("effects");
     }
 
-    private static ArrayNode instances(JsonNode effects, String path) {
+    static ArrayNode instances(JsonNode effects, String path) {
         if (!effects.isArray() || effects.size() > MAX_INSTANCES) throw RuleJson.error(path, "Expected a bounded effect list.");
         Set<String> ids = new HashSet<>();
         for (JsonNode effect : effects) {
@@ -307,6 +317,26 @@ public final class RuleEffects {
 
     static boolean sourceActorMatches(JsonNode effect, String sourceActorId) {
         return !effect.has("sourceActorId") || sourceActorId != null && sourceActorId.equals(effect.path("sourceActorId").textValue());
+    }
+
+    static boolean hasSourceActorId(JsonNode effect) {
+        String actor = effect.path("sourceActorId").textValue();
+        return actor != null && actor.matches("[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}");
+    }
+
+    private static boolean otherRecipient(ObjectNode context, String target) {
+        if (!"recipient".equals(target)) return false;
+        String actor = context.path("actor").path("id").textValue();
+        return actor == null || !actor.equals(context.path("recipient").path("id").textValue());
+    }
+
+    private static void requireSourceOwners(ArrayNode effects, String key, String instanceId) {
+        for (JsonNode effect : effects) {
+            if (!key.equals(effect.path("effect").asText()) || !instanceId.equals(effect.path("sourceInstanceId").asText())) continue;
+            if (!hasSourceActorId(effect))
+                throw RuleJson.error("/effects", "Cannot determine the source character for effect '"
+                        + effect.path("id").asText() + "'. Migrate or repair its source identity before changing it.");
+        }
     }
 
     private static boolean matches(JsonNode effect, String key, String instanceId, String sourceActorId) {

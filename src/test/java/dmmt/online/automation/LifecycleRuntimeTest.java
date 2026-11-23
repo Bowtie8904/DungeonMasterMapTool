@@ -129,6 +129,31 @@ class LifecycleRuntimeTest {
         RuleEffects.start(single, "wildForm", "recipient", recipient);
         assertEquals("actor", recipient.at("/recipient/effects/0/sourceActorId").asText());
         assertEquals("other", recipient.at("/outbox/0/holder").asText());
+
+        ObjectNode ambiguous = context("action.request");
+        ambiguous.withObject("/actor").putArray("effects").addObject().put("id", "old")
+                .put("effect", "features:lifecycle#wildForm").put("sourceInstanceId", "inst-1");
+        ObjectNode ambiguousBefore = ambiguous.deepCopy();
+        var refusal = assertThrows(IllegalArgumentException.class,
+                () -> RuleRuntime.execute(single, intent, ambiguous, noRandom()));
+        assertTrue(refusal.getMessage().contains("Migrate or repair"));
+        assertEquals(ambiguousBefore, ambiguous);
+        assertThrows(IllegalArgumentException.class, () -> RuleEffects.end(single, "wildForm", "actor", ambiguous));
+        assertEquals(ambiguousBefore, ambiguous);
+
+        ObjectNode crossActor = context("action.request");
+        crossActor.putObject("recipient").put("id", "other").putArray("effects").addObject().put("id", "old")
+                .put("effect", "features:lifecycle#wildForm").put("sourceInstanceId", "inst-1");
+        ObjectNode crossBefore = crossActor.deepCopy();
+        assertThrows(IllegalArgumentException.class, () -> RuleEffects.end(program(), "wildForm", "recipient", crossActor));
+        assertEquals(crossBefore, crossActor);
+
+        ((ObjectNode) document.at("/effects/wildForm")).put("endWhen", true);
+        var conditional = RuleCompiler.compile("features:lifecycle", document, fixture("rewrite/recipes"));
+        RuleEffects.refreshCounts(conditional, ambiguous);
+        ObjectNode beforeSettlement = ambiguous.deepCopy();
+        assertThrows(IllegalArgumentException.class, () -> RuleEffects.settle(conditional, ambiguous));
+        assertEquals(beforeSettlement, ambiguous);
     }
 
     @Test
