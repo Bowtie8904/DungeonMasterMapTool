@@ -45,6 +45,31 @@ foreach ($category in $categories) {
     }
 }
 
+$sourceRules = Join-Path $root 'dmmap-daggerheart\rules'
+if (Test-Path -LiteralPath $sourceRules) {
+    if (-not (Test-Path -LiteralPath $sourceRules -PathType Container)) {
+        throw "Reserved rules path is not a directory: $sourceRules"
+    }
+    foreach ($rule in @(
+        @{ File = 'recipes.json'; Format = 'dmmap-daggerheart-rules' },
+        @{ File = 'ruleset.json'; Format = 'dmmap-daggerheart-ruleset' }
+    )) {
+        $relative = "dmmap-daggerheart\rules\$($rule.File)"
+        $source = Join-Path $root $relative
+        $packaged = Join-Path $AppImage "app\$relative"
+        Assert-File $source
+        Assert-File $packaged
+        if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne
+            (Get-FileHash -LiteralPath $packaged -Algorithm SHA256).Hash) {
+            throw "Packaged shared rules differ from source: $relative"
+        }
+        $document = Get-Content -LiteralPath $packaged -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($document.format -ne $rule.Format -or $document.version -ne 2) {
+            throw "Packaged shared rules have an invalid format or version: $relative"
+        }
+    }
+}
+
 $archive = [System.IO.Compression.ZipFile]::OpenRead((Join-Path $AppImage 'app\DungeonMasterMapTool.jar'))
 $sha = [System.Security.Cryptography.SHA256]::Create()
 try {

@@ -81,7 +81,12 @@ silently producing source IDs that do not match the sheet. The separate nine-cat
 `name` and `automation`. It compiles that automation with the pack's recipes and projects the reserved
 `ruleset:base` source onto each character without adding an editable sheet element. Its state and limits are
 character-local; ordinary discovery, events, profiles, result guards and lifecycle resets include it.
-Sheets cannot impersonate the reserved source. The reserved-file loader and base rules are not yet wired.
+Sheets cannot impersonate the reserved source. The host loads `rules\recipes.json` and `rules\ruleset.json`
+together, includes both content revisions and the layout in the compiled-pack key, and excludes them from
+compendium categories and legacy name-based lookup. A present but incomplete or malformed `rules` directory
+is rejected rather than falling back; incomplete development fixtures without that directory can still use
+root `rules.json`. Packaging copies and verifies the reserved documents when present. Shipped base rules
+and shared-rules editor support remain pending.
 
 **Performance baseline.** Run `mvn "-Ddmmt.benchmark.automation=true" "-Dtest=OnlineSessionServerTest#measurePersistedProfileAndPartyActions" test` separately from other tests. It uses loopback HTTP and a temporary on-disk campaign, six sheets with 12 KB of notes each, a profile attack with conditional and unconditional passives, a stored-effect modifier, a selected option and a finished reaction, and versioned result and sheet actions with a recipient filter and five recipients each. It checks the applied modifiers and total. After 20 warm-up cycles the retry journal is full. The next 40 cycles measure each request to receipt of its response, including persistence on POST. The result GET fetches a post-roll target offer; neither GET is required to resolve the roll.
 

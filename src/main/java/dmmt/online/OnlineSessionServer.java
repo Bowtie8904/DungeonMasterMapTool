@@ -5677,7 +5677,7 @@ public final class OnlineSessionServer {
         return object;
     }
 
-    /** Compiles format-2 catalogs plus rules.json once per combined compendium revision. */
+    /** Compiles format-2 catalogs and shared rules once per combined compendium revision. */
     private dmmt.online.automation.AutomationHost.Pack automationPack() throws IOException {
         return automationPack(catalogs());
     }
@@ -5688,20 +5688,27 @@ public final class OnlineSessionServer {
             String revision = snapshot.revision(category);
             if (revision != null) key.append(category).append('=').append(revision).append(';');
         }
-        key.append("rules=").append(snapshot.revision("rules"));
+        key.append("layout=").append(snapshot.sharedRules() ? "shared" : "legacy")
+                .append(";recipes=").append(snapshot.recipeRevision())
+                .append(";ruleset=").append(snapshot.rulesetRevision());
         String revision = CampaignStore.sha256(key.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
         if (automationPack != null && automationPack.revision().equals(revision)) return automationPack;
         if (revision.equals(automationFailureRevision))
             throw new dmmt.online.automation.AutomationHost.NotReady(automationFailure);
         try {
             Map<String, String> sources = new java.util.LinkedHashMap<>();
-            byte[] recipes = snapshot.bytes("rules");
+            byte[] recipes = snapshot.recipeBytes();
+            byte[] ruleset = snapshot.rulesetBytes();
+            if (snapshot.sharedRules() && (recipes == null || ruleset == null))
+                throw new dmmt.online.automation.AutomationHost.NotReady(
+                        "The rules directory must contain both recipes.json and ruleset.json.");
             if (recipes != null) for (String category : CatalogEditor.CATEGORIES) {
                 byte[] bytes = snapshot.bytes(category);
                 if (bytes != null) sources.put(category, new String(bytes, StandardCharsets.UTF_8));
             }
             automationPack = dmmt.online.automation.AutomationHost.compile(revision, sources,
-                    recipes == null ? null : new String(recipes, java.nio.charset.StandardCharsets.UTF_8));
+                    recipes == null ? null : new String(recipes, StandardCharsets.UTF_8),
+                    ruleset == null ? null : new String(ruleset, StandardCharsets.UTF_8));
             automationFailureRevision = null;
             return automationPack;
         } catch (dmmt.online.automation.AutomationHost.NotReady e) {
@@ -5825,13 +5832,13 @@ public final class OnlineSessionServer {
             Campaign.Actor actor = automationActor(ctx.pathParam("id"));
             String original = store.loadSheet(campaign.getId(), actor.getId());
             ObjectNode sheet = original == null ? MAPPER.createObjectNode() : hydrateSheet(actor.getId(), original);
+            var pack = automationPack();
             Map<String, JsonNode> sourceNames = new java.util.HashMap<>();
-            for (var element : automationHost.projection().sources(sheet))
+            for (var element : automationHost.sources(pack, sheet))
                 sourceNames.put(element.instanceId(), element.element().deepCopy());
             long revisionBefore = automationHost.revision(sheet);
             ObjectNode event = automationEvent("action.request", actor);
             String relation = automationRelation(ctx, playerId, actor);
-            var pack = automationPack();
             AutomationRoster roster = body.path("request").has("target") && !"dm".equals(relation)
                     ? new AutomationRoster(pack, actor, original, sheet) : null;
             ObjectNode response = automationHost.execute(pack, sheet, event,

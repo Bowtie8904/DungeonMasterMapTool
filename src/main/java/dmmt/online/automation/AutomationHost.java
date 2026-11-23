@@ -60,13 +60,13 @@ public final class AutomationHost {
 
     /** Compiles the optional always-active ruleset with the same recipes as the catalogs. */
     public static Pack compile(String revision, Map<String, String> catalogs, String recipes, String ruleset) {
-        if (recipes == null) throw new NotReady("The compendium has no rules.json recipe document.");
+        if (recipes == null) throw new NotReady("The compendium has no recipes.json (or legacy rules.json) recipe document.");
         Map<String, RuleCompiler.Program> programs = new LinkedHashMap<>();
         Map<String, ObjectNode> compiledRecipes;
         try {
             compiledRecipes = RuleCatalog.recipes(recipes);
         } catch (IOException | IllegalArgumentException ex) {
-            throw new NotReady("rules.json: " + ex.getMessage());
+            throw new NotReady("recipes.json (or legacy rules.json): " + ex.getMessage());
         }
         for (var entry : catalogs.entrySet()) {
             try {
@@ -94,14 +94,15 @@ public final class AutomationHost {
         return new Pack(revision, programs, rulesetName);
     }
 
-    private List<SheetProjection.SourceElement> sources(Pack pack, ObjectNode sheet) {
+    /** Active sheet sources plus the pack's reserved shared source, if present. */
+    public List<SheetProjection.SourceElement> sources(Pack pack, ObjectNode sheet) {
         List<SheetProjection.SourceElement> sources = projection.sources(sheet);
         if (pack.rulesetName() == null) return sources;
         for (var source : sources)
             if (RULESET_SOURCE.equals(source.instanceId()) || RULESET_SOURCE.equals(source.sourceId()))
                 throw RuleJson.error("/sources", "The shared ruleset source identity is reserved.");
         sources.add(new SheetProjection.SourceElement(RULESET_SOURCE, RULESET_SOURCE, pack.rulesetName(),
-                RuleJson.JSON.createObjectNode(), null));
+                RuleJson.JSON.createObjectNode().put("name", pack.rulesetName()), null));
         return sources;
     }
 

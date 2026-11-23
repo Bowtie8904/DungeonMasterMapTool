@@ -1690,6 +1690,70 @@ class OnlineSessionServerTest {
         assertEquals(409, automationHttp(cookie, "auto", null).statusCode(), "missing recipes make automation unavailable");
     }
 
+    @Test
+    void sharedRulesFilesDriveLiveAutomationAndInvalidateTheCompiledPack() throws Exception {
+        automationCompendium();
+        campaign.getActors().add(Campaign.Actor.builder().id("auto").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "auto", "{\"name\":\"Ada\",\"hope\":{\"slots\":6,\"on\":1},\"features\":[]}");
+        String cookie = cookie();
+        assertEquals(200, automationHttp(cookie, "auto", null).statusCode(), "Legacy development fixtures remain usable.");
+        Path rules = java.nio.file.Files.createDirectories(compendiumDir.resolve("rules"));
+        Path recipe = rules.resolve("recipes.json"), ruleset = rules.resolve("ruleset.json");
+        String recipeText = java.nio.file.Files.readString(compendiumDir.resolve("rules.json"));
+        java.nio.file.Files.writeString(recipe, recipeText);
+        var incomplete = automationHttp(cookie, "auto", null);
+        assertEquals(409, incomplete.statusCode(), incomplete.body());
+        assertTrue(incomplete.body().contains("ruleset.json"));
+        String rulesetText = """
+                {"format":"dmmap-daggerheart-ruleset","version":2,"name":"Shared rules",
+                 "automation":{"rules":[{"id":"grant",
+                  "bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],
+                  "ui":{"label":"First action","report":"Granted Hope."}}]}}
+                """;
+        java.nio.file.Files.writeString(ruleset, rulesetText);
+        var described = automationHttp(cookie, "auto", null);
+        assertEquals(200, described.statusCode(), described.body());
+        assertEquals(List.of("First action"), MAPPER.readTree(described.body()).path("actions").findValuesAsText("label"));
+        var index = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/compendium"))
+                .header("Cookie", cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertFalse(MAPPER.readTree(index.body()).path("categories").findValuesAsText("category").contains("rules"));
+        var rootRule = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/compendium/rules"))
+                .header("Cookie", cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(404, rootRule.statusCode());
+
+        String request = """
+                {"request":{"requestId":"shared","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"ruleset:base","ruleId":"grant","bindingId":"sheet"}]}}
+                """;
+        var executed = automationHttp(cookie, "auto", request);
+        assertEquals(200, executed.statusCode(), executed.body());
+        assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "auto")).requiredAt("/hope/on").intValue());
+        assertTrue(store.historyTail(campaign.getId(), 10).getLast().path("text").asText().contains("Shared rules"),
+                "The shared source keeps its authored name in reports.");
+        assertEquals(executed.body(), automationHttp(cookie, "auto", request).body());
+
+        var timestamp = java.nio.file.Files.getLastModifiedTime(ruleset);
+        java.nio.file.Files.writeString(ruleset, rulesetText.replace("First action", "Other action"));
+        java.nio.file.Files.setLastModifiedTime(ruleset, timestamp);
+        assertEquals(List.of("Other action"), MAPPER.readTree(automationHttp(cookie, "auto", null).body())
+                .path("actions").findValuesAsText("label"));
+        ObjectNode badRecipes = (ObjectNode) MAPPER.readTree(recipeText);
+        badRecipes.put("version", 1);
+        java.nio.file.Files.writeString(recipe, badRecipes.toString());
+        assertEquals(409, automationHttp(cookie, "auto", null).statusCode(), "A changed recipe invalidates the pack.");
+        java.nio.file.Files.writeString(recipe, recipeText);
+        assertEquals(200, automationHttp(cookie, "auto", null).statusCode());
+        java.nio.file.Files.writeString(ruleset, "{broken");
+        assertEquals(409, automationHttp(cookie, "auto", null).statusCode(), "Malformed shared rules cannot use a cached pack.");
+        java.nio.file.Files.delete(ruleset);
+        assertEquals(409, automationHttp(cookie, "auto", null).statusCode(), "A missing ruleset cannot use the root recipe.");
+        java.nio.file.Files.delete(recipe);
+        assertEquals(409, automationHttp(cookie, "auto", null).statusCode());
+        java.nio.file.Files.delete(rules);
+        assertEquals(200, automationHttp(cookie, "auto", null).statusCode(), "Removing the directory restores the fixture layout.");
+    }
+
     private HttpResponse<String> preferencesHttp(String cookie, String token, String body) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/preferences"));
         if (cookie != null) request.header("Cookie", cookie);

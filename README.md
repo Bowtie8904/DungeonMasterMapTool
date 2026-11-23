@@ -49,8 +49,10 @@ See the [rewrite design and implementation status](docs/ONLINE_AUTOMATION_PLAN.m
 
 Candidate catalog validation checks recipe argument declarations, defaults, UI templates, substitutions, static binding values, target and claim declarations, concrete input definitions, locally resolvable argument/input/result references, and static rule and operation shapes even when no entry uses them. The host rejects format-2 catalog files whose declared category does not match their filename. Full semantic validation of unused rule bodies remains outstanding.
 
-The candidate engine can compile an optional shared ruleset as an always-active, per-character source, using
-the same generic rules and recipes as other sources. Its document loading and shipped base rules remain pending.
+For candidate format-2 packs, `rules\recipes.json` and `rules\ruleset.json` are loaded together as shared
+rules. The ruleset is an always-active, per-character source using the same generic operations as other
+sources. An incomplete or invalid `rules` directory makes the pack unavailable; older development fixtures
+without that directory can still use root `rules.json`. Shipped base rules and editor support remain pending.
 
 In a format-2 pack, an owner can roll a declared attack profile or its damage. The host resolves
 the profile from the saved sheet and commits its edited dice, reactions and costs together. A blocked

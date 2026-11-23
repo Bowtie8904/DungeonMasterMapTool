@@ -6,12 +6,16 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** Content-revision cache. Snapshots pin one operation's catalog data, never its mutable sheets. */
 final class HostCatalog {
@@ -28,32 +32,58 @@ final class HostCatalog {
 
     synchronized Snapshot snapshot(Path directory) throws IOException {
         Map<String, Document> documents = new LinkedHashMap<>();
+        Set<Path> observed = new HashSet<>();
+        Document legacyRecipes = null, recipes = null, ruleset = null;
+        boolean sharedRules = false;
         if (directory != null && Files.isDirectory(directory)) {
             try (var files = Files.list(directory)) {
                 for (Path file : files.filter(p -> p.getFileName().toString().endsWith(".json")).sorted().toList()) {
-                    Path key = file.toAbsolutePath().normalize();
-                    Document document;
-                    try {
-                        byte[] bytes = Files.readAllBytes(file);
-                        fileReads++;
-                        document = cached.get(key);
-                        if (document == null || !Arrays.equals(document.bytes, bytes)) {
-                            document = new Document(bytes);
-                            parses++;
-                            cached.put(key, document);
-                        }
-                    } catch (IOException e) {
-                        cached.remove(key);
-                        document = new Document(e);
-                    }
-                    documents.put(file.getFileName().toString(), document);
+                    Document document = read(file, observed);
+                    if (document == null) continue;
+                    if ("rules.json".equals(file.getFileName().toString())) legacyRecipes = document;
+                    else documents.put(file.getFileName().toString(), document);
                 }
             }
+            Path ruleDirectory = directory.resolve("rules");
+            try {
+                BasicFileAttributes attributes = Files.readAttributes(ruleDirectory, BasicFileAttributes.class);
+                sharedRules = true;
+                if (!attributes.isDirectory()) {
+                    IOException error = new IOException("The reserved rules path is not a directory: " + ruleDirectory);
+                    recipes = new Document(error);
+                    ruleset = new Document(error);
+                } else {
+                    recipes = read(ruleDirectory.resolve("recipes.json"), observed);
+                    ruleset = read(ruleDirectory.resolve("ruleset.json"), observed);
+                }
+            } catch (NoSuchFileException missing) {
+                // Root rules.json remains supported for incomplete development fixtures.
+            }
         }
-        cached.keySet().removeIf(path -> directory == null
-                || !path.getParent().equals(directory.toAbsolutePath().normalize())
-                || !documents.containsKey(path.getFileName().toString()));
-        return new Snapshot(documents);
+        cached.keySet().removeIf(path -> !observed.contains(path));
+        return new Snapshot(documents, sharedRules, sharedRules ? recipes : legacyRecipes, ruleset);
+    }
+
+    private Document read(Path file, Set<Path> observed) {
+        Path key = file.toAbsolutePath().normalize();
+        try {
+            byte[] bytes = Files.readAllBytes(file);
+            observed.add(key);
+            fileReads++;
+            Document document = cached.get(key);
+            if (document == null || !Arrays.equals(document.bytes, bytes)) {
+                document = new Document(bytes);
+                parses++;
+                cached.put(key, document);
+            }
+            return document;
+        } catch (NoSuchFileException missing) {
+            cached.remove(key);
+            return null;
+        } catch (IOException error) {
+            cached.remove(key);
+            return new Document(error);
+        }
     }
 
     private static final class Document {
@@ -109,10 +139,22 @@ final class HostCatalog {
 
     static final class Snapshot {
         private final Map<String, Document> documents;
+        private final boolean sharedRules;
+        private final Document recipes;
+        private final Document ruleset;
 
-        Snapshot(Map<String, Document> documents) {
+        Snapshot(Map<String, Document> documents, boolean sharedRules, Document recipes, Document ruleset) {
             this.documents = documents;
+            this.sharedRules = sharedRules;
+            this.recipes = recipes;
+            this.ruleset = ruleset;
         }
+
+        boolean sharedRules() { return sharedRules; }
+        byte[] recipeBytes() throws IOException { return bytes(recipes); }
+        byte[] rulesetBytes() throws IOException { return bytes(ruleset); }
+        String recipeRevision() throws IOException { return revision(recipes); }
+        String rulesetRevision() throws IOException { return revision(ruleset); }
 
         void refresh(ObjectNode sheet) throws IOException {
             List<ObjectNode> files = new ArrayList<>();
@@ -188,14 +230,20 @@ final class HostCatalog {
         }
 
         byte[] bytes(String category) throws IOException {
-            Document document = documents.get(category + ".json");
+            return bytes(documents.get(category + ".json"));
+        }
+
+        private static byte[] bytes(Document document) throws IOException {
             if (document == null) return null;
             if (document.bytes == null) document.readable();
             return document.bytes.clone();
         }
 
         String revision(String category) throws IOException {
-            Document document = documents.get(category + ".json");
+            return revision(documents.get(category + ".json"));
+        }
+
+        private static String revision(Document document) throws IOException {
             if (document == null) return null;
             if (document.bytes == null) document.readable();
             return document.revision;

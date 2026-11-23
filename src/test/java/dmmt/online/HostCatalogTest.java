@@ -104,6 +104,53 @@ class HostCatalogTest {
     }
 
     @Test
+    void reservedRuleDocumentsStaySeparateAndSnapshotsTrackBothContents() throws Exception {
+        Files.writeString(directory.resolve("items.json"), items().toString());
+        Files.writeString(directory.resolve("rules.json"),
+                "{\"name\":\"Hidden\",\"automation\":{\"marker\":\"legacy-rule\"}}");
+        HostCatalog cache = new HostCatalog();
+        HostCatalog.Snapshot legacy = cache.snapshot(directory);
+        assertFalse(legacy.sharedRules());
+        assertEquals(java.util.List.of("items"), legacy.categories());
+        assertNull(legacy.document("rules"));
+        assertNull(legacy.automation("Hidden"));
+        assertNotNull(legacy.recipeRevision());
+
+        Path rules = Files.createDirectories(directory.resolve("rules"));
+        Path recipe = rules.resolve("recipes.json"), ruleset = rules.resolve("ruleset.json");
+        Files.writeString(recipe, "{\"name\":\"Hidden\",\"automation\":{\"marker\":\"recipe\"}}");
+        Files.writeString(ruleset, "{\"name\":\"Hidden\",\"automation\":{\"marker\":\"first\"}}");
+        HostCatalog.Snapshot first = cache.snapshot(directory);
+        assertTrue(first.sharedRules());
+        assertEquals(java.util.List.of("items"), first.categories());
+        assertNull(first.automation("Hidden"));
+        assertTrue(first.automation("feat:Hidden", "Hidden", MAPPER.nullNode()).isNull());
+        assertNotEquals(legacy.recipeRevision(), first.recipeRevision());
+        String oldRuleset = first.rulesetRevision(), oldRecipe = first.recipeRevision();
+        var timestamp = Files.getLastModifiedTime(ruleset);
+        Files.writeString(ruleset, Files.readString(ruleset).replace("first", "later"));
+        Files.setLastModifiedTime(ruleset, timestamp);
+        Files.writeString(recipe, Files.readString(recipe).replace("recipe", "edited"));
+        HostCatalog.Snapshot changed = cache.snapshot(directory);
+        assertNotEquals(oldRuleset, changed.rulesetRevision());
+        assertNotEquals(oldRecipe, changed.recipeRevision());
+        assertTrue(new String(first.rulesetBytes(), java.nio.charset.StandardCharsets.UTF_8).contains("first"));
+        assertEquals(oldRuleset, first.rulesetRevision(), "An earlier snapshot remains pinned.");
+        byte[] copy = changed.recipeBytes();
+        copy[0] = 0;
+        assertNotEquals(0, changed.recipeBytes()[0], "Callers cannot change a cached document.");
+        Files.delete(ruleset);
+        HostCatalog.Snapshot missing = cache.snapshot(directory);
+        assertTrue(missing.sharedRules());
+        assertNull(missing.rulesetBytes());
+        assertNotNull(missing.recipeBytes());
+        Files.delete(recipe);
+        assertNull(cache.snapshot(directory).recipeBytes(), "An incomplete rules directory never uses the root recipe.");
+        Files.delete(rules);
+        assertEquals(legacy.recipeRevision(), cache.snapshot(directory).recipeRevision());
+    }
+
+    @Test
     void hydrationKeepsIndependentSheetStateAndCatalogDefinitions() throws Exception {
         Files.writeString(directory.resolve("items.json"), items().toString());
         HostCatalog.Snapshot snapshot = new HostCatalog().snapshot(directory);

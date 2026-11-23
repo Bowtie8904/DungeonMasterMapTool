@@ -27,6 +27,10 @@ mkdir jpackage-input
 for %%F in (target\DungeonMasterMapTool-*-all.jar) do copy /y "%%F" jpackage-input\DungeonMasterMapTool.jar >nul
 xcopy /i /y "dmmap-daggerheart\*.json" "jpackage-input\dmmap-daggerheart\" >nul
 if errorlevel 1 goto :failed
+if exist "dmmap-daggerheart\rules\" (
+    xcopy /e /i /y "dmmap-daggerheart\rules" "jpackage-input\dmmap-daggerheart\rules\" >nul
+    if errorlevel 1 goto :failed
+)
 
 echo [3/3] Creating the app image with jpackage...
 jpackage --type app-image --name DungeonMasterMapTool --input jpackage-input --main-jar DungeonMasterMapTool.jar --main-class dmmt.DungeonMasterMapToolLauncher --icon packaging\icon.ico --add-modules java.base,java.desktop,java.net.http,java.prefs,java.sql,jdk.jfr,jdk.jsobject,jdk.unsupported,jdk.httpserver,jdk.xml.dom --java-options "-XX:+UseCompactObjectHeaders --enable-native-access=ALL-UNNAMED -Dprism.maxvram=1g" --add-launcher DungeonMasterMapTool-Compatibility=packaging\compatibility-launcher.properties --dest dist %JP_EXTRA%
