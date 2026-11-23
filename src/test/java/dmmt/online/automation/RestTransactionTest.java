@@ -182,7 +182,7 @@ class RestTransactionTest {
         var base = pack();
         ObjectNode automation = (ObjectNode) RuleJson.parse("""
                 {"rules":[{"id":"fear","bindings":[{"id":"rest","event":"rest.prepare","surface":"rest","mode":"automatic"}],
-                 "do":[{"op":"table.gain","resource":"fear","amount":1,"label":"Fear"}],"ui":{"label":"Fear"}}]}
+                 "do":[{"op":"damage.deal","to":"actor","amount":1,"label":"Damage"}],"ui":{"label":"Damage"}}]}
                 """);
         var programs = new java.util.HashMap<>(base.programs());
         programs.put("features:fear", RuleCompiler.compile("features:fear", automation,
@@ -195,8 +195,71 @@ class RestTransactionTest {
         var error = assertThrows(RuleRuntime.Unavailable.class,
                 () -> HOST.stageSelfRest(pack, sheet, origin(), request("short"), StructuredRollTest.noRandom()));
         assertEquals("restCommand", error.code());
-        assertTrue(error.getMessage().contains("table.gain"));
+        assertTrue(error.getMessage().contains("damage.deal"));
         assertEquals(before, sheet);
+    }
+
+    @Test
+    void fearCarriesThroughEveryRestStageAndLifecyclePoolReset() throws Exception {
+        var base = pack();
+        ObjectNode automation = (ObjectNode) RuleJson.parse("""
+                {"pools":{"snapshot":{"kind":"number","scope":"source","max":12,"resetOn":["rest.short"],
+                                      "resetTo":{"read":"event.table.fear"}}},
+                 "rules":[
+                  {"id":"prepare-fear","bindings":[{"id":"auto","event":"rest.prepare","surface":"rest","mode":"automatic"}],
+                   "do":[{"op":"table.gain","resource":"fear","amount":2,"label":"Prepare Fear"}],
+                   "ui":{"report":"Prepare: {event.table.fear}."}},
+                  {"id":"move-fear","bindings":[{"id":"auto","event":"downtime.move","surface":"downtime","mode":"automatic"}],
+                   "do":[{"op":"table.spend","resource":"fear","amount":1,"label":"Move Fear"}],
+                   "after":{"do":[{"op":"table.gain","resource":"fear","amount":2,"label":"Deferred Fear"}],
+                            "report":"Deferred: {event.table.fear}."},
+                   "ui":{"report":"Move: {event.table.fear}."}},
+                  {"id":"before-fear","bindings":[{"id":"auto","event":"rest.short","surface":"rest","mode":"automatic"}],
+                   "do":[{"op":"table.spend","resource":"fear","amount":2,"label":"Before Fear"}],
+                   "ui":{"report":"Before: {event.table.fear}."}},
+                  {"id":"after-fear","bindings":[{"id":"auto","event":"rest.short","surface":"rest","mode":"automatic",
+                                                  "restPhase":"afterReset"}],
+                   "when":{"eq":[{"read":"event.table.fear"},3]},
+                   "do":[{"op":"table.gain","resource":"fear","amount":1,"label":"After Fear"}],
+                   "ui":{"report":"After: {event.table.fear}."}}
+                 ]}""");
+        var programs = new java.util.HashMap<>(base.programs());
+        programs.put("features:fear", RuleCompiler.compile("features:fear", automation,
+                RuleJson.parse(LegacyCatalogConverter.coreRecipes())));
+        var pack = new AutomationHost.Pack("test", programs, base.rulesetName(), base.rest());
+        ObjectNode sheet = sheet();
+        sheet.putArray("features").addObject().put("name", "Fear").put("instanceId", "fear")
+                .put("automationSource", "features:fear");
+        ObjectNode before = sheet.deepCopy();
+        ObjectNode rest = request("short");
+        move(rest, "mend");
+        move(rest, "ready");
+        ObjectNode origin = origin();
+        ObjectNode result = HOST.stageSelfRest(pack, sheet, origin, rest, StructuredRollTest.faces(4));
+
+        assertEquals(1, origin.requiredAt("/table/fear").intValue());
+        assertEquals(3, result.requiredAt("/preparationEvent/table/fear").intValue());
+        assertEquals(4, result.requiredAt("/moveEvents/0/table/fear").intValue());
+        assertEquals(5, result.requiredAt("/moveEvents/1/table/fear").intValue());
+        assertEquals(4, result.requiredAt("/event/table/fear").intValue());
+        assertEquals(3, sheet.requiredAt("/automationState/sources/fear/sourcePools/snapshot/value").intValue());
+        assertEquals(List.of(1, 3, 2, 4, 3, 5, 3),
+                result.path("outbox").findValues("before").stream().map(node -> node.intValue()).toList());
+        assertEquals(List.of(3, 2, 4, 3, 5, 3, 4),
+                result.path("outbox").findValues("after").stream().map(node -> node.intValue()).toList());
+        assertTrue(result.path("actions").findValuesAsText("report").containsAll(
+                List.of("Move: 2.", "Deferred: 4.", "Move: 3.", "Deferred: 5.", "Before: 3.", "After: 4.")));
+        assertEquals(10, HOST.revision(sheet));
+
+        ((ObjectNode) automation.at("/rules/3/do/0")).put("op", "table.spend").put("amount", 4);
+        programs.put("features:fear", RuleCompiler.compile("features:fear", automation,
+                RuleJson.parse(LegacyCatalogConverter.coreRecipes())));
+        var failingPack = new AutomationHost.Pack("failure", programs, base.rulesetName(), base.rest());
+        ObjectNode failingSheet = before.deepCopy();
+        assertEquals("tableResource", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageSelfRest(failingPack, failingSheet, origin, rest, StructuredRollTest.faces(4))).code());
+        assertEquals(before, failingSheet);
+        assertEquals(1, origin.requiredAt("/table/fear").intValue());
     }
 
     @Test

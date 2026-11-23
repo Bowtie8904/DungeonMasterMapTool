@@ -62,8 +62,8 @@ request-local roster. Staged completion derives signed recovery facts, runs bene
 advances rest counters; failures roll back that stage. The final multi-character rest transaction and player
 workflow are still required.
 An internal coordinator composes these stages on private source and recipient sheets, reprojects each recipient
-after earlier moves, and advances each changed sheet once. Commands needing intervening host settlement are
-rejected rather than evaluated against stale facts; offer authentication, persistence, retry receipts and
+after earlier moves, carries Fear through the rest, and advances each changed sheet once. Other commands needing
+intervening host settlement are rejected rather than evaluated against stale facts; offer authentication, persistence, retry receipts and
 interactive choices are not yet connected.
 Until that workflow is connected, format-2 catalogs reject legacy client-supplied rests and downtime rerolls.
 Owner and DM sheet saves cannot change host-owned rest counters, and legacy damage snapshots retain those counters

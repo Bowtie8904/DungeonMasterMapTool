@@ -100,7 +100,9 @@ the campaign before committing it with the sheets, history and retry receipt; ru
 resources. No additional request is needed for a roll.
 Lifecycle resets carry the settled Fear through saved actor order and scene/session phase order. Limit and pool
 resets receive the resulting host event, retaining actor and session identity; a failure leaves the full reset
-unchanged. Staged rests still reject Fear commands until their intervening stages carry the settled state.
+unchanged. The staged rest coordinator also carries Fear through preparation, each move and deferred benefit,
+the pre-reset completion phase, reset expressions and the post-reset phase. It returns the ordered commands for
+the future live host commit and leaves the original event untouched.
 Numeric pool reset expressions evaluate against initialized declared state and pools from one pre-reset snapshot
 per source, independently of declaration order; unchanged default pools are not persisted by the reset.
 
@@ -197,9 +199,9 @@ character. The host still needs full recipient coordination, publication and per
 The internal rest coordinator composes the initial effect snapshot, early expiry, preparation, ordered moves and
 completion on private source and recipient sheets. Recipient offers retain their original host versions while later
 moves reproject earlier staged changes; every changed sheet advances once, and failure discards the sequence.
-Recipient sheets are loaded only when selected or needed for eligibility. Until per-stage host settlement is
-available it accepts only countdown and already-applied limit refresh commands; a self-only rest can also emit
-single-holder cleanup. Commands that could change facts read by later stages are rejected. It is not a live
+Recipient sheets are loaded only when selected or needed for eligibility. It accepts ordered Fear changes,
+countdowns and already-applied limit refresh commands; a self-only rest can also emit single-holder cleanup.
+Other commands that could change facts read by later stages are rejected. It is not a live
 workflow: authenticated offers, post-roll choices, command settlement, persisted reports, retries and the atomic
 campaign commit remain necessary.
 The shared Daggerheart ruleset now supplies self-targeted short recovery (1d4 plus tier and move bonus), the two

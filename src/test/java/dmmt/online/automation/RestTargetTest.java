@@ -283,8 +283,8 @@ class RestTargetTest {
     void commandsRequiringSettlementAreRejectedAtEveryTargetedStage() throws Exception {
         for (String path : List.of("/automation/rules/0/do", "/automation/rules/2/do", "/automation/rules/0/after/do")) {
             ObjectNode ruleset = ruleset();
-            ((ArrayNode) ruleset.at(path)).addObject().put("op", "table.gain").put("resource", "fear")
-                    .put("amount", 1).put("label", "Fear");
+            ((ArrayNode) ruleset.at(path)).addObject().put("op", "damage.deal").put("to", "actor")
+                    .put("amount", 1).put("label", "Damage");
             Setup setup = setup(ruleset, 4);
             PartyTargets party = party(setup, setup.recipient(), new AtomicReference<>());
             ObjectNode target = targetRequest(setup, party, "heal");
@@ -292,11 +292,58 @@ class RestTargetTest {
             var failure = assertThrows(RuleRuntime.Unavailable.class,
                     () -> move(setup, setup.progress(), "heal", options(), party, target, 4), path);
             assertEquals("restCommand", failure.code());
-            assertTrue(failure.getMessage().contains("table.gain"));
+            assertTrue(failure.getMessage().contains("damage.deal"));
             assertEquals(beforeSource, setup.source());
             assertEquals(beforeRecipient, setup.recipient());
             assertTrue(party.updates().isEmpty());
         }
+    }
+
+    @Test
+    void allyMoveAndLaterMoveSeeSettledFearFromAdjustmentsAndDeferredBenefits() throws Exception {
+        ObjectNode ruleset = ruleset();
+        ((ArrayNode) ruleset.at("/automation/rules/0/do")).addObject()
+                .put("op", "table.gain").put("resource", "fear").put("amount", 2).put("label", "Adjustment");
+        ((ArrayNode) ruleset.at("/automation/rules/2/do")).addObject()
+                .put("op", "table.spend").put("resource", "fear").put("amount", 1).put("label", "Move");
+        ((ArrayNode) ruleset.at("/automation/rules/0/after/do")).addObject()
+                .put("op", "table.gain").put("resource", "fear").put("amount", 3).put("label", "Deferred");
+        ((ObjectNode) ruleset.at("/automation/rules/4/ui")).put("report", "Repair at {event.table.fear} Fear.");
+        Setup setup = setup(ruleset, 4);
+        PartyTargets party = party(setup, setup.recipient(), new AtomicReference<>());
+        ObjectNode healTarget = targetRequest(setup, party, "heal");
+        ObjectNode repairTarget = targetRequest(setup, party, "repair");
+        ObjectNode request = transaction(setup);
+        transactionMove(request, "heal", healTarget);
+        transactionMove(request, "repair", repairTarget);
+        ObjectNode originalRecipient = setup.recipient().deepCopy();
+        var result = stage(setup, request, roster(setup, new java.util.HashMap<>()), 4);
+
+        assertEquals(5, result.response().requiredAt("/moveEvents/0/table/fear").intValue());
+        assertEquals(5, result.response().requiredAt("/moveEvents/1/table/fear").intValue());
+        assertEquals(5, result.response().requiredAt("/event/table/fear").intValue());
+        assertEquals(List.of(1, 3, 2),
+                result.response().path("outbox").findValues("before").stream().map(JsonNode::intValue).toList());
+        assertEquals(List.of(3, 2, 5),
+                result.response().path("outbox").findValues("after").stream().map(JsonNode::intValue).toList());
+        assertTrue(result.response().path("actions").findValuesAsText("report").contains("Repair at 5 Fear."));
+        assertEquals(4, result.recipients().get("mira").requiredAt("/hp/on").intValue(),
+                "Permanent and temporary locks still protect the recipient.");
+        assertEquals(1, result.recipients().get("mira").requiredAt("/armorTrack/on").intValue());
+        assertEquals(originalRecipient, setup.recipient());
+
+        ((ArrayNode) ruleset.at("/automation/rules/4/do")).addObject()
+                .put("op", "table.spend").put("resource", "fear").put("amount", 6).put("label", "Too much");
+        Setup failing = setup(ruleset, 4);
+        PartyTargets failingParty = party(failing, failing.recipient(), new AtomicReference<>());
+        ObjectNode failingRequest = transaction(failing);
+        transactionMove(failingRequest, "heal", targetRequest(failing, failingParty, "heal"));
+        transactionMove(failingRequest, "repair", targetRequest(failing, failingParty, "repair"));
+        ObjectNode beforeSource = failing.source().deepCopy(), beforeRecipient = failing.recipient().deepCopy();
+        assertEquals("tableResource", assertThrows(RuleRuntime.Unavailable.class,
+                () -> stage(failing, failingRequest, roster(failing, new java.util.HashMap<>()), 4)).code());
+        assertEquals(beforeSource, failing.source());
+        assertEquals(beforeRecipient, failing.recipient());
     }
 
     @Test

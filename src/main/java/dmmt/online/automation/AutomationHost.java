@@ -28,8 +28,10 @@ public final class AutomationHost {
     private static final String EFFECT_PROFILE = "effect.profile";
     // Runtime revisions pass through double-valued expressions; reserve room for intermediate stages.
     private static final long MAX_REST_REVISION = 1L << 52;
-    private static final Set<String> STAGED_REST_COMMANDS = Set.of("countdown.start", "limits.refresh", "effect.endElsewhere");
-    private static final Set<String> STAGED_TARGET_REST_COMMANDS = Set.of("countdown.start", "limits.refresh");
+    private static final Set<String> STAGED_REST_COMMANDS = Set.of(
+            "countdown.start", "limits.refresh", "effect.endElsewhere", "table.gain", "table.spend");
+    private static final Set<String> STAGED_TARGET_REST_COMMANDS = Set.of(
+            "countdown.start", "limits.refresh", "table.gain", "table.spend");
     static final String RULESET_SOURCE = "ruleset:base";
 
     /** Compiled automation keyed by fully qualified source ID. */
@@ -890,6 +892,8 @@ public final class AutomationHost {
         ObjectNode prepared = prepareRest(pack, working, origin, kind, revision, preparation, random, initial);
         projection.state(working).put("revision", revision);
         RestProgress progress = restProgress(pack, prepared);
+        ObjectNode stagedOrigin = origin.deepCopy();
+        carryRestTable(stagedOrigin, prepared.required("event"));
 
         ObjectNode response = RuleJson.JSON.createObjectNode();
         ArrayNode actions = response.putArray("actions"), outbox = response.putArray("outbox");
@@ -899,15 +903,16 @@ public final class AutomationHost {
         for (JsonNode move : moves) {
             PartyTargets party = move.has("target") ? recipients.party() : null;
             RestTarget target = party == null ? null : new RestTarget(party, (ObjectNode) move.get("target"), recipients::reproject);
-            RestMoveResult result = restMove(pack, working, origin, progress, (ObjectNode) move.get("selection"),
+            RestMoveResult result = restMove(pack, working, stagedOrigin, progress, (ObjectNode) move.get("selection"),
                     (ArrayNode) move.get("options"), random, target);
             progress = result.progress();
             moveEvents.add(result.response().path("event").deepCopy());
             appendRestStage(result.response(), actions, outbox, targeted);
+            carryRestTable(stagedOrigin, result.response().required("event"));
             if (party != null) recipients.apply(party.updates());
             projection.state(working).put("revision", revision);
         }
-        ObjectNode finished = completeRest(pack, working, origin, progress, initial, completion, random);
+        ObjectNode finished = completeRest(pack, working, stagedOrigin, progress, initial, completion, random);
         appendRestStage(finished, actions, outbox, targeted);
         response.set("event", finished.path("event").deepCopy());
         response.set("skipped", finished.path("skipped").deepCopy());
@@ -921,6 +926,12 @@ public final class AutomationHost {
         RestTransaction transaction = new RestTransaction(response, changed);
         replace(sheet, working);
         return transaction;
+    }
+
+    private static void carryRestTable(ObjectNode origin, JsonNode event) {
+        JsonNode table = event.get("table");
+        if (table == null) origin.remove("table");
+        else origin.set("table", table.deepCopy());
     }
 
     private long restRevision(ObjectNode sheet) {
@@ -1421,12 +1432,15 @@ public final class AutomationHost {
         response.putArray("outbox");
         response.putArray("skipped");
         runRestPhase(pack, working, beforeEvent, beforeChoices, approvedSources, response, random);
+        ObjectNode settledBeforeEvent = RuleJson.object(response.get("event"), "/event");
         working.put("shortRestsInRow", "short".equals(progress.kind()) ? consecutive + 1 : 0);
         if ("long".equals(progress.kind())) working.put("longRestRevision", longRevision + 1);
         ObjectNode state = projection.state(working);
         state.put("revision", state.path("revision").asLong() + 1);
-        resetRest(pack, working, beforeEvent, initialEffectIds);
-        ObjectNode afterEvent = restCompletionEvent(pack, working, origin, plan, "afterReset");
+        resetRest(pack, working, settledBeforeEvent, initialEffectIds);
+        ObjectNode afterOrigin = origin.deepCopy();
+        carryRestTable(afterOrigin, settledBeforeEvent);
+        ObjectNode afterEvent = restCompletionEvent(pack, working, afterOrigin, plan, "afterReset");
         runRestPhase(pack, working, afterEvent, afterChoices, approvedSources, response, random);
         response.put("revision", revision(working));
         replace(sheet, working);
