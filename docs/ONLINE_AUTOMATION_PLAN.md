@@ -115,6 +115,14 @@ The staged rest-reset primitive snapshots the original stored effect IDs and exp
 effects started or replaced during the same downtime and reconciling surviving effect-bound pools. It is not yet
 connected to the live rest workflow.
 
+The live host rejects legacy client-supplied rests and downtime rerolls when any category declares format 2,
+including an incomplete pack. It cannot classify malformed, unreadable or unknown-version categories as legacy.
+The shared rules directory alongside valid format-1 catalogs is not a cutover marker; a standalone ruleset is a
+replacement candidate. Full and compact owner or DM sheet saves cannot change the rest counters: omitted fields
+are preserved, and explicit changes or compact removals are rejected. Legacy incoming-damage snapshots preserve
+the host's automation state and cannot change those counters under the replacement policy. These guards do not
+implement the format-2 rest transaction or affect ordinary edits and valid format-1 rests.
+
 Selected `downtime.move` buttons may declare `restMove: {id, kind, group?, ally?}`. `kind` is `any`,
 `short`, `long`, or `longMove` (a long-rest move that an allowance may permit during a short rest). The optional
 group defaults to the move ID and identifies mutually exclusive variants within a source instance; `ally` defaults

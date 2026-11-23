@@ -1658,6 +1658,7 @@ public final class OnlineSessionServer {
                     return;
                 }
             }
+            protectRestCounters(previous, (ObjectNode) sheet, patch);
             refreshCatalogSheet((ObjectNode) sheet);
             if (sheet.path("inventoryRevision").asLong(0) != previous.path("inventoryRevision").asLong(0)
                     || sheet.path("compendiumRevision").asLong(0) != previous.path("compendiumRevision").asLong(0)
@@ -1670,8 +1671,7 @@ public final class OnlineSessionServer {
             CopycatCards.preserveSave((ObjectNode) sheet, previous);
             SpecialCardActions.preserveSave((ObjectNode) sheet, previous, actor.isTestingCharacter(), expected != null);
             SplendorActions.preserveSave((ObjectNode) sheet, previous);
-            if (previous.has("automationState")) ((ObjectNode) sheet).set("automationState", previous.get("automationState").deepCopy());
-            else ((ObjectNode) sheet).remove("automationState");
+            preserveAutomationState(previous, (ObjectNode) sheet);
             DmEffectProtection.validate(previous, sheet, null);
             BoneValorRules.validateSave(previous, (ObjectNode) sheet);
             String problem = CharacterSheetRules.problem(sheet, previous, actor.isTestingCharacter(), c.getFear());
@@ -1734,6 +1734,8 @@ public final class OnlineSessionServer {
             stockChanged(actor.getId());
             ctx.header("Cache-Control", "no-store");
             json(ctx, 200, sheetState(actor));
+        } catch (RestPolicyException e) {
+            json(ctx, 503, errorBody(e.getMessage()));
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             json(ctx, 400, errorBody("Invalid sheet"));
         } catch (IllegalArgumentException e) {
@@ -1746,6 +1748,51 @@ public final class OnlineSessionServer {
     private static String sheetVersion(String stored, Campaign.Actor actor) {
         return "\"" + CampaignStore.sha256((stored == null ? "actor:" + actor.getName() : stored)
                 .getBytes(StandardCharsets.UTF_8)) + "\"";
+    }
+
+    private static final List<String> REST_COUNTERS = List.of("shortRestsInRow", "longRestRevision");
+
+    private static final class RestPolicyException extends IOException {
+        RestPolicyException(IOException cause) {
+            super("Cannot verify the host's rest rules: " + cause.getMessage()
+                    + " Correct the host catalogs before retrying.", cause);
+        }
+    }
+
+    private boolean requiresAuthoritativeRest() throws RestPolicyException {
+        try {
+            return catalogs().requiresAuthoritativeRest();
+        } catch (IOException e) {
+            throw new RestPolicyException(e);
+        }
+    }
+
+    private void protectRestCounters(ObjectNode previous, ObjectNode proposed, boolean explicitRemoval)
+            throws RestPolicyException {
+        boolean changed = false;
+        for (String field : REST_COUNTERS)
+            if (!java.util.Objects.equals(previous.get(field), proposed.get(field))) changed = true;
+        if (!changed || !requiresAuthoritativeRest()) return;
+        for (String field : REST_COUNTERS) {
+            JsonNode before = previous.get(field), after = proposed.get(field);
+            if (after == null) {
+                if (explicitRemoval && before != null)
+                    throw new IllegalArgumentException("Rest counters are maintained by the host. Reload the sheet.");
+            } else {
+                boolean validBefore = before == null || before.isNull()
+                        || before.isIntegralNumber() && before.canConvertToLong();
+                long oldValue = before == null || before.isNull() ? 0 : before.asLong();
+                if (!validBefore || !after.isIntegralNumber() || !after.canConvertToLong() || after.longValue() != oldValue)
+                    throw new IllegalArgumentException("Rest counters are maintained by the host. Reload the sheet.");
+            }
+            if (before == null) proposed.remove(field);
+            else proposed.set(field, before.deepCopy());
+        }
+    }
+
+    private static void preserveAutomationState(ObjectNode previous, ObjectNode proposed) {
+        if (previous.has("automationState")) proposed.set("automationState", previous.get("automationState").deepCopy());
+        else proposed.remove("automationState");
     }
 
     static ObjectNode applySheetPatch(ObjectNode original, JsonNode patch) {
@@ -2364,6 +2411,11 @@ public final class OnlineSessionServer {
                     json(ctx, 409, conflict);
                     return;
                 }
+            }
+            if ((request.has("rest") || request.has("restDie")) && requiresAuthoritativeRest()) {
+                json(ctx, 409, errorBody("Legacy downtime is unavailable for this ruleset. "
+                        + "The host-authoritative rest workflow is not yet available."));
+                return;
             }
             if (request.has("incomingDamage")) {
                 resolveBoneValorDamage(sourceActor, request.path("incomingDamage"));
@@ -3001,6 +3053,8 @@ public final class OnlineSessionServer {
             actionResponse(ctx, playerId, sourceActor);
         } catch (FeatureIoException e) {
             json(ctx, 500, errorBody("Could not read the target character sheet."));
+        } catch (RestPolicyException e) {
+            json(ctx, 503, errorBody(e.getMessage()));
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             json(ctx, 400, errorBody("Invalid feature request."));
         } catch (IllegalArgumentException e) {
@@ -3018,6 +3072,8 @@ public final class OnlineSessionServer {
     private synchronized void resolveBoneValorDamage(Campaign.Actor actor, JsonNode request) throws IOException {
         ObjectNode before = storedSheet(actor.getId());
         if (!(request.path("sheet") instanceof ObjectNode next)) throw new IllegalArgumentException("Invalid damage result.");
+        protectRestCounters(before, next, false);
+        preserveAutomationState(before, next);
         DmEffectProtection.validate(before, next, null);
         if (next.path("longRestRevision").asLong() != before.path("longRestRevision").asLong())
             throw new IllegalArgumentException("Incoming damage cannot advance a long rest.");

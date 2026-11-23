@@ -4742,6 +4742,175 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void replacementPacksRejectLegacyRestAndProtectCountersInOwnerAndDmSaves() throws Exception {
+        ObjectNode before = bloodSheet().put("shortRestsInRow", 2).put("longRestRevision", 3);
+        before.putObject("automationState").put("revision", 7);
+        automationCompendium();
+        String id = "replacement-rest", campaignId = campaign.getId();
+        campaign.getActors().add(Campaign.Actor.builder().id(id).name("Resting").ownerId(playerId()).build());
+        store.saveSheet(campaignId, id, before.toString());
+        String cookie = cookie(), token = URI.create(server.dmSheetUrl(id)).getFragment();
+        JsonNode baseline = MAPPER.readTree(sheetRead(cookie, id).body());
+        String version = baseline.path("version").asText(), original = store.loadSheet(campaignId, id);
+        int history = store.historyTail(campaignId, 100).size();
+
+        ObjectNode request = MAPPER.createObjectNode().put("actorId", id).put("expectedSheetVersion", version);
+        ObjectNode rest = request.putObject("rest").put("kind", "short");
+        rest.set("sheet", before.deepCopy().put("shortRestsInRow", 3));
+        rest.putArray("picks");
+        var denied = featureHttp(cookie, request);
+        assertEquals(409, denied.statusCode(), denied.body());
+        assertTrue(denied.body().contains("host-authoritative rest"), denied.body());
+        ObjectNode reroll = MAPPER.createObjectNode().put("actorId", id).put("key", "feat:Old")
+                .put("actionId", "reroll").put("restDie", 0);
+        assertEquals(409, featureHttp(cookie, reroll).statusCode());
+
+        for (String field : List.of("shortRestsInRow", "longRestRevision")) {
+            ObjectNode forged = (ObjectNode) baseline.path("sheet").deepCopy();
+            forged.put(field, 0).put("notes", "Must not save");
+            var owner = saveDeathSheet(cookie, id, forged);
+            assertEquals(400, owner.statusCode(), owner.body());
+            assertTrue(owner.body().contains("maintained by the host"), owner.body());
+            assertEquals(400, dmSheetHttp(id, token, forged, version).statusCode());
+
+            ObjectNode patch = MAPPER.createObjectNode();
+            patch.putObject("fields").put(field, 0);
+            patch.putArray("removed");
+            assertEquals(400, patchSheet(cookie, id, patch, version).statusCode());
+            assertEquals(400, dmSheetPatch(id, token, patch, version).statusCode());
+            patch.withObject("/fields").removeAll();
+            patch.withArray("/removed").add(field);
+            assertEquals(400, patchSheet(cookie, id, patch, version).statusCode());
+            assertEquals(400, dmSheetPatch(id, token, patch, version).statusCode());
+            forged.putNull(field);
+            assertEquals(400, saveDeathSheet(cookie, id, forged).statusCode());
+            assertEquals(original, store.loadSheet(campaignId, id));
+            assertEquals(history, store.historyTail(campaignId, 100).size());
+        }
+
+        ObjectNode ordinary = (ObjectNode) baseline.path("sheet").deepCopy();
+        ordinary.remove(List.of("shortRestsInRow", "longRestRevision"));
+        ordinary.put("notes", "Ordinary edit");
+        var saved = saveDeathSheet(cookie, id, ordinary);
+        assertEquals(200, saved.statusCode(), saved.body());
+        JsonNode persisted = MAPPER.readTree(store.loadSheet(campaignId, id));
+        assertEquals(2, persisted.path("shortRestsInRow").asInt());
+        assertEquals(3, persisted.path("longRestRevision").asInt());
+        assertEquals(7, persisted.path("automationState").path("revision").asInt());
+        assertEquals("Ordinary edit", persisted.path("notes").asText());
+        assertEquals(history, store.historyTail(campaignId, 100).size());
+        assertEquals(409, featureHttp(cookie, request).statusCode(), "A stale rest never changes the latest sheet.");
+        ObjectNode stalePatch = MAPPER.createObjectNode();
+        stalePatch.putObject("fields").put("shortRestsInRow", 0);
+        stalePatch.putArray("removed");
+        assertEquals(409, dmSheetPatch(id, token, stalePatch, version).statusCode());
+        assertEquals(persisted, MAPPER.readTree(store.loadSheet(campaignId, id)));
+
+        String fresh = "fresh-rest";
+        campaign.getActors().add(Campaign.Actor.builder().id(fresh).name("Fresh").ownerId(playerId()).build());
+        ObjectNode uncounted = before.deepCopy();
+        uncounted.remove(List.of("shortRestsInRow", "longRestRevision"));
+        store.saveSheet(campaignId, fresh, uncounted.toString());
+        ObjectNode zeroes = (ObjectNode) MAPPER.readTree(sheetRead(cookie, fresh).body()).path("sheet").deepCopy();
+        zeroes.put("shortRestsInRow", 0).put("longRestRevision", 0);
+        var zeroSave = saveDeathSheet(cookie, fresh, zeroes);
+        assertEquals(200, zeroSave.statusCode(), zeroSave.body());
+        JsonNode newSheet = MAPPER.readTree(store.loadSheet(campaignId, fresh));
+        assertFalse(newSheet.has("shortRestsInRow"));
+        assertFalse(newSheet.has("longRestRevision"));
+    }
+
+    @Test
+    void incompleteOrUnclassifiableReplacementCatalogsNeverEnableLegacyRest() throws Exception {
+        ObjectNode before = bloodSheet().put("shortRestsInRow", 1).put("longRestRevision", 1);
+        automationCompendium();
+        String id = "incomplete-rest", campaignId = campaign.getId(), cookie = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id(id).name("Incomplete").ownerId(playerId()).build());
+        store.saveSheet(campaignId, id, before.toString());
+        String original = store.loadSheet(campaignId, id);
+        int history = store.historyTail(campaignId, 100).size();
+        ObjectNode request = MAPPER.createObjectNode().put("actorId", id);
+        request.putObject("rest").put("kind", "short").set("sheet", before.deepCopy().put("shortRestsInRow", 2));
+        Path classes = compendiumDir.resolve("classes.json");
+        java.nio.file.Files.delete(compendiumDir.resolve("rules.json"));
+        assertEquals(409, featureHttp(cookie, request).statusCode(), "Missing recipes do not enable legacy rest.");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(classes.toFile());
+        for (String kind : List.of("missing", "unknown", "malformed")) {
+            ObjectNode broken = catalog.deepCopy();
+            if ("missing".equals(kind)) broken.remove("version");
+            if ("unknown".equals(kind)) broken.put("version", 9);
+            java.nio.file.Files.writeString(classes, "malformed".equals(kind) ? "{broken" : broken.toString());
+            var denied = featureHttp(cookie, request);
+            assertEquals(503, denied.statusCode(), denied.body());
+            assertTrue(denied.body().contains("host catalogs"), denied.body());
+            var save = saveDeathSheet(cookie, id, before.deepCopy().put("longRestRevision", 2));
+            assertTrue(save.statusCode() >= 400, save.body());
+            assertEquals(original, store.loadSheet(campaignId, id));
+            assertEquals(history, store.historyTail(campaignId, 100).size());
+        }
+    }
+
+    @Test
+    void formatOneCatalogsRetainLegacyRestsAndCounterEdits() throws Exception {
+        ObjectNode before = bloodSheet();
+        before.putObject("armorTrack").put("on", 0).put("slots", 6);
+        String id = "legacy-rest", campaignId = campaign.getId(), cookie = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id(id).name("Legacy").ownerId(playerId()).build());
+        store.saveSheet(campaignId, id, before.toString());
+        ObjectNode request = MAPPER.createObjectNode().put("actorId", id);
+        ObjectNode rest = request.putObject("rest").put("kind", "short").put("report", "Short rest.");
+        rest.set("sheet", before.deepCopy().put("shortRestsInRow", 1));
+        rest.putArray("picks");
+        rest.putObject("options");
+        var response = featureHttp(cookie, request);
+        assertEquals(200, response.statusCode(), response.body());
+        ObjectNode saved = (ObjectNode) MAPPER.readTree(store.loadSheet(campaignId, id));
+        assertEquals(1, saved.path("shortRestsInRow").asInt());
+        saved.put("longRestRevision", 1);
+        response = saveDeathSheet(cookie, id, saved);
+        assertEquals(200, response.statusCode(), response.body());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaignId, id)).path("longRestRevision").asInt());
+    }
+
+    @Test
+    void replacementDamageSnapshotsCannotChangeRestCountersOrAutomationState() throws Exception {
+        ObjectNode before = bloodSheet("octarine-brace", "rise-up").put("shortRestsInRow", 2).put("longRestRevision", 3);
+        before.putObject("armorTrack").put("on", 0).put("slots", 6);
+        before.withObject("/stress").put("on", 3);
+        before.putObject("automationState").put("revision", 7).putObject("limits").put("spent", 1);
+        automationCompendium();
+        String id = "replacement-damage", campaignId = campaign.getId(), cookie = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id(id).name("Braced").ownerId(playerId()).build());
+        store.saveSheet(campaignId, id, before.toString());
+        ObjectNode body = MAPPER.createObjectNode().put("actorId", id);
+        ObjectNode damage = body.putObject("incomingDamage").put("report", "Damage taken.");
+        ObjectNode next = before.deepCopy().put("shortRestsInRow", 0);
+        next.withObject("/armorTrack").put("on", 1);
+        next.withObject("/hp").put("on", 1);
+        next.withObject("/stress").put("on", 2);
+        next.withObject("/automationState").put("revision", 0).putObject("limits");
+        damage.set("sheet", next);
+        ObjectNode input = damage.putObject("input").put("damage", 12).put("type", "physical").put("armor", true);
+        input.putArray("selected").add("card:Octarine Brace/octarine");
+        ObjectNode result = damage.putObject("result").put("armorUsed", 1).put("armorMarked", 1).put("hp", 1).put("final", 1);
+        result.putArray("applied").addObject().put("key", "card:Octarine Brace").put("id", "octarine");
+        result.withArray("/applied").addObject().put("key", "card:Rise Up").put("id", "rise");
+        String original = store.loadSheet(campaignId, id);
+        int history = store.historyTail(campaignId, 100).size(), fear = campaign.getFear();
+        assertEquals(400, featureHttp(cookie, body).statusCode());
+        assertEquals(original, store.loadSheet(campaignId, id));
+        assertEquals(history, store.historyTail(campaignId, 100).size());
+        assertEquals(fear, campaign.getFear());
+        next.remove(List.of("shortRestsInRow", "longRestRevision"));
+        var response = featureHttp(cookie, body);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode persisted = MAPPER.readTree(store.loadSheet(campaignId, id));
+        assertEquals(2, persisted.path("shortRestsInRow").asInt());
+        assertEquals(3, persisted.path("longRestRevision").asInt());
+        assertEquals(before.path("automationState"), persisted.path("automationState"));
+    }
+
+    @Test
     void versionedRestAndDamageActionsReturnLatestSheetWithoutApplyingStaleSnapshots() throws Exception {
         campaign.getActors().add(Campaign.Actor.builder().id("versioned-rest").name("Resting").ownerId(playerId()).build());
         campaign.getActors().add(Campaign.Actor.builder().id("versioned-damage").name("Damaged").ownerId(playerId()).build());
@@ -7446,6 +7615,14 @@ class OnlineSessionServerTest {
         if (version != null) request.header("If-Match", version);
         if (body != null) request.header("Content-Type", "application/json")
                 .PUT(HttpRequest.BodyPublishers.ofString(body.toString()));
+        return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpResponse<String> dmSheetPatch(String actorId, String token, JsonNode patch, String version) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/sheet/" + actorId))
+                .header("Authorization", "Bearer " + token).header("Content-Type", "application/json")
+                .header("X-DMMT-Sheet-Patch", "1").header("If-Match", version)
+                .PUT(HttpRequest.BodyPublishers.ofString(patch.toString()));
         return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 

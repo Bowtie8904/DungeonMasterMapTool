@@ -257,6 +257,40 @@ final class HostCatalog {
             return false;
         }
 
+        boolean requiresAuthoritativeRest() throws IOException {
+            boolean foundCatalog = false, replacement = false;
+            for (String category : CatalogEditor.CATEGORIES) {
+                Document doc = documents.get(category + ".json");
+                if (doc == null) continue;
+                foundCatalog = true;
+                try {
+                    doc.readable();
+                } catch (IOException e) {
+                    throw new IOException("Cannot read the " + category + " catalog.", e);
+                }
+                JsonNode file = doc.file;
+                if (!(file instanceof ObjectNode) || !"dmmap-daggerheart".equals(file.path("format").asText())
+                        || !category.equals(file.path("category").asText()) || !file.path("entries").isArray()
+                        || !file.path("version").isIntegralNumber() || !file.path("version").canConvertToInt()
+                        || (file.path("version").intValue() != 1 && file.path("version").intValue() != 2))
+                    throw new IOException("The " + category + " catalog has an invalid or unsupported format.");
+                replacement |= file.path("version").intValue() == 2;
+            }
+            if (foundCatalog || !sharedRules) return replacement;
+            if (ruleset == null) throw new IOException("The shared ruleset is missing.");
+            try {
+                ruleset.readable();
+            } catch (IOException e) {
+                throw new IOException("Cannot read the shared ruleset.", e);
+            }
+            JsonNode file = ruleset.file;
+            if (!(file instanceof ObjectNode) || !"dmmap-daggerheart-ruleset".equals(file.path("format").asText())
+                    || !file.path("version").isIntegralNumber() || !file.path("version").canConvertToInt()
+                    || file.path("version").intValue() != 2)
+                throw new IOException("The shared ruleset has an invalid or unsupported format.");
+            return true;
+        }
+
         List<String> categories() {
             return documents.keySet().stream().map(name -> name.substring(0, name.length() - 5)).toList();
         }

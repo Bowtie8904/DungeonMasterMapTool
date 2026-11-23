@@ -61,6 +61,10 @@ An internal coordinator composes these stages on private source and recipient sh
 after earlier moves, and advances each changed sheet once. Commands needing intervening host settlement are
 rejected rather than evaluated against stale facts; offer authentication, persistence, retry receipts and
 interactive choices are not yet connected.
+Until that workflow is connected, format-2 catalogs reject legacy client-supplied rests and downtime rerolls.
+Owner and DM sheet saves cannot change host-owned rest counters, and legacy damage snapshots retain those counters
+and the host's automation state. An unreadable or unrecognized catalog cannot silently enable legacy rest;
+the shipped format-1 catalogs retain their existing rest behavior.
 The shared ruleset defines the base self-recovery, preparation and project moves for staged tests, including
 tier-scaled recovery, protected HP and capped Hope. Its ally recovery variants, rerolls and armor overflow are
 not yet wired.
