@@ -876,12 +876,13 @@ public final class AutomationHost {
     private record OrderedRestRecovery(RestPartyRecovery recovery, int sourceIndex, int ruleIndex, int stepIndex) {}
 
     record PartyRecovery(ObjectNode response, Map<String, ObjectNode> recipients, Map<String, String> readVersions,
-                         Map<String, List<String>> scopeMembership) {
+                         Map<String, List<String>> scopeMembership, Map<String, List<String>> scopeOrder) {
         PartyRecovery {
             response = response.deepCopy();
             recipients = copySheets(recipients);
             readVersions = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(readVersions));
             scopeMembership = copyScopeMembership(scopeMembership);
+            scopeOrder = copyScopeMembership(scopeOrder);
         }
         @Override public ObjectNode response() { return response.deepCopy(); }
         @Override public Map<String, ObjectNode> recipients() { return copySheets(recipients); }
@@ -1070,7 +1071,8 @@ public final class AutomationHost {
         ObjectNode response = staged.response().put("scope", scope).put("scopeInspected", !requests.isEmpty());
         response.set("membership", requests.isEmpty() ? RuleJson.JSON.createArrayNode()
                 : response.at("/scopeSnapshots/0/membership").deepCopy());
-        return new PartyRecovery(response, staged.recipients(), staged.readVersions(), staged.scopeMembership());
+        return new PartyRecovery(response, staged.recipients(), staged.readVersions(), staged.scopeMembership(),
+                staged.scopeOrder());
     }
 
     /** Reads only host-produced move adjustments; it does not authorize or settle the resulting requests. */
@@ -1196,6 +1198,18 @@ public final class AutomationHost {
     /** Stages an ordered sequence with potentially different host-selected scopes. */
     PartyRecovery stagePartyRecoveries(Pack pack, ObjectNode event, RestRoster roster,
                                        List<ScopedPartyRecoveryRequest> requests, RandomGenerator random) {
+        return stagePartyRecoveries(pack, event, roster, requests, random, false);
+    }
+
+    /** Uses the host roster's original order and retains it as a commit dependency. */
+    PartyRecovery stagePartyRecoveriesInRosterOrder(Pack pack, ObjectNode event, RestRoster roster,
+                                                    List<ScopedPartyRecoveryRequest> requests, RandomGenerator random) {
+        return stagePartyRecoveries(pack, event, roster, requests, random, true);
+    }
+
+    private PartyRecovery stagePartyRecoveries(Pack pack, ObjectNode event, RestRoster roster,
+                                               List<ScopedPartyRecoveryRequest> requests, RandomGenerator random,
+                                               boolean rosterOrder) {
         RuleJson.object(event, "/event");
         String sourceId = RuleJson.id(event.get("actorId"), "/event/actorId");
         RuleJson.text(event.get("type"), "/event/type");
@@ -1205,12 +1219,13 @@ public final class AutomationHost {
         if (requests == null || requests.size() > 128 || requests.stream().anyMatch(java.util.Objects::isNull))
             throw RuleJson.error("/recovery/requests", "Expected at most 128 recovery requests.");
         StagedRestRecipients recipients = new StagedRestRecipients(pack, sourceId, roster);
-        ObjectNode response = recoverParty(recipients, event, requests, random);
-        return new PartyRecovery(response, recipients.changed(), recipients.readVersions(), recipients.scopeMembership());
+        ObjectNode response = recoverParty(recipients, event, requests, random, rosterOrder);
+        return new PartyRecovery(response, recipients.changed(), recipients.readVersions(),
+                recipients.scopeMembership(), recipients.scopeOrder());
     }
 
     private ObjectNode recoverParty(StagedRestRecipients recipients, ObjectNode parentEvent,
-                                    List<ScopedPartyRecoveryRequest> requests, RandomGenerator random) {
+                                    List<ScopedPartyRecoveryRequest> requests, RandomGenerator random, boolean rosterOrder) {
         ObjectNode response = RuleJson.JSON.createObjectNode();
         ArrayNode actions = response.putArray("actions"), outbox = response.putArray("outbox");
         ArrayNode clears = response.putArray("clears");
@@ -1222,7 +1237,7 @@ public final class AutomationHost {
             for (ScopedPartyRecoveryRequest request : requests) {
                 List<StagedRecipient> members = scopes.get(request.scope());
                 if (members == null) {
-                    members = recipients.scoped(request.scope());
+                    members = recipients.scoped(request.scope(), rosterOrder);
                     scopes.put(request.scope(), members);
                     ArrayNode membership = snapshots.addObject().put("scope", request.scope()).putArray("membership");
                     for (StagedRecipient member : members)
@@ -1493,7 +1508,25 @@ public final class AutomationHost {
         }
     }
 
+    /** Rechecks host ordering without hydrating recipient sheets. */
+    public static void requireRestScopeOrder(String sourceId, Map<String, List<String>> expected, RestRoster roster) {
+        RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(sourceId), "/event/actorId");
+        if (expected == null || roster == null) throw RuleJson.error("/recipients", "Expected host scope snapshots and roster.");
+        for (var entry : expected.entrySet()) {
+            if (!RuleCompiler.TARGET_SCOPES.contains(entry.getKey()) || entry.getValue() == null)
+                throw RuleJson.error("/recipients", "Invalid host scope snapshot.");
+            List<String> current = restScopeMembers(sourceId, roster.loadScope().apply(entry.getKey()), false).stream()
+                    .map(RestMember::id).toList();
+            if (!current.equals(entry.getValue()))
+                throw new RuleRuntime.Unavailable("staleRecipient", "The character order changed. Reopen this rest.");
+        }
+    }
+
     private static List<RestMember> restScopeMembers(String sourceId, List<RestMember> members) {
+        return restScopeMembers(sourceId, members, true);
+    }
+
+    private static List<RestMember> restScopeMembers(String sourceId, List<RestMember> members, boolean sort) {
         if (members == null || members.size() > 128)
             throw RuleJson.error("/recipients", "A rest is limited to 128 characters.");
         List<RestMember> result = new ArrayList<>();
@@ -1503,7 +1536,7 @@ public final class AutomationHost {
                 throw RuleJson.error("/recipients", "Duplicate or missing target.");
             if (!sourceId.equals(member.id())) result.add(member);
         }
-        result.sort(java.util.Comparator.comparing(RestMember::id));
+        if (sort) result.sort(java.util.Comparator.comparing(RestMember::id));
         return List.copyOf(result);
     }
 
@@ -1514,6 +1547,7 @@ public final class AutomationHost {
         private final Map<String, StagedRecipient> participants = new LinkedHashMap<>();
         private final Set<String> changed = new java.util.LinkedHashSet<>();
         private final Map<String, List<String>> scopeMembership = new LinkedHashMap<>();
+        private final Map<String, List<String>> scopeOrder = new LinkedHashMap<>();
 
         private StagedRestRecipients(Pack pack, String sourceId, RestRoster roster) {
             this.pack = pack;
@@ -1534,13 +1568,23 @@ public final class AutomationHost {
         }
 
         private List<StagedRecipient> scoped(String scope) {
+            return scoped(scope, false);
+        }
+
+        private List<StagedRecipient> scoped(String scope, boolean preserveOrder) {
             if (!RuleCompiler.TARGET_SCOPES.contains(scope))
                 throw RuleJson.error("/recipients", "Expected a host character scope.");
-            List<RestMember> members = restScopeMembers(sourceId, roster.loadScope().apply(scope));
-            List<String> ids = members.stream().map(RestMember::id).toList();
+            List<RestMember> members = restScopeMembers(sourceId, roster.loadScope().apply(scope), false);
+            List<String> hostOrder = members.stream().map(RestMember::id).toList();
+            List<String> ids = hostOrder.stream().sorted().toList();
             List<String> previous = scopeMembership.putIfAbsent(scope, ids);
             if (previous != null && !previous.equals(ids))
                 throw new RuleRuntime.Unavailable("staleRecipient", "The eligible characters changed. Reopen this rest.");
+            List<String> previousOrder = scopeOrder.get(scope);
+            if (previousOrder != null && !previousOrder.equals(hostOrder))
+                throw new RuleRuntime.Unavailable("staleRecipient", "The character order changed. Reopen this rest.");
+            if (preserveOrder) scopeOrder.putIfAbsent(scope, hostOrder);
+            else members = members.stream().sorted(java.util.Comparator.comparing(RestMember::id)).toList();
             List<StagedRecipient> result = new ArrayList<>();
             for (RestMember member : members) {
                 StagedRecipient participant = participants.get(member.id());
@@ -1599,6 +1643,10 @@ public final class AutomationHost {
 
         private Map<String, List<String>> scopeMembership() {
             return copyScopeMembership(scopeMembership);
+        }
+
+        private Map<String, List<String>> scopeOrder() {
+            return copyScopeMembership(scopeOrder);
         }
     }
 

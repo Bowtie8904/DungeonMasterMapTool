@@ -146,6 +146,53 @@ class PartyRecoveryTest {
     }
 
     @Test
+    void rosterOrderedRecoveriesRetainAndRecheckTheHostOrderWithoutLoadingSheets() throws Exception {
+        RuleCompiler.Program overflow = program("armor:overflow", "", """
+                {"op":"resource.gain","pool":"actor.hope","amount":1},
+                {"op":"table.gain","resource":"fear","amount":1,"label":"Overflow"}
+                """);
+        var pack = new AutomationHost.Pack("party", Map.of(overflow.sourceId(), overflow));
+        ObjectNode zara = sheet("Zara", 0, 0, 4), mira = sheet("Mira", 0, 0, 2), nia = sheet("Nia", 0, 0, 3);
+        for (ObjectNode sheet : List.of(zara, mira, nia)) equip(sheet, overflow.sourceId());
+        var source = new AutomationHost.RestMember("ada", "Ada", "stored-ada", 1,
+                () -> { throw new AssertionError("The source is excluded."); });
+        List<AutomationHost.RestMember> members = List.of(member("zara", zara), source,
+                member("mira", mira), member("nia", nia));
+        var roster = new AutomationHost.RestRoster("stored-ada", scope -> members);
+        ObjectNode event = AutomationHost.event("downtime.move", "ada", 0);
+        var result = HOST.stagePartyRecoveriesInRosterOrder(pack, event, roster, List.of(
+                scoped("activePlayerCharacters", "one", "armorTrack", 1),
+                scoped("activePlayerCharacters", "two", "armorTrack", 1)), noRandom());
+
+        assertEquals(List.of("zara", "mira", "nia", "zara", "mira", "nia"),
+                result.response().path("clears").findValuesAsText("holderId"));
+        assertEquals(List.of("zara", "mira", "nia"),
+                result.response().at("/scopeSnapshots/0/membership").findValuesAsText("id"));
+        assertEquals(List.of(0, 1, 2, 3, 4, 5), result.response().path("outbox").findValues("before").stream()
+                .map(node -> node.asInt()).toList());
+        assertEquals(Map.of("activePlayerCharacters", List.of("mira", "nia", "zara")), result.scopeMembership());
+        assertEquals(Map.of("activePlayerCharacters", List.of("zara", "mira", "nia")), result.scopeOrder());
+        assertEquals(Map.of("zara", "stored-zara", "mira", "stored-mira", "nia", "stored-nia"), result.readVersions());
+        assertEquals(2, result.recipients().get("zara").at("/hope/on").asInt());
+        assertEquals(5, HOST.revision(result.recipients().get("zara")));
+        assertEquals(0, zara.at("/hope/on").asInt());
+        assertThrows(UnsupportedOperationException.class, () -> result.scopeOrder().get("activePlayerCharacters").add("new"));
+
+        var noLoads = new AutomationHost.RestRoster("stored-ada", scope -> List.of(
+                new AutomationHost.RestMember("zara", "Zara", "other-version", 4,
+                        () -> { throw new AssertionError("Order comparison must not load a sheet."); }),
+                new AutomationHost.RestMember("mira", "Mira", "other-version", 2,
+                        () -> { throw new AssertionError("Order comparison must not load a sheet."); }),
+                new AutomationHost.RestMember("nia", "Nia", "other-version", 3,
+                        () -> { throw new AssertionError("Order comparison must not load a sheet."); })));
+        assertDoesNotThrow(() -> AutomationHost.requireRestScopeOrder("ada", result.scopeOrder(), noLoads));
+        var reordered = new AutomationHost.RestRoster("stored-ada", scope -> List.of(members.get(2), members.get(0), members.get(3)));
+        assertDoesNotThrow(() -> AutomationHost.requireRestScopeMembership("ada", result.scopeMembership(), reordered));
+        assertEquals("staleRecipient", assertThrows(RuleRuntime.Unavailable.class,
+                () -> AutomationHost.requireRestScopeOrder("ada", result.scopeOrder(), reordered)).code());
+    }
+
+    @Test
     void appliesEachRequestInOrderUsingRecipientReactionsAndOneRevision() throws Exception {
         RuleCompiler.Program overflow = program("armor:overflow", "", """
                 {"op":"resource.gain","pool":"actor.hope","amount":1},
@@ -291,6 +338,9 @@ class PartyRecoveryTest {
         for (int i = 0; i < 4; i++) mixed.add(scoped("activeCharacters", "two", "armorTrack", 1));
         assertThrows(IllegalArgumentException.class, () -> HOST.stagePartyRecoveries(pack, event, roster, mixed, noRandom()));
         assertEquals(0, loads.get(), "The bound covers all scopes before any recipient sheet is loaded.");
+        assertThrows(IllegalArgumentException.class,
+                () -> HOST.stagePartyRecoveriesInRosterOrder(pack, event, roster, mixed, noRandom()));
+        assertEquals(0, loads.get(), "Host ordering does not bypass the pre-load application bound.");
     }
 
     @Test

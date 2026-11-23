@@ -251,7 +251,9 @@ An internal whole-rest ordering primitive validates each recorded source, rule, 
 initial sheet and compiled pack, then orders by source, rule, step and move instead of dispatch order. This
 preserves converted loadout modifier/pick order in the supported cases, including individually clamped requests.
 It accepts only private host-produced events and does not settle recipient changes or reproduce legacy server
-applicability checks that differ from ordinary move modifiers.
+applicability checks that differ from ordinary move modifiers. A separate party stage can use the host roster's
+original character order rather than sorted IDs, recording both membership and order for comparison before
+commit without loading sheets. Existing sorted targeting and recovery remain unchanged.
 The shared Daggerheart ruleset now supplies self-targeted short recovery (1d4 plus tier and move bonus), the two
 mutually exclusive preparation variants, long recovery and work on a project. Reports use the amount actually
 cleared or gained, including permanent and locked HP and capped Hope; a short rest needs a granted allowance for

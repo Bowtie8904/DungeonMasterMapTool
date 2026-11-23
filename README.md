@@ -66,7 +66,8 @@ changing sources, cross-holder effect cleanup, computed source pools, deferred i
 and unsettled conditional endings until those lifecycles are supported. Unstable dependencies are rejected, and
 inspecting an action does not write the adjusted pool to the sheet.
 An isolated party stage applies each host-supplied clear separately, preserving request order across different
-host-selected scopes and retaining each inspected membership and read version. It is not connected to the rest workflow.
+host-selected scopes and retaining each inspected membership and read version. A separate variant follows the
+host roster's character order and records it as an additional dependency. It is not connected to the rest workflow.
 Converted downtime buttons now describe their host-validated move identity and rest restriction. This metadata
 and the shared ruleset's validated rest limits do not yet make the format-2 rest workflow available.
 The host can stage and validate rest preparation and individual moves on a private copy, retaining the
