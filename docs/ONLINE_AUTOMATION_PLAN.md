@@ -121,6 +121,11 @@ group defaults to the move ID and identifies mutually exclusive variants within 
 to false. The compiler validates this metadata and exposes it in descriptors, and the converter emits it for
 legacy timed actions. The future rest host must derive move facts from the compiled binding, not a client request.
 These descriptors alone neither execute downtime nor establish parity.
+The shared ruleset may also declare `rest.short` (`moves`, `maxMoves`, `maxLongMoves`, `consecutiveLimit`) and
+`rest.long` (`moves`, `maxMoves`). Counts are validated against a 32-move safety bound. Daggerheart starts with
+two moves, permits at most one granted long-rest move in a short rest, and requires a long rest after three
+short rests. Older development fixtures may omit this configuration, but cannot supply an authoritative rest
+plan until it is present.
 
 Ordinary and targeted sheet requests accept only `sheet` bindings, even when another surface uses the same event.
 Roll options and saved-result actions use their own validated surfaces. The planned authoritative rest flow has not

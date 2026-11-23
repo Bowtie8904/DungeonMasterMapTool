@@ -26,9 +26,16 @@ public final class AutomationHost {
     static final String RULESET_SOURCE = "ruleset:base";
 
     /** Compiled automation keyed by fully qualified source ID. */
-    public record Pack(String revision, Map<String, RuleCompiler.Program> programs, String rulesetName) {
+    public record RestLimits(int moves, int maxMoves, int maxLongMoves, int consecutiveLimit) {}
+    public record RestConfiguration(RestLimits shortRest, RestLimits longRest) {}
+
+    public record Pack(String revision, Map<String, RuleCompiler.Program> programs, String rulesetName,
+                       RestConfiguration rest) {
         public Pack { programs = Map.copyOf(programs); }
-        public Pack(String revision, Map<String, RuleCompiler.Program> programs) { this(revision, programs, null); }
+        public Pack(String revision, Map<String, RuleCompiler.Program> programs, String rulesetName) {
+            this(revision, programs, rulesetName, null);
+        }
+        public Pack(String revision, Map<String, RuleCompiler.Program> programs) { this(revision, programs, null, null); }
     }
 
     public record SingleHolderEffect(String sourceActorId, String sourceInstanceId, String effect, String holder) {}
@@ -80,11 +87,13 @@ public final class AutomationHost {
             }
         }
         String rulesetName = null;
+        RestConfiguration rest = null;
         if (ruleset != null) {
             try {
                 ObjectNode document = RuleCompiler.parseDocument(ruleset, "dmmap-daggerheart-ruleset");
-                RuleJson.fields(document, "/", "format", "version", "name", "automation");
+                RuleJson.fields(document, "/", "format", "version", "name", "automation", "rest");
                 rulesetName = RuleJson.text(document.get("name"), "/name");
+                if (document.has("rest")) rest = restConfiguration(document.get("rest"));
                 RuleCompiler.Program program =
                         RuleCompiler.compileWithRecipes(RULESET_SOURCE, document.get("automation"), compiledRecipes);
                 if (programs.putIfAbsent(RULESET_SOURCE, program) != null)
@@ -93,7 +102,23 @@ public final class AutomationHost {
                 throw new NotReady("ruleset.json: " + ex.getMessage());
             }
         }
-        return new Pack(revision, programs, rulesetName);
+        return new Pack(revision, programs, rulesetName, rest);
+    }
+
+    private static RestConfiguration restConfiguration(JsonNode rest) {
+        RuleJson.fields(rest, "/rest", "short", "long");
+        return new RestConfiguration(restLimits(rest.path("short"), "/rest/short", true),
+                restLimits(rest.path("long"), "/rest/long", false));
+    }
+
+    private static RestLimits restLimits(JsonNode value, String path, boolean shortRest) {
+        if (shortRest) RuleJson.fields(value, path, "moves", "maxMoves", "maxLongMoves", "consecutiveLimit");
+        else RuleJson.fields(value, path, "moves", "maxMoves");
+        int maxMoves = RuleJson.integer(value.get("maxMoves"), path + "/maxMoves", 0, 32);
+        int moves = RuleJson.integer(value.get("moves"), path + "/moves", 0, maxMoves);
+        int maxLongMoves = shortRest ? RuleJson.integer(value.get("maxLongMoves"), path + "/maxLongMoves", 0, 32) : 0;
+        int consecutiveLimit = shortRest ? RuleJson.integer(value.get("consecutiveLimit"), path + "/consecutiveLimit", 1, 1000) : 0;
+        return new RestLimits(moves, maxMoves, maxLongMoves, consecutiveLimit);
     }
 
     /** Active sheet sources plus the pack's reserved shared source, if present. */

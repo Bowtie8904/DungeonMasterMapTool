@@ -2,6 +2,10 @@
   "format": "dmmap-daggerheart-ruleset",
   "version": 2,
   "name": "Daggerheart rules",
+  "rest": {
+    "short": { "moves": 2, "maxMoves": 32, "maxLongMoves": 1, "consecutiveLimit": 3 },
+    "long": { "moves": 2, "maxMoves": 32 }
+  },
   "automation": {
     "rules": [
       {

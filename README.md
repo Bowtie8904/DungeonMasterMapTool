@@ -47,7 +47,7 @@ effects and other sources' or recipients' conditional endings remains unfinished
 The staged rest-reset primitive can preserve effects started or replaced during downtime, but it is not yet
 connected to the live rest workflow.
 Converted downtime buttons now describe their host-validated move identity and rest restriction. This metadata
-does not yet make the format-2 rest workflow available.
+and the shared ruleset's validated rest limits do not yet make the format-2 rest workflow available.
 New automation effects record their source character as well as their source instance, so another character
 using the same instance ID cannot take over local effect actions or profiles. Starting a single-holder effect
 now removes that source's copies from other saved characters, including offline or disabled ones, in the same

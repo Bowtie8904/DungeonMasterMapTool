@@ -46,6 +46,38 @@ class SharedRulesTest {
     }
 
     @Test
+    void sharedRestLimitsAreAuthoredAndInvalidConfigurationsRejectThePack() throws Exception {
+        ObjectNode ruleset = (ObjectNode) RuleJson.parse(LegacyCatalogConverter.coreRuleset());
+        var limits = AutomationHost.compile("test", Map.of(), LegacyCatalogConverter.coreRecipes(), ruleset.toString()).rest();
+        assertEquals(new AutomationHost.RestLimits(2, 32, 1, 3), limits.shortRest());
+        assertEquals(new AutomationHost.RestLimits(2, 32, 0, 0), limits.longRest());
+
+        ObjectNode homeRules = ruleset.deepCopy();
+        ((ObjectNode) homeRules.at("/rest/short")).put("moves", 1).put("maxMoves", 4)
+                .put("maxLongMoves", 2).put("consecutiveLimit", 5);
+        assertEquals(new AutomationHost.RestLimits(1, 4, 2, 5),
+                AutomationHost.compile("home", Map.of(), LegacyCatalogConverter.coreRecipes(), homeRules.toString()).rest().shortRest());
+        homeRules.remove("rest");
+        assertNull(AutomationHost.compile("old", Map.of(), LegacyCatalogConverter.coreRecipes(), homeRules.toString()).rest());
+        assertNull(AutomationHost.compile("old", Map.of(), LegacyCatalogConverter.coreRecipes()).rest());
+
+        for (String invalid : List.of(
+                "{\"short\":{\"moves\":2,\"maxMoves\":1,\"maxLongMoves\":1,\"consecutiveLimit\":3},\"long\":{\"moves\":2,\"maxMoves\":2}}",
+                "{\"short\":{\"moves\":2,\"maxMoves\":33,\"maxLongMoves\":1,\"consecutiveLimit\":3},\"long\":{\"moves\":2,\"maxMoves\":2}}",
+                "{\"short\":{\"moves\":2,\"maxMoves\":2,\"maxLongMoves\":-1,\"consecutiveLimit\":3},\"long\":{\"moves\":2,\"maxMoves\":2}}",
+                "{\"short\":{\"moves\":2,\"maxMoves\":2,\"maxLongMoves\":1,\"consecutiveLimit\":0},\"long\":{\"moves\":2,\"maxMoves\":2}}",
+                "{\"short\":{\"moves\":2,\"maxMoves\":2,\"maxLongMoves\":1},\"long\":{\"moves\":2,\"maxMoves\":2}}",
+                "{\"short\":{\"moves\":2,\"maxMoves\":2,\"maxLongMoves\":1,\"consecutiveLimit\":3},\"long\":{\"moves\":2,\"maxMoves\":2,\"extra\":1}}",
+                "{\"short\":{},\"long\":{}}")) {
+            ObjectNode bad = ruleset.deepCopy();
+            bad.set("rest", RuleJson.parse(invalid));
+            var failure = assertThrows(AutomationHost.NotReady.class,
+                    () -> AutomationHost.compile("bad", Map.of(), LegacyCatalogConverter.coreRecipes(), bad.toString()), invalid);
+            assertTrue(failure.getMessage().contains("ruleset.json: /rest"), failure.getMessage());
+        }
+    }
+
+    @Test
     void baseRewardAllowsFailureButExcludesReactionDeathAndNoBenefit() throws Exception {
         var program = pack(fixture("rewrite/host-classes")).programs().get("ruleset:base");
         ObjectNode context = (ObjectNode) RuleJson.parse("""
