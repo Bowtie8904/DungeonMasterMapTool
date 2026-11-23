@@ -58,9 +58,11 @@ ruleset's initial Hope, Armor and recovery facts across the moves. Move bonuses 
 passive costs and modifier steps run afterward and failures roll back the move. A staged ally move can use a
 versioned host-selected recipient and its own healing floor; it returns a private recipient update only after
 the whole move succeeds. Repeated moves require applying each update to a private sheet and rebuilding the
-request-local roster. Staged completion derives signed recovery facts, runs benefits around the rest reset and
-advances rest counters; failures roll back that stage. The final multi-character rest transaction and player
-workflow are still required.
+request-local roster. The base Tend and Repair ally choices remain narrative, as in the legacy client: they
+report recovery for the ally to apply rather than selecting or changing another character. A shared fixture
+checks short and long variants in both engines. Staged completion derives signed recovery facts, runs benefits
+around the rest reset and advances rest counters; failures roll back that stage. The live multi-character rest
+transaction and player workflow are still required.
 An internal coordinator composes these stages on private source and recipient sheets, reprojects each recipient
 after earlier moves, carries Fear through the rest, and advances each changed sheet once. Other commands needing
 intervening host settlement are rejected rather than evaluated against stale facts. The staged result identifies

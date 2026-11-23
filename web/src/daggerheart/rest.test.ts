@@ -16,8 +16,33 @@ function rules(category: string, name: string): Automation {
   return structuredClone(source.automation);
 }
 const feature = (name: string, category = 'ancestries') => ({ source: 'test', name, text: '', automation: rules(category, name) });
+const narrativeAllyParity: {
+  level: number; tier: number; markedHp: number; markedArmor: number;
+  cases: Array<{ kind: 'short' | 'long'; move: string; face?: number; bonus?: number; amount?: number; unit?: string }>;
+} = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/automation/parity/narrative-ally-rest.json', import.meta.url), 'utf8'));
 
 describe('daggerheart rests', () => {
+  it('matches the shared narrative ally rest fixture', () => {
+    for (const sample of narrativeAllyParity.cases) {
+      const c = mockCharacter();
+      c.level = narrativeAllyParity.level;
+      c.hp.on = narrativeAllyParity.markedHp;
+      c.armorTrack.on = narrativeAllyParity.markedArmor;
+      c.features.push({ source: 'test', name: 'Ally bonus', text: '', automation: {
+        rest: { modifiers: [{ move: sample.move, target: 'ally', bonus: sample.bonus ?? 0 }] },
+      } });
+      const result = resolveRest(c, sample.kind, [{ move: sample.move, ally: true }], {}, expression => {
+        expect(expression).toBe(`1d4+${narrativeAllyParity.tier}`);
+        if (sample.face === undefined) throw new Error('Unexpected downtime roll');
+        return sample.face + narrativeAllyParity.tier;
+      });
+      expect(c.hp.on).toBe(narrativeAllyParity.markedHp);
+      expect(c.armorTrack.on).toBe(narrativeAllyParity.markedArmor);
+      expect(result.lines[0]).toContain('on an ally');
+      if (sample.amount !== undefined) expect(result.lines[0]).toContain(`clears ${sample.amount} ${sample.unit}`);
+    }
+  });
+
   it('uses metadata for renamed/homebrew sources, never names or prose', () => {
     const c = mockCharacter();
     c.heritage.push({ source: 'test', name: 'Unlisted ancestry', text: '', automation: {

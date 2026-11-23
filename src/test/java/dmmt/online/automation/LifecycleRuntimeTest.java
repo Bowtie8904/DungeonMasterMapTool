@@ -62,11 +62,26 @@ class LifecycleRuntimeTest {
             metadata.put("kind", kind);
             assertDoesNotThrow(() -> RuleCompiler.compile("features:lifecycle", automation, fixture("rewrite/recipes")));
         }
+        metadata.put("narrative", true);
+        RuleCompiler.Program narrative = RuleCompiler.compile("features:lifecycle", automation, fixture("rewrite/recipes"));
+        assertTrue(RuleRuntime.describe(narrative, "fortify", "rest", context("downtime.move"))
+                .at("/restMove/narrative").booleanValue());
+        metadata.put("ally", false);
+        assertThrows(IllegalArgumentException.class,
+                () -> RuleCompiler.compile("features:lifecycle", automation, fixture("rewrite/recipes")));
+        metadata.put("ally", true);
+        binding.putObject("targetSelection").put("cardinality", "one").put("scope", "activeCharacters").put("excludeSource", true);
+        assertThrows(IllegalArgumentException.class,
+                () -> RuleCompiler.compile("features:lifecycle", automation, fixture("rewrite/recipes")));
+        binding.remove("targetSelection");
+        metadata.remove("narrative");
         for (String bad : List.of(
                 "{\"id\":\"\",\"kind\":\"any\"}",
                 "{\"id\":\"fortify\",\"kind\":\"sometimes\"}",
                 "{\"id\":\"fortify\",\"kind\":\"any\",\"group\":\"!\"}",
                 "{\"id\":\"fortify\",\"kind\":\"any\",\"ally\":\"yes\"}",
+                "{\"id\":\"fortify\",\"kind\":\"any\",\"ally\":true,\"narrative\":\"yes\"}",
+                "{\"id\":\"fortify\",\"kind\":\"any\",\"narrative\":true}",
                 "{\"id\":\"fortify\",\"kind\":\"any\",\"slots\":0}")) {
             binding.set("restMove", RuleJson.parse(bad));
             assertThrows(IllegalArgumentException.class,

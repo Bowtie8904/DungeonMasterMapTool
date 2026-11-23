@@ -769,7 +769,7 @@ public final class RuleCompiler {
                 throw RuleJson.error(at, "A rest move requires a downtime.move button without forEach.");
             if (!(allowSubstitutions && substitution(binding.get("restMove")))) {
                 JsonNode move = binding.get("restMove");
-                RuleJson.fields(move, at, "id", "kind", "group", "ally");
+                RuleJson.fields(move, at, "id", "kind", "group", "ally", "narrative");
                 if (!(allowSubstitutions && substitution(move.path("id")))) RuleJson.id(move.path("id"), at + "/id");
                 if (!(allowSubstitutions && substitution(move.path("kind")))
                         && !Set.of("any", "short", "long", "longMove").contains(move.path("kind").asText()))
@@ -778,6 +778,14 @@ public final class RuleCompiler {
                     RuleJson.id(move.get("group"), at + "/group");
                 if (move.has("ally") && !(allowSubstitutions && substitution(move.get("ally"))) && !move.get("ally").isBoolean())
                     throw RuleJson.error(at + "/ally", "Expected a boolean.");
+                if (move.has("narrative") && !(allowSubstitutions && substitution(move.get("narrative")))
+                        && !move.get("narrative").isBoolean())
+                    throw RuleJson.error(at + "/narrative", "Expected a boolean.");
+                boolean narrativeUnknown = allowSubstitutions && substitution(move.path("narrative"));
+                boolean allyUnknown = allowSubstitutions && substitution(move.path("ally"));
+                if (!narrativeUnknown && move.path("narrative").asBoolean(false)
+                        && (binding.has("targetSelection") || (!allyUnknown && !move.path("ally").asBoolean(false))))
+                    throw RuleJson.error(at + "/narrative", "A narrative move requires ally: true and no target selection.");
             }
         }
         for (String group : List.of("exclusiveGroup", "claimGroup")) if (binding.has(group)) {

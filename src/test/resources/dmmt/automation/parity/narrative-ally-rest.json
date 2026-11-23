@@ -1,0 +1,16 @@
+{
+  "format": "dmmap-automation-parity",
+  "version": 1,
+  "scenario": "narrative-ally-rest",
+  "level": 5,
+  "tier": 3,
+  "markedHp": 1,
+  "markedArmor": 1,
+  "cases": [
+    { "kind": "short", "move": "tend", "rule": "rest-tend-ally", "face": 1, "bonus": 2, "amount": 6, "unit": "HP" },
+    { "kind": "short", "move": "repair", "rule": "rest-repair-ally", "face": 4, "bonus": 2, "amount": 9, "unit": "Armor Slots" },
+    { "kind": "short", "move": "tend", "rule": "rest-tend-ally", "face": 1, "bonus": -8, "amount": -4, "unit": "HP" },
+    { "kind": "long", "move": "tend-all", "rule": "rest-tend-all-ally" },
+    { "kind": "long", "move": "repair-all", "rule": "rest-repair-all-ally" }
+  ]
+}

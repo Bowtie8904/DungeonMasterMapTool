@@ -137,12 +137,14 @@ Scene and session resets use the same fail-closed catalog classification. Malfor
 unknown-version categories and incomplete replacement packs reject the reset without changing sheets, campaign
 state or history; valid format-1 catalogs continue to use legacy resets even when shared rules are present.
 
-Selected `downtime.move` buttons may declare `restMove: {id, kind, group?, ally?}`. `kind` is `any`,
+Selected `downtime.move` buttons may declare `restMove: {id, kind, group?, ally?, narrative?}`. `kind` is `any`,
 `short`, `long`, or `longMove` (a long-rest move that an allowance may permit during a short rest). The optional
 group defaults to the move ID and identifies mutually exclusive variants within a source instance; `ally` defaults
-to false. The compiler validates this metadata and exposes it in descriptors, and the converter emits it for
-legacy timed actions. The future rest host must derive move facts from the compiled binding, not a client request.
-These descriptors alone neither execute downtime nor establish parity.
+to false. `narrative: true` requires `ally: true` and forbids a `targetSelection`: it reports the move without
+selecting or changing an ally. Other ally moves still require an authoritative recipient transaction. The compiler
+validates this metadata and exposes it in descriptors, and the converter emits it for legacy timed actions.
+The future rest host must derive move facts from the compiled binding, not a client request. These descriptors
+alone neither execute downtime nor establish general parity.
 The shared ruleset may also declare `rest.short` (`moves`, `maxMoves`, `maxLongMoves`, `consecutiveLimit`) and
 `rest.long` (`moves`, `maxMoves`). Counts are validated against a 32-move safety bound. Daggerheart starts with
 two moves, permits at most one granted long-rest move in a short rest, and requires a long rest after three
@@ -159,6 +161,9 @@ and short-rest long-move allowances. It returns dice, reports and commands witho
 `downtime.move` button must declare `restMove.ally: true` and select exactly one other character. The host resolves
 the versioned roster offer before adjustments so their conditions can read that recipient, rechecks eligibility
 after adjustments, and applies source costs once against the chosen recipient's current protected tracks.
+The bundled Tend and Repair ally variants instead preserve the legacy report-only boundary. Short moves report
+the rolled face plus tier and ally-specific bonus without clamping against the source sheet; long moves report
+the choice. A shared fixture checks these outcomes and unchanged source tracks in both engines.
 Deferred bodies see a freshly reprojected recipient, including derived statistics; only after they succeed is the recipient update staged. Commands
 needing interstage settlement are rejected. The caller must apply that update to a private sheet and construct
 a fresh request-local roster before a later target move; reusing a roster with an unapplied update is rejected.

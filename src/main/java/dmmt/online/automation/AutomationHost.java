@@ -1263,7 +1263,8 @@ public final class AutomationHost {
         if (progress.groups().contains(group))
             throw new RuleRuntime.Unavailable("duplicateMove", "This downtime move was already chosen.");
         boolean targeted = binding.has("targetSelection");
-        if (target == null && (metadata.path("ally").asBoolean(false) || targeted))
+        if (target == null && (targeted || (metadata.path("ally").asBoolean(false)
+                && !metadata.path("narrative").asBoolean(false))))
             throw new RuleRuntime.Unavailable("restTarget", "This downtime move requires an authoritative recipient transaction.");
         if (target != null && (!targeted || !metadata.path("ally").asBoolean(false)))
             throw RuleJson.error("/target", "This downtime move does not select an ally.");

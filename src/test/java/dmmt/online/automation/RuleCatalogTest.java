@@ -177,6 +177,24 @@ class RuleCatalogTest {
         assertDoesNotThrow(() -> RuleCatalog.compile(catalog, recipes.toString()));
         move.put("ally", "yes");
         assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, recipes.toString()));
+        move.put("ally", false).put("narrative", true);
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, recipes.toString()));
+        move.put("ally", true);
+        assertDoesNotThrow(() -> RuleCatalog.compile(catalog, recipes.toString()));
+        move.putObject("ally").put("$arg", "dieRole");
+        assertDoesNotThrow(() -> RuleCatalog.compile(catalog, recipes.toString()));
+        ((ObjectNode) recipes.at("/recipes/0/rules/0/bindings/0")).putObject("targetSelection")
+                .put("cardinality", "one").put("scope", "activeCharacters").put("excludeSource", true);
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, recipes.toString()));
+        ((ObjectNode) recipes.at("/recipes/0/rules/0/bindings/0")).remove("targetSelection");
+        assertThrows(IllegalArgumentException.class,
+                () -> RuleCatalog.compile(fixture("rewrite/domain-cards").toString(), recipes.toString()));
+        move.put("ally", true);
+        move.putObject("narrative").put("$arg", "dieRole");
+        assertDoesNotThrow(() -> RuleCatalog.compile(catalog, recipes.toString()));
+        assertThrows(IllegalArgumentException.class,
+                () -> RuleCatalog.compile(fixture("rewrite/domain-cards").toString(), recipes.toString()));
+        move.remove("narrative");
         move.remove("ally");
         move.putObject("kind").put("$arg", "dieRole");
         assertDoesNotThrow(() -> RuleCatalog.compile(catalog, recipes.toString()));
