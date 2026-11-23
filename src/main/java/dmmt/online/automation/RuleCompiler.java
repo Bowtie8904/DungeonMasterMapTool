@@ -133,6 +133,8 @@ public final class RuleCompiler {
         private final ArrayNode modifiers;
         private final boolean hasTraitModifiers;
         private final boolean readsDerivedTraits;
+        private final boolean downtimeMayAddSource;
+        private final Set<String> downtimeStatReads;
         private final Map<String, ObjectNode> rules;
         private final Map<BindingKey, List<BindingRef>> bindingsByEventSurface;
         private final List<BindingRef> resultButtons;
@@ -179,6 +181,30 @@ public final class RuleCompiler {
             this.readsDerivedTraits = containsDerivedTraitRead(modifiers);
             this.rules = new LinkedHashMap<>();
             rules.forEach((id, rule) -> this.rules.put(id, rule.deepCopy()));
+            boolean downtimeAddition = false;
+            Set<String> downtimeReads = new HashSet<>();
+            for (ObjectNode rule : this.rules.values()) {
+                boolean downtime = false;
+                for (JsonNode binding : rule.path("bindings"))
+                    downtime |= "downtime.move".equals(binding.path("event").asText());
+                if (!downtime) continue;
+                downtimeReads.addAll(RuleExpression.references(rule));
+                rule.path("ui").fields().forEachRemaining(field ->
+                        downtimeReads.addAll(RuleTemplate.references(field.getValue().asText())));
+                if (rule.path("after").has("report"))
+                    downtimeReads.addAll(RuleTemplate.references(rule.path("after").path("report").asText()));
+                for (JsonNode steps : List.of(rule.path("costs"), rule.path("do"),
+                        rule.path("after").path("costs"), rule.path("after").path("do")))
+                    for (JsonNode step : steps) {
+                        downtimeAddition |= "collection.add".equals(step.path("op").asText());
+                        operationReferences(step, "/operation", false, false,
+                                (refs, die, at) -> downtimeReads.addAll(refs));
+                    }
+            }
+            this.downtimeMayAddSource = downtimeAddition;
+            this.downtimeStatReads = downtimeReads.stream()
+                    .filter(ref -> "actor".equals(ref) || "actor.stats".equals(ref) || ref.startsWith("actor.stats."))
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
             Map<BindingKey, List<BindingRef>> bindingIndex = new HashMap<>();
             List<BindingRef> results = new ArrayList<>();
             Map<String, List<AutomaticBinding>> automatic = new HashMap<>();
@@ -228,6 +254,8 @@ public final class RuleCompiler {
         boolean hasComputedActorPools() { return hasComputedActorPools; }
         boolean computedActorPoolsReadSourcePools() { return computedActorPoolsReadSourcePools; }
         boolean hasComputedSourcePools() { return hasComputedSourcePools; }
+        boolean downtimeMayAddSource() { return downtimeMayAddSource; }
+        Set<String> downtimeStatReads() { return downtimeStatReads; }
         boolean stateMayAffectProjection() {
             return hasComputedActorPools || hasComputedSourcePools || !modifiers.isEmpty() || !effects.isEmpty();
         }

@@ -55,7 +55,10 @@ The experimental runtime can observe ordered track changes inside a private tran
 Armor clears and damage marks. A bounded isolated dispatcher can run the owner's supplied automatic reactions
 in order without copying unrelated sources for each event; computed actor pools still refresh even when no
 reaction is bound. Isolated selected and deferred move stages can run the same owner reactions without repeating
-the parent event's automatic adjustments. An isolated host-owned clear also applies the holder's healing floor and reactions, including
+the parent event's automatic adjustments. Private self downtime moves now use those reactions in their adjustment,
+move and deferred phases, including Armor overflow and zero-mark clears; target-recipient reactions still need a
+separate transaction. Active bindings and computed-pool dependencies restrict dispatch without dropping passive
+projections, and moves without relevant dependencies avoid the observer. An isolated host-owned clear also applies the holder's healing floor and reactions, including
 positive clears with no marks, and returns the actual clear and staged state. Source activation, cross-character
 recovery and live rest recovery are not yet connected. A sheet-backed recovery stage selects the affected
 holder's own sources and state even when another character initiated the parent event; it is not a live action.

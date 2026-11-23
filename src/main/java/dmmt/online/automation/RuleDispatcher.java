@@ -255,6 +255,14 @@ public final class RuleDispatcher {
         return executeEvent(activeSources, selections, random, programs, true, null);
     }
 
+    static EventResolution executeStagedMoveWithOwnerReactions(List<Candidate> activeSources,
+                                                               List<RuleRuntime.Intent> selections,
+                                                               RandomGenerator random,
+                                                               Map<String, RuleCompiler.Program> programs,
+                                                               OwnerProjection projection) {
+        return executeEvent(activeSources, selections, random, programs, true, new ReactionBudget(projection));
+    }
+
     static EventResolution executeOwnerTrackReactions(List<Candidate> activeSources, List<RuleRuntime.Intent> selections,
                                                       RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
         return executeEvent(activeSources, selections, random, programs, false, new ReactionBudget());
@@ -262,12 +270,24 @@ public final class RuleDispatcher {
 
     static EventResolution executeSelectedWithOwnerReactions(List<Candidate> activeSources, RuleRuntime.Intent selection,
                                                             RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
+        return executeSelectedWithOwnerReactions(activeSources, selection, random, programs, null);
+    }
+
+    static EventResolution executeSelectedWithOwnerReactions(List<Candidate> activeSources, RuleRuntime.Intent selection,
+                                                            RandomGenerator random, Map<String, RuleCompiler.Program> programs,
+                                                            OwnerProjection projection) {
         if (selection == null) throw RuleJson.error("/selection", "A selected binding is required.");
-        return executeEvent(activeSources, List.of(selection), random, programs, false, new ReactionBudget(), false);
+        return executeEvent(activeSources, List.of(selection), random, programs, false, new ReactionBudget(projection), false);
     }
 
     static EventResolution executeDeferredWithOwnerReactions(List<Candidate> activeSources, RuleRuntime.Intent intent,
                                                             RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
+        return executeDeferredWithOwnerReactions(activeSources, intent, random, programs, null);
+    }
+
+    static EventResolution executeDeferredWithOwnerReactions(List<Candidate> activeSources, RuleRuntime.Intent intent,
+                                                            RandomGenerator random, Map<String, RuleCompiler.Program> programs,
+                                                            OwnerProjection projection) {
         if (intent == null) throw RuleJson.error("/selection", "A deferred binding is required.");
         if (programs == null) throw RuleJson.error("/programs", "Expected a compiled program registry.");
         Snapshot snapshot = validateSources(activeSources);
@@ -281,7 +301,7 @@ public final class RuleDispatcher {
         if (selected == null) throw new RuleRuntime.Unavailable("source", "This source is no longer active.");
         List<ActionResult> actions = new ArrayList<>();
         List<ObjectNode> outbox = new ArrayList<>();
-        ReactionBudget budget = new ReactionBudget();
+        ReactionBudget budget = new ReactionBudget(projection);
         budget.contexts = workingContexts;
         RuleRuntime.TrackObserver observer = ownerTrackObserver(
                 snapshot, byInstance, workingContexts, random, programs, budget, actions, outbox);

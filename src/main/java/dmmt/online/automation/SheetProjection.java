@@ -27,6 +27,7 @@ public final class SheetProjection {
     private final String stateField, sourceField, instanceField, nameField;
     private final List<JsonNode> traitStats;
     private final Set<String> sourceFacts;
+    private final Set<String> mutableStats;
 
     private SheetProjection(ObjectNode spec) {
         this.spec = spec;
@@ -56,7 +57,12 @@ public final class SheetProjection {
         for (int i = 0; i < stats.size(); i++) if (needed[i]) selected.add(stats.get(i));
         traitStats = List.copyOf(selected);
         Set<String> sourceFacts = new HashSet<>();
+        Set<String> mutableFacts = new HashSet<>();
         spec.path("actor").fields().forEachRemaining(fact -> {
+            JsonNode writable = fact.getValue().path("writable");
+            if (writable.asBoolean(false) || writable.isArray() && !writable.isEmpty()
+                    || "engine".equals(fact.getValue().path("kind").asText()))
+                mutableFacts.add("actor." + fact.getKey());
             String factPath = fact.getValue().path("path").asText();
             for (JsonNode source : spec.path("sources")) {
                 if (overlaps(factPath, source.path("path").asText())) {
@@ -66,6 +72,18 @@ public final class SheetProjection {
             }
         });
         this.sourceFacts = Set.copyOf(sourceFacts);
+        Set<String> mutableStats = new HashSet<>();
+        for (JsonNode stat : stats) {
+            Set<String> refs = RuleExpression.references(stat.get("value"));
+            if (refs.stream().anyMatch(ref -> mutableFacts.stream().anyMatch(fact -> overlaps(ref, fact))
+                    || mutableStats.stream().anyMatch(derived -> overlaps(ref, derived))))
+                mutableStats.add("actor.stats." + stat.path("id").asText());
+        }
+        this.mutableStats = Set.copyOf(mutableStats);
+    }
+
+    boolean readsMutableStats(Set<String> references) {
+        return references.stream().anyMatch(ref -> mutableStats.stream().anyMatch(stat -> overlaps(ref, stat)));
     }
 
     public static SheetProjection parse(String json) throws java.io.IOException {

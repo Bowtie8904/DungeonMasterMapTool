@@ -218,6 +218,23 @@ class RestTargetTest {
     }
 
     @Test
+    void targetedArmorChangeDoesNotRunTheSourcesReactionsForTheRecipient() throws Exception {
+        ObjectNode ruleset = ruleset();
+        ruleset.withObject("/automation").withArray("rules").add(RuleJson.parse("""
+                {"id":"overflow","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.track"},"armorTrack"]},
+                 "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"report":"Overflow."}}
+                """));
+        Setup setup = setup(ruleset, 4);
+        PartyTargets party = party(setup, setup.recipient(), new AtomicReference<>());
+        ObjectNode target = targetRequest(setup, party, "repair");
+        var result = move(setup, setup.progress(), "repair", options(), party, target);
+        assertEquals(4, setup.source().at("/hope/on").asInt());
+        assertEquals(1, party.updates().getFirst().snapshot().at("/armorTrack/marked").asInt());
+        assertFalse(result.response().path("actions").findValuesAsText("ruleId").contains("overflow"));
+    }
+
+    @Test
     void missingStaleSelfIneligibleAndForgedTargetsFailWithoutStaging() throws Exception {
         Setup setup = setup(ruleset(), 4);
         PartyTargets party = party(setup, setup.recipient(), new AtomicReference<>());

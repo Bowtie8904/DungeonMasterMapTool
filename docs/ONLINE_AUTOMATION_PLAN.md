@@ -238,6 +238,15 @@ involve a computed source pool, request deferred inventory, use-budget or damage
 conditional effect ending fail atomically instead of reading stale facts. The fixed-source isolated dispatcher also
 rejects projected snapshots when it cannot reproject them. Nested reactions propagate shared event changes back to
 the parent while retaining each event's own type, actor and track-change details.
+Private self downtime moves now use this projection during automatic adjustments, the selected move and authorized
+deferred benefits. Converted Armor overflow fires for over-repair and positive clears of an empty track; later
+steps see the resulting state, derived facts and Fear. Active event bindings and computed-pool dependencies limit
+dispatch, while passive sources and conditional-effect state remain available to projection. A move without
+listeners, projection dependencies, collection additions or mutable derived-stat reads skips the observer.
+One opt-in, single-thread
+32-idle-source private-rest sample allocated about 38.8 MiB per move both with and without one Armor reaction;
+timings varied substantially between runs. This is not a live persistence, concurrency or release benchmark.
+Targeted-move recipient reactions and the whole-rest recovery guard remain unresolved.
 Converted `repairAllies` adjustments require party recovery and recipient track-change reactions, including
 Armor overflow. Until those transactions are implemented, a staged self move with a positive party-recovery
 request is rejected rather than silently omitting recipient changes, including when later adjustments cancel
