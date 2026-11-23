@@ -3,6 +3,7 @@ package dmmt.online.automation;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import dmmt.online.Campaign;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -1272,7 +1273,11 @@ public final class RuleRuntime {
                     request.put("group", op.path("group").asText());
                     if (op.has("limit")) request.put("limit", whole(op.path("limit"), context, 0, 64));
                 }
-                else if (Set.of("table.gain", "table.spend").contains(kind)) request.put("resource", op.path("resource").asText()).put("amount", whole(op.path("amount"), context, 1, 1000));
+                else if (Set.of("table.gain", "table.spend").contains(kind)) {
+                    request.put("resource", op.path("resource").asText())
+                            .put("amount", whole(op.path("amount"), context, 1, 1000));
+                    settleTableResource(context, request);
+                }
                 else if ("limits.refresh".equals(kind)) request.set("on", op.path("on").deepCopy());
                 else if ("limit.restore".equals(kind)) request.put("to", op.path("to").asText())
                         .put("actorId", context.path(op.path("to").asText()).path("id").asText());
@@ -1291,6 +1296,24 @@ public final class RuleRuntime {
             default -> throw RuleJson.error("/op", "Unsupported operation: " + kind);
         }
         if (op.has("as")) ((ObjectNode) context.get("result")).set(op.path("as").asText(), result.deepCopy());
+    }
+
+    private static void settleTableResource(ObjectNode context, ObjectNode request) {
+        String resource = request.path("resource").asText();
+        if (!"fear".equals(resource))
+            throw new Unavailable("tableResource", "The host does not support this table resource: " + resource + ".");
+        ObjectNode table = RuleJson.object(context.at("/event/table"), "/event/table");
+        int before = RuleJson.integer(table.get(resource), "/event/table/" + resource, 0, Campaign.MAX_FEAR);
+        int amount = request.path("amount").intValue();
+        int after;
+        if ("table.gain".equals(request.path("kind").asText())) {
+            after = Math.min(Campaign.MAX_FEAR, before + amount);
+        } else {
+            if (before < amount) throw new Unavailable("tableResource", "Not enough GM Fear.");
+            after = before - amount;
+        }
+        table.put(resource, after);
+        request.put("before", before).put("after", after);
     }
 
     private static JsonNode eval(JsonNode value, ObjectNode context) { return RuleExpression.evaluate(value, context); }

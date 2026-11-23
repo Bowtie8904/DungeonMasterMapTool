@@ -5943,6 +5943,7 @@ public final class OnlineSessionServer {
     private void resetAutomationPeriod(boolean session, dmmt.online.automation.AutomationHost.Pack pack) throws IOException {
         Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
         Map<String, String> originals = new java.util.LinkedHashMap<>();
+        int stagedFear = campaign.getFear();
         List<String> lines = new ArrayList<>();
         ArrayNode commands = MAPPER.createArrayNode();
         for (Campaign.Actor actor : campaign.getActors()) {
@@ -5954,17 +5955,16 @@ public final class OnlineSessionServer {
             boolean modified = false;
             for (String type : session ? List.of("scene.end", "session.start") : List.of("scene.end")) {
                 ObjectNode event = automationEvent(type, actor);
+                ((ObjectNode) event.required("table")).put("fear", stagedFear);
                 ObjectNode result = automationHost.automatic(pack, sheet, event, diceRandom);
                 for (JsonNode action : result.path("actions")) {
                     modified = true;
                     String report = action.path("report").asText();
                     if (!report.isBlank()) lines.add(actor.getName() + ": " + report);
                 }
-                for (JsonNode command : result.path("outbox")) {
-                    if (Set.of("table.gain", "table.spend").contains(command.path("kind").asText()))
-                        throw new IllegalStateException("Scene and session automation cannot change table resources until ordered settlement is available.");
-                    commands.add(command);
-                }
+                for (JsonNode command : result.path("outbox")) commands.add(command);
+                event = (ObjectNode) result.required("event");
+                stagedFear = event.requiredAt("/table/fear").intValue();
                 modified |= automationHost.resetLimits(pack, sheet, event);
             }
             if (modified) {
@@ -6117,12 +6117,20 @@ public final class OnlineSessionServer {
                 case "table.gain", "table.spend" -> {
                     if (!"fear".equals(command.path("resource").asText()))
                         throw new IllegalArgumentException("Unsupported automation table resource.");
-                    int amount = command.required("amount").intValue();
-                    if ("table.gain".equals(kind)) fear = Math.min(Campaign.MAX_FEAR, fear + amount);
+                    JsonNode amountNode = command.path("amount"), before = command.path("before"), after = command.path("after");
+                    if (!amountNode.isInt() || amountNode.intValue() < 1 || amountNode.intValue() > 1000
+                            || !before.isInt() || !after.isInt() || before.intValue() != fear)
+                        throw new IllegalArgumentException("The automation table state changed. Retry the action.");
+                    int amount = amountNode.intValue();
+                    int next;
+                    if ("table.gain".equals(kind)) next = Math.min(Campaign.MAX_FEAR, fear + amount);
                     else {
                         if (fear < amount) throw new IllegalArgumentException("Not enough GM Fear.");
-                        fear -= amount;
+                        next = fear - amount;
                     }
+                    if (after.intValue() != next)
+                        throw new IllegalArgumentException("The automation table state is inconsistent. Retry the action.");
+                    fear = next;
                 }
                 default -> throw new IllegalArgumentException("The host cannot apply this automation operation yet: " + kind);
             }

@@ -599,7 +599,7 @@ class LegacyCatalogConverterTest {
                 List.of(new RuleRuntime.Intent("steady", "sheet", "fixture", 0, RuleJson.JSON.createObjectNode())), StructuredRollTest.faces(6));
         assertEquals(2, lucky.contexts().getFirst().at("/actor/stress/marked").asInt());
 
-        ObjectNode finished = context(program, actor, "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"attack\",\"outcome\":\"success\"},\"roll\":" + ROLL + "}");
+        ObjectNode finished = context(program, actor, "{\"type\":\"roll.finished\",\"table\":{\"fear\":3},\"check\":{\"kind\":\"attack\",\"outcome\":\"success\"},\"roll\":" + ROLL + "}");
         JsonNode outbox = run(program, finished, "fear").contexts().getFirst().path("outbox");
         assertEquals("table.gain", outbox.at("/0/kind").asText(), outbox.toString());
         assertEquals("fear", outbox.at("/0/resource").asText());
@@ -751,7 +751,7 @@ class LegacyCatalogConverterTest {
         assertEquals("class", block(result, 1).at("/pools/slayer-dice/section").asText(), block(result, 1).toString());
         RuleCompiler.Program program = program(result, 0);
         String actor = "{\"id\":\"me\",\"hope\":{\"value\":2,\"max\":6},\"effects\":[]}";
-        String hope = "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"action\",\"trait\":\"Presence\",\"dominant\":\"hope\",\"critical\":false,\"outcome\":null}}";
+        String hope = "{\"type\":\"roll.finished\",\"table\":{\"fear\":3},\"check\":{\"kind\":\"action\",\"trait\":\"Presence\",\"dominant\":\"hope\",\"critical\":false,\"outcome\":null}}";
         ObjectNode presence = context(program, actor, hope);
         assertEquals(List.of("hope-reward"), available(program, presence, "roll"));
         for (String other : List.of(hope.replace("\"dominant\":\"hope\"", "\"dominant\":\"fear\""), hope.replace("\"critical\":false", "\"critical\":true"),

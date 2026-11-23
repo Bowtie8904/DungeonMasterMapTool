@@ -2030,6 +2030,63 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void automationFearSettlesInOrderAndRetriesWithoutReapplyingOrPartiallySaving() throws Exception {
+        automationCompendium();
+        Path catalogPath = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(catalogPath.toFile());
+        ObjectNode feature = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        feature.set("rules", MAPPER.readTree("""
+                [{"id":"use","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                  "costs":[{"op":"resource.spend","pool":"actor.hope","amount":1}],
+                  "do":[{"op":"table.gain","resource":"fear","amount":3,"label":"Gain"},
+                        {"op":"value","value":{"read":"event.table.fear"},"as":"capped"},
+                        {"op":"table.spend","resource":"fear","amount":2,"label":"Spend"}],
+                  "ui":{"label":"Use","report":"Fear reached {result.capped}, then {event.table.fear}."}},
+                 {"id":"fail","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                  "costs":[{"op":"resource.spend","pool":"actor.hope","amount":1}],
+                  "do":[{"op":"table.gain","resource":"fear","amount":1,"label":"Gain"},
+                        {"op":"table.spend","resource":"fear","amount":12,"label":"Spend"}],"ui":{"label":"Fail"}}]"""));
+        java.nio.file.Files.writeString(catalogPath, catalog.toString());
+        campaign.getActors().add(Campaign.Actor.builder().id("auto").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "auto", """
+                {"name":"Ada","hope":{"slots":6,"on":2},"features":[
+                 {"name":"Steady","automationSource":"classes:tester:features:steady","instanceId":"steady"}]}""");
+        campaign.setFear(11);
+        String cookie = cookie();
+        String use = """
+                {"request":{"requestId":"fear-use","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"steady","ruleId":"use","bindingId":"sheet"}]}}""";
+        int historyBefore = store.historyTail(campaign.getId(), 100).size();
+        var response = automationHttp(cookie, "auto", use);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode receipt = MAPPER.readTree(response.body());
+        assertEquals("Fear reached 12, then 10.", receipt.requiredAt("/actions/0/report").textValue());
+        assertEquals(10, receipt.requiredAt("/event/table/fear").intValue());
+        assertEquals(11, receipt.requiredAt("/outbox/0/before").intValue());
+        assertEquals(12, receipt.requiredAt("/outbox/0/after").intValue());
+        assertEquals(12, receipt.requiredAt("/outbox/1/before").intValue());
+        assertEquals(10, receipt.requiredAt("/outbox/1/after").intValue());
+        assertEquals(10, campaign.getFear());
+        assertEquals(10, store.load(campaign.getId()).getFear());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "auto")).requiredAt("/hope/on").intValue());
+        assertEquals(historyBefore + 1, store.historyTail(campaign.getId(), 100).size());
+        assertEquals(response.body(), automationHttp(cookie, "auto", use).body());
+        assertEquals(10, campaign.getFear());
+        assertEquals(historyBefore + 1, store.historyTail(campaign.getId(), 100).size());
+
+        String before = store.loadSheet(campaign.getId(), "auto");
+        String fail = use.replace("fear-use", "fear-fail").replace("\"expectedRevision\":0", "\"expectedRevision\":1")
+                .replace("\"ruleId\":\"use\"", "\"ruleId\":\"fail\"");
+        var rejected = automationHttp(cookie, "auto", fail);
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertTrue(rejected.body().contains("Not enough GM Fear"), rejected.body());
+        assertEquals(before, store.loadSheet(campaign.getId(), "auto"));
+        assertEquals(10, campaign.getFear());
+        assertEquals(10, store.load(campaign.getId()).getFear());
+        assertEquals(historyBefore + 1, store.historyTail(campaign.getId(), 100).size());
+    }
+
+    @Test
     void effectBoundPoolsPersistAcrossSourcesAndUnsafeEndingsRollBack() throws Exception {
         automationCompendium();
         Path catalogPath = compendiumDir.resolve("classes.json");
@@ -4162,7 +4219,70 @@ class OnlineSessionServerTest {
     }
 
     @Test
-    void replacementLifecycleRejectsUnsettledTableChangesAtomically() throws Exception {
+    void replacementLifecycleSettlesFearAcrossActorsAndPhasesBeforeResettingPools() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        automation.set("pools", MAPPER.readTree("""
+                {"charge":{"kind":"number","scope":"source","max":12,"resetOn":["scene.end","session.start"],
+                  "resetTo":{"read":"event.table.fear"}}}"""));
+        automation.set("rules", MAPPER.readTree("""
+                [{"id":"active-scene","bindings":[{"id":"auto","event":"scene.end","surface":"sheet","mode":"automatic"}],
+                  "when":{"eq":[{"read":"actor.id"},"active"]},
+                  "do":[{"op":"table.gain","resource":"fear","amount":2,"label":"Gain"}],
+                  "ui":{"report":"Active scene: {event.table.fear}."}},
+                 {"id":"offline-scene","bindings":[{"id":"auto","event":"scene.end","surface":"sheet","mode":"automatic"}],
+                  "when":{"eq":[{"read":"actor.id"},"offline"]},
+                  "do":[{"op":"value","value":{"read":"event.table.fear"},"as":"before"},
+                        {"op":"table.spend","resource":"fear","amount":1,"label":"Spend"}],
+                  "ui":{"report":"Offline scene: {result.before} to {event.table.fear}."}},
+                 {"id":"active-session","bindings":[{"id":"auto","event":"session.start","surface":"sheet","mode":"automatic"}],
+                  "when":{"eq":[{"read":"actor.id"},"active"]},
+                  "do":[{"op":"table.spend","resource":"fear","amount":1,"label":"Spend"}],
+                  "ui":{"report":"Active session: {event.table.fear}."}},
+                 {"id":"offline-session","bindings":[{"id":"auto","event":"session.start","surface":"sheet","mode":"automatic"}],
+                  "when":{"eq":[{"read":"actor.id"},"offline"]},
+                  "do":[{"op":"table.gain","resource":"fear","amount":3,"label":"Gain"}],
+                  "ui":{"report":"Offline session: {event.table.fear}."}}]"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String initial = """
+                {"name":"Ada","features":[
+                 {"name":"Steady","instanceId":"s","automationSource":"classes:tester:features:steady"}],
+                 "automationState":{"revision":3,"journal":[],"sources":{},
+                   "effects":[{"id":"scene","label":"Scene","until":["scene.end"]}]}}
+                """;
+        for (String id : List.of("active", "offline")) {
+            campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId()).build());
+            store.saveSheet(campaign.getId(), id, initial);
+        }
+        campaign.setFear(3);
+        assertNull(server.endScene());
+        assertEquals(4, campaign.getFear());
+        assertEquals(4, store.load(campaign.getId()).getFear());
+        assertEquals(5, MAPPER.readTree(store.loadSheet(campaign.getId(), "active"))
+                .requiredAt("/automationState/sources/s/sourcePools/charge/value").intValue());
+        assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "offline"))
+                .requiredAt("/automationState/sources/s/sourcePools/charge/value").intValue());
+        String sceneReport = store.historyTail(campaign.getId(), 1).getFirst().path("text").asText();
+        assertTrue(sceneReport.contains("Offline scene: 5 to 4."), sceneReport);
+
+        for (String id : List.of("active", "offline")) store.saveSheet(campaign.getId(), id, initial);
+        campaign.setFear(3);
+        assertNull(server.newSession());
+        assertEquals(6, campaign.getFear());
+        assertEquals(6, store.load(campaign.getId()).getFear());
+        assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "active"))
+                .requiredAt("/automationState/sources/s/sourcePools/charge/value").intValue());
+        assertEquals(6, MAPPER.readTree(store.loadSheet(campaign.getId(), "offline"))
+                .requiredAt("/automationState/sources/s/sourcePools/charge/value").intValue());
+        String sessionReport = store.historyTail(campaign.getId(), 1).getFirst().path("text").asText();
+        assertTrue(sessionReport.contains("Offline scene: 4 to 3."), sessionReport);
+        assertTrue(sessionReport.contains("Offline session: 6."), sessionReport);
+    }
+
+    @Test
+    void replacementLifecycleRejectsInvalidTableChangesAtomically() throws Exception {
         automationCompendium();
         Path file = compendiumDir.resolve("classes.json");
         ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
@@ -4182,19 +4302,20 @@ class OnlineSessionServerTest {
         String offlineBefore = store.loadSheet(campaign.getId(), "offline");
         var historyBefore = store.historyTail(campaign.getId(), 100);
         for (String event : List.of("scene.end", "session.start")) {
-            for (String operation : List.of("table.gain", "table.spend")) {
+            for (String resource : List.of("fear", "unsupported")) {
                 automation.set("rules", MAPPER.readTree("""
                         [{"id":"early","bindings":[{"id":"auto","event":"scene.end","surface":"sheet","mode":"automatic"}],
                           "when":{"eq":[{"read":"actor.id"},"active"]},
-                          "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"Early"}},
+                          "do":[{"op":"resource.gain","pool":"actor.hope","amount":1},
+                                {"op":"table.gain","resource":"fear","amount":2,"label":"Gain"}],"ui":{"label":"Early"}},
                          {"id":"table","bindings":[{"id":"auto","event":"%s","surface":"sheet","mode":"automatic"}],
                           "when":{"eq":[{"read":"actor.id"},"offline"]},
-                          "do":[{"op":"%s","resource":"fear","amount":1,"label":"Fear"}],"ui":{"label":"Table"}}]
-                        """.formatted(event, operation)));
+                          "do":[{"op":"table.spend","resource":"%s","amount":6,"label":"Spend"}],"ui":{"label":"Table"}}]
+                        """.formatted(event, resource)));
                 java.nio.file.Files.writeString(file, catalog.toString());
                 String error = "scene.end".equals(event) ? server.endScene() : server.newSession();
                 assertNotNull(error);
-                assertTrue(error.contains("ordered settlement"), error);
+                assertTrue(error.contains("fear".equals(resource) ? "Not enough GM Fear" : "does not support"), error);
                 assertEquals(activeBefore, store.loadSheet(campaign.getId(), "active"));
                 assertEquals(offlineBefore, store.loadSheet(campaign.getId(), "offline"));
                 assertEquals(3, campaign.getFear());

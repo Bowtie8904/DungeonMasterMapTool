@@ -19,7 +19,7 @@ class TargetActionsTest {
                 {"source":{"id":"features:target-fixture","instanceId":"rally-source","name":"Rally"},
                  "actor":{"id":"owner","name":"Ari","hope":{"value":3,"max":6},
                            "stress":{"marked":1,"capacity":6}},
-                 "revision":4,"event":{"type":"action.request"},
+                 "revision":4,"event":{"type":"action.request","table":{"fear":3}},
                  "targetOptions":{"connectedPlayerCharacters":[
                    {"id":"owner","label":"Ari","revision":4},
                    {"id":"mira","label":"Mira","revision":8},
@@ -75,12 +75,18 @@ class TargetActionsTest {
         var steps = (com.fasterxml.jackson.databind.node.ArrayNode) automation.at("/rules/0/do");
         steps.addObject().put("op", "table.spend").put("resource", "fear").put("amount", 1).put("label", "Spend");
         steps.addObject().put("op", "countdown.start").put("value", 2).put("label", "{recipient.name}");
+        ((ObjectNode) automation.at("/rules/0/ui")).put("report", "{recipient.name}: {event.table.fear} Fear.");
         var program = RuleCompiler.compile("features:target-fixture", automation, fixture("rewrite/recipes"));
         var result = RuleDispatcher.executeTargets(List.of(source(program)), new RuleDispatcher.TargetIntent(
                 new RuleRuntime.Intent("rally", "sheet", "rally-source", 4, RuleJson.JSON.createObjectNode()), null, null),
                 List.of(recipient("noor", "Noor", 1, 3), recipient("mira", "Mira", 2, 8)), RandomGenerator.getDefault());
         assertEquals(List.of("mira:Spend", "mira:Mira", "noor:Spend", "noor:Noor"), result.outbox().stream()
                 .map(command -> command.path("recipientId").asText() + ":" + command.path("label").asText()).toList());
+        assertEquals(List.of("Mira: 2 Fear.", "Noor: 1 Fear."),
+                result.actions().stream().map(action -> action.action().report()).toList());
+        assertEquals(1, result.sourceContexts().getFirst().at("/event/table/fear").intValue());
+        assertEquals(List.of(3, 2), result.outbox().stream().filter(command -> command.has("before"))
+                .map(command -> command.path("before").intValue()).toList());
         assertFalse(result.sourceContexts().getFirst().has("outbox"));
         result.outbox().getFirst().put("label", "mutated");
         assertEquals("Spend", result.outbox().getFirst().path("label").asText());

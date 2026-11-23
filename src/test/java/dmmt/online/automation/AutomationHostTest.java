@@ -232,6 +232,45 @@ class AutomationHostTest {
     }
 
     @Test
+    void profileRollCarriesSettledFearFromPreparationIntoFinishedReactionsAndRetries() throws Exception {
+        ObjectNode classes = fixture("rewrite/host-classes");
+        ObjectNode feature = (ObjectNode) classes.at("/entries/0/features/2/automation");
+        feature.withArray("profiles").add(RuleJson.parse("""
+                {"id":"test-action","label":"Test action","rollKind":"action","trait":"Agility"}"""));
+        feature.set("rules", RuleJson.parse("""
+                [{"id":"prepare","bindings":[{"id":"use","event":"roll.prepare","surface":"roll","mode":"option"}],
+                  "do":[{"op":"table.gain","resource":"fear","amount":3,"label":"Gain"}],"ui":{"label":"Prepare"}},
+                 {"id":"finish","bindings":[{"id":"auto","event":"roll.finished","surface":"roll","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.table.fear"},4]},
+                  "do":[{"op":"table.spend","resource":"fear","amount":2,"label":"Spend"}],
+                  "ui":{"report":"Finished with {event.table.fear} Fear."}}]"""));
+        var pack = AutomationHost.compile("table-roll", Map.of("classes", classes.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet();
+        ObjectNode origin = AutomationHost.event("action.request", "actor", 1).put("sessionId", "session");
+        ObjectNode request = request("table-roll", 0, "f-steady", "prepare");
+        ((ObjectNode) request.requiredAt("/selections/0")).put("bindingId", "use");
+        request.putObject("profileRoll").put("sourceInstanceId", "f-steady").put("profileId", "test-action").put("kind", "action");
+
+        ObjectNode receipt = HOST.execute(pack, sheet, origin, request, "self", StructuredRollTest.faces(3, 5));
+        assertEquals(2, receipt.requiredAt("/event/table/fear").intValue());
+        assertEquals("Finished with 2 Fear.", receipt.requiredAt("/actions/1/report").textValue());
+        assertEquals(List.of(1, 4), receipt.path("outbox").findValues("before").stream().map(JsonNode::intValue).toList());
+        assertEquals(List.of(4, 2), receipt.path("outbox").findValues("after").stream().map(JsonNode::intValue).toList());
+        ObjectNode saved = sheet.deepCopy();
+        assertEquals(receipt, HOST.execute(pack, sheet, origin, request, "self", StructuredRollTest.noRandom()));
+        assertEquals(saved, sheet);
+
+        ((ObjectNode) feature.at("/rules/1/do/0")).put("amount", 5);
+        var failingPack = AutomationHost.compile("table-roll-failure", Map.of("classes", classes.toString()),
+                fixture("rewrite/recipes").toString());
+        ObjectNode failingSheet = sheet();
+        ObjectNode before = failingSheet.deepCopy();
+        assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(failingPack, failingSheet, origin, request,
+                "self", StructuredRollTest.faces(3, 5)));
+        assertEquals(before, failingSheet);
+    }
+
+    @Test
     void actionProfilesRejectInvalidShapes() throws Exception {
         for (String invalid : List.of(
                 "{\"label\":\"Bad\",\"rollKind\":\"attack\"}",

@@ -487,6 +487,7 @@ public final class RuleDispatcher {
 
         List<ClaimActionResult> actionResults = new ArrayList<>();
         List<ObjectNode> outbox = new ArrayList<>();
+        ObjectNode sharedEvent = snapshot.event().deepCopy();
         for (PreparedClaim claim : prepared) {
             RuleRuntime.Prepared item = claim.prepared();
             String instanceId = item.intent().sourceInstanceId();
@@ -494,6 +495,7 @@ public final class RuleDispatcher {
             mergeTransactionState(current, workingContexts.get(instanceId));
             boolean self = selfClaims.contains(claim.recipientId());
             setParticipants(current, sharedActor, self ? null : workingRecipients.get(claim.recipientId()));
+            current.set("event", sharedEvent.deepCopy());
             current.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             RuleRuntime.Prepared executable = new RuleRuntime.Prepared(item.intent(), current, snapshot.revision());
             RuleRuntime.Resolution resolution = RuleRuntime.executePrepared(
@@ -501,6 +503,7 @@ public final class RuleDispatcher {
             ObjectNode nextContext = resolution.context();
             collectRecipientCommands(outbox, nextContext, claim.recipientId());
             sharedActor = nextContext.path("actor").deepCopy();
+            sharedEvent = nextContext.path("event").deepCopy();
             if (!self) {
                 workingRecipients.put(claim.recipientId(), nextContext.path("recipient").deepCopy());
             }
@@ -516,6 +519,7 @@ public final class RuleDispatcher {
         for (String instanceId : instanceIds) {
             ObjectNode context = workingContexts.get(instanceId).deepCopy();
             context.set("actor", sharedActor.deepCopy());
+            context.set("event", sharedEvent.deepCopy());
             context.remove("recipient");
             if (!prepared.isEmpty()) context.set("revision", RuleExpression.numeric(snapshot.revision() + 1d, "/revision"));
             updatedSources.add(context);
@@ -649,16 +653,19 @@ public final class RuleDispatcher {
 
         List<TargetActionResult> actionResults = new ArrayList<>();
         List<ObjectNode> outbox = new ArrayList<>();
+        ObjectNode sharedEvent = snapshot.event().deepCopy();
         for (PreparedTarget item : prepared) {
             ObjectNode current = item.prepared().context().deepCopy();
             mergeTransactionState(current, workingSource);
             setParticipants(current, sharedActor, item.recipientId().equals(sourceActorId) ? null : workingRecipients.get(item.recipientId()));
+            current.set("event", sharedEvent.deepCopy());
             current.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             RuleRuntime.Prepared executable = new RuleRuntime.Prepared(intent, current, snapshot.revision());
             RuleRuntime.Resolution resolution = RuleRuntime.executePrepared(candidate.program(), executable, random, false, programs);
             ObjectNode nextContext = resolution.context();
             collectRecipientCommands(outbox, nextContext, item.recipientId());
             sharedActor = nextContext.path("actor").deepCopy();
+            sharedEvent = nextContext.path("event").deepCopy();
             workingSource = nextContext.deepCopy();
             if (!item.recipientId().equals(sourceActorId))
                 workingRecipients.put(item.recipientId(), nextContext.path("recipient").deepCopy());
@@ -672,6 +679,7 @@ public final class RuleDispatcher {
             String instanceId = source.context().path("source").path("instanceId").asText();
             ObjectNode context = instanceId.equals(intent.sourceInstanceId()) ? workingSource.deepCopy() : source.context();
             context.set("actor", sharedActor.deepCopy());
+            context.set("event", sharedEvent.deepCopy());
             context.remove("recipient");
             context.set("revision", RuleExpression.numeric(snapshot.revision() + 1d, "/revision"));
             updatedSources.add(context);
