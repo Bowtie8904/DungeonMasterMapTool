@@ -1,0 +1,45 @@
+{
+  "source": "domain-cards:healing-hands",
+  "scenarios": [
+    {
+      "name": "success-stress-clamped",
+      "before": { "healerStress": 0, "patientHp": 3, "patientStress": 1 },
+      "cast": { "seed": 0, "trait": 30, "roll": "2d12+30", "choice": "stress" },
+      "expected": {
+        "faces": [1, 5], "total": 36, "outcome": "success", "critical": false,
+        "choices": ["hp", "stress"], "healerStress": 1, "patientHp": 3, "patientStress": 0,
+        "reportLine": "patient: cleared 1 Stress."
+      }
+    },
+    {
+      "name": "failure-hp",
+      "before": { "healerStress": 0, "patientHp": 3, "patientStress": 3 },
+      "cast": { "seed": 0, "trait": 0, "roll": "2d12", "choice": "failed-hp" },
+      "expected": {
+        "faces": [1, 5], "total": 6, "outcome": "failure", "critical": false,
+        "choices": ["failed-hp", "failed-stress"], "healerStress": 1, "patientHp": 2, "patientStress": 3,
+        "reportLine": "patient: cleared 1 HP."
+      }
+    },
+    {
+      "name": "failure-stress",
+      "before": { "healerStress": 0, "patientHp": 3, "patientStress": 3 },
+      "cast": { "seed": 0, "trait": 0, "roll": "2d12", "choice": "failed-stress" },
+      "expected": {
+        "faces": [1, 5], "total": 6, "outcome": "failure", "critical": false,
+        "choices": ["failed-hp", "failed-stress"], "healerStress": 1, "patientHp": 3, "patientStress": 2,
+        "reportLine": "patient: cleared 1 Stress."
+      }
+    },
+    {
+      "name": "critical-below-difficulty",
+      "before": { "healerStress": 0, "patientHp": 3, "patientStress": 3 },
+      "cast": { "seed": 8, "trait": 0, "roll": "2d12", "choice": "stress" },
+      "expected": {
+        "faces": [5, 5], "total": 10, "outcome": "success", "critical": true,
+        "choices": ["hp", "stress"], "healerStress": 1, "patientHp": 3, "patientStress": 1,
+        "reportLine": "patient: cleared 2 Stress."
+      }
+    }
+  ]
+}

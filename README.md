@@ -60,7 +60,10 @@ See the [rewrite design and implementation status](docs/ONLINE_AUTOMATION_PLAN.m
 
 Converted action reports can roll bounded dice on the host before subsequent action steps, with the result, costs and use recorded together. The report remains narrative: it does not select or heal targets. Unsupported expressions or combinations with other ordered rolls are reported by the converter rather than guessed. A shared Warden's Protection fixture checks both engines' report and isolated reset behavior; the replacement's live rest workflow remains unfinished.
 
-A shared Healing Hands fixture now exercises the converted successful HP cast through the host, including recipient locking, transactional reporting and retry safety. Its isolated recipient long-rest expiry matches the fixture, but the live format-2 rest workflow and the card's other outcomes still need parity coverage.
+Shared Healing Hands fixtures exercise successful HP and Stress recovery, both failure choices and a
+below-difficulty critical through the legacy and converted hosts, including clamping, recipient locking,
+transactional reporting and retry safety. Recipient long-rest expiry matches in isolation, but the live
+format-2 rest workflow remains unwired.
 
 Converted passive bonuses based on a trait use its current total, including passive and active-effect trait bonuses. This includes Untouchable's rounded Agility-to-Evasion bonus. Trait-modifying passives cannot themselves depend on derived trait totals. Legacy trait-derived effect modifiers remain dynamic and are rejected by the converter until that behavior is supported; explicitly authored format-2 started effects can instead freeze a value when activated.
 
