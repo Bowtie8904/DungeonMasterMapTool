@@ -441,6 +441,31 @@ class RestTransactionTest {
     }
 
     @Test
+    void unsettledAnnotatedRecoveryOnAnotherMoveFieldCannotBypassTheGuard() throws Exception {
+        var base = pack();
+        ObjectNode automation = (ObjectNode) RuleJson.parse("""
+                {"rules":[{"id":"share","bindings":[{"id":"auto","event":"downtime.move","surface":"downtime","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.move.id"},"mend"]},
+                 "do":[{"op":"plan.adjust","plan":"event.move","field":"bonus","by":1,"label":"Share",
+                        "partyRecovery":{"track":"stress","scope":"activeCharacters"}},
+                       {"op":"plan.adjust","plan":"event.move","field":"bonus","by":-1,"label":"Cancel"}],
+                 "ui":{"label":"Share"}}]}
+                """);
+        var programs = new java.util.HashMap<>(base.programs());
+        programs.put("features:sharing", RuleCompiler.compile("features:sharing", automation,
+                RuleJson.parse(LegacyCatalogConverter.coreRecipes())));
+        var pack = new AutomationHost.Pack("sharing", programs, base.rulesetName(), base.rest());
+        ObjectNode sheet = sheet();
+        sheet.putArray("features").addObject().put("name", "Sharing").put("instanceId", "sharing")
+                .put("automationSource", "features:sharing");
+        ObjectNode before = sheet.deepCopy(), rest = request("short");
+        move(rest, "mend");
+        assertEquals("restCommand", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageSelfRest(pack, sheet, origin(), rest, StructuredRollTest.noRandom())).code());
+        assertEquals(before, sheet);
+    }
+
+    @Test
     void canceledOrClampedPartyRequestsRemainOrderedAndCannotBypassTheGuard() throws Exception {
         var base = pack();
         ObjectNode automation = (ObjectNode) RuleJson.parse("""

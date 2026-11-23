@@ -1767,7 +1767,8 @@ public final class AutomationHost {
         int allies = RuleJson.integer(move.get("allies"), "/event/move/allies", 0, 128);
         boolean partyRecovery = allies > 0;
         if (!partyRecovery) for (JsonNode adjustment : move.path("adjustments")) {
-            if ("allies".equals(adjustment.path("field").asText()) && adjustment.path("requested").asInt() > 0) {
+            if (adjustment.path("requested").asInt() > 0
+                    && (adjustment.has("partyRecovery") || "allies".equals(adjustment.path("field").asText()))) {
                 partyRecovery = true;
                 break;
             }
