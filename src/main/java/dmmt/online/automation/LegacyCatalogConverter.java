@@ -4679,7 +4679,8 @@ public final class LegacyCatalogConverter {
         JsonNode modifiers = rest.path("modifiers");
         if (rest.has("modifiers") && (!modifiers.isArray() || modifiers.size() > 16)) p.add(path + "/modifiers", "Expected up to 16 move modifiers.");
         else for (int i = 0; i < modifiers.size(); i++) {
-            ObjectNode rule = moveModifier(modifiers.get(i), path + "/modifiers/" + i, p, effects, pools, effectGate);
+            ObjectNode rule = moveModifier(modifiers.get(i), path + "/modifiers/" + i, p, effects, pools, effectGate,
+                    block != null);
             if (rule != null) out.add(rule);
         }
         if (out.isEmpty()) p.add(path, "A rest block needs allowances, passives or move modifiers.");
@@ -4811,7 +4812,8 @@ public final class LegacyCatalogConverter {
         return out;
     }
 
-    private static ObjectNode moveModifier(JsonNode modifier, String path, Problems p, ObjectNode effects, Pools pools, ArrayNode effectGate) {
+    private static ObjectNode moveModifier(JsonNode modifier, String path, Problems p, ObjectNode effects, Pools pools,
+                                           ArrayNode effectGate, boolean sourceRest) {
         if (!modifier.isObject()) { p.add(path, "Expected a move modifier object."); return null; }
         p.onlyFields(modifier, path, MOVE_MODIFIER_FIELDS);
         String move = modifier.path("move").asText("");
@@ -4826,22 +4828,39 @@ public final class LegacyCatalogConverter {
         }
         applyWhen(rule, when);
         ArrayNode steps = rule.putArray("do");
+        boolean ignoredRepair = false;
         for (String field : List.of("bonus", "repairAllies")) {
             if (!modifier.has(field)) continue;
-            JsonNode by = signed(modifier.path(field));
+            JsonNode value = modifier.path(field);
+            if ("repairAllies".equals(field)) {
+                if (!sourceRest) {
+                    ignoredRepair = true;
+                    continue;
+                }
+                if (!value.isIntegralNumber() || !value.canConvertToInt() || value.asInt() > 1000) {
+                    p.add(path + "/repairAllies", "Expected a fixed integer no greater than 1000 for party recovery.");
+                    continue;
+                }
+                if (value.asInt() <= 0) {
+                    ignoredRepair = true;
+                    continue;
+                }
+            }
+            JsonNode by = "repairAllies".equals(field) ? value : signed(value);
             if (by == null) p.add(path + "/" + field, "Expected a whole number.");
             else {
                 ObjectNode adjustment = planAdjust("event.move", "bonus".equals(field) ? "bonus" : "allies", by,
                         "bonus".equals(field) ? "Move bonus" : "Party Armor recovery");
                 if ("repairAllies".equals(field))
-                    adjustment.putObject("partyRecovery").put("track", "armorTrack").put("scope", "activePlayerCharacters");
+                    adjustment.putObject("partyRecovery").put("track", "armorTrack").put("scope", "activePlayerCharacters")
+                            .putObject("afterRest").put("sourcePath", "loadout").put("move", move);
                 steps.add(adjustment);
             }
         }
         JsonNode list = modifier.path("steps");
         for (int s = 0; s < list.size(); s++) step(list.get(s), path + "/steps/" + s, p, steps, effects, pools);
         if (modifier.has("note")) ((ObjectNode) rule.get("ui")).put("report", escape(modifier.path("note").asText()));
-        if (steps.isEmpty()) p.add(path, "A move modifier needs a bonus, ally count or steps.");
+        if (steps.isEmpty() && !ignoredRepair) p.add(path, "A move modifier needs a bonus, ally count or steps.");
         deferMoveBenefit(rule);
         return rule;
     }

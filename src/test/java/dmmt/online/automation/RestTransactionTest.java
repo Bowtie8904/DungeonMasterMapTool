@@ -466,6 +466,81 @@ class RestTransactionTest {
     }
 
     @Test
+    void gatedAndConsumedInitialScheduledSourcesCannotBypassTheRestGuard() throws Exception {
+        var base = pack();
+        ObjectNode automation = (ObjectNode) RuleJson.parse("""
+                {"rules":[
+                 {"id":"consume","bindings":[{"id":"rest","event":"rest.prepare","surface":"rest","mode":"option"}],
+                  "do":[{"op":"inventory.consume","amount":1}],"ui":{"label":"Consume"}},
+                 {"id":"share","bindings":[{"id":"auto","event":"downtime.move","surface":"downtime","mode":"automatic"}],
+                  "when":false,"do":[{"op":"plan.adjust","plan":"event.move","field":"allies","by":1,"label":"Share",
+                   "partyRecovery":{"track":"armorTrack","scope":"activeCharacters",
+                                    "afterRest":{"sourcePath":"inventory","move":"mend"}}}],"ui":{}}]}
+                """);
+        var programs = new java.util.HashMap<>(base.programs());
+        programs.put("items:camp", RuleCompiler.compile("items:camp", automation,
+                RuleJson.parse(LegacyCatalogConverter.coreRecipes())));
+        var pack = new AutomationHost.Pack("scheduled", programs, base.rulesetName(), base.rest());
+        ObjectNode initial = sheet();
+        initial.putArray("inventory").addObject().put("name", "Camp").put("instanceId", "camp")
+                .put("automationSource", "items:camp").put("qty", 1);
+        ObjectNode before = initial.deepCopy();
+
+        ObjectNode gated = request("short");
+        move(gated, "mend");
+        assertEquals("restCommand", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageSelfRest(pack, initial, origin(), gated, StructuredRollTest.noRandom())).code());
+        assertEquals(before, initial);
+
+        ObjectNode prepareOnly = request("short");
+        prepareOnly.withArray("preparation").add(choice("consume", "rest").put("sourceInstanceId", "camp"));
+        ObjectNode consumed = initial.deepCopy();
+        HOST.stageSelfRest(pack, consumed, origin(), prepareOnly, StructuredRollTest.noRandom());
+        assertTrue(consumed.path("inventory").isEmpty(), "Preparation really removes the scheduling source.");
+
+        ObjectNode consumeThenMove = prepareOnly.deepCopy();
+        move(consumeThenMove, "mend");
+        assertEquals("restCommand", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageSelfRest(pack, initial, origin(), consumeThenMove, StructuredRollTest.noRandom())).code());
+        assertEquals(before, initial, "The removed source and every staged change must roll back.");
+
+        ObjectNode elsewhere = sheet();
+        elsewhere.putArray("features").addObject().put("name", "Camp").put("instanceId", "camp")
+                .put("automationSource", "items:camp");
+        ObjectNode allowed = request("short");
+        move(allowed, "mend");
+        assertDoesNotThrow(() -> HOST.stageSelfRest(pack, elsewhere, origin(), allowed, StructuredRollTest.faces(4)));
+
+        ((ObjectNode) automation.at("/rules/1")).put("when", true);
+        programs.put("items:camp", RuleCompiler.compile("items:camp", automation,
+                RuleJson.parse(LegacyCatalogConverter.coreRecipes())));
+        var activePack = new AutomationHost.Pack("outside-location", programs, base.rulesetName(), base.rest());
+        ObjectNode activeElsewhere = sheet();
+        activeElsewhere.putArray("features").addObject().put("name", "Camp").put("instanceId", "camp")
+                .put("automationSource", "items:camp");
+        ObjectNode result = HOST.stageSelfRest(activePack, activeElsewhere, origin(), allowed, StructuredRollTest.faces(4));
+        assertEquals(1, result.at("/moveEvents/0/move/allies").asInt());
+
+        ((com.fasterxml.jackson.databind.node.ArrayNode) automation.path("rules")).add(RuleJson.parse("""
+                {"id":"ordinary","bindings":[{"id":"auto","event":"downtime.move","surface":"downtime","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.move.id"},"mend"]},
+                 "do":[{"op":"plan.adjust","plan":"event.move","field":"bonus","by":1,"label":"Ordinary",
+                        "partyRecovery":{"track":"stress","scope":"activeCharacters"}},
+                       {"op":"plan.adjust","plan":"event.move","field":"bonus","by":-1,"label":"Cancel"}],"ui":{}}
+                """));
+        programs.put("items:camp", RuleCompiler.compile("items:camp", automation,
+                RuleJson.parse(LegacyCatalogConverter.coreRecipes())));
+        var mixedPack = new AutomationHost.Pack("mixed-recoveries", programs, base.rulesetName(), base.rest());
+        ObjectNode mixed = sheet();
+        mixed.putArray("features").addObject().put("name", "Camp").put("instanceId", "camp")
+                .put("automationSource", "items:camp");
+        ObjectNode mixedBefore = mixed.deepCopy();
+        assertEquals("restCommand", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageSelfRest(mixedPack, mixed, origin(), allowed, StructuredRollTest.noRandom())).code());
+        assertEquals(mixedBefore, mixed);
+    }
+
+    @Test
     void canceledOrClampedPartyRequestsRemainOrderedAndCannotBypassTheGuard() throws Exception {
         var base = pack();
         ObjectNode automation = (ObjectNode) RuleJson.parse("""

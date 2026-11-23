@@ -50,7 +50,7 @@ class RestPartyRecoveryOrderingTest {
             ObjectNode context = RuleJson.JSON.createObjectNode().put("revision", 0);
             context.putObject("source").put("id", source.sourceId()).put("instanceId", source.instanceId())
                     .put("name", source.name());
-            context.putObject("actor").put("id", "ada");
+            context.putObject("actor").put("id", "ada").putArray("effects");
             context.set("event", event.deepCopy());
             candidates.add(new RuleDispatcher.Candidate(fixture.pack().programs().get(source.sourceId()), context));
         }
@@ -175,6 +175,135 @@ class RestPartyRecoveryOrderingTest {
         assertEquals(List.of(1, 1, 2, 2), ordered.stream().map(item -> item.request().request().requested()).toList());
         assertEquals(List.of(0, 1, 0, 1), ordered.stream().map(AutomationHost.RestPartyRecovery::moveIndex).toList());
         assertEquals(List.of(0, 0, 1, 1), ordered.stream().map(AutomationHost.RestPartyRecovery::adjustmentIndex).toList());
+    }
+
+    @Test
+    void schedulesInitialLoadoutRequestsDespiteMoveFiltersAndMissingLaterSources() throws Exception {
+        var converted = LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"domain-cards","entries":[
+                 {"id":"rest","name":"Rest gate","automation":{"rest":{"modifiers":[
+                  {"move":"tend","rest":"long","repairAllies":2}]}}},
+                 {"id":"target","name":"Target gate","automation":{"rest":{"modifiers":[
+                  {"move":"tend","target":"ally","repairAllies":3}]}}},
+                 {"id":"effect","name":"Effect gate","automation":{"rest":{"requiresEffect":"Lit","modifiers":[
+                  {"move":"tend","repairAllies":4}]}}},
+                 {"id":"normal","name":"Normal","automation":{"rest":{"modifiers":[
+                  {"move":"tend","repairAllies":5}]}}}
+                ]}
+                """);
+        assertTrue(converted.diagnostics().isEmpty(), converted.diagnostics().toString());
+        var pack = AutomationHost.compile("filters", Map.of("domain-cards", converted.catalog().toString()),
+                LegacyCatalogConverter.coreRecipes());
+        ObjectNode initial = (ObjectNode) RuleJson.parse("""
+                {"loadout":[
+                  {"name":"Rest gate","automationSource":"domain-cards:rest","instanceId":"z-rest"},
+                  {"name":"Target gate","automationSource":"domain-cards:target","instanceId":"y-target"},
+                  {"name":"Effect gate","automationSource":"domain-cards:effect","instanceId":"x-effect"},
+                  {"name":"Normal","automationSource":"domain-cards:normal","instanceId":"w-normal"}],
+                 "inventory":[{"name":"Normal","automationSource":"domain-cards:normal","instanceId":"inventory","qty":1}]}
+                """);
+        Fixture fixture = new Fixture(pack, initial);
+        ObjectNode self = move(fixture, "tend", false), ally = move(fixture, "tend", true);
+        assertEquals(List.of("inventory", "w-normal"), self.at("/move/adjustments").findValuesAsText("sourceInstanceId"));
+        List<ObjectNode> events = List.of(self, move(fixture, "other", false), ally, self.deepCopy());
+        var ordered = HOST.orderRestPartyRecoveries(pack, initial, "ada", events);
+        assertEquals(List.of("z-rest", "z-rest", "y-target", "y-target", "x-effect", "x-effect", "w-normal", "w-normal"),
+                ordered.stream().map(item -> item.request().request().sourceInstanceId()).toList());
+        assertEquals(List.of(2, 2, 3, 3, 4, 4, 5, 5),
+                ordered.stream().map(item -> item.request().request().requested()).toList());
+        assertEquals(List.of(0, 3, 0, 3, 0, 3, 0, 3),
+                ordered.stream().map(AutomationHost.RestPartyRecovery::moveIndex).toList());
+        assertEquals(List.of(-1, -1, -1, -1, -1, -1, 1, 1),
+                ordered.stream().map(AutomationHost.RestPartyRecovery::adjustmentIndex).toList());
+
+        ObjectNode later = initial.deepCopy();
+        later.putArray("loadout");
+        later.putArray("inventory");
+        ObjectNode missingSourcesMove = AutomationHost.event("downtime.move", "ada", 0);
+        missingSourcesMove.putObject("move").put("id", "tend").put("rest", "short")
+                .put("ally", false).put("allies", 0).put("bonus", 0);
+        var missing = HOST.orderRestPartyRecoveries(pack, initial, "ada", List.of(missingSourcesMove));
+        assertEquals(List.of("z-rest", "y-target", "x-effect", "w-normal"),
+                missing.stream().map(item -> item.request().request().sourceInstanceId()).toList());
+        assertTrue(missing.stream().allMatch(item -> item.adjustmentIndex() == -1));
+        assertTrue(HOST.orderRestPartyRecoveries(pack, later, "ada", List.of(missingSourcesMove)).isEmpty());
+
+        ObjectNode recipient = recipient("Mira", 0, 2);
+        var reactionPack = withReaction(fixture, reaction("""
+                {"op":"resource.gain","pool":"actor.hope","amount":1}"""));
+        var staged = HOST.stageRestPartyRecoveries(reactionPack, initial, completed(), List.of(missingSourcesMove),
+                new AutomationHost.RestRoster("source", scope -> List.of(member("mira", recipient))), noRandom());
+        assertEquals(List.of(2, 3, 4, 5),
+                staged.response().path("clears").findValues("requested").stream().map(JsonNode::asInt).toList());
+        assertEquals(List.of(-1, -1, -1, -1),
+                staged.response().path("clears").findValues("adjustmentIndex").stream().map(JsonNode::asInt).toList());
+        assertEquals(4, staged.recipients().get("mira").at("/hope/on").asInt());
+        assertEquals(0, recipient.at("/hope/on").asInt());
+    }
+
+    @Test
+    void scheduledAdjustmentsCannotChangeTheirCompiledAmountsOrBeDuplicated() throws Exception {
+        Fixture fixture = fixture();
+        ObjectNode self = move(fixture, "tend", false);
+        for (Consumer<ObjectNode> corrupt : List.<Consumer<ObjectNode>>of(
+                node -> ((ObjectNode) node.at("/move/adjustments/0")).put("requested", 9),
+                node -> ((ObjectNode) node.at("/move/adjustments/0")).put("requested", 0),
+                node -> ((ObjectNode) node.at("/move/adjustments/0")).put("requested", -1),
+                node -> ((ObjectNode) node.at("/move/adjustments/0")).put("label", "Changed"),
+                node -> ((ObjectNode) node.at("/move/adjustments/0/partyRecovery/afterRest")).put("move", "other"),
+                node -> ((com.fasterxml.jackson.databind.node.ArrayNode) node.at("/move/adjustments"))
+                        .add(node.at("/move/adjustments/0").deepCopy()))) {
+            ObjectNode changed = self.deepCopy();
+            corrupt.accept(changed);
+            assertThrows(IllegalArgumentException.class,
+                    () -> HOST.orderRestPartyRecoveries(fixture.pack(), fixture.sheet(), "ada", List.of(changed)));
+        }
+        assertEquals(128, HOST.orderRestPartyRecoveries(fixture.pack(), fixture.sheet(), "ada",
+                java.util.Collections.nCopies(64, self)).size());
+        assertThrows(IllegalArgumentException.class, () -> HOST.orderRestPartyRecoveries(
+                fixture.pack(), fixture.sheet(), "ada", java.util.Collections.nCopies(65, self)));
+    }
+
+    @Test
+    void rejectsScheduledLocationsAbsentFromTheSheetProjection() throws Exception {
+        String catalog = """
+                {"format":"dmmap-daggerheart","version":2,"category":"domain-cards","entries":[
+                 {"id":"first","name":"First","automation":{"rules":[
+                  {"id":"share","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"automatic"}],
+                   "when":false,"do":[{"op":"plan.adjust","plan":"event.move","field":"allies","by":1,"label":"Share",
+                     "partyRecovery":{"track":"armorTrack","scope":"activeCharacters",
+                                      "afterRest":{"sourcePath":"unknown","move":"tend"}}}],"ui":{}}]}}]}
+                """;
+        var pack = AutomationHost.compile("unknown-path", Map.of("domain-cards", catalog), LegacyCatalogConverter.coreRecipes());
+        ObjectNode sheet = (ObjectNode) RuleJson.parse("""
+                {"loadout":[{"name":"First","automationSource":"domain-cards:first","instanceId":"first"}]}""");
+        var fixture = new Fixture(pack, sheet);
+        assertTrue(assertThrows(IllegalArgumentException.class, () ->
+                HOST.orderRestPartyRecoveries(pack, sheet, "ada", List.of(move(fixture, "tend", false))))
+                .getMessage().contains("sheet projection"));
+    }
+
+    @Test
+    void interleavesScheduledAndOrdinaryStepsWithoutApplyingWrongMoveSchedules() throws Exception {
+        String catalog = """
+                {"format":"dmmap-daggerheart","version":2,"category":"domain-cards","entries":[
+                 {"id":"first","name":"First","automation":{"rules":[
+                  {"id":"both","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"automatic"}],
+                   "do":[{"op":"plan.adjust","plan":"event.move","field":"allies","by":1,"label":"Scheduled",
+                          "partyRecovery":{"track":"armorTrack","scope":"activeCharacters",
+                                           "afterRest":{"sourcePath":"loadout","move":"tend"}}},
+                         {"op":"plan.adjust","plan":"event.move","field":"allies","by":2,"label":"Ordinary",
+                          "partyRecovery":{"track":"stress","scope":"activeCharacters"}}],"ui":{}}]}}]}
+                """;
+        var pack = AutomationHost.compile("mixed", Map.of("domain-cards", catalog), LegacyCatalogConverter.coreRecipes());
+        ObjectNode sheet = (ObjectNode) RuleJson.parse("""
+                {"loadout":[{"name":"First","automationSource":"domain-cards:first","instanceId":"first"}]}""");
+        var fixture = new Fixture(pack, sheet);
+        var ordered = HOST.orderRestPartyRecoveries(pack, sheet, "ada", List.of(move(fixture, "tend", false),
+                move(fixture, "stress", false), move(fixture, "tend", false)));
+        assertEquals(List.of(1, 1, 2, 2, 2), ordered.stream().map(item -> item.request().request().requested()).toList());
+        assertEquals(List.of(0, 2, 0, 1, 2), ordered.stream().map(AutomationHost.RestPartyRecovery::moveIndex).toList());
+        assertEquals(List.of(0, 0, 1, 1, 1), ordered.stream().map(AutomationHost.RestPartyRecovery::adjustmentIndex).toList());
     }
 
     @Test

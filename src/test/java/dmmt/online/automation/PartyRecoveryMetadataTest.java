@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -140,5 +141,82 @@ class PartyRecoveryMetadataTest {
         assertDoesNotThrow(() -> RuleCatalog.compile(expanded, recipes.toString()));
         assertThrows(IllegalArgumentException.class,
                 () -> RuleCatalog.compile(expanded.replace("armorTrack", "actor.armorTrack"), recipes.toString()));
+    }
+
+    private static ObjectNode scheduledAutomation() throws Exception {
+        ObjectNode automation = automation();
+        ObjectNode step = (ObjectNode) automation.at("/rules/0/do/0");
+        step.put("label", "First {{recovery}}");
+        step.withObject("/partyRecovery").putObject("afterRest").put("sourcePath", "loadout").put("move", "tend");
+        return automation;
+    }
+
+    @Test
+    void scheduledRecoveryRequiresAUniqueBoundedStaticDeclaration() throws Exception {
+        ObjectNode valid = scheduledAutomation();
+        var program = compile(valid);
+        assertTrue(program.restRecoveries("other").isEmpty());
+        var scheduled = program.restRecoveries("tend");
+        assertEquals(1, scheduled.size());
+        assertEquals("share", scheduled.getFirst().ruleId());
+        assertEquals("move", scheduled.getFirst().bindingId());
+        assertEquals("loadout", scheduled.getFirst().sourcePath());
+        assertEquals(128, scheduled.getFirst().amount());
+        assertEquals("First {recovery}", scheduled.getFirst().label());
+
+        List<Consumer<ObjectNode>> invalid = List.of(
+                node -> ((ObjectNode) node.at("/rules/0/do/0")).put("by", 0),
+                node -> ((ObjectNode) node.at("/rules/0/do/0")).put("by", -1),
+                node -> ((ObjectNode) node.at("/rules/0/do/0")).put("by", 1001),
+                node -> ((ObjectNode) node.at("/rules/0/do/0")).putObject("by").put("read", "actor.level"),
+                node -> ((ObjectNode) node.at("/rules/0/do/0")).put("label", "{source.name}"),
+                node -> ((ObjectNode) node.at("/rules/0/do/0")).put("if", true),
+                node -> ((ObjectNode) node.at("/rules/0/do/0/partyRecovery")).putNull("afterRest"),
+                node -> ((ObjectNode) node.at("/rules/0/do/0/partyRecovery/afterRest")).remove("move"),
+                node -> ((ObjectNode) node.at("/rules/0/do/0/partyRecovery/afterRest")).put("sourcePath", "../loadout"),
+                node -> ((ObjectNode) node.at("/rules/0/do/0/partyRecovery/afterRest")).put("move", "bad move"),
+                node -> ((ObjectNode) node.at("/rules/0/do/0/partyRecovery/afterRest")).put("extra", true),
+                node -> ((ObjectNode) node.at("/rules/0/bindings/0")).put("mode", "option"),
+                node -> ((ObjectNode) node.at("/rules/0/bindings/0")).put("surface", "sheet"),
+                node -> ((com.fasterxml.jackson.databind.node.ArrayNode) node.at("/rules/0/bindings"))
+                        .add(node.at("/rules/0/bindings/0").deepCopy()),
+                node -> ((ObjectNode) node.at("/rules/0")).put("limitRef", "once"));
+        for (Consumer<ObjectNode> change : invalid) {
+            ObjectNode bad = valid.deepCopy();
+            change.accept(bad);
+            assertThrows(IllegalArgumentException.class, () -> compile(bad), bad.toString());
+        }
+    }
+
+    @Test
+    void unusedRecipesAndExpandedArgumentsValidateScheduledRecovery() throws Exception {
+        String catalog = """
+                {"format":"dmmap-daggerheart","version":2,"category":"items","entries":[]}""";
+        ObjectNode recipes = (ObjectNode) RuleJson.parse("""
+                {"format":"dmmap-daggerheart-rules","version":2,"recipes":[{"id":"test:schedule",
+                 "args":{"amount":{"type":"integer"},"path":{"type":"string"},"move":{"type":"string"}},"ui":{},
+                 "rules":[{"id":"share","bindings":[
+                   {"id":"move","event":"downtime.move","surface":"downtime","mode":"automatic"}],
+                  "do":[{"op":"plan.adjust","plan":"event.move","field":"allies","by":{"$arg":"amount"},"label":"Share",
+                   "partyRecovery":{"track":"armorTrack","scope":"activePlayerCharacters",
+                                    "afterRest":{"sourcePath":{"$arg":"path"},"move":{"$arg":"move"}}}}],
+                  "ui":{}}]}]}
+                """);
+        assertDoesNotThrow(() -> RuleCatalog.compile(catalog, recipes.toString()));
+        ObjectNode invalidPath = recipes.deepCopy();
+        ((ObjectNode) invalidPath.at("/recipes/0/rules/0/do/0/partyRecovery/afterRest")).put("sourcePath", "../loadout");
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, invalidPath.toString()));
+        ObjectNode invalidMode = recipes.deepCopy();
+        ((ObjectNode) invalidMode.at("/recipes/0/rules/0/bindings/0")).put("mode", "option");
+        assertThrows(IllegalArgumentException.class, () -> RuleCatalog.compile(catalog, invalidMode.toString()));
+        String expanded = """
+                {"format":"dmmap-daggerheart","version":2,"category":"items","entries":[
+                 {"id":"share","name":"Share","automation":{"rules":[
+                  {"id":"use","useRecipe":"test:schedule","args":{"amount":1,"path":"loadout","move":"tend"}}]}}]}""";
+        assertDoesNotThrow(() -> RuleCatalog.compile(expanded, recipes.toString()));
+        assertThrows(IllegalArgumentException.class,
+                () -> RuleCatalog.compile(expanded.replace("\"amount\":1", "\"amount\":0"), recipes.toString()));
+        assertThrows(IllegalArgumentException.class,
+                () -> RuleCatalog.compile(expanded.replace("\"path\":\"loadout\"", "\"path\":\"../loadout\""), recipes.toString()));
     }
 }

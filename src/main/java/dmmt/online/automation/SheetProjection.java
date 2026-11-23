@@ -21,7 +21,12 @@ public final class SheetProjection {
     public static final String FORMAT = "dmmap-sheet-projection";
     private static final Set<String> KINDS = Set.of("value", "object", "map", "first", "collection", "engine");
 
-    public record SourceElement(String sourceId, String instanceId, String name, ObjectNode element, String quantityField) {}
+    public record SourceElement(String sourceId, String instanceId, String name, ObjectNode element,
+                                String quantityField, String sourcePath) {
+        public SourceElement(String sourceId, String instanceId, String name, ObjectNode element, String quantityField) {
+            this(sourceId, instanceId, name, element, quantityField, null);
+        }
+    }
 
     private final ObjectNode spec;
     private final String stateField, sourceField, instanceField, nameField;
@@ -342,7 +347,7 @@ public final class SheetProjection {
                 String instanceId = element.path(instanceField).asText();
                 if (!instances.add(instanceId)) throw RuleJson.error("/" + instanceField, "Duplicate source instance on the sheet: " + instanceId);
                 result.add(new SourceElement(element.path(sourceField).asText(), instanceId, element.path(nameField).asText(""),
-                        (ObjectNode) element, location.path("quantity").asText(null)));
+                        (ObjectNode) element, location.path("quantity").asText(null), location.path("path").asText()));
             }
         }
         return result;

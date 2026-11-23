@@ -871,9 +871,12 @@ public final class AutomationHost {
 
     record RestPartyRecovery(int moveIndex, int adjustmentIndex, ScopedPartyRecoveryRequest request) {}
 
-    private record RecoverySourceOrder(int index, String sourceId, RuleCompiler.Program program) {}
+    private record RecoverySourceOrder(int index, String sourceId, String sourcePath, RuleCompiler.Program program) {}
 
     private record OrderedRestRecovery(RestPartyRecovery recovery, int sourceIndex, int ruleIndex, int stepIndex) {}
+
+    private record ScheduledRecoveryKey(String sourceInstanceId, String ruleId, String bindingId, int stepIndex,
+                                        int moveIndex) {}
 
     private record RecoveryTask(ScopedPartyRecoveryRequest request, ObjectNode moveEvent, int moveIndex,
                                 int adjustmentIndex) {}
@@ -1110,7 +1113,11 @@ public final class AutomationHost {
             String at = "/event/move/adjustments/" + i;
             String field = RuleJson.id(adjustment.get("field"), at + "/field");
             int amount = RuleJson.integer(adjustment.get("requested"), at + "/requested", -1000, 1000);
-            if (amount <= 0) continue;
+            if (amount <= 0) {
+                if (adjustment.path("partyRecovery").has("afterRest"))
+                    throw RuleJson.error(at + "/requested", "A scheduled recovery must have its compiled positive amount.");
+                continue;
+            }
             if ("allies".equals(field)) hasPositiveAllies = true;
             if (!adjustment.has("partyRecovery")) {
                 if ("allies".equals(field))
@@ -1119,7 +1126,13 @@ public final class AutomationHost {
                 continue;
             }
             JsonNode recovery = adjustment.get("partyRecovery");
-            RuleJson.fields(recovery, at + "/partyRecovery", "track", "scope");
+            RuleJson.fields(recovery, at + "/partyRecovery", "track", "scope", "afterRest");
+            if (recovery.has("afterRest")) {
+                JsonNode schedule = recovery.get("afterRest");
+                RuleJson.fields(schedule, at + "/partyRecovery/afterRest", "sourcePath", "move");
+                SheetProjection.path(schedule.path("sourcePath"), at + "/partyRecovery/afterRest/sourcePath");
+                RuleJson.id(schedule.path("move"), at + "/partyRecovery/afterRest/move");
+            }
             String scope = RuleJson.text(recovery.get("scope"), at + "/partyRecovery/scope");
             PartyRecoveryRequest request = new PartyRecoveryRequest(
                     RuleJson.id(adjustment.get("sourceId"), at + "/sourceId"),
@@ -1135,7 +1148,7 @@ public final class AutomationHost {
     }
 
     /**
-     * Orders host-produced adjustments across a rest. Event contents and requested amounts must originate from
+     * Orders initial-source schedules and host-produced adjustments across a rest. Events must originate from
      * the private rest transaction, not from a client; checking provenance does not authenticate an event.
      */
     List<RestPartyRecovery> orderRestPartyRecoveries(Pack pack, ObjectNode initialSheet, String actorId,
@@ -1145,25 +1158,25 @@ public final class AutomationHost {
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(actorId), "/event/actorId");
         if (moveEvents == null || moveEvents.size() > 64 || moveEvents.stream().anyMatch(java.util.Objects::isNull))
             throw RuleJson.error("/rest/moves", "Expected at most 64 host-generated move events.");
-        Map<String, RecoverySourceOrder> sourceOrder = null;
+        List<SheetProjection.SourceElement> initialSources = sources(pack, initialSheet);
+        Map<String, RecoverySourceOrder> sourceOrder = new HashMap<>();
+        for (int i = 0; i < initialSources.size(); i++) {
+            var source = initialSources.get(i);
+            sourceOrder.put(source.instanceId(), new RecoverySourceOrder(i, source.sourceId(), source.sourcePath(),
+                    pack.programs().get(source.sourceId())));
+        }
+        Set<String> sourcePaths = Set.copyOf(projection.sourcePaths());
         Map<RuleCompiler.Program, Map<String, Integer>> ruleOrders = new HashMap<>();
+        Map<ScheduledRecoveryKey, Integer> adjustmentIndexes = new HashMap<>();
         List<OrderedRestRecovery> ordered = new ArrayList<>();
         for (int moveIndex = 0; moveIndex < moveEvents.size(); moveIndex++) {
             ObjectNode event = moveEvents.get(moveIndex);
             RuleJson.checkTree(event, "/event", 0, new int[]{0});
             if (!actorId.equals(RuleJson.id(event.get("actorId"), "/event/actorId")))
                 throw RuleJson.error("/event/actorId", "A rest move belongs to a different character.");
+            String moveId = RuleJson.id(event.at("/move/id"), "/event/move/id");
             List<ScopedPartyRecoveryRequest> requests = partyRecoveryRequests(event);
             if (requests.isEmpty()) continue;
-            if (sourceOrder == null) {
-                sourceOrder = new HashMap<>();
-                List<SheetProjection.SourceElement> sources = sources(pack, initialSheet);
-                for (int i = 0; i < sources.size(); i++) {
-                    var source = sources.get(i);
-                    sourceOrder.put(source.instanceId(), new RecoverySourceOrder(i, source.sourceId(),
-                            pack.programs().get(source.sourceId())));
-                }
-            }
             JsonNode adjustments = event.at("/move/adjustments");
             int requestIndex = 0;
             for (int adjustmentIndex = 0; adjustmentIndex < adjustments.size(); adjustmentIndex++) {
@@ -1193,6 +1206,22 @@ public final class AutomationHost {
                         || !step.path("field").equals(adjustment.path("field"))
                         || !step.path("partyRecovery").equals(adjustment.path("partyRecovery")))
                     throw RuleJson.error(at, "The recovery does not match its compiled operation.");
+                JsonNode schedule = step.path("partyRecovery").path("afterRest");
+                if (!schedule.isMissingNode()) {
+                    if (request.request().requested() != step.path("by").asInt()
+                            || !request.request().label().equals(RuleTemplate.render(step.path("label").asText(),
+                            RuleJson.JSON.createObjectNode())))
+                        throw RuleJson.error(at, "The scheduled recovery does not match its compiled amount or label.");
+                    String sourcePath = schedule.path("sourcePath").asText();
+                    requireRestSourcePath(sourcePaths, sourcePath);
+                    if (sourcePath.equals(source.sourcePath()) && moveId.equals(schedule.path("move").asText())) {
+                        var key = new ScheduledRecoveryKey(request.request().sourceInstanceId(), ruleId, bindingId,
+                                stepIndex, moveIndex);
+                        if (adjustmentIndexes.putIfAbsent(key, adjustmentIndex) != null)
+                            throw RuleJson.error(at, "A scheduled recovery has more than one matching adjustment.");
+                    }
+                    continue;
+                }
                 Map<String, Integer> rules = ruleOrders.computeIfAbsent(source.program(), program -> {
                     Map<String, Integer> indexes = new HashMap<>();
                     List<String> ids = program.orderedRuleIds();
@@ -1205,11 +1234,52 @@ public final class AutomationHost {
                         source.index(), rules.get(ruleId), stepIndex));
             }
         }
+        for (int sourceIndex = 0; sourceIndex < initialSources.size(); sourceIndex++) {
+            var source = initialSources.get(sourceIndex);
+            RuleCompiler.Program program = pack.programs().get(source.sourceId());
+            if (program == null) continue;
+            for (int moveIndex = 0; moveIndex < moveEvents.size(); moveIndex++) {
+                JsonNode move = moveEvents.get(moveIndex).path("move");
+                if (move.path("ally").asBoolean()) continue;
+                for (var schedule : program.restRecoveries(move.path("id").asText())) {
+                    requireRestSourcePath(sourcePaths, schedule.sourcePath());
+                    if (!schedule.sourcePath().equals(source.sourcePath())) continue;
+                    var key = new ScheduledRecoveryKey(source.instanceId(), schedule.ruleId(), schedule.bindingId(),
+                            schedule.stepIndex(), moveIndex);
+                    var request = new ScopedPartyRecoveryRequest(schedule.scope(),
+                            new PartyRecoveryRequest(source.sourceId(), source.instanceId(), schedule.track(),
+                                    schedule.amount(), schedule.label()));
+                    if (ordered.size() == 128)
+                        throw RuleJson.error("/rest/moves", "A rest is limited to 128 party recovery requests.");
+                    ordered.add(new OrderedRestRecovery(new RestPartyRecovery(moveIndex,
+                            adjustmentIndexes.getOrDefault(key, -1), request),
+                            sourceIndex, schedule.ruleIndex(), schedule.stepIndex()));
+                }
+            }
+        }
         ordered.sort(java.util.Comparator.comparingInt(OrderedRestRecovery::sourceIndex)
                 .thenComparingInt(OrderedRestRecovery::ruleIndex).thenComparingInt(OrderedRestRecovery::stepIndex)
                 .thenComparingInt(item -> item.recovery().moveIndex())
                 .thenComparingInt(item -> item.recovery().adjustmentIndex()));
         return ordered.stream().map(OrderedRestRecovery::recovery).toList();
+    }
+
+    private static void requireRestSourcePath(Set<String> sourcePaths, String path) {
+        if (!sourcePaths.contains(path))
+            throw RuleJson.error("/recovery/sourcePath", "The scheduled source location is not in the sheet projection: " + path + ".");
+    }
+
+    private boolean hasScheduledRestRecovery(Pack pack, List<SheetProjection.SourceElement> initialSources, String move) {
+        Set<String> sourcePaths = Set.copyOf(projection.sourcePaths());
+        for (var source : initialSources) {
+            RuleCompiler.Program program = pack.programs().get(source.sourceId());
+            if (program == null) continue;
+            for (var schedule : program.restRecoveries(move)) {
+                requireRestSourcePath(sourcePaths, schedule.sourcePath());
+                if (schedule.sourcePath().equals(source.sourcePath())) return true;
+            }
+        }
+        return false;
     }
 
     /** Stages an ordered sequence with potentially different host-selected scopes. */
@@ -1399,6 +1469,7 @@ public final class AutomationHost {
             throw new RuleRuntime.Unavailable("stale", "The character changed. Reopen this rest.");
         if (revision == MAX_REST_REVISION)
             throw new RuleRuntime.Unavailable("revision", "The character's rest revision cannot be advanced.");
+        List<SheetProjection.SourceElement> initialSources = sources(pack, sheet);
         StagedRestRecipients recipients = targeted ? new StagedRestRecipients(pack, actorId, roster) : null;
 
         Set<String> initial = restEffectSnapshot(working);
@@ -1420,7 +1491,7 @@ public final class AutomationHost {
             PartyTargets party = move.has("target") ? recipients.party() : null;
             RestTarget target = party == null ? null : new RestTarget(party, (ObjectNode) move.get("target"), recipients::reproject);
             RestMoveResult result = restMove(pack, working, stagedOrigin, progress, (ObjectNode) move.get("selection"),
-                    (ArrayNode) move.get("options"), random, target);
+                    (ArrayNode) move.get("options"), random, target, initialSources);
             progress = result.progress();
             moveEvents.add(result.response().path("event").deepCopy());
             appendRestStage(result.response(), actions, outbox, targeted);
@@ -1861,6 +1932,12 @@ public final class AutomationHost {
 
     RestMoveResult restMove(Pack pack, ObjectNode sheet, ObjectNode origin, RestProgress progress,
                             ObjectNode selection, ArrayNode options, RandomGenerator random, RestTarget target) {
+        return restMove(pack, sheet, origin, progress, selection, options, random, target, sources(pack, sheet));
+    }
+
+    private RestMoveResult restMove(Pack pack, ObjectNode sheet, ObjectNode origin, RestProgress progress,
+                                    ObjectNode selection, ArrayNode options, RandomGenerator random, RestTarget target,
+                                    List<SheetProjection.SourceElement> initialSources) {
         if (progress.count() >= 64) throw RuleJson.error("/rest/moves", "A rest may contain at most 64 moves.");
         RuleJson.fields(selection, "/selection", "sourceInstanceId", "ruleId", "bindingId", "inputs");
         RuleJson.checkTree(selection, "/selection", 0, new int[]{0});
@@ -1894,6 +1971,9 @@ public final class AutomationHost {
             throw RuleJson.error("/target", "This downtime move does not select an ally.");
         if (target != null && !target.party().updates().isEmpty())
             throw new RuleRuntime.Unavailable("restTarget", "Apply the previous staged recipient update before another move.");
+        if (!metadata.path("ally").asBoolean(false) && hasScheduledRestRecovery(pack, initialSources, id))
+            throw new RuleRuntime.Unavailable("restCommand",
+                    "This downtime move requires party recovery and recipient track-change settlement, which are not available yet.");
 
         ObjectNode event = RuleJson.object(origin, "/event").deepCopy().put("type", "downtime.move");
         ObjectNode rest = progress.plan();
@@ -2251,14 +2331,19 @@ public final class AutomationHost {
         RuleJson.integer(move.get("slots"), "/event/move/slots", 0, 1);
         RuleJson.integer(move.get("bonus"), "/event/move/bonus", -1000, 1000);
         int allies = RuleJson.integer(move.get("allies"), "/event/move/allies", 0, 128);
-        boolean partyRecovery = allies > 0;
-        if (!partyRecovery) for (JsonNode adjustment : move.path("adjustments")) {
-            if (adjustment.path("requested").asInt() > 0
-                    && (adjustment.has("partyRecovery") || "allies".equals(adjustment.path("field").asText()))) {
+        boolean partyRecovery = false;
+        int ignoredScheduledAllies = 0;
+        for (JsonNode adjustment : move.path("adjustments")) {
+            if (adjustment.path("requested").asInt() <= 0) continue;
+            if (adjustment.path("partyRecovery").has("afterRest")) {
+                if ("allies".equals(adjustment.path("field").asText()))
+                    ignoredScheduledAllies += adjustment.path("by").asInt();
+            } else if (adjustment.has("partyRecovery") || "allies".equals(adjustment.path("field").asText())) {
                 partyRecovery = true;
                 break;
             }
         }
+        partyRecovery |= allies > ignoredScheduledAllies;
         if (!move.path("ally").asBoolean() && partyRecovery)
             throw new RuleRuntime.Unavailable("restCommand",
                     "This downtime move requires party recovery and recipient track-change settlement, which are not available yet.");

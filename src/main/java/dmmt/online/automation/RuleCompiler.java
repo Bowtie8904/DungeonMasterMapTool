@@ -119,6 +119,8 @@ public final class RuleCompiler {
         record BindingRef(String ruleId, String bindingId, boolean forEach, String audience, boolean option,
                           String claimGroup) {}
         record AutomaticBinding(String ruleId, String bindingId, int priority) {}
+        record ScheduledRestRecovery(String ruleId, String bindingId, int ruleIndex, int stepIndex, String sourcePath,
+                                     String move, String track, String scope, int amount, String label) {}
 
         private final String sourceId;
         private final ObjectNode initialState;
@@ -139,6 +141,7 @@ public final class RuleCompiler {
         private final Map<BindingKey, List<BindingRef>> bindingsByEventSurface;
         private final List<BindingRef> resultButtons;
         private final Map<String, List<AutomaticBinding>> automaticByEvent;
+        private final Map<String, List<ScheduledRestRecovery>> restRecoveriesByMove;
         private ArrayNode profiles = RuleJson.JSON.createArrayNode();
 
         private Program(String sourceId, Decl decl, ArrayNode modifiers, Map<String, ObjectNode> rules) {
@@ -205,6 +208,26 @@ public final class RuleCompiler {
             this.downtimeStatReads = downtimeReads.stream()
                     .filter(ref -> "actor".equals(ref) || "actor.stats".equals(ref) || ref.startsWith("actor.stats."))
                     .collect(java.util.stream.Collectors.toUnmodifiableSet());
+            Map<String, List<ScheduledRestRecovery>> recoveries = new HashMap<>();
+            int ruleIndex = 0;
+            for (var entry : this.rules.entrySet()) {
+                ObjectNode rule = entry.getValue();
+                for (int stepIndex = 0; stepIndex < rule.path("do").size(); stepIndex++) {
+                    JsonNode step = rule.path("do").get(stepIndex);
+                    JsonNode recovery = step.path("partyRecovery"), schedule = recovery.path("afterRest");
+                    if (schedule.isMissingNode()) continue;
+                    String move = schedule.path("move").asText();
+                    var item = new ScheduledRestRecovery(entry.getKey(), rule.at("/bindings/0/id").asText(),
+                            ruleIndex, stepIndex, schedule.path("sourcePath").asText(), move,
+                            recovery.path("track").asText(), recovery.path("scope").asText(),
+                            step.path("by").asInt(), RuleTemplate.render(step.path("label").asText(),
+                            RuleJson.JSON.createObjectNode()));
+                    recoveries.computeIfAbsent(move, ignored -> new ArrayList<>()).add(item);
+                }
+                ruleIndex++;
+            }
+            recoveries.replaceAll((key, items) -> List.copyOf(items));
+            this.restRecoveriesByMove = Map.copyOf(recoveries);
             Map<BindingKey, List<BindingRef>> bindingIndex = new HashMap<>();
             List<BindingRef> results = new ArrayList<>();
             Map<String, List<AutomaticBinding>> automatic = new HashMap<>();
@@ -245,6 +268,7 @@ public final class RuleCompiler {
         public Set<String> ruleIds() { return Set.copyOf(rules.keySet()); }
         List<String> orderedRuleIds() { return List.copyOf(rules.keySet()); }
         List<AutomaticBinding> automatic(String event) { return automaticByEvent.getOrDefault(event, List.of()); }
+        List<ScheduledRestRecovery> restRecoveries(String move) { return restRecoveriesByMove.getOrDefault(move, List.of()); }
         List<BindingRef> bindings(String event, String surface) {
             return bindingsByEventSurface.getOrDefault(new BindingKey(event, surface), List.of());
         }
@@ -1005,6 +1029,7 @@ public final class RuleCompiler {
                 }
             }
         }
+        validateScheduledRecoveryPlacement(rule, path, true);
         if (rule.has("after") && !substitution(rule.get("after"))) {
             validateAfterPlacement(rule, path, true);
             validateRecipeShape(afterRule(rule.get("after")), path + "/after");
@@ -1171,6 +1196,7 @@ public final class RuleCompiler {
                 if (step.has("as") && !outputs.add(step.path("as").asText())) throw RuleJson.error(path, "Duplicate operation result ID.");
             }
         }
+        validateScheduledRecoveryPlacement(rule, path, false);
         validateReferences(rule, args, decl, inputs, usesDieContext, path);
         validatePreRollChoices(rule, path);
         if (rule.has("after")) {
@@ -1664,7 +1690,7 @@ public final class RuleCompiler {
         JsonNode recovery = operation.get("partyRecovery");
         String at = path + "/partyRecovery";
         if (allowSubstitutions && substitution(recovery)) return;
-        RuleJson.fields(recovery, at, "track", "scope");
+        RuleJson.fields(recovery, at, "track", "scope", "afterRest");
         JsonNode plan = operation.path("plan");
         if (!(allowSubstitutions && substitution(plan)) && !"event.move".equals(plan.asText()))
             throw RuleJson.error(at, "Party recovery requires an event.move plan.");
@@ -1674,6 +1700,52 @@ public final class RuleCompiler {
             throw RuleJson.error(at + "/track", "Expected an actor track name.");
         if (!(allowSubstitutions && substitution(scope)) && !TARGET_SCOPES.contains(RuleJson.text(scope, at + "/scope")))
             throw RuleJson.error(at + "/scope", "Expected a host character scope.");
+        if (!recovery.has("afterRest")) return;
+        JsonNode schedule = recovery.get("afterRest");
+        if (!(allowSubstitutions && substitution(schedule))) {
+            RuleJson.fields(schedule, at + "/afterRest", "sourcePath", "move");
+            if (!(allowSubstitutions && substitution(schedule.path("sourcePath"))))
+                SheetProjection.path(schedule.path("sourcePath"), at + "/afterRest/sourcePath");
+            if (!(allowSubstitutions && substitution(schedule.path("move"))))
+                RuleJson.id(schedule.path("move"), at + "/afterRest/move");
+        }
+        if (operation.has("if"))
+            throw RuleJson.error(path + "/if", "A scheduled recovery cannot be a conditional step.");
+        if (!(allowSubstitutions && substitution(operation.path("by"))))
+            RuleJson.integer(operation.path("by"), path + "/by", 1, 1000);
+        if (!(allowSubstitutions && substitution(operation.path("label")))) {
+            String label = RuleJson.text(operation.path("label"), path + "/label");
+            if (!RuleTemplate.references(label).isEmpty())
+                throw RuleJson.error(path + "/label", "A scheduled recovery needs a literal label.");
+        }
+    }
+
+    private static void validateScheduledRecoveryPlacement(JsonNode rule, String path, boolean allowSubstitutions) {
+        boolean scheduled = false;
+        for (JsonNode step : rule.path("do"))
+            scheduled |= step.path("partyRecovery").has("afterRest");
+        if (!scheduled) return;
+        if (rule.has("limitRef"))
+            throw RuleJson.error(path + "/limitRef", "Scheduled recoveries cannot use a limited rule.");
+        JsonNode bindings = rule.path("bindings");
+        if (allowSubstitutions && substitution(bindings)) return;
+        if (!bindings.isArray() || bindings.size() != 1)
+            throw RuleJson.error(path + "/bindings", "A scheduled recovery needs exactly one automatic downtime binding.");
+        JsonNode binding = bindings.get(0);
+        if (allowSubstitutions && substitution(binding)) return;
+        for (String field : List.of("event", "surface", "mode")) {
+            JsonNode value = binding.path(field);
+            if (allowSubstitutions && substitution(value)) continue;
+            String expected = switch (field) {
+                case "event" -> "downtime.move";
+                case "surface" -> "downtime";
+                default -> "automatic";
+            };
+            if (!expected.equals(value.asText()))
+                throw RuleJson.error(path + "/bindings", "A scheduled recovery needs exactly one automatic downtime binding.");
+        }
+        if (binding.has("forEach") || binding.has("targetSelection") || binding.has("claimGroup"))
+            throw RuleJson.error(path + "/bindings", "A scheduled recovery cannot select targets or claims.");
     }
 
     /** Static {@code options} or one {@code optionsFrom} expression yielding {@code [{id, label}]}; returns the static maximum. */

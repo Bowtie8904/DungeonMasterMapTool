@@ -256,16 +256,25 @@ operation identities. A move adjustment may declare `partyRecovery: {track, scop
 `armorTrack` and `activePlayerCharacters` for `repairAllies`. The host copies this validated, authored metadata
 into the adjustment record, rather than deriving recovery mechanics from a client-supplied amount. Applying
 each request to affected characters in a staged rest is still pending. Narrative ally moves remain report-only.
-An internal whole-rest ordering primitive validates each recorded source, rule, binding and step against the
-initial sheet and compiled pack, then orders by source, rule, step and move instead of dispatch order. This
-preserves converted loadout modifier/pick order in the supported cases, including individually clamped requests.
-It accepts only private host-produced events. A separate party stage can use the host roster's original
-character order rather than sorted IDs, recording both membership and order for comparison before commit
-without loading sheets. Existing sorted targeting and recovery remain unchanged. A whole-rest recovery stage
-combines these primitives after a completed private rest, supplies each reaction with its originating move facts,
-carries the post-rest table state, and rejects attempts to change completed event facts. It returns private
-recipient changes and dependencies but is not yet composed with targeted moves or the rest coordinator, and
-does not reproduce legacy server applicability checks that differ from ordinary move modifiers.
+A recovery may additionally declare `afterRest: {sourcePath, move}`. It must have a fixed positive integer
+`by` of at most 1,000, a literal label and exactly one automatic `downtime.move`/`downtime` binding, without a
+conditional step or use budget. The compiler indexes these declarations by move. For matching self moves the
+host schedules the compiled request for sources in the named initial projection location even when the ordinary
+rule's condition was false or the source subsequently disappeared. Its fixed amount and label are checked
+against any recorded adjustment; `adjustmentIndex: -1` means no matching adjustment was recorded. Sources at
+other locations and ally moves do not schedule it. Converted top-level `repairAllies` declarations use `loadout`
+and bypass rest, target and effect filters just as the old host loop did; effect-carried rest blocks are not
+searched by that loop. Nonpositive legacy integers are ignored and unsupported amounts are diagnosed. The rest
+guard rejects a matching schedule even if its adjustment was gated out or its source was consumed.
+The internal whole-rest ordering primitive validates recorded source, rule, binding and step against the initial
+sheet and compiled pack, then orders by source, rule, step and move instead of dispatch order. It accepts only
+private host-produced events; provenance does not authenticate client data. A separate party stage can use the
+host roster's original character order rather than sorted IDs, recording both membership and order for comparison
+before commit without loading sheets. Existing sorted targeting and recovery remain unchanged. A whole-rest
+recovery stage combines these primitives after a completed private rest, supplies each reaction with its
+originating move facts, carries the post-rest table state, and rejects attempts to change completed event facts.
+It returns private recipient changes and dependencies but is not yet composed with targeted moves, per-card ally
+passives or the rest coordinator.
 The shared Daggerheart ruleset now supplies self-targeted short recovery (1d4 plus tier and move bonus), the two
 mutually exclusive preparation variants, long recovery and work on a project. Reports use the amount actually
 cleared or gained, including permanent and locked HP and capped Hope; a short rest needs a granted allowance for

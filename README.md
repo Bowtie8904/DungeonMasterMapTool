@@ -102,10 +102,14 @@ not yet connected to a live format-2 rest. A staged self move that requests addi
 rejected until all affected recipients and their Armor-overflow reactions can be settled atomically, even if a
 later adjustment cancels the total. Ordered adjustment records retain each requested amount, source, rule,
 binding and compiled step; converted party-repair modifiers additionally identify the recipient scope and track
-without settling them yet. An internal ordering primitive reconstructs source, rule, step and move order across
-a rest from host-generated events. A separate private stage applies that sequence in host roster order after a
-completed rest, with each recipient's reactions and the final rest's table state. It is not yet composed with
-targeted moves or the live workflow and does not cover all legacy modifier applicability.
+without settling them yet. An indexed post-rest declaration can schedule a fixed recovery from a named initial
+sheet-source location for matching self moves even if its ordinary modifier was filtered or the source disappeared.
+Converted source-rest party repairs use the initial loadout and the legacy host's move matching; effect-carried
+rest blocks are not included. Nonpositive legacy integer requests are ignored and unsupported amounts are
+diagnosed. A separate private stage applies the ordered requests in host roster order after a completed rest,
+with each recipient's reactions and the final rest's table state. The guard also rejects scheduled requests that
+never produced a move adjustment. This is not yet composed with targeted moves, interleaved ally passives or the
+live workflow.
 Format-2 healing respects permanent HP and temporary locked HP on both the actor and targeted recipients;
 reports use the amount actually cleared.
 Converted scar gains and healing update the affected character's Hope capacity atomically. Gaining a scar
