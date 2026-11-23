@@ -78,6 +78,8 @@ public final class RuleRuntime {
         if (binding.has("exclusiveGroup")) description.set("exclusiveGroup", binding.get("exclusiveGroup"));
         if (binding.has("repeatable")) description.set("repeatable", binding.get("repeatable"));
         if (binding.has("restMove")) description.set("restMove", binding.get("restMove").deepCopy());
+        if (isRestEvent(binding.path("event").asText()))
+            description.put("restPhase", binding.path("restPhase").asText("beforeReset"));
         if (binding.has("claimGroup")) description.set("claimGroup", binding.get("claimGroup"));
         if (binding.has("claimGroupScope")) description.set("claimGroupScope", binding.get("claimGroupScope"));
         if (binding.has("claimScope")) description.set("claimScope", binding.get("claimScope"));
@@ -559,6 +561,11 @@ public final class RuleRuntime {
     private static void available(RuleCompiler.Program program, ObjectNode rule, JsonNode binding, ObjectNode context) {
         if (!binding.path("event").asText().equals(context.path("event").path("type").asText()))
             throw new Unavailable("event", "This action does not apply to this event.");
+        if (isRestEvent(binding.path("event").asText())) {
+            String phase = restPhase(context.path("event"));
+            if (!phase.equals(binding.path("restPhase").asText("beforeReset")))
+                throw new Unavailable("restPhase", "This benefit applies during a different rest phase.");
+        }
         for (JsonNode def : List.of(rule, binding))
             if (def.has("when") && !RuleExpression.bool(eval(def.get("when"), context), "/when"))
                 throw new Unavailable("condition", unavailableText(rule, context, "This action is not currently available."));
@@ -567,6 +574,21 @@ public final class RuleRuntime {
             if (context.path("usage").path(limit).asInt() >= maxUses(program, context, limit))
                 throw new Unavailable("limit", "No uses remain for this action.");
         }
+    }
+
+    static boolean isRestEvent(String type) {
+        return "rest.short".equals(type) || "rest.long".equals(type);
+    }
+
+    static String restPhase(JsonNode event) {
+        JsonNode rest = event.path("rest");
+        if (!rest.isMissingNode() && !rest.isObject())
+            throw RuleJson.error("/event/rest", "Expected a rest object.");
+        JsonNode supplied = rest.path("phase");
+        String phase = supplied.isMissingNode() ? "beforeReset" : RuleJson.text(supplied, "/event/rest/phase");
+        if (!Set.of("beforeReset", "afterReset").contains(phase))
+            throw RuleJson.error("/event/rest/phase", "Expected beforeReset or afterReset.");
+        return phase;
     }
 
     private static String unavailableText(ObjectNode rule, ObjectNode context, String fallback) {

@@ -686,7 +686,7 @@ public final class RuleCompiler {
 
     private static void validateBindingBasics(JsonNode binding, String path, boolean allowSubstitutions) {
         RuleJson.fields(binding, path, "id", "event", "surface", "mode", "when", "group",
-                "defaultOn", "forEach", "exclusiveGroup", "priority", "claimGroup", "claimGroupScope", "claimScope", "audience", "targetSelection", "repeatable", "restMove");
+                "defaultOn", "forEach", "exclusiveGroup", "priority", "claimGroup", "claimGroupScope", "claimScope", "audience", "targetSelection", "repeatable", "restMove", "restPhase");
         if (!(allowSubstitutions && substitution(binding.path("id")))) RuleJson.id(binding.path("id"), path + "/id");
         if (!(allowSubstitutions && substitution(binding.path("event"))) && !EVENTS.contains(binding.path("event").asText()))
             throw RuleJson.error(path + "/event", "Unknown event.");
@@ -709,6 +709,14 @@ public final class RuleCompiler {
         if (binding.has("defaultOn") && !(allowSubstitutions && substitution(binding.path("mode")))
                 && !"option".equals(binding.path("mode").asText()))
             throw RuleJson.error(path + "/defaultOn", "Defaults are only valid for option bindings.");
+        if (binding.has("restPhase")) {
+            boolean eventUnknown = allowSubstitutions && substitution(binding.path("event"));
+            if (!eventUnknown && !Set.of("rest.short", "rest.long").contains(binding.path("event").asText()))
+                throw RuleJson.error(path + "/restPhase", "Rest phases require a rest.short or rest.long binding.");
+            if (!(allowSubstitutions && substitution(binding.get("restPhase")))
+                    && !Set.of("beforeReset", "afterReset").contains(binding.path("restPhase").asText()))
+                throw RuleJson.error(path + "/restPhase", "Expected beforeReset or afterReset.");
+        }
         if (binding.has("repeatable")) {
             if (!(allowSubstitutions && substitution(binding.get("repeatable"))))
                 RuleExpression.bool(binding.get("repeatable"), path + "/repeatable");

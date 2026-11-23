@@ -387,6 +387,10 @@ class RuleCatalogTest {
                 """
                 {"mode":"option","forEach":"dice"}""",
                 """
+                {"restPhase":"afterReset"}""",
+                """
+                {"event":"rest.short","restPhase":"duringReset"}""",
+                """
                 {"event":"rest.long","targetSelection":{"cardinality":"one","scope":"activeCharacters"}}"""
         )) {
             ObjectNode bad = recipes.deepCopy();

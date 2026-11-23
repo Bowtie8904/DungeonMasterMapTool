@@ -2505,6 +2505,8 @@ class LegacyCatalogConverterTest {
         assertEquals(1, rules.get("plate").path("bindings").size());
         assertEquals("rest.short", rules.get("plate").at("/bindings/0/event").asText());
         assertEquals(2, rules.get("idle").path("bindings").size());
+        assertEquals("afterReset", rules.get("idle").at("/bindings/0/restPhase").asText());
+        assertEquals("afterReset", rules.get("idle").at("/bindings/1/restPhase").asText());
         assertEquals("claim.offer", rules.get("share").at("/do/0/op").asText());
         assertEquals("share-ally", rules.get("share-ally").at("/bindings/0/claimGroup").asText());
         assertEquals("otherPlayersCharacters", rules.get("share-ally").at("/bindings/0/claimScope/recipients").asText());
@@ -2548,11 +2550,13 @@ class LegacyCatalogConverterTest {
         ObjectNode rested = context(program, actor, """
                 {"type":"rest.short","rest":{"kind":"short","start":{"hope":2,"armor":1},
                  "cleared":{"hitPoints":0,"stress":0,"armor":0}}}""");
-        assertEquals(List.of("idle", "plate", "share"), available(program, rested, "rest"));
+        assertEquals(List.of("plate", "share"), available(program, rested, "rest"));
+        assertEquals("Share", run(program, rested, "share").contexts().getFirst().at("/outbox/0/label").asText());
+        rested.withObject("/event/rest").put("phase", "afterReset");
+        assertEquals(List.of("idle"), available(program, rested, "rest"));
         ObjectNode idle = run(program, rested, "idle").contexts().getFirst();
         assertEquals(1, idle.at("/actor/hope/value").asInt());
         assertEquals(2, idle.at("/actor/stress/marked").asInt());
-        assertEquals("Share", run(program, rested, "share").contexts().getFirst().at("/outbox/0/label").asText());
         ObjectNode recovered = context(program, actor.replace("\"armorTrack\":{\"marked\":1", "\"armorTrack\":{\"marked\":0"), """
                 {"type":"rest.long","rest":{"kind":"long","start":{"hope":2,"armor":1},
                  "cleared":{"hitPoints":2,"stress":0,"armor":0}}}""");
@@ -2595,6 +2599,7 @@ class LegacyCatalogConverterTest {
         context.withObject("/actor/armorTrack").put("marked", 0);
         context.withObject("/event/rest/start").put("hope", 5).put("armor", 1);
         context.withObject("/event/rest/cleared").put("hitPoints", 0).put("stress", 0);
+        context.withObject("/event/rest").put("phase", "afterReset");
         assertEquals(List.of("no-recovery"), available(program, context, "rest"));
     }
 

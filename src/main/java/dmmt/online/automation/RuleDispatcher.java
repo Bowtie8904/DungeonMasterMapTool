@@ -179,6 +179,8 @@ public final class RuleDispatcher {
         if (!SURFACES.contains(surface)) throw RuleJson.error("/surface", "Unknown surface.");
         List<ObjectNode> descriptions = new ArrayList<>();
         Snapshot snapshot = validateSources(activeSources);
+        if (RuleRuntime.isRestEvent(snapshot.eventType()))
+            RuleRuntime.restPhase(snapshot.event());
         for (Candidate candidate : snapshot.sources()) {
             RuleCompiler.Program program = candidate.program();
             ObjectNode context = candidate.context();
@@ -224,6 +226,8 @@ public final class RuleDispatcher {
                                                 RandomGenerator random, Map<String, RuleCompiler.Program> programs,
                                                 boolean stagedMove) {
         Snapshot snapshot = validateSources(activeSources);
+        if (RuleRuntime.isRestEvent(snapshot.eventType()))
+            RuleRuntime.restPhase(snapshot.event());
         if (stagedMove && !"downtime.move".equals(snapshot.eventType()))
             throw RuleJson.error("/event/type", "Deferred benefits require a staged downtime move.");
         Map<String, Candidate> byInstance = new HashMap<>();

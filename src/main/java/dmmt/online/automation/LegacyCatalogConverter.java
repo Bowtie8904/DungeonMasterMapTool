@@ -4721,6 +4721,8 @@ public final class LegacyCatalogConverter {
         if (bindings.isEmpty()) { p.add(path + "/rest", "Expected short or long."); return List.of(); }
         for (JsonNode binding : bindings) {
             ((ObjectNode) binding).put("mode", "option");
+            if (!prepare && !move && "noRecovery".equals(passive.path("condition").asText()))
+                ((ObjectNode) binding).put("restPhase", "afterReset");
             if (passive.has("defaultOn")) {
                 if (!passive.path("defaultOn").isBoolean()) p.add(path + "/defaultOn", "Expected a boolean.");
                 ((ObjectNode) binding).put("defaultOn", passive.path("defaultOn").asBoolean());

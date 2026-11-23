@@ -50,8 +50,9 @@ Converted downtime buttons now describe their host-validated move identity and r
 and the shared ruleset's validated rest limits do not yet make the format-2 rest workflow available.
 The host can stage and validate rest preparation and individual moves on a private copy, retaining the
 ruleset's initial Hope, Armor and recovery facts across the moves. Move bonuses run before recovery; selected
-passive costs and modifier steps run afterward and failures roll back the move. The final atomic rest
-transaction and player workflow are still required.
+passive costs and modifier steps run afterward and failures roll back the move. Rest-rule bindings can
+distinguish before-reset and after-reset benefits. The final atomic rest transaction and player workflow
+are still required.
 The shared ruleset defines the base self-recovery, preparation and project moves for staged tests, including
 tier-scaled recovery, protected HP and capped Hope. Ally recovery, rerolls and armor overflow are not yet wired.
 Format-2 healing respects permanent HP and temporary locked HP on both the actor and targeted recipients;
