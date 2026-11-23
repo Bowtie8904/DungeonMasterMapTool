@@ -13,6 +13,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.random.RandomGenerator;
 
 /**
@@ -26,6 +29,7 @@ public final class AutomationHost {
     // Runtime revisions pass through double-valued expressions; reserve room for intermediate stages.
     private static final long MAX_REST_REVISION = 1L << 52;
     private static final Set<String> STAGED_REST_COMMANDS = Set.of("countdown.start", "limits.refresh", "effect.endElsewhere");
+    private static final Set<String> STAGED_TARGET_REST_COMMANDS = Set.of("countdown.start", "limits.refresh");
     static final String RULESET_SOURCE = "ruleset:base";
 
     /** Compiled automation keyed by fully qualified source ID. */
@@ -801,11 +805,51 @@ public final class AutomationHost {
         return applyEvent(pack, working, projection.state(working), event, candidates(pack, working, event), List.of(), random);
     }
 
+    record RestMember(String id, String name, String sheetVersion, long revision, Supplier<ObjectNode> loadSheet) {
+        RestMember {
+            RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(id), "/recipient/id");
+            if (name == null || name.isBlank() || sheetVersion == null || sheetVersion.isBlank()
+                    || revision < 0 || revision > MAX_REST_REVISION || loadSheet == null)
+                throw RuleJson.error("/recipient", "A host character, sheet version and representable revision are required.");
+        }
+    }
+
+    record RestRoster(String sourceVersion, Function<String, List<RestMember>> loadScope) {
+        RestRoster {
+            if (sourceVersion == null || sourceVersion.isBlank() || loadScope == null)
+                throw RuleJson.error("/recipients", "A host source version and roster are required.");
+        }
+    }
+
+    record RestTransaction(ObjectNode response, Map<String, ObjectNode> recipients) {
+        RestTransaction {
+            response = response.deepCopy();
+            recipients = copySheets(recipients);
+        }
+        @Override public ObjectNode response() { return response.deepCopy(); }
+        @Override public Map<String, ObjectNode> recipients() { return copySheets(recipients); }
+    }
+
+    private static Map<String, ObjectNode> copySheets(Map<String, ObjectNode> sheets) {
+        Map<String, ObjectNode> result = new LinkedHashMap<>();
+        sheets.forEach((id, sheet) -> result.put(id, sheet.deepCopy()));
+        return java.util.Collections.unmodifiableMap(result);
+    }
+
     /**
-     * Stages a complete self-only rest without publishing or persistence. A live caller must authenticate offered
-     * choices, settle the outbox and journal and commit the resulting sheet and reports as one transaction.
+     * Stages a self-only rest without publishing or persistence. A live caller must authenticate offered choices,
+     * settle the outbox and journal and commit the resulting sheet and reports as one transaction.
      */
     ObjectNode stageSelfRest(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request, RandomGenerator random) {
+        return stageRest(pack, sheet, origin, request, random, null).response();
+    }
+
+    /**
+     * Stages a rest and its recipient sheets on private copies. The roster supplies original host versions and must
+     * retain every read sheet for the caller's eventual atomic comparison and commit.
+     */
+    RestTransaction stageRest(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request,
+                              RandomGenerator random, RestRoster roster) {
         RuleJson.fields(request, "/request", "kind", "expectedRevision", "preparation", "moves", "completion");
         RuleJson.checkTree(request, "/request", 0, new int[]{0});
         String kind = RuleJson.text(request.get("kind"), "/request/kind");
@@ -817,32 +861,27 @@ public final class AutomationHost {
         ArrayNode moves = restSelections(request.get("moves"), "/request/moves");
         ArrayNode completion = restSelections(request.get("completion"), "/request/completion");
         if (moves.size() > 64) throw RuleJson.error("/request/moves", "A rest may contain at most 64 moves.");
+        boolean targeted = false;
         for (int i = 0; i < moves.size(); i++) {
             String at = "/request/moves/" + i;
-            RuleJson.fields(moves.get(i), at, "selection", "options");
+            RuleJson.fields(moves.get(i), at, "selection", "options", "target");
             RuleJson.object(moves.get(i).get("selection"), at + "/selection");
             restSelections(moves.get(i).get("options"), at + "/options");
+            if (moves.get(i).has("target")) {
+                RuleJson.object(moves.get(i).get("target"), at + "/target");
+                targeted = true;
+            }
         }
-        RuleJson.id(RuleJson.object(origin, "/event").get("actorId"), "/event/actorId");
+        String actorId = RuleJson.id(RuleJson.object(origin, "/event").get("actorId"), "/event/actorId");
         if (pack.rest() == null) throw new NotReady("The shared ruleset has no rest configuration.");
+        if (targeted && roster == null)
+            throw new RuleRuntime.Unavailable("restTarget", "A host recipient roster is required for this rest.");
 
-        JsonNode persistedState = sheet.get(projection.stateField());
-        if (persistedState != null) {
-            RuleJson.object(persistedState, "/automationState");
-            if (persistedState.has("sources") && !persistedState.path("sources").isObject())
-                throw RuleJson.error("/automationState/sources", "Expected an object.");
-            if (persistedState.has("journal") && !persistedState.path("journal").isArray())
-                throw RuleJson.error("/automationState/journal", "Expected a list.");
-        }
         ObjectNode working = sheet.deepCopy();
-        ObjectNode state = projection.state(working);
-        JsonNode savedRevision = state.path("revision");
-        if (!savedRevision.isIntegralNumber() || !savedRevision.canConvertToLong()
-                || savedRevision.longValue() < 0 || savedRevision.longValue() > MAX_REST_REVISION)
-            throw RuleJson.error("/automationState/revision", "Expected a nonnegative, representable host revision.");
-        long revision = savedRevision.longValue();
+        long revision = restRevision(working);
         if (expected.longValue() != revision)
             throw new RuleRuntime.Unavailable("stale", "The character changed. Reopen this rest.");
+        StagedRestRecipients recipients = targeted ? new StagedRestRecipients(pack, actorId, roster) : null;
 
         Set<String> initial = restEffectSnapshot(working);
         ObjectNode restEvent = origin.deepCopy().put("type", "rest." + kind);
@@ -856,17 +895,20 @@ public final class AutomationHost {
         ArrayNode actions = response.putArray("actions"), outbox = response.putArray("outbox");
         ArrayNode moveEvents = response.putArray("moveEvents");
         response.set("preparationEvent", prepared.path("event").deepCopy());
-        appendRestStage(prepared, actions, outbox);
+        appendRestStage(prepared, actions, outbox, targeted);
         for (JsonNode move : moves) {
+            PartyTargets party = move.has("target") ? recipients.party() : null;
+            RestTarget target = party == null ? null : new RestTarget(party, (ObjectNode) move.get("target"), recipients::reproject);
             RestMoveResult result = restMove(pack, working, origin, progress, (ObjectNode) move.get("selection"),
-                    (ArrayNode) move.get("options"), random);
+                    (ArrayNode) move.get("options"), random, target);
             progress = result.progress();
             moveEvents.add(result.response().path("event").deepCopy());
-            appendRestStage(result.response(), actions, outbox);
+            appendRestStage(result.response(), actions, outbox, targeted);
+            if (party != null) recipients.apply(party.updates());
             projection.state(working).put("revision", revision);
         }
         ObjectNode finished = completeRest(pack, working, origin, progress, initial, completion, random);
-        appendRestStage(finished, actions, outbox);
+        appendRestStage(finished, actions, outbox, targeted);
         response.set("event", finished.path("event").deepCopy());
         response.set("skipped", finished.path("skipped").deepCopy());
         response.putObject("progress").put("moves", progress.moves()).put("longMoves", progress.longMoves())
@@ -875,8 +917,27 @@ public final class AutomationHost {
         response.put("revision", revision + 1);
         projection.state(working).put("revision", revision + 1);
         RuleJson.checkTree(response, "/response", 0, new int[]{0});
+        Map<String, ObjectNode> changed = recipients == null ? Map.of() : recipients.changed();
+        RestTransaction transaction = new RestTransaction(response, changed);
         replace(sheet, working);
-        return response;
+        return transaction;
+    }
+
+    private long restRevision(ObjectNode sheet) {
+        JsonNode persistedState = sheet.get(projection.stateField());
+        if (persistedState != null) {
+            RuleJson.object(persistedState, "/automationState");
+            if (persistedState.has("sources") && !persistedState.path("sources").isObject())
+                throw RuleJson.error("/automationState/sources", "Expected an object.");
+            if (persistedState.has("journal") && !persistedState.path("journal").isArray())
+                throw RuleJson.error("/automationState/journal", "Expected a list.");
+        }
+        ObjectNode state = projection.state(sheet);
+        JsonNode savedRevision = state.path("revision");
+        if (!savedRevision.isIntegralNumber() || !savedRevision.canConvertToLong()
+                || savedRevision.longValue() < 0 || savedRevision.longValue() > MAX_REST_REVISION)
+            throw RuleJson.error("/automationState/revision", "Expected a nonnegative, representable host revision.");
+        return savedRevision.longValue();
     }
 
     private static ArrayNode restSelections(JsonNode node, String path) {
@@ -884,15 +945,111 @@ public final class AutomationHost {
         return array;
     }
 
-    private static void appendRestStage(ObjectNode stage, ArrayNode actions, ArrayNode outbox) {
+    private static void appendRestStage(ObjectNode stage, ArrayNode actions, ArrayNode outbox, boolean targeted) {
         for (JsonNode command : stage.path("outbox")) {
             String kind = command.path("kind").asText();
-            if (!STAGED_REST_COMMANDS.contains(kind))
+            if (!(targeted ? STAGED_TARGET_REST_COMMANDS : STAGED_REST_COMMANDS).contains(kind))
                 throw new RuleRuntime.Unavailable("restCommand",
                         "This rest requires host settlement before later stages: " + kind + ".");
         }
         actions.addAll((ArrayNode) stage.get("actions"));
         outbox.addAll((ArrayNode) stage.get("outbox"));
+    }
+
+    private final class StagedRestRecipients {
+        private final Pack pack;
+        private final String sourceId;
+        private final RestRoster roster;
+        private final Map<String, StagedRecipient> participants = new LinkedHashMap<>();
+        private final Set<String> changed = new java.util.LinkedHashSet<>();
+
+        private StagedRestRecipients(Pack pack, String sourceId, RestRoster roster) {
+            this.pack = pack;
+            this.sourceId = sourceId;
+            this.roster = roster;
+        }
+
+        private PartyTargets party() {
+            return new PartyTargets(pack.revision(), roster.sourceVersion(), scope -> {
+                List<RestMember> members = roster.loadScope().apply(scope);
+                if (members == null || members.size() > 128)
+                    throw RuleJson.error("/recipients", "A rest is limited to 128 characters.");
+                List<PartyTargets.Member> result = new ArrayList<>();
+                Set<String> seen = new java.util.HashSet<>();
+                for (RestMember member : members) {
+                    if (member == null || !seen.add(member.id()))
+                        throw RuleJson.error("/recipients", "Duplicate or missing target.");
+                    if (sourceId.equals(member.id())) continue;
+                    StagedRecipient participant = participants.get(member.id());
+                    if (participant == null) {
+                        if (participants.size() == 128) throw RuleJson.error("/recipients", "A rest is limited to 128 characters.");
+                        participant = new StagedRecipient(member);
+                        participants.put(member.id(), participant);
+                    } else if (!participant.sameVersion(member)) {
+                        throw new RuleRuntime.Unavailable("staleRecipient", "A character changed. Reopen this rest.");
+                    }
+                    StagedRecipient selected = participant;
+                    result.add(new PartyTargets.Member(member.id(), member.name(), member.sheetVersion(), member.revision(),
+                            event -> recipientSnapshot(pack, selected.sheet(), event, member.id())));
+                }
+                return result;
+            });
+        }
+
+        private void apply(List<RuleDispatcher.RecipientUpdate> updates) {
+            if (updates.size() != 1) throw RuleJson.error("/recipients", "An ally move requires one recipient update.");
+            var update = updates.getFirst();
+            StagedRecipient participant = participants.get(update.actorId());
+            if (participant == null || participant.sheet == null)
+                throw RuleJson.error("/recipients", "The staged recipient was not read from the host roster.");
+            writeRecipient(participant.sheet, update);
+            projection.state(participant.sheet).put("revision", participant.member.revision());
+            changed.add(update.actorId());
+        }
+
+        private ObjectNode reproject(RuleDispatcher.RecipientUpdate update, ObjectNode event) {
+            StagedRecipient participant = participants.get(update.actorId());
+            if (participant == null || participant.sheet == null)
+                throw RuleJson.error("/recipients", "The staged recipient was not read from the host roster.");
+            ObjectNode after = participant.sheet.deepCopy();
+            writeRecipient(after, update);
+            return recipientSnapshot(pack, after, event, update.actorId());
+        }
+
+        private Map<String, ObjectNode> changed() {
+            Map<String, ObjectNode> result = new LinkedHashMap<>();
+            for (String id : changed) {
+                StagedRecipient participant = participants.get(id);
+                ObjectNode sheet = participant.sheet.deepCopy();
+                projection.state(sheet).put("revision", participant.member.revision() + 1);
+                result.put(id, sheet);
+            }
+            return result;
+        }
+    }
+
+    private final class StagedRecipient {
+        private final RestMember member;
+        private ObjectNode sheet;
+
+        private StagedRecipient(RestMember member) { this.member = member; }
+
+        private boolean sameVersion(RestMember other) {
+            return member.name().equals(other.name()) && member.sheetVersion().equals(other.sheetVersion())
+                    && member.revision() == other.revision();
+        }
+
+        private ObjectNode sheet() {
+            if (sheet == null) {
+                ObjectNode loaded = member.loadSheet().get();
+                if (loaded == null) throw RuleJson.error("/recipients/" + member.id(), "The recipient sheet is missing.");
+                ObjectNode copy = loaded.deepCopy();
+                if (restRevision(copy) != member.revision())
+                    throw new RuleRuntime.Unavailable("staleRecipient", "A character changed. Reopen this rest.");
+                sheet = copy;
+            }
+            return sheet;
+        }
     }
 
     /** Stages rest preparation only; the caller must complete and atomically commit the entire rest. */
@@ -974,9 +1131,11 @@ public final class AutomationHost {
         RestProgress { groups = Set.copyOf(groups); plan = plan.deepCopy(); }
         @Override public ObjectNode plan() { return plan.deepCopy(); }
     }
-    record RestTarget(PartyTargets party, ObjectNode request) {
+    record RestTarget(PartyTargets party, ObjectNode request,
+                      BiFunction<RuleDispatcher.RecipientUpdate, ObjectNode, ObjectNode> reproject) {
         RestTarget {
-            if (party == null || request == null) throw RuleJson.error("/target", "A host roster and target selection are required.");
+            if (party == null || request == null || reproject == null)
+                throw RuleJson.error("/target", "A host roster, target selection and recipient projection are required.");
             request = request.deepCopy();
         }
         @Override public ObjectNode request() { return request.deepCopy(); }
@@ -1130,6 +1289,7 @@ public final class AutomationHost {
             throw new RuleRuntime.Unavailable("restMoves", "No downtime move slots remain.");
         for (String key : List.of("actions", "outbox")) ((ArrayNode) result.get(key)).addAll((ArrayNode) after.get(key));
         JsonNode completedMove = finalEvent.path("move").deepCopy();
+        Map<JsonNode, ObjectNode> recipientViews = new HashMap<>();
         for (var adjustment : adjustments.actions()) {
             var original = byInstance.get(adjustment.sourceInstanceId());
             if (!original.program().rule(adjustment.ruleId()).has("after")) continue;
@@ -1144,7 +1304,15 @@ public final class AutomationHost {
             var deferred = new RuleRuntime.Intent(adjustment.ruleId(), adjustment.bindingId(),
                     adjustment.sourceInstanceId(), currentState.path("revision").asLong(), RuleJson.JSON.createObjectNode());
             ObjectNode deferredContext = context(currentState, active, currentActor, finalEvent);
-            if (target != null) deferredContext.set("recipient", recipientUpdates.getFirst().snapshot());
+            if (target != null) {
+                var update = recipientUpdates.getFirst();
+                ObjectNode currentEvent = finalEvent.deepCopy();
+                ObjectNode recipient = recipientViews.computeIfAbsent(currentEvent,
+                        ignored -> target.reproject().apply(update, currentEvent.deepCopy()));
+                if (recipient == null || !update.actorId().equals(recipient.path("id").asText()))
+                    throw RuleJson.error("/recipient", "The host must reproject the updated recipient.");
+                deferredContext.set("recipient", recipient.deepCopy());
+            }
             var completed = RuleRuntime.executeAfter(original.program(), deferred,
                     deferredContext, random, pack.programs());
             var deferredAction = new RuleDispatcher.ActionResult(adjustment.sourceInstanceId(), adjustment.ruleId(),
@@ -1177,7 +1345,7 @@ public final class AutomationHost {
     private static void validateTargetRestCommands(ObjectNode response) {
         for (JsonNode command : response.path("outbox")) {
             String kind = command.path("kind").asText();
-            if (!Set.of("countdown.start", "limits.refresh").contains(kind))
+            if (!STAGED_TARGET_REST_COMMANDS.contains(kind))
                 throw new RuleRuntime.Unavailable("restCommand",
                         "This ally move requires host settlement before later stages: " + kind + ".");
         }

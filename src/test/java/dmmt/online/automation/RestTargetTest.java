@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -114,6 +116,10 @@ class RestTargetTest {
     }
 
     private static ObjectNode targetRequest(Setup setup, PartyTargets party, String rule) {
+        return targetRequest(setup, party, rule, "mira");
+    }
+
+    private static ObjectNode targetRequest(Setup setup, PartyTargets party, String rule, String recipientId) {
         ObjectNode event = ((ObjectNode) setup.preparation().get("event")).deepCopy().put("type", "downtime.move");
         event.putObject("move").put("id", "mend").put("ally", true).put("long", false).put("slots", 1).put("bonus", 0);
         ObjectNode context = RuleJson.JSON.createObjectNode();
@@ -123,11 +129,48 @@ class RestTargetTest {
         JsonNode binding = setup.pack().programs().get("ruleset:base").rule(rule).path("bindings").get(0);
         JsonNode offer = party.describe(binding, rule, context);
         JsonNode option = null;
-        for (JsonNode candidate : offer.path("options")) if ("mira".equals(candidate.path("id").asText())) option = candidate;
+        for (JsonNode candidate : offer.path("options"))
+            if (recipientId.equals(candidate.path("id").asText())) option = candidate;
         assertNotNull(option, offer.toString());
-        ObjectNode request = RuleJson.JSON.createObjectNode().put("recipientId", "mira");
+        ObjectNode request = RuleJson.JSON.createObjectNode().put("recipientId", recipientId);
         request.set("version", option.get("version"));
         return request;
+    }
+
+    private static AutomationHost.RestRoster roster(Setup setup, Map<String, AtomicInteger> loads) {
+        List<AutomationHost.RestMember> members = new ArrayList<>();
+        for (var entry : Map.of("ada", setup.source(), "mira", setup.recipient(), "healthy", setup.healthy()).entrySet()) {
+            String id = entry.getKey();
+            ObjectNode sheet = entry.getValue();
+            members.add(new AutomationHost.RestMember(id, sheet.path("name").asText(), sheet.toString(), HOST.revision(sheet), () -> {
+                loads.computeIfAbsent(id, ignored -> new AtomicInteger()).incrementAndGet();
+                return sheet;
+            }));
+        }
+        return new AutomationHost.RestRoster(setup.source().toString(), scope -> members);
+    }
+
+    private static ObjectNode transaction(Setup setup) {
+        ObjectNode request = RuleJson.JSON.createObjectNode().put("kind", "short")
+                .put("expectedRevision", HOST.revision(setup.source()));
+        request.putArray("preparation");
+        request.putArray("moves");
+        request.putArray("completion");
+        return request;
+    }
+
+    private static void transactionMove(ObjectNode request, String rule, ObjectNode target) {
+        ObjectNode move = request.withArray("moves").addObject();
+        move.set("selection", choice(rule));
+        move.putArray("options");
+        if (target != null) move.set("target", target.deepCopy());
+    }
+
+    private static AutomationHost.RestTransaction stage(Setup setup, ObjectNode request, AutomationHost.RestRoster roster,
+                                                         int... faces) {
+        return HOST.stageRest(setup.pack(), setup.source(),
+                AutomationHost.event("action.request", "ada", 1).put("sessionId", "session"),
+                request, faces.length == 0 ? StructuredRollTest.noRandom() : StructuredRollTest.faces(faces), roster);
     }
 
     private static AutomationHost.RestMoveResult move(Setup setup, AutomationHost.RestProgress progress,
@@ -135,7 +178,12 @@ class RestTargetTest {
                                                        ObjectNode target, int... faces) {
         return HOST.restMove(setup.pack(), setup.source(), (ObjectNode) setup.preparation().get("event"),
                 progress, choice(rule), choices, faces.length == 0 ? StructuredRollTest.noRandom() : StructuredRollTest.faces(faces),
-                party == null ? null : new AutomationHost.RestTarget(party, target));
+                party == null ? null : new AutomationHost.RestTarget(party, target, (update, event) -> {
+                    ObjectNode original = "mira".equals(update.actorId()) ? setup.recipient() : setup.healthy();
+                    ObjectNode changed = original.deepCopy();
+                    HOST.writeRecipient(changed, update);
+                    return HOST.recipientSnapshot(setup.pack(), changed, event, update.actorId());
+                }));
     }
 
     @Test
@@ -280,6 +328,216 @@ class RestTargetTest {
                 () -> move(setup, second.progress(), "brace", options(), null, null)).code());
         assertEquals(beforeFull, setup.source());
         assertEquals(6, setup.recipient().at("/hp/on").asInt(), "Neither staged update writes the original recipient.");
+    }
+
+    @Test
+    void fullStagingReprojectsEarlierMovesAndAdvancesEachParticipantOnce() throws Exception {
+        Setup setup = setup(ruleset(), 4);
+        long sourceRevision = HOST.revision(setup.source());
+        PartyTargets offers = party(setup, setup.recipient(), new AtomicReference<>());
+        ObjectNode request = transaction(setup);
+        transactionMove(request, "heal", targetRequest(setup, offers, "heal"));
+        transactionMove(request, "repair", targetRequest(setup, offers, "repair"));
+        ObjectNode originalRecipient = setup.recipient().deepCopy();
+        var result = stage(setup, request, roster(setup, new java.util.HashMap<>()), 4);
+
+        assertEquals(sourceRevision + 1, HOST.revision(setup.source()));
+        assertEquals(sourceRevision + 1, result.response().path("revision").asLong());
+        assertEquals(3, setup.source().at("/hope/on").asInt());
+        assertEquals(0, setup.source().at("/stress/on").asInt());
+        assertEquals(List.of("observe", "heal", "observe", "repair"), result.response().path("actions").findValuesAsText("ruleId"),
+                "The second move must see that the first move already healed the recipient.");
+        assertEquals(originalRecipient, setup.recipient());
+        assertEquals(List.of("mira"), result.recipients().keySet().stream().toList());
+        ObjectNode staged = result.recipients().get("mira");
+        assertEquals(4, staged.at("/hp/on").asInt());
+        assertEquals(1, staged.at("/armorTrack/on").asInt());
+        assertEquals(8, HOST.revision(staged), "Two changes still produce one published revision.");
+        staged.withObject("/hp").put("on", 0);
+        assertEquals(4, result.recipients().get("mira").at("/hp/on").asInt());
+    }
+
+    @Test
+    void deferredBenefitsReadFreshlyRecomputedRecipientStatistics() throws Exception {
+        ObjectNode ruleset = ruleset();
+        ((ObjectNode) ruleset.at("/automation/rules/0/after")).put("report",
+                "{recipient.name} has {recipient.stats.armorAvailable} Armor available.");
+        Setup setup = setup(ruleset, 4);
+        PartyTargets offers = party(setup, setup.recipient(), new AtomicReference<>());
+        ObjectNode request = transaction(setup);
+        transactionMove(request, "repair", targetRequest(setup, offers, "repair"));
+        var result = stage(setup, request, roster(setup, new java.util.HashMap<>()));
+        assertEquals("Mira has 2 Armor available.", result.response().at("/actions/2/report").asText());
+        assertEquals(1, result.recipients().get("mira").at("/armorTrack/on").asInt());
+        assertEquals(2, setup.recipient().at("/armorTrack/on").asInt());
+    }
+
+    @Test
+    void invalidRecipientReprojectionCannotPublishASourceOrTargetUpdate() throws Exception {
+        Setup setup = setup(ruleset(), 4);
+        PartyTargets party = party(setup, setup.recipient(), new AtomicReference<>());
+        ObjectNode target = targetRequest(setup, party, "heal");
+        ObjectNode beforeSource = setup.source().deepCopy(), beforeRecipient = setup.recipient().deepCopy();
+        var invalid = new AutomationHost.RestTarget(party, target,
+                (update, event) -> RuleJson.JSON.createObjectNode().put("id", "other"));
+        assertThrows(IllegalArgumentException.class, () -> HOST.restMove(setup.pack(), setup.source(),
+                (ObjectNode) setup.preparation().get("event"), setup.progress(), choice("heal"), options(),
+                StructuredRollTest.faces(4), invalid));
+        assertEquals(beforeSource, setup.source());
+        assertEquals(beforeRecipient, setup.recipient());
+        assertTrue(party.updates().isEmpty());
+    }
+
+    @Test
+    void fullStagingCanChangeTwoRecipientsWithoutWritingTheirOriginalSheets() throws Exception {
+        Setup setup = setup(ruleset(), 4);
+        PartyTargets offers = party(setup, setup.recipient(), new AtomicReference<>());
+        ObjectNode request = transaction(setup);
+        transactionMove(request, "heal", targetRequest(setup, offers, "heal", "mira"));
+        transactionMove(request, "repair", targetRequest(setup, offers, "repair", "healthy"));
+        ObjectNode originalMira = setup.recipient().deepCopy(), originalHealthy = setup.healthy().deepCopy();
+        var result = stage(setup, request, roster(setup, new java.util.HashMap<>()), 4);
+        assertEquals(Set.of("mira", "healthy"), result.recipients().keySet());
+        assertEquals(4, result.recipients().get("mira").at("/hp/on").asInt());
+        assertEquals(1, result.recipients().get("healthy").at("/armorTrack/on").asInt());
+        assertEquals(8, HOST.revision(result.recipients().get("mira")));
+        assertEquals(3, HOST.revision(result.recipients().get("healthy")));
+        assertEquals(originalMira, setup.recipient());
+        assertEquals(originalHealthy, setup.healthy());
+    }
+
+    @Test
+    void failedLaterTargetOrCompletionDiscardsEveryPrivateStage() throws Exception {
+        ObjectNode ruleset = ruleset();
+        ((ArrayNode) ruleset.at("/automation/rules")).add(RuleJson.parse("""
+                {"id":"costly","bindings":[{"id":"short","event":"rest.short","surface":"rest","mode":"option"}],
+                 "costs":[{"op":"resource.spend","pool":"actor.hope","amount":6}],"ui":{"label":"Costly"}}
+                """));
+        Setup setup = setup(ruleset, 4);
+        PartyTargets offers = party(setup, setup.recipient(), new AtomicReference<>());
+        ObjectNode heal = targetRequest(setup, offers, "heal");
+        ObjectNode repair = targetRequest(setup, offers, "repair");
+        ObjectNode beforeSource = setup.source().deepCopy(), beforeRecipient = setup.recipient().deepCopy();
+        ObjectNode stale = transaction(setup);
+        transactionMove(stale, "heal", heal);
+        transactionMove(stale, "repair", repair.deepCopy().put("version", "stale"));
+        assertEquals("staleRecipient", assertThrows(RuleRuntime.Unavailable.class,
+                () -> stage(setup, stale, roster(setup, new java.util.HashMap<>()), 4)).code());
+        assertEquals(beforeSource, setup.source());
+        assertEquals(beforeRecipient, setup.recipient());
+
+        ObjectNode late = transaction(setup);
+        transactionMove(late, "heal", heal);
+        late.withArray("completion").addObject().put("sourceInstanceId", "ruleset:base")
+                .put("ruleId", "costly").put("bindingId", "short");
+        assertEquals("cost", assertThrows(RuleRuntime.Unavailable.class,
+                () -> stage(setup, late, roster(setup, new java.util.HashMap<>()), 4)).code());
+        assertEquals(beforeSource, setup.source());
+        assertEquals(beforeRecipient, setup.recipient());
+    }
+
+    @Test
+    void laterTargetEligibilityUsesTheEarlierStagedRecipient() throws Exception {
+        ObjectNode ruleset = ruleset();
+        ((ObjectNode) ruleset.at("/automation/rules/4/bindings/0/targetSelection")).set("where",
+                RuleJson.parse("{\"gt\":[{\"read\":\"recipient.hp.marked\"},5]}"));
+        Setup setup = setup(ruleset, 4);
+        PartyTargets offers = party(setup, setup.recipient(), new AtomicReference<>());
+        ObjectNode request = transaction(setup);
+        transactionMove(request, "heal", targetRequest(setup, offers, "heal"));
+        transactionMove(request, "repair", targetRequest(setup, offers, "repair"));
+        ObjectNode beforeSource = setup.source().deepCopy(), beforeRecipient = setup.recipient().deepCopy();
+        assertEquals("staleRecipient", assertThrows(RuleRuntime.Unavailable.class,
+                () -> stage(setup, request, roster(setup, new java.util.HashMap<>()), 4)).code());
+        assertEquals(beforeSource, setup.source());
+        assertEquals(beforeRecipient, setup.recipient());
+    }
+
+    @Test
+    void unfilteredTargetsLoadOnlyTheirSelectedSheetsAndValidateSavedRevisions() throws Exception {
+        ObjectNode ruleset = ruleset();
+        ((ObjectNode) ruleset.at("/automation/rules/2/bindings/0/targetSelection")).remove("where");
+        Setup setup = setup(ruleset, 4);
+        PartyTargets offers = party(setup, setup.recipient(), new AtomicReference<>());
+        ObjectNode request = transaction(setup);
+        transactionMove(request, "heal", targetRequest(setup, offers, "heal"));
+        Map<String, AtomicInteger> loads = new java.util.HashMap<>();
+        stage(setup, request, roster(setup, loads), 4);
+        assertEquals(1, loads.get("mira").get());
+        assertFalse(loads.containsKey("ada"));
+        assertFalse(loads.containsKey("healthy"));
+
+        Setup stale = setup(ruleset, 4);
+        PartyTargets staleOffers = party(stale, stale.recipient(), new AtomicReference<>());
+        ObjectNode staleRequest = transaction(stale);
+        transactionMove(staleRequest, "heal", targetRequest(stale, staleOffers, "heal"));
+        ObjectNode changed = stale.recipient().deepCopy();
+        changed.withObject("/automationState").put("revision", 8);
+        var member = new AutomationHost.RestMember("mira", "Mira", stale.recipient().toString(), 7, () -> changed);
+        var staleRoster = new AutomationHost.RestRoster(stale.source().toString(), scope -> List.of(member));
+        ObjectNode before = stale.source().deepCopy();
+        assertEquals("staleRecipient", assertThrows(RuleRuntime.Unavailable.class,
+                () -> stage(stale, staleRequest, staleRoster, 4)).code());
+        assertEquals(before, stale.source());
+        assertEquals(7, HOST.revision(stale.recipient()));
+    }
+
+    @Test
+    void changedScopeMetadataAndOversizedOrDuplicateRostersFailAtomically() throws Exception {
+        ObjectNode ruleset = ruleset();
+        ((ObjectNode) ruleset.at("/automation/rules/4/bindings/0/targetSelection")).put("scope", "activePlayerCharacters");
+        Setup setup = setup(ruleset, 4);
+        PartyTargets offers = party(setup, setup.recipient(), new AtomicReference<>());
+        ObjectNode request = transaction(setup);
+        transactionMove(request, "heal", targetRequest(setup, offers, "heal"));
+        transactionMove(request, "repair", targetRequest(setup, offers, "repair"));
+        var current = new AutomationHost.RestMember("mira", "Mira", setup.recipient().toString(), 7, setup::recipient);
+        var changed = new AutomationHost.RestMember("mira", "Mira", "changed", 7, setup::recipient);
+        var shifting = new AutomationHost.RestRoster(setup.source().toString(),
+                scope -> List.of("activeCharacters".equals(scope) ? current : changed));
+        ObjectNode beforeSource = setup.source().deepCopy(), beforeRecipient = setup.recipient().deepCopy();
+        assertEquals("staleRecipient", assertThrows(RuleRuntime.Unavailable.class,
+                () -> stage(setup, request, shifting, 4)).code());
+        assertEquals(beforeSource, setup.source());
+        assertEquals(beforeRecipient, setup.recipient());
+
+        ObjectNode single = transaction(setup);
+        transactionMove(single, "heal", targetRequest(setup, offers, "heal"));
+        var duplicate = new AutomationHost.RestRoster(setup.source().toString(), scope -> List.of(current, current));
+        assertThrows(IllegalArgumentException.class, () -> stage(setup, single, duplicate, 4));
+        List<AutomationHost.RestMember> tooMany = new ArrayList<>();
+        for (int i = 0; i < 129; i++)
+            tooMany.add(new AutomationHost.RestMember("member" + i, "Member", "v1", 0, setup::recipient));
+        var oversized = new AutomationHost.RestRoster(setup.source().toString(), scope -> tooMany);
+        assertThrows(IllegalArgumentException.class, () -> stage(setup, single, oversized, 4));
+        assertEquals(beforeSource, setup.source());
+        assertEquals(beforeRecipient, setup.recipient());
+    }
+
+    @Test
+    void targetedRestRejectsCrossHolderCleanupBeforeItCanAffectALaterMove() throws Exception {
+        ObjectNode ruleset = ruleset();
+        ((ObjectNode) ruleset.at("/automation/effects/ward")).put("singleHolder", true);
+        ((ArrayNode) ruleset.at("/automation/rules")).add(RuleJson.parse("""
+                {"id":"start-ward","bindings":[{"id":"rest","event":"rest.prepare","surface":"rest","mode":"automatic"}],
+                 "do":[{"op":"effect.start","effect":"ward","target":"actor"}],"ui":{"label":"Ward"}}
+                """));
+        Setup setup = setup(ruleset, 4);
+        PartyTargets offers = party(setup, setup.recipient(), new AtomicReference<>());
+        ObjectNode request = transaction(setup);
+        transactionMove(request, "heal", targetRequest(setup, offers, "heal"));
+        ObjectNode beforeSource = setup.source().deepCopy(), beforeRecipient = setup.recipient().deepCopy();
+        var failure = assertThrows(RuleRuntime.Unavailable.class,
+                () -> stage(setup, request, roster(setup, new java.util.HashMap<>()), 4));
+        assertEquals("restCommand", failure.code());
+        assertTrue(failure.getMessage().contains("effect.endElsewhere"));
+        assertEquals(beforeSource, setup.source());
+        assertEquals(beforeRecipient, setup.recipient());
+
+        ObjectNode self = transaction(setup);
+        assertEquals("effect.endElsewhere", HOST.stageSelfRest(setup.pack(), setup.source(),
+                AutomationHost.event("action.request", "ada", 1).put("sessionId", "session"),
+                self, StructuredRollTest.noRandom()).at("/outbox/0/kind").asText());
     }
 
     @Test

@@ -57,10 +57,10 @@ the whole move succeeds. Repeated moves require applying each update to a privat
 request-local roster. Staged completion derives signed recovery facts, runs benefits around the rest reset and
 advances rest counters; failures roll back that stage. The final multi-character rest transaction and player
 workflow are still required.
-An internal self-only coordinator now composes these stages on one private copy, retaining ordered reports and
-dice and advancing the sheet revision once. Commands needing intervening host settlement are rejected rather than
-evaluated against stale facts; offer authentication, persistence, retry receipts and interactive choices are not
-yet connected.
+An internal coordinator composes these stages on private source and recipient sheets, reprojects each recipient
+after earlier moves, and advances each changed sheet once. Commands needing intervening host settlement are
+rejected rather than evaluated against stale facts; offer authentication, persistence, retry receipts and
+interactive choices are not yet connected.
 The shared ruleset defines the base self-recovery, preparation and project moves for staged tests, including
 tier-scaled recovery, protected HP and capped Hope. Its ally recovery variants, rerolls and armor overflow are
 not yet wired.

@@ -137,7 +137,7 @@ and short-rest long-move allowances. It returns dice, reports and commands witho
 `downtime.move` button must declare `restMove.ally: true` and select exactly one other character. The host resolves
 the versioned roster offer before adjustments so their conditions can read that recipient, rechecks eligibility
 after adjustments, and applies source costs once against the chosen recipient's current protected tracks.
-Deferred bodies see the updated recipient; only after they succeed is the recipient update staged. Commands
+Deferred bodies see a freshly reprojected recipient, including derived statistics; only after they succeed is the recipient update staged. Commands
 needing interstage settlement are rejected. The caller must apply that update to a private sheet and construct
 a fresh request-local roster before a later target move; reusing a roster with an unapplied update is rejected.
 Post-outcome choices, complete multi-character rest transactions and browser integration remain release gaps.
@@ -174,13 +174,14 @@ Conditional options that no longer apply are reported as skipped; invalid choice
 outcomes reject the stage. Reports and host requests remain ordered for a future atomic commit. Moves without
 the required recipient transaction reject ally or targeted bindings rather than applying them to the wrong
 character. The host still needs full recipient coordination, publication and persistence.
-The internal self-rest coordinator composes the initial effect snapshot, early expiry, preparation, ordered
-self moves and completion on one private sheet copy. It checks the original revision once, returns ordered
-actions, dice and commands with the preparation and move events, and advances the sheet revision once; any
-failure discards the entire sequence. Until per-stage host settlement is available it accepts only countdown,
-already-applied limit refresh and single-holder cleanup commands, rejecting commands that could change facts
-read by later stages. It is not a live workflow: authenticated offers, recipient and post-roll choices, command
-settlement, persisted reports, retries and the atomic campaign commit remain necessary.
+The internal rest coordinator composes the initial effect snapshot, early expiry, preparation, ordered moves and
+completion on private source and recipient sheets. Recipient offers retain their original host versions while later
+moves reproject earlier staged changes; every changed sheet advances once, and failure discards the sequence.
+Recipient sheets are loaded only when selected or needed for eligibility. Until per-stage host settlement is
+available it accepts only countdown and already-applied limit refresh commands; a self-only rest can also emit
+single-holder cleanup. Commands that could change facts read by later stages are rejected. It is not a live
+workflow: authenticated offers, post-roll choices, command settlement, persisted reports, retries and the atomic
+campaign commit remain necessary.
 The shared Daggerheart ruleset now supplies self-targeted short recovery (1d4 plus tier and move bonus), the two
 mutually exclusive preparation variants, long recovery and work on a project. Reports use the amount actually
 cleared or gained, including permanent and locked HP and capped Hope; a short rest needs a granted allowance for
