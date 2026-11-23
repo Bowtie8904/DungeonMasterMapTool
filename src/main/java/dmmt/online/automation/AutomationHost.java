@@ -875,6 +875,9 @@ public final class AutomationHost {
 
     private record OrderedRestRecovery(RestPartyRecovery recovery, int sourceIndex, int ruleIndex, int stepIndex) {}
 
+    private record RecoveryTask(ScopedPartyRecoveryRequest request, ObjectNode moveEvent, int moveIndex,
+                                int adjustmentIndex) {}
+
     record PartyRecovery(ObjectNode response, Map<String, ObjectNode> recipients, Map<String, String> readVersions,
                          Map<String, List<String>> scopeMembership, Map<String, List<String>> scopeOrder) {
         PartyRecovery {
@@ -1219,13 +1222,42 @@ public final class AutomationHost {
         if (requests == null || requests.size() > 128 || requests.stream().anyMatch(java.util.Objects::isNull))
             throw RuleJson.error("/recovery/requests", "Expected at most 128 recovery requests.");
         StagedRestRecipients recipients = new StagedRestRecipients(pack, sourceId, roster);
-        ObjectNode response = recoverParty(recipients, event, requests, random, rosterOrder);
+        List<RecoveryTask> tasks = requests.stream().map(request -> new RecoveryTask(request, null, -1, -1)).toList();
+        ObjectNode response = recoverParty(recipients, event, tasks, random, rosterOrder);
+        return new PartyRecovery(response, recipients.changed(), recipients.readVersions(),
+                recipients.scopeMembership(), recipients.scopeOrder());
+    }
+
+    /** Stages trusted recovery from all moves after a private rest has completed; it does not commit any sheets. */
+    PartyRecovery stageRestPartyRecoveries(Pack pack, ObjectNode initialSheet, ObjectNode completedEvent,
+                                           List<ObjectNode> moveEvents, RestRoster roster, RandomGenerator random) {
+        RuleJson.object(completedEvent, "/event");
+        RuleJson.checkTree(completedEvent, "/event", 0, new int[]{0});
+        String actorId = RuleJson.id(completedEvent.get("actorId"), "/event/actorId");
+        String type = RuleJson.text(completedEvent.get("type"), "/event/type");
+        if (!RuleRuntime.isRestEvent(type)) throw RuleJson.error("/event/type", "Expected a completed rest.");
+        String kind = type.substring("rest.".length());
+        if (!kind.equals(completedEvent.at("/rest/kind").asText())
+                || !"afterReset".equals(completedEvent.at("/rest/phase").asText()))
+            throw RuleJson.error("/event/rest", "Expected the completed rest's after-reset facts.");
+        if (roster == null || random == null)
+            throw RuleJson.error("/recovery", "A host roster and random source are required.");
+        List<RestPartyRecovery> ordered = orderRestPartyRecoveries(pack, initialSheet, actorId, moveEvents);
+        for (ObjectNode move : moveEvents) {
+            if (!kind.equals(move.at("/move/rest").asText())
+                    || !java.util.Objects.equals(completedEvent.get("sessionId"), move.get("sessionId")))
+                throw RuleJson.error("/rest/moves", "A move does not belong to this completed rest.");
+        }
+        List<RecoveryTask> tasks = ordered.stream().map(item -> new RecoveryTask(item.request(),
+                moveEvents.get(item.moveIndex()), item.moveIndex(), item.adjustmentIndex())).toList();
+        StagedRestRecipients recipients = new StagedRestRecipients(pack, actorId, roster);
+        ObjectNode response = recoverParty(recipients, completedEvent, tasks, random, true);
         return new PartyRecovery(response, recipients.changed(), recipients.readVersions(),
                 recipients.scopeMembership(), recipients.scopeOrder());
     }
 
     private ObjectNode recoverParty(StagedRestRecipients recipients, ObjectNode parentEvent,
-                                    List<ScopedPartyRecoveryRequest> requests, RandomGenerator random, boolean rosterOrder) {
+                                    List<RecoveryTask> requests, RandomGenerator random, boolean rosterOrder) {
         ObjectNode response = RuleJson.JSON.createObjectNode();
         ArrayNode actions = response.putArray("actions"), outbox = response.putArray("outbox");
         ArrayNode clears = response.putArray("clears");
@@ -1234,7 +1266,8 @@ public final class AutomationHost {
         if (!requests.isEmpty()) {
             Map<String, List<StagedRecipient>> scopes = new LinkedHashMap<>();
             long applications = 0;
-            for (ScopedPartyRecoveryRequest request : requests) {
+            for (RecoveryTask task : requests) {
+                ScopedPartyRecoveryRequest request = task.request();
                 List<StagedRecipient> members = scopes.get(request.scope());
                 if (members == null) {
                     members = recipients.scoped(request.scope(), rosterOrder);
@@ -1249,12 +1282,31 @@ public final class AutomationHost {
                     throw RuleJson.error("/recovery/requests", "A transaction is limited to 1024 recipient recoveries.");
             }
             for (int requestIndex = 0; requestIndex < requests.size(); requestIndex++) {
-                ScopedPartyRecoveryRequest scoped = requests.get(requestIndex);
+                RecoveryTask task = requests.get(requestIndex);
+                ScopedPartyRecoveryRequest scoped = task.request();
                 PartyRecoveryRequest request = scoped.request();
+                ObjectNode moveEvent = task.moveEvent() == null ? null : task.moveEvent().deepCopy();
+                ObjectNode completedFacts = null;
+                if (moveEvent != null) {
+                    carryRestTable(moveEvent, event);
+                    completedFacts = moveEvent.deepCopy();
+                    completedFacts.remove("table");
+                }
                 for (StagedRecipient member : scopes.get(scoped.scope())) {
                     ObjectNode sheet = member.sheet();
-                    ObjectNode recovered = stageHolderRecovery(recipients.pack, sheet, event, member.member.id(),
+                    ObjectNode recovered = stageHolderRecovery(recipients.pack, sheet, moveEvent == null ? event : moveEvent,
+                            member.member.id(),
                             request.track(), request.requested(), random);
+                    ObjectNode recoveredEvent = RuleJson.object(recovered.get("event"), "/event");
+                    if (moveEvent != null) {
+                        if (!recoveredEvent.path("blocked").isEmpty())
+                            throw new RuleRuntime.Unavailable("blocked", recoveredEvent.at("/blocked/0/reason").asText());
+                        ObjectNode unchanged = recoveredEvent.deepCopy();
+                        unchanged.remove("table");
+                        if (!completedFacts.equals(unchanged))
+                            throw new RuleRuntime.Unavailable("restEvent",
+                                    "A recovery reaction cannot change an already-completed rest or move.");
+                    }
                     for (JsonNode command : recovered.path("outbox")) {
                         if (!STAGED_TARGET_REST_COMMANDS.contains(command.path("kind").asText()))
                             throw new RuleRuntime.Unavailable("restCommand",
@@ -1263,12 +1315,17 @@ public final class AutomationHost {
                     }
                     for (JsonNode action : recovered.path("actions"))
                         actions.add(((ObjectNode) action).deepCopy().put("actorId", member.member.id()));
-                    clears.addObject().put("requestIndex", requestIndex).put("holderId", member.member.id())
+                    ObjectNode clear = clears.addObject().put("requestIndex", requestIndex).put("holderId", member.member.id())
                             .put("holderName", member.member.name()).put("sourceId", request.sourceId())
                             .put("sourceInstanceId", request.sourceInstanceId()).put("scope", scoped.scope()).put("track", request.track())
                             .put("requested", request.requested()).put("cleared", recovered.path("cleared").asInt())
                             .put("label", request.label());
-                    event = ((ObjectNode) recovered.get("event")).deepCopy();
+                    if (moveEvent == null) event = recoveredEvent.deepCopy();
+                    else {
+                        clear.put("moveIndex", task.moveIndex()).put("adjustmentIndex", task.adjustmentIndex());
+                        carryRestTable(event, recoveredEvent);
+                        carryRestTable(moveEvent, event);
+                    }
                     if (recovered.path("revision").asLong() != member.member.revision()) {
                         projection.state(sheet).put("revision", member.member.revision());
                         recipients.changed.add(member.member.id());

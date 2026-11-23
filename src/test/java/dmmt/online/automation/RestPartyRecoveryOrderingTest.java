@@ -5,8 +5,10 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static dmmt.online.automation.StructuredRollTest.noRandom;
@@ -54,6 +56,43 @@ class RestPartyRecoveryOrderingTest {
         }
         var result = RuleDispatcher.executeStagedMove(candidates, List.of(), noRandom(), fixture.pack().programs());
         return ((ObjectNode) result.contexts().getFirst().get("event")).deepCopy();
+    }
+
+    private static RuleCompiler.Program reaction(String steps) throws Exception {
+        return RuleCompiler.compile("armor:listener", RuleJson.parse("""
+                {"rules":[{"id":"reaction","bindings":[
+                 {"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"armorTrack"]},
+                                  {"eq":[{"read":"event.change"},"clear"]}]},
+                 "do":[%s],"ui":{"report":"{actor.name}: {event.move.id}, Fear {event.table.fear}."}}]}
+                """.formatted(steps)), RuleJson.parse(LegacyCatalogConverter.coreRecipes()));
+    }
+
+    private static AutomationHost.Pack withReaction(Fixture fixture, RuleCompiler.Program reaction) {
+        Map<String, RuleCompiler.Program> programs = new HashMap<>(fixture.pack().programs());
+        programs.put(reaction.sourceId(), reaction);
+        return new AutomationHost.Pack("with-reaction", programs);
+    }
+
+    private static ObjectNode recipient(String name, int armor, long revision) throws Exception {
+        ObjectNode sheet = (ObjectNode) RuleJson.parse("""
+                {"name":"%s","hope":{"slots":6,"on":0},"hp":{"slots":6,"on":0},
+                 "stress":{"slots":6,"on":0},"armorTrack":{"slots":3,"on":%d},
+                 "activeArmor":{"name":"Listener","instanceId":"armor","automationSource":"armor:listener"}}
+                """.formatted(name, armor));
+        HOST.projection().state(sheet).put("revision", revision);
+        return sheet;
+    }
+
+    private static AutomationHost.RestMember member(String id, ObjectNode sheet) {
+        return new AutomationHost.RestMember(id, sheet.path("name").asText(), "stored-" + id,
+                HOST.revision(sheet), () -> sheet);
+    }
+
+    private static ObjectNode completed() {
+        ObjectNode event = AutomationHost.event("rest.short", "ada", 1);
+        event.putObject("rest").put("kind", "short").put("phase", "afterReset");
+        return event;
     }
 
     @Test
@@ -136,5 +175,103 @@ class RestPartyRecoveryOrderingTest {
         assertEquals(List.of(1, 1, 2, 2), ordered.stream().map(item -> item.request().request().requested()).toList());
         assertEquals(List.of(0, 1, 0, 1), ordered.stream().map(AutomationHost.RestPartyRecovery::moveIndex).toList());
         assertEquals(List.of(0, 0, 1, 1), ordered.stream().map(AutomationHost.RestPartyRecovery::adjustmentIndex).toList());
+    }
+
+    @Test
+    void stagesWholeRestRecoveriesInCardModifierPickAndHostRecipientOrder() throws Exception {
+        Fixture fixture = fixture();
+        RuleCompiler.Program listener = reaction("""
+                {"op":"resource.gain","pool":"actor.hope","amount":1,
+                 "if":{"eq":[{"read":"event.move.id"},"tend"]}},
+                {"op":"table.gain","resource":"fear","amount":1,"label":"Reaction"}
+                """);
+        var pack = withReaction(fixture, listener);
+        ObjectNode zara = recipient("Zara", 0, 4), mira = recipient("Mira", 3, 2);
+        ObjectNode sourceBefore = fixture.sheet().deepCopy(), zaraBefore = zara.deepCopy(), miraBefore = mira.deepCopy();
+        var source = new AutomationHost.RestMember("ada", "Ada", "stored-ada", 1,
+                () -> { throw new AssertionError("The resting character is excluded."); });
+        var roster = new AutomationHost.RestRoster("stored-ada", scope -> List.of(member("zara", zara), source, member("mira", mira)));
+        List<ObjectNode> moves = List.of(move(fixture, "tend", false), move(fixture, "stress", false));
+        ObjectNode completed = completed(), beforeCompleted = completed.deepCopy();
+        var result = HOST.stageRestPartyRecoveries(pack, fixture.sheet(), completed, moves, roster, noRandom());
+
+        JsonNode clears = result.response().path("clears");
+        assertEquals(List.of("zara", "mira", "zara", "mira", "zara", "mira", "zara", "mira", "zara", "mira"),
+                clears.findValuesAsText("holderId"));
+        assertEquals(List.of(2, 2, 1, 1, 3, 3, 4, 4, 5, 5),
+                clears.findValues("requested").stream().map(JsonNode::asInt).toList());
+        assertEquals(List.of(1, 1, 0, 0, 1, 1, 0, 0, 1, 1),
+                clears.findValues("moveIndex").stream().map(JsonNode::asInt).toList());
+        assertEquals(List.of(0, 2, 0, 1, 0, 0, 0, 0, 0, 0),
+                clears.findValues("cleared").stream().map(JsonNode::asInt).toList());
+        assertEquals(List.of("Zara: stress, Fear 2.", "Mira: stress, Fear 3.",
+                        "Zara: tend, Fear 4.", "Mira: tend, Fear 5.",
+                        "Zara: stress, Fear 6.", "Mira: stress, Fear 7.",
+                        "Zara: tend, Fear 8.", "Mira: tend, Fear 9.",
+                        "Zara: stress, Fear 10.", "Mira: stress, Fear 11."),
+                result.response().path("actions").findValuesAsText("report"));
+        assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
+                result.response().path("outbox").findValues("before").stream().map(JsonNode::asInt).toList());
+        assertEquals(11, result.response().at("/event/table/fear").asInt());
+        assertEquals("rest.short", result.response().at("/event/type").asText());
+        assertEquals(2, result.recipients().get("zara").at("/hope/on").asInt());
+        assertEquals(2, result.recipients().get("mira").at("/hope/on").asInt());
+        assertEquals(5, HOST.revision(result.recipients().get("zara")));
+        assertEquals(3, HOST.revision(result.recipients().get("mira")));
+        assertEquals(Map.of("zara", "stored-zara", "mira", "stored-mira"), result.readVersions());
+        assertEquals(Map.of("activePlayerCharacters", List.of("mira", "zara")), result.scopeMembership());
+        assertEquals(Map.of("activePlayerCharacters", List.of("zara", "mira")), result.scopeOrder());
+        assertEquals(beforeCompleted, completed);
+        assertEquals(sourceBefore, fixture.sheet());
+        assertEquals(zaraBefore, zara);
+        assertEquals(miraBefore, mira);
+    }
+
+    @Test
+    void completedEventChangesAndBlocksRollBackEveryRecovery() throws Exception {
+        Fixture fixture = fixture();
+        List<ObjectNode> moves = List.of(move(fixture, "tend", false));
+        ObjectNode zara = recipient("Zara", 0, 4), before = zara.deepCopy();
+        var roster = new AutomationHost.RestRoster("source", scope -> List.of(member("zara", zara)));
+        var blockedPack = withReaction(fixture, reaction("""
+                {"op":"event.block","reason":"No recovery."}"""));
+        var blocked = assertThrows(RuleRuntime.Unavailable.class, () -> HOST.stageRestPartyRecoveries(
+                blockedPack, fixture.sheet(), completed(), moves, roster, noRandom()));
+        assertEquals("blocked", blocked.code());
+        assertEquals("No recovery.", blocked.getMessage());
+        assertEquals(before, zara);
+
+        var latePack = withReaction(fixture, reaction("""
+                {"op":"plan.adjust","plan":"event.move","field":"allies","by":1,"label":"Too late"}"""));
+        assertEquals("restEvent", assertThrows(RuleRuntime.Unavailable.class, () ->
+                HOST.stageRestPartyRecoveries(latePack, fixture.sheet(), completed(), moves, roster, noRandom())).code());
+        assertEquals(before, zara);
+        ObjectNode wrongKind = completed().put("type", "rest.long");
+        assertThrows(IllegalArgumentException.class,
+                () -> HOST.stageRestPartyRecoveries(latePack, fixture.sheet(), wrongKind, moves, roster, noRandom()));
+        ObjectNode wrongSession = completed().put("sessionId", "other");
+        assertThrows(IllegalArgumentException.class,
+                () -> HOST.stageRestPartyRecoveries(latePack, fixture.sheet(), wrongSession, moves, roster, noRandom()));
+        assertEquals(before, zara);
+    }
+
+    @Test
+    void wholeRestApplicationLimitIsCheckedBeforeReadingAnySheet() throws Exception {
+        Fixture fixture = fixture();
+        AtomicInteger loads = new AtomicInteger();
+        List<AutomationHost.RestMember> members = new ArrayList<>();
+        for (int i = 0; i < 128; i++) {
+            String id = "target" + i;
+            members.add(new AutomationHost.RestMember(id, id, "version-" + i, 0, () -> {
+                loads.incrementAndGet();
+                return fixture.sheet();
+            }));
+        }
+        var roster = new AutomationHost.RestRoster("source", scope -> members);
+        ObjectNode tend = move(fixture, "tend", false);
+        var error = assertThrows(IllegalArgumentException.class, () -> HOST.stageRestPartyRecoveries(fixture.pack(),
+                fixture.sheet(), completed(), java.util.Collections.nCopies(6, tend), roster, noRandom()));
+        assertTrue(error.getMessage().contains("1024"));
+        assertEquals(0, loads.get());
     }
 }
