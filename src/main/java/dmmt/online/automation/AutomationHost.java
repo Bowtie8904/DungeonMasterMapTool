@@ -895,16 +895,22 @@ public final class AutomationHost {
     }
 
     public record RestTransaction(ObjectNode response, Map<String, ObjectNode> recipients, Map<String, String> readVersions,
-                                  Map<String, List<String>> scopeMembership, boolean replayed) {
+                                  Map<String, List<String>> scopeMembership, Map<String, List<String>> scopeOrder,
+                                  boolean replayed) {
         public RestTransaction {
             response = response.deepCopy();
             recipients = copySheets(recipients);
             readVersions = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(readVersions));
             scopeMembership = copyScopeMembership(scopeMembership);
+            scopeOrder = copyScopeMembership(scopeOrder);
+        }
+        public RestTransaction(ObjectNode response, Map<String, ObjectNode> recipients, Map<String, String> readVersions,
+                               Map<String, List<String>> scopeMembership, boolean replayed) {
+            this(response, recipients, readVersions, scopeMembership, Map.of(), replayed);
         }
         public RestTransaction(ObjectNode response, Map<String, ObjectNode> recipients, Map<String, String> readVersions,
                                boolean replayed) {
-            this(response, recipients, readVersions, Map.of(), replayed);
+            this(response, recipients, readVersions, Map.of(), Map.of(), replayed);
         }
         @Override public ObjectNode response() { return response.deepCopy(); }
         @Override public Map<String, ObjectNode> recipients() { return copySheets(recipients); }
@@ -1512,7 +1518,8 @@ public final class AutomationHost {
         Map<String, ObjectNode> changed = recipients == null ? Map.of() : recipients.changed();
         Map<String, String> readVersions = recipients == null ? Map.of() : recipients.readVersions();
         Map<String, List<String>> scopes = recipients == null ? Map.of() : recipients.scopeMembership();
-        RestTransaction transaction = new RestTransaction(response, changed, readVersions, scopes, false);
+        Map<String, List<String>> order = recipients == null ? Map.of() : recipients.scopeOrder();
+        RestTransaction transaction = new RestTransaction(response, changed, readVersions, scopes, order, false);
         replace(sheet, working);
         return transaction;
     }
@@ -1592,7 +1599,7 @@ public final class AutomationHost {
         RuleJson.checkTree(response, "/response", 0, new int[]{0});
         recordReceipt(projection.state(working), requestId, principalId, false, fingerprint, response);
         RestTransaction transaction = new RestTransaction(response, staged.recipients(), staged.readVersions(),
-                staged.scopeMembership(), false);
+                staged.scopeMembership(), staged.scopeOrder(), false);
         replace(sheet, working);
         return transaction;
     }
@@ -1638,37 +1645,37 @@ public final class AutomationHost {
 
     /** Rechecks only membership; the caller must compare read sheet bytes within the same commit boundary. */
     public static void requireRestScopeMembership(String sourceId, Map<String, List<String>> expected, RestRoster roster) {
-        RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(sourceId), "/event/actorId");
-        if (expected == null || roster == null) throw RuleJson.error("/recipients", "Expected host scope snapshots and roster.");
-        for (var entry : expected.entrySet()) {
-            if (!RuleCompiler.TARGET_SCOPES.contains(entry.getKey()) || entry.getValue() == null)
-                throw RuleJson.error("/recipients", "Invalid host scope snapshot.");
-            List<String> current = restScopeMembers(sourceId, roster.loadScope().apply(entry.getKey())).stream()
-                    .map(RestMember::id).toList();
-            if (!current.equals(entry.getValue()))
-                throw new RuleRuntime.Unavailable("staleRecipient", "The eligible characters changed. Reopen this rest.");
-        }
+        requireRestScopeSnapshots(sourceId, expected, Map.of(), roster);
     }
 
     /** Rechecks host ordering without hydrating recipient sheets. */
     public static void requireRestScopeOrder(String sourceId, Map<String, List<String>> expected, RestRoster roster) {
+        requireRestScopeSnapshots(sourceId, Map.of(), expected, roster);
+    }
+
+    /** Rechecks membership and order from one roster snapshot per scope; the caller must hold the commit boundary. */
+    public static void requireRestScopeSnapshots(String sourceId, Map<String, List<String>> membership,
+                                                 Map<String, List<String>> order, RestRoster roster) {
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(sourceId), "/event/actorId");
-        if (expected == null || roster == null) throw RuleJson.error("/recipients", "Expected host scope snapshots and roster.");
-        for (var entry : expected.entrySet()) {
-            if (!RuleCompiler.TARGET_SCOPES.contains(entry.getKey()) || entry.getValue() == null)
+        if (membership == null || order == null || roster == null)
+            throw RuleJson.error("/recipients", "Expected host scope snapshots and roster.");
+        Set<String> scopes = new java.util.LinkedHashSet<>(membership.keySet());
+        scopes.addAll(order.keySet());
+        for (String scope : scopes) {
+            if (scope == null || !RuleCompiler.TARGET_SCOPES.contains(scope)
+                    || (membership.containsKey(scope) && membership.get(scope) == null)
+                    || (order.containsKey(scope) && order.get(scope) == null))
                 throw RuleJson.error("/recipients", "Invalid host scope snapshot.");
-            List<String> current = restScopeMembers(sourceId, roster.loadScope().apply(entry.getKey()), false).stream()
+            List<String> current = restScopeMembers(sourceId, roster.loadScope().apply(scope)).stream()
                     .map(RestMember::id).toList();
-            if (!current.equals(entry.getValue()))
+            if (membership.containsKey(scope) && !current.stream().sorted().toList().equals(membership.get(scope)))
+                throw new RuleRuntime.Unavailable("staleRecipient", "The eligible characters changed. Reopen this rest.");
+            if (order.containsKey(scope) && !current.equals(order.get(scope)))
                 throw new RuleRuntime.Unavailable("staleRecipient", "The character order changed. Reopen this rest.");
         }
     }
 
     private static List<RestMember> restScopeMembers(String sourceId, List<RestMember> members) {
-        return restScopeMembers(sourceId, members, true);
-    }
-
-    private static List<RestMember> restScopeMembers(String sourceId, List<RestMember> members, boolean sort) {
         if (members == null || members.size() > 128)
             throw RuleJson.error("/recipients", "A rest is limited to 128 characters.");
         List<RestMember> result = new ArrayList<>();
@@ -1678,7 +1685,6 @@ public final class AutomationHost {
                 throw RuleJson.error("/recipients", "Duplicate or missing target.");
             if (!sourceId.equals(member.id())) result.add(member);
         }
-        if (sort) result.sort(java.util.Comparator.comparing(RestMember::id));
         return List.copyOf(result);
     }
 
@@ -1716,7 +1722,7 @@ public final class AutomationHost {
         private List<StagedRecipient> scoped(String scope, boolean preserveOrder) {
             if (!RuleCompiler.TARGET_SCOPES.contains(scope))
                 throw RuleJson.error("/recipients", "Expected a host character scope.");
-            List<RestMember> members = restScopeMembers(sourceId, roster.loadScope().apply(scope), false);
+            List<RestMember> members = restScopeMembers(sourceId, roster.loadScope().apply(scope));
             List<String> hostOrder = members.stream().map(RestMember::id).toList();
             List<String> ids = hostOrder.stream().sorted().toList();
             List<String> previous = scopeMembership.putIfAbsent(scope, ids);

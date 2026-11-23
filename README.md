@@ -87,8 +87,8 @@ An internal coordinator composes these stages on private source and recipient sh
 after earlier moves, carries Fear through the rest, and advances each changed sheet once. Other commands needing
 intervening host settlement are rejected rather than evaluated against stale facts. The staged result identifies
 all recipient sheets read, including unchanged eligibility dependencies, and each inspected scope's membership.
-Membership can be rechecked without loading sheets, but must be compared with the read versions inside the
-future atomic commit. A host-signed
+The transaction also retains any host-order dependencies; both can be rechecked from one roster snapshot per
+scope without loading sheets, but must be compared with the read versions inside the future atomic commit. A host-signed
 snapshot offer and owner-bound retry receipt can reject stale or forged rest intents and replay committed results
 without rolling or staging recipients again. Offers expire on host restart; already committed receipts still replay.
 The live host must authenticate owners, compare and commit all dependencies, and provide interactive choices.

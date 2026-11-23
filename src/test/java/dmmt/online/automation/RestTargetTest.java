@@ -423,6 +423,7 @@ class RestTargetTest {
                 result.readVersions(), "An unchanged character used by target eligibility is a read dependency.");
         assertThrows(UnsupportedOperationException.class, () -> result.readVersions().put("other", "version"));
         assertEquals(Map.of("activeCharacters", List.of("healthy", "mira")), result.scopeMembership());
+        assertTrue(result.scopeOrder().isEmpty(), "Ordinary targeted moves do not depend on host roster order.");
         assertThrows(UnsupportedOperationException.class, () -> result.scopeMembership().put("other", List.of()));
         assertThrows(UnsupportedOperationException.class, () -> result.scopeMembership().get("activeCharacters").add("other"));
     }
@@ -453,6 +454,7 @@ class RestTargetTest {
         assertTrue(replay.recipients().isEmpty());
         assertTrue(replay.readVersions().isEmpty());
         assertTrue(replay.scopeMembership().isEmpty());
+        assertTrue(replay.scopeOrder().isEmpty());
         assertEquals(saved, setup.source());
         assertEquals(6, setup.recipient().at("/hp/on").asInt());
     }

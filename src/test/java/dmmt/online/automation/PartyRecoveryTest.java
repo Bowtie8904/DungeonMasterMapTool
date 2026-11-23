@@ -193,6 +193,51 @@ class PartyRecoveryTest {
     }
 
     @Test
+    void restTransactionsRetainImmutableScopeOrderAndRecheckEachScopeOnce() {
+        String scope = "activePlayerCharacters";
+        Map<String, List<String>> membership = new java.util.LinkedHashMap<>();
+        Map<String, List<String>> order = new java.util.LinkedHashMap<>();
+        membership.put(scope, new ArrayList<>(List.of("mira", "zara")));
+        order.put(scope, new ArrayList<>(List.of("zara", "mira")));
+        var transaction = new AutomationHost.RestTransaction(RuleJson.JSON.createObjectNode(), Map.of(), Map.of(),
+                membership, order, false);
+        membership.get(scope).clear();
+        order.get(scope).clear();
+        assertEquals(List.of("mira", "zara"), transaction.scopeMembership().get(scope));
+        assertEquals(List.of("zara", "mira"), transaction.scopeOrder().get(scope));
+        assertThrows(UnsupportedOperationException.class, () -> transaction.scopeOrder().put("other", List.of()));
+        assertThrows(UnsupportedOperationException.class, () -> transaction.scopeOrder().get(scope).add("other"));
+
+        var zara = new AutomationHost.RestMember("zara", "Zara", "new-version", 1,
+                () -> { throw new AssertionError("Scope validation must not load a sheet."); });
+        var mira = new AutomationHost.RestMember("mira", "Mira", "new-version", 2,
+                () -> { throw new AssertionError("Scope validation must not load a sheet."); });
+        var source = new AutomationHost.RestMember("ada", "Ada", "new-version", 3,
+                () -> { throw new AssertionError("Scope validation must not load a sheet."); });
+        AtomicInteger scopes = new AtomicInteger();
+        var current = new AutomationHost.RestRoster("source", requested -> {
+            assertEquals(scope, requested);
+            scopes.incrementAndGet();
+            return List.of(zara, source, mira);
+        });
+        AutomationHost.requireRestScopeSnapshots("ada", transaction.scopeMembership(), transaction.scopeOrder(), current);
+        assertEquals(1, scopes.get(), "Membership and order must use the same roster snapshot.");
+
+        var reordered = new AutomationHost.RestRoster("source", requested -> List.of(mira, zara));
+        var reorderedFailure = assertThrows(RuleRuntime.Unavailable.class, () ->
+                AutomationHost.requireRestScopeSnapshots("ada", transaction.scopeMembership(), transaction.scopeOrder(), reordered));
+        assertEquals("staleRecipient", reorderedFailure.code());
+        assertTrue(reorderedFailure.getMessage().contains("order"));
+        var removed = new AutomationHost.RestRoster("source", requested -> List.of(zara));
+        var membershipFailure = assertThrows(RuleRuntime.Unavailable.class, () ->
+                AutomationHost.requireRestScopeSnapshots("ada", transaction.scopeMembership(), transaction.scopeOrder(), removed));
+        assertEquals("staleRecipient", membershipFailure.code());
+        assertTrue(membershipFailure.getMessage().contains("eligible"));
+        assertTrue(new AutomationHost.RestTransaction(RuleJson.JSON.createObjectNode(), Map.of(), Map.of(), false)
+                .scopeOrder().isEmpty());
+    }
+
+    @Test
     void appliesEachRequestInOrderUsingRecipientReactionsAndOneRevision() throws Exception {
         RuleCompiler.Program overflow = program("armor:overflow", "", """
                 {"op":"resource.gain","pool":"actor.hope","amount":1},
