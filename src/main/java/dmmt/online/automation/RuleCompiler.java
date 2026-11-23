@@ -17,7 +17,7 @@ public final class RuleCompiler {
     public static final int FORMAT_VERSION = 2;
     private static final Set<String> EVENTS = Set.of("action.request", "roll.prepare", "roll.finished",
             "damage.prepare", "damage.marks", "damage.applied", "claim.accept", "rest.prepare", "rest.short", "rest.long", "scene.end", "session.start",
-            "downtime.move", "downtime.completed", "death.options", "track.changed", "pool.changed", "equipment.changed", "effect.started",
+            "downtime.move", "downtime.completed", "rest.roll", "death.options", "track.changed", "pool.changed", "equipment.changed", "effect.started",
             "effect.ended", "creation.apply");
     static final Set<String> SURFACES = Set.of("sheet", "chat", "roll", "damage", "effect", "resource", "rest",
             "death", "downtime", "creation", "companion");
@@ -43,6 +43,7 @@ public final class RuleCompiler {
             Map.entry("dice.hits", List.of("count", "sides", "atLeast")),
             Map.entry("dice.highest", List.of("count", "sides")),
             Map.entry("dice.table", List.of("count", "outcomes")),
+            Map.entry("recovery.offerRoll", List.of("roll", "track", "label")),
             Map.entry("inventory.grant", List.of("catalog", "entry", "quantity", "label", "to", "tag", "max", "scope")),
             Map.entry("state.set", List.of("slot", "value")),
             Map.entry("state.increment", List.of("slot", "by")),
@@ -1552,6 +1553,13 @@ public final class RuleCompiler {
             if (operation.has("scope") && !operation.has("max")) throw RuleJson.error(path + "/scope", "A cap scope requires max.");
             if (operation.has("scope") && !Set.of("actor", "party").contains(operation.path("scope").asText()))
                 throw RuleJson.error(path + "/scope", "Expected actor or party.");
+            return;
+        }
+        if ("recovery.offerRoll".equals(op)) {
+            RuleExpression.validate(operation.get("roll"), path + "/roll");
+            if (!RuleJson.text(operation.get("track"), path + "/track").matches("(actor|recipient)\\.[a-zA-Z][a-zA-Z0-9_-]*"))
+                throw RuleJson.error(path + "/track", "Expected an actor or recipient recovery track.");
+            RuleTemplate.validate(RuleJson.text(operation.get("label"), path + "/label"));
             return;
         }
         if ("roll.reroll".equals(op) && !Set.of("new", "higher").contains(operation.path("choose").asText()))

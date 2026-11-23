@@ -17,6 +17,7 @@ import { setGmFear } from './daggerheart/engine';
 import { rollButtons } from './daggerheart/rollbuttons';
 import { historyResultControls } from './automation/panel';
 import { historyClaimControls } from './automation/claims';
+import { historyRecoveryRollControls } from './automation/recovery-rolls';
 import { ChatActionReports } from './chat-action-reports';
 import { addToSheet, needsInventoryRarityCatalogs, refreshInventoryRarities } from './daggerheart/compendium';
 import { CompendiumPanel } from './compendium';
@@ -1404,6 +1405,9 @@ export class App {
   private actionReports?: ChatActionReports;
 
   private rollActions(m: RollMessage | import('./protocol').ChatMessage): HTMLElement | null {
+    if ('automationRecoveryRoll' in m && m.automationRecoveryRoll) {
+      return historyRecoveryRollControls(m, this.myActors.filter(actor => !actor.disabled));
+    }
     if ('automationClaim' in m && m.automationClaim) {
       return historyClaimControls(m, this.myActors.filter(actor => !actor.disabled));
     }

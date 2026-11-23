@@ -55,6 +55,7 @@ class SharedRestMovesTest {
                 JsonNode amount = value.path("amount").path("max").get(1).deepCopy();
                 value.remove(List.of("track", "amount"));
                 value.put("op", "value").put("as", "recovery").set("value", amount);
+                ((ArrayNode) rule.get("do")).remove(2);
                 ((ObjectNode) rule.get("ui")).put("report", id.contains("tend")
                         ? "{actor.name} tends to an ally: clear {result.recovery} HP (1d4: {result.roll}, tier: {actor.stats.tier}); apply it to the ally's sheet."
                         : "{actor.name} repairs an ally's armor: clear {result.recovery} Armor Slots (1d4: {result.roll}, tier: {actor.stats.tier}); apply it to the ally's sheet.");

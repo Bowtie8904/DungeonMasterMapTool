@@ -20,7 +20,8 @@
           { "op": "dice.roll", "count": 1, "sides": 4, "as": "roll" },
           { "op": "track.clear", "track": "actor.hp", "amount": { "max": [0, { "add": [
             { "read": "result.roll" }, { "read": "actor.stats.tier" }, { "read": "event.move.bonus" }
-          ] }] }, "as": "cleared" }
+          ] }] }, "as": "cleared" },
+          { "op": "recovery.offerRoll", "roll": { "read": "result.roll" }, "track": "actor.hp", "label": "Tend to Wounds" }
         ],
         "ui": { "label": "Tend to Wounds", "report": "{actor.name} cleared {result.cleared} HP (1d4: {result.roll}, tier: {actor.stats.tier})." }
       },
@@ -35,7 +36,8 @@
           { "op": "dice.roll", "count": 1, "sides": 4, "as": "roll" },
           { "op": "track.clear", "track": "recipient.hp", "amount": { "max": [0, { "add": [
             { "read": "result.roll" }, { "read": "actor.stats.tier" }, { "read": "event.move.bonus" }
-          ] }] }, "as": "cleared" }
+          ] }] }, "as": "cleared" },
+          { "op": "recovery.offerRoll", "roll": { "read": "result.roll" }, "track": "recipient.hp", "label": "Tend to Wounds" }
         ],
         "ui": { "label": "Tend to Wounds (an ally)", "report": "{actor.name} cleared {result.cleared} HP for {recipient.name} (1d4: {result.roll}, tier: {actor.stats.tier})." }
       },
@@ -49,7 +51,8 @@
           { "op": "dice.roll", "count": 1, "sides": 4, "as": "roll" },
           { "op": "track.clear", "track": "actor.stress", "amount": { "max": [0, { "add": [
             { "read": "result.roll" }, { "read": "actor.stats.tier" }, { "read": "event.move.bonus" }
-          ] }] }, "as": "cleared" }
+          ] }] }, "as": "cleared" },
+          { "op": "recovery.offerRoll", "roll": { "read": "result.roll" }, "track": "actor.stress", "label": "Clear Stress" }
         ],
         "ui": { "label": "Clear Stress", "report": "{actor.name} cleared {result.cleared} Stress (1d4: {result.roll}, tier: {actor.stats.tier})." }
       },
@@ -63,7 +66,8 @@
           { "op": "dice.roll", "count": 1, "sides": 4, "as": "roll" },
           { "op": "track.clear", "track": "actor.armorTrack", "amount": { "max": [0, { "add": [
             { "read": "result.roll" }, { "read": "actor.stats.tier" }, { "read": "event.move.bonus" }
-          ] }] }, "as": "cleared" }
+          ] }] }, "as": "cleared" },
+          { "op": "recovery.offerRoll", "roll": { "read": "result.roll" }, "track": "actor.armorTrack", "label": "Repair Armor" }
         ],
         "ui": { "label": "Repair Armor", "report": "{actor.name} repaired {result.cleared} Armor Slots (1d4: {result.roll}, tier: {actor.stats.tier})." }
       },
@@ -78,7 +82,8 @@
           { "op": "dice.roll", "count": 1, "sides": 4, "as": "roll" },
           { "op": "track.clear", "track": "recipient.armorTrack", "amount": { "max": [0, { "add": [
             { "read": "result.roll" }, { "read": "actor.stats.tier" }, { "read": "event.move.bonus" }
-          ] }] }, "as": "cleared" }
+          ] }] }, "as": "cleared" },
+          { "op": "recovery.offerRoll", "roll": { "read": "result.roll" }, "track": "recipient.armorTrack", "label": "Repair Armor" }
         ],
         "ui": { "label": "Repair Armor (an ally)", "report": "{actor.name} repaired {result.cleared} Armor Slots for {recipient.name} (1d4: {result.roll}, tier: {actor.stats.tier})." }
       },

@@ -313,7 +313,7 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
         el('div', { class: 'shared-source' }, m.rollSource.source),
         el('strong', {}, m.rollSource.name), rich(m.rollSource.text))));
   }
-  if (rollActions && (e.kind === 'roll' || e.m.actionBenefits || e.m.automationClaim || e.m.reactionPrompt)) {
+  if (rollActions && (e.kind === 'roll' || e.m.actionBenefits || e.m.automationClaim || e.m.automationRecoveryRoll || e.m.reactionPrompt)) {
     const actions = rollActions(e.m);
     if (actions) card.append(actions);
   }

@@ -31,7 +31,7 @@ public final class LegacyCatalogConverter {
     private static final List<String> FAMILIES = List.of("actions", "rollOptions", "rollTriggers", "conditionalRollTriggers", "mitigation");
     private static final Set<String> BLOCK_FIELDS = Set.of("actions", "reloading", "uses", "modifiers", "resources", "rollOptions", "rollTriggers",
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
-            "damage", "alternateProfiles", "damageTypeChoice", "rest", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions", "conditionalRollOptions",
+            "damage", "alternateProfiles", "damageTypeChoice", "rest", "restReroll", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions", "conditionalRollOptions",
             "hopeReward", "classResourceOnly", "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "zeroHopeClearArmor",
             "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases", "hideSpellcast", "companion", "companionTraining", "conditionalDamageRewards");
     private static final Set<String> DEATH_KINDS = Set.of("hopeBonus", "hopeSpend", "mask", "spectral", "egg", "battleHardened",
@@ -280,6 +280,14 @@ public final class LegacyCatalogConverter {
         ArrayNode rules = RuleJson.JSON.createArrayNode();
         ObjectNode effects = RuleJson.JSON.createObjectNode();
         Set<String> ruleIds = new HashSet<>();
+        if (legacy.has("restReroll")) {
+            if (!legacy.path("restReroll").isBoolean()) p.add(path + "/restReroll", "Expected a boolean.");
+            else if (legacy.path("restReroll").asBoolean()) {
+                ObjectNode reroll = restReroll(limited);
+                reroll.put("id", unique(reroll.path("id").asText(), ruleIds));
+                rules.add(reroll);
+            }
+        }
         String lunarPool = lunar(legacy, path, p, pools, effects, lifecycle);
         for (ObjectNode rule : lifecycle) {
             rule.put("id", unique(rule.path("id").asText(), ruleIds));
@@ -1546,6 +1554,23 @@ public final class LegacyCatalogConverter {
         ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", id);
         rule.putArray("bindings").addObject().put("id", "use").put("event", event).put("surface", surface).put("mode", mode);
         rule.putObject("ui");
+        return rule;
+    }
+
+    private static ObjectNode restReroll(boolean limited) {
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "rest-reroll");
+        rule.putArray("bindings").addObject().put("id", "use").put("event", "rest.roll")
+                .put("surface", "chat").put("mode", "button");
+        if (limited) rule.put("limitRef", "uses");
+        ArrayNode steps = rule.putArray("do");
+        ObjectNode dice = steps.addObject().put("op", "roll.keptDice").put("role", "downtime").put("as", "dice");
+        dice.set("from", read("event.roll"));
+        ObjectNode reroll = steps.addObject().put("op", "roll.reroll").put("choose", "higher").put("as", "rerolled");
+        reroll.set("from", read("event.roll"));
+        reroll.set("dice", read("result.dice"));
+        steps.addObject().put("op", "roll.publish").set("roll", read("result.rerolled"));
+        rule.putObject("ui").put("label", "Reroll downtime die")
+                .put("report", "{actor.name} rerolled the downtime die and kept {result.rerolled.total}.");
         return rule;
     }
 

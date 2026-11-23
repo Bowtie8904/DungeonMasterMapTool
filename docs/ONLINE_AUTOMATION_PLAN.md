@@ -158,6 +158,9 @@ Self-targeted single-holder effects transfer after preparation and between moves
 settle recipient effect starts and ends immediately, including transfers from offline or disabled holders, so
 subsequent operations and recovery reactions see the updated effects. Other reaction phases still reject
 recipient effect mutations that lack ordered lifecycle settlement.
+Short-rest recovery dice can publish generic chat offers; an owned source may edit one die through
+`rest.roll`. The host commits its use, the holder's bounded recovery and reactions, the updated offer and
+the exact-retry receipt atomically. Non-recovery downtime dice are not yet offered.
 
 The live host rejects legacy client-supplied rests and downtime rerolls when any category declares format 2,
 including an incomplete pack. It cannot classify malformed, unreadable or unknown-version categories as legacy.

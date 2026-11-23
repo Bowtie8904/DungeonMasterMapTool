@@ -105,8 +105,10 @@ Owner and DM sheet saves cannot change host-owned rest counters, and legacy dama
 and the host's automation state. An unreadable or unrecognized catalog cannot silently enable legacy rest;
 the shipped format-1 catalogs retain their existing rest behavior.
 The shared ruleset defines the base recovery, preparation and project moves, including tier-scaled recovery,
-protected HP and capped Hope. Converted companions recover the owner's net cleared Stress and return before
-long-rest moves; downtime rerolls remain incomplete. Ordered adjustment records retain each requested
+protected HP and capped Hope. Short-rest recovery dice offer authored reroll actions in chat; the host applies
+any improvement to the affected character with its healing floor and reactions. Other downtime dice are not
+yet supported. Converted companions recover the owner's net cleared Stress and return before long-rest moves.
+Ordered adjustment records retain each requested
 amount, source, rule, binding and compiled step; converted party-repair modifiers identify the recipient scope
 and track and settle recipient Armor-overflow reactions atomically. An indexed post-rest declaration can schedule a fixed recovery from a named initial
 sheet-source location for matching self moves even if its ordinary modifier was filtered or the source disappeared.

@@ -70,6 +70,28 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void convertsDowntimeRerollsToGenericRollActionsAndValidatesTheirFlag() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"dune","name":"Dune","automation":{"restReroll":true,"uses":{"max":1,"per":"rest"}}},
+                {"id":"other","name":"Other","automation":{"restReroll":true}}"""));
+        assertEquals(2, result.converted(), result.diagnostics().toString());
+        for (int i = 0; i < 2; i++) {
+            JsonNode rule = result.catalog().at("/entries/" + i + "/automation/rules/0");
+            assertEquals("rest.roll", rule.at("/bindings/0/event").asText());
+            assertEquals("downtime", rule.at("/do/0/role").asText());
+            assertEquals("higher", rule.at("/do/1/choose").asText());
+            assertEquals("roll.publish", rule.at("/do/2/op").asText());
+        }
+        assertEquals("uses", result.catalog().at("/entries/0/automation/rules/0/limitRef").asText());
+        assertFalse(result.catalog().at("/entries/1/automation/rules/0").has("limitRef"));
+        assertEquals(2, RuleCatalog.compile(result.catalog().toString(), LegacyCatalogConverter.coreRecipes()).size());
+        var bad = LegacyCatalogConverter.convert(catalog("""
+                {"id":"bad","name":"Bad","automation":{"restReroll":"yes"}}"""));
+        assertEquals(0, bad.converted());
+        assertTrue(bad.diagnostics().toString().contains("Expected a boolean"));
+    }
+
+    @Test
     void consumesHostOwnedFlagsAcrossActionsOptionsAndTriggers() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"owned","name":"Owned","automation":{

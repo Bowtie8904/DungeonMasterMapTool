@@ -1900,6 +1900,31 @@ class OnlineSessionServerTest {
         return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    private HttpResponse<String> recoveryRollHttp(String cookie, JsonNode offer, String actorId, String body) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/automation/"
+                + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + "/" + actorId + "/rest-rolls/"
+                + offer.path("id").asLong() + "/" + offer.path("ts").asLong())).header("Cookie", cookie);
+        if (body == null) request.GET();
+        else request.header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body));
+        return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private static ObjectNode recoveryRollRequest(JsonNode description, String requestId) {
+        ObjectNode body = MAPPER.createObjectNode();
+        ObjectNode request = body.putObject("request").put("requestId", requestId)
+                .put("expectedRevision", description.path("revision").asLong())
+                .put("expectedHolderRevision", description.path("holderRevision").asLong())
+                .put("expectedOfferRevision", description.path("offerRevision").asLong());
+        request.set("selection", restSelection(description.path("actions").get(0)));
+        return body;
+    }
+
+    private static long seedForDie(int sides, int face) {
+        for (long seed = 0; seed < 100000; seed++)
+            if (new java.util.Random(seed).nextInt(sides) + 1 == face) return seed;
+        throw new AssertionError("No seed found for d" + sides + " = " + face);
+    }
+
     private static ObjectNode claimRequest(JsonNode description, String recipientId, String requestId) {
         ObjectNode body = MAPPER.createObjectNode();
         ObjectNode request = body.putObject("request").put("requestId", requestId).put("recipientId", recipientId)
@@ -1965,6 +1990,310 @@ class OnlineSessionServerTest {
                  "ui":{"label":"Rest benefit","report":"Gained a benefit."}}
                 """));
         java.nio.file.Files.writeString(rules.resolve("ruleset.json"), ruleset.toString());
+    }
+
+    private void installRestRerollRules() throws Exception {
+        installRestRules();
+        var converted = dmmt.online.automation.LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"domain-cards","entries":[
+                 {"id":"reroller","name":"Second Chance","automation":{"restReroll":true,"uses":{"max":1,"per":"rest"}}}]}
+                """);
+        assertEquals(1, converted.converted(), converted.diagnostics().toString());
+        java.nio.file.Files.writeString(compendiumDir.resolve("domain-cards.json"), converted.catalog().toString());
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withArray("rules").add(MAPPER.readTree("""
+                {"id":"healing-reaction","bindings":[{"id":"change","event":"track.changed",
+                   "surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"hp"]},
+                                  {"eq":[{"read":"event.change"},"clear"]}]},
+                 "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],
+                 "ui":{"report":"Healing renewed {actor.name}."}}
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+    }
+
+    private JsonNode recoveryOffer(String cookie, String actorId, String rule, String requestId, int initialFace) throws Exception {
+        diceSeed(seedForDie(4, initialFace));
+        var described = restHttp(cookie, actorId, "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode rest = MAPPER.readTree(described.body());
+        ObjectNode body = restRequest(rest, requestId);
+        addRestMove((ObjectNode) body.path("request"), restDescriptor(rest.path("moves"), rule));
+        var response = restHttp(cookie, actorId, null, body.toString());
+        assertEquals(200, response.statusCode(), response.body());
+        return store.historyTail(campaign.getId(), 100).stream()
+                .filter(message -> message.path("automationRecoveryRoll").isObject())
+                .reduce((first, second) -> second).orElseThrow();
+    }
+
+    @Test
+    void recoveryRollsCommitCrossPlayerReactionsAndExactRetries() throws Exception {
+        installRestRerollRules();
+        String owner = cookie(), other = allyCookie("reroller-owner");
+        campaign.getActors().add(Campaign.Actor.builder().id("patient").name("Mira").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("reroller").name("Ada").ownerId("reroller-owner").build());
+        store.saveSheet(campaign.getId(), "patient", """
+                {"name":"Mira","level":1,"permanentHp":2,"hp":{"slots":8,"on":6},
+                 "stress":{"slots":6,"on":1},"armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0}}
+                """);
+        store.saveSheet(campaign.getId(), "reroller", """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":1},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},
+                 "loadout":[{"name":"Second Chance","instanceId":"chance","automationSource":"domain-cards:reroller"}]}
+                """);
+        JsonNode offer = recoveryOffer(owner, "patient", "rest-tend", "recovery-rest", 1);
+        assertEquals("patient", offer.at("/automationRecoveryRoll/holderId").asText());
+        assertEquals(2, offer.at("/automationRecoveryRoll/remaining").asInt());
+        assertTrue(OnlineSessionServer.playerView(offer).at("/automationRecoveryRoll/receipts").isMissingNode());
+        assertEquals(403, recoveryRollHttp(owner, offer, "reroller", null).statusCode());
+        var old = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port
+                        + "/api/automation/0/reroller/rest-rolls/" + offer.path("id").asLong()
+                        + "/" + offer.path("ts").asLong()))
+                .header("Cookie", other).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(409, old.statusCode());
+        assertEquals("automationCompatibilityMismatch", MAPPER.readTree(old.body()).path("code").asText());
+        var described = recoveryRollHttp(other, offer, "reroller", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode choices = MAPPER.readTree(described.body());
+        assertEquals("rest-reroll", choices.at("/actions/0/ruleId").asText());
+        ObjectNode request = recoveryRollRequest(choices, "recovery-edit");
+        String beforePatient = store.loadSheet(campaign.getId(), "patient");
+        String beforeReroller = store.loadSheet(campaign.getId(), "reroller");
+        ObjectNode stale = request.deepCopy();
+        ((ObjectNode) stale.path("request")).put("expectedHolderRevision", 99);
+        assertEquals(409, recoveryRollHttp(other, offer, "reroller", stale.toString()).statusCode());
+        ObjectNode forged = request.deepCopy();
+        ((ObjectNode) forged.at("/request/selection")).put("sourceInstanceId", "forged");
+        assertTrue(recoveryRollHttp(other, offer, "reroller", forged.toString()).statusCode() >= 400);
+        assertEquals(beforePatient, store.loadSheet(campaign.getId(), "patient"));
+        assertEquals(beforeReroller, store.loadSheet(campaign.getId(), "reroller"));
+        diceSeed(seedForDie(4, 4));
+        var accepted = recoveryRollHttp(other, offer, "reroller", request.toString());
+        assertEquals(200, accepted.statusCode(), accepted.body());
+        JsonNode result = MAPPER.readTree(accepted.body());
+        assertEquals(1, result.path("previous").asInt());
+        assertEquals(4, result.path("kept").asInt());
+        assertEquals(2, result.path("cleared").asInt());
+        JsonNode patient = MAPPER.readTree(store.loadSheet(campaign.getId(), "patient"));
+        JsonNode reroller = MAPPER.readTree(store.loadSheet(campaign.getId(), "reroller"));
+        assertEquals(2, patient.at("/hp/on").asInt());
+        assertEquals(2, patient.at("/hope/on").asInt());
+        assertEquals(1, reroller.at("/automationState/sources/chance/usage/uses").asInt());
+        int history = store.historyTail(campaign.getId(), 100).size();
+        assertEquals(accepted.body(), recoveryRollHttp(other, offer, "reroller", request.toString()).body());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        ((ObjectNode) request.path("request")).put("requestId", "another-edit").put("expectedOfferRevision", 1);
+        assertEquals(409, recoveryRollHttp(other, offer, "reroller", request.toString()).statusCode());
+    }
+
+    @Test
+    void selfRecoveryRerollsUseOneRevisionAndKeepHigherResults() throws Exception {
+        installRestRerollRules();
+        String owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("self").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "self", """
+                {"name":"Ada","level":1,"hp":{"slots":8,"on":8},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},
+                 "loadout":[{"name":"Second Chance","instanceId":"chance","automationSource":"domain-cards:reroller"}]}
+                """);
+        JsonNode offer = recoveryOffer(owner, "self", "rest-tend", "self-roll-rest", 1);
+        JsonNode description = MAPPER.readTree(recoveryRollHttp(owner, offer, "self", null).body());
+        ObjectNode request = recoveryRollRequest(description, "self-roll-edit");
+        diceSeed(seedForDie(4, 4));
+        var accepted = recoveryRollHttp(owner, offer, "self", request.toString());
+        assertEquals(200, accepted.statusCode(), accepted.body());
+        JsonNode sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), "self"));
+        assertEquals(3, sheet.at("/hp/on").asInt());
+        assertEquals(2, sheet.at("/hope/on").asInt());
+        assertEquals(2, sheet.at("/automationState/revision").asInt());
+        assertEquals(1, sheet.at("/automationState/sources/chance/usage/uses").asInt());
+        assertEquals(accepted.body(), recoveryRollHttp(owner, offer, "self", request.toString()).body());
+    }
+
+    @Test
+    void lowerRecoveryRerollIsSpentWithoutChangingTheRecipient() throws Exception {
+        installRestRerollRules();
+        String owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("self").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "self", """
+                {"name":"Ada","level":1,"hp":{"slots":8,"on":8},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},
+                 "loadout":[{"name":"Second Chance","instanceId":"chance","automationSource":"domain-cards:reroller"}]}
+                """);
+        JsonNode offer = recoveryOffer(owner, "self", "rest-tend", "lower-rest", 3);
+        JsonNode description = MAPPER.readTree(recoveryRollHttp(owner, offer, "self", null).body());
+        ObjectNode request = recoveryRollRequest(description, "lower-edit");
+        diceSeed(seedForDie(4, 1));
+        var accepted = recoveryRollHttp(owner, offer, "self", request.toString());
+        assertEquals(200, accepted.statusCode(), accepted.body());
+        JsonNode result = MAPPER.readTree(accepted.body());
+        assertEquals(3, result.path("kept").asInt());
+        assertEquals(0, result.path("cleared").asInt());
+        JsonNode sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), "self"));
+        assertEquals(4, sheet.at("/hp/on").asInt());
+        assertEquals(1, sheet.at("/hope/on").asInt());
+        assertEquals(1, sheet.at("/automationState/sources/chance/usage/uses").asInt());
+    }
+
+    @Test
+    void failedRecoveryRollReactionRollsBackBothSheetsAndTheOffer() throws Exception {
+        installRestRerollRules();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withArray("rules").add(MAPPER.readTree("""
+                {"id":"unaffordable-healing","bindings":[{"id":"change","event":"track.changed",
+                   "surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"hp"]},
+                                  {"eq":[{"read":"event.before.marked"},4]}]},
+                 "do":[{"op":"resource.spend","pool":"actor.hope","amount":6}],
+                 "ui":{"report":"Cannot afford this reaction."}}
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        String owner = cookie(), other = allyCookie("roller-owner");
+        campaign.getActors().add(Campaign.Actor.builder().id("patient").name("Mira").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("roller").name("Ada").ownerId("roller-owner").build());
+        store.saveSheet(campaign.getId(), "patient", """
+                {"name":"Mira","level":1,"hp":{"slots":8,"on":6},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0}}
+                """);
+        store.saveSheet(campaign.getId(), "roller", """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":1},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},
+                 "loadout":[{"name":"Second Chance","instanceId":"chance","automationSource":"domain-cards:reroller"}]}
+                """);
+        JsonNode offer = recoveryOffer(owner, "patient", "rest-tend", "failing-rest", 1);
+        JsonNode description = MAPPER.readTree(recoveryRollHttp(other, offer, "roller", null).body());
+        ObjectNode request = recoveryRollRequest(description, "failing-edit");
+        String beforePatient = store.loadSheet(campaign.getId(), "patient");
+        String beforeRoller = store.loadSheet(campaign.getId(), "roller");
+        int history = store.historyTail(campaign.getId(), 100).size();
+        diceSeed(seedForDie(4, 4));
+        var failed = recoveryRollHttp(other, offer, "roller", request.toString());
+        assertTrue(failed.statusCode() >= 400, failed.body());
+        assertEquals(beforePatient, store.loadSheet(campaign.getId(), "patient"));
+        assertEquals(beforeRoller, store.loadSheet(campaign.getId(), "roller"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        assertFalse(store.automationClaimEntry(campaign.getId(), offer.path("id").asLong(), offer.path("ts").asLong())
+                .at("/automationRecoveryRoll/used").asBoolean());
+    }
+
+    @Test
+    void recoveryRerollsRespectOriginalAllowanceAndCurrentHealingFloor() throws Exception {
+        installRestRerollRules();
+        String owner = cookie(), other = allyCookie("roller-owner");
+        for (String id : List.of("limited", "floor", "roller-a", "roller-b")) {
+            boolean roller = id.startsWith("roller");
+            campaign.getActors().add(Campaign.Actor.builder().id(id).name(id)
+                    .ownerId(roller ? "roller-owner" : playerId()).build());
+            store.saveSheet(campaign.getId(), id, roller ? """
+                    {"name":"%s","hp":{"slots":8,"on":0},"stress":{"slots":6,"on":0},
+                     "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},
+                     "loadout":[{"name":"Second Chance","instanceId":"chance","automationSource":"domain-cards:reroller"}]}
+                    """.formatted(id) : """
+                    {"name":"%s","level":1,"permanentHp":2,"hp":{"slots":8,"on":6},
+                     "stress":{"slots":6,"on":0},"armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0}}
+                    """.formatted(id));
+        }
+        for (String id : List.of("limited", "floor")) {
+            JsonNode offer = recoveryOffer(owner, id, "rest-tend", "rest-" + id, 1);
+            assertEquals(2, offer.at("/automationRecoveryRoll/remaining").asInt());
+            ObjectNode patient = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+            patient.withObject("/hp").put("on", id.equals("limited") ? 8 : 7);
+            if (id.equals("floor")) patient.put("permanentHp", 6);
+            store.saveSheet(campaign.getId(), id, patient.toString());
+            String roller = id.equals("limited") ? "roller-a" : "roller-b";
+            JsonNode description = MAPPER.readTree(recoveryRollHttp(other, offer, roller, null).body());
+            ObjectNode request = recoveryRollRequest(description, "edit-" + id);
+            diceSeed(seedForDie(4, 4));
+            var accepted = recoveryRollHttp(other, offer, roller, request.toString());
+            assertEquals(200, accepted.statusCode(), accepted.body());
+            assertEquals(id.equals("limited") ? 2 : 1, MAPPER.readTree(accepted.body()).path("cleared").asInt());
+            assertEquals(6, MAPPER.readTree(store.loadSheet(campaign.getId(), id)).at("/hp/on").asInt());
+        }
+    }
+
+    @Test
+    void authoredRecoveryRollOffersWorkWithAnotherTrackAndDie() throws Exception {
+        installRestRerollRules();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withArray("rules").add(MAPPER.readTree("""
+                {"id":"custom-relief","bindings":[{"id":"move","event":"downtime.move","surface":"downtime",
+                   "mode":"button","restMove":{"id":"custom-relief","kind":"short"}}],
+                 "do":[{"op":"dice.roll","count":1,"sides":6,"as":"roll"},
+                       {"op":"track.clear","track":"actor.stress","amount":{"read":"result.roll"}},
+                       {"op":"recovery.offerRoll","track":"actor.stress","roll":{"read":"result.roll"},"label":"Relief"}],
+                 "ui":{"label":"Relief","report":"Took a breath."}}
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        String owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("self").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "self", """
+                {"name":"Ada","hp":{"slots":8,"on":1},"stress":{"slots":8,"on":8},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},
+                 "loadout":[{"name":"Second Chance","instanceId":"chance","automationSource":"domain-cards:reroller"}]}
+                """);
+        diceSeed(seedForDie(6, 2));
+        var described = restHttp(owner, "self", "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode rest = MAPPER.readTree(described.body());
+        ObjectNode restBody = restRequest(rest, "custom-rest");
+        addRestMove((ObjectNode) restBody.path("request"), restDescriptor(rest.path("moves"), "custom-relief"));
+        var completed = restHttp(owner, "self", null, restBody.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode offer = store.historyTail(campaign.getId(), 100).stream()
+                .filter(message -> message.path("automationRecoveryRoll").isObject()).findFirst().orElseThrow();
+        JsonNode description = MAPPER.readTree(recoveryRollHttp(owner, offer, "self", null).body());
+        ObjectNode request = recoveryRollRequest(description, "custom-edit");
+        diceSeed(seedForDie(6, 5));
+        var accepted = recoveryRollHttp(owner, offer, "self", request.toString());
+        assertEquals(200, accepted.statusCode(), accepted.body());
+        assertEquals(3, MAPPER.readTree(accepted.body()).path("cleared").asInt());
+        assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "self")).at("/stress/on").asInt());
+    }
+
+    @Test
+    void allyRecoveryOffersRerollTheActualTargetSheet() throws Exception {
+        installRestRerollRules();
+        String owner = cookie(), other = allyCookie("roller-owner");
+        campaign.getActors().add(Campaign.Actor.builder().id("healer").name("Healer").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("target").name("Target").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("roller").name("Roller").ownerId("roller-owner").build());
+        for (String id : List.of("healer", "target"))
+            store.saveSheet(campaign.getId(), id, """
+                    {"name":"%s","level":1,"hp":{"slots":8,"on":6},"stress":{"slots":6,"on":0},
+                     "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0}}
+                    """.formatted(id));
+        store.saveSheet(campaign.getId(), "roller", """
+                {"name":"Roller","hp":{"slots":8,"on":0},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},
+                 "loadout":[{"name":"Second Chance","instanceId":"chance","automationSource":"domain-cards:reroller"}]}
+                """);
+        diceSeed(seedForDie(4, 1));
+        var described = restHttp(owner, "healer", "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode rest = MAPPER.readTree(described.body());
+        ObjectNode body = restRequest(rest, "ally-roll-rest");
+        JsonNode move = restDescriptor(rest.path("moves"), "rest-tend-ally");
+        JsonNode target = java.util.stream.StreamSupport.stream(move.path("targetSelection").path("options").spliterator(), false)
+                .filter(option -> "target".equals(option.path("id").asText())).findFirst().orElseThrow();
+        addRestMove((ObjectNode) body.path("request"), move).putObject("target")
+                .put("recipientId", "target").put("version", target.path("version").asText());
+        var completed = restHttp(owner, "healer", null, body.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode offer = store.historyTail(campaign.getId(), 100).stream()
+                .filter(message -> message.path("automationRecoveryRoll").isObject()).findFirst().orElseThrow();
+        assertEquals("healer", offer.at("/automationRecoveryRoll/sourceActorId").asText());
+        assertEquals("target", offer.at("/automationRecoveryRoll/holderId").asText());
+        JsonNode choices = MAPPER.readTree(recoveryRollHttp(other, offer, "roller", null).body());
+        ObjectNode request = recoveryRollRequest(choices, "ally-roll-edit");
+        String healer = store.loadSheet(campaign.getId(), "healer");
+        diceSeed(seedForDie(4, 4));
+        var accepted = recoveryRollHttp(other, offer, "roller", request.toString());
+        assertEquals(200, accepted.statusCode(), accepted.body());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "target")).at("/hp/on").asInt());
+        assertEquals(healer, store.loadSheet(campaign.getId(), "healer"));
     }
 
     @Test

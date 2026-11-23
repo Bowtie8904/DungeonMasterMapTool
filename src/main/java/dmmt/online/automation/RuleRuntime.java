@@ -1080,6 +1080,40 @@ public final class RuleRuntime {
                     result = RuleExpression.numeric(highest, "/result");
                 } else result = RuleExpression.numeric(total, "/result");
             }
+            case "recovery.offerRoll" -> {
+                if (!"downtime.move".equals(context.at("/event/type").asText())
+                        || !"short".equals(context.at("/event/move/rest").asText()))
+                    throw new Unavailable("restRoll", "Recovery rolls can only be offered during a short-rest move.");
+                int value = whole(op.path("roll"), context, 1, 1000);
+                if (rolls.isEmpty()) throw RuleJson.error("/roll", "A recovery offer needs a preceding single-die roll.");
+                JsonNode sampled = rolls.getLast();
+                int sides = RuleJson.integer(sampled.get("sides"), "/roll/sides", 2, 1000);
+                if (sampled.path("faces").size() != 1 || sampled.path("faces").get(0).asInt() != value
+                        || sampled.path("total").asInt() != value)
+                    throw RuleJson.error("/roll", "A recovery offer needs the last sampled single-die result.");
+                String path = op.path("track").asText();
+                String[] parts = path.split("\\.", 2);
+                ObjectNode holder = RuleJson.object(context.get(parts[0]), "/" + parts[0]);
+                ObjectNode track = RuleJson.object(holder.get(parts[1]), "/" + path);
+                int capacity = RuleJson.integer(track.get("capacity"), "/" + path + "/capacity", 0, 1000);
+                int marked = RuleJson.integer(track.get("marked"), "/" + path + "/marked", 0, capacity);
+                int remaining = Math.max(0, marked - SheetProjection.markedFloor(holder, track, capacity, "/" + path));
+                String label = RuleTemplate.render(op.path("label").asText(), context);
+                ObjectNode roll = RuleJson.JSON.createObjectNode().put("id", "recovery-" + java.util.UUID.randomUUID());
+                ObjectNode contribution = roll.putArray("contributions").addObject()
+                        .put("id", "recovery").put("kind", "dice").put("role", "downtime")
+                        .put("sourceId", program.sourceId()).put("label", label);
+                contribution.putArray("dice").addObject().put("id", "recovery.d1")
+                        .put("sides", sides).put("face", value).put("kept", true).put("origin", "rolled");
+                ArrayNode outbox = context.has("outbox") ? (ArrayNode) context.get("outbox") : context.putArray("outbox");
+                if (outbox.size() >= 32) throw RuleJson.error("/outbox", "Too many host requests.");
+                ObjectNode request = outbox.addObject().put("kind", kind).put("label", label)
+                        .put("sourceActorId", RuleJson.id(context.at("/actor/id"), "/actor/id"))
+                        .put("holderId", RuleJson.id(holder.get("id"), "/" + parts[0] + "/id"))
+                        .put("track", parts[1]).put("remaining", remaining);
+                request.set("roll", StructuredRoll.validate(roll));
+                result = request.deepCopy();
+            }
             case "state.set", "state.increment" -> {
                 ObjectNode state = (ObjectNode) context.get("state");
                 String slot = op.path("slot").asText();

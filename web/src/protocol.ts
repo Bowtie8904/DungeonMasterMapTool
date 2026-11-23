@@ -210,6 +210,7 @@ export interface ChatMessage {
   actorId?: string;
   restDice?: import('./daggerheart/rest').RestDie[];
   automationClaim?: { sourceActorId: string; sourceInstanceId: string; group: string; recipientActorId?: string };
+  automationRecoveryRoll?: { sourceActorId: string; holderId: string; track: string; used: boolean };
   actionBenefits?: { options: import('./daggerheart/engine').ChatBenefit[]; actorIds: string[]; claimedBy: string[]; sessionId: string; allowSourceOwner?: boolean; stressCapacity?: number; maxClaims?: number; excludeSourceActor?: boolean };
   actionDamage?: { label: string; damage: NonNullable<import('./daggerheart/engine').ActionDef['damage']> };
   actionFollowUp?: { name: string; id: string; label: string };

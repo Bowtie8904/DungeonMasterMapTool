@@ -38,9 +38,10 @@ public final class AutomationHost {
     private static final int MAX_PARTY_RECOVERIES = 1024;
     private static final int MAX_REACTION_PROJECTION_PASSES = 16;
     private static final Set<String> STAGED_REST_COMMANDS = Set.of(
-            "countdown.start", "limits.refresh", "effect.endElsewhere", "table.gain", "table.spend", "claim.offer", "limit.restore");
+            "countdown.start", "limits.refresh", "effect.endElsewhere", "table.gain", "table.spend", "claim.offer", "limit.restore",
+            "recovery.offerRoll");
     private static final Set<String> STAGED_TARGET_REST_COMMANDS = Set.of(
-            "countdown.start", "limits.refresh", "table.gain", "table.spend", "claim.offer", "limit.restore");
+            "countdown.start", "limits.refresh", "table.gain", "table.spend", "claim.offer", "limit.restore", "recovery.offerRoll");
     static final String RULESET_SOURCE = "ruleset:base";
 
     /** Compiled automation keyed by fully qualified source ID. */
@@ -948,8 +949,8 @@ public final class AutomationHost {
     }
 
     /** Stages a host-owned clear against the holder's sheet; the caller must settle commands and commit it. */
-    ObjectNode stageHolderRecovery(Pack pack, ObjectNode sheet, ObjectNode parentEvent, String holderId,
-                                   String track, int requested, RandomGenerator random) {
+    public ObjectNode stageHolderRecovery(Pack pack, ObjectNode sheet, ObjectNode parentEvent, String holderId,
+                                          String track, int requested, RandomGenerator random) {
         RuleJson.object(sheet, "/sheet");
         RuleJson.object(parentEvent, "/event");
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(holderId), "/holderId");
@@ -986,6 +987,56 @@ public final class AutomationHost {
             replace(sheet, working);
         }
         return response;
+    }
+
+    /** Describes the current owner's authored actions for a host-saved recovery roll. */
+    public ObjectNode describeRecoveryRoll(Pack pack, ObjectNode sheet, ObjectNode event) {
+        ObjectNode copy = sheet.deepCopy();
+        ArrayNode actions = RuleJson.JSON.createArrayNode();
+        for (var candidate : candidates(pack, copy, event)) {
+            for (var ref : candidate.program().bindings("rest.roll", "chat")) {
+                JsonNode binding = RuleDispatcher.binding(candidate.program().rule(ref.ruleId()), ref.bindingId());
+                if (!"button".equals(binding.path("mode").asText())
+                        || !allowed(binding.path("audience").asText("self"), "self")
+                        || binding.has("targetSelection") || binding.has("claimGroup")) continue;
+                if (ref.forEach()) actions.addAll(RuleRuntime.describeEach(candidate.program(), ref.ruleId(), ref.bindingId(), candidate.context()));
+                else actions.add(RuleRuntime.describe(candidate.program(), ref.ruleId(), ref.bindingId(), candidate.context()));
+            }
+        }
+        ObjectNode result = RuleJson.JSON.createObjectNode().put("revision", revision(copy));
+        result.set("actions", actions);
+        return result;
+    }
+
+    /** Executes one authored roll edit on a private owner sheet; the caller settles the recovery and saved offer. */
+    public ObjectNode stageRecoveryRoll(Pack pack, ObjectNode sheet, ObjectNode event, ObjectNode selection,
+                                        long expectedRevision, RandomGenerator random) {
+        ObjectNode working = sheet.deepCopy();
+        if (revision(working) != expectedRevision)
+            throw new RuleRuntime.Unavailable("stale", "The character changed. Reopen this roll.");
+        var candidates = candidates(pack, working, event);
+        ObjectNode request = RuleJson.JSON.createObjectNode();
+        request.putArray("selections").add(selection.deepCopy());
+        var intent = selections(request, candidates, expectedRevision, "self", "chat", false).getFirst();
+        var candidate = candidates.stream().filter(item -> intent.sourceInstanceId().equals(item.instanceId()))
+                .findFirst().orElseThrow(() -> new RuleRuntime.Unavailable("source", "This source is no longer active."));
+        JsonNode binding = RuleDispatcher.binding(candidate.program().rule(intent.ruleId()), intent.bindingId());
+        if (!"rest.roll".equals(binding.path("event").asText()) || !"button".equals(binding.path("mode").asText())
+                || binding.has("targetSelection") || binding.has("claimGroup"))
+            throw RuleJson.error("/selection", "Choose an offered recovery-roll action.");
+        ObjectNode state = projection.state(working);
+        var resolved = RuleDispatcher.executeSelectedWithOwnerReactions(candidates, intent, random, pack.programs(),
+                ownerMoveProjection(pack, working, state, candidates));
+        long published = resolved.actions().stream().mapToLong(action -> action.publishedRolls().size()).sum();
+        if (published != 1) throw RuleJson.error("/selection", "A recovery-roll action must publish one edited roll.");
+        ObjectNode result = applyResolved(pack, working, state, event, resolved.contexts(), resolved.actions(), resolved.outbox());
+        if (!result.path("event").path("blocked").isEmpty())
+            throw new RuleRuntime.Unavailable("blocked", result.at("/event/blocked/0/reason").asText());
+        for (JsonNode command : result.path("outbox"))
+            if (!Set.of("limits.refresh", "table.gain", "table.spend", "countdown.start").contains(command.path("kind").asText()))
+                throw new RuleRuntime.Unavailable("restCommand", "This recovery-roll action requires unsupported ordered settlement.");
+        replace(sheet, working);
+        return result;
     }
 
     private RuleDispatcher.OwnerProjection ownerRecoveryProjection(Pack pack, ObjectNode sheet, ObjectNode state,
