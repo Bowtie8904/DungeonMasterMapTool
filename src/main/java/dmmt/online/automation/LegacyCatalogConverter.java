@@ -4193,7 +4193,10 @@ public final class LegacyCatalogConverter {
         boolean clearAllTrack = "all".equals(amount.asText()) && "clear".equals(op) && TRACKS.containsKey(resource);
         boolean clearAllPool = "all".equals(amount.asText()) && "clear".equals(op) && pools.has(resource);
         boolean markAllTrack = "all".equals(amount.asText()) && "mark".equals(op) && TRACKS.containsKey(resource);
+        boolean clearAllScars = "all".equals(amount.asText()) && "clear".equals(op)
+                && "scars".equals(resource) && !pools.has(resource);
         JsonNode value = clearAllTrack || clearAllPool || markAllTrack ? null : amount(amount);
+        if (clearAllScars) value = read(operationTarget + ".scars");
         var rolled = amount.isTextual() ? ACTION_DAMAGE.matcher(amount.asText().trim()) : null;
         if (value == null && rolled != null && rolled.matches() && rolled.group(1).length() <= 2 && rolled.group(2).length() <= 3
                 && (rolled.group(4) == null || rolled.group(4).length() <= 6)) {
@@ -4225,6 +4228,8 @@ public final class LegacyCatalogConverter {
                     if (value != null) converted.set("amount", value);
                     else if (markAllTrack) converted.putObject("amount").putArray("subtract").add(read(track + ".capacity")).add(read(track + ".marked"));
                     else converted.putObject("amount").put("read", track + ".marked");
+                } else if ("scars".equals(resource) && !pools.has(resource)) {
+                    scarCapacity(out, operationTarget, value, "mark".equals(op));
                 } else if ("clear".equals(op) && clearAllPool) {
                     ObjectNode converted = out.addObject().put("op", "pool.spend").put("pool", resource);
                     if ("recipient".equals(operationTarget)) converted.put("owner", "recipient");
@@ -4233,12 +4238,8 @@ public final class LegacyCatalogConverter {
             }
             case "gain" -> {
                 if ("hope".equals(resource)) out.addObject().put("op", "resource.gain").put("pool", operationTarget + ".hope").set("amount", value);
-                else if ("scars".equals(resource) && !pools.has(resource)) {
-                    // Scars take Hope slots, so a gain never exceeds the Hope slots still available.
-                    ObjectNode capped = RuleJson.JSON.createObjectNode();
-                    capped.putArray("min").add(value).add(read(operationTarget + ".hope.max"));
-                    out.addObject().put("op", "resource.gain").put("pool", operationTarget + ".scars").set("amount", capped);
-                }
+                else if ("scars".equals(resource) && !pools.has(resource))
+                    scarCapacity(out, operationTarget, value, true);
                 else if (pools.has(resource)) {
                     ObjectNode converted = out.addObject().put("op", "pool.gain").put("pool", resource);
                     if ("recipient".equals(operationTarget)) converted.put("owner", "recipient");
@@ -4248,6 +4249,11 @@ public final class LegacyCatalogConverter {
             }
             default -> p.add(path + "/op", "Unsupported step: " + op);
         }
+    }
+
+    private static void scarCapacity(ArrayNode out, String target, JsonNode amount, boolean reserve) {
+        out.addObject().put("op", "track.capacity").put("track", target + ".hope")
+                .put("counter", target + ".scars").put("direction", reserve ? "reserve" : "release").set("amount", amount);
     }
 
     /** A token effect ({@code tokenResource}) ends as soon as its pool of tokens is empty. */

@@ -80,6 +80,26 @@ public final class SheetProjection {
                             "A live lock collection must name a projected collection or engine fact.");
             }
         });
+        Set<String> reserveCounters = new HashSet<>();
+        actor.fields().forEachRemaining(field -> {
+            JsonNode reserve = field.getValue().path("capacityReserve");
+            if (reserve.isMissingNode()) return;
+            String counter = reserve.path("counter").asText();
+            JsonNode target = actor.path(counter);
+            if (counter.equals(field.getKey()) || !"value".equals(target.path("kind").asText())
+                    || !target.path("writable").asBoolean() || !reserveCounters.add(counter))
+                throw RuleJson.error("/actor/" + field.getKey() + "/capacityReserve/counter",
+                        "A capacity reserve requires its own writable numeric fact.");
+            String counterPath = target.path("path").asText();
+            String trackPath = field.getValue().path("path").asText();
+            for (String part : List.of(reserve.path("capacity").asText(),
+                    "capacity".equals(reserve.path("capacity").asText()) ? "marked" : "value",
+                    reserve.path("total").asText(""))) {
+                if (!part.isEmpty() && overlaps(counterPath, trackPath + "." + field.getValue().path("fields").path(part).asText()))
+                    throw RuleJson.error("/actor/" + field.getKey() + "/capacityReserve/counter",
+                            "The reserve counter must not overlap a track field.");
+            }
+        });
         if (spec.has("stats")) {
             JsonNode stats = spec.get("stats");
             if (!stats.isArray() || stats.size() > 64) throw RuleJson.error("/stats", "Expected up to 64 derived statistics.");
@@ -146,7 +166,7 @@ public final class SheetProjection {
                 if (fact.has("default") && !fact.get("default").isValueNode()) throw RuleJson.error(at + "/default", "Expected a plain default value.");
             }
             case "object" -> {
-                RuleJson.fields(fact, at, "kind", "path", "fields", "writable", "atLeast", "max", "markedFloor");
+                RuleJson.fields(fact, at, "kind", "path", "fields", "writable", "atLeast", "max", "markedFloor", "capacityReserve");
                 ObjectNode fields = RuleJson.object(fact.get("fields"), at + "/fields");
                 if (fields.isEmpty()) throw RuleJson.error(at + "/fields", "Expected mapped fields.");
                 fields.fields().forEachRemaining(field -> path(field.getValue(), at + "/fields/" + field.getKey()));
@@ -157,6 +177,31 @@ public final class SheetProjection {
                     if (!fields.has(field.getValue().asText())) throw RuleJson.error(at + "/atLeast", "Expected a mapped field.");
                 });
                 if (fact.has("max")) RuleJson.integer(fact.get("max"), at + "/max", 1, 1_000_000);
+                if (fact.has("capacityReserve")) {
+                    JsonNode reserve = fact.get("capacityReserve");
+                    RuleJson.fields(reserve, at + "/capacityReserve", "capacity", "counter", "total");
+                    String capacity = RuleJson.text(reserve.get("capacity"), at + "/capacityReserve/capacity");
+                    String expected = fields.has("capacity") ? "capacity" : "max";
+                    String filled = "capacity".equals(capacity) ? "marked" : "value";
+                    if (!expected.equals(capacity) || !fields.has(capacity)
+                            || !fields.has(filled) || !contains(fact.path("writable"), capacity)
+                            || !contains(fact.path("writable"), filled)
+                            || overlaps(fields.path(capacity).asText(), fields.path(filled).asText()))
+                        throw RuleJson.error(at + "/capacityReserve/capacity", "The track capacity and value must be distinct, mapped and writable.");
+                    RuleJson.id(reserve.get("counter"), at + "/capacityReserve/counter");
+                    if (reserve.has("total")) {
+                        String total = RuleJson.id(reserve.get("total"), at + "/capacityReserve/total");
+                        if (!fields.has(total) || total.equals(capacity) || total.equals(filled)
+                                || contains(fact.path("writable"), total)
+                                || overlaps(fields.path(total).asText(), fields.path(capacity).asText())
+                                || overlaps(fields.path(total).asText(), fields.path(filled).asText()))
+                            throw RuleJson.error(at + "/capacityReserve/total", "The total must be a mapped read-only field.");
+                        fact.path("atLeast").fieldNames().forEachRemaining(path -> {
+                            if (overlaps(path, fields.path(total).asText()))
+                                throw RuleJson.error(at + "/capacityReserve/total", "The base total cannot be adjusted by atLeast.");
+                        });
+                    }
+                }
                 if (fact.has("markedFloor")) {
                     if (!fields.has("marked") || !fields.has("capacity") || fields.has("minimumMarkedBase")
                             || fields.has("minimumMarkedCollections") || fields.has("minimumCapacity"))
@@ -216,6 +261,15 @@ public final class SheetProjection {
         if (fact.has("writable")) RuleExpression.bool(fact.get("writable"), at + "/writable");
         if (fact.has("min")) RuleJson.integer(fact.get("min"), at + "/min", -1_000_000, 1_000_000);
         if (fact.has("max")) RuleJson.integer(fact.get("max"), at + "/max", -1_000_000, 1_000_000);
+    }
+
+    private static boolean contains(JsonNode values, String expected) {
+        for (JsonNode value : values) if (expected.equals(value.asText())) return true;
+        return false;
+    }
+
+    private static boolean overlaps(String left, String right) {
+        return left.equals(right) || left.startsWith(right + ".") || right.startsWith(left + ".");
     }
 
     static String path(JsonNode node, String at) {
@@ -384,6 +438,7 @@ public final class SheetProjection {
 
     /** Copies declared writable facts from an executed actor snapshot back into the sheet. */
     public void write(ObjectNode sheet, ObjectNode before, ObjectNode after) {
+        validateCapacityReserves(sheet, before, after);
         spec.path("actor").fields().forEachRemaining(entry -> {
             String key = entry.getKey();
             JsonNode fact = entry.getValue();
@@ -419,6 +474,46 @@ public final class SheetProjection {
                 case "engine" -> set(sheet, fact.path("path").asText(), next.deepCopy());
                 default -> throw RuleJson.error(at, "This actor fact is read-only.");
             }
+        });
+    }
+
+    private void validateCapacityReserves(ObjectNode sheet, ObjectNode before, ObjectNode after) {
+        spec.path("actor").fields().forEachRemaining(entry -> {
+            JsonNode reserve = entry.getValue().path("capacityReserve");
+            if (reserve.isMissingNode()) return;
+            String name = entry.getKey(), capacity = reserve.path("capacity").asText(), counter = reserve.path("counter").asText();
+            JsonNode oldTrack = before.path(name), newTrack = after.path(name);
+            String at = "/actor/" + name + "/capacityReserve";
+            JsonNode storedCounter = get(sheet, spec.path("actor").path(counter).path("path").asText());
+            if (!storedCounter.isMissingNode()) RuleJson.integer(storedCounter, at + "/counter", 0, 1000);
+            if (reserve.has("total")) {
+                String field = reserve.path("total").asText();
+                JsonNode rawTrack = get(sheet, entry.getValue().path("path").asText());
+                JsonNode storedTotal = rawTrack.isObject()
+                        ? get((ObjectNode) rawTrack, entry.getValue().path("fields").path(field).asText())
+                        : rawTrack;
+                if (!storedTotal.isMissingNode()) RuleJson.integer(storedTotal, at + "/total", 0, 1000);
+            }
+            if (oldTrack.path(capacity).equals(newTrack.path(capacity)) && before.path(counter).equals(after.path(counter))) return;
+            RuleJson.object(oldTrack, at);
+            RuleJson.object(newTrack, at);
+            int oldCapacity = RuleJson.integer(oldTrack.get(capacity), at + "/capacity", 0, 1000);
+            int newCapacity = RuleJson.integer(newTrack.get(capacity), at + "/capacity", 0, 1000);
+            int oldCounter = RuleJson.integer(before.get(counter), at + "/counter", 0, 1000);
+            int newCounter = RuleJson.integer(after.get(counter), at + "/counter", 0, 1000);
+            int total = oldCapacity + oldCounter;
+            if (total > 1000 || total != newCapacity + newCounter)
+                throw RuleJson.error(at, "Capacity and its reserve must change together.");
+            if (reserve.has("total")) {
+                String field = reserve.path("total").asText();
+                if (!oldTrack.path(field).equals(newTrack.path(field)))
+                    throw RuleJson.error(at + "/total", "The base total cannot change with the reserve.");
+                if (oldTrack.has(field) && RuleJson.integer(oldTrack.get(field), at + "/total", 0, 1000) != total)
+                    throw RuleJson.error(at + "/total", "Capacity and reserve do not match the stored total.");
+            }
+            String filled = oldTrack.has("marked") ? "marked" : "value";
+            RuleJson.integer(oldTrack.get(filled), at + "/" + filled, 0, oldCapacity);
+            RuleJson.integer(newTrack.get(filled), at + "/" + filled, 0, newCapacity);
         });
     }
 

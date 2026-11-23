@@ -482,7 +482,7 @@ consumables,/entries/167/automation,invisibility-potion [Invisibility Potion],ac
 consumables,/entries/168/automation,formoid-serum [Formoid Serum],actions,converted-candidate,,not captured,unverified
 consumables,/entries/169/automation,steelskin-salve [Steelskin Salve],actions,converted-candidate,,not captured,unverified
 consumables,/entries/170/automation,godlings-pomelo [Godling’s Pomelo],actions,converted-candidate,,not captured,unverified
-consumables,/entries/171/automation,snakeskin-spirit [Snakeskin Spirit],actions,unconverted,/entries/171/automation/actions/0/steps/0/resource: Unsupported track: scars,not captured,unverified
+consumables,/entries/171/automation,snakeskin-spirit [Snakeskin Spirit],actions,converted-candidate,,not captured,unverified
 consumables,/entries/172/automation,magic-users-malison [Magic-User’s Malison],actions,converted-candidate,,not captured,unverified
 consumables,/entries/173/automation,quintessential-severant [Quintessential Severant],actions,converted-candidate,,not captured,unverified
 consumables,/entries/174/automation,mask-of-the-echoed-self [Mask of the Echoed Self],actions,converted-candidate,,not captured,unverified

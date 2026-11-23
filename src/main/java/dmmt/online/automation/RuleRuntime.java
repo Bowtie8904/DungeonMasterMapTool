@@ -1200,12 +1200,32 @@ public final class RuleRuntime {
                 String capacity = track.has("capacity") ? "capacity" : "max";
                 String filled = track.has("marked") ? "marked" : "value";
                 int current = RuleJson.integer(track.get(capacity), "/" + path + "/" + capacity, 0, 1000);
-                int next = Math.max(0, Math.min(1000, current + whole(op.path("by"), context, -1000, 1000)));
+                int change = op.has("amount") ? whole(op.path("amount"), context, 0, 1_000_000)
+                        * ("reserve".equals(op.path("direction").asText()) ? -1 : 1)
+                        : whole(op.path("by"), context, -1000, 1000);
+                int next = Math.max(0, Math.min(1000, current + change));
+                ObjectNode owner = null;
+                String counterName = null;
+                int reserved = 0;
+                if (op.has("counter")) {
+                    String counter = op.path("counter").asText();
+                    int dot = counter.indexOf('.');
+                    owner = RuleJson.object(context.get(counter.substring(0, dot)), "/" + counter);
+                    counterName = counter.substring(dot + 1);
+                    reserved = RuleJson.integer(owner.get(counterName), "/" + counter, 0, 1000);
+                    if (current + reserved > 1000)
+                        throw RuleJson.error("/" + counter, "The capacity and reserve exceed the supported total.");
+                    if (track.has("total") && RuleJson.integer(track.get("total"), "/" + path + "/total", 0, 1000) != current + reserved)
+                        throw RuleJson.error("/" + path + "/total", "The capacity and reserve do not match the stored total.");
+                    RuleJson.integer(track.get(filled), "/" + path + "/" + filled, 0, current);
+                    next = Math.min(next, current + reserved);
+                }
                 if (track.has("minimumCapacity") && next < RuleJson.integer(track.get("minimumCapacity"),
                         "/" + path + "/minimumCapacity", 0, 1000))
                     throw new Unavailable("capacity", "Track capacity cannot be reduced below its permanent marks.");
                 track.put(capacity, next);
                 if (track.has(filled) && track.path(filled).asInt() > next) track.put(filled, next);
+                if (owner != null) owner.put(counterName, reserved + current - next);
                 result = RuleExpression.numeric(next - current, "/result");
             }
             case "collection.add", "collection.remove" -> {

@@ -17,7 +17,7 @@ This map identifies existing tests that characterize the currently shipped engin
 
 ## Inventory status
 
-`automation-parity-ledger.csv` contains one row for each of the 1,087 automation blocks processed by the current converter dry run. The report classified 1,012 as converter candidates and 75 as unconverted; diagnostics are copied to the corresponding rows. A converter candidate only means the converter accepted the block. It does **not** prove that the replacement has the same behavior.
+`automation-parity-ledger.csv` contains one row for each of the 1,087 automation blocks processed by the current converter dry run. The report classified 1,013 as converter candidates and 74 as unconverted; diagnostics are copied to the corresponding rows. A converter candidate only means the converter accepted the block. It does **not** prove that the replacement has the same behavior.
 
 [`healing-hands.json`](../src/test/resources/dmmt/automation/parity/healing-hands.json) records a seeded successful cast, persisted healer/recipient tracks, report text, invalid self-target, duplicate and locked-target retries, and recipient long-rest expiry. Both the legacy HTTP/WebSocket path and the converted format-2 HTTP path consume the fixture. The converted host protects the stored lock from sheet edits and tests short/long expiry in isolation, not through the unfinished live rest workflow. The fixture does not cover the card's Stress or failure options.
 

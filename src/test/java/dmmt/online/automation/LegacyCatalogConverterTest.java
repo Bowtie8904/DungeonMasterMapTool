@@ -1533,6 +1533,8 @@ class LegacyCatalogConverterTest {
             int face = Integer.parseInt(report.replaceAll("^Fixture: rolled (\\d+)\\..*$", "$1"));
             seen.add(face);
             assertEquals(face == 1 ? 1 : 0, out.at("/actor/scars").asInt(), report);
+            assertEquals(face == 1 ? 0 : 1, out.at("/actor/hope/max").asInt(), report);
+            assertEquals(face == 1 ? 0 : 1, out.at("/actor/hope/value").asInt(), report);
             assertEquals(face >= 2 && face <= 4 ? 2 : 5, out.at("/actor/stress/marked").asInt(), report);
             assertEquals(face >= 5 ? 2 : 4, out.at("/actor/hp/marked").asInt(), report);
         }
@@ -1546,6 +1548,7 @@ class LegacyCatalogConverterTest {
                     List.of(new RuleRuntime.Intent("drink", "sheet", "fixture", 0, RuleJson.JSON.createObjectNode())),
                     new java.util.Random(seed));
             assertEquals(6, resolution.contexts().getFirst().at("/actor/scars").asInt());
+            assertEquals(0, resolution.contexts().getFirst().at("/actor/hope/max").asInt());
         }
     }
 

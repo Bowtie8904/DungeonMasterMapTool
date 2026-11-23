@@ -67,7 +67,7 @@ public final class RuleCompiler {
             Map.entry("effect.endLabeled", List.of("label", "target")),
             Map.entry("limit.reset", List.of("limit")),
             Map.entry("limit.modify", List.of("limit", "by")),
-            Map.entry("track.capacity", List.of("track", "by")),
+            Map.entry("track.capacity", List.of("track", "by", "counter", "amount", "direction")),
             Map.entry("collection.add", List.of("target", "collection", "item")),
             Map.entry("collection.remove", List.of("target", "collection", "item")),
             Map.entry("damage.deal", List.of("to", "amount", "label")),
@@ -1273,7 +1273,7 @@ public final class RuleCompiler {
                 expressionReferences(value, at, true, partial, visitor);
             else if ("plan".equals(field) && "roll.resolve".equals(name)
                     || !Set.of("pool", "track", "slot", "role", "effect", "target", "owner", "limit",
-                    "choose", "maxDice", "collection", "to", "plan", "field").contains(field))
+                    "choose", "maxDice", "collection", "to", "plan", "field", "counter", "direction").contains(field))
                 expressionReferences(value, at, usesDieContext, partial, visitor);
         }
         if (op.has("if")) expressionReferences(op.get("if"), path + "/if", usesDieContext, partial, visitor);
@@ -1464,6 +1464,23 @@ public final class RuleCompiler {
         if ("roll.reroll".equals(op) && !Set.of("new", "higher").contains(operation.path("choose").asText()))
             throw RuleJson.error(path + "/choose", "Expected new or higher.");
         if ("roll.explode".equals(op)) RuleJson.integer(operation.get("maxDice"), path + "/maxDice", 1, 32);
+        if ("track.capacity".equals(op) && operation.has("counter")) {
+            String track = RuleJson.text(operation.get("track"), path + "/track");
+            String counter = RuleJson.text(operation.get("counter"), path + "/counter");
+            if (!track.matches("(actor|recipient)\\.[a-zA-Z][a-zA-Z0-9_-]*")
+                    || !counter.matches("(actor|recipient)\\.[a-zA-Z][a-zA-Z0-9_-]*")
+                    || !counter.substring(0, counter.indexOf('.')).equals(track.substring(0, track.indexOf('.')))
+                    || counter.equals(track))
+                throw RuleJson.error(path + "/counter", "The reserve counter must be another fact of the track's owner.");
+        }
+        if ("track.capacity".equals(op)) {
+            boolean directed = operation.has("amount") || operation.has("direction");
+            if (directed && (operation.has("by") || !operation.has("counter")
+                    || !operation.has("amount") || !Set.of("reserve", "release").contains(operation.path("direction").asText())))
+                throw RuleJson.error(path, "A directed capacity change requires counter, amount and reserve/release direction instead of by.");
+            if (!directed && !operation.has("by"))
+                throw RuleJson.error(path + "/by", "A capacity change needs by or a directed amount.");
+        }
         if ("roll.annotate".equals(op)) {
             RuleExpression.validate(operation.get("from"), path + "/from");
             RuleJson.id(operation.get("field"), path + "/field");
@@ -1496,6 +1513,8 @@ public final class RuleCompiler {
                     if (cost && target.startsWith("recipient."))
                         throw RuleJson.error(path + "/" + field, "Costs are charged to the source actor; put target changes in the action steps.");
                 } else throw RuleJson.error(path + "/" + field, "Invalid operation target.");
+            } else if (Set.of("counter", "direction").contains(field) && "track.capacity".equals(op)) {
+                continue;
             } else if ("slot".equals(field)) {
                 String name = RuleJson.text(value, path + "/slot");
                 slot(name, path + "/slot");
@@ -1567,6 +1586,7 @@ public final class RuleCompiler {
                 && !"owner".equals(field)
                 && !("roll.resolve".equals(op) && "metadata".equals(field))
                 && !("damage.resolve".equals(op) && "armor".equals(field))
+                && !("track.capacity".equals(op) && Set.of("by", "counter", "amount", "direction").contains(field))
                 && !("claim.offer".equals(op) && "limit".equals(field))
                 && !("inventory.grant".equals(op) && Set.of("to", "tag", "max", "scope").contains(field)))
             throw RuleJson.error(path + "/" + field, "Missing operation field.");

@@ -3953,6 +3953,59 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void automationScarActionsPersistHopeCapacityAndReplayWithoutChangingItTwice() throws Exception {
+        automationCompendium();
+        Path classes = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(classes.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        automation.withArray("rules").addAll((ArrayNode) MAPPER.readTree("""
+                [
+                 {"id":"scar","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"track.capacity","track":"actor.hope","counter":"actor.scars","by":-1}],
+                  "ui":{"label":"Gain a scar"}},
+                 {"id":"heal-scar","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"track.capacity","track":"actor.hope","counter":"actor.scars","by":1}],
+                  "ui":{"label":"Heal a scar"}},
+                 {"id":"unpaired","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"resource.gain","pool":"actor.scars","amount":1}],"ui":{"label":"Invalid scar"}}
+                ]
+                """));
+        java.nio.file.Files.writeString(classes, catalog.toString());
+        campaign.getActors().add(Campaign.Actor.builder().id("scarred").name("Scarred").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "scarred", """
+                {"name":"Scarred","scars":0,"hope":{"total":6,"slots":6,"on":6},
+                 "hp":{"slots":6,"on":0},"stress":{"slots":6,"on":0},"armorTrack":{"slots":3,"on":0},
+                 "features":[{"name":"Steady","instanceId":"s","automationSource":"classes:tester:features:steady"}]}
+                """);
+        String cookie = cookie();
+        ObjectNode body = MAPPER.createObjectNode();
+        ObjectNode request = body.putObject("request").put("requestId", "scar").put("expectedRevision", 0);
+        request.putArray("selections").addObject().put("sourceInstanceId", "s").put("ruleId", "scar").put("bindingId", "sheet");
+        var gain = automationHttp(cookie, "scarred", body.toString());
+        assertEquals(200, gain.statusCode(), gain.body());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "scarred"));
+        assertEquals(1, saved.path("scars").asInt());
+        assertEquals(5, saved.at("/hope/slots").asInt());
+        assertEquals(5, saved.at("/hope/on").asInt());
+        assertEquals(6, saved.at("/hope/total").asInt());
+        assertEquals(gain.body(), automationHttp(cookie, "scarred", body.toString()).body());
+        assertEquals(saved, MAPPER.readTree(store.loadSheet(campaign.getId(), "scarred")));
+
+        request.put("requestId", "unpaired").put("expectedRevision", 1);
+        ((ObjectNode) request.at("/selections/0")).put("ruleId", "unpaired");
+        assertEquals(400, automationHttp(cookie, "scarred", body.toString()).statusCode());
+        assertEquals(saved, MAPPER.readTree(store.loadSheet(campaign.getId(), "scarred")));
+        request.put("requestId", "heal");
+        ((ObjectNode) request.at("/selections/0")).put("ruleId", "heal-scar");
+        var heal = automationHttp(cookie, "scarred", body.toString());
+        assertEquals(200, heal.statusCode(), heal.body());
+        JsonNode healed = MAPPER.readTree(new CampaignStore(store.root()).loadSheet(campaign.getId(), "scarred"));
+        assertEquals(0, healed.path("scars").asInt());
+        assertEquals(6, healed.at("/hope/slots").asInt());
+        assertEquals(5, healed.at("/hope/on").asInt());
+    }
+
+    @Test
     void sceneAndSessionResetsRejectUnclassifiableAndIncompleteCatalogsAtomically() throws Exception {
         automationCompendium();
         Path classes = compendiumDir.resolve("classes.json");
