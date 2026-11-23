@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { CompendiumFile } from './compendium';
 import { emptyCharacter, type CharacterSheet } from './data';
@@ -14,6 +16,14 @@ import { updateCharacterAutomation } from './persist';
 
 const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
 const items: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/items.json', import.meta.url), 'utf8'));
+const wardenParity: {
+  classId: string; feature: string; action: string;
+  before: { hope: number; hopeSlots: number; hpMarked: number; insufficientHope: number };
+  cases: { face: number; report: string }[];
+  expected: { dice: string; hopeAfter: number; usesAfter: number; hpMarkedAfter: number;
+    shortRestResets: boolean; longRestResets: boolean; hopeAfterSecondUse: number };
+} = JSON.parse(readFileSync(join(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..',
+  'src', 'test', 'resources', 'dmmt', 'automation', 'parity', 'warden-protection.json'), 'utf8'));
 function druid(level = 8) {
   const c = emptyCharacter('Druid');
   Object.assign(c, { className: 'Druid', subclass: 'Warden of the Elements', level });
@@ -220,6 +230,44 @@ describe('Druid automation', () => {
     expect(c.hope.on).toBe(4);
     const regen = action(c, 'Regeneration');
     expect(regen.action).toMatchObject({ target: 'actor', cost: { hope: 3 }, steps: [{ op: 'clear', resource: 'hp', amount: '1d4' }] });
+  });
+  it('matches the shared Warden report and rest fixture', () => {
+    for (const sample of wardenParity.cases) {
+      const c = druid();
+      c.hope.slots = wardenParity.before.hopeSlots;
+      c.hope.on = wardenParity.before.hope;
+      c.hp.on = wardenParity.before.hpMarked;
+      const entry = catalog.entries.find(item => item.id === wardenParity.classId)!;
+      c.features.push(...entry.features!.filter(feature => feature.name === wardenParity.feature)
+        .map(feature => ({ ...structuredClone(feature), source: 'Subclass specialization - Warden of Renewal' })));
+      const protection = action(c, wardenParity.feature, wardenParity.action);
+      const rolled: string[] = [];
+      const roll = (expression: string) => { rolled.push(expression); return sample.face; };
+      const report = runActionDetailed(c, protection.key, protection.a, protection.action, protection.action.label, roll)!;
+      expect(rolled).toEqual([wardenParity.expected.dice]);
+      expect(report).toContain(sample.report);
+      expect(c.hope.on).toBe(wardenParity.expected.hopeAfter);
+      expect(c.hp.on).toBe(wardenParity.expected.hpMarkedAfter);
+      expect(c.usage[protection.key].used).toBe(wardenParity.expected.usesAfter);
+      expect(runActionDetailed(c, protection.key, protection.a, protection.action, protection.action.label, roll)).toBeNull();
+      applyRest(c, 'short');
+      expect(!!c.usage[protection.key]).toBe(!wardenParity.expected.shortRestResets);
+      applyRest(c, 'long');
+      expect(!!c.usage[protection.key]).toBe(!wardenParity.expected.longRestResets);
+      expect(runActionDetailed(c, protection.key, protection.a, protection.action, protection.action.label, roll)).toContain(sample.report);
+      expect(c.hope.on).toBe(wardenParity.expected.hopeAfterSecondUse);
+      expect(rolled).toEqual([wardenParity.expected.dice, wardenParity.expected.dice]);
+
+      const poor = druid();
+      poor.hope.on = wardenParity.before.insufficientHope;
+      poor.features.push(...entry.features!.filter(feature => feature.name === wardenParity.feature)
+        .map(feature => ({ ...structuredClone(feature), source: 'Subclass specialization - Warden of Renewal' })));
+      const unavailable = action(poor, wardenParity.feature, wardenParity.action);
+      expect(runActionDetailed(poor, unavailable.key, unavailable.a, unavailable.action, unavailable.action.label,
+        () => { throw new Error('Unaffordable actions must not roll'); })).toBeNull();
+      expect(poor.hope.on).toBe(wardenParity.before.insufficientHope);
+      expect(poor.usage[unavailable.key]).toBeUndefined();
+    }
   });
   it('applies Rampage to beastform weapon damage as a host-rolled d10 per die showing 1', () => {
     const c = druid();

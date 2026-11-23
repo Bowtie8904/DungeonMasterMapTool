@@ -1,0 +1,27 @@
+{
+  "format": "dmmap-automation-parity",
+  "version": 1,
+  "scenario": "warden-protection.rolled-report",
+  "classId": "druid-warden-of-renewal-specialization",
+  "feature": "Warden’s Protection",
+  "action": "use",
+  "before": {
+    "hope": 6,
+    "hopeSlots": 6,
+    "hpMarked": 3,
+    "insufficientHope": 1
+  },
+  "cases": [
+    { "face": 1, "report": "Clear 2 HP on each of up to 1 allies within Close range." },
+    { "face": 4, "report": "Clear 2 HP on each of up to 4 allies within Close range." }
+  ],
+  "expected": {
+    "dice": "1d4",
+    "hopeAfter": 4,
+    "usesAfter": 1,
+    "hpMarkedAfter": 3,
+    "shortRestResets": false,
+    "longRestResets": true,
+    "hopeAfterSecondUse": 2
+  }
+}

@@ -54,6 +54,62 @@ class AutomationHostTest {
     }
 
     @Test
+    void matchesSharedWardenReportAndRestFixture() throws Exception {
+        ObjectNode example = fixture("parity/warden-protection");
+        JsonNode classes = RuleJson.parse(java.nio.file.Files.readString(java.nio.file.Path.of("dmmap-daggerheart", "classes.json")));
+        JsonNode feature = null;
+        for (JsonNode entry : classes.path("entries")) if (example.path("classId").equals(entry.path("id")))
+            for (JsonNode candidate : entry.path("features"))
+                if (example.path("feature").equals(candidate.path("name"))) feature = candidate;
+        assertNotNull(feature);
+        ObjectNode legacy = RuleJson.JSON.createObjectNode().put("format", "dmmap-daggerheart").put("version", 1)
+                .put("category", "classes").put("label", "Fixture");
+        legacy.putArray("entries").addObject().put("id", example.path("classId").asText()).put("name", "Warden")
+                .putArray("features").add(feature.deepCopy());
+        var converted = LegacyCatalogConverter.convert(legacy.toString());
+        assertEquals(1, converted.converted(), converted.diagnostics().toString());
+        String catalog = converted.catalog().toString(), recipes = LegacyCatalogConverter.coreRecipes();
+        String sourceId = RuleCatalog.compile(catalog, recipes).getFirst().id();
+        var pack = AutomationHost.compile("warden-parity", Map.of("classes", catalog), recipes);
+        JsonNode before = example.path("before"), expected = example.path("expected");
+        for (JsonNode sample : example.path("cases")) {
+            ObjectNode sheet = RuleJson.JSON.createObjectNode().put("name", "Warden").put("level", 8);
+            sheet.putObject("hope").put("slots", before.path("hopeSlots").asInt()).put("on", before.path("hope").asInt());
+            sheet.putObject("hp").put("slots", 6).put("on", before.path("hpMarked").asInt());
+            sheet.putArray("features").addObject().put("name", example.path("feature").asText())
+                    .put("automationSource", sourceId).put("instanceId", "warden");
+            ObjectNode poor = sheet.deepCopy();
+            poor.withObject("/hope").put("on", before.path("insufficientHope").asInt());
+            ObjectNode poorBefore = poor.deepCopy();
+            assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, poor, action(),
+                    request("poor", 0, "warden", example.path("action").asText()), "self", StructuredRollTest.noRandom()));
+            assertEquals(poorBefore, poor);
+
+            ObjectNode use = request("first", 0, "warden", example.path("action").asText());
+            ObjectNode receipt = HOST.execute(pack, sheet, action(), use, "self", StructuredRollTest.faces(sample.path("face").asInt()));
+            assertEquals(sample.path("report"), receipt.at("/actions/0/report"));
+            assertEquals(sample.path("face").asInt(), receipt.at("/actions/0/diceRolls/0/contributions/0/dice/0/face").asInt());
+            assertEquals(expected.path("hopeAfter").asInt(), sheet.at("/hope/on").asInt());
+            assertEquals(expected.path("hpMarkedAfter").asInt(), sheet.at("/hp/on").asInt());
+            assertEquals(expected.path("usesAfter").asInt(), sheet.at("/automationState/sources/warden/usage/uses").asInt());
+            ObjectNode spent = sheet.deepCopy();
+            assertEquals(receipt, HOST.execute(pack, sheet, action(), use, "self", StructuredRollTest.noRandom()));
+            assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, sheet, action(),
+                    request("spent", 1, "warden", example.path("action").asText()), "self", StructuredRollTest.noRandom()));
+            assertEquals(spent, sheet);
+            assertEquals(expected.path("shortRestResets").asBoolean(),
+                    HOST.resetLimits(pack, sheet, AutomationHost.event("rest.short", "warden", 0)));
+            assertEquals(expected.path("longRestResets").asBoolean(),
+                    HOST.resetLimits(pack, sheet, AutomationHost.event("rest.long", "warden", 0)));
+            assertEquals(0, sheet.at("/automationState/sources/warden/usage/uses").asInt());
+            ObjectNode second = HOST.execute(pack, sheet, action(), request("after-rest", HOST.revision(sheet), "warden",
+                    example.path("action").asText()), "self", StructuredRollTest.faces(sample.path("face").asInt()));
+            assertEquals(sample.path("report"), second.at("/actions/0/report"));
+            assertEquals(expected.path("hopeAfterSecondUse").asInt(), sheet.at("/hope/on").asInt());
+        }
+    }
+
+    @Test
     void describesOnlyActiveSourcesVisibleToTheViewer() throws Exception {
         var pack = pack();
         ObjectNode sheet = sheet();
