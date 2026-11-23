@@ -9,6 +9,101 @@
   "automation": {
     "rules": [
       {
+        "id": "rest-tend",
+        "bindings": [{
+          "id": "move", "event": "downtime.move", "surface": "downtime", "mode": "button",
+          "restMove": { "id": "tend", "kind": "short" }
+        }],
+        "do": [
+          { "op": "dice.roll", "count": 1, "sides": 4, "as": "roll" },
+          { "op": "track.clear", "track": "actor.hp", "amount": { "max": [0, { "add": [
+            { "read": "result.roll" }, { "read": "actor.stats.tier" }, { "read": "event.move.bonus" }
+          ] }] }, "as": "cleared" }
+        ],
+        "ui": { "label": "Tend to Wounds", "report": "{actor.name} cleared {result.cleared} HP (1d4: {result.roll}, tier: {actor.stats.tier})." }
+      },
+      {
+        "id": "rest-stress",
+        "bindings": [{
+          "id": "move", "event": "downtime.move", "surface": "downtime", "mode": "button",
+          "restMove": { "id": "stress", "kind": "short" }
+        }],
+        "do": [
+          { "op": "dice.roll", "count": 1, "sides": 4, "as": "roll" },
+          { "op": "track.clear", "track": "actor.stress", "amount": { "max": [0, { "add": [
+            { "read": "result.roll" }, { "read": "actor.stats.tier" }, { "read": "event.move.bonus" }
+          ] }] }, "as": "cleared" }
+        ],
+        "ui": { "label": "Clear Stress", "report": "{actor.name} cleared {result.cleared} Stress (1d4: {result.roll}, tier: {actor.stats.tier})." }
+      },
+      {
+        "id": "rest-repair",
+        "bindings": [{
+          "id": "move", "event": "downtime.move", "surface": "downtime", "mode": "button",
+          "restMove": { "id": "repair", "kind": "short" }
+        }],
+        "do": [
+          { "op": "dice.roll", "count": 1, "sides": 4, "as": "roll" },
+          { "op": "track.clear", "track": "actor.armorTrack", "amount": { "max": [0, { "add": [
+            { "read": "result.roll" }, { "read": "actor.stats.tier" }, { "read": "event.move.bonus" }
+          ] }] }, "as": "cleared" }
+        ],
+        "ui": { "label": "Repair Armor", "report": "{actor.name} repaired {result.cleared} Armor Slots (1d4: {result.roll}, tier: {actor.stats.tier})." }
+      },
+      {
+        "id": "rest-prepare",
+        "bindings": [{
+          "id": "move", "event": "downtime.move", "surface": "downtime", "mode": "button",
+          "restMove": { "id": "prepare", "kind": "any", "group": "prepare" }
+        }],
+        "do": [{ "op": "resource.gain", "pool": "actor.hope", "amount": 1, "as": "hope" }],
+        "ui": { "label": "Prepare (alone)", "report": "{actor.name} gained {result.hope} Hope." }
+      },
+      {
+        "id": "rest-prepare-group",
+        "bindings": [{
+          "id": "move", "event": "downtime.move", "surface": "downtime", "mode": "button",
+          "restMove": { "id": "prepare-group", "kind": "any", "group": "prepare" }
+        }],
+        "do": [{ "op": "resource.gain", "pool": "actor.hope", "amount": 2, "as": "hope" }],
+        "ui": { "label": "Prepare (with others)", "report": "{actor.name} gained {result.hope} Hope." }
+      },
+      {
+        "id": "rest-tend-all",
+        "bindings": [{
+          "id": "move", "event": "downtime.move", "surface": "downtime", "mode": "button",
+          "restMove": { "id": "tend-all", "kind": "longMove" }
+        }],
+        "do": [{ "op": "track.clear", "track": "actor.hp", "amount": { "read": "actor.hp.marked" }, "as": "cleared" }],
+        "ui": { "label": "Tend to All Wounds", "report": "{actor.name} cleared {result.cleared} HP." }
+      },
+      {
+        "id": "rest-stress-all",
+        "bindings": [{
+          "id": "move", "event": "downtime.move", "surface": "downtime", "mode": "button",
+          "restMove": { "id": "stress-all", "kind": "longMove" }
+        }],
+        "do": [{ "op": "track.clear", "track": "actor.stress", "amount": { "read": "actor.stress.marked" }, "as": "cleared" }],
+        "ui": { "label": "Clear All Stress", "report": "{actor.name} cleared {result.cleared} Stress." }
+      },
+      {
+        "id": "rest-repair-all",
+        "bindings": [{
+          "id": "move", "event": "downtime.move", "surface": "downtime", "mode": "button",
+          "restMove": { "id": "repair-all", "kind": "longMove" }
+        }],
+        "do": [{ "op": "track.clear", "track": "actor.armorTrack", "amount": { "read": "actor.armorTrack.marked" }, "as": "cleared" }],
+        "ui": { "label": "Repair All Armor", "report": "{actor.name} repaired {result.cleared} Armor Slots." }
+      },
+      {
+        "id": "rest-project",
+        "bindings": [{
+          "id": "move", "event": "downtime.move", "surface": "downtime", "mode": "button",
+          "restMove": { "id": "project", "kind": "longMove" }
+        }],
+        "ui": { "label": "Work on a Project", "report": "{actor.name} worked on a project." }
+      },
+      {
         "id": "hope-reward",
         "bindings": [{
           "id": "claim",

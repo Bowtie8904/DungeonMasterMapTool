@@ -135,6 +135,10 @@ An isolated move primitive derives its event identity and target flag from compi
 and selected move adjustments before the chosen button, and tracks source-scoped duplicate groups, move slots
 and short-rest long-move allowances. It returns dice, reports and commands without persisting. Post-move ordering,
 recipient and post-outcome choices, complete rest transactions and browser integration remain release gaps.
+The shared Daggerheart ruleset now supplies self-targeted short recovery (1d4 plus tier and move bonus), the two
+mutually exclusive preparation variants, long recovery and work on a project. Reports use the amount actually
+cleared or gained, including permanent and locked HP and capped Hope; a short rest needs a granted allowance for
+a long move. Ally variants, rerolls, armor overflow and companion recovery are not yet represented.
 The sheet projection supplies permanent and temporary marked-HP floors to generic track clearing. The
 engine recomputes locks held in its effect list as operations run, so ending a lock before healing in the same
 action allows the newly recoverable HP to clear. Recipient healing uses the recipient's floor, and capacity
