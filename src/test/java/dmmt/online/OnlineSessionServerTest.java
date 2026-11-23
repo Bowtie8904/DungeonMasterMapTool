@@ -4437,9 +4437,14 @@ class OnlineSessionServerTest {
         binding.put("event", "roll.finished").put("surface", "roll").put("id", "after");
         ((ObjectNode) binding.required("targetSelection")).put("scope", "activePlayerCharacters").put("cardinality", cardinality);
         ArrayNode steps = (ArrayNode) automation.at("/rules/0/do");
-        steps.add(MAPPER.readTree("""
-            {"op":"roll.contribute","from":{"read":"event.roll"},"as":"edited",
-             "contribution":{"id":"late","kind":"flat","role":"modifier","label":"Late","value":2}}"""));
+        if ("all".equals(cardinality)) {
+            steps.add(MAPPER.readTree("""
+                {"op":"roll.swapRoles","from":{"read":"event.roll"},"first":"hope","second":"fear","as":"edited"}"""));
+        } else {
+            steps.add(MAPPER.readTree("""
+                {"op":"roll.contribute","from":{"read":"event.roll"},"as":"edited",
+                 "contribution":{"id":"late","kind":"flat","role":"modifier","label":"Late","value":2}}"""));
+        }
         steps.add(MAPPER.readTree("{\"op\":\"roll.publish\",\"roll\":{\"read\":\"result.edited\"}}"));
         java.nio.file.Files.writeString(compendiumDir.resolve("classes.json"), catalog.toString());
         String cookie = cookie(), id = campaign.getId();
@@ -4473,7 +4478,7 @@ class OnlineSessionServerTest {
         var applied = automationHttp(cookie, "caster", body.toString());
         if ("all".equals(cardinality)) {
             assertEquals(400, applied.statusCode(), applied.body());
-            assertTrue(applied.body().contains("at most one revision"));
+            assertTrue(applied.body().contains("at most one revision"), applied.body());
             assertEquals(before, store.loadSheet(id, "caster"));
             assertEquals(ally, store.loadSheet(id, "ally"));
             assertEquals(history, store.historyTail(id, 100).size());
@@ -4676,7 +4681,9 @@ class OnlineSessionServerTest {
              "selections":[{"sourceInstanceId":"s","ruleId":"after","bindingId":"apply"}]}}""".formatted(resultId);
         assertEquals(403, automationHttp(allyCookie("result-invoker"), "roller", action).statusCode());
         String saved = store.loadSheet(campaign.getId(), "roller");
-        assertEquals(400, automationHttp(cookie, "roller", action).statusCode(), "Cannot spend three Fear.");
+        var insufficientFear = automationHttp(cookie, "roller", action);
+        assertEquals(409, insufficientFear.statusCode(), insufficientFear.body());
+        assertTrue(insufficientFear.body().contains("Not enough GM Fear"), insufficientFear.body());
         assertEquals(saved, store.loadSheet(campaign.getId(), "roller"), "Failed command retains both the offer and its cost.");
         campaign.setFear(3);
         var used = automationHttp(cookie, "roller", action);
