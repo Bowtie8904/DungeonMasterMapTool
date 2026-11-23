@@ -191,6 +191,13 @@ public final class OnlineSessionServer {
     private final ChatActionReports chatActions = new ChatActionReports();
     private final Map<String, LoginClaim> loginClaims = new java.util.HashMap<>();
     private final Set<String> sessionRolls = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private record RestChoiceKey(String playerId, String actorId, String requestId) {}
+    private final Map<RestChoiceKey, PendingRestChoice> restChoices = new java.util.LinkedHashMap<>() {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<RestChoiceKey, PendingRestChoice> eldest) {
+            return size() > 128;
+        }
+    };
     private final Map<String, ObjectNode> invisibilityRolls = new java.util.LinkedHashMap<>() {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, ObjectNode> eldest) {
@@ -297,6 +304,7 @@ public final class OnlineSessionServer {
         sessionId = java.util.UUID.randomUUID().toString();
         dmSheetGrants.clear();
         sessionRolls.clear();
+        restChoices.clear();
         Javalin javalin = Javalin.create(cfg -> {
             cfg.showJavalinBanner = false;
             cfg.http.maxRequestSize = 12L * 1024 * 1024;
@@ -335,6 +343,8 @@ public final class OnlineSessionServer {
         javalin.post("/api/automation/{version}/{id}", ctx -> withSheetOperation(ctx, this::handleAutomationExecute));
         javalin.get("/api/automation/{version}/{id}/rest", ctx -> withSheetOperation(ctx, this::handleRestDescribe));
         javalin.post("/api/automation/{version}/{id}/rest", ctx -> withSheetOperation(ctx, this::handleRestExecute));
+        javalin.post("/api/automation/{version}/{id}/rest/choices", ctx -> withSheetOperation(ctx, this::handleRestChoices));
+        javalin.post("/api/automation/{version}/{id}/rest/complete", ctx -> withSheetOperation(ctx, this::handleRestComplete));
         javalin.get("/api/automation/{version}/{id}/claims/{messageId}/{timestamp}", ctx -> withSheetOperation(ctx, this::handleClaimDescribe));
         javalin.post("/api/automation/{version}/{id}/claims/{messageId}/{timestamp}", ctx -> withSheetOperation(ctx, this::handleClaimExecute));
         javalin.put("/api/sheet/{id}", ctx -> withSheetOperation(ctx, this::handleSheetSave));
@@ -449,6 +459,7 @@ public final class OnlineSessionServer {
         sessions.clear();
         loginClaims.clear();
         sessionRolls.clear();
+        restChoices.clear();
         app.stop();
         app = null;
         current = null;
@@ -6358,33 +6369,7 @@ public final class OnlineSessionServer {
             var transaction = automationHost.stageOfferedRestWithPartyRecovery(pack, sheet, automationEvent("rest.prepare", actor),
                     (ObjectNode) body.get("request"), playerId, sheetVersion(original, actor), diceRandom, roster.roster);
             ObjectNode response = transaction.response();
-            if (!transaction.replayed()) {
-                Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
-                changed.put(actor.getId(), sheet);
-                changed.putAll(transaction.recipients());
-                changed.values().forEach(staged -> staged.put("featureRevision", staged.path("featureRevision").asLong(0) + 1));
-                Map<String, Map<String, JsonNode>> namesByActor = new java.util.HashMap<>();
-                namesByActor.put(actor.getId(), sourceNames);
-                for (var entry : transaction.recipients().entrySet()) {
-                    Map<String, JsonNode> recipientSources = new java.util.HashMap<>();
-                    for (var element : automationHost.sources(pack, entry.getValue()))
-                        recipientSources.put(element.instanceId(), element.element().deepCopy());
-                    namesByActor.put(entry.getKey(), recipientSources);
-                }
-                List<ObjectNode> messages = automationHolderReports(actor, namesByActor, response);
-                for (JsonNode clear : response.path("partyRecoveries")) {
-                    JsonNode source = sourceNames.getOrDefault(clear.path("sourceInstanceId").asText(),
-                            MAPPER.createObjectNode().put("name", "Automation"));
-                    String line = clear.path("holderName").asText() + " cleared " + clear.path("cleared").asInt()
-                            + " " + clear.path("track").asText() + " (requested " + clear.path("requested").asInt()
-                            + "; " + clear.path("label").asText() + ").";
-                    messages.add(actionReportMessage(actor, source, source.path("name").asText("Automation"), List.of(line), null));
-                }
-                Runnable validateRoster = () -> AutomationHost.requireRestScopeSnapshots(actor.getId(),
-                        transaction.scopeMembership(), transaction.scopeOrder(), roster.roster);
-                commitAutomationResults(roster.originals, changed, messages, response.path("outbox"),
-                        pack, actor.getId(), response, validateRoster);
-            }
+            if (!transaction.replayed()) commitRest(actor, pack, roster, transaction, sheet, sourceNames, response);
             json(ctx, 200, response);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             json(ctx, 400, errorBody("Invalid rest request."));
@@ -6396,6 +6381,226 @@ public final class OnlineSessionServer {
             json(ctx, 409, errorBody(e.getMessage()).put("code", "staleRecipient"));
         } catch (CampaignStore.StaleAutomationSheet e) {
             json(ctx, 409, errorBody(e.getMessage()));
+        } catch (SecurityException e) {
+            json(ctx, 403, errorBody(e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            json(ctx, 400, errorBody(e.getMessage()));
+        } catch (RestPolicyException e) {
+            json(ctx, 409, errorBody(e.getMessage()));
+        } catch (IOException | java.io.UncheckedIOException e) {
+            json(ctx, 500, errorBody("Could not save the rest."));
+        }
+    }
+
+    private void commitRest(Campaign.Actor actor, AutomationHost.Pack pack, AutomationRestRoster roster,
+                            AutomationHost.RestTransaction transaction, ObjectNode sheet,
+                            Map<String, JsonNode> sourceNames, ObjectNode response) throws IOException {
+        Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
+        changed.put(actor.getId(), sheet);
+        changed.putAll(transaction.recipients());
+        changed.values().forEach(staged -> staged.put("featureRevision", staged.path("featureRevision").asLong(0) + 1));
+        Map<String, Map<String, JsonNode>> namesByActor = new java.util.HashMap<>();
+        namesByActor.put(actor.getId(), sourceNames);
+        for (var entry : transaction.recipients().entrySet()) {
+            Map<String, JsonNode> recipientSources = new java.util.HashMap<>();
+            for (var element : automationHost.sources(pack, entry.getValue()))
+                recipientSources.put(element.instanceId(), element.element().deepCopy());
+            namesByActor.put(entry.getKey(), recipientSources);
+        }
+        List<ObjectNode> messages = automationHolderReports(actor, namesByActor, response);
+        for (JsonNode clear : response.path("partyRecoveries")) {
+            JsonNode source = sourceNames.getOrDefault(clear.path("sourceInstanceId").asText(),
+                    MAPPER.createObjectNode().put("name", "Automation"));
+            String line = clear.path("holderName").asText() + " cleared " + clear.path("cleared").asInt()
+                    + " " + clear.path("track").asText() + " (requested " + clear.path("requested").asInt()
+                    + "; " + clear.path("label").asText() + ").";
+            messages.add(actionReportMessage(actor, source, source.path("name").asText("Automation"), List.of(line), null));
+        }
+        Runnable validateRoster = () -> AutomationHost.requireRestScopeSnapshots(actor.getId(),
+                transaction.scopeMembership(), transaction.scopeOrder(), roster.roster);
+        commitAutomationResults(roster.originals, changed, messages, response.path("outbox"),
+                pack, actor.getId(), response, validateRoster);
+    }
+
+    private final class PendingRestChoice {
+        final String original, sourceVersion, packRevision;
+        final ObjectNode request, origin;
+        final AutomationRestRoster roster;
+        final AutomationHost.RestChoiceStage before;
+        final Map<String, JsonNode> sourceNames;
+        AutomationHost.RestChoiceStage after;
+        ArrayNode beforeChoices;
+        AutomationHost.RestChoiceCommit commit;
+
+        PendingRestChoice(String original, String sourceVersion, AutomationHost.Pack pack, ObjectNode request,
+                          ObjectNode origin, AutomationRestRoster roster, AutomationHost.RestChoiceStage before,
+                          Map<String, JsonNode> sourceNames) {
+            this.original = original;
+            this.sourceVersion = sourceVersion;
+            this.packRevision = pack.revision();
+            this.request = request.deepCopy();
+            this.origin = origin.deepCopy();
+            this.roster = roster;
+            this.before = before;
+            this.sourceNames = sourceNames;
+        }
+    }
+
+    private void requireCurrentRestChoice(PendingRestChoice pending, Campaign.Actor actor) throws IOException {
+        if (!java.util.Objects.equals(pending.original, store.loadSheet(campaign.getId(), actor.getId()))
+                || !pending.sourceVersion.equals(sheetVersion(pending.original, actor))
+                || !pending.packRevision.equals(automationPack().revision())
+                || !pending.origin.equals(automationEvent("rest.prepare", actor)))
+            throw new dmmt.online.automation.RuleRuntime.Unavailable("restOffer", "The rest changed. Reopen downtime.");
+    }
+
+    private static String restChoiceText(JsonNode value, String label) {
+        if (value == null || !value.isTextual() || value.textValue().isBlank())
+            throw new IllegalArgumentException("A " + label + " is required.");
+        return value.textValue();
+    }
+
+    private static void requireRestChoiceVersion(JsonNode supplied, AutomationHost.RestChoiceStage stage) {
+        String version = restChoiceText(supplied, "rest choice version");
+        String expected = stage.offer().path("choiceVersion").asText();
+        if (!java.security.MessageDigest.isEqual(version.getBytes(StandardCharsets.UTF_8), expected.getBytes(StandardCharsets.UTF_8)))
+            throw new dmmt.online.automation.RuleRuntime.Unavailable("restChoice", "The rest choice changed. Reopen downtime.");
+    }
+
+    private PendingRestChoice pendingRestChoice(String playerId, Campaign.Actor actor, String requestId) {
+        PendingRestChoice pending = restChoices.get(new RestChoiceKey(playerId, actor.getId(), requestId));
+        if (pending == null)
+            throw new dmmt.online.automation.RuleRuntime.Unavailable("restChoice", "The rest choice expired. Reopen downtime.");
+        return pending;
+    }
+
+    private synchronized void handleRestChoices(Context ctx) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null || !requireAutomationVersion(ctx)) return;
+        if (ctx.bodyAsBytes().length > config.maxMessageBytes()) {
+            json(ctx, 413, errorBody("Rest request is too large."));
+            return;
+        }
+        try {
+            JsonNode body = MAPPER.readTree(ctx.body());
+            if (body == null || !body.isObject()) throw new IllegalArgumentException("Invalid rest choice request.");
+            Campaign.Actor actor = restActor(ctx, playerId);
+            if (!requiresAuthoritativeRest())
+                throw new AutomationHost.NotReady("The host is using legacy rest rules.");
+            ctx.header("Cache-Control", "no-store");
+            if (body.size() == 1 && body.path("request") instanceof ObjectNode request) {
+                String requestId = restChoiceText(request.get("requestId"), "rest request ID");
+                RestChoiceKey key = new RestChoiceKey(playerId, actor.getId(), requestId);
+                PendingRestChoice existing = restChoices.get(key);
+                if (existing != null) {
+                    if (!existing.request.equals(request))
+                        throw new dmmt.online.automation.RuleRuntime.Unavailable("requestId", "This rest request ID was already used.");
+                    json(ctx, 200, existing.before.offer());
+                    return;
+                }
+                String original = store.loadSheet(campaign.getId(), actor.getId());
+                ObjectNode sheet = original == null ? MAPPER.createObjectNode() : hydrateSheet(actor.getId(), original);
+                AutomationHost.Pack pack = automationPack();
+                ObjectNode event = automationEvent("rest.prepare", actor);
+                String version = sheetVersion(original, actor);
+                AutomationRestRoster roster = new AutomationRestRoster(actor, original);
+                Map<String, JsonNode> names = new java.util.HashMap<>();
+                for (var element : automationHost.sources(pack, sheet))
+                    names.put(element.instanceId(), element.element().deepCopy());
+                AutomationHost.RestChoiceStage stage = automationHost.beginRestChoices(pack, sheet, event, request,
+                        playerId, version, diceRandom, roster.roster);
+                restChoices.put(key, new PendingRestChoice(original, version, pack, request, event, roster, stage, names));
+                json(ctx, 200, stage.offer());
+                return;
+            }
+            if (body.size() != 3 || !(body.path("selections") instanceof ArrayNode selections))
+                throw new IllegalArgumentException("Invalid rest choice request.");
+            String requestId = restChoiceText(body.get("requestId"), "rest request ID");
+            PendingRestChoice pending = pendingRestChoice(playerId, actor, requestId);
+            requireRestChoiceVersion(body.get("choiceVersion"), pending.before);
+            if (pending.after != null) {
+                if (!pending.beforeChoices.equals(selections))
+                    throw new dmmt.online.automation.RuleRuntime.Unavailable("restChoice", "These rest choices were already submitted.");
+                json(ctx, 200, pending.after.offer());
+                return;
+            }
+            requireCurrentRestChoice(pending, actor);
+            pending.after = automationHost.chooseRestBeforeReset(pending.before, selections, diceRandom);
+            pending.beforeChoices = selections.deepCopy();
+            json(ctx, 200, pending.after.offer());
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            json(ctx, 400, errorBody("Invalid rest choice request."));
+        } catch (AutomationHost.NotReady e) {
+            json(ctx, 409, errorBody("Automation is unavailable: " + e.getMessage()));
+        } catch (dmmt.online.automation.RuleRuntime.Unavailable e) {
+            json(ctx, 409, errorBody(e.getMessage()).put("code", e.code()));
+        } catch (StaleAutomationRoster | CampaignStore.StaleAutomationSheet e) {
+            json(ctx, 409, errorBody(e.getMessage()).put("code", "staleRecipient"));
+        } catch (SecurityException e) {
+            json(ctx, 403, errorBody(e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            json(ctx, 400, errorBody(e.getMessage()));
+        } catch (RestPolicyException e) {
+            json(ctx, 409, errorBody(e.getMessage()));
+        } catch (IOException | java.io.UncheckedIOException e) {
+            json(ctx, 500, errorBody("Could not stage the rest choices."));
+        }
+    }
+
+    private synchronized void handleRestComplete(Context ctx) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null || !requireAutomationVersion(ctx)) return;
+        if (ctx.bodyAsBytes().length > config.maxMessageBytes()) {
+            json(ctx, 413, errorBody("Rest request is too large."));
+            return;
+        }
+        try {
+            JsonNode body = MAPPER.readTree(ctx.body());
+            if (body == null || !body.isObject() || body.size() != 2 || !(body.path("request") instanceof ObjectNode request))
+                throw new IllegalArgumentException("Invalid rest completion request.");
+            restChoiceText(body.get("choiceVersion"), "rest choice version");
+            Campaign.Actor actor = restActor(ctx, playerId);
+            if (!requiresAuthoritativeRest())
+                throw new AutomationHost.NotReady("The host is using legacy rest rules.");
+            String original = store.loadSheet(campaign.getId(), actor.getId());
+            ObjectNode sheet = original == null ? MAPPER.createObjectNode() : hydrateSheet(actor.getId(), original);
+            ObjectNode replay = automationHost.replayRest(sheet, request, playerId);
+            if (replay != null) {
+                json(ctx, 200, replay);
+                return;
+            }
+            String requestId = restChoiceText(request.get("requestId"), "rest request ID");
+            PendingRestChoice pending = pendingRestChoice(playerId, actor, requestId);
+            if (pending.after == null)
+                throw new dmmt.online.automation.RuleRuntime.Unavailable("restChoice", "Complete the earlier rest choices first.");
+            requireRestChoiceVersion(body.get("choiceVersion"), pending.after);
+            requireCurrentRestChoice(pending, actor);
+            if (!(request.path("completion") instanceof ArrayNode choices))
+                throw new IllegalArgumentException("Expected rest completion choices.");
+            ObjectNode initial = request.deepCopy();
+            initial.putArray("completion");
+            if (!initial.equals(pending.request) || choices.size() < pending.beforeChoices.size())
+                throw new dmmt.online.automation.RuleRuntime.Unavailable("restChoice", "The rest request changed. Reopen downtime.");
+            for (int i = 0; i < pending.beforeChoices.size(); i++)
+                if (!pending.beforeChoices.get(i).equals(choices.get(i)))
+                    throw new dmmt.online.automation.RuleRuntime.Unavailable("restChoice", "The earlier rest choices changed.");
+            ArrayNode after = MAPPER.createArrayNode();
+            for (int i = pending.beforeChoices.size(); i < choices.size(); i++) after.add(choices.get(i).deepCopy());
+            if (pending.commit == null) pending.commit = automationHost.finishRestChoices(pending.after, after, diceRandom);
+            if (!pending.commit.request().equals(request))
+                throw new dmmt.online.automation.RuleRuntime.Unavailable("restChoice", "These rest choices were already submitted.");
+            AutomationHost.RestTransaction transaction = pending.commit.transaction();
+            ObjectNode response = transaction.response();
+            commitRest(actor, automationPack(), pending.roster, transaction, pending.commit.sheet(), pending.sourceNames, response);
+            json(ctx, 200, response);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            json(ctx, 400, errorBody("Invalid rest completion request."));
+        } catch (AutomationHost.NotReady e) {
+            json(ctx, 409, errorBody("Automation is unavailable: " + e.getMessage()));
+        } catch (dmmt.online.automation.RuleRuntime.Unavailable e) {
+            json(ctx, 409, errorBody(e.getMessage()).put("code", e.code()));
+        } catch (StaleAutomationRoster | CampaignStore.StaleAutomationSheet e) {
+            json(ctx, 409, errorBody(e.getMessage()).put("code", "staleRecipient"));
         } catch (SecurityException e) {
             json(ctx, 403, errorBody(e.getMessage()));
         } catch (IllegalArgumentException e) {

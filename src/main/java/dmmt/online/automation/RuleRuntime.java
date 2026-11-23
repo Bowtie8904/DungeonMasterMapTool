@@ -34,7 +34,7 @@ public final class RuleRuntime {
 
     public static final class Unavailable extends IllegalStateException {
         private final String code;
-        Unavailable(String code, String message) { super(message); this.code = code; }
+        public Unavailable(String code, String message) { super(message); this.code = code; }
         public String code() { return code; }
     }
 

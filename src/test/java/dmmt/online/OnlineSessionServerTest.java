@@ -1881,6 +1881,14 @@ class OnlineSessionServerTest {
         return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    private HttpResponse<String> restChoiceHttp(String cookie, String actorId, String path, JsonNode body) throws Exception {
+        var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/automation/"
+                + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + "/" + actorId + "/rest/" + path))
+                .header("Cookie", cookie).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString()));
+        return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
     private HttpResponse<String> claimHttp(String cookie, JsonNode offer, String recipientId, String body) throws Exception {
         var claim = offer.path("automationClaim");
         var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/automation/"
@@ -2181,6 +2189,89 @@ class OnlineSessionServerTest {
         assertEquals(accepted.body(), claimHttp(owner, offer, "resting", claim.toString()).body());
     }
 
+    @Test
+    void postOutcomeRestChoicesStageEachPhaseAndCommitTheSampledMovesOnce() throws Exception {
+        installRestRules();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withArray("rules").addAll((ArrayNode) MAPPER.readTree("""
+                [
+                 {"id":"outcome-benefit","bindings":[{"id":"rest","event":"rest.short","surface":"rest","mode":"option"}],
+                  "when":{"gt":[{"read":"event.rest.cleared.stress"},0]},
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],
+                  "ui":{"label":"Reward recovery","report":"Recovery rewarded."}},
+                 {"id":"reset-benefit","bindings":[{"id":"rest","event":"rest.short","surface":"rest","mode":"option",
+                   "restPhase":"afterReset"}],
+                  "when":{"gte":[{"read":"actor.hope.value"},2]},
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],
+                  "ui":{"label":"Reward Hope","report":"Hope rewarded."}}
+                ]
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        campaign.getActors().add(Campaign.Actor.builder().id("resting").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "resting", """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":2},"stress":{"slots":6,"on":3},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":1}}
+                """);
+        String owner = cookie(), other = allyCookie("outcome-viewer");
+        String initialSheet = store.loadSheet(campaign.getId(), "resting");
+        int history = store.historyTail(campaign.getId(), 100).size();
+        JsonNode rest = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        assertTrue(rest.path("postOutcomeChoices").asBoolean());
+        assertFalse(restDescriptor(rest.path("completion"), "outcome-benefit").path("available").asBoolean());
+        ObjectNode body = restRequest(rest, "outcome-rest");
+        addRestMove((ObjectNode) body.path("request"), restDescriptor(rest.path("moves"), "rest-stress"));
+        assertEquals(403, restChoiceHttp(other, "resting", "choices", body).statusCode());
+        var first = restChoiceHttp(owner, "resting", "choices", body);
+        assertEquals(200, first.statusCode(), first.body());
+        JsonNode before = MAPPER.readTree(first.body());
+        assertEquals("beforeReset", before.path("phase").asText());
+        assertTrue(before.at("/cleared/stress").asInt() > 0);
+        assertTrue(restDescriptor(before.path("actions"), "outcome-benefit").path("available").asBoolean());
+        assertEquals(first.body(), restChoiceHttp(owner, "resting", "choices", body).body());
+        assertEquals(initialSheet, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+
+        ObjectNode advance = MAPPER.createObjectNode().put("requestId", "outcome-rest")
+                .put("choiceVersion", before.path("choiceVersion").asText());
+        advance.putArray("selections").add(restSelection(restDescriptor(before.path("actions"), "outcome-benefit")));
+        ObjectNode forged = advance.deepCopy().put("choiceVersion", "rest-choice-v1.forged");
+        assertEquals(409, restChoiceHttp(owner, "resting", "choices", forged).statusCode());
+        ObjectNode unoffered = advance.deepCopy();
+        ((ObjectNode) unoffered.at("/selections/0")).put("ruleId", "reset-benefit");
+        assertEquals(400, restChoiceHttp(owner, "resting", "choices", unoffered).statusCode());
+        var second = restChoiceHttp(owner, "resting", "choices", advance);
+        assertEquals(200, second.statusCode(), second.body());
+        JsonNode after = MAPPER.readTree(second.body());
+        assertEquals("afterReset", after.path("phase").asText());
+        assertTrue(restDescriptor(after.path("actions"), "reset-benefit").path("available").asBoolean());
+        assertEquals(second.body(), restChoiceHttp(owner, "resting", "choices", advance).body());
+        assertEquals(initialSheet, store.loadSheet(campaign.getId(), "resting"));
+
+        ObjectNode request = ((ObjectNode) body.path("request")).deepCopy();
+        request.withArray("completion").add(advance.at("/selections/0").deepCopy())
+                .add(restSelection(restDescriptor(after.path("actions"), "reset-benefit")));
+        ObjectNode complete = MAPPER.createObjectNode().put("choiceVersion", after.path("choiceVersion").asText());
+        complete.set("request", request);
+        ObjectNode wrongToken = complete.deepCopy().put("choiceVersion", before.path("choiceVersion").asText());
+        assertEquals(409, restChoiceHttp(owner, "resting", "complete", wrongToken).statusCode());
+        var committed = restChoiceHttp(owner, "resting", "complete", complete);
+        assertEquals(200, committed.statusCode(), committed.body());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(3, saved.at("/hope/on").asInt());
+        assertEquals(3 - before.at("/cleared/stress").asInt(), saved.at("/stress/on").asInt());
+        int published = store.historyTail(campaign.getId(), 100).size();
+        assertTrue(published > history);
+        assertEquals(committed.body(), restChoiceHttp(owner, "resting", "complete", complete).body());
+        assertEquals(saved, MAPPER.readTree(store.loadSheet(campaign.getId(), "resting")));
+        assertEquals(published, store.historyTail(campaign.getId(), 100).size());
+        server.stop();
+        server.start();
+        assertEquals(committed.body(), restChoiceHttp(cookie(), "resting", "complete", complete).body());
+        assertEquals(saved, MAPPER.readTree(store.loadSheet(campaign.getId(), "resting")));
+        assertEquals(published, store.historyTail(campaign.getId(), 100).size());
+    }
+
     private void installPartyRestRules(String fearOperation) throws Exception {
         installRestRules();
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
@@ -2310,6 +2401,110 @@ class OnlineSessionServerTest {
         ObjectNode move = addRestMove((ObjectNode) body.path("request"), descriptor);
         move.putObject("target").put("recipientId", recipientId).put("version", target.path("version").asText());
         return move;
+    }
+
+    @Test
+    void postOutcomeRestCommitsTargetAndWholePartyRecoveryTogether() throws Exception {
+        installTargetRestRules("gain");
+        addRestParty();
+        String owner = cookie();
+        Map<String, String> initial = new java.util.LinkedHashMap<>();
+        for (String id : List.of("resting", "mira", "borin"))
+            initial.put(id, store.loadSheet(campaign.getId(), id));
+        int fear = campaign.getFear();
+        JsonNode rest = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode body = restRequest(rest, "interactive-party");
+        targetRestMove(body, rest, "mira");
+        addRestMove((ObjectNode) body.path("request"), restDescriptor(rest.path("moves"), "rest-tend"));
+        var first = restChoiceHttp(owner, "resting", "choices", body);
+        assertEquals(200, first.statusCode(), first.body());
+        JsonNode before = MAPPER.readTree(first.body());
+        ObjectNode advance = MAPPER.createObjectNode().put("requestId", "interactive-party")
+                .put("choiceVersion", before.path("choiceVersion").asText());
+        advance.putArray("selections");
+        var second = restChoiceHttp(owner, "resting", "choices", advance);
+        assertEquals(200, second.statusCode(), second.body());
+        for (var entry : initial.entrySet()) assertEquals(entry.getValue(), store.loadSheet(campaign.getId(), entry.getKey()));
+        assertEquals(fear, campaign.getFear());
+        ObjectNode complete = MAPPER.createObjectNode()
+                .put("choiceVersion", MAPPER.readTree(second.body()).path("choiceVersion").asText());
+        complete.set("request", body.path("request").deepCopy());
+        var result = restChoiceHttp(owner, "resting", "complete", complete);
+        assertEquals(200, result.statusCode(), result.body());
+        JsonNode receipt = MAPPER.readTree(result.body());
+        assertEquals(List.of("mira", "borin"), receipt.path("partyRecoveries").findValuesAsText("holderId"));
+        assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "mira")).at("/armorTrack/on").asInt());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "borin")).at("/hope/on").asInt());
+        assertEquals(fear + 3, campaign.getFear());
+        String saved = store.loadSheet(campaign.getId(), "mira");
+        int history = store.historyTail(campaign.getId(), 100).size();
+        campaign.actor("mira").setDisabled(true);
+        assertEquals(result.body(), restChoiceHttp(owner, "resting", "complete", complete).body());
+        assertEquals(saved, store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+    }
+
+    @Test
+    void postOutcomeRestRejectsARecipientChangedAfterTheMoveWithoutCommitting() throws Exception {
+        installTargetRestRules("gain");
+        addRestParty();
+        String owner = cookie();
+        String source = store.loadSheet(campaign.getId(), "resting");
+        String other = store.loadSheet(campaign.getId(), "borin");
+        int fear = campaign.getFear(), history = store.historyTail(campaign.getId(), 100).size();
+        JsonNode rest = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode body = restRequest(rest, "stale-interactive-party");
+        targetRestMove(body, rest, "mira");
+        var first = restChoiceHttp(owner, "resting", "choices", body);
+        assertEquals(200, first.statusCode(), first.body());
+        ObjectNode advance = MAPPER.createObjectNode().put("requestId", "stale-interactive-party")
+                .put("choiceVersion", MAPPER.readTree(first.body()).path("choiceVersion").asText());
+        advance.putArray("selections");
+        var second = restChoiceHttp(owner, "resting", "choices", advance);
+        assertEquals(200, second.statusCode(), second.body());
+        ObjectNode recipient = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        recipient.put("notes", "Changed elsewhere");
+        store.saveSheet(campaign.getId(), "mira", recipient.toString());
+        ObjectNode complete = MAPPER.createObjectNode()
+                .put("choiceVersion", MAPPER.readTree(second.body()).path("choiceVersion").asText());
+        complete.set("request", body.path("request").deepCopy());
+        var result = restChoiceHttp(owner, "resting", "complete", complete);
+        assertEquals(409, result.statusCode(), result.body());
+        assertEquals(source, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(other, store.loadSheet(campaign.getId(), "borin"));
+        assertEquals(recipient, MAPPER.readTree(store.loadSheet(campaign.getId(), "mira")));
+        assertEquals(fear, campaign.getFear());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+    }
+
+    @Test
+    void postOutcomeRestRejectsChangedTargetMembershipWithoutCommitting() throws Exception {
+        installTargetRestRules("gain");
+        addRestParty();
+        String owner = cookie();
+        String source = store.loadSheet(campaign.getId(), "resting");
+        String recipient = store.loadSheet(campaign.getId(), "mira");
+        int fear = campaign.getFear(), history = store.historyTail(campaign.getId(), 100).size();
+        JsonNode rest = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode body = restRequest(rest, "stale-interactive-members");
+        targetRestMove(body, rest, "mira");
+        var first = restChoiceHttp(owner, "resting", "choices", body);
+        assertEquals(200, first.statusCode(), first.body());
+        ObjectNode advance = MAPPER.createObjectNode().put("requestId", "stale-interactive-members")
+                .put("choiceVersion", MAPPER.readTree(first.body()).path("choiceVersion").asText());
+        advance.putArray("selections");
+        var second = restChoiceHttp(owner, "resting", "choices", advance);
+        assertEquals(200, second.statusCode(), second.body());
+        campaign.actor("borin").setDisabled(true);
+        ObjectNode complete = MAPPER.createObjectNode()
+                .put("choiceVersion", MAPPER.readTree(second.body()).path("choiceVersion").asText());
+        complete.set("request", body.path("request").deepCopy());
+        var result = restChoiceHttp(owner, "resting", "complete", complete);
+        assertEquals(409, result.statusCode(), result.body());
+        assertEquals(source, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(recipient, store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(fear, campaign.getFear());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
     }
 
     @Test

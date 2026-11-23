@@ -93,8 +93,9 @@ The transaction also retains any host-order dependencies; both can be rechecked 
 scope without loading sheets, and are compared with read sheet bytes inside the atomic commit. A host-signed
 snapshot offer and owner-bound retry receipt can reject stale or forged rest intents and replay committed results
 without rolling or staging recipients again. Offers expire on host restart; already committed receipts still replay.
-The live rest workflow authenticates owners and commits targeted moves and party recoveries; post-outcome
-choices remain incomplete. Format-2 catalogs reject legacy
+The live rest workflow authenticates owners and commits targeted moves and party recoveries. Completion benefits
+are offered after the move outcomes and again after the reset, with no second prompt when no choices are available.
+Format-2 catalogs reject legacy
 client-supplied rests and downtime rerolls.
 Owner and DM sheet saves cannot change host-owned rest counters, and legacy damage snapshots retain those counters
 and the host's automation state. An unreadable or unrecognized catalog cannot silently enable legacy rest;
@@ -108,8 +109,8 @@ sheet-source location for matching self moves even if its ordinary modifier was 
 Converted source-rest party repairs use the initial loadout and the legacy host's move matching; effect-carried
 rest blocks are not included. Nonpositive legacy integer requests are ignored and unsupported amounts are
 diagnosed. The live coordinator applies ordered requests in host roster order after the rest, with each
-recipient's reactions and the final table state, and rolls back the transaction on failure. Targeted-move
-recipient reactions and interleaved ally passives remain unfinished.
+recipient's reactions and the final table state, and rolls back the transaction on failure. Cross-holder
+effect lifecycles and immediate interleaved ally passives remain unfinished.
 Format-2 healing respects permanent HP and temporary locked HP on both the actor and targeted recipients;
 reports use the amount actually cleared.
 Converted scar gains and healing update the affected character's Hope capacity atomically. Gaining a scar

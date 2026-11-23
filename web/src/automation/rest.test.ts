@@ -115,6 +115,95 @@ describe('host-authored rest dialog', () => {
     expect(dialog.text).toContain('Rest completed.');
   });
 
+  it('offers benefits after the resolved moves and again after the first completion phase', async () => {
+    const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      if (!init.body) return Response.json({ ...offer(), postOutcomeChoices: true });
+      const request = JSON.parse(String(init.body)) as Record<string, unknown>;
+      calls.push({ url, body: request });
+      if (url.endsWith('/complete')) return Response.json({ actions: [{ report: 'Benefits settled.' }] });
+      if ('request' in request) return Response.json({ phase: 'beforeReset', choiceVersion: 'first-signature',
+        cleared: { stress: 2 }, reports: ['Cleared 2 Stress.'],
+        actions: [action('after-move', 'option', 'Reward recovery', { defaultOn: true })] });
+      return Response.json({ phase: 'afterReset', choiceVersion: 'second-signature', cleared: { stress: 2 },
+        reports: ['Recovery rewarded.'], actions: [action('after-reset', 'option', 'Reward Hope', { defaultOn: true })] });
+    }));
+    await openAutomationRestDialog('hero', 'short', async () => {});
+    const dialog = body.all('dialog')[0];
+    expect(dialog.text).not.toContain('Benefit');
+    const go = dialog.all('button').find(button => button.text === 'Complete rest')!;
+    go.click();
+    await settle();
+    expect(dialog.text).toContain('Cleared 2 Stress.');
+    expect(dialog.text).toContain('Reward recovery');
+    expect(dialog.text).toContain('stress: 2');
+    go.click();
+    await settle();
+    expect(calls[1].body).toEqual({ requestId: expect.any(String), choiceVersion: 'first-signature',
+      selections: [{ sourceInstanceId: 'ruleset:base', ruleId: 'after-move', bindingId: 'option', inputs: {} }] });
+    expect(dialog.text).toContain('Reward Hope');
+    go.click();
+    await settle();
+    expect(calls[2].body.choiceVersion).toBe('second-signature');
+    expect((calls[2].body.request as { completion: unknown[] }).completion).toEqual([
+      { sourceInstanceId: 'ruleset:base', ruleId: 'after-move', bindingId: 'option', inputs: {} },
+      { sourceInstanceId: 'ruleset:base', ruleId: 'after-reset', bindingId: 'option', inputs: {} },
+    ]);
+    expect(dialog.text).toContain('Benefits settled.');
+  });
+
+  it('finishes without another confirmation when no post-outcome benefits are available', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      if (!init.body) return Response.json({ ...offer(), postOutcomeChoices: true });
+      calls.push(url);
+      if (url.endsWith('/complete')) return Response.json({ actions: [] });
+      const first = calls.length === 1;
+      return Response.json({ phase: first ? 'beforeReset' : 'afterReset', choiceVersion: first ? 'one' : 'two',
+        cleared: {}, reports: [], actions: [] });
+    }));
+    await openAutomationRestDialog('hero', 'short', async () => {});
+    const dialog = body.all('dialog')[0];
+    dialog.all('button').find(button => button.text === 'Complete rest')!.click();
+    await settle();
+    expect(calls.map(url => url.split('/').at(-1))).toEqual(['choices', 'choices', 'complete']);
+    expect(dialog.text).toContain('Rest completed.');
+  });
+
+  it('retries uncertain staged and final submissions without changing the request', async () => {
+    const previews: string[] = [], completions: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      if (!init.body) return Response.json({ ...offer(), postOutcomeChoices: true });
+      const payload = String(init.body);
+      if (url.endsWith('/complete')) {
+        completions.push(payload);
+        if (completions.length === 1) throw new Error('Final response lost.');
+        return Response.json({ actions: [] });
+      }
+      const request = JSON.parse(payload) as Record<string, unknown>;
+      if ('request' in request) {
+        previews.push(payload);
+        if (previews.length === 1) throw new Error('Preview response lost.');
+        return Response.json({ phase: 'beforeReset', choiceVersion: 'one', cleared: {}, reports: [], actions: [] });
+      }
+      return Response.json({ phase: 'afterReset', choiceVersion: 'two', cleared: {}, reports: [], actions: [] });
+    }));
+    await openAutomationRestDialog('hero', 'short', async () => {});
+    const dialog = body.all('dialog')[0], go = dialog.all('button').find(button => button.text === 'Complete rest')!;
+    go.click();
+    await settle();
+    expect(dialog.text).toContain('Preview response lost.');
+    expect(dialog.all('select')[0].disabled).toBe(true);
+    go.click();
+    await settle();
+    expect(previews).toEqual([previews[0], previews[0]]);
+    expect(dialog.text).toContain('Final response lost.');
+    go.click();
+    await settle();
+    expect(completions).toEqual([completions[0], completions[0]]);
+    expect(dialog.text).toContain('Rest completed.');
+  });
+
   it('requires a host-described recipient and submits its version with the move', async () => {
     const described = offer();
     Object.assign(described.moves[0], { targetSelection: { cardinality: 'one', options: [

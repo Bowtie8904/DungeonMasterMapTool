@@ -17,10 +17,19 @@ interface RestOffer {
   kind: RestKind;
   revision: number;
   offerVersion: string;
+  postOutcomeChoices?: boolean;
   plan: { moves: number; longMoves: number };
   preparation: RuleDescriptor[];
   moves: MoveDescriptor[];
   completion: RuleDescriptor[];
+}
+
+interface RestChoiceOffer {
+  phase: 'beforeReset' | 'afterReset';
+  choiceVersion: string;
+  actions: RuleDescriptor[];
+  cleared: Record<string, number>;
+  reports: string[];
 }
 
 interface RestRequest {
@@ -46,6 +55,15 @@ async function submitRest(actorId: string, request: RestRequest): Promise<unknow
   const response = await hostFetch(`${automationUrl(actorId)}/rest`, {
     method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ request }),
+  });
+  if (!response.ok) throw new ApiError((await errorDetails(response)).text, response.status);
+  return response.json();
+}
+
+async function submitRestStage(actorId: string, path: 'choices' | 'complete', body: unknown): Promise<unknown> {
+  const response = await hostFetch(`${automationUrl(actorId)}/rest/${path}`, {
+    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
   });
   if (!response.ok) throw new ApiError((await errorDetails(response)).text, response.status);
   return response.json();
@@ -145,11 +163,11 @@ export async function openAutomationRestDialog(actorId: string, kind: RestKind,
   add.addEventListener('click', addMove);
   content.append(moves, add);
   const completion = el('div');
-  if (offer.completion.length) {
+  if (!offer.postOutcomeChoices && offer.completion.length) {
     completion.append(el('h4', {}, 'Rest benefits'),
       el('p', { class: 'muted' }, 'Availability is checked again after downtime.'));
   }
-  const readCompletion = optionFields(completion, offer.completion, fields, CONTROL_TEXT);
+  const readCompletion = optionFields(completion, offer.postOutcomeChoices ? [] : offer.completion, fields, CONTROL_TEXT);
   content.append(completion);
 
   const go = el('button', { type: 'button', class: 'primary' }, 'Complete rest');
@@ -162,6 +180,71 @@ export async function openAutomationRestDialog(actorId: string, kind: RestKind,
     for (const item of disabled) item.element.disabled = true;
   };
   const unlock = () => { for (const item of disabled) item.element.disabled = item.previous; disabled = []; };
+  let phase: 'plan' | 'beforeReset' | 'afterReset' = 'plan';
+  let choice: RestChoiceOffer | undefined;
+  let beforeChoices: Selection[] = [];
+  let readChoices: () => Selection[] = () => [];
+  let choiceFields: HTMLInputElement[] = [];
+  let retryStage: { path: 'choices' | 'complete'; body: unknown } | undefined;
+
+  const showChoices = (next: RestChoiceOffer) => {
+    choice = next;
+    phase = next.phase;
+    choiceFields = [];
+    const outcome = Object.entries(next.cleared)
+      .map(([name, amount]) => `${name}: ${amount}`).join(', ');
+    const options = el('div');
+    readChoices = optionFields(options, next.actions, choiceFields, CONTROL_TEXT);
+    content.replaceChildren(
+      el('p', { role: 'status' }, next.reports.length ? next.reports.join('\n') : 'Downtime moves resolved.'),
+      el('p', { class: 'muted' }, `Rest changes: ${outcome || 'none'}.`),
+      el('h4', {}, next.phase === 'beforeReset' ? 'Rest benefits' : 'After rest benefits'),
+      options,
+    );
+    go.textContent = next.phase === 'beforeReset' ? 'Continue' : 'Complete rest';
+  };
+
+  const nextStage = (): { path: 'choices' | 'complete'; body: unknown } => {
+    if (!retry) throw new Error('The rest request is missing.');
+    if (phase === 'plan') return { path: 'choices', body: { request: retry } };
+    if (!choice) throw new Error('The rest choices are missing.');
+    const selections = readChoices();
+    if (phase === 'beforeReset')
+      return { path: 'choices', body: { requestId: retry.requestId, choiceVersion: choice.choiceVersion, selections } };
+    return { path: 'complete', body: { choiceVersion: choice.choiceVersion,
+      request: { ...retry, completion: [...beforeChoices, ...selections] } } };
+  };
+
+  const performStages = async () => {
+    while (true) {
+      if (!retryStage) retryStage = nextStage();
+      const current = retryStage;
+      const currentPhase = phase;
+      const response = await submitRestStage(actorId, current.path, current.body);
+      retryStage = undefined;
+      if (currentPhase === 'afterReset') {
+        const reports = restReports(response);
+        content.replaceChildren(el('p', { role: 'status' }, reports.length ? reports.join('\n') : 'Rest completed.'));
+        actions.replaceChildren(cancel);
+        cancel.textContent = 'Done';
+        return;
+      }
+      if (currentPhase === 'beforeReset') {
+        const sent = current.body as { selections: Selection[] };
+        beforeChoices = sent.selections;
+      }
+      const next = response as RestChoiceOffer;
+      if ((currentPhase === 'plan' && next.phase !== 'beforeReset')
+          || (currentPhase === 'beforeReset' && next.phase !== 'afterReset')
+          || !Array.isArray(next.actions) || !Array.isArray(next.reports)
+          || !next.cleared || typeof next.choiceVersion !== 'string')
+        throw new Error('The host returned invalid rest choices.');
+      disabled = [];
+      showChoices(next);
+      if (next.actions.some(action => action.available)) return;
+    }
+  };
+
   go.addEventListener('click', () => {
     if (pending) return;
     try {
@@ -193,6 +276,27 @@ export async function openAutomationRestDialog(actorId: string, kind: RestKind,
     go.disabled = true;
     cancel.disabled = true;
     go.textContent = CONTROL_TEXT.pending;
+    if (offer.postOutcomeChoices) {
+      if (phase !== 'plan' && disabled.length === 0)
+        disabled = choiceFields.map(element => ({ element, previous: element.disabled }));
+      for (const item of disabled) item.element.disabled = true;
+      void performStages().catch((failure: unknown) => {
+        error.textContent = failure instanceof Error ? failure.message : 'The rest could not be completed.';
+        if (!retryStage || failure instanceof ApiError && failure.status >= 400 && failure.status < 500) {
+          retryStage = undefined;
+          if (phase === 'plan') retry = undefined;
+          unlock();
+          go.textContent = phase === 'beforeReset' ? 'Continue' : 'Complete rest';
+        } else {
+          go.textContent = 'Retry';
+        }
+      }).finally(() => {
+        pending = false;
+        go.disabled = false;
+        cancel.disabled = false;
+      });
+      return;
+    }
     void submitRest(actorId, retry).then(receipt => {
       const reports = restReports(receipt);
       content.replaceChildren(el('p', { role: 'status' }, reports.length ? reports.join('\n') : 'Rest completed.'));
