@@ -96,6 +96,8 @@ snapshot offer and owner-bound retry receipt can reject stale or forged rest int
 without rolling or staging recipients again. Offers expire on host restart; already committed receipts still replay.
 The live rest workflow authenticates owners and commits targeted moves and party recoveries. Completion benefits
 are offered after the move outcomes and again after the reset, with no second prompt when no choices are available.
+If automatic preparation rolls determine the move allowance, they run once before moves are offered; retrying a
+lost response preserves the sampled result.
 Format-2 catalogs reject legacy
 client-supplied rests and downtime rerolls.
 Owner and DM sheet saves cannot change host-owned rest counters, and legacy damage snapshots retain those counters

@@ -6484,9 +6484,11 @@ public final class OnlineSessionServer {
 
     private final class PendingRestChoice {
         final String original, sourceVersion, packRevision;
-        final ObjectNode request, origin;
+        ObjectNode request;
+        final ObjectNode origin, preparationRequest;
         final AutomationRestRoster roster;
-        final AutomationHost.RestChoiceStage before;
+        final AutomationHost.RestPreparationStage preparation;
+        AutomationHost.RestChoiceStage before;
         final Map<String, JsonNode> sourceNames;
         AutomationHost.RestChoiceStage after;
         ArrayNode beforeChoices;
@@ -6502,6 +6504,23 @@ public final class OnlineSessionServer {
             this.origin = origin.deepCopy();
             this.roster = roster;
             this.before = before;
+            this.preparation = null;
+            this.preparationRequest = null;
+            this.sourceNames = sourceNames;
+        }
+
+        PendingRestChoice(String original, String sourceVersion, AutomationHost.Pack pack, ObjectNode request,
+                          ObjectNode origin, AutomationRestRoster roster, AutomationHost.RestPreparationStage preparation,
+                          Map<String, JsonNode> sourceNames) {
+            this.original = original;
+            this.sourceVersion = sourceVersion;
+            this.packRevision = pack.revision();
+            this.request = request.deepCopy();
+            this.origin = origin.deepCopy();
+            this.roster = roster;
+            this.before = null;
+            this.preparation = preparation;
+            this.preparationRequest = request.deepCopy();
             this.sourceNames = sourceNames;
         }
     }
@@ -6548,12 +6567,60 @@ public final class OnlineSessionServer {
             if (!requiresAuthoritativeRest())
                 throw new AutomationHost.NotReady("The host is using legacy rest rules.");
             ctx.header("Cache-Control", "no-store");
+            if (body.size() == 2 && body.path("request") instanceof ObjectNode request
+                    && body.path("prepare").isBoolean() && body.path("prepare").booleanValue()) {
+                String requestId = restChoiceText(request.get("requestId"), "rest request ID");
+                RestChoiceKey key = new RestChoiceKey(playerId, actor.getId(), requestId);
+                PendingRestChoice existing = restChoices.get(key);
+                if (existing != null) {
+                    if (existing.preparation == null || !existing.preparationRequest.equals(request))
+                        throw new dmmt.online.automation.RuleRuntime.Unavailable("requestId", "This rest request ID was already used.");
+                    json(ctx, 200, existing.preparation.offer());
+                    return;
+                }
+                String original = store.loadSheet(campaign.getId(), actor.getId());
+                ObjectNode sheet = original == null ? MAPPER.createObjectNode() : hydrateSheet(actor.getId(), original);
+                AutomationHost.Pack pack = automationPack();
+                ObjectNode event = automationEvent("rest.prepare", actor);
+                String version = sheetVersion(original, actor);
+                AutomationRestRoster roster = new AutomationRestRoster(actor, original);
+                Map<String, JsonNode> names = new java.util.HashMap<>();
+                for (var element : automationHost.sources(pack, sheet))
+                    names.put(element.instanceId(), element.element().deepCopy());
+                AutomationHost.RestPreparationStage stage = automationHost.beginRestPreparation(pack, sheet, event, request,
+                        playerId, version, diceRandom, roster.roster);
+                restChoices.put(key, new PendingRestChoice(original, version, pack, request, event, roster, stage, names));
+                json(ctx, 200, stage.offer());
+                return;
+            }
+            if (body.size() == 2 && body.path("request") instanceof ObjectNode request
+                    && body.path("preparedVersion").isTextual()) {
+                String requestId = restChoiceText(request.get("requestId"), "rest request ID");
+                PendingRestChoice pending = pendingRestChoice(playerId, actor, requestId);
+                if (pending.preparation == null)
+                    throw new dmmt.online.automation.RuleRuntime.Unavailable("restChoice", "Prepare this rest first.");
+                String supplied = restChoiceText(body.get("preparedVersion"), "preparation version");
+                String expected = pending.preparation.offer().path("choiceVersion").asText();
+                if (!java.security.MessageDigest.isEqual(supplied.getBytes(StandardCharsets.UTF_8), expected.getBytes(StandardCharsets.UTF_8)))
+                    throw new dmmt.online.automation.RuleRuntime.Unavailable("restChoice", "The preparation changed. Reopen downtime.");
+                if (pending.before != null) {
+                    if (!pending.request.equals(request))
+                        throw new dmmt.online.automation.RuleRuntime.Unavailable("requestId", "This rest request ID was already used.");
+                    json(ctx, 200, pending.before.offer());
+                    return;
+                }
+                requireCurrentRestChoice(pending, actor);
+                pending.before = automationHost.beginPreparedRestChoices(pending.preparation, request, diceRandom);
+                pending.request = request.deepCopy();
+                json(ctx, 200, pending.before.offer());
+                return;
+            }
             if (body.size() == 1 && body.path("request") instanceof ObjectNode request) {
                 String requestId = restChoiceText(request.get("requestId"), "rest request ID");
                 RestChoiceKey key = new RestChoiceKey(playerId, actor.getId(), requestId);
                 PendingRestChoice existing = restChoices.get(key);
                 if (existing != null) {
-                    if (!existing.request.equals(request))
+                    if (existing.preparation != null || !existing.request.equals(request))
                         throw new dmmt.online.automation.RuleRuntime.Unavailable("requestId", "This rest request ID was already used.");
                     json(ctx, 200, existing.before.offer());
                     return;
@@ -6577,6 +6644,8 @@ public final class OnlineSessionServer {
                 throw new IllegalArgumentException("Invalid rest choice request.");
             String requestId = restChoiceText(body.get("requestId"), "rest request ID");
             PendingRestChoice pending = pendingRestChoice(playerId, actor, requestId);
+            if (pending.before == null)
+                throw new dmmt.online.automation.RuleRuntime.Unavailable("restChoice", "Choose downtime moves before rest benefits.");
             requireRestChoiceVersion(body.get("choiceVersion"), pending.before);
             if (pending.after != null) {
                 if (!pending.beforeChoices.equals(selections))

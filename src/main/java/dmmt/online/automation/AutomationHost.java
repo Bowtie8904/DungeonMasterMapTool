@@ -1481,6 +1481,12 @@ public final class AutomationHost {
 
     private StagedRest beginRest(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request,
                                  RandomGenerator random, RestRoster roster, boolean settlePartyRecovery) {
+        StagedRest prepared = prepareRestStage(pack, sheet, origin, request, random, roster, settlePartyRecovery);
+        return runRestMoves(prepared, (ArrayNode) request.get("moves"), random, roster);
+    }
+
+    private StagedRest prepareRestStage(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request,
+                                         RandomGenerator random, RestRoster roster, boolean settlePartyRecovery) {
         RuleJson.fields(request, "/request", "kind", "expectedRevision", "preparation", "moves", "completion");
         RuleJson.checkTree(request, "/request", 0, new int[]{0});
         String kind = RuleJson.text(request.get("kind"), "/request/kind");
@@ -1491,18 +1497,7 @@ public final class AutomationHost {
         ArrayNode preparation = restSelections(request.get("preparation"), "/request/preparation");
         ArrayNode moves = restSelections(request.get("moves"), "/request/moves");
         restSelections(request.get("completion"), "/request/completion");
-        if (moves.size() > 64) throw RuleJson.error("/request/moves", "A rest may contain at most 64 moves.");
-        boolean targeted = false;
-        for (int i = 0; i < moves.size(); i++) {
-            String at = "/request/moves/" + i;
-            RuleJson.fields(moves.get(i), at, "selection", "options", "target");
-            RuleJson.object(moves.get(i).get("selection"), at + "/selection");
-            restSelections(moves.get(i).get("options"), at + "/options");
-            if (moves.get(i).has("target")) {
-                RuleJson.object(moves.get(i).get("target"), at + "/target");
-                targeted = true;
-            }
-        }
+        boolean targeted = targetedRestMoves(moves);
         String actorId = RuleJson.id(RuleJson.object(origin, "/event").get("actorId"), "/event/actorId");
         if (pack.rest() == null) throw new NotReady("The shared ruleset has no rest configuration.");
         if ((targeted || settlePartyRecovery) && roster == null)
@@ -1514,7 +1509,6 @@ public final class AutomationHost {
             throw new RuleRuntime.Unavailable("stale", "The character changed. Reopen this rest.");
         if (revision == MAX_REST_REVISION)
             throw new RuleRuntime.Unavailable("revision", "The character's rest revision cannot be advanced.");
-        List<SheetProjection.SourceElement> initialSources = sources(pack, sheet);
         StagedRestRecipients recipients = targeted || settlePartyRecovery ? new StagedRestRecipients(pack, actorId, roster) : null;
 
         Set<String> initial = restEffectSnapshot(working);
@@ -1530,10 +1524,44 @@ public final class AutomationHost {
 
         ObjectNode response = RuleJson.JSON.createObjectNode();
         ArrayNode actions = response.putArray("actions"), outbox = response.putArray("outbox");
-        ArrayNode moveEvents = response.putArray("moveEvents");
+        response.putArray("moveEvents");
         List<ObjectNode> completedMoves = settlePartyRecovery ? new ArrayList<>() : null;
         response.set("preparationEvent", prepared.path("event").deepCopy());
         appendRestStage(prepared, actions, outbox, targeted);
+        return new StagedRest(pack, sheet.deepCopy(), working, stagedOrigin, progress, initial, recipients,
+                targeted, settlePartyRecovery, response, completedMoves, revision);
+    }
+
+    private static boolean targetedRestMoves(ArrayNode moves) {
+        if (moves.size() > 64) throw RuleJson.error("/request/moves", "A rest may contain at most 64 moves.");
+        boolean targeted = false;
+        for (int i = 0; i < moves.size(); i++) {
+            String at = "/request/moves/" + i;
+            RuleJson.fields(moves.get(i), at, "selection", "options", "target");
+            RuleJson.object(moves.get(i).get("selection"), at + "/selection");
+            restSelections(moves.get(i).get("options"), at + "/options");
+            if (moves.get(i).has("target")) {
+                RuleJson.object(moves.get(i).get("target"), at + "/target");
+                targeted = true;
+            }
+        }
+        return targeted;
+    }
+
+    private StagedRest runRestMoves(StagedRest prepared, ArrayNode moves, RandomGenerator random, RestRoster roster) {
+        StagedRest staged = prepared.copy();
+        Pack pack = staged.pack;
+        ObjectNode working = staged.working, stagedOrigin = staged.origin, response = staged.response;
+        StagedRestRecipients recipients = staged.recipients;
+        RestProgress progress = staged.progress;
+        boolean targeted = targetedRestMoves(moves) || staged.targeted;
+        if (targeted && recipients == null)
+            throw new RuleRuntime.Unavailable("restTarget", "A host recipient roster is required for this rest.");
+        if (targeted && !staged.targeted) validateTargetRestCommands(response);
+        List<SheetProjection.SourceElement> initialSources = sources(pack, staged.original);
+        ArrayNode actions = (ArrayNode) response.get("actions"), outbox = (ArrayNode) response.get("outbox");
+        ArrayNode moveEvents = (ArrayNode) response.get("moveEvents");
+        List<ObjectNode> completedMoves = staged.completedMoves;
         for (JsonNode move : moves) {
             PartyTargets party = move.has("target") ? recipients.party() : null;
             RestTarget target = party == null ? null : new RestTarget(
@@ -1543,7 +1571,7 @@ public final class AutomationHost {
                     ? (current, stage) -> settleRestInventory(current, stage, recipients, roster, true) : null;
             boolean settleTargetInventory = target != null && roster != null && roster.grantInventory() != null;
             RestMoveResult result = restMove(pack, working, stagedOrigin, progress, (ObjectNode) move.get("selection"),
-                    (ArrayNode) move.get("options"), random, target, initialSources, settlePartyRecovery,
+                    (ArrayNode) move.get("options"), random, target, initialSources, staged.settlePartyRecovery,
                     settleSelected, settleTargetInventory);
             progress = result.progress();
             ObjectNode completedMove = RuleJson.object(result.response().get("event"), "/event").deepCopy();
@@ -1553,10 +1581,10 @@ public final class AutomationHost {
             settleRestInventory(working, result.response(), recipients, roster, settleTargetInventory);
             appendRestStage(result.response(), actions, outbox, targeted);
             carryRestTable(stagedOrigin, result.response().required("event"));
-            projection.state(working).put("revision", revision);
+            projection.state(working).put("revision", staged.revision);
         }
-        return new StagedRest(pack, sheet.deepCopy(), working, stagedOrigin, progress, initial, recipients,
-                targeted, settlePartyRecovery, response, completedMoves, revision);
+        return new StagedRest(pack, staged.original, working, stagedOrigin, progress, staged.initialEffects, recipients,
+                targeted, staged.settlePartyRecovery, response, completedMoves, staged.revision);
     }
 
     private RestTransaction finishRest(StagedRest staged, ObjectNode finished, RandomGenerator random) {
@@ -1623,7 +1651,8 @@ public final class AutomationHost {
         }
 
         StagedRest copy() {
-            List<ObjectNode> moves = completedMoves == null ? null : completedMoves.stream().map(ObjectNode::deepCopy).toList();
+            List<ObjectNode> moves = completedMoves == null ? null
+                    : new ArrayList<>(completedMoves.stream().map(ObjectNode::deepCopy).toList());
             return new StagedRest(pack, original.deepCopy(), working.deepCopy(), origin.deepCopy(), progress, initialEffects,
                     recipients == null ? null : recipients.copy(), targeted, settlePartyRecovery, response.deepCopy(), moves, revision);
         }
@@ -1671,7 +1700,7 @@ public final class AutomationHost {
                                      String sourceVersion, String phase) {
         if (principalId == null || principalId.isBlank() || sourceVersion == null || sourceVersion.isBlank())
             throw new IllegalArgumentException("The rest choice needs an owner and sheet version.");
-        if (!Set.of("beforeReset", "afterReset").contains(phase))
+        if (!Set.of("afterPrepare", "beforeReset", "afterReset").contains(phase))
             throw RuleJson.error("/phase", "Unknown rest completion phase.");
         ObjectNode signed = RuleJson.JSON.createObjectNode().put("purpose", "rest-choice-v1")
                 .put("pack", pack.revision()).put("principal", principalId).put("sheetVersion", sourceVersion)
@@ -1714,15 +1743,33 @@ public final class AutomationHost {
         ObjectNode preview = working.deepCopy();
         RandomGenerator noSampling = () -> {
             throw new RuleRuntime.Unavailable("randomPreview",
-                    "This rest requires an automatic preparation roll before choices, which is not supported yet.");
+                    "This rest requires an automatic preparation roll before choosing moves.");
         };
-        ObjectNode prepared = prepareRest(pack, preview, origin, kind, revision, RuleJson.JSON.createArrayNode(), noSampling, initial);
+        ObjectNode prepared;
+        try {
+            prepared = prepareRest(pack, preview, origin, kind, revision, RuleJson.JSON.createArrayNode(), noSampling, initial);
+        } catch (RuleRuntime.Unavailable failure) {
+            if (!"randomPreview".equals(failure.code())) throw failure;
+            ObjectNode offer = RuleJson.JSON.createObjectNode().put("kind", kind).put("revision", revision)
+                    .put("offerVersion", version).put("postOutcomeChoices", true).put("prepareBeforeMoves", true);
+            offer.set("plan", initialEvent.path("rest").deepCopy());
+            offer.set("preparation", preparation);
+            offer.putArray("moves");
+            offer.putArray("completion");
+            return offer;
+        }
         projection.state(preview).put("revision", revision);
         RestProgress progress = restProgress(pack, prepared);
         ObjectNode stagedOrigin = origin.deepCopy();
         carryRestTable(stagedOrigin, prepared.required("event"));
+        return restPlanOffer(pack, preview, stagedOrigin, progress, prepared.path("event"), revision, version, preparation, party);
+    }
+
+    private ObjectNode restPlanOffer(Pack pack, ObjectNode preview, ObjectNode stagedOrigin, RestProgress progress,
+                                     JsonNode preparedEvent, long revision, String version, ArrayNode preparation,
+                                     PartyTargets party) {
         ArrayNode moves = RuleJson.JSON.createArrayNode();
-        var initialCandidates = candidates(pack, preview, prepared.path("event").deepCopy());
+        var initialCandidates = candidates(pack, preview, preparedEvent.deepCopy());
         for (var candidate : initialCandidates) {
             for (var ref : candidate.program().bindings("downtime.move", "downtime")) {
                 JsonNode binding = RuleDispatcher.binding(candidate.program().rule(ref.ruleId()), ref.bindingId());
@@ -1734,8 +1781,8 @@ public final class AutomationHost {
                         && !binding.has("targetSelection"))
                     continue;
                 String availability = metadata.path("kind").asText();
-                if ("short".equals(availability) && !"short".equals(kind)
-                        || "long".equals(availability) && !"long".equals(kind))
+                if ("short".equals(availability) && !"short".equals(progress.kind())
+                        || "long".equals(availability) && !"long".equals(progress.kind()))
                     continue;
                 ObjectNode event = restMoveEvent(stagedOrigin, progress, metadata);
                 var sources = candidates(pack, preview, event);
@@ -1753,7 +1800,7 @@ public final class AutomationHost {
             ObjectNode event = restCompletionEvent(pack, preview, stagedOrigin, progress.plan(), phase);
             completion.addAll(restCompletionOptions(pack, preview, event, phase));
         }
-        ObjectNode offer = RuleJson.JSON.createObjectNode().put("kind", kind).put("revision", revision)
+        ObjectNode offer = RuleJson.JSON.createObjectNode().put("kind", progress.kind()).put("revision", revision)
                 .put("offerVersion", version).put("postOutcomeChoices", true);
         offer.set("plan", progress.plan());
         offer.set("preparation", preparation);
@@ -1799,6 +1846,61 @@ public final class AutomationHost {
         public ObjectNode offer() { return offer.deepCopy(); }
     }
 
+    public final class RestPreparationStage {
+        private final StagedRest staged;
+        private final String principalId, sourceVersion;
+        private final ObjectNode request, offer;
+
+        private RestPreparationStage(StagedRest staged, String principalId, String sourceVersion,
+                                     ObjectNode request, ObjectNode offer) {
+            this.staged = staged;
+            this.principalId = principalId;
+            this.sourceVersion = sourceVersion;
+            this.request = request.deepCopy();
+            this.offer = offer.deepCopy();
+        }
+
+        public ObjectNode offer() { return offer.deepCopy(); }
+    }
+
+    /** Samples preparation once and retains it while the owner chooses downtime moves. */
+    public RestPreparationStage beginRestPreparation(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request,
+                                                      String principalId, String sourceVersion, RandomGenerator random,
+                                                      RestRoster roster) {
+        if (replayRest(sheet, request, principalId) != null)
+            throw new RuleRuntime.Unavailable("restReceipt", "This rest has already been completed.");
+        if (!restSelections(request.get("moves"), "/request/moves").isEmpty()
+                || !restSelections(request.get("completion"), "/request/completion").isEmpty())
+            throw RuleJson.error("/request", "Choose downtime moves after preparation.");
+        requireRestOffer(pack, sheet, origin, request, principalId, sourceVersion, roster);
+        ObjectNode stagedRequest = request.deepCopy();
+        stagedRequest.remove(List.of("requestId", "offerVersion"));
+        StagedRest staged = prepareRestStage(pack, sheet, origin, stagedRequest, random, roster, true);
+        ObjectNode offer = restPlanOffer(pack, staged.working, staged.origin, staged.progress,
+                staged.response.path("preparationEvent"), staged.revision, request.path("offerVersion").asText(),
+                RuleJson.JSON.createArrayNode(), staged.recipients.party());
+        ArrayNode reports = offer.putArray("reports");
+        for (JsonNode action : staged.response.path("actions"))
+            if (!action.path("report").asText().isBlank()) reports.add(action.path("report").asText());
+        offer.put("choiceVersion", restChoiceVersion(pack, request, offer, principalId, sourceVersion, "afterPrepare"));
+        return new RestPreparationStage(staged, principalId, sourceVersion, request, offer);
+    }
+
+    /** Continues the retained preparation without sampling it again. */
+    public RestChoiceStage beginPreparedRestChoices(RestPreparationStage previous, ObjectNode request, RandomGenerator random) {
+        if (previous == null) throw RuleJson.error("/choice", "Expected a prepared rest.");
+        replayRest(previous.staged.original, request, previous.principalId);
+        if (!restSelections(request.get("completion"), "/request/completion").isEmpty())
+            throw RuleJson.error("/request/completion", "Choose completion benefits after the moves.");
+        ObjectNode initial = request.deepCopy();
+        initial.putArray("moves");
+        if (!initial.equals(previous.request))
+            throw new RuleRuntime.Unavailable("restChoice", "The preparation choices changed. Reopen downtime.");
+        StagedRest staged = runRestMoves(previous.staged, restSelections(request.get("moves"), "/request/moves"),
+                random, previous.staged.recipients.roster);
+        return restBeforeChoices(staged, request, previous.principalId, previous.sourceVersion);
+    }
+
     public record RestChoiceCommit(ObjectNode sheet, ObjectNode request, RestTransaction transaction) {
         public RestChoiceCommit {
             sheet = sheet.deepCopy();
@@ -1816,18 +1918,36 @@ public final class AutomationHost {
             throw new RuleRuntime.Unavailable("restReceipt", "This rest has already been completed.");
         ArrayNode completion = restSelections(request.get("completion"), "/request/completion");
         if (!completion.isEmpty()) throw RuleJson.error("/request/completion", "Choose completion benefits after the moves.");
+        requireRestOffer(pack, sheet, origin, request, principalId, sourceVersion, roster);
+        requirePreviewableRest(pack, sheet, origin, request, principalId, sourceVersion);
+        ObjectNode stagedRequest = request.deepCopy();
+        stagedRequest.remove(List.of("requestId", "offerVersion"));
+        StagedRest staged = beginRest(pack, sheet, origin, stagedRequest, random, roster, true);
+        return restBeforeChoices(staged, request, principalId, sourceVersion);
+    }
+
+    private RestChoiceStage restBeforeChoices(StagedRest staged, ObjectNode request, String principalId, String sourceVersion) {
+        Pack pack = staged.pack;
+        RestCompletionFacts facts = restCompletionFacts(pack, staged.working, staged.origin, staged.progress, staged.initialEffects);
+        ObjectNode offer = restChoiceOffer(staged, request, principalId, sourceVersion, "beforeReset", facts.beforeEvent(), null);
+        return new RestChoiceStage(staged, principalId, sourceVersion, request, "beforeReset", offer,
+                null, null, null, Set.of());
+    }
+
+    private void requireRestOffer(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request,
+                                  String principalId, String sourceVersion, RestRoster roster) {
         String supplied = RuleJson.text(request.get("offerVersion"), "/request/offerVersion");
         String expected = restOfferVersion(pack, sheet, origin, request.path("kind").asText(), principalId, sourceVersion);
         if (!MessageDigest.isEqual(supplied.getBytes(StandardCharsets.UTF_8), expected.getBytes(StandardCharsets.UTF_8))
                 || roster == null || !sourceVersion.equals(roster.sourceVersion()))
             throw new RuleRuntime.Unavailable("restOffer", "The rest offer changed. Reopen downtime.");
-        ObjectNode stagedRequest = request.deepCopy();
-        stagedRequest.remove(List.of("requestId", "offerVersion"));
-        StagedRest staged = beginRest(pack, sheet, origin, stagedRequest, random, roster, true);
-        RestCompletionFacts facts = restCompletionFacts(pack, staged.working, staged.origin, staged.progress, staged.initialEffects);
-        ObjectNode offer = restChoiceOffer(staged, request, principalId, sourceVersion, "beforeReset", facts.beforeEvent(), null);
-        return new RestChoiceStage(staged, principalId, sourceVersion, request, "beforeReset", offer,
-                null, null, null, Set.of());
+    }
+
+    private void requirePreviewableRest(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request,
+                                        String principalId, String sourceVersion) {
+        if (describeRest(pack, sheet, origin, request.path("kind").asText(), principalId, sourceVersion)
+                .path("prepareBeforeMoves").asBoolean())
+            throw new RuleRuntime.Unavailable("randomPreview", "Prepare this rest before choosing downtime moves.");
     }
 
     /** Applies the first completion phase on a private copy and offers the resulting post-reset choices. */
@@ -1949,6 +2069,7 @@ public final class AutomationHost {
                 throw new RuleRuntime.Unavailable("restOffer", "The rest offer changed. Reopen downtime.");
             if (roster != null && !sourceVersion.equals(roster.sourceVersion()))
                 throw new RuleRuntime.Unavailable("restOffer", "The rest roster changed. Reopen downtime.");
+            requirePreviewableRest(pack, working, origin, request, principalId, sourceVersion);
         }
         ObjectNode rest = request.deepCopy();
         rest.remove("requestId");

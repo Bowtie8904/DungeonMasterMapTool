@@ -152,6 +152,47 @@ describe('host-authored rest dialog', () => {
     expect(dialog.text).toContain('Benefits settled.');
   });
 
+  it('retains rolled preparation while the owner chooses downtime moves', async () => {
+    const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      if (!init.body) return Response.json({ ...offer(), postOutcomeChoices: true, prepareBeforeMoves: true,
+        moves: [], completion: [] });
+      const request = JSON.parse(String(init.body)) as Record<string, unknown>;
+      calls.push({ url, body: request });
+      if ('prepare' in request) {
+        if (calls.length === 1) throw new Error('Preparation response lost.');
+        return Response.json({ ...offer(), postOutcomeChoices: true, preparation: [], choiceVersion: 'prepared',
+          plan: { moves: 3, longMoves: 0 }, reports: ['Preparation rolled 1.'] });
+      }
+      if (url.endsWith('/complete')) return Response.json({ actions: [{ report: 'Rest completed.' }] });
+      return Response.json({ phase: 'preparedVersion' in request ? 'beforeReset' : 'afterReset',
+        choiceVersion: 'next', cleared: {}, reports: [], actions: [] });
+    }));
+    await openAutomationRestDialog('hero', 'short', async () => {});
+    const dialog = body.all('dialog')[0];
+    expect(dialog.all('select')).toHaveLength(0);
+    const prepare = dialog.all('button').find(button => button.text === 'Prepare rest')!;
+    prepare.click();
+    await settle();
+    expect(dialog.text).toContain('Preparation response lost.');
+    prepare.click();
+    await settle();
+    expect(calls[1].body).toEqual(calls[0].body);
+    expect(dialog.text).toContain('Preparation rolled 1.');
+    expect(dialog.all('select')).toHaveLength(3);
+    const select = dialog.all('select')[0];
+    select.value = '1'; select.change();
+    dialog.all('button').find(button => button.text === 'Complete rest')!.click();
+    await settle();
+    const preparedRequest = calls[0].body.request as Record<string, unknown>;
+    const movesRequest = calls[2].body.request as Record<string, unknown>;
+    expect(calls[2].body.preparedVersion).toBe('prepared');
+    expect(movesRequest.requestId).toBe(preparedRequest.requestId);
+    expect(movesRequest.preparation).toEqual(preparedRequest.preparation);
+    expect(movesRequest.moves).toHaveLength(1);
+    expect(dialog.text).toContain('Rest completed.');
+  });
+
   it('finishes without another confirmation when no post-outcome benefits are available', async () => {
     const calls: string[] = [];
     vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {

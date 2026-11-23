@@ -143,8 +143,9 @@ Pending choices live in the running host and expire on restart or cache eviction
 `POST .../rest/choices` first accepts `{request}` with no completion selections, then
 `{requestId, choiceVersion, selections}` for before-reset choices. `POST .../rest/complete` accepts
 `{choiceVersion, request}` with both phases' selections in order. Each response supplies the next signed
-choice version and host-derived descriptors; exact retries reuse the staged outcomes.
-Automatic preparation rolls are rejected during preview until interactive post-roll choices exist.
+choice version and host-derived descriptors; exact retries reuse the staged outcomes. If preparation needs an
+automatic roll, `{request, prepare: true}` stages it before move selection and `{request, preparedVersion}`
+continues with the chosen moves without rerolling. Older direct requests cannot skip this preparation.
 Converted companions use their current sheet Stress track as the source of their unmarked-slot pool. They return
 before long-rest moves and clear the owner's net Stress recovered by each completed move; unavailable companions
 do not recover during short rests. `CompanionRestRecoveryTest` and the live HTTP fixture cover this ordering.

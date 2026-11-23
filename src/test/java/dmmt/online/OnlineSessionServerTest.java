@@ -3254,27 +3254,131 @@ class OnlineSessionServerTest {
         assertTrue(MAPPER.readTree(dmLegacy.body()).path("legacy").asBoolean());
     }
 
-    @Test
-    void formatTwoRestRejectsRandomPreparationPreviewWithoutRolling() throws Exception {
-        installRestRules();
+    private void addAutomaticRestPreparationRoll() throws Exception {
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
         ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
         ruleset.withObject("/automation").withArray("rules").add(MAPPER.readTree("""
                 {"id":"random-before-choice","bindings":[{"id":"rest","event":"rest.prepare","surface":"rest","mode":"automatic"}],
-                 "do":[{"op":"dice.roll","count":1,"sides":4,"as":"roll"}],"ui":{"label":"Roll before rest"}}
+                 "do":[{"op":"dice.roll","count":1,"sides":4,"as":"roll"},
+                       {"op":"plan.adjust","plan":"event.rest","field":"moves","by":{"read":"result.roll"},"label":"Extra time"}],
+                 "ui":{"label":"Roll before rest","report":"Preparation rolled {result.roll}."}}
                 """));
         java.nio.file.Files.writeString(file, ruleset.toString());
+    }
+
+    @Test
+    void formatTwoRestRetainsAutomaticPreparationRollsWhileChoosingMoves() throws Exception {
+        installRestRules();
+        addAutomaticRestPreparationRoll();
         campaign.getActors().add(Campaign.Actor.builder().id("resting").name("Ada").ownerId(playerId()).build());
         store.saveSheet(campaign.getId(), "resting", """
                 {"name":"Ada","hp":{"slots":6,"on":1},"stress":{"slots":6,"on":1},
                  "armorTrack":{"slots":4,"on":1},"hope":{"slots":6,"on":1}}
                 """);
-        String before = store.loadSheet(campaign.getId(), "resting");
-        var rejected = restHttp(cookie(), "resting", "short", null);
+        String owner = cookie(), other = allyCookie("other-rest-player");
+        String original = store.loadSheet(campaign.getId(), "resting");
+        int history = store.historyTail(campaign.getId(), 100).size();
+        var described = restHttp(owner, "resting", "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode offer = MAPPER.readTree(described.body());
+        assertTrue(offer.path("prepareBeforeMoves").asBoolean());
+        assertTrue(offer.path("moves").isEmpty());
+        ObjectNode body = restRequest(offer, "random-preparation");
+        body.withObject("/request").withArray("preparation")
+                .add(restSelection(restDescriptor(offer.path("preparation"), "test-extra")));
+        assertEquals(409, restHttp(owner, "resting", null, body.toString()).statusCode());
+        assertEquals(409, restChoiceHttp(owner, "resting", "choices", body).statusCode());
+        ObjectNode preparing = body.deepCopy().put("prepare", true);
+        assertEquals(403, restChoiceHttp(other, "resting", "choices", preparing).statusCode());
+        diceSeed(0);
+        var first = restChoiceHttp(owner, "resting", "choices", preparing);
+        assertEquals(200, first.statusCode(), first.body());
+        JsonNode prepared = MAPPER.readTree(first.body());
+        int allowance = prepared.at("/plan/moves").asInt();
+        assertTrue(allowance >= 4 && allowance <= 7, prepared.toString());
+        String report = java.util.stream.StreamSupport.stream(prepared.path("reports").spliterator(), false)
+                .map(JsonNode::asText).filter(text -> text.startsWith("Preparation rolled ")).findFirst().orElseThrow();
+        assertFalse(prepared.path("moves").isEmpty());
+        assertEquals(first.body(), restChoiceHttp(owner, "resting", "choices", preparing).body());
+        ObjectNode changedPreparation = preparing.deepCopy();
+        ((ArrayNode) changedPreparation.at("/request/preparation")).removeAll();
+        assertEquals(409, restChoiceHttp(owner, "resting", "choices", changedPreparation).statusCode());
+        assertEquals(original, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+
+        ObjectNode selected = body.deepCopy();
+        addRestMove((ObjectNode) selected.path("request"), restDescriptor(prepared.path("moves"), "rest-stress"));
+        selected.put("preparedVersion", "forged");
+        assertEquals(409, restChoiceHttp(owner, "resting", "choices", selected).statusCode());
+        selected.put("preparedVersion", prepared.path("choiceVersion").asText());
+        var moves = restChoiceHttp(owner, "resting", "choices", selected);
+        assertEquals(200, moves.statusCode(), moves.body());
+        JsonNode beforeReset = MAPPER.readTree(moves.body());
+        assertTrue(beforeReset.path("reports").toString().contains(report));
+        assertEquals(moves.body(), restChoiceHttp(owner, "resting", "choices", selected).body());
+        ObjectNode beforeChoice = MAPPER.createObjectNode().put("requestId", "random-preparation")
+                .put("choiceVersion", beforeReset.path("choiceVersion").asText());
+        beforeChoice.putArray("selections");
+        var after = restChoiceHttp(owner, "resting", "choices", beforeChoice);
+        assertEquals(200, after.statusCode(), after.body());
+        ObjectNode complete = MAPPER.createObjectNode()
+                .put("choiceVersion", MAPPER.readTree(after.body()).path("choiceVersion").asText());
+        complete.set("request", selected.path("request").deepCopy());
+        var completed = restChoiceHttp(owner, "resting", "complete", complete);
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode receipt = MAPPER.readTree(completed.body());
+        assertEquals(allowance, receipt.at("/preparationEvent/rest/moves").asInt());
+        assertTrue(receipt.path("actions").findValuesAsText("report").contains(report));
+        assertEquals(completed.body(), restChoiceHttp(owner, "resting", "complete", complete).body());
+    }
+
+    @Test
+    void preparedRestRejectsStaleRecipientWithoutPublishingOrSpending() throws Exception {
+        installTargetRestRules("gain");
+        addAutomaticRestPreparationRoll();
+        addRestParty();
+        String owner = cookie();
+        String source = store.loadSheet(campaign.getId(), "resting");
+        String recipient = store.loadSheet(campaign.getId(), "mira");
+        String other = store.loadSheet(campaign.getId(), "borin");
+        int fear = campaign.getFear(), history = store.historyTail(campaign.getId(), 100).size();
+        JsonNode offer = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode body = restRequest(offer, "prepared-target");
+        ObjectNode preparing = body.deepCopy().put("prepare", true);
+        var response = restChoiceHttp(owner, "resting", "choices", preparing);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode prepared = MAPPER.readTree(response.body());
+        targetRestMove(body, prepared, "mira");
+        body.put("preparedVersion", prepared.path("choiceVersion").asText());
+
+        ObjectNode changed = (ObjectNode) MAPPER.readTree(recipient);
+        changed.put("notes", "Changed elsewhere");
+        store.saveSheet(campaign.getId(), "mira", changed.toString());
+        assertEquals(409, restChoiceHttp(owner, "resting", "choices", body).statusCode());
+        assertEquals(source, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(other, store.loadSheet(campaign.getId(), "borin"));
+        assertEquals(fear, campaign.getFear());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+
+        store.saveSheet(campaign.getId(), "mira", recipient);
+        var moves = restChoiceHttp(owner, "resting", "choices", body);
+        assertEquals(200, moves.statusCode(), moves.body());
+        ObjectNode advance = MAPPER.createObjectNode().put("requestId", "prepared-target")
+                .put("choiceVersion", MAPPER.readTree(moves.body()).path("choiceVersion").asText());
+        advance.putArray("selections");
+        var after = restChoiceHttp(owner, "resting", "choices", advance);
+        assertEquals(200, after.statusCode(), after.body());
+        store.saveSheet(campaign.getId(), "mira", changed.toString());
+        ObjectNode complete = MAPPER.createObjectNode()
+                .put("choiceVersion", MAPPER.readTree(after.body()).path("choiceVersion").asText());
+        complete.set("request", body.path("request").deepCopy());
+        var rejected = restChoiceHttp(owner, "resting", "complete", complete);
         assertEquals(409, rejected.statusCode(), rejected.body());
-        assertEquals("randomPreview", MAPPER.readTree(rejected.body()).path("code").asText());
-        assertTrue(rejected.body().contains("automatic preparation roll"));
-        assertEquals(before, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(source, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(changed, MAPPER.readTree(store.loadSheet(campaign.getId(), "mira")));
+        assertEquals(other, store.loadSheet(campaign.getId(), "borin"));
+        assertEquals(fear, campaign.getFear());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
     }
 
     private HttpResponse<String> resultHttp(String cookie, String actorId, String resultId) throws Exception {
