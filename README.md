@@ -53,7 +53,8 @@ freeze marked-track locks and expire before rest moves; Daggerheart healing resp
 This staged ordering is not yet connected to the live rest workflow, and legacy locks still require migration.
 The experimental runtime can observe ordered track changes inside a private transaction, including clamped
 Armor clears and damage marks. A bounded isolated dispatcher can run the owner's supplied automatic reactions
-in order, but source activation, recipient reactions and live rest recovery are not yet connected.
+in order without copying unrelated sources for each event; computed actor pools still refresh. Source activation,
+recipient reactions and live rest recovery are not yet connected.
 Converted downtime buttons now describe their host-validated move identity and rest restriction. This metadata
 and the shared ruleset's validated rest limits do not yet make the format-2 rest workflow available.
 The host can stage and validate rest preparation and individual moves on a private copy, retaining the

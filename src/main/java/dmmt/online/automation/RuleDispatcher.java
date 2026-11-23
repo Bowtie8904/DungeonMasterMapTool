@@ -382,6 +382,10 @@ public final class RuleDispatcher {
             List<ActionResult> results, List<ObjectNode> outbox) {
         boolean hasReactions = byInstance.values().stream().anyMatch(candidate ->
                 !candidate.program().automatic("track.changed").isEmpty());
+        List<String> relevant = byInstance.entrySet().stream()
+                .filter(entry -> entry.getValue().program().hasComputedActorPools()
+                        || !entry.getValue().program().automatic("track.changed").isEmpty())
+                .map(Map.Entry::getKey).sorted().toList();
         return (staged, holder, event) -> {
             String actorId = staged.path("actor").path("id").asText();
             if (!actorId.equals(staged.path(holder).path("id").asText()))
@@ -394,13 +398,13 @@ public final class RuleDispatcher {
             String currentId = staged.path("source").path("instanceId").asText();
             mergeSourceState(workingContexts.get(currentId), staged);
             List<Candidate> candidates = new ArrayList<>();
-            for (var entry : byInstance.entrySet()) {
-                ObjectNode context = workingContexts.get(entry.getKey()).deepCopy();
+            for (String instanceId : relevant) {
+                ObjectNode context = workingContexts.get(instanceId).deepCopy();
                 context.set("actor", staged.get("actor").deepCopy());
                 context.set("event", event.deepCopy());
                 context.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
                 context.remove(List.of("recipient", "outbox"));
-                candidates.add(new Candidate(entry.getValue().program(), context));
+                candidates.add(new Candidate(byInstance.get(instanceId).program(), context));
             }
             EventResolution reacted;
             budget.depth++;

@@ -123,6 +123,7 @@ public final class RuleCompiler {
         private final ObjectNode initialState;
         private final ObjectNode limits;
         private final ObjectNode pools;
+        private final boolean hasComputedActorPools;
         private final Map<String, List<String>> poolsByEffect;
         private final Set<String> boundPoolIds;
         private final ObjectNode effects;
@@ -140,6 +141,16 @@ public final class RuleCompiler {
             this.initialState = decl.state().deepCopy();
             this.limits = decl.limits().deepCopy();
             this.pools = decl.pools().deepCopy();
+            boolean computedActorPools = false;
+            var poolDefinitions = this.pools.elements();
+            while (poolDefinitions.hasNext()) {
+                JsonNode definition = poolDefinitions.next();
+                if ("actor".equals(definition.path("scope").asText()) && !definition.path("max").isInt()) {
+                    computedActorPools = true;
+                    break;
+                }
+            }
+            this.hasComputedActorPools = computedActorPools;
             Map<String, List<String>> bound = new HashMap<>();
             this.pools.fields().forEachRemaining(entry -> {
                 if (entry.getValue().has("whileEffect"))
@@ -204,6 +215,7 @@ public final class RuleCompiler {
         public ObjectNode initialState() { return initialState.deepCopy(); }
         ObjectNode limits() { return limits.deepCopy(); }
         ObjectNode pools() { return pools.deepCopy(); }
+        boolean hasComputedActorPools() { return hasComputedActorPools; }
         List<String> poolsBoundTo(String effectId) { return poolsByEffect.getOrDefault(effectId, List.of()); }
         Set<String> boundPoolIds() { return boundPoolIds; }
         boolean hasEffect(String effectId) { return effects.has(effectId); }

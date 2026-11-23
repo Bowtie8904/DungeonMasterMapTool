@@ -30,6 +30,77 @@ class OwnerTrackReactionsTest {
     }
 
     @Test
+    @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "dmmt.benchmark.automation", matches = "true")
+    void measureManySourceTrackReactions() throws Exception {
+        RuleCompiler.Program active = program("features:active", """
+                {"state":{"seen":0},"rules":[
+                 {"id":"use","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"track.clear","track":"actor.armorTrack","amount":1},
+                        {"op":"track.clear","track":"actor.armorTrack","amount":1},
+                        {"op":"track.clear","track":"actor.armorTrack","amount":1},
+                        {"op":"track.clear","track":"actor.armorTrack","amount":1}],"ui":{"label":"Use"}},
+                 {"id":"observe","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                  "do":[{"op":"state.increment","slot":"seen","by":1}],"ui":{}}
+                ]}
+                """);
+        RuleCompiler.Program idle = program("features:idle", """
+                {"rules":[{"id":"idle","bindings":[{"id":"auto","event":"roll.finished","surface":"roll","mode":"automatic"}],"ui":{}}]}
+                """);
+        List<RuleDispatcher.Candidate> sources = new java.util.ArrayList<>();
+        sources.add(new RuleDispatcher.Candidate(active, context(active.sourceId(), "active")));
+        for (int i = 0; i < 64; i++)
+            sources.add(new RuleDispatcher.Candidate(idle, context(idle.sourceId(), "idle-" + i)));
+        var programs = Map.of(active.sourceId(), active, idle.sourceId(), idle);
+        var allocation = java.lang.management.ManagementFactory.getPlatformMXBean(com.sun.management.ThreadMXBean.class);
+        if (allocation == null || !allocation.isThreadAllocatedMemorySupported())
+            throw new IllegalStateException("The benchmark requires JVM allocation counters.");
+        allocation.setThreadAllocatedMemoryEnabled(true);
+        long[] nanos = new long[20], bytes = new long[20];
+        long thread = Thread.currentThread().threadId();
+        for (int i = -10; i < nanos.length; i++) {
+            long before = allocation.getThreadAllocatedBytes(thread), start = System.nanoTime();
+            var result = RuleDispatcher.executeOwnerTrackReactions(sources, List.of(select("use", "active")), noRandom(), programs);
+            long elapsed = System.nanoTime() - start, allocated = allocation.getThreadAllocatedBytes(thread) - before;
+            assertEquals(4, result.contexts().getFirst().at("/state/seen").asInt());
+            if (i >= 0) { nanos[i] = elapsed; bytes[i] = allocated; }
+        }
+        java.util.Arrays.sort(nanos);
+        System.out.printf(java.util.Locale.ROOT,
+                "automation-bench isolated track: n=%d p50=%.2fms p95=%.2fms mean=%.2fMiB allocated%n",
+                nanos.length, nanos[nanos.length / 2 - 1] / 1e6, nanos[(int) Math.ceil(nanos.length * .95) - 1] / 1e6,
+                java.util.Arrays.stream(bytes).average().orElseThrow() / (1024 * 1024));
+    }
+
+    @Test
+    void aNonreactiveSourcesComputedActorPoolStillClampsBeforeReactionAndLaterSteps() throws Exception {
+        RuleCompiler.Program active = program("features:active", """
+                {"rules":[
+                 {"id":"use","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                  "costs":[{"op":"resource.spend","pool":"actor.hope","amount":2}],
+                  "do":[{"op":"value","value":{"read":"actor.pools.shared.value"},"as":"remaining"}],
+                  "ui":{"label":"Use","report":"Pool {result.remaining}."}},
+                 {"id":"unmatched","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.track"},"armorTrack"]},"ui":{}}
+                ]}
+                """);
+        RuleCompiler.Program pool = program("features:pool", """
+                {"pools":{"shared":{"kind":"number","scope":"actor","max":{"read":"actor.hope.value"}}}}
+                """);
+        ObjectNode first = context(active.sourceId(), "active"), second = context(pool.sourceId(), "pool");
+        first.withObject("/actor").putObject("pools").putObject("shared").put("value", 3).put("max", 3);
+        second.set("actor", first.path("actor").deepCopy());
+        var result = RuleDispatcher.executeOwnerTrackReactions(
+                List.of(new RuleDispatcher.Candidate(active, first), new RuleDispatcher.Candidate(pool, second)),
+                List.of(select("use", "active")), noRandom(), Map.of(active.sourceId(), active, pool.sourceId(), pool));
+        assertEquals("Pool 1.", result.actions().getLast().report());
+        for (ObjectNode context : result.contexts()) {
+            assertEquals(1, context.at("/actor/pools/shared/value").asInt());
+            assertEquals(1, context.at("/actor/pools/shared/max").asInt());
+            assertEquals(1, context.path("revision").asInt());
+        }
+    }
+
+    @Test
     void nestedSourceReactionsShareStateFearAndOneRevisionInOperationOrder() throws Exception {
         RuleCompiler.Program first = program("features:first", """
                 {"state":{"steps":0},"rules":[
