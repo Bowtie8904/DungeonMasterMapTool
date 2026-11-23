@@ -19,6 +19,8 @@ import java.util.random.RandomGenerator;
  */
 public final class RuleDispatcher {
     private static final Set<String> SURFACES = RuleCompiler.SURFACES;
+    private static final int MAX_TRACK_REACTION_DEPTH = 16;
+    private static final int MAX_TRACK_EVENTS = 128;
 
     public record Candidate(RuleCompiler.Program program, ObjectNode context) {
         public Candidate {
@@ -154,6 +156,10 @@ public final class RuleDispatcher {
     private record CheckedInvocation(Invocation invocation, RuleRuntime.Prepared prepared) {}
     private record PreparedClaim(RuleRuntime.Prepared prepared, String recipientId, String claimGroup) {}
     private record PreparedTarget(RuleRuntime.Prepared prepared, String recipientId) {}
+    private static final class ReactionBudget {
+        int depth;
+        int events;
+    }
 
     private RuleDispatcher() {}
 
@@ -214,17 +220,22 @@ public final class RuleDispatcher {
     /** Supply the compiled programs referenced by effects, including sources no longer active on the sheet. */
     public static EventResolution executeEvent(List<Candidate> activeSources, List<RuleRuntime.Intent> selections,
                                                RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
-        return executeEvent(activeSources, selections, random, programs, false);
+        return executeEvent(activeSources, selections, random, programs, false, null);
     }
 
     static EventResolution executeStagedMove(List<Candidate> activeSources, List<RuleRuntime.Intent> selections,
                                              RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
-        return executeEvent(activeSources, selections, random, programs, true);
+        return executeEvent(activeSources, selections, random, programs, true, null);
+    }
+
+    static EventResolution executeOwnerTrackReactions(List<Candidate> activeSources, List<RuleRuntime.Intent> selections,
+                                                      RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
+        return executeEvent(activeSources, selections, random, programs, false, new ReactionBudget());
     }
 
     private static EventResolution executeEvent(List<Candidate> activeSources, List<RuleRuntime.Intent> selections,
                                                 RandomGenerator random, Map<String, RuleCompiler.Program> programs,
-                                                boolean stagedMove) {
+                                                boolean stagedMove, ReactionBudget budget) {
         Snapshot snapshot = validateSources(activeSources);
         if (RuleRuntime.isRestEvent(snapshot.eventType()))
             RuleRuntime.restPhase(snapshot.event());
@@ -304,28 +315,32 @@ public final class RuleDispatcher {
             }
         }
 
+        List<ActionResult> results = new ArrayList<>();
+        List<ObjectNode> outbox = new ArrayList<>();
+        RuleRuntime.TrackObserver observer = budget == null ? null : ownerTrackObserver(
+                snapshot, byInstance, workingContexts, random, programs, budget, results, outbox);
         List<RuleRuntime.Prepared> prepared = new ArrayList<>();
         ObjectNode sharedActor = snapshot.actor().deepCopy();
+        ObjectNode sharedEvent = snapshot.event().deepCopy();
         for (CheckedInvocation item : checked) {
             Invocation invocation = item.invocation();
             String instanceId = invocation.intent().sourceInstanceId();
             ObjectNode context = workingContexts.get(instanceId).deepCopy();
             context.set("actor", sharedActor.deepCopy());
+            if (observer != null) context.set("event", sharedEvent.deepCopy());
             context.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             try {
                 RuleRuntime.Prepared next = RuleRuntime.reserveCosts(
-                        invocation.candidate().program(), item.prepared(), context);
+                        invocation.candidate().program(), item.prepared(), context, true, observer);
                 prepared.add(next);
                 workingContexts.put(instanceId, next.context().deepCopy());
                 sharedActor = next.context().path("actor").deepCopy();
+                if (observer != null) sharedEvent = next.context().path("event").deepCopy();
             } catch (RuleRuntime.Unavailable unavailable) {
                 if (!invocation.automatic()) throw unavailable;
             }
         }
 
-        List<ActionResult> results = new ArrayList<>();
-        List<ObjectNode> outbox = new ArrayList<>();
-        ObjectNode sharedEvent = snapshot.event().deepCopy();
         for (RuleRuntime.Prepared item : prepared) {
             String instanceId = item.intent().sourceInstanceId();
             ObjectNode current = item.context().deepCopy();
@@ -335,9 +350,11 @@ public final class RuleDispatcher {
             current.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             RuleRuntime.Prepared executable = new RuleRuntime.Prepared(item.intent(), current, snapshot.revision());
             RuleRuntime.Resolution resolution = RuleRuntime.executePrepared(
-                    byInstance.get(instanceId).program(), executable, random, false, programs, stagedMove);
+                    byInstance.get(instanceId).program(), executable, random, false, programs, stagedMove, observer);
             ObjectNode nextContext = resolution.context();
-            for (JsonNode command : nextContext.path("outbox")) outbox.add((ObjectNode) command);
+            if (observer == null) {
+                for (JsonNode command : nextContext.path("outbox")) outbox.add((ObjectNode) command);
+            } else drainOutbox(nextContext, outbox);
             sharedActor = nextContext.path("actor").deepCopy();
             if (nextContext.path("event").isObject()) sharedEvent = nextContext.get("event").deepCopy();
             nextContext.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
@@ -357,6 +374,71 @@ public final class RuleDispatcher {
             updated.add(context);
         }
         return new EventResolution(updated, results, outbox);
+    }
+
+    private static RuleRuntime.TrackObserver ownerTrackObserver(
+            Snapshot snapshot, Map<String, Candidate> byInstance, Map<String, ObjectNode> workingContexts,
+            RandomGenerator random, Map<String, RuleCompiler.Program> programs, ReactionBudget budget,
+            List<ActionResult> results, List<ObjectNode> outbox) {
+        boolean hasReactions = byInstance.values().stream().anyMatch(candidate ->
+                !candidate.program().automatic("track.changed").isEmpty());
+        return (staged, holder, event) -> {
+            String actorId = staged.path("actor").path("id").asText();
+            if (!actorId.equals(staged.path(holder).path("id").asText()))
+                throw new RuleRuntime.Unavailable("recipientReactions",
+                        "A different recipient requires that character's own track reactions.");
+            if (++budget.events > MAX_TRACK_EVENTS || budget.depth >= MAX_TRACK_REACTION_DEPTH)
+                throw new RuleRuntime.Unavailable("reactionLimit", "Track reactions exceeded the transaction limit.");
+            if (!hasReactions) return;
+            drainOutbox(staged, outbox);
+            String currentId = staged.path("source").path("instanceId").asText();
+            mergeSourceState(workingContexts.get(currentId), staged);
+            List<Candidate> candidates = new ArrayList<>();
+            for (var entry : byInstance.entrySet()) {
+                ObjectNode context = workingContexts.get(entry.getKey()).deepCopy();
+                context.set("actor", staged.get("actor").deepCopy());
+                context.set("event", event.deepCopy());
+                context.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
+                context.remove(List.of("recipient", "outbox"));
+                candidates.add(new Candidate(entry.getValue().program(), context));
+            }
+            EventResolution reacted;
+            budget.depth++;
+            try {
+                reacted = executeEvent(candidates, List.of(), random, programs, false, budget);
+            } finally {
+                budget.depth--;
+            }
+            List<ObjectNode> contexts = reacted.contexts();
+            for (ObjectNode context : contexts) {
+                String instance = context.path("source").path("instanceId").asText();
+                mergeSourceState(workingContexts.get(instance), context);
+            }
+            ObjectNode parentState = workingContexts.get(currentId);
+            mergeSourceState(staged, parentState);
+            if (!contexts.isEmpty()) {
+                boolean selfRecipient = staged.has("recipient")
+                        && actorId.equals(staged.path("recipient").path("id").asText());
+                staged.set("actor", contexts.getFirst().get("actor").deepCopy());
+                if (selfRecipient) staged.set("recipient", staged.get("actor"));
+                JsonNode table = contexts.getFirst().at("/event/table");
+                if (!table.isMissingNode()) ((ObjectNode) staged.get("event")).set("table", table.deepCopy());
+            }
+            results.addAll(reacted.actions());
+            outbox.addAll(reacted.outbox());
+        };
+    }
+
+    private static void mergeSourceState(ObjectNode target, ObjectNode source) {
+        for (String field : List.of("source", "state", "usage", "sourcePools")) {
+            if (source.has(field)) target.set(field, source.get(field).deepCopy());
+            else target.remove(field);
+        }
+    }
+
+    private static void drainOutbox(ObjectNode context, List<ObjectNode> outbox) {
+        JsonNode pending = context.remove("outbox");
+        if (pending != null) for (JsonNode command : pending) outbox.add(((ObjectNode) command).deepCopy());
     }
 
     public static ClaimResolution executeClaims(List<Candidate> activeSources, List<ClaimIntent> selections,

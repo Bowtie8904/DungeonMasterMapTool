@@ -260,6 +260,7 @@ public final class RuleRuntime {
             throw new Unavailable("stale", "This action is stale. Use its latest state.");
         for (String field : List.of("actor", "recipient", "source", "state", "usage", "sourcePools"))
             if (currentContext.has(field)) copyField(currentContext, next, field);
+        if (observer != null && currentContext.has("event")) next.set("event", currentContext.get("event").deepCopy());
         RuleEffects.refreshCounts(program, next);
         if (reserveSourceCosts && rule.has("limitRef")) {
             reserveUse(program, next, rule.path("limitRef").asText());

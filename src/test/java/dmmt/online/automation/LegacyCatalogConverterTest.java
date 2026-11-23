@@ -789,6 +789,7 @@ class LegacyCatalogConverterTest {
             RuleEffects.derived(program, context(program, actor.formatted(marked), "{\"type\":\"track.changed\"}")).forEach(e -> labels.add(e.path("label").asText()));
             derived.add(String.join("+", labels));
         }
+
         assertEquals(List.of("", "Beacon", "Beacon+Reinforced"), derived, plate.toString());
         assertEquals(2, plate.at("/effects/reinforced/modifiers/0/value").asInt(), plate.toString());
 
@@ -824,6 +825,36 @@ class LegacyCatalogConverterTest {
         assertEquals("Gained 2 Hope and cleared 2 Stress from a critical melee attack.", claim.actions().getFirst().action().report());
         var pending = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(brawler, crit)), List.of(), StructuredRollTest.noRandom());
         assertEquals(1, pending.contexts().getFirst().at("/actor/effects").size(), pending.contexts().toString());
+    }
+
+    @Test
+    void convertedZeroHopeAndOverflowReactWithinThePayingAction() throws Exception {
+        var converted = LegacyCatalogConverter.convert(catalog("""
+                {"id":"plate","name":"Plate","automation":{"zeroHopeClearArmor":2,"overflowHope":1}}
+                """));
+        assertTrue(converted.diagnostics().isEmpty(), converted.diagnostics().toString());
+        RuleCompiler.Program plate = program(converted, 0);
+        RuleCompiler.Program payer = RuleCompiler.compile("features:payer", RuleJson.parse("""
+                {"rules":[{"id":"pay","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                  "costs":[{"op":"resource.spend","pool":"actor.hope","amount":1}],
+                  "do":[{"op":"value","value":{"read":"actor.hope.value"},"as":"remaining"}],
+                  "ui":{"label":"Pay","report":"Hope {result.remaining}."}}]}
+                """), RuleJson.parse(LegacyCatalogConverter.coreRecipes()));
+        String actor = "{\"id\":\"me\",\"hope\":{\"value\":1,\"max\":6},"
+                + "\"armorTrack\":{\"marked\":1,\"capacity\":4},\"effects\":[]}";
+        String event = "{\"type\":\"action.request\",\"table\":{\"fear\":0}}";
+        ObjectNode paying = context(payer, actor, event);
+        paying.withObject("/source").put("instanceId", "payer");
+        ObjectNode armor = context(plate, actor, event);
+        var result = RuleDispatcher.executeOwnerTrackReactions(
+                List.of(new RuleDispatcher.Candidate(payer, paying), new RuleDispatcher.Candidate(plate, armor)),
+                List.of(new RuleRuntime.Intent("pay", "use", "payer", 0, RuleJson.JSON.createObjectNode())),
+                StructuredRollTest.noRandom(), Map.of(plate.sourceId(), plate, payer.sourceId(), payer));
+        assertEquals(List.of("overflow-hope", "zero-hope-clear-armor", "pay"),
+                result.actions().stream().map(RuleDispatcher.ActionResult::ruleId).toList());
+        assertEquals("Hope 1.", result.actions().getLast().report());
+        assertEquals(1, result.contexts().getFirst().at("/actor/hope/value").asInt());
+        assertEquals(0, result.contexts().getFirst().at("/actor/armorTrack/marked").asInt());
     }
 
     @Test
