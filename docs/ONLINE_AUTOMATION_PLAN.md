@@ -139,6 +139,7 @@ supported commands, reports and retry receipt. The browser flushes pending edits
 and completion controls. Authored targeted ally moves and party recovery commit recipient sheets, reactions and
 reports with the rest. A two-phase signed choice flow presents completion benefits after the actual move outcomes
 and again after pre-reset benefits and the reset; the private staged rest is committed only after both phases.
+Bundled ally healing and armor-repair moves now target an active character's saved sheet rather than reporting manual recovery; negative recovery is clamped to zero.
 Pending choices live in the running host and expire on restart or cache eviction; committed retries use the saved journal.
 `POST .../rest/choices` first accepts `{request}` with no completion selections, then
 `{requestId, choiceVersion, selections}` for before-reset choices. `POST .../rest/complete` accepts

@@ -16,7 +16,11 @@ class SharedRestMovesTest {
     private static final AutomationHost HOST = AutomationHost.bundled();
 
     private static AutomationHost.Pack pack(int bonus, boolean longMove) throws Exception {
-        ObjectNode ruleset = (ObjectNode) RuleJson.parse(LegacyCatalogConverter.coreRuleset());
+        return pack(bonus, longMove, false);
+    }
+
+    private static AutomationHost.Pack pack(int bonus, boolean longMove, boolean narrative) throws Exception {
+        ObjectNode ruleset = narrative ? narrativeRuleset() : (ObjectNode) RuleJson.parse(LegacyCatalogConverter.coreRuleset());
         ArrayNode rules = ruleset.withObject("/automation").withArray("rules");
         if (bonus != 0) rules.add(RuleJson.parse("""
                 {"id":"test-bonus","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"automatic"}],
@@ -29,6 +33,34 @@ class SharedRestMovesTest {
                  "ui":{"label":"Long move"}}
                 """));
         return AutomationHost.compile("shared-rest", Map.of(), LegacyCatalogConverter.coreRecipes(), ruleset.toString());
+    }
+
+    private static ObjectNode narrativeRuleset() throws Exception {
+        ObjectNode ruleset = (ObjectNode) RuleJson.parse(LegacyCatalogConverter.coreRuleset());
+        for (JsonNode definition : ruleset.at("/automation/rules")) {
+            String id = definition.path("id").asText();
+            if (!List.of("rest-tend-ally", "rest-repair-ally", "rest-tend-all-ally", "rest-repair-all-ally").contains(id))
+                continue;
+            ObjectNode rule = (ObjectNode) definition;
+            ObjectNode binding = (ObjectNode) rule.at("/bindings/0");
+            binding.remove("targetSelection");
+            ((ObjectNode) binding.get("restMove")).put("narrative", true);
+            if (id.contains("-all-")) {
+                rule.remove("do");
+                ((ObjectNode) rule.get("ui")).put("report", id.contains("tend")
+                        ? "{actor.name} tends to all wounds on an ally; apply the recovery to the ally's sheet."
+                        : "{actor.name} repairs all Armor Slots on an ally; apply the recovery to the ally's sheet.");
+            } else {
+                ObjectNode value = (ObjectNode) rule.at("/do/1");
+                JsonNode amount = value.path("amount").path("max").get(1).deepCopy();
+                value.remove(List.of("track", "amount"));
+                value.put("op", "value").put("as", "recovery").set("value", amount);
+                ((ObjectNode) rule.get("ui")).put("report", id.contains("tend")
+                        ? "{actor.name} tends to an ally: clear {result.recovery} HP (1d4: {result.roll}, tier: {actor.stats.tier}); apply it to the ally's sheet."
+                        : "{actor.name} repairs an ally's armor: clear {result.recovery} Armor Slots (1d4: {result.roll}, tier: {actor.stats.tier}); apply it to the ally's sheet.");
+            }
+        }
+        return ruleset;
     }
 
     private static ObjectNode sheet(int level) throws Exception {
@@ -66,6 +98,93 @@ class SharedRestMovesTest {
         }
         request.putArray("completion");
         return request;
+    }
+
+    private record TargetedRest(ObjectNode source, ObjectNode recipient, ObjectNode origin,
+                                AutomationHost.RestRoster roster, PartyTargets party) {}
+
+    private static TargetedRest targetedRest(AutomationHost.Pack pack) throws Exception {
+        ObjectNode source = sheet(5), recipient = sheet(1).put("name", "Mira");
+        ObjectNode origin = AutomationHost.event("action.request", "ada", 0).put("sessionId", "session");
+        String sourceVersion = source.toString(), recipientVersion = recipient.toString();
+        var roster = new AutomationHost.RestRoster(sourceVersion, scope -> {
+            assertEquals("activeCharacters", scope);
+            return List.of(
+                    new AutomationHost.RestMember("ada", "Ada", sourceVersion, 0, () -> source),
+                    new AutomationHost.RestMember("mira", "Mira", recipientVersion, 0, () -> recipient));
+        });
+        var party = new PartyTargets(pack.revision(), sourceVersion, scope -> {
+            assertEquals("activeCharacters", scope);
+            return List.of(
+                    new PartyTargets.Member("ada", "Ada", sourceVersion, 0,
+                            event -> HOST.recipientSnapshot(pack, source, event, "ada")),
+                    new PartyTargets.Member("mira", "Mira", recipientVersion, 0,
+                            event -> HOST.recipientSnapshot(pack, recipient, event, "mira")));
+        });
+        return new TargetedRest(source, recipient, origin, roster, party);
+    }
+
+    private static ObjectNode targetedRequest(AutomationHost.Pack pack, TargetedRest rest, String kind, String rule) {
+        ObjectNode offer = HOST.describeRest(pack, rest.source(), rest.origin(), kind, "owner",
+                rest.source().toString(), rest.party());
+        JsonNode descriptor = null;
+        for (JsonNode move : offer.path("moves"))
+            if (rule.equals(move.path("ruleId").asText())) descriptor = move;
+        assertNotNull(descriptor, offer.toString());
+        JsonNode options = descriptor.at("/targetSelection/options");
+        assertEquals(List.of("mira"), options.findValuesAsText("id"));
+        ObjectNode request = restRequest(kind, rule);
+        ((ObjectNode) request.at("/moves/0")).putObject("target").put("recipientId", "mira")
+                .set("version", options.get(0).get("version"));
+        return request;
+    }
+
+    @Test
+    void bundledAllyMovesRecoverTheSelectedRecipientAndRespectTheirHealingFloor() throws Exception {
+        for (String rule : List.of("rest-tend-ally", "rest-repair-ally", "rest-tend-all-ally", "rest-repair-all-ally")) {
+            var pack = pack(2, false);
+            TargetedRest rest = targetedRest(pack);
+            String kind = rule.contains("-all-") ? "long" : "short";
+            ObjectNode beforeSource = rest.source().deepCopy(), beforeRecipient = rest.recipient().deepCopy();
+            ObjectNode request = targetedRequest(pack, rest, kind, rule);
+            var transaction = HOST.stageRest(pack, rest.source(), rest.origin(), request,
+                    "short".equals(kind) ? StructuredRollTest.faces(2) : StructuredRollTest.noRandom(), rest.roster());
+            ObjectNode saved = transaction.recipients().get("mira");
+            assertNotNull(saved, rule);
+            assertEquals(beforeRecipient, rest.recipient(), "Recipient changes remain staged until the host commits.");
+            assertEquals(beforeSource.path("hp"), rest.source().path("hp"));
+            assertEquals(beforeSource.path("armorTrack"), rest.source().path("armorTrack"));
+            if (rule.contains("tend")) {
+                assertEquals(3, saved.at("/hp/on").asInt(), "Permanent and locked HP belong to the recipient.");
+                assertEquals(3, saved.at("/armorTrack/on").asInt());
+            } else {
+                assertEquals(6, saved.at("/hp/on").asInt());
+                assertEquals(0, saved.at("/armorTrack/on").asInt());
+            }
+            String report = transaction.response().path("actions").findValuesAsText("report").getLast();
+            assertTrue(report.contains("3 " + (rule.contains("tend") ? "HP" : "Armor Slots")), report);
+            assertTrue(report.contains("Mira"), report);
+            assertEquals(List.of("mira"), transaction.scopeMembership().get("activeCharacters"));
+        }
+    }
+
+    @Test
+    void bundledAllyLongMoveUsesTheSameShortRestAllowanceAsItsSelfVariant() throws Exception {
+        var denied = pack(0, false);
+        TargetedRest unavailable = targetedRest(denied);
+        ObjectNode before = unavailable.source().deepCopy();
+        ObjectNode request = targetedRequest(denied, unavailable, "short", "rest-tend-all-ally");
+        assertEquals("longMove", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageRest(denied, unavailable.source(), unavailable.origin(), request,
+                        StructuredRollTest.noRandom(), unavailable.roster())).code());
+        assertEquals(before, unavailable.source());
+        var allowed = pack(0, true);
+        TargetedRest rest = targetedRest(allowed);
+        var result = HOST.stageRest(allowed, rest.source(), rest.origin(),
+                targetedRequest(allowed, rest, "short", "rest-tend-all-ally"),
+                StructuredRollTest.noRandom(), rest.roster());
+        assertEquals(1, result.response().at("/progress/longMovesUsed").asInt());
+        assertEquals(3, result.recipients().get("mira").at("/hp/on").asInt());
     }
 
     @Test
@@ -163,7 +282,7 @@ class SharedRestMovesTest {
 
     @Test
     void allyShortRecoveryIsReportedWithoutChangingAnyRecipient() throws Exception {
-        ObjectNode ruleset = (ObjectNode) RuleJson.parse(LegacyCatalogConverter.coreRuleset());
+        ObjectNode ruleset = narrativeRuleset();
         ruleset.withObject("/automation").withArray("rules").add(RuleJson.parse("""
                 {"id":"ally-bonus","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"automatic"}],
                  "when":{"eq":[{"read":"event.move.ally"},true]},
@@ -204,7 +323,7 @@ class SharedRestMovesTest {
 
     @Test
     void allyLongRecoveryIsNarrativeAndUsesTheSameRestAllowanceAsSelfRecovery() throws Exception {
-        var pack = pack(0, false);
+        var pack = pack(0, false, true);
         for (String rule : List.of("rest-tend-all-ally", "rest-repair-all-ally")) {
             ObjectNode sheet = sheet(1), hp = sheet.withObject("/hp").deepCopy(), armor = sheet.withObject("/armorTrack").deepCopy();
             var result = HOST.stageRest(pack, sheet, AutomationHost.event("action.request", "ada", 0),
@@ -220,7 +339,7 @@ class SharedRestMovesTest {
                             restRequest("short", rule), StructuredRollTest.noRandom(), null)).code());
             assertEquals(before, shortSheet);
         }
-        var allowed = pack(0, true);
+        var allowed = pack(0, true, true);
         ObjectNode sheet = sheet(1);
         var result = HOST.stageRest(allowed, sheet, AutomationHost.event("action.request", "ada", 0),
                 restRequest("short", "rest-tend-all-ally"), StructuredRollTest.noRandom(), null);
@@ -231,7 +350,7 @@ class SharedRestMovesTest {
     void matchesLegacyNarrativeAllyRestFixture() throws Exception {
         JsonNode fixture = fixture("parity/narrative-ally-rest");
         for (JsonNode sample : fixture.path("cases")) {
-            ObjectNode ruleset = (ObjectNode) RuleJson.parse(LegacyCatalogConverter.coreRuleset());
+            ObjectNode ruleset = narrativeRuleset();
             ruleset.withObject("/automation").withArray("rules").add(RuleJson.parse("""
                     {"id":"ally-bonus","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"automatic"}],
                      "when":{"eq":[{"read":"event.move.ally"},true]},

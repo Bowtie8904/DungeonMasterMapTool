@@ -2759,7 +2759,11 @@ class OnlineSessionServerTest {
     }
 
     private static ObjectNode targetRestMove(ObjectNode body, JsonNode offer, String recipientId) {
-        JsonNode descriptor = restDescriptor(offer.path("moves"), "target-repair");
+        return targetRestMove(body, offer, "target-repair", recipientId);
+    }
+
+    private static ObjectNode targetRestMove(ObjectNode body, JsonNode offer, String rule, String recipientId) {
+        JsonNode descriptor = restDescriptor(offer.path("moves"), rule);
         JsonNode target = null;
         for (JsonNode option : descriptor.at("/targetSelection/options"))
             if (recipientId.equals(option.path("id").asText())) target = option;
@@ -2767,6 +2771,60 @@ class OnlineSessionServerTest {
         ObjectNode move = addRestMove((ObjectNode) body.path("request"), descriptor);
         move.putObject("target").put("recipientId", recipientId).put("version", target.path("version").asText());
         return move;
+    }
+
+    @Test
+    void bundledAllyRestMovesCommitTheirRecipientAndReactionsOnce() throws Exception {
+        installRestRules();
+        addRestParty();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withArray("rules").add(MAPPER.readTree("""
+                {"id":"repair-reaction","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"armorTrack"]},
+                                  {"eq":[{"read":"event.change"},"clear"]}]},
+                 "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],
+                 "ui":{"report":"Repaired armor for {actor.name}."}}
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        String owner = cookie();
+        String initialSource = store.loadSheet(campaign.getId(), "resting");
+        ObjectNode initialRecipient = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        initialRecipient.put("permanentHp", 1);
+        for (String rule : List.of("rest-tend-ally", "rest-repair-ally", "rest-tend-all-ally", "rest-repair-all-ally")) {
+            store.saveSheet(campaign.getId(), "resting", initialSource);
+            store.saveSheet(campaign.getId(), "mira", initialRecipient.toString());
+            String kind = rule.contains("-all-") ? "long" : "short";
+            var described = restHttp(owner, "resting", kind, null);
+            assertEquals(200, described.statusCode(), described.body());
+            JsonNode offer = MAPPER.readTree(described.body());
+            ObjectNode body = restRequest(offer, "bundled-" + rule);
+            targetRestMove(body, offer, rule, "mira");
+            var completed = restHttp(owner, "resting", null, body.toString());
+            assertEquals(200, completed.statusCode(), completed.body());
+            JsonNode receipt = MAPPER.readTree(completed.body());
+            JsonNode action = restDescriptor(receipt.path("actions"), rule);
+            JsonNode recipient = MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+            if (rule.contains("tend")) {
+                int amount = "long".equals(kind) ? 4 : action.at("/diceRolls/0/faces/0").asInt() + 1;
+                int expected = Math.max(1, 4 - amount);
+                assertEquals(expected, recipient.at("/hp/on").asInt(), rule);
+                assertEquals(1, recipient.at("/armorTrack/on").asInt(), rule);
+                assertTrue(action.path("report").asText().contains("cleared " + (4 - expected) + " HP"), action.toString());
+            } else {
+                assertEquals(4, recipient.at("/hp/on").asInt(), rule);
+                assertEquals(0, recipient.at("/armorTrack/on").asInt(), rule);
+                assertEquals(1, recipient.at("/hope/on").asInt(), "Recipient reactions settle in the same commit.");
+                assertTrue(receipt.path("actions").findValuesAsText("report").contains("Repaired armor for mira."));
+                assertTrue(action.path("report").asText().contains("repaired 1 Armor Slots"), action.toString());
+            }
+            assertEquals(4, MAPPER.readTree(store.loadSheet(campaign.getId(), "resting")).at("/hp/on").asInt());
+            String saved = store.loadSheet(campaign.getId(), "mira");
+            int history = store.historyTail(campaign.getId(), 100).size();
+            assertEquals(completed.body(), restHttp(owner, "resting", null, body.toString()).body());
+            assertEquals(saved, store.loadSheet(campaign.getId(), "mira"));
+            assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        }
     }
 
     @Test

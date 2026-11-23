@@ -28,15 +28,16 @@
         "id": "rest-tend-ally",
         "bindings": [{
           "id": "move", "event": "downtime.move", "surface": "downtime", "mode": "button",
-          "restMove": { "id": "tend", "kind": "short", "ally": true, "narrative": true }
+          "restMove": { "id": "tend", "kind": "short", "ally": true },
+          "targetSelection": { "cardinality": "one", "scope": "activeCharacters", "excludeSource": true }
         }],
         "do": [
           { "op": "dice.roll", "count": 1, "sides": 4, "as": "roll" },
-          { "op": "value", "value": { "add": [
+          { "op": "track.clear", "track": "recipient.hp", "amount": { "max": [0, { "add": [
             { "read": "result.roll" }, { "read": "actor.stats.tier" }, { "read": "event.move.bonus" }
-          ] }, "as": "recovery" }
+          ] }] }, "as": "cleared" }
         ],
-        "ui": { "label": "Tend to Wounds (an ally)", "report": "{actor.name} tends to an ally: clear {result.recovery} HP (1d4: {result.roll}, tier: {actor.stats.tier}); apply it to the ally's sheet." }
+        "ui": { "label": "Tend to Wounds (an ally)", "report": "{actor.name} cleared {result.cleared} HP for {recipient.name} (1d4: {result.roll}, tier: {actor.stats.tier})." }
       },
       {
         "id": "rest-stress",
@@ -70,15 +71,16 @@
         "id": "rest-repair-ally",
         "bindings": [{
           "id": "move", "event": "downtime.move", "surface": "downtime", "mode": "button",
-          "restMove": { "id": "repair", "kind": "short", "ally": true, "narrative": true }
+          "restMove": { "id": "repair", "kind": "short", "ally": true },
+          "targetSelection": { "cardinality": "one", "scope": "activeCharacters", "excludeSource": true }
         }],
         "do": [
           { "op": "dice.roll", "count": 1, "sides": 4, "as": "roll" },
-          { "op": "value", "value": { "add": [
+          { "op": "track.clear", "track": "recipient.armorTrack", "amount": { "max": [0, { "add": [
             { "read": "result.roll" }, { "read": "actor.stats.tier" }, { "read": "event.move.bonus" }
-          ] }, "as": "recovery" }
+          ] }] }, "as": "cleared" }
         ],
-        "ui": { "label": "Repair Armor (an ally)", "report": "{actor.name} repairs an ally's armor: clear {result.recovery} Armor Slots (1d4: {result.roll}, tier: {actor.stats.tier}); apply it to the ally's sheet." }
+        "ui": { "label": "Repair Armor (an ally)", "report": "{actor.name} repaired {result.cleared} Armor Slots for {recipient.name} (1d4: {result.roll}, tier: {actor.stats.tier})." }
       },
       {
         "id": "rest-prepare",
@@ -111,9 +113,11 @@
         "id": "rest-tend-all-ally",
         "bindings": [{
           "id": "move", "event": "downtime.move", "surface": "downtime", "mode": "button",
-          "restMove": { "id": "tend-all", "kind": "longMove", "ally": true, "narrative": true }
+          "restMove": { "id": "tend-all", "kind": "longMove", "ally": true },
+          "targetSelection": { "cardinality": "one", "scope": "activeCharacters", "excludeSource": true }
         }],
-        "ui": { "label": "Tend to All Wounds (an ally)", "report": "{actor.name} tends to all wounds on an ally; apply the recovery to the ally's sheet." }
+        "do": [{ "op": "track.clear", "track": "recipient.hp", "amount": { "read": "recipient.hp.marked" }, "as": "cleared" }],
+        "ui": { "label": "Tend to All Wounds (an ally)", "report": "{actor.name} cleared {result.cleared} HP for {recipient.name}." }
       },
       {
         "id": "rest-stress-all",
@@ -137,9 +141,11 @@
         "id": "rest-repair-all-ally",
         "bindings": [{
           "id": "move", "event": "downtime.move", "surface": "downtime", "mode": "button",
-          "restMove": { "id": "repair-all", "kind": "longMove", "ally": true, "narrative": true }
+          "restMove": { "id": "repair-all", "kind": "longMove", "ally": true },
+          "targetSelection": { "cardinality": "one", "scope": "activeCharacters", "excludeSource": true }
         }],
-        "ui": { "label": "Repair All Armor (an ally)", "report": "{actor.name} repairs all Armor Slots on an ally; apply the recovery to the ally's sheet." }
+        "do": [{ "op": "track.clear", "track": "recipient.armorTrack", "amount": { "read": "recipient.armorTrack.marked" }, "as": "cleared" }],
+        "ui": { "label": "Repair All Armor (an ally)", "report": "{actor.name} repaired {result.cleared} Armor Slots for {recipient.name}." }
       },
       {
         "id": "rest-project",
