@@ -1573,6 +1573,68 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void actionRollProfileCommitsTrustedSpellcastFactsAndRetriesOnce() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode feature = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        feature.set("profiles", MAPPER.readTree("""
+                [{"id":"cast","label":"Cast","rollKind":"spellcast","trait":"spellcast",
+                  "difficulty":13,"origin":"card:Example"}]"""));
+        feature.set("rules", MAPPER.readTree("""
+                [{"id":"focus","bindings":[{"id":"use","event":"roll.prepare","surface":"roll","mode":"option"}],
+                  "when":{"eq":[{"read":"event.check.origin"},"card:Example"]},
+                  "costs":[{"op":"resource.spend","pool":"actor.hope","amount":1}],
+                  "do":[{"op":"roll.contribute","from":{"read":"event.roll"},
+                    "contribution":{"id":"focus","kind":"flat","role":"modifier","label":"Focus","value":4},"as":"next"},
+                    {"op":"roll.publish","roll":{"read":"result.next"}}],"ui":{"label":"Focus"}},
+                 {"id":"after","bindings":[{"id":"auto","event":"roll.finished","surface":"roll","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.check.outcome"},"success"]},
+                  "do":[{"op":"track.mark","track":"actor.stress","amount":1}],"ui":{"label":"After"}},
+                 {"id":"result","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button"}],
+                  "when":{"eq":[{"read":"event.check.origin"},"card:Example"]},
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"Result"}}]"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String id = campaign.getId();
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(id, "caster", """
+                {"name":"Ada","hope":{"slots":6,"on":2},"stress":{"slots":6,"on":0},
+                 "traits":[{"name":"Agility","mod":3,"spellcast":true}],
+                 "features":[{"name":"Steady","instanceId":"s","automationSource":"classes:tester:features:steady"}]}""");
+        String owner = cookie(), other = allyCookie("other");
+        var description = automationHttp(owner, "caster", null);
+        assertEquals(200, description.statusCode(), description.body());
+        JsonNode profile = MAPPER.readTree(description.body()).requiredAt("/profiles/0");
+        assertEquals("spellcast", profile.required("rollKind").textValue());
+        assertEquals(List.of("focus"), profile.requiredAt("/options/spellcast").findValuesAsText("ruleId"));
+        String request = """
+                {"request":{"requestId":"cast","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"s","ruleId":"focus","bindingId":"use"}],
+                 "profileRoll":{"sourceInstanceId":"s","profileId":"cast","kind":"spellcast"}}}""";
+        assertEquals(403, automationHttp(other, "caster", request).statusCode());
+        assertEquals(400, automationHttp(owner, "caster", request.replace("\"kind\":\"spellcast\"", "\"kind\":\"attack\"")).statusCode());
+        int history = store.historyTail(id, 100).size();
+        diceSeed(0);
+        var response = automationHttp(owner, "caster", request);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode result = MAPPER.readTree(response.body());
+        assertEquals(13, result.requiredAt("/event/check/total").intValue());
+        assertEquals("success", result.requiredAt("/event/check/outcome").textValue());
+        assertEquals("card:Example", result.requiredAt("/event/check/origin").textValue());
+        assertEquals(List.of("result"), result.required("resultActions").findValuesAsText("ruleId"));
+        JsonNode saved = MAPPER.readTree(store.loadSheet(id, "caster"));
+        assertEquals(1, saved.requiredAt("/hope/on").intValue());
+        assertEquals(1, saved.requiredAt("/stress/on").intValue());
+        assertEquals(1, saved.requiredAt("/automationState/revision").intValue());
+        assertEquals(history + 1, store.historyTail(id, 100).size());
+        assertEquals(response.body(), automationHttp(owner, "caster", request).body());
+        assertEquals(history + 1, store.historyTail(id, 100).size());
+        var reopened = new CampaignStore(temp.resolve("campaigns"));
+        assertEquals(saved, MAPPER.readTree(reopened.loadSheet(id, "caster")));
+        assertEquals(409, automationHttp(owner, "caster", request.replace("\"cast\",\"expectedRevision\"", "\"again\",\"expectedRevision\"")).statusCode());
+    }
+
+    @Test
     void convertedWardenRollReportAndUsePersistAtomicallyAndReplay() throws Exception {
         automationCompendium();
         JsonNode classes = MAPPER.readTree(Path.of("dmmap-daggerheart", "classes.json").toFile());

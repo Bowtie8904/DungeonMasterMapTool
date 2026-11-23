@@ -71,7 +71,9 @@ without that directory can still use root `rules.json`. The shared ruleset inclu
 critical reward, exclusive with converted alternatives; it applies to integrated format-2 profile rolls.
 Other roll origins and shared-rules editor support remain pending.
 
-In a format-2 pack, an owner can roll a declared attack profile or its damage. The host resolves
+In a format-2 pack, an owner can roll a declared attack profile or its damage, or an authored
+action, reaction or spellcast profile. A spellcast profile uses the character's current Spellcast trait;
+its written difficulty and origin come from the rules, not the player. The host resolves
 the profile from the saved sheet and commits its edited dice, reactions and costs together. A blocked
 profile roll spends nothing, and a retry does not roll again. Equipped weapons with stable automation
 source and instance IDs also offer their ordinary attack and damage; saved customized weapon statistics
@@ -82,7 +84,7 @@ Other-character effect profiles are not yet integrated. Matching passive and act
 contributions; weapon passives apply only to that weapon's profiles. Existing sheets still need the
 planned identity migration. Typed chat dice stay separate. Other roll origins are not yet integrated
 with these modifiers.
-Choose any offered options and their inputs together before pressing Roll (the attack or damage button). If no options are available, the button rolls immediately. Opening the choices does not contact the host; **Retry** resends the same selection if the reply was lost.
+Choose any offered options and their inputs together before pressing the profile's roll button. If no options are available, the button rolls immediately. Opening the choices does not contact the host; **Retry** resends the same selection if the reply was lost. Legacy spellcast and other feature-action rolls have not yet been converted to these profiles.
 Format-2 authors must put choices based on the new faces or total on a result action, not a pre-roll option. A pre-roll option can use previously stored dice and can change the new dice when it executes.
 
 The rolling owner can use an offered result button on the sheet or reopen **Result actions** on the roll in chat. Restoring chat history does not fetch actions for every roll. A successful use spends that button once; a self-claim spends all alternatives in its source's claim group for that result. Authors can explicitly share a result-wide claim group across sources for alternative rewards; source-local groups remain independent. An edit posts a new roll without rearming spent buttons or claims, and leaves the original readable. Other players see the roll, not the owner's choices.

@@ -11,12 +11,20 @@ Start with the [Deathrun and homebrew example](#example-2-deathrun-and-a-mechani
 ## Implementation status
 
 **Profile rolls (format 2).** The automation endpoint accepts an owner-only `request.profileRoll` with
-`sourceInstanceId`, `profileId` and `kind` (`attack` or `damage`); `selections` names any chosen `roll.prepare`
+`sourceInstanceId`, `profileId` and `kind` (`attack`, `damage`, `action`, `reaction` or `spellcast`);
+`selections` names any chosen `roll.prepare`
 options. The host determines contributions, traits, thresholds and Fear from its sheet, catalog and campaign.
 It runs prepare edits and automatic finished reactions in the same request. A blocked prepare discards the
 transaction. Roll history stores the final structured event; retrying returns the journaled response without
 publishing or spending again. Profile attacks include action and attack modifiers, and profile damage includes
 damage modifiers; eligible passive and active-effect modifiers become labelled, source-identified contributions.
+Native source profiles can instead specify `rollKind: "action"`, `"reaction"` or `"spellcast"` with an
+optional `trait` (a named trait or `"spellcast"`), numeric `difficulty` and explicit `origin`. Their only
+accepted roll kind is the declared one; attack profiles remain attack/damage only. The Spellcast trait resolves
+to the current derived total. Action and spellcast profiles apply action modifiers; spellcast profiles also
+apply spellcast modifiers, and reaction profiles apply reaction modifiers. Their known facts are supplied to
+pre-roll choices without sampling; difficulty and outcome are recomputed from the edited roll. These declarations
+do not yet replace converted legacy spellcast rolls or implement their automatic use budgets.
 An equipped weapon's passive roll modifiers apply only to its own profile, while effect modifiers apply to the
 holder. `set`, `add` and bounds are combined per statistic using the derived-stat ordering. Trait bonuses
 are already included in the projected trait total. When a passive value, condition or label reads a derived
@@ -51,7 +59,7 @@ whole edit and dice budget before sampling.
 
 A player chooses `roll.prepare` options before seeing the new dice. Their availability, inputs, prices and labels may use saved dice and known roll facts (`event.check.duality` identifies a planned Hope/Fear roll), but not the new faces or result. The compiler directs such choices to a `roll.finished` action instead. The selected option's `do` steps may still edit the sampled dice.
 
-The owner's sheet description embeds matching option descriptors in `profiles[].options.attack` and `.damage` when the loadout has roll options. The host constructs these from the same profile facts used for execution, without rolling, spending, or making a second request at roll time.
+The owner's sheet description embeds matching option descriptors under `profiles[].options` for each available kind when the loadout has roll options. The host constructs these from the same profile facts used for execution, without rolling, spending, or making a second request at roll time.
 
 A scoped loopback DM sheet grant uses the `dm` audience for automation rather than impersonating the owner.
 `any` bindings include the DM; `self`, `others` and `party` are player audiences. Receipts distinguish the

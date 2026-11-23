@@ -207,6 +207,25 @@ describe('automation panel', () => {
         effectInstanceId: 'activation-1' } } });
   });
 
+  it('renders and submits a host-described spellcast profile without attack or damage controls', async () => {
+    const fetchMock = vi.fn(async () => Response.json({
+      revision: 6, event: { check: { total: 17, outcome: 'success' } }, actions: [],
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const panel = fake(automationPanel('a1', 'sheet', 'Actions', async () => ({ revision: 5, actions: [], profiles: [
+      { id: 'cast', sourceInstanceId: 's1', label: 'Cast', sourceName: 'Spell', rollKind: 'spellcast' },
+    ] })));
+    await settle();
+    const buttons = panel.all('button');
+    expect(buttons.map(button => button.text)).toEqual(['Spell: Cast (spellcast)']);
+    buttons[0].click();
+    await settle();
+    const [, options] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(options.body))).toEqual({ request: { requestId: expect.any(String), expectedRevision: 5,
+      selections: [], profileRoll: { sourceInstanceId: 's1', profileId: 'cast', kind: 'spellcast' } } });
+    expect(panel.text).toContain('Spell: Cast (spellcast): 17 (success)');
+  });
+
   it('loads a saved target offer after the roll and sends its version with the result action', async () => {
     const calls: Array<{ url: string; body?: string }> = [];
     vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit) => {

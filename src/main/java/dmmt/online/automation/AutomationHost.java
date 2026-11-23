@@ -171,7 +171,7 @@ public final class AutomationHost {
         if (effectId != null) item.put("effectInstanceId", effectId);
         if (!hasRollOptions) return;
         ObjectNode options = item.putObject("options");
-        for (String kind : profile.has("damage") ? List.of("attack", "damage") : List.of("attack")) {
+        for (String kind : ProfileRoll.kinds(profile)) {
             ObjectNode facts = event.deepCopy();
             if (effectId != null) facts.put("effectInstanceId", effectId);
             ProfileRoll.facts(facts, source, profile, kind, actor, weapon);

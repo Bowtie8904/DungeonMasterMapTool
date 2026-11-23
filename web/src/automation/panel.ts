@@ -3,12 +3,14 @@ import { ApiError, hostFetch } from '../api';
 import type { RollMessage } from '../protocol';
 import { intentControl, ruleControl, type ControlText, type RuleDescriptor, type RuleIntent } from './controls';
 
+type ProfileRollKind = 'attack' | 'damage' | 'action' | 'reaction' | 'spellcast';
+
 export interface DescribedActions {
   revision: number;
   actions: RuleDescriptor[];
   profiles?: Array<{ id: string; label: string; sourceInstanceId: string; sourceName: string; damage?: object;
-    effectInstanceId?: string;
-    options?: Partial<Record<'attack' | 'damage', RuleDescriptor[]>> }>;
+    effectInstanceId?: string; rollKind?: 'action' | 'reaction' | 'spellcast';
+    options?: Partial<Record<ProfileRollKind, RuleDescriptor[]>> }>;
 }
 
 export const CONTROL_TEXT: ControlText = {
@@ -80,7 +82,7 @@ function actionReports(response: unknown): string[] {
 
 interface RollReceipt {
   revision: number;
-  event: { check: { total: number }; resultId?: string };
+  event: { check: { total: number; outcome?: string | null }; resultId?: string };
   resultActions?: RuleDescriptor[];
   resultPublished?: boolean;
 }
@@ -199,7 +201,8 @@ export function automationPanel(actorId: string, surface = 'sheet', title = 'Act
         void load();
       }, CONTROL_TEXT));
       for (const profile of described?.profiles ?? []) {
-        for (const kind of ['attack', 'damage'] as const) {
+        const kinds: ProfileRollKind[] = profile.rollKind ? [profile.rollKind] : ['attack', 'damage'];
+        for (const kind of kinds) {
           if (kind === 'damage' && !profile.damage) continue;
           const label = `${profile.sourceName}: ${profile.label} (${kind})`;
           controls.push(intentControl({ label, available: true, revision: described!.revision, options: profile.options?.[kind] },
@@ -217,7 +220,8 @@ export function automationPanel(actorId: string, surface = 'sheet', title = 'Act
               const { event, resultActions: actions, revision } = result as RollReceipt;
               resultActions.replaceChildren(...(event.resultId && actions?.length
                 ? [resultControls(actorId, event.resultId, { revision, actions }).root] : []));
-              output.textContent = [`${label}: ${event.check.total}`, ...actionReports(result)].join('\n');
+              const outcome = event.check.outcome ? ` (${event.check.outcome})` : '';
+              output.textContent = [`${label}: ${event.check.total}${outcome}`, ...actionReports(result)].join('\n');
               void load();
             }, CONTROL_TEXT));
         }

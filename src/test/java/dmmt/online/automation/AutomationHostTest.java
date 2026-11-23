@@ -125,6 +125,118 @@ class AutomationHostTest {
     }
 
     @Test
+    void actionProfilesUseTrustedFactsDerivedTraitsOptionsAndFinishedResults() throws Exception {
+        ObjectNode classes = fixture("rewrite/host-classes");
+        ObjectNode feature = (ObjectNode) classes.at("/entries/0/features/2/automation");
+        feature.withArray("profiles").add(RuleJson.parse("""
+                {"id":"cast","label":"Cast","rollKind":"spellcast","trait":"spellcast",
+                 "difficulty":17,"origin":"card:Example"}"""));
+        feature.withArray("profiles").add(RuleJson.parse("""
+                {"id":"react","label":"React","rollKind":"reaction","trait":"Agility"}"""));
+        feature.withArray("profiles").add(RuleJson.parse("""
+                {"id":"act","label":"Act","rollKind":"action"}"""));
+        feature.set("modifiers", RuleJson.parse("""
+                [{"stat":"trait.Agility","value":2},
+                 {"stat":"roll.action","value":2,"label":"Action bonus"},
+                 {"stat":"roll.spellcast","value":3,"label":"Spell bonus"},
+                 {"stat":"roll.reaction","value":4,"label":"Reaction bonus"},
+                 {"stat":"roll.attack","value":20,"label":"Attack only"}]"""));
+        feature.withArray("rules").add(RuleJson.parse("""
+                {"id":"focus","bindings":[{"id":"use","event":"roll.prepare","surface":"roll","mode":"option"}],
+                 "when":{"and":[{"eq":[{"read":"event.check.kind"},"spellcast"]},
+                    {"eq":[{"read":"event.check.trait"},"Agility"]},
+                    {"eq":[{"read":"event.check.origin"},"card:Example"]},
+                    {"eq":[{"read":"event.check.difficulty"},17]}]},
+                 "costs":[{"op":"resource.spend","pool":"actor.hope","amount":1}],
+                 "do":[{"op":"roll.contribute","from":{"read":"event.roll"},
+                    "contribution":{"id":"focus","kind":"flat","role":"modifier","label":"Focus","value":4},"as":"next"},
+                    {"op":"roll.publish","roll":{"read":"result.next"}}],"ui":{"label":"Focus"}}"""));
+        feature.withArray("rules").add(RuleJson.parse("""
+                {"id":"after","bindings":[{"id":"auto","event":"roll.finished","surface":"roll","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.check.outcome"},"success"]},
+                 "do":[{"op":"track.mark","track":"actor.stress","amount":1}],"ui":{"label":"After"}}"""));
+        feature.withArray("rules").add(RuleJson.parse("""
+                {"id":"result","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button"}],
+                 "when":{"eq":[{"read":"event.check.origin"},"card:Example"]},
+                 "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"Result"}}"""));
+        var pack = AutomationHost.compile("test", Map.of("classes", classes.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet();
+        ((ObjectNode) sheet.at("/traits/0")).put("spellcast", true);
+        ObjectNode origin = AutomationHost.event("action.request", "actor", 0).put("sessionId", "session");
+        ObjectNode untouched = sheet.deepCopy();
+        JsonNode profiles = HOST.describe(pack, sheet, origin, "sheet", "self").required("profiles");
+        JsonNode cast = null;
+        for (JsonNode profile : profiles) if ("cast".equals(profile.path("id").asText())) cast = profile;
+        assertNotNull(cast);
+        assertEquals(List.of("focus"), cast.requiredAt("/options/spellcast").findValuesAsText("ruleId"));
+        assertFalse(cast.path("options").has("attack"));
+        assertEquals(untouched, sheet);
+
+        ObjectNode forged = RuleJson.JSON.createObjectNode().put("requestId", "forged").put("expectedRevision", 0);
+        forged.putArray("selections");
+        forged.putObject("profileRoll").put("sourceInstanceId", "f-steady").put("profileId", "cast").put("kind", "attack");
+        assertThrows(IllegalArgumentException.class, () -> HOST.execute(pack, sheet, origin, forged, "self", StructuredRollTest.noRandom()));
+        assertEquals(untouched, sheet);
+        ObjectNode missingTrait = sheet.deepCopy();
+        ((ObjectNode) missingTrait.at("/traits/0")).remove("spellcast");
+        ObjectNode beforeMissing = missingTrait.deepCopy();
+        ((ObjectNode) forged.required("profileRoll")).put("kind", "spellcast");
+        assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, missingTrait, origin, forged, "self", StructuredRollTest.noRandom()));
+        assertEquals(beforeMissing, missingTrait);
+
+        ObjectNode request = request("cast", 0, "f-steady", "focus");
+        ((ObjectNode) request.requiredAt("/selections/0")).put("bindingId", "use");
+        request.putObject("profileRoll").put("sourceInstanceId", "f-steady").put("profileId", "cast").put("kind", "spellcast");
+        ObjectNode receipt = HOST.execute(pack, sheet, origin, request, "self", StructuredRollTest.faces(1, 5));
+        JsonNode check = receipt.requiredAt("/event/check"), roll = receipt.requiredAt("/event/roll");
+        assertEquals("spellcast", check.required("kind").textValue());
+        assertEquals("Agility", check.required("trait").textValue());
+        assertTrue(check.required("spell").booleanValue());
+        assertTrue(check.required("duality").booleanValue());
+        assertTrue(check.required("weaponSource").isNull());
+        assertEquals("card:Example", check.required("origin").textValue());
+        assertEquals(17, check.required("difficulty").intValue());
+        assertEquals(18, check.required("total").intValue());
+        assertEquals("success", check.required("outcome").textValue());
+        assertTrue(roll.path("contributions").findValuesAsText("label").containsAll(List.of("Agility", "Action bonus", "Spell bonus", "Focus")));
+        assertFalse(roll.path("contributions").findValuesAsText("label").contains("Attack only"));
+        assertEquals(0, sheet.requiredAt("/hope/on").intValue());
+        assertEquals(2, sheet.requiredAt("/stress/on").intValue());
+        assertTrue(receipt.requiredAt("/event/resultId").isTextual());
+        assertTrue(receipt.required("resultActions").findValuesAsText("ruleId").contains("result"));
+        assertEquals(receipt, HOST.execute(pack, sheet, origin, request, "self", StructuredRollTest.noRandom()));
+
+        for (var sample : List.of(Map.entry("react", "reaction"), Map.entry("act", "action"))) {
+            ObjectNode next = RuleJson.JSON.createObjectNode().put("requestId", sample.getKey())
+                    .put("expectedRevision", HOST.revision(sheet));
+            next.putArray("selections");
+            next.putObject("profileRoll").put("sourceInstanceId", "f-steady")
+                    .put("profileId", sample.getKey()).put("kind", sample.getValue());
+            JsonNode result = HOST.execute(pack, sheet, origin, next, "self", StructuredRollTest.faces(2, 4));
+            List<String> labels = result.requiredAt("/event/roll/contributions").findValuesAsText("label");
+            assertEquals("reaction".equals(sample.getValue()) ? 13 : 8, result.requiredAt("/event/check/total").intValue());
+            assertEquals("reaction".equals(sample.getValue()), labels.contains("Reaction bonus"));
+            assertEquals("action".equals(sample.getValue()), labels.contains("Action bonus"));
+            assertFalse(labels.contains("Spell bonus"));
+            assertFalse(labels.contains("Attack only"));
+        }
+    }
+
+    @Test
+    void actionProfilesRejectInvalidShapes() throws Exception {
+        for (String invalid : List.of(
+                "{\"label\":\"Bad\",\"rollKind\":\"attack\"}",
+                "{\"label\":\"Bad\",\"rollKind\":\"spellcast\",\"damage\":{\"sides\":6}}",
+                "{\"label\":\"Bad\",\"rollKind\":\"action\",\"difficulty\":-1}",
+                "{\"label\":\"Bad\",\"origin\":\"untyped\"}",
+                "{\"label\":\"Bad\",\"trait\":\"spellcast\"}")) {
+            ObjectNode automation = (ObjectNode) RuleJson.parse("{\"profiles\":[" + invalid.replaceFirst("\\{", "{\"id\":\"bad\",") + "]}");
+            assertThrows(IllegalArgumentException.class,
+                    () -> RuleCompiler.compile("classes:test:features:bad", automation, fixture("rewrite/recipes")), invalid);
+        }
+    }
+
+    @Test
     void sheetIntentsCannotExecuteBindingsOnOtherSurfaces() throws Exception {
         ObjectNode classes = fixture("rewrite/host-classes");
         var bindings = (com.fasterxml.jackson.databind.node.ArrayNode) classes.at("/entries/0/features/0/automation/rules/0/bindings");

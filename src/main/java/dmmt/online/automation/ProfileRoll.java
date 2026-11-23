@@ -20,6 +20,11 @@ final class ProfileRoll {
     record Modifier(JsonNode value, String sourceId, String label, boolean weapon) {}
     private record WeaponDamage(List<int[]> pools, int flat) {}
 
+    static List<String> kinds(JsonNode profile) {
+        return profile.has("rollKind") ? List.of(profile.path("rollKind").asText())
+                : profile.has("damage") ? List.of("attack", "damage") : List.of("attack");
+    }
+
     static ObjectNode weaponProfile(SheetProjection.SourceElement source, JsonNode declaredProfiles) {
         JsonNode weapon = source.element();
         String id = "weapon.base";
@@ -101,24 +106,31 @@ final class ProfileRoll {
 
     static void facts(ObjectNode event, SheetProjection.SourceElement source, JsonNode profile, String kind,
                       ObjectNode actor, boolean equippedWeapon) {
-        boolean attack = "attack".equals(kind);
-        if (!attack && !"damage".equals(kind)) throw RuleJson.error("/request/profileRoll/kind", "Choose attack or damage.");
+        boolean damageRoll = "damage".equals(kind);
+        if (!kinds(profile).contains(kind))
+            throw RuleJson.error("/request/profileRoll/kind", "This roll kind is not available for the selected profile.");
         JsonNode gear = source.element();
         JsonNode damage = profile.path("damage");
-        if (!attack && !damage.isObject()) throw new RuleRuntime.Unavailable("profile", "This profile has no damage roll.");
+        if (damageRoll && !damage.isObject()) throw new RuleRuntime.Unavailable("profile", "This profile has no damage roll.");
         JsonNode stats = actor.path("stats");
-        String trait = profile.path("trait").asText(equippedWeapon ? gear.path("trait").textValue() : null);
+        String declaredTrait = profile.path("trait").asText(equippedWeapon && !profile.has("rollKind")
+                ? gear.path("trait").textValue() : null);
+        String trait = "spellcast".equals(declaredTrait) ? actor.path("spellcastTrait").path("name").textValue() : declaredTrait;
         ObjectNode check = event.withObject("/check");
-        check.put("kind", kind).put("duality", attack).put("trait", trait).put("range", profile.path("range").asText(null))
-                .put("spell", false).put("weaponSource", source.instanceId()).put("weaponSourceId", source.sourceId());
-        if (equippedWeapon) {
+        check.put("kind", kind).put("duality", !damageRoll).put("trait", trait).put("range", profile.path("range").asText(null))
+                .put("spell", "spellcast".equals(kind));
+        if (!profile.has("rollKind"))
+            check.put("weaponSource", source.instanceId()).put("weaponSourceId", source.sourceId());
+        if (equippedWeapon && !profile.has("rollKind")) {
             String slot = gear.path("slot").asText("").toLowerCase(Locale.ROOT);
             if ("primary".equals(slot) || "secondary".equals(slot)) check.put("weapon", slot);
         }
+        if (profile.has("difficulty")) check.set("difficulty", profile.get("difficulty").deepCopy());
+        if (profile.has("origin")) check.set("origin", profile.get("origin").deepCopy());
         event.put("type", "roll.prepare").put("sourceInstanceId", source.instanceId())
                 .put("profileId", profile.path("id").asText()).put("label", profile.path("label").asText());
         if (stats.path("thresholds").isObject()) event.set("thresholds", stats.get("thresholds").deepCopy());
-        if (!attack) {
+        if (damageRoll) {
             String type = damage.path("type").asText(equippedWeapon ? gear.path("damageType").textValue() : null);
             if ("phys".equals(type)) type = "physical";
             if ("mag".equals(type)) type = "magic";
@@ -133,16 +145,20 @@ final class ProfileRoll {
         JsonNode check = event.path("check"), stats = actor.path("stats"), damage = profile.path("damage");
         ObjectNode plan = RuleJson.JSON.createObjectNode().put("id", java.util.UUID.randomUUID().toString());
         ArrayNode parts = plan.putArray("contributions");
-        if ("attack".equals(kind)) {
+        if (!"damage".equals(kind)) {
             dice(parts, "hope", "Hope die", "core", 1, 12);
             dice(parts, "fear", "Fear die", "core", 1, 12);
             String trait = check.path("trait").textValue();
+            if ("spellcast".equals(profile.path("trait").asText()) && trait == null)
+                throw new RuleRuntime.Unavailable("trait", "Choose a Spellcast trait before making this roll.");
             if (trait != null) {
-                JsonNode mod = stats.path("trait").path(trait);
+                JsonNode mod = "spellcast".equals(profile.path("trait").asText())
+                        ? stats.path("spellcast").path("total") : stats.path("trait").path(trait);
                 if (!mod.isNumber()) throw new RuleRuntime.Unavailable("trait", "The profile trait is not available.");
                 parts.addObject().put("id", "trait").put("kind", "flat").put("role", "modifier")
                         .put("sourceId", source.sourceId()).put("label", trait).set("value", mod);
             }
+            if (profile.has("difficulty")) plan.putObject("metadata").set("difficulty", profile.get("difficulty").deepCopy());
         } else {
             ObjectNode metadata = plan.putObject("metadata");
             metadata.set("damageType", check.get("damageType"));
@@ -164,7 +180,15 @@ final class ProfileRoll {
                     .put("role", "damage").put("sourceId", source.sourceId()).put("label", profile.path("label").asText())
                     .put("value", flat);
         }
-        for (String stat : "attack".equals(kind) ? List.of("roll.action", "roll.attack") : List.of("roll.damage"))
+        List<String> statsForRoll = switch (kind) {
+            case "attack" -> List.of("roll.action", "roll.attack");
+            case "damage" -> List.of("roll.damage");
+            case "action" -> List.of("roll.action");
+            case "reaction" -> List.of("roll.reaction");
+            case "spellcast" -> List.of("roll.action", "roll.spellcast");
+            default -> throw RuleJson.error("/request/profileRoll/kind", "Unknown profile roll kind.");
+        };
+        for (String stat : statsForRoll)
             addModifiers(parts, modifiers, stat, source.instanceId(), kind);
         event.set("roll", StructuredRoll.resolve(plan, RuleJson.JSON.createObjectNode(), random));
         updateCheck(event);

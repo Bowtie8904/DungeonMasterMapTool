@@ -486,12 +486,12 @@ public final class RuleCompiler {
     }
 
     private static ArrayNode profileList(JsonNode list) {
-        if (!list.isArray() || list.isEmpty() || list.size() > 8) throw RuleJson.error("/automation/profiles", "Expected 1-8 attack profiles.");
+        if (!list.isArray() || list.isEmpty() || list.size() > 8) throw RuleJson.error("/automation/profiles", "Expected 1-8 roll profiles.");
         Set<String> ids = new HashSet<>();
         for (int i = 0; i < list.size(); i++) {
             String path = "/automation/profiles/" + i;
             if (!ids.add(RuleJson.id(list.get(i).path("id"), path + "/id"))) throw RuleJson.error(path + "/id", "Duplicate profile ID.");
-            RuleJson.fields(list.get(i), path, "id", "label", "trait", "range", "damage");
+            RuleJson.fields(list.get(i), path, "id", "label", "trait", "range", "damage", "rollKind", "difficulty", "origin");
             validateProfileBody(list.get(i), path);
         }
         return (ArrayNode) list.deepCopy();
@@ -503,13 +503,23 @@ public final class RuleCompiler {
     }
 
     /**
-     * An attack profile: on an effect it replaces the actor's weapon while the effect lasts (beastform, companion,
-     * unarmed); in a source's {@code profiles} it is an additional way to attack with that source. Damage {@code count}
-     * defaults to the actor's proficiency and {@code type} to the source's own damage type.
+     * An effect profile or a source profile without a roll kind describes an attack. A source may instead declare
+     * an action, reaction or spellcast roll. Attack damage count defaults to the actor's proficiency.
      */
     private static void validateProfileBody(JsonNode profile, String path) {
         RuleJson.text(profile.get("label"), path + "/label");
-        if (profile.has("trait") && !Set.of("Agility", "Strength", "Finesse", "Instinct", "Presence", "Knowledge").contains(profile.path("trait").asText()))
+        boolean actionRoll = profile.has("rollKind");
+        if (actionRoll && !Set.of("action", "reaction", "spellcast").contains(profile.path("rollKind").asText()))
+            throw RuleJson.error(path + "/rollKind", "Expected action, reaction or spellcast.");
+        if (!actionRoll && (profile.has("difficulty") || profile.has("origin")))
+            throw RuleJson.error(path, "Difficulty and origin require an action-roll profile.");
+        if (actionRoll && profile.has("damage"))
+            throw RuleJson.error(path + "/damage", "An action-roll profile cannot declare attack damage.");
+        if (profile.has("difficulty")) RuleJson.integer(profile.get("difficulty"), path + "/difficulty", 0, 1_000_000);
+        if (profile.has("origin")) RuleJson.text(profile.get("origin"), path + "/origin");
+        String trait = profile.path("trait").asText();
+        if (profile.has("trait") && !Set.of("Agility", "Strength", "Finesse", "Instinct", "Presence", "Knowledge").contains(trait)
+                && !(actionRoll && "spellcast".equals(trait)))
             throw RuleJson.error(path + "/trait", "Unknown trait.");
         if (profile.has("range") && !Set.of("melee", "veryClose", "close", "far", "veryFar").contains(profile.path("range").asText()))
             throw RuleJson.error(path + "/range", "Unknown range.");
