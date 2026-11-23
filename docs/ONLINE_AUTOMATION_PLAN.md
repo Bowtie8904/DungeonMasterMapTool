@@ -93,6 +93,9 @@ identities and unsafe pool state reject the transaction without spending costs. 
 no single-holder start occurs. For the standard engine-owned effects field, unrelated sheets are inspected
 without building complete actor projections; other projection mappings retain the full-projection path.
 Lifecycle resets use the same host-generated event as automatic rules, retaining actor identity, table facts and session identity for projections and expressions.
+Scene/session rules that request a table-resource change currently reject the entire reset, including earlier
+staged actor and phase changes. Later rules can read table state, so committing a queued change only after all
+events would be unsafe. Ordered inter-rule and inter-event settlement remains required.
 Numeric pool reset expressions evaluate against initialized declared state and pools from one pre-reset snapshot
 per source, independently of declaration order; unchanged default pools are not persisted by the reset.
 

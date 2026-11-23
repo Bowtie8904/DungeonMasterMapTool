@@ -4161,6 +4161,48 @@ class OnlineSessionServerTest {
         }
     }
 
+    @Test
+    void replacementLifecycleRejectsUnsettledTableChangesAtomically() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        String initial = """
+                {"name":"Ada","hope":{"slots":6,"on":2},"features":[
+                 {"name":"Steady","instanceId":"s","automationSource":"classes:tester:features:steady"}],
+                 "automationState":{"revision":3,"journal":[],"sources":{},
+                   "effects":[{"id":"scene","label":"Scene","until":["scene.end"]}]}}
+                """;
+        for (String id : List.of("active", "offline")) {
+            campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId()).build());
+            store.saveSheet(campaign.getId(), id, initial);
+        }
+        campaign.setFear(3);
+        String activeBefore = store.loadSheet(campaign.getId(), "active");
+        String offlineBefore = store.loadSheet(campaign.getId(), "offline");
+        var historyBefore = store.historyTail(campaign.getId(), 100);
+        for (String event : List.of("scene.end", "session.start")) {
+            for (String operation : List.of("table.gain", "table.spend")) {
+                automation.set("rules", MAPPER.readTree("""
+                        [{"id":"early","bindings":[{"id":"auto","event":"scene.end","surface":"sheet","mode":"automatic"}],
+                          "when":{"eq":[{"read":"actor.id"},"active"]},
+                          "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"Early"}},
+                         {"id":"table","bindings":[{"id":"auto","event":"%s","surface":"sheet","mode":"automatic"}],
+                          "when":{"eq":[{"read":"actor.id"},"offline"]},
+                          "do":[{"op":"%s","resource":"fear","amount":1,"label":"Fear"}],"ui":{"label":"Table"}}]
+                        """.formatted(event, operation)));
+                java.nio.file.Files.writeString(file, catalog.toString());
+                String error = "scene.end".equals(event) ? server.endScene() : server.newSession();
+                assertNotNull(error);
+                assertTrue(error.contains("ordered settlement"), error);
+                assertEquals(activeBefore, store.loadSheet(campaign.getId(), "active"));
+                assertEquals(offlineBefore, store.loadSheet(campaign.getId(), "offline"));
+                assertEquals(3, campaign.getFear());
+                assertEquals(historyBefore, store.historyTail(campaign.getId(), 100));
+            }
+        }
+    }
+
     private HttpResponse<String> artworkHttp(String actorId, String cookie, String token, String body) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/actors/" + actorId + "/artwork"));
         if (cookie != null) request.header("Cookie", cookie);

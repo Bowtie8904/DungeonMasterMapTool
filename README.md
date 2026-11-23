@@ -41,6 +41,8 @@ Reset expressions use the same host-generated actor, table and session facts as 
 expressions see default state and a consistent pre-reset pool snapshot.
 Scene and session resets reject malformed or unknown-version catalogs and incomplete replacement packs rather
 than falling back to legacy reset; valid format-1 catalogs retain their existing behavior.
+Format-2 lifecycle rules that change table resources are rejected until those changes can be settled in order;
+no part of the reset is committed in that case.
 Format-2 effect-bound actor pools retain their balance while another supporting effect on that character remains,
 including effects from a different source or a source no longer on the sheet. Ending or replacing the last
 supporting effect and timed expiry clear the pool in the same transaction. An unresolved automation effect or

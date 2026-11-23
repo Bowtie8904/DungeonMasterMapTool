@@ -5960,7 +5960,11 @@ public final class OnlineSessionServer {
                     String report = action.path("report").asText();
                     if (!report.isBlank()) lines.add(actor.getName() + ": " + report);
                 }
-                result.path("outbox").forEach(commands::add);
+                for (JsonNode command : result.path("outbox")) {
+                    if (Set.of("table.gain", "table.spend").contains(command.path("kind").asText()))
+                        throw new IllegalStateException("Scene and session automation cannot change table resources until ordered settlement is available.");
+                    commands.add(command);
+                }
                 modified |= automationHost.resetLimits(pack, sheet, event);
             }
             if (modified) {
