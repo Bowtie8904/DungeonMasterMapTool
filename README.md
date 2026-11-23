@@ -34,8 +34,10 @@ reject the action without spending its costs.
 Authored claim offers, including per-card ally rest benefits, appear in chat with choices for eligible owned
 characters. The host checks the offering source and saved claim ledger, then journals the offer, participating
 sheets and reports together; retrying the same request does not apply the benefit twice. A claim offer must name
-an acceptance group on the `claim.accept` chat surface of the same active source. Inventory grants and other
-unsupported claim commands still reject without spending the claim.
+an acceptance group on the `claim.accept` chat surface of the same active source. Generic feature-use restoration
+instead creates a recipient-specific offer: its owner chooses a currently spent use in chat, and the host saves
+the choice and receipt atomically. Catalog-backed inventory grants are also supported; unsupported claim commands
+still reject without spending the claim.
 Ending a scene or starting a new session with a format-2 pack applies its automatic rules, limit and pool
 resets, and timed effect expiry to saved active characters, including offline ones, in a single campaign commit.
 Reset expressions use the same host-generated actor, table and session facts as lifecycle rules. Pool reset

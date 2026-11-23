@@ -6233,10 +6233,18 @@ public final class OnlineSessionServer {
             JsonNode claim = offer.path("automationClaim");
             ClaimParticipants participants = claimParticipants(playerId, claim, ctx.queryParam("recipientId"));
             var ledger = claimLedger(claim);
-            ObjectNode result = automationHost.describeClaim(participants.pack(), participants.sourceSheet(),
-                    participants.recipientSheet(), claimEvent(claim, participants.source()),
-                    claim.path("sourceInstanceId").asText(), claim.path("group").asText(),
-                    participants.recipient().getId(), participants.relation());
+            ObjectNode event = claimEvent(claim, participants.source());
+            boolean otherRecipient = claim.has("recipientActorId")
+                    && !participants.recipient().getId().equals(claim.path("recipientActorId").asText());
+            ObjectNode result = otherRecipient
+                    ? MAPPER.createObjectNode().put("revision", automationHost.revision(participants.sourceSheet()))
+                    .put("recipientRevision", automationHost.revision(participants.recipientSheet())).set("actions", MAPPER.createArrayNode())
+                    : "limit.restore".equals(claim.path("kind").asText())
+                    ? automationHost.describeLimitRestoration(participants.pack(), participants.sourceSheet(),
+                    participants.recipientSheet(), event, claim.path("sourceInstanceId").asText())
+                    : automationHost.describeClaim(participants.pack(), participants.sourceSheet(),
+                    participants.recipientSheet(), event, claim.path("sourceInstanceId").asText(),
+                    claim.path("group").asText(), participants.recipient().getId(), participants.relation());
             result.put("claimRevision", ledger.revision());
             long taken = ledger.claims().stream().filter(key -> key.group().equals(claim.path("group").asText())).count();
             if (ledger.claims().contains(new RuleDispatcher.ClaimKey(claim.path("group").asText(), participants.recipient().getId()))
@@ -6288,17 +6296,27 @@ public final class OnlineSessionServer {
             if (!(request.path("selection") instanceof ObjectNode selection))
                 throw new IllegalArgumentException("Choose an action from this claim offer.");
             ClaimParticipants participants = claimParticipants(playerId, claim, request.path("recipientId").asText());
+            if (claim.has("recipientActorId")
+                    && !participants.recipient().getId().equals(claim.path("recipientActorId").asText()))
+                throw new SecurityException("This offer belongs to a different character.");
             var ledger = claimLedger(claim);
             ObjectNode event = claimEvent(claim, participants.source());
             Map<String, JsonNode> sourceNames = new java.util.HashMap<>();
             for (var element : automationHost.sources(participants.pack(), participants.sourceSheet()))
                 sourceNames.put(element.instanceId(), element.element().deepCopy());
-            ObjectNode result = automationHost.stageClaim(participants.pack(), participants.sourceSheet(),
+            long sourceRevision = claimLong(request.get("expectedRevision"), "source revision");
+            long recipientRevision = claimLong(request.get("expectedRecipientRevision"), "recipient revision");
+            long claimRevision = claimLong(request.get("expectedClaimRevision"), "claim revision");
+            boolean restoration = "limit.restore".equals(claim.path("kind").asText());
+            ObjectNode result = restoration
+                    ? automationHost.stageLimitRestoration(participants.pack(), participants.sourceSheet(),
+                    participants.recipientSheet(), event, claim.path("sourceInstanceId").asText(),
+                    claim.path("group").asText(), participants.recipient().getId(), selection,
+                    sourceRevision, recipientRevision, claimRevision, ledger)
+                    : automationHost.stageClaim(participants.pack(), participants.sourceSheet(),
                     participants.recipientSheet(), event, claim.path("sourceInstanceId").asText(),
                     claim.path("group").asText(), participants.recipient().getId(), participants.relation(), selection,
-                    claimLong(request.get("expectedRevision"), "source revision"),
-                    claimLong(request.get("expectedRecipientRevision"), "recipient revision"),
-                    claimLong(request.get("expectedClaimRevision"), "claim revision"), ledger, diceRandom);
+                    sourceRevision, recipientRevision, claimRevision, ledger, diceRandom);
             result.put("requestId", requestId);
             ObjectNode replacement = offer.deepCopy();
             ObjectNode updated = (ObjectNode) replacement.path("automationClaim");
@@ -6310,7 +6328,7 @@ public final class OnlineSessionServer {
             receipt.set("response", result.deepCopy());
             while (receipts.size() > 32) receipts.remove(0);
             Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
-            changed.put(participants.source().getId(), participants.sourceSheet());
+            if (!restoration) changed.put(participants.source().getId(), participants.sourceSheet());
             changed.put(participants.recipient().getId(), participants.recipientSheet());
             changed.values().forEach(sheet -> sheet.put("featureRevision", sheet.path("featureRevision").asLong(0) + 1));
             List<ObjectNode> messages = automationReports(participants.source(), sourceNames, result);
@@ -6992,7 +7010,8 @@ public final class OnlineSessionServer {
                         throw new IllegalArgumentException("The automation table state is inconsistent. Retry the action.");
                     fear = next;
                 }
-                case "claim.offer" -> {
+                case "claim.offer", "limit.restore" -> {
+                    boolean restoration = "limit.restore".equals(kind);
                     Campaign.Actor source = automationActor(command.path("sourceActorId").asText());
                     ObjectNode sourceSheet = changed.get(source.getId());
                     if (sourceSheet == null || campaign.player(source.getOwnerId()) == null
@@ -7001,15 +7020,21 @@ public final class OnlineSessionServer {
                         throw new ClaimUnavailable("The offering source is no longer active.");
                     if (!(command.path("originEvent") instanceof ObjectNode))
                         throw new IllegalArgumentException("The claim offer has no originating event.");
+                    Campaign.Actor recipient = restoration ? automationActor(command.path("targetActorId").asText()) : null;
+                    if (restoration && (campaign.player(recipient.getOwnerId()) == null
+                            || !changed.containsKey(recipient.getId())))
+                        throw new ClaimUnavailable("A feature-use restoration requires an active player-owned recipient in this transaction.");
                     ObjectNode message = chatMessage(source.getOwnerId(), campaign.player(source.getOwnerId()).getName(),
                             null, clip(command.path("label").asText("Benefit offered")));
                     message.put("actorId", source.getId());
                     ObjectNode claim = message.putObject("automationClaim")
                             .put("sourceActorId", source.getId())
                             .put("sourceInstanceId", command.path("sourceInstanceId").asText())
-                            .put("packRevision", pack.revision()).put("group", command.path("group").asText())
+                            .put("packRevision", pack.revision())
+                            .put("group", restoration ? "limit-restore" : command.path("group").asText())
                             .put("revision", 0);
-                    if (command.has("limit")) claim.set("limit", command.get("limit").deepCopy());
+                    if (restoration) claim.put("kind", kind).put("recipientActorId", recipient.getId()).put("limit", 1);
+                    else if (command.has("limit")) claim.set("limit", command.get("limit").deepCopy());
                     claim.set("originEvent", command.get("originEvent").deepCopy());
                     claim.putArray("claims");
                     claim.putArray("receipts");

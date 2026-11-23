@@ -613,7 +613,7 @@ public final class RuleDispatcher {
                 if ("limits.refresh".equals(operation))
                     throw new RuleRuntime.Unavailable("reactionLimits",
                             "Refreshing other sources' use budgets requires host settlement before later reactions.");
-                if (Set.of("limit.restore", "inventory.grant", "damage.deal").contains(operation))
+                if (Set.of("inventory.grant", "damage.deal").contains(operation))
                     throw new RuleRuntime.Unavailable("reactionCommand",
                             "This host request requires settlement before later reactions: " + operation + ".");
                 String currentId = staged.path("source").path("instanceId").asText();

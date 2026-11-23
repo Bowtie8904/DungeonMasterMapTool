@@ -38,9 +38,9 @@ public final class AutomationHost {
     private static final int MAX_PARTY_RECOVERIES = 1024;
     private static final int MAX_REACTION_PROJECTION_PASSES = 16;
     private static final Set<String> STAGED_REST_COMMANDS = Set.of(
-            "countdown.start", "limits.refresh", "effect.endElsewhere", "table.gain", "table.spend", "claim.offer");
+            "countdown.start", "limits.refresh", "effect.endElsewhere", "table.gain", "table.spend", "claim.offer", "limit.restore");
     private static final Set<String> STAGED_TARGET_REST_COMMANDS = Set.of(
-            "countdown.start", "limits.refresh", "table.gain", "table.spend", "claim.offer");
+            "countdown.start", "limits.refresh", "table.gain", "table.spend", "claim.offer", "limit.restore");
     static final String RULESET_SOURCE = "ruleset:base";
 
     /** Compiled automation keyed by fully qualified source ID. */
@@ -3325,6 +3325,105 @@ public final class AutomationHost {
 
     public ObjectNode recipientSnapshot(Pack pack, ObjectNode sheet, ObjectNode event, String recipientId) {
         return actor(pack, sheet, projection.state(sheet), event.deepCopy().put("actorId", recipientId));
+    }
+
+    private record SpentLimit(String choiceId, String instanceId, String limitId, String label, int used) {}
+
+    private List<SpentLimit> spentLimits(Pack pack, ObjectNode sheet) {
+        ObjectNode state = projection.state(sheet);
+        List<SpentLimit> result = new ArrayList<>();
+        for (var element : sources(pack, sheet)) {
+            RuleCompiler.Program program = pack.programs().get(element.sourceId());
+            if (program == null) continue;
+            JsonNode usage = state.path("sources").path(element.instanceId()).path("usage");
+            program.limits().fieldNames().forEachRemaining(limit -> {
+                JsonNode value = usage.path(limit);
+                if (value.isMissingNode()) return;
+                int used = RuleJson.integer(value, "/automationState/sources/" + element.instanceId() + "/usage/" + limit, 0, 1000);
+                if (used == 0) return;
+                String choiceId = element.instanceId().length() + ":" + element.instanceId() + ":" + limit;
+                String label = element.name() + " (" + limit + ", " + used + " spent)";
+                result.add(new SpentLimit(choiceId, element.instanceId(), limit, label, used));
+            });
+        }
+        result.sort(java.util.Comparator.comparing(SpentLimit::label).thenComparing(SpentLimit::choiceId));
+        if (result.size() > 64)
+            throw new RuleRuntime.Unavailable("limitChoices", "There are too many spent feature uses to choose from.");
+        return result;
+    }
+
+    private RuleDispatcher.Candidate restorationSource(Pack pack, ObjectNode sourceSheet, ObjectNode event,
+                                                        String sourceInstanceId) {
+        return candidates(pack, sourceSheet, event).stream()
+                .filter(item -> sourceInstanceId.equals(item.instanceId())).findFirst()
+                .orElseThrow(() -> new RuleRuntime.Unavailable("source", "The offering source is no longer active."));
+    }
+
+    /** Describes a recipient's current spent use budgets using the ordinary claim-control shape. */
+    public ObjectNode describeLimitRestoration(Pack pack, ObjectNode sourceSheet, ObjectNode recipientSheet,
+                                               ObjectNode event, String sourceInstanceId) {
+        ObjectNode source = sourceSheet.deepCopy(), recipient = recipientSheet.deepCopy();
+        var candidate = restorationSource(pack, source, event, sourceInstanceId);
+        ObjectNode result = RuleJson.JSON.createObjectNode()
+                .put("revision", revision(source)).put("recipientRevision", revision(recipient));
+        ArrayNode actions = result.putArray("actions");
+        List<SpentLimit> limits = spentLimits(pack, recipient);
+        if (!limits.isEmpty()) {
+            ObjectNode action = actions.addObject().put("sourceId", candidate.program().sourceId())
+                    .put("sourceInstanceId", sourceInstanceId).put("ruleId", "limit-restore")
+                    .put("bindingId", "claim").put("revision", revision(source))
+                    .put("surface", "chat").put("mode", "button").put("label", "Restore a feature use")
+                    .put("available", true);
+            ObjectNode input = action.putArray("inputs").addObject()
+                    .put("id", "limit").put("kind", "choice").put("label", "Choose a spent feature use").put("count", 1);
+            ArrayNode options = input.putArray("options");
+            for (SpentLimit limit : limits) options.addObject().put("id", limit.choiceId()).put("label", limit.label());
+        }
+        return result;
+    }
+
+    /** Applies a recipient-selected restoration to private sheets and the existing saved-offer ledger. */
+    public ObjectNode stageLimitRestoration(Pack pack, ObjectNode sourceSheet, ObjectNode recipientSheet,
+                                            ObjectNode event, String sourceInstanceId, String group, String recipientId,
+                                            ObjectNode selection, long expectedSourceRevision, long expectedRecipientRevision,
+                                            long expectedClaimRevision, RuleDispatcher.ClaimLedger ledger) {
+        if (revision(sourceSheet) != expectedSourceRevision)
+            throw new RuleRuntime.Unavailable("stale", "The offering character changed. Reopen this offer.");
+        if (revision(recipientSheet) != expectedRecipientRevision)
+            throw new RuleRuntime.Unavailable("staleRecipient", "The recipient changed. Reopen this offer.");
+        if (ledger.revision() != expectedClaimRevision)
+            throw new RuleRuntime.Unavailable("staleClaim", "The claim state changed. Reopen this offer.");
+        var key = new RuleDispatcher.ClaimKey(group, recipientId);
+        long taken = ledger.claims().stream().filter(claim -> group.equals(claim.group())).count();
+        if (ledger.claims().contains(key) || ledger.limits().containsKey(group) && taken >= ledger.limits().get(group))
+            throw new RuleRuntime.Unavailable("claimed", "This restoration has already been claimed.");
+        restorationSource(pack, sourceSheet, event, sourceInstanceId);
+        RuleJson.fields(selection, "/claim/selection", "sourceInstanceId", "ruleId", "bindingId", "inputs");
+        if (!sourceInstanceId.equals(selection.path("sourceInstanceId").asText())
+                || !"limit-restore".equals(selection.path("ruleId").asText())
+                || !"claim".equals(selection.path("bindingId").asText()))
+            throw RuleJson.error("/claim/selection", "The selected action does not match this offer.");
+        ObjectNode inputs = RuleJson.object(selection.get("inputs"), "/claim/selection/inputs");
+        RuleJson.fields(inputs, "/claim/selection/inputs", "limit");
+        if (!inputs.path("limit").isTextual())
+            throw RuleJson.error("/claim/selection/inputs/limit", "Choose a spent feature use.");
+        String selected = inputs.path("limit").asText();
+        SpentLimit limit = spentLimits(pack, recipientSheet).stream().filter(item -> item.choiceId().equals(selected))
+                .findFirst().orElseThrow(() -> new RuleRuntime.Unavailable("limit", "That feature use is no longer spent. Reopen this offer."));
+        ObjectNode state = projection.state(recipientSheet);
+        ObjectNode usage = (ObjectNode) state.path("sources").path(limit.instanceId()).path("usage");
+        usage.put(limit.limitId(), limit.used() - 1);
+        state.put("revision", expectedRecipientRevision + 1);
+        ObjectNode result = RuleJson.JSON.createObjectNode()
+                .put("revision", revision(sourceSheet)).put("recipientRevision", revision(recipientSheet))
+                .put("claimRevision", ledger.revision() + 1);
+        result.set("event", event.deepCopy());
+        result.putArray("outbox");
+        result.putArray("actions").addObject().put("sourceInstanceId", sourceInstanceId)
+                .put("ruleId", "limit-restore").put("bindingId", "claim")
+                .put("report", "Restored one use of " + limit.label() + " for "
+                        + recipientSheet.path("name").asText(recipientId) + ".");
+        return result;
     }
 
     /** Describes one saved offer against the current source and recipient sheets. */

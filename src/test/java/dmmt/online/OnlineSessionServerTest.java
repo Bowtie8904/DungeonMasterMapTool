@@ -2244,6 +2244,181 @@ class OnlineSessionServerTest {
         assertEquals(accepted.body(), claimHttp(owner, offer, "resting", claim.toString()).body());
     }
 
+    @Test
+    void targetedRestLetsOnlyTheRecipientRestoreOneSpentFeatureUse() throws Exception {
+        installRestRules();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withArray("rules").add(MAPPER.readTree("""
+                {"id":"give-use","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"button",
+                  "restMove":{"id":"give-use","kind":"any","ally":true},
+                  "targetSelection":{"cardinality":"one","scope":"activeCharacters","excludeSource":true}}],
+                 "do":[{"op":"limit.restore","to":"recipient","label":"Choose a feature to restore"}],
+                 "ui":{"label":"Restore an ally's feature"}}
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        String owner = cookie(), mira = allyCookie("mira-player");
+        campaign.getActors().add(Campaign.Actor.builder().id("resting").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("mira").name("Mira").ownerId("mira-player").build());
+        campaign.getActors().add(Campaign.Actor.builder().id("mira-alt").name("Alt").ownerId("mira-player").build());
+        store.saveSheet(campaign.getId(), "resting", """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":2},"stress":{"slots":6,"on":1},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":1}}
+                """);
+        store.saveSheet(campaign.getId(), "mira", """
+                {"name":"Mira","level":1,"hp":{"slots":6,"on":2},"stress":{"slots":6,"on":1},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":1},
+                 "features":[
+                  {"name":"First Rally","automationSource":"classes:tester:features:rally","instanceId":"r1"},
+                  {"name":"Second Rally","automationSource":"classes:tester:features:rally","instanceId":"r2"},
+                  {"name":"Unused Rally","automationSource":"classes:tester:features:rally","instanceId":"r3"}],
+                 "automationState":{"revision":4,"sources":{"r1":{"usage":{"once":1}},
+                   "r2":{"usage":{"once":1}},"r3":{"usage":{"once":0}}}}}
+                """);
+        store.saveSheet(campaign.getId(), "mira-alt", """
+                {"name":"Alt","level":1,"hp":{"slots":6,"on":0},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0}}
+                """);
+        JsonNode rest = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode restBody = restRequest(rest, "restore-rest");
+        targetRestMove(restBody, rest, "give-use", "mira");
+        var completed = restHttp(owner, "resting", null, restBody.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode offer = store.historyTail(campaign.getId(), 100).stream()
+                .filter(message -> "limit.restore".equals(message.at("/automationClaim/kind").asText()))
+                .findFirst().orElseThrow();
+        assertEquals("mira", OnlineSessionServer.playerView(offer).at("/automationClaim/recipientActorId").asText());
+        assertEquals(403, claimHttp(owner, offer, "mira", null).statusCode());
+        var otherDescription = claimHttp(mira, offer, "mira-alt", null);
+        assertEquals(200, otherDescription.statusCode(), otherDescription.body());
+        assertTrue(MAPPER.readTree(otherDescription.body()).path("actions").isEmpty());
+        var described = claimHttp(mira, offer, "mira", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode choices = MAPPER.readTree(described.body());
+        JsonNode options = choices.at("/actions/0/inputs/0/options");
+        assertEquals(List.of("2:r1:once", "2:r2:once"), options.findValuesAsText("id"));
+        ObjectNode request = claimRequest(choices, "mira", "restore-choice");
+        ((ObjectNode) request.at("/request/selection/inputs")).put("limit", "2:r2:once");
+        String originalSource = store.loadSheet(campaign.getId(), "resting");
+        String originalRecipient = store.loadSheet(campaign.getId(), "mira");
+        ObjectNode forged = request.deepCopy();
+        ((ObjectNode) forged.at("/request/selection/inputs")).put("limit", "2:r3:once");
+        assertEquals(409, claimHttp(mira, offer, "mira", forged.toString()).statusCode());
+        ObjectNode otherTarget = request.deepCopy();
+        ((ObjectNode) otherTarget.path("request")).put("recipientId", "mira-alt");
+        assertEquals(403, claimHttp(mira, offer, "mira-alt", otherTarget.toString()).statusCode());
+        ObjectNode stale = request.deepCopy();
+        ((ObjectNode) stale.path("request")).put("expectedClaimRevision", 1);
+        assertEquals(409, claimHttp(mira, offer, "mira", stale.toString()).statusCode());
+        assertEquals(originalSource, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(originalRecipient, store.loadSheet(campaign.getId(), "mira"));
+        var accepted = claimHttp(mira, offer, "mira", request.toString());
+        assertEquals(200, accepted.statusCode(), accepted.body());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(1, saved.at("/automationState/sources/r1/usage/once").asInt());
+        assertEquals(0, saved.at("/automationState/sources/r2/usage/once").asInt());
+        assertEquals(originalSource, store.loadSheet(campaign.getId(), "resting"));
+        assertTrue(MAPPER.readTree(accepted.body()).at("/actions/0/report").asText().contains("Second Rally"));
+        int history = store.historyTail(campaign.getId(), 100).size();
+        assertEquals(accepted.body(), claimHttp(mira, offer, "mira", request.toString()).body());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        assertTrue(MAPPER.readTree(claimHttp(mira, offer, "mira", null).body()).path("actions").isEmpty());
+        ObjectNode duplicate = request.deepCopy();
+        ((ObjectNode) duplicate.path("request")).put("requestId", "another-restore").put("expectedClaimRevision", 1);
+        assertEquals(409, claimHttp(mira, offer, "mira", duplicate.toString()).statusCode());
+    }
+
+    @Test
+    void selfRestRestoresTheSelectedUseOnTheSameSheet() throws Exception {
+        installRestRules();
+        Path classes = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(classes.toFile());
+        ((ObjectNode) catalog.at("/entries/0/features/0/automation/limits/once"))
+                .putArray("resetOn").add("scene.end");
+        java.nio.file.Files.writeString(classes, catalog.toString());
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withArray("rules").add(MAPPER.readTree("""
+                {"id":"self-use","bindings":[{"id":"rest","event":"rest.short","surface":"rest","mode":"option"}],
+                 "do":[{"op":"limit.restore","to":"actor","label":"Choose your feature"}],
+                 "ui":{"label":"Restore a feature"}}
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        String owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("resting").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "resting", """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":2},"stress":{"slots":6,"on":1},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":1},
+                 "features":[{"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"}],
+                 "automationState":{"revision":0,"sources":{"r":{"usage":{"once":1}}}}}
+                """);
+        JsonNode rest = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode body = restRequest(rest, "self-restore-rest");
+        body.withObject("/request").withArray("completion")
+                .add(restSelection(restDescriptor(rest.path("completion"), "self-use")));
+        var completed = restHttp(owner, "resting", null, body.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode offer = store.historyTail(campaign.getId(), 100).stream()
+                .filter(message -> "limit.restore".equals(message.at("/automationClaim/kind").asText()))
+                .findFirst().orElseThrow();
+        JsonNode description = MAPPER.readTree(claimHttp(owner, offer, "resting", null).body());
+        ObjectNode request = claimRequest(description, "resting", "self-restore-claim");
+        ((ObjectNode) request.at("/request/selection/inputs")).put("limit", "1:r:once");
+        var accepted = claimHttp(owner, offer, "resting", request.toString());
+        assertEquals(200, accepted.statusCode(), accepted.body());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(0, saved.at("/automationState/sources/r/usage/once").asInt());
+        assertEquals(2, saved.at("/automationState/revision").asInt());
+        assertEquals(2, MAPPER.readTree(accepted.body()).path("revision").asInt());
+        assertEquals(accepted.body(), claimHttp(owner, offer, "resting", request.toString()).body());
+    }
+
+    @Test
+    void targetedActionOffersTheRecipientAFeatureUseChoice() throws Exception {
+        ObjectNode catalog = installPartyAction();
+        ObjectNode rule = (ObjectNode) catalog.at("/entries/0/features/0/automation/rules/0");
+        ((ObjectNode) rule.at("/bindings/0/targetSelection")).put("cardinality", "one").put("scope", "activePlayerCharacters");
+        rule.set("do", MAPPER.readTree("""
+                [{"op":"limit.restore","to":"recipient","label":"Restore a feature"}]
+                """));
+        ((ObjectNode) rule.path("ui")).put("report", "Offered a feature use.");
+        java.nio.file.Files.writeString(compendiumDir.resolve("classes.json"), catalog.toString());
+        String owner = cookie(), other = allyCookie("other");
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("patient").name("Bea").ownerId("other").build());
+        store.saveSheet(campaign.getId(), "caster", """
+                {"name":"Ada","hope":{"on":3,"slots":6},"features":[
+                 {"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r0"}]}
+                """);
+        store.saveSheet(campaign.getId(), "patient", """
+                {"name":"Bea","hope":{"on":0,"slots":6},"features":[
+                 {"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r1"}],
+                 "automationState":{"revision":0,"sources":{"r1":{"usage":{"uses":1}}}}}
+                """);
+        JsonNode options = partyOptions(owner);
+        assertEquals("patient", options.get(0).path("id").asText());
+        ObjectNode body = MAPPER.createObjectNode();
+        ObjectNode request = body.putObject("request").put("requestId", "offer-use").put("expectedRevision", 0);
+        request.putArray("selections").addObject().put("sourceInstanceId", "r0").put("ruleId", "rally").put("bindingId", "sheet");
+        request.putObject("target").put("recipientId", "patient").set("version", options.get(0).required("version"));
+        var offered = automationHttp(owner, "caster", body.toString());
+        assertEquals(200, offered.statusCode(), offered.body());
+        assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "caster")).at("/hope/on").asInt());
+        JsonNode offer = store.historyTail(campaign.getId(), 100).stream()
+                .filter(message -> "limit.restore".equals(message.at("/automationClaim/kind").asText()))
+                .findFirst().orElseThrow();
+        int history = store.historyTail(campaign.getId(), 100).size();
+        assertEquals(offered.body(), automationHttp(owner, "caster", body.toString()).body());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        JsonNode description = MAPPER.readTree(claimHttp(other, offer, "patient", null).body());
+        ObjectNode claim = claimRequest(description, "patient", "accept-use");
+        ((ObjectNode) claim.at("/request/selection/inputs")).put("limit", "2:r1:uses");
+        var accepted = claimHttp(other, offer, "patient", claim.toString());
+        assertEquals(200, accepted.statusCode(), accepted.body());
+        assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "patient"))
+                .at("/automationState/sources/r1/usage/uses").asInt());
+    }
+
     private void installInventoryGrantActions() throws Exception {
         automationCompendium();
         Path classes = compendiumDir.resolve("classes.json");

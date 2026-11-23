@@ -149,6 +149,10 @@ Converted companions use their current sheet Stress track as the source of their
 before long-rest moves and clear the owner's net Stress recovered by each completed move; unavailable companions
 do not recover during short rests. `CompanionRestRecoveryTest` and the live HTTP fixture cover this ordering.
 Single-action, claim and rest `inventory.grant` commands settle catalog-linked item/consumable stacks and actor or party caps atomically; self and targeted rest grants follow earlier track reactions and are visible to later moves and completion phases. Later inventory-dependent reads or track reactions in the granting action, deferred benefits after a targeted grant, and grants that require dynamic effect/pool projection are rejected until ordered settlement is available.
+`limit.restore` creates a saved recipient-specific claim instead of changing a use immediately; its owner selects
+one current spent source limit through the generic chat controls. The claim ledger, sheet, report and exact-retry
+receipt commit atomically. Offers to characters without a player owner are rejected; more than 64 spent limits
+must be reduced before choosing.
 
 The live host rejects legacy client-supplied rests and downtime rerolls when any category declares format 2,
 including an incomplete pack. It cannot classify malformed, unreadable or unknown-version categories as legacy.

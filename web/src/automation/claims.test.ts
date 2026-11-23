@@ -11,6 +11,7 @@ class Element {
   disabled = false;
   inert = false;
   open = false;
+  checked = false;
   constructor(readonly tagName: string) {}
   append(...children: Array<Element | string>): void {
     this.children.push(...children.map(child => {
@@ -24,6 +25,9 @@ class Element {
     this.listeners.set(event, [...(this.listeners.get(event) ?? []), handler]);
   }
   click(): void { if (!this.disabled && !this.inert) this.listeners.get('click')?.forEach(handler => handler()); }
+  showModal(): void { this.open = true; }
+  close(): void { this.open = false; this.listeners.get('close')?.forEach(handler => handler()); }
+  remove(): void {}
   focus(): void {}
   all(tag: string): Element[] { return [...(this.tagName === tag ? [this] : []), ...this.children.flatMap(child => child.all(tag))]; }
   get text(): string { return this.textContent + this.children.map(child => child.text).join(''); }
@@ -95,5 +99,44 @@ describe('saved automation claims', () => {
     expect(gets).toBe(2);
     expect(fake(card).text).toContain('Offer changed.');
     expect(fake(card).all('button')).toHaveLength(1);
+  });
+
+  it('only loads the named recipient and submits its host-described feature choice', async () => {
+    const targetOffer: ChatMessage = {
+      ...offer, automationClaim: { ...offer.automationClaim!, recipientActorId: 'mira' },
+    };
+    const targeted = {
+      ...description, actions: [{ ...action, ruleId: 'limit-restore', inputs: [{
+        id: 'limit', kind: 'choice', label: 'Choose a spent feature use', count: 1,
+        options: [{ id: '5:card-a:once', label: 'Rally (once, 1 spent)' }],
+      }] }],
+    };
+    const posts: string[] = [];
+    const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+      if (!init.body) return Response.json(posts.length > 1 ? { ...targeted, actions: [] } : targeted);
+      posts.push(String(init.body));
+      if (posts.length === 1) throw new Error('Reply lost');
+      return Response.json({ actions: [{ report: 'Restored Rally.' }] });
+    });
+    vi.stubGlobal('fetch', fetch);
+    expect(historyClaimControls(targetOffer, [{ id: 'other', name: 'Other' }])).toBeNull();
+    const card = historyClaimControls(targetOffer, [{ id: 'other', name: 'Other' }, { id: 'mira', name: 'Mira' }])!;
+    fake(card).open = true;
+    fake(card).listeners.get('toggle')!.forEach(listener => listener());
+    await settle();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][0]).toContain('recipientId=mira');
+    fake(card).all('button')[0].click();
+    const dialog = fake(document.body).all('dialog')[0];
+    expect(dialog.text).toContain('Rally (once, 1 spent)');
+    dialog.all('input')[0].checked = true;
+    dialog.all('button')[1].click();
+    await settle();
+    expect(dialog.text).toContain('Reply lost');
+    dialog.all('button')[1].click();
+    await settle();
+    expect(posts).toEqual([posts[0], posts[0]]);
+    expect(JSON.parse(posts[0]).request.selection.inputs).toEqual({ limit: '5:card-a:once' });
+    expect(fake(card).text).toContain('Restored Rally.');
   });
 });

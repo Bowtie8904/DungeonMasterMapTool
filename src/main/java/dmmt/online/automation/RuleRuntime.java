@@ -1441,8 +1441,13 @@ public final class RuleRuntime {
                     settleTableResource(context, request);
                 }
                 else if ("limits.refresh".equals(kind)) request.set("on", op.path("on").deepCopy());
-                else if ("limit.restore".equals(kind)) request.put("to", op.path("to").asText())
-                        .put("actorId", context.path(op.path("to").asText()).path("id").asText());
+                else if ("limit.restore".equals(kind)) {
+                    String target = op.path("to").asText();
+                    String targetId = RuleJson.id(context.path(target).path("id"), "/" + target + "/id");
+                    request.put("to", target).put("actorId", targetId).put("targetActorId", targetId)
+                            .put("sourceActorId", RuleJson.id(context.path("actor").path("id"), "/actor/id"));
+                    request.set("originEvent", context.path("event").deepCopy());
+                }
                 else if ("inventory.grant".equals(kind)) {
                     String target = op.path("to").asText("actor");
                     request.put("catalog", op.path("catalog").asText())
@@ -1463,7 +1468,7 @@ public final class RuleRuntime {
         if (observer != null && (kind.startsWith("state.") || kind.startsWith("pool.") || "flag.set".equals(kind)
                 || kind.startsWith("effect.") || kind.startsWith("collection.")
                 || "inventory.consume".equals(kind) || "roll.addPoolDie".equals(kind)
-                || "limits.refresh".equals(kind) || "limit.restore".equals(kind)
+                || "limits.refresh".equals(kind)
                 || "inventory.grant".equals(kind) || "damage.deal".equals(kind))) {
             String target = kind.startsWith("pool.") || "roll.addPoolDie".equals(kind)
                     ? op.path("owner").asText(null)

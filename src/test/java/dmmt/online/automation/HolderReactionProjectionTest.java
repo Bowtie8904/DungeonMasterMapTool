@@ -162,7 +162,6 @@ class HolderReactionProjectionTest {
     @Test
     void deferredHostChangesCannotLeaveLaterReactionStepsWithStaleFacts() throws Exception {
         for (String operation : new String[]{
-                "{\"op\":\"limit.restore\",\"to\":\"actor\",\"label\":\"Restore\"}",
                 "{\"op\":\"inventory.grant\",\"catalog\":\"items\",\"entry\":\"potion\",\"quantity\":1,\"label\":\"Grant\"}",
                 "{\"op\":\"damage.deal\",\"to\":\"actor\",\"amount\":1,\"label\":\"Damage\"}"}) {
             RuleCompiler.Program program = program("features:command", """
@@ -174,6 +173,24 @@ class HolderReactionProjectionTest {
             assertEquals("reactionCommand", assertThrows(RuleRuntime.Unavailable.class, () -> recover(pack, sheet)).code());
             assertEquals(before, sheet);
         }
+    }
+
+    @Test
+    void aReactionCanOfferAFeatureUseWithoutChangingLaterReactionFacts() throws Exception {
+        RuleCompiler.Program program = program("features:offer", """
+                {"rules":[{"id":"armor","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.track"},"armorTrack"]},
+                  "do":[{"op":"limit.restore","to":"actor","label":"Restore"},
+                        {"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{}}]}
+                """);
+        ObjectNode sheet = sheet(program.sourceId());
+        var pack = new AutomationHost.Pack("offer", Map.of(program.sourceId(), program));
+        ObjectNode result = recover(pack, sheet);
+        assertEquals(1, sheet.at("/hope/on").asInt());
+        assertEquals("limit.restore", result.at("/outbox/0/kind").asText());
+        assertEquals("mira", result.at("/outbox/0/sourceActorId").asText());
+        assertEquals("mira", result.at("/outbox/0/targetActorId").asText());
+        assertEquals("feature", result.at("/outbox/0/sourceInstanceId").asText());
     }
 
     @Test

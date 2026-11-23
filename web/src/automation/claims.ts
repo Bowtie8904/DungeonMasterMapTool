@@ -16,7 +16,8 @@ interface ClaimActor { id: string; name: string }
 /** Claim choices are loaded only when a player opens the saved offer. */
 export function historyClaimControls(message: ChatMessage, actors: ClaimActor[]): HTMLElement | null {
   const claim = message.automationClaim;
-  if (!claim || !actors.length) return null;
+  const eligibleActors = claim?.recipientActorId ? actors.filter(actor => actor.id === claim.recipientActorId) : actors;
+  if (!claim || !eligibleActors.length) return null;
   const url = `${automationUrl(claim.sourceActorId)}/claims/${encodeURIComponent(String(message.id))}/${message.ts}`;
   const status = el('div', { role: 'status' });
   const list = el('div', { class: 'acts automation-actions' });
@@ -30,7 +31,7 @@ export function historyClaimControls(message: ChatMessage, actors: ClaimActor[])
     status.textContent = notice || 'Loading benefit choices…';
     list.replaceChildren();
     try {
-      const descriptions = await Promise.all(actors.map(async actor => {
+      const descriptions = await Promise.all(eligibleActors.map(async actor => {
         const query = new URLSearchParams({ recipientId: actor.id });
         const response = await hostFetch(`${url}?${query}`, { credentials: 'same-origin', cache: 'no-store' });
         if (!response.ok) throw new ApiError((await errorDetails(response)).text, response.status);
