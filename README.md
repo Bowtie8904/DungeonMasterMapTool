@@ -110,6 +110,7 @@ long-rest moves; downtime rerolls remain incomplete. Ordered adjustment records 
 amount, source, rule, binding and compiled step; converted party-repair modifiers identify the recipient scope
 and track and settle recipient Armor-overflow reactions atomically. An indexed post-rest declaration can schedule a fixed recovery from a named initial
 sheet-source location for matching self moves even if its ordinary modifier was filtered or the source disappeared.
+Self-targeted single-holder effects transfer from previous holders before party recovery reactions run.
 Converted source-rest party repairs use the initial loadout and the legacy host's move matching; effect-carried
 rest blocks are not included. Nonpositive legacy integer requests are ignored and unsupported amounts are
 diagnosed. The live coordinator applies ordered requests in host roster order after the rest, with each

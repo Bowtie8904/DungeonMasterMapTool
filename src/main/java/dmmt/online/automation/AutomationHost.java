@@ -843,10 +843,23 @@ public final class AutomationHost {
         }
     }
 
+    public record RestEffectSheet(RestMember member, ObjectNode sheet) {
+        public RestEffectSheet {
+            if (member == null || sheet == null)
+                throw RuleJson.error("/recipients", "A host character and sheet are required.");
+        }
+    }
+
     public record RestRoster(String sourceVersion, Function<String, List<RestMember>> loadScope,
-                             BiConsumer<ObjectNode, Map<String, ObjectNode>> grantInventory) {
+                             BiConsumer<ObjectNode, Map<String, ObjectNode>> grantInventory,
+                             BiFunction<ArrayNode, Map<String, ObjectNode>, List<RestEffectSheet>> endEffectsElsewhere) {
         public RestRoster(String sourceVersion, Function<String, List<RestMember>> loadScope) {
-            this(sourceVersion, loadScope, null);
+            this(sourceVersion, loadScope, null, null);
+        }
+
+        public RestRoster(String sourceVersion, Function<String, List<RestMember>> loadScope,
+                          BiConsumer<ObjectNode, Map<String, ObjectNode>> grantInventory) {
+            this(sourceVersion, loadScope, grantInventory, null);
         }
 
         public RestRoster {
@@ -1596,13 +1609,9 @@ public final class AutomationHost {
         response.set("completionEvents", finished.path("completionEvents").deepCopy());
         ObjectNode finalEvent = RuleJson.object(finished.get("event"), "/event");
         if (staged.settlePartyRecovery) {
+            settleRestEffects(staged, outbox);
             ObjectNode recovery = stageRestPartyRecoveries(pack, staged.original, finalEvent,
                     staged.completedMoves, staged.recipients, random);
-            if (!recovery.path("clears").isEmpty())
-                for (JsonNode command : outbox)
-                    if ("effect.endElsewhere".equals(command.path("kind").asText()))
-                        throw new RuleRuntime.Unavailable("restCommand",
-                                "Single-holder effect cleanup must settle before party recovery.");
             appendRestStage(recovery, actions, outbox, true);
             response.set("partyRecoveries", recovery.path("clears").deepCopy());
             finalEvent = RuleJson.object(recovery.get("event"), "/event");
@@ -2154,6 +2163,29 @@ public final class AutomationHost {
         }
     }
 
+    private void settleRestEffects(StagedRest staged, ArrayNode outbox) {
+        ArrayNode commands = RuleJson.JSON.createArrayNode();
+        for (JsonNode command : outbox) {
+            if (!"effect.endElsewhere".equals(command.path("kind").asText())) continue;
+            SingleHolderEffect effect = singleHolderCommand(staged.pack, command);
+            if (!staged.recipients.sourceId.equals(effect.sourceActorId())
+                    || !staged.recipients.sourceId.equals(effect.holder()))
+                throw new RuleRuntime.Unavailable("restCommand",
+                        "A targeted single-holder effect requires settlement during the move.");
+            commands.add(command.deepCopy());
+        }
+        if (commands.isEmpty()) return;
+        var settle = staged.recipients.roster.endEffectsElsewhere();
+        if (settle == null)
+            throw new RuleRuntime.Unavailable("restCommand",
+                    "Single-holder effect cleanup requires a host character roster.");
+        Map<String, ObjectNode> sheets = staged.recipients.currentSheets();
+        sheets.put(staged.recipients.sourceId, staged.working);
+        List<RestEffectSheet> updated = settle.apply(commands, sheets);
+        if (updated == null) throw RuleJson.error("/recipients", "Expected settled effect holders.");
+        for (RestEffectSheet item : updated) staged.recipients.applyEffectSheet(item);
+    }
+
     /** Rechecks only membership; the caller must compare read sheet bytes within the same commit boundary. */
     public static void requireRestScopeMembership(String sourceId, Map<String, List<String>> expected, RestRoster roster) {
         requireRestScopeSnapshots(sourceId, expected, Map.of(), roster);
@@ -2300,6 +2332,24 @@ public final class AutomationHost {
             if (participant.member.revision() == MAX_REST_REVISION)
                 throw new RuleRuntime.Unavailable("revision", "The recipient's rest revision cannot be advanced.");
             changed.add(id);
+        }
+
+        private void applyEffectSheet(RestEffectSheet update) {
+            RestMember member = update.member();
+            if (sourceId.equals(member.id()))
+                throw RuleJson.error("/recipients", "Single-holder cleanup cannot replace the resting character.");
+            StagedRecipient participant = participants.get(member.id());
+            if (participant == null) {
+                if (participants.size() == 128) throw RuleJson.error("/recipients", "A rest is limited to 128 characters.");
+                participant = new StagedRecipient(member);
+                participants.put(member.id(), participant);
+            } else if (!participant.sameVersion(member)) {
+                throw new RuleRuntime.Unavailable("staleRecipient", "A character changed. Reopen this rest.");
+            }
+            if (restRevision(update.sheet()) != member.revision())
+                throw new RuleRuntime.Unavailable("staleRecipient", "A character changed. Reopen this rest.");
+            participant.sheet = update.sheet();
+            markChanged(member.id());
         }
 
         private ObjectNode reproject(RuleDispatcher.RecipientUpdate update, ObjectNode event) {

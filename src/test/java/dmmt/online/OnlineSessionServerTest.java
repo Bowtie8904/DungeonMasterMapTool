@@ -3009,6 +3009,92 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void formatTwoRestTransfersSingleHolderEffectsBeforePartyRecovery() throws Exception {
+        installPartyRestRules("gain");
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = ruleset.withObject("/automation");
+        ObjectNode effects = automation.putObject("effects");
+        effects.putObject("ward").put("label", "Ward").put("singleHolder", true);
+        effects.putObject("banner").put("label", "Banner").put("singleHolder", true);
+        ArrayNode rules = automation.withArray("rules");
+        ObjectNode overflow = (ObjectNode) rules.get(rules.size() - 1);
+        ((ArrayNode) overflow.at("/when/and")).add(MAPPER.readTree("""
+                {"not":{"includes":[{"pluck":[{"read":"actor.effects"},"label"]},"Ward"]}}
+                """));
+        ((ArrayNode) overflow.at("/when/and")).add(MAPPER.readTree("""
+                {"not":{"includes":[{"pluck":[{"read":"actor.effects"},"label"]},"Banner"]}}
+                """));
+        rules.add(MAPPER.readTree("""
+                {"id":"renew-wards","bindings":[{"id":"rest","event":"rest.short","surface":"rest",
+                  "mode":"automatic","restPhase":"afterReset"}],
+                 "do":[{"op":"effect.start","effect":"ward","target":"actor"},
+                       {"op":"effect.start","effect":"banner","target":"actor"}],
+                 "ui":{"report":"Renewed wards."}}
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        addRestParty();
+        campaign.getActors().add(Campaign.Actor.builder().id("offline").name("offline").ownerId("other").build());
+        store.saveSheet(campaign.getId(), "offline", """
+                {"name":"offline","hp":{"slots":6,"on":2},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":1},"hope":{"slots":6,"on":0}}
+                """);
+        for (String id : List.of("mira", "retired", "offline")) {
+            ObjectNode saved = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+            ArrayNode stored = saved.withObject("/automationState").put("revision", 0).putArray("effects");
+            for (String effect : List.of("ward", "banner"))
+                stored.addObject().put("id", id + "-" + effect).put("effect", "ruleset:base#" + effect)
+                        .put("sourceInstanceId", "ruleset:base").put("sourceActorId", "resting")
+                        .put("label", "ward".equals(effect) ? "Ward" : "Banner");
+            if ("retired".equals(id))
+                stored.addObject().put("id", "foreign").put("effect", "ruleset:base#ward")
+                        .put("sourceInstanceId", "ruleset:base").put("sourceActorId", "another")
+                        .put("label", "Ward");
+            if ("mira".equals(id)) ((ObjectNode) stored.get(0)).remove("sourceActorId");
+            store.saveSheet(campaign.getId(), id, saved.toString());
+        }
+
+        String owner = cookie();
+        JsonNode offer = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode body = restRequest(offer, "ward-rest");
+        addRestMove((ObjectNode) body.path("request"), restDescriptor(offer.path("moves"), "rest-tend"));
+        Map<String, String> before = new java.util.LinkedHashMap<>();
+        for (String id : List.of("resting", "mira", "borin", "retired", "offline"))
+            before.put(id, store.loadSheet(campaign.getId(), id));
+        int history = store.historyTail(campaign.getId(), 100).size(), fear = campaign.getFear();
+        var rejected = restHttp(owner, "resting", null, body.toString());
+        assertEquals(400, rejected.statusCode(), rejected.body());
+        assertTrue(rejected.body().contains("Migrate or repair"), rejected.body());
+        for (var entry : before.entrySet())
+            assertEquals(entry.getValue(), store.loadSheet(campaign.getId(), entry.getKey()));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        assertEquals(fear, campaign.getFear());
+
+        ObjectNode repaired = (ObjectNode) MAPPER.readTree(before.get("mira"));
+        ((ObjectNode) repaired.at("/automationState/effects/0")).put("sourceActorId", "resting");
+        store.saveSheet(campaign.getId(), "mira", repaired.toString());
+        var committed = restHttp(owner, "resting", null, body.toString());
+        assertEquals(200, committed.statusCode(), committed.body());
+        for (String id : List.of("mira", "offline", "retired")) {
+            JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+            assertEquals("retired".equals(id) ? List.of("foreign") : List.of(),
+                    saved.at("/automationState/effects").findValuesAsText("id"));
+            assertEquals(1, saved.at("/automationState/revision").asInt());
+            assertEquals(1, saved.path("featureRevision").asInt());
+        }
+        JsonNode mira = MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(1, mira.at("/hope/on").asInt(), "Recovery reacts after both wards leave.");
+        assertEquals(fear + 2, campaign.getFear());
+        JsonNode source = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(List.of("Ward", "Banner"), source.at("/automationState/effects").findValuesAsText("label"));
+        int published = store.historyTail(campaign.getId(), 100).size();
+        assertEquals(committed.body(), restHttp(owner, "resting", null, body.toString()).body());
+        assertEquals(source, MAPPER.readTree(store.loadSheet(campaign.getId(), "resting")));
+        assertEquals(mira, MAPPER.readTree(store.loadSheet(campaign.getId(), "mira")));
+        assertEquals(published, store.historyTail(campaign.getId(), 100).size());
+    }
+
+    @Test
     void formatTwoRestRollsBackAllPartyRecoveryWhenAReactionFails() throws Exception {
         installPartyRestRules("spend");
         addRestParty();

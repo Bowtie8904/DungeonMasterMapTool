@@ -5922,6 +5922,7 @@ public final class OnlineSessionServer {
         final Map<String, String> originals = new java.util.LinkedHashMap<>();
         final AutomationHost.RestRoster roster;
         List<String> inventoryParty;
+        List<String> effectActors;
 
         AutomationRestRoster(Campaign.Actor source, String stored) {
             originals.put(source.getId(), stored);
@@ -5953,7 +5954,46 @@ public final class OnlineSessionServer {
                     throw new java.io.UncheckedIOException(ex);
                 }
                 return members;
-            }, this::grantInventory);
+            }, this::grantInventory, this::settleEffects);
+        }
+
+        private List<AutomationHost.RestEffectSheet> settleEffects(ArrayNode commands, Map<String, ObjectNode> staged) {
+            List<String> actors = campaign.getActors().stream().map(Campaign.Actor::getId).sorted().toList();
+            if (effectActors != null && !effectActors.equals(actors)) throw new StaleAutomationRoster();
+            effectActors = actors;
+            Map<String, ObjectNode> sheets = new java.util.LinkedHashMap<>(staged);
+            Map<String, AutomationHost.RestMember> members = new java.util.HashMap<>();
+            try {
+                for (Campaign.Actor actor : campaign.getActors()) {
+                    String id = actor.getId();
+                    String original = store.loadSheet(campaign.getId(), id);
+                    if (originals.containsKey(id) && !java.util.Objects.equals(originals.get(id), original))
+                        throw new StaleAutomationRoster();
+                    originals.put(id, original);
+                    if (original == null) continue;
+                    long revision = storedAutomationRevision(original, automationHost.projection().stateField());
+                    ObjectNode sheet = sheets.get(id);
+                    if (sheet == null) {
+                        sheet = hydrateSheet(id, original);
+                        if (automationHost.revision(sheet) != revision)
+                            throw new IOException("Catalog refresh changed the stored automation revision.");
+                        sheets.put(id, sheet);
+                    }
+                    ObjectNode loaded = sheet;
+                    members.put(id, new AutomationHost.RestMember(id, actor.getName(), sheetVersion(original, actor),
+                            revision, loaded::deepCopy));
+                }
+                Set<String> affected = settleSingleHolderEffects(automationPack(), originals, sheets, commands);
+                List<AutomationHost.RestEffectSheet> result = new ArrayList<>();
+                for (String id : affected) {
+                    AutomationHost.RestMember member = members.get(id);
+                    if (member == null) throw new IllegalArgumentException("The effect holder has no saved sheet.");
+                    result.add(new AutomationHost.RestEffectSheet(member, sheets.get(id)));
+                }
+                return result;
+            } catch (IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
         }
 
         private void grantInventory(ObjectNode command, Map<String, ObjectNode> staged) {
@@ -5991,6 +6031,9 @@ public final class OnlineSessionServer {
 
         private void requireInventoryParty() {
             if (inventoryParty != null && !inventoryParty.equals(automationInventoryParty()))
+                throw new StaleAutomationRoster();
+            if (effectActors != null && !effectActors.equals(
+                    campaign.getActors().stream().map(Campaign.Actor::getId).sorted().toList()))
                 throw new StaleAutomationRoster();
         }
     }

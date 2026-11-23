@@ -154,6 +154,8 @@ Single-action, claim and rest `inventory.grant` commands settle catalog-linked i
 one current spent source limit through the generic chat controls. The claim ledger, sheet, report and exact-retry
 receipt commit atomically. Offers to characters without a player owner are rejected; more than 64 spent limits
 must be reduced before choosing.
+Self-targeted single-holder effects are transferred before whole-rest party recovery, including offline and disabled
+holders, so recipient reactions see the current effects. Targeted-move transfers still require interstage settlement.
 
 The live host rejects legacy client-supplied rests and downtime rerolls when any category declares format 2,
 including an incomplete pack. It cannot classify malformed, unreadable or unknown-version categories as legacy.
@@ -233,7 +235,7 @@ The internal rest coordinator composes the initial effect snapshot, early expiry
 completion on private source and recipient sheets. Recipient offers retain their original host versions while later
 moves reproject earlier staged changes; every changed sheet advances once, and failure discards the sequence.
 Recipient sheets are loaded only when selected or needed for eligibility. It accepts ordered Fear changes,
-countdowns and already-applied limit refresh commands; a self-only rest can also emit single-holder cleanup.
+countdowns and already-applied limit refresh commands; a self-only rest settles single-holder cleanup before recovery.
 Other commands that could change facts read by later stages are rejected. The result separately identifies every
 recipient sheet read and its original host version, including unchanged sheets used by eligibility predicates.
 The live party-recovery workflow compares read sheet bytes and scope membership and host order under the store
