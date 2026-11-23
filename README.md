@@ -58,8 +58,8 @@ reaction is bound. An isolated host-owned clear also applies the holder's healin
 positive clears with no marks, and returns the actual clear and staged state. Source activation, cross-character
 recovery and live rest recovery are not yet connected. A sheet-backed recovery stage selects the affected
 holder's own sources and state even when another character initiated the parent event; it is not a live action.
-An isolated party stage applies each host-supplied clear separately to the other members of a host-selected
-scope, retaining their read versions and the inspected membership. It is not connected to the rest workflow.
+An isolated party stage applies each host-supplied clear separately, preserving request order across different
+host-selected scopes and retaining each inspected membership and read version. It is not connected to the rest workflow.
 Converted downtime buttons now describe their host-validated move identity and rest restriction. This metadata
 and the shared ruleset's validated rest limits do not yet make the format-2 rest workflow available.
 The host can stage and validate rest preparation and individual moves on a private copy, retaining the

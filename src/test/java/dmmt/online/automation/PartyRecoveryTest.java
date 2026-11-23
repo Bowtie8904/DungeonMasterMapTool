@@ -52,6 +52,95 @@ class PartyRecoveryTest {
         return new AutomationHost.PartyRecoveryRequest("features:repair", source, track, amount, "Repair");
     }
 
+    private static AutomationHost.ScopedPartyRecoveryRequest scoped(String scope, String source, String track, int amount) {
+        return new AutomationHost.ScopedPartyRecoveryRequest(scope, request(source, track, amount));
+    }
+
+    @Test
+    void extractsOnlyPositiveAuthoredRequestsWithoutCombiningOrGuessing() throws Exception {
+        ObjectNode event = (ObjectNode) RuleJson.parse("""
+                {"type":"downtime.move","actorId":"ada","move":{"ally":false,"allies":0,"adjustments":[
+                 {"field":"allies","requested":128,"by":128,"sourceId":"features:repair","sourceInstanceId":"one","label":"First",
+                  "partyRecovery":{"track":"armorTrack","scope":"activePlayerCharacters"}},
+                 {"field":"allies","requested":1,"by":0,"sourceId":"features:repair","sourceInstanceId":"two","label":"Clamped",
+                  "partyRecovery":{"track":"armorTrack","scope":"connectedPlayerCharacters"}},
+                 {"field":"allies","requested":-1000,"by":-128,"sourceId":"features:repair","sourceInstanceId":"one","label":"Cancel"},
+                 {"field":"bonus","requested":2,"by":2,"sourceId":"features:care","sourceInstanceId":"three","label":"Care",
+                  "partyRecovery":{"track":"stress","scope":"activeCharacters"}},
+                 {"field":"bonus","requested":3,"by":3,"sourceId":"features:other","sourceInstanceId":"four","label":"Bonus"}
+                ]}}
+                """);
+        var requests = AutomationHost.partyRecoveryRequests(event);
+        assertEquals(List.of("activePlayerCharacters", "connectedPlayerCharacters", "activeCharacters"),
+                requests.stream().map(AutomationHost.ScopedPartyRecoveryRequest::scope).toList());
+        assertEquals(List.of(128, 1, 2), requests.stream().map(item -> item.request().requested()).toList());
+        assertEquals(List.of("one", "two", "three"), requests.stream().map(item -> item.request().sourceInstanceId()).toList());
+        assertEquals(List.of("armorTrack", "armorTrack", "stress"), requests.stream().map(item -> item.request().track()).toList());
+        ObjectNode unannotated = event.deepCopy();
+        ((ObjectNode) unannotated.at("/move/adjustments/0")).remove("partyRecovery");
+        assertEquals("restCommand", assertThrows(RuleRuntime.Unavailable.class,
+                () -> AutomationHost.partyRecoveryRequests(unannotated)).code());
+        ObjectNode wrongScope = event.deepCopy();
+        ((ObjectNode) wrongScope.at("/move/adjustments/0/partyRecovery")).put("scope", "everyone");
+        assertThrows(IllegalArgumentException.class, () -> AutomationHost.partyRecoveryRequests(wrongScope));
+        ObjectNode unattributed = event.deepCopy();
+        ((ObjectNode) unattributed.at("/move/adjustments/1")).remove("sourceInstanceId");
+        assertThrows(IllegalArgumentException.class, () -> AutomationHost.partyRecoveryRequests(unattributed));
+        event.withObject("/move").put("ally", true);
+        assertTrue(AutomationHost.partyRecoveryRequests(event).isEmpty(), "Narrative ally moves do not fan out.");
+        ObjectNode orphan = (ObjectNode) RuleJson.parse("""
+                {"type":"downtime.move","move":{"ally":false,"allies":1}}""");
+        assertEquals("restCommand", assertThrows(RuleRuntime.Unavailable.class,
+                () -> AutomationHost.partyRecoveryRequests(orphan)).code());
+    }
+
+    @Test
+    void mixedScopesRemainInRequestOrderAndAreInspectedOnlyOnce() throws Exception {
+        RuleCompiler.Program overflow = program("armor:overflow", "", """
+                {"op":"resource.gain","pool":"actor.hope","amount":1},
+                {"op":"table.gain","resource":"fear","amount":1,"label":"Overflow"}
+                """);
+        var pack = new AutomationHost.Pack("party", Map.of(overflow.sourceId(), overflow));
+        ObjectNode mira = sheet("Mira", 0, 0, 2), nia = sheet("Nia", 0, 0, 3), zara = sheet("Zara", 0, 0, 4);
+        for (ObjectNode sheet : List.of(mira, nia, zara)) equip(sheet, overflow.sourceId());
+        AtomicInteger activeLoads = new AtomicInteger(), connectedLoads = new AtomicInteger();
+        var roster = new AutomationHost.RestRoster("source", scope -> {
+            if ("activePlayerCharacters".equals(scope)) {
+                activeLoads.incrementAndGet();
+                return List.of(member("zara", zara), member("mira", mira));
+            }
+            if ("connectedPlayerCharacters".equals(scope)) {
+                connectedLoads.incrementAndGet();
+                return List.of(member("zara", zara), member("nia", nia));
+            }
+            fail("Unexpected scope " + scope);
+            return List.of();
+        });
+        var result = HOST.stagePartyRecoveries(pack, AutomationHost.event("downtime.move", "ada", 0), roster, List.of(
+                scoped("activePlayerCharacters", "one", "armorTrack", 1),
+                scoped("connectedPlayerCharacters", "two", "armorTrack", 1),
+                scoped("activePlayerCharacters", "three", "armorTrack", 1)), noRandom());
+        assertEquals(1, activeLoads.get());
+        assertEquals(1, connectedLoads.get());
+        assertEquals(List.of("activePlayerCharacters", "connectedPlayerCharacters"),
+                result.response().path("scopeSnapshots").findValuesAsText("scope"));
+        assertEquals(List.of("mira", "zara"), result.response().at("/scopeSnapshots/0/membership").findValuesAsText("id"));
+        assertEquals(List.of("nia", "zara"), result.response().at("/scopeSnapshots/1/membership").findValuesAsText("id"));
+        assertEquals(List.of("mira", "zara", "nia", "zara", "mira", "zara"),
+                result.response().path("clears").findValuesAsText("holderId"));
+        assertEquals(List.of("one", "one", "two", "two", "three", "three"),
+                result.response().path("clears").findValuesAsText("sourceInstanceId"));
+        assertEquals(List.of(0, 1, 2, 3, 4, 5), result.response().path("outbox").findValues("before").stream()
+                .map(node -> node.asInt()).toList());
+        assertEquals(6, result.response().at("/event/table/fear").asInt());
+        assertEquals(2, result.recipients().get("mira").at("/hope/on").asInt());
+        assertEquals(1, result.recipients().get("nia").at("/hope/on").asInt());
+        assertEquals(3, result.recipients().get("zara").at("/hope/on").asInt());
+        assertEquals(5, HOST.revision(result.recipients().get("zara")));
+        assertEquals(Map.of("mira", "stored-mira", "nia", "stored-nia", "zara", "stored-zara"), result.readVersions());
+        assertEquals(0, zara.at("/hope/on").asInt());
+    }
+
     @Test
     void appliesEachRequestInOrderUsingRecipientReactionsAndOneRevision() throws Exception {
         RuleCompiler.Program overflow = program("armor:overflow", "", """
@@ -194,6 +283,12 @@ class PartyRecoveryTest {
                 "activePlayerCharacters", java.util.Collections.nCopies(9, request), noRandom()));
         assertTrue(error.getMessage().contains("1024"));
         assertEquals(0, loads.get());
+
+        List<AutomationHost.ScopedPartyRecoveryRequest> mixed = new ArrayList<>();
+        for (int i = 0; i < 5; i++) mixed.add(scoped("activePlayerCharacters", "one", "armorTrack", 1));
+        for (int i = 0; i < 4; i++) mixed.add(scoped("activeCharacters", "two", "armorTrack", 1));
+        assertThrows(IllegalArgumentException.class, () -> HOST.stagePartyRecoveries(pack, event, roster, mixed, noRandom()));
+        assertEquals(0, loads.get(), "The bound covers all scopes before any recipient sheet is loaded.");
     }
 
     @Test

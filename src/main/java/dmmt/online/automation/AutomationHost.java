@@ -860,6 +860,14 @@ public final class AutomationHost {
         }
     }
 
+    record ScopedPartyRecoveryRequest(String scope, PartyRecoveryRequest request) {
+        ScopedPartyRecoveryRequest {
+            if (scope == null || !RuleCompiler.TARGET_SCOPES.contains(scope))
+                throw RuleJson.error("/recovery/scope", "Expected a host character scope.");
+            if (request == null) throw RuleJson.error("/recovery/request", "Expected a recovery request.");
+        }
+    }
+
     record PartyRecovery(ObjectNode response, Map<String, ObjectNode> recipients, Map<String, String> readVersions) {
         PartyRecovery {
             response = response.deepCopy();
@@ -930,39 +938,105 @@ public final class AutomationHost {
     /** Stages trusted recovery requests for a host-selected scope without persisting or publishing them. */
     PartyRecovery stagePartyRecovery(Pack pack, ObjectNode event, RestRoster roster, String scope,
                                      List<PartyRecoveryRequest> requests, RandomGenerator random) {
+        if (scope == null || !RuleCompiler.TARGET_SCOPES.contains(scope))
+            throw RuleJson.error("/recovery/scope", "Expected a host character scope.");
+        if (requests == null || requests.size() > 128 || requests.stream().anyMatch(java.util.Objects::isNull))
+            throw RuleJson.error("/recovery/requests", "Expected at most 128 recovery requests.");
+        List<ScopedPartyRecoveryRequest> scoped = requests.stream()
+                .map(request -> new ScopedPartyRecoveryRequest(scope, request)).toList();
+        PartyRecovery staged = stagePartyRecoveries(pack, event, roster, scoped, random);
+        ObjectNode response = staged.response().put("scope", scope).put("scopeInspected", !requests.isEmpty());
+        response.set("membership", requests.isEmpty() ? RuleJson.JSON.createArrayNode()
+                : response.at("/scopeSnapshots/0/membership").deepCopy());
+        return new PartyRecovery(response, staged.recipients(), staged.readVersions());
+    }
+
+    /** Reads only host-produced move adjustments; it does not authorize or settle the resulting requests. */
+    static List<ScopedPartyRecoveryRequest> partyRecoveryRequests(ObjectNode event) {
+        if (!"downtime.move".equals(RuleJson.text(RuleJson.object(event, "/event").get("type"), "/event/type")))
+            throw RuleJson.error("/event/type", "Expected a host-generated downtime move.");
+        JsonNode move = RuleJson.object(event.get("move"), "/event/move");
+        if (!move.path("ally").isBoolean()) throw RuleJson.error("/event/move/ally", "Expected a boolean.");
+        if (move.path("ally").asBoolean()) return List.of();
+        int allies = RuleJson.integer(move.get("allies"), "/event/move/allies", 0, 128);
+        JsonNode adjustments = move.path("adjustments");
+        if (!adjustments.isMissingNode() && !adjustments.isArray())
+            throw RuleJson.error("/event/move/adjustments", "Expected an ordered adjustment list.");
+        List<ScopedPartyRecoveryRequest> result = new ArrayList<>();
+        boolean hasPositiveAllies = false;
+        for (int i = 0; i < adjustments.size(); i++) {
+            JsonNode adjustment = RuleJson.object(adjustments.get(i), "/event/move/adjustments/" + i);
+            String at = "/event/move/adjustments/" + i;
+            String field = RuleJson.id(adjustment.get("field"), at + "/field");
+            int amount = RuleJson.integer(adjustment.get("requested"), at + "/requested", -1000, 1000);
+            if (amount <= 0) continue;
+            if ("allies".equals(field)) hasPositiveAllies = true;
+            if (!adjustment.has("partyRecovery")) {
+                if ("allies".equals(field))
+                    throw new RuleRuntime.Unavailable("restCommand",
+                            "A party recovery adjustment must declare its track and character scope.");
+                continue;
+            }
+            JsonNode recovery = adjustment.get("partyRecovery");
+            RuleJson.fields(recovery, at + "/partyRecovery", "track", "scope");
+            String scope = RuleJson.text(recovery.get("scope"), at + "/partyRecovery/scope");
+            PartyRecoveryRequest request = new PartyRecoveryRequest(
+                    RuleJson.id(adjustment.get("sourceId"), at + "/sourceId"),
+                    RuleJson.id(adjustment.get("sourceInstanceId"), at + "/sourceInstanceId"),
+                    RuleJson.text(recovery.get("track"), at + "/partyRecovery/track"), amount,
+                    RuleJson.text(adjustment.get("label"), at + "/label"));
+            result.add(new ScopedPartyRecoveryRequest(scope, request));
+            if (result.size() > 128) throw RuleJson.error("/event/move/adjustments", "A move is limited to 128 recovery requests.");
+        }
+        if (allies > 0 && !hasPositiveAllies)
+            throw new RuleRuntime.Unavailable("restCommand", "The party recovery request has no authored adjustment.");
+        return List.copyOf(result);
+    }
+
+    /** Stages an ordered sequence with potentially different host-selected scopes. */
+    PartyRecovery stagePartyRecoveries(Pack pack, ObjectNode event, RestRoster roster,
+                                       List<ScopedPartyRecoveryRequest> requests, RandomGenerator random) {
         RuleJson.object(event, "/event");
         String sourceId = RuleJson.id(event.get("actorId"), "/event/actorId");
         RuleJson.text(event.get("type"), "/event/type");
         RuleJson.checkTree(event, "/event", 0, new int[]{0});
         if (pack == null || roster == null || random == null)
             throw RuleJson.error("/recovery", "A compiled pack, host roster and random source are required.");
-        if (scope == null || !RuleCompiler.TARGET_SCOPES.contains(scope))
-            throw RuleJson.error("/recovery/scope", "Expected a host character scope.");
         if (requests == null || requests.size() > 128 || requests.stream().anyMatch(java.util.Objects::isNull))
             throw RuleJson.error("/recovery/requests", "Expected at most 128 recovery requests.");
         StagedRestRecipients recipients = new StagedRestRecipients(pack, sourceId, roster);
-        ObjectNode response = recoverParty(recipients, event, scope, requests, random);
+        ObjectNode response = recoverParty(recipients, event, requests, random);
         return new PartyRecovery(response, recipients.changed(), recipients.readVersions());
     }
 
-    private ObjectNode recoverParty(StagedRestRecipients recipients, ObjectNode parentEvent, String scope,
-                                    List<PartyRecoveryRequest> requests, RandomGenerator random) {
+    private ObjectNode recoverParty(StagedRestRecipients recipients, ObjectNode parentEvent,
+                                    List<ScopedPartyRecoveryRequest> requests, RandomGenerator random) {
         ObjectNode response = RuleJson.JSON.createObjectNode();
         ArrayNode actions = response.putArray("actions"), outbox = response.putArray("outbox");
         ArrayNode clears = response.putArray("clears");
-        ArrayNode membership = response.putArray("membership");
-        response.put("scope", scope).put("scopeInspected", !requests.isEmpty());
+        ArrayNode snapshots = response.putArray("scopeSnapshots");
         ObjectNode event = parentEvent.deepCopy();
         if (!requests.isEmpty()) {
-            List<StagedRecipient> members = recipients.scoped(scope);
-            if ((long) requests.size() * members.size() > MAX_PARTY_RECOVERIES)
-                throw RuleJson.error("/recovery/requests", "A transaction is limited to 1024 recipient recoveries.");
-            for (StagedRecipient member : members)
-                membership.addObject().put("id", member.member.id()).put("name", member.member.name())
-                        .put("sheetVersion", member.member.sheetVersion()).put("revision", member.member.revision());
+            Map<String, List<StagedRecipient>> scopes = new LinkedHashMap<>();
+            long applications = 0;
+            for (ScopedPartyRecoveryRequest request : requests) {
+                List<StagedRecipient> members = scopes.get(request.scope());
+                if (members == null) {
+                    members = recipients.scoped(request.scope());
+                    scopes.put(request.scope(), members);
+                    ArrayNode membership = snapshots.addObject().put("scope", request.scope()).putArray("membership");
+                    for (StagedRecipient member : members)
+                        membership.addObject().put("id", member.member.id()).put("name", member.member.name())
+                                .put("sheetVersion", member.member.sheetVersion()).put("revision", member.member.revision());
+                }
+                applications += members.size();
+                if (applications > MAX_PARTY_RECOVERIES)
+                    throw RuleJson.error("/recovery/requests", "A transaction is limited to 1024 recipient recoveries.");
+            }
             for (int requestIndex = 0; requestIndex < requests.size(); requestIndex++) {
-                PartyRecoveryRequest request = requests.get(requestIndex);
-                for (StagedRecipient member : members) {
+                ScopedPartyRecoveryRequest scoped = requests.get(requestIndex);
+                PartyRecoveryRequest request = scoped.request();
+                for (StagedRecipient member : scopes.get(scoped.scope())) {
                     ObjectNode sheet = member.sheet();
                     ObjectNode recovered = stageHolderRecovery(recipients.pack, sheet, event, member.member.id(),
                             request.track(), request.requested(), random);
@@ -976,7 +1050,7 @@ public final class AutomationHost {
                         actions.add(((ObjectNode) action).deepCopy().put("actorId", member.member.id()));
                     clears.addObject().put("requestIndex", requestIndex).put("holderId", member.member.id())
                             .put("holderName", member.member.name()).put("sourceId", request.sourceId())
-                            .put("sourceInstanceId", request.sourceInstanceId()).put("track", request.track())
+                            .put("sourceInstanceId", request.sourceInstanceId()).put("scope", scoped.scope()).put("track", request.track())
                             .put("requested", request.requested()).put("cleared", recovered.path("cleared").asInt())
                             .put("label", request.label());
                     event = ((ObjectNode) recovered.get("event")).deepCopy();
