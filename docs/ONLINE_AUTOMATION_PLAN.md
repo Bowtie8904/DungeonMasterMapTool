@@ -123,6 +123,10 @@ are preserved, and explicit changes or compact removals are rejected. Legacy inc
 the host's automation state and cannot change those counters under the replacement policy. These guards do not
 implement the format-2 rest transaction or affect ordinary edits and valid format-1 rests.
 
+Scene and session resets use the same fail-closed catalog classification. Malformed, unreadable or
+unknown-version categories and incomplete replacement packs reject the reset without changing sheets, campaign
+state or history; valid format-1 catalogs continue to use legacy resets even when shared rules are present.
+
 Selected `downtime.move` buttons may declare `restMove: {id, kind, group?, ally?}`. `kind` is `any`,
 `short`, `long`, or `longMove` (a long-rest move that an allowance may permit during a short rest). The optional
 group defaults to the move ID and identifies mutually exclusive variants within a source instance; `ally` defaults

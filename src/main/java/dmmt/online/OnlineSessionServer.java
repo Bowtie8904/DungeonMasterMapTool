@@ -1761,7 +1761,7 @@ public final class OnlineSessionServer {
 
     private boolean requiresAuthoritativeRest() throws RestPolicyException {
         try {
-            return catalogs().requiresAuthoritativeRest();
+            return catalogs().requiresReplacementAutomation();
         } catch (IOException e) {
             throw new RestPolicyException(e);
         }
@@ -5532,7 +5532,7 @@ public final class OnlineSessionServer {
         List<String> lines = new ArrayList<>();
         try {
             HostCatalog.Snapshot snapshot = catalogs();
-            if (snapshot.declaresReplacementPack()) {
+            if (snapshot.requiresReplacementAutomation()) {
                 resetAutomationPeriod(session, automationPack(snapshot));
                 return null;
             }

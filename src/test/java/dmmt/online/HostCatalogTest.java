@@ -154,20 +154,20 @@ class HostCatalogTest {
     @Test
     void restPolicyRequiresKnownCatalogFormatsAndDoesNotConfuseSharedRulesWithReplacementCatalogs() throws Exception {
         HostCatalog cache = new HostCatalog();
-        assertFalse(cache.snapshot(directory).requiresAuthoritativeRest());
+        assertFalse(cache.snapshot(directory).requiresReplacementAutomation());
         Path legacy = directory.resolve("items.json");
         Files.writeString(legacy, items().toString());
         Path rules = Files.createDirectories(directory.resolve("rules"));
         Path ruleset = rules.resolve("ruleset.json");
         Files.writeString(ruleset, "{\"format\":\"dmmap-daggerheart-ruleset\",\"version\":2}");
-        assertFalse(cache.snapshot(directory).requiresAuthoritativeRest(),
+        assertFalse(cache.snapshot(directory).requiresReplacementAutomation(),
                 "The shipped format-1 catalogs already have a shared rules directory.");
 
         Path replacement = directory.resolve("classes.json");
         Files.writeString(replacement, """
                 {"format":"dmmap-daggerheart","version":2,"category":"classes","entries":[]}
                 """);
-        assertTrue(cache.snapshot(directory).requiresAuthoritativeRest(),
+        assertTrue(cache.snapshot(directory).requiresReplacementAutomation(),
                 "An incomplete replacement pack must not fall through to legacy rest.");
 
         for (String invalid : List.of(
@@ -179,16 +179,16 @@ class HostCatalogTest {
                 "{\"format\":\"dmmap-daggerheart\",\"version\":2,\"category\":\"items\",\"entries\":[]}",
                 "{\"format\":\"dmmap-daggerheart\",\"version\":2,\"category\":\"classes\"}")) {
             Files.writeString(replacement, invalid);
-            assertThrows(IOException.class, () -> cache.snapshot(directory).requiresAuthoritativeRest(), invalid);
+            assertThrows(IOException.class, () -> cache.snapshot(directory).requiresReplacementAutomation(), invalid);
         }
         Files.delete(replacement);
         Files.delete(legacy);
-        assertTrue(cache.snapshot(directory).requiresAuthoritativeRest(),
+        assertTrue(cache.snapshot(directory).requiresReplacementAutomation(),
                 "A standalone shared ruleset is a replacement candidate.");
         Files.writeString(ruleset, "{\"format\":\"dmmap-daggerheart-ruleset\",\"version\":4294967298}");
-        assertThrows(IOException.class, () -> cache.snapshot(directory).requiresAuthoritativeRest());
+        assertThrows(IOException.class, () -> cache.snapshot(directory).requiresReplacementAutomation());
         Files.delete(ruleset);
-        assertThrows(IOException.class, () -> cache.snapshot(directory).requiresAuthoritativeRest());
+        assertThrows(IOException.class, () -> cache.snapshot(directory).requiresReplacementAutomation());
     }
 
     @Test

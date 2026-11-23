@@ -3953,6 +3953,85 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void sceneAndSessionResetsRejectUnclassifiableAndIncompleteCatalogsAtomically() throws Exception {
+        automationCompendium();
+        Path classes = compendiumDir.resolve("classes.json");
+        Path recipes = compendiumDir.resolve("rules.json");
+        String validClasses = java.nio.file.Files.readString(classes);
+        String validRecipes = java.nio.file.Files.readString(recipes);
+        for (String id : List.of("active", "offline")) {
+            campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId()).build());
+            store.saveSheet(campaign.getId(), id, """
+                    {"name":"Ada","usage":{"scene":{"used":1,"per":"scene"},"session":{"used":1,"per":"session"}},
+                     "automationState":{"revision":5,"sources":{},"effects":[]}}
+                    """);
+        }
+        campaign.setFear(3);
+        store.save(campaign);
+        Map<String, String> sheets = Map.of("active", store.loadSheet(campaign.getId(), "active"),
+                "offline", store.loadSheet(campaign.getId(), "offline"));
+        JsonNode persistedCampaign = MAPPER.valueToTree(store.load(campaign.getId()));
+        JsonNode liveCampaign = MAPPER.valueToTree(campaign);
+        List<JsonNode> history = store.historyTail(campaign.getId(), 20);
+
+        java.nio.file.Files.delete(recipes);
+        for (boolean session : List.of(false, true)) {
+            String error = session ? server.newSession() : server.endScene();
+            assertNotNull(error);
+            assertTrue(error.contains("recipe"), error);
+        }
+        java.nio.file.Files.writeString(recipes, validRecipes);
+
+        for (String invalid : List.of(
+                "{broken",
+                "{\"format\":\"dmmap-daggerheart\",\"category\":\"classes\",\"entries\":[]}",
+                "{\"format\":\"dmmap-daggerheart\",\"version\":3,\"category\":\"classes\",\"entries\":[]}",
+                "{\"format\":\"dmmap-daggerheart\",\"version\":2,\"category\":\"items\",\"entries\":[]}")) {
+            java.nio.file.Files.writeString(classes, invalid);
+            for (boolean session : List.of(false, true)) {
+                String error = session ? server.newSession() : server.endScene();
+                assertNotNull(error, invalid);
+                assertTrue(error.contains("classes"), error);
+            }
+        }
+        java.nio.file.Files.delete(classes);
+        java.nio.file.Files.createDirectory(classes);
+        for (boolean session : List.of(false, true)) {
+            String error = session ? server.newSession() : server.endScene();
+            assertNotNull(error);
+            assertTrue(error.contains("classes"), error);
+        }
+        java.nio.file.Files.delete(classes);
+        java.nio.file.Files.writeString(classes, validClasses);
+
+        for (var entry : sheets.entrySet())
+            assertEquals(entry.getValue(), store.loadSheet(campaign.getId(), entry.getKey()));
+        assertEquals(persistedCampaign, MAPPER.valueToTree(store.load(campaign.getId())));
+        assertEquals(liveCampaign, MAPPER.valueToTree(campaign));
+        assertEquals(history, store.historyTail(campaign.getId(), 20));
+    }
+
+    @Test
+    void formatOneSceneAndSessionResetsRemainAvailableWithSharedRules() throws Exception {
+        compendiumDir = Path.of("dmmap-daggerheart");
+        campaign.getActors().add(Campaign.Actor.builder().id("legacy").name("Legacy").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "legacy", """
+                {"usage":{"scene":{"used":1,"per":"scene"},"session":{"used":1,"per":"session"}},
+                 "effects":[{"id":"scene","name":"Scene","until":"scene"},
+                            {"id":"session","name":"Session","until":"session"}]}
+                """);
+        assertNull(server.endScene());
+        JsonNode scene = MAPPER.readTree(store.loadSheet(campaign.getId(), "legacy"));
+        assertFalse(scene.path("usage").has("scene"));
+        assertTrue(scene.path("usage").has("session"));
+        assertEquals(List.of("session"), scene.path("effects").findValuesAsText("id"));
+        assertNull(server.newSession());
+        JsonNode session = MAPPER.readTree(store.loadSheet(campaign.getId(), "legacy"));
+        assertFalse(session.path("usage").has("session"));
+        assertTrue(session.path("effects").isEmpty());
+    }
+
+    @Test
     void replacementSceneAndNewSessionResetOfflineActorsInOneCommit() throws Exception {
         automationCompendium();
         Path file = compendiumDir.resolve("classes.json");

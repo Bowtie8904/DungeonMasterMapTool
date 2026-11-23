@@ -249,15 +249,7 @@ final class HostCatalog {
             return document.revision;
         }
 
-        boolean declaresReplacementPack() {
-            for (String category : CatalogEditor.CATEGORIES) {
-                Document doc = documents.get(category + ".json");
-                if (doc != null && doc.file != null && doc.file.path("version").asInt() == 2) return true;
-            }
-            return false;
-        }
-
-        boolean requiresAuthoritativeRest() throws IOException {
+        boolean requiresReplacementAutomation() throws IOException {
             boolean foundCatalog = false, replacement = false;
             for (String category : CatalogEditor.CATEGORIES) {
                 Document doc = documents.get(category + ".json");

@@ -39,6 +39,8 @@ Ending a scene or starting a new session with a format-2 pack applies its automa
 resets, and timed effect expiry to saved active characters, including offline ones, in a single campaign commit.
 Reset expressions use the same host-generated actor, table and session facts as lifecycle rules. Pool reset
 expressions see default state and a consistent pre-reset pool snapshot.
+Scene and session resets reject malformed or unknown-version catalogs and incomplete replacement packs rather
+than falling back to legacy reset; valid format-1 catalogs retain their existing behavior.
 Format-2 effect-bound actor pools retain their balance while another supporting effect on that character remains,
 including effects from a different source or a source no longer on the sheet. Ending or replacing the last
 supporting effect and timed expiry clear the pool in the same transaction. An unresolved automation effect or
