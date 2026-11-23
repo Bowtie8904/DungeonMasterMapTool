@@ -248,6 +248,49 @@ public final class RuleDispatcher {
         return executeEvent(activeSources, selections, random, programs, false, new ReactionBudget());
     }
 
+    static EventResolution executeSelectedWithOwnerReactions(List<Candidate> activeSources, RuleRuntime.Intent selection,
+                                                            RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
+        if (selection == null) throw RuleJson.error("/selection", "A selected binding is required.");
+        return executeEvent(activeSources, List.of(selection), random, programs, false, new ReactionBudget(), false);
+    }
+
+    static EventResolution executeDeferredWithOwnerReactions(List<Candidate> activeSources, RuleRuntime.Intent intent,
+                                                            RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
+        if (intent == null) throw RuleJson.error("/selection", "A deferred binding is required.");
+        if (programs == null) throw RuleJson.error("/programs", "Expected a compiled program registry.");
+        Snapshot snapshot = validateSources(activeSources);
+        Map<String, Candidate> byInstance = new HashMap<>();
+        Map<String, ObjectNode> workingContexts = new HashMap<>();
+        for (Candidate candidate : snapshot.sources()) {
+            byInstance.put(candidate.instanceId(), candidate);
+            workingContexts.put(candidate.instanceId(), candidate.context());
+        }
+        Candidate selected = byInstance.get(intent.sourceInstanceId());
+        if (selected == null) throw new RuleRuntime.Unavailable("source", "This source is no longer active.");
+        List<ActionResult> actions = new ArrayList<>();
+        List<ObjectNode> outbox = new ArrayList<>();
+        RuleRuntime.TrackObserver observer = ownerTrackObserver(
+                snapshot, byInstance, workingContexts, random, programs, new ReactionBudget(), actions, outbox);
+        ObjectNode selectedContext = selected.context();
+        selectedContext.set("actor", snapshot.actor().deepCopy());
+        RuleRuntime.Resolution resolution = RuleRuntime.executeAfter(selected.program(), intent, selectedContext,
+                random, programs, observer);
+        ObjectNode completed = resolution.context();
+        drainOutbox(completed, outbox);
+        workingContexts.put(intent.sourceInstanceId(), completed);
+        actions.add(new ActionResult(intent.sourceInstanceId(), intent.ruleId(), intent.bindingId(),
+                resolution.report(), resolution.publishedRolls(), resolution.diceRolls()));
+        List<ObjectNode> contexts = new ArrayList<>();
+        for (String instanceId : workingContexts.keySet().stream().sorted().toList()) {
+            ObjectNode context = workingContexts.get(instanceId).deepCopy();
+            context.set("actor", completed.get("actor").deepCopy());
+            context.set("event", completed.get("event").deepCopy());
+            context.set("revision", RuleExpression.numeric(snapshot.revision() + 1d, "/revision"));
+            contexts.add(context);
+        }
+        return new EventResolution(contexts, actions, outbox);
+    }
+
     static OwnerTrackClear clearOwnerTrack(List<Candidate> activeSources, ObjectNode actor, ObjectNode event, long revision,
                                            String track, int requested, RandomGenerator random,
                                            Map<String, RuleCompiler.Program> programs) {
@@ -300,6 +343,12 @@ public final class RuleDispatcher {
     private static EventResolution executeEvent(List<Candidate> activeSources, List<RuleRuntime.Intent> selections,
                                                 RandomGenerator random, Map<String, RuleCompiler.Program> programs,
                                                 boolean stagedMove, ReactionBudget budget) {
+        return executeEvent(activeSources, selections, random, programs, stagedMove, budget, true);
+    }
+
+    private static EventResolution executeEvent(List<Candidate> activeSources, List<RuleRuntime.Intent> selections,
+                                                RandomGenerator random, Map<String, RuleCompiler.Program> programs,
+                                                boolean stagedMove, ReactionBudget budget, boolean includeAutomatic) {
         Snapshot snapshot = validateSources(activeSources);
         if (RuleRuntime.isRestEvent(snapshot.eventType()))
             RuleRuntime.restPhase(snapshot.event());
@@ -343,7 +392,7 @@ public final class RuleDispatcher {
             invocations.add(new Invocation(candidate, intent, mode, binding.path("priority").asInt(),
                     exclusiveGroup, false, null, null));
         }
-        for (Candidate candidate : snapshot.sources()) {
+        if (includeAutomatic) for (Candidate candidate : snapshot.sources()) {
             RuleCompiler.Program program = candidate.program();
             var automatic = program.automatic(snapshot.eventType());
             if (automatic.isEmpty()) continue;

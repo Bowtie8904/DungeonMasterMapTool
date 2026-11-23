@@ -101,6 +101,100 @@ class OwnerTrackReactionsTest {
     }
 
     @Test
+    void selectedAndDeferredMovesSettleOwnerReactionsWithoutRedispatchingParentRules() throws Exception {
+        RuleCompiler.Program move = program("features:move", """
+                {"state":{"runs":0},"rules":[
+                 {"id":"already","bindings":[{"id":"auto","event":"downtime.move","surface":"downtime","mode":"automatic"}],
+                  "do":[{"op":"state.increment","slot":"runs","by":100}],"ui":{}},
+                 {"id":"move","bindings":[{"id":"use","event":"downtime.move","surface":"downtime","mode":"button"}],
+                  "costs":[{"op":"resource.spend","pool":"actor.hope","amount":1}],
+                  "do":[{"op":"table.gain","resource":"fear","amount":1,"label":"Before"},
+                        {"op":"track.clear","track":"actor.armorTrack","amount":2},
+                        {"op":"table.spend","resource":"fear","amount":1,"label":"After"},
+                        {"op":"state.increment","slot":"runs","by":1}],
+                  "ui":{"label":"Move","report":"Fear {event.table.fear}, Hope {actor.hope.value}."}},
+                 {"id":"benefit","bindings":[{"id":"use","event":"downtime.move","surface":"downtime","mode":"option"}],
+                  "when":{"eq":[{"read":"actor.hope.value"},4]},
+                  "after":{"costs":[{"op":"resource.spend","pool":"actor.hope","amount":1}],
+                           "do":[{"op":"track.clear","track":"actor.armorTrack","amount":1}],
+                           "report":"After Fear {event.table.fear}, Hope {actor.hope.value}."},
+                  "ui":{"label":"Benefit"}},
+                 {"id":"fail","bindings":[{"id":"use","event":"downtime.move","surface":"downtime","mode":"option"}],
+                  "after":{"do":[{"op":"track.clear","track":"actor.armorTrack","amount":1},
+                                 {"op":"table.spend","resource":"fear","amount":99,"label":"Fail"}]},
+                  "ui":{"label":"Fail"}}
+                ]}
+                """);
+        RuleCompiler.Program reaction = program("features:reaction", """
+                {"state":{"seen":0},"rules":[
+                 {"id":"overflow","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                  "when":{"and":[{"eq":[{"read":"event.track"},"armorTrack"]},{"eq":[{"read":"event.change"},"clear"]}]},
+                  "do":[{"op":"state.increment","slot":"seen","by":1},
+                        {"op":"resource.gain","pool":"actor.hope","amount":1},
+                        {"op":"table.gain","resource":"fear","amount":1,"label":"Overflow"}],
+                  "ui":{"report":"Overflow."}}
+                ]}
+                """);
+        ObjectNode one = context(move.sourceId(), "one"), two = context(reaction.sourceId(), "two");
+        one.withObject("/event").put("type", "downtime.move");
+        two.set("event", one.get("event").deepCopy());
+        ObjectNode originalOne = one.deepCopy(), originalTwo = two.deepCopy();
+        var candidates = List.of(new RuleDispatcher.Candidate(move, one), new RuleDispatcher.Candidate(reaction, two));
+        var programs = Map.of(move.sourceId(), move, reaction.sourceId(), reaction);
+        var selected = RuleDispatcher.executeSelectedWithOwnerReactions(candidates, select("move", "one"), noRandom(), programs);
+        assertEquals(List.of("overflow", "move"), selected.actions().stream().map(RuleDispatcher.ActionResult::ruleId).toList());
+        assertEquals("Fear 3, Hope 3.", selected.actions().getLast().report());
+        assertEquals(List.of("Before", "Overflow", "After"),
+                selected.outbox().stream().map(command -> command.path("label").asText()).toList());
+        assertEquals(1, selected.contexts().getFirst().at("/state/runs").asInt());
+        assertEquals(1, selected.contexts().getLast().at("/state/seen").asInt());
+        for (ObjectNode context : selected.contexts()) {
+            assertEquals(0, context.at("/actor/armorTrack/marked").asInt());
+            assertEquals(1, context.path("revision").asInt());
+            assertEquals("downtime.move", context.at("/event/type").asText());
+        }
+
+        var deferred = RuleDispatcher.executeDeferredWithOwnerReactions(candidates, select("benefit", "one"), noRandom(), programs);
+        assertEquals(List.of("overflow", "benefit"), deferred.actions().stream().map(RuleDispatcher.ActionResult::ruleId).toList());
+        assertEquals("After Fear 3, Hope 3.", deferred.actions().getLast().report());
+        assertEquals(List.of("Overflow"), deferred.outbox().stream().map(command -> command.path("label").asText()).toList());
+        assertEquals(1, deferred.contexts().getLast().at("/state/seen").asInt());
+        assertEquals(3, deferred.contexts().getFirst().at("/actor/hope/value").asInt());
+        assertEquals(1, deferred.contexts().getFirst().path("revision").asInt());
+        assertEquals("tableResource", assertThrows(RuleRuntime.Unavailable.class, () ->
+                RuleDispatcher.executeDeferredWithOwnerReactions(candidates, select("fail", "one"), noRandom(), programs)).code());
+        assertEquals(originalOne, one);
+        assertEquals(originalTwo, two);
+    }
+
+    @Test
+    void deferredBenefitUsesComputedPoolsFromEveryActiveSourceBeforeItsFirstOperation() throws Exception {
+        RuleCompiler.Program move = program("features:move", """
+                {"rules":[{"id":"benefit","bindings":[{"id":"use","event":"downtime.move","surface":"downtime","mode":"option"}],
+                 "after":{"do":[{"op":"value","value":{"read":"actor.pools.shared.value"},"as":"remaining"}],
+                          "report":"Pool {result.remaining}."},"ui":{"label":"Benefit"}}]}
+                """);
+        RuleCompiler.Program pool = program("features:pool", """
+                {"pools":{"shared":{"kind":"number","scope":"actor","max":{"read":"actor.hope.value"}}}}
+                """);
+        ObjectNode first = context(move.sourceId(), "move"), second = context(pool.sourceId(), "pool");
+        first.withObject("/actor").putObject("pools").putObject("shared").put("value", 6).put("max", 6);
+        first.withObject("/event").put("type", "downtime.move");
+        second.set("actor", first.path("actor").deepCopy());
+        second.set("event", first.path("event").deepCopy());
+        var result = RuleDispatcher.executeDeferredWithOwnerReactions(
+                List.of(new RuleDispatcher.Candidate(move, first), new RuleDispatcher.Candidate(pool, second)),
+                select("benefit", "move"), noRandom(), Map.of(move.sourceId(), move, pool.sourceId(), pool));
+        assertEquals("Pool 3.", result.actions().getLast().report());
+        for (ObjectNode context : result.contexts()) {
+            assertEquals(3, context.at("/actor/pools/shared/value").asInt());
+            assertEquals(3, context.at("/actor/pools/shared/max").asInt());
+        }
+        assertEquals(6, first.at("/actor/pools/shared/value").asInt());
+        assertEquals(6, second.at("/actor/pools/shared/value").asInt());
+    }
+
+    @Test
     void nestedSourceReactionsShareStateFearAndOneRevisionInOperationOrder() throws Exception {
         RuleCompiler.Program first = program("features:first", """
                 {"state":{"steps":0},"rules":[
