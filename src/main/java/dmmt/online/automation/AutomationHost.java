@@ -783,6 +783,51 @@ public final class AutomationHost {
         return applyEvent(pack, working, projection.state(working), event, candidates(pack, working, event), List.of(), random);
     }
 
+    /** Stages rest preparation only; the caller must complete and atomically commit the entire rest. */
+    ObjectNode prepareRest(Pack pack, ObjectNode sheet, ObjectNode origin, String kind, long expectedRevision,
+                           ArrayNode choices, RandomGenerator random) {
+        if (pack.rest() == null) throw new NotReady("The shared ruleset has no rest configuration.");
+        if (!Set.of("short", "long").contains(kind)) throw RuleJson.error("/rest/kind", "Expected short or long.");
+        ObjectNode working = sheet.deepCopy();
+        ObjectNode state = projection.state(working);
+        long revision = state.path("revision").asLong();
+        if (expectedRevision < 0 || expectedRevision != revision)
+            throw new RuleRuntime.Unavailable("stale", "The character changed. Reopen this rest.");
+        int consecutive = working.has("shortRestsInRow")
+                ? RuleJson.integer(working.get("shortRestsInRow"), "/sheet/shortRestsInRow", 0, 1_000_000) : 0;
+        RestLimits limits = "short".equals(kind) ? pack.rest().shortRest() : pack.rest().longRest();
+        if ("short".equals(kind) && consecutive >= limits.consecutiveLimit())
+            throw new RuleRuntime.Unavailable("restLimit", "The party has taken " + limits.consecutiveLimit()
+                    + " short rests in a row and must take a long rest next.");
+        ObjectNode event = RuleJson.object(origin, "/event").deepCopy().put("type", "rest.prepare");
+        ObjectNode plan = event.putObject("rest").put("kind", kind).put("moves", limits.moves()).put("longMoves", 0);
+        ObjectNode adjustable = plan.putObject("adjustable");
+        adjustable.putObject("moves").put("min", 0).put("max", limits.maxMoves());
+        adjustable.putObject("longMoves").put("min", 0).put("max", limits.maxLongMoves());
+        var candidates = candidates(pack, working, event);
+        ObjectNode request = RuleJson.JSON.createObjectNode();
+        request.set("selections", choices);
+        var intents = selections(request, candidates, revision, "self", "rest", false);
+        Map<String, RuleDispatcher.Candidate> byInstance = new HashMap<>();
+        candidates.forEach(candidate -> byInstance.put(candidate.instanceId(), candidate));
+        for (var intent : intents) {
+            JsonNode binding = RuleDispatcher.binding(byInstance.get(intent.sourceInstanceId()).program().rule(intent.ruleId()),
+                    intent.bindingId());
+            if (!"rest.prepare".equals(binding.path("event").asText()) || !"option".equals(binding.path("mode").asText()))
+                throw RuleJson.error("/request/selections", "Choose only rest preparation options.");
+        }
+        ObjectNode response = applyEvent(pack, working, state, event, candidates, intents, random);
+        JsonNode result = response.path("event").path("rest");
+        if (!kind.equals(result.path("kind").asText()) || !adjustable.equals(result.path("adjustable")))
+            throw RuleJson.error("/event/rest", "The rest plan's identity or bounds changed.");
+        RuleJson.integer(result.get("moves"), "/event/rest/moves", 0, limits.maxMoves());
+        RuleJson.integer(result.get("longMoves"), "/event/rest/longMoves", 0, limits.maxLongMoves());
+        if (!response.path("event").path("blocked").isEmpty())
+            throw new RuleRuntime.Unavailable("blocked", response.at("/event/blocked/0/reason").asText());
+        replace(sheet, working);
+        return response;
+    }
+
     private ObjectNode applyEvent(Pack pack, ObjectNode working, ObjectNode state, ObjectNode event,
                                   List<RuleDispatcher.Candidate> candidates, List<RuleRuntime.Intent> intents, RandomGenerator random) {
         RuleDispatcher.EventResolution resolution = RuleDispatcher.executeEvent(candidates, intents, random, pack.programs());

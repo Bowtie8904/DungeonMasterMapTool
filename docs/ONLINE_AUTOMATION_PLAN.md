@@ -126,6 +126,11 @@ The shared ruleset may also declare `rest.short` (`moves`, `maxMoves`, `maxLongM
 two moves, permits at most one granted long-rest move in a short rest, and requires a long rest after three
 short rests. Older development fixtures may omit this configuration, but cannot supply an authoritative rest
 plan until it is present.
+The staged preparation primitive constructs its facts from those limits and the stored short-rest count,
+checks the expected revision, and applies authorized selected `rest.prepare` options and automatic adjustments
+on a copy. Invalid choices, an exhausted short-rest allowance and invalid plans leave the sheet unchanged.
+It does not finish a rest, advance the counters or persist anything; a live transaction still has to compose
+preparation with downtime, effect expiry, resets, receipts and the outbox.
 
 Ordinary and targeted sheet requests accept only `sheet` bindings, even when another surface uses the same event.
 Roll options and saved-result actions use their own validated surfaces. The planned authoritative rest flow has not
