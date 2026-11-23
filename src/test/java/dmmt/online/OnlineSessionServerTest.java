@@ -1664,6 +1664,69 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void effectBoundPoolsPersistAcrossSourcesAndUnsafeEndingsRollBack() throws Exception {
+        automationCompendium();
+        Path catalogPath = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(catalogPath.toFile());
+        ObjectNode supporting = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        supporting.set("effects", MAPPER.readTree("{\"stance\":{\"label\":\"Stance\"}}"));
+        supporting.set("pools", MAPPER.readTree("""
+                {"charge":{"kind":"number","scope":"actor","max":4,"whileEffect":"stance"}}"""));
+        ObjectNode remover = (ObjectNode) catalog.at("/entries/0/features/0/automation");
+        remover.remove("limits");
+        remover.set("rules", MAPPER.readTree("""
+                [{"id":"first","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"effect.endLabeled","label":"First","target":"actor"}],
+                  "ui":{"label":"First","report":"First ended."}},
+                 {"id":"last","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"effect.endLabeled","label":"Last","target":"actor"}],
+                  "ui":{"label":"Last","report":"Last ended."}}]"""));
+        java.nio.file.Files.writeString(catalogPath, catalog.toString());
+
+        String campaignId = campaign.getId();
+        campaign.getActors().add(Campaign.Actor.builder().id("auto").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaignId, "auto", """
+                {"name":"Ada","features":[
+                  {"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"}],
+                 "automationState":{"revision":0,"pools":{"charge":{"value":3,"max":4}},"effects":[
+                  {"id":"a","effect":"classes:tester:features:steady#stance","sourceInstanceId":"inactive-a","label":"First"},
+                  {"id":"b","effect":"classes:tester:features:steady#stance","sourceInstanceId":"inactive-b","label":"Last"},
+                  {"id":"u","effect":"classes:missing:features:source#guard","sourceInstanceId":"missing","label":"Unknown"}]}}
+                """);
+        String cookie = cookie();
+        String first = """
+                {"request":{"requestId":"first","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"r","ruleId":"first","bindingId":"sheet"}]}}""";
+        String last = first.replace("\"first\"", "\"last\"").replace("\"expectedRevision\":0", "\"expectedRevision\":1");
+        var firstResponse = automationHttp(cookie, "auto", first);
+        assertEquals(200, firstResponse.statusCode(), firstResponse.body());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaignId, "auto"));
+        assertEquals(3, saved.at("/automationState/pools/charge/value").asInt());
+        assertEquals(List.of("b", "u"), saved.at("/automationState/effects").findValuesAsText("id"));
+        String beforeFailure = store.loadSheet(campaignId, "auto");
+        int history = store.historyTail(campaignId, 100).size();
+        var refused = automationHttp(cookie, "auto", last);
+        assertEquals(400, refused.statusCode(), refused.body());
+        assertTrue(refused.body().contains("unknown effect definition"), refused.body());
+        assertEquals(beforeFailure, store.loadSheet(campaignId, "auto"));
+        assertEquals(history, store.historyTail(campaignId, 100).size());
+
+        ObjectNode repaired = (ObjectNode) MAPPER.readTree(beforeFailure);
+        repaired.withArray("/automationState/effects").remove(1);
+        store.saveSheet(campaignId, "auto", repaired.toString());
+        var lastResponse = automationHttp(cookie, "auto", last);
+        assertEquals(200, lastResponse.statusCode(), lastResponse.body());
+        assertEquals(lastResponse.body(), automationHttp(cookie, "auto", last).body());
+        assertEquals(firstResponse.body(), automationHttp(cookie, "auto", first).body());
+        var reopened = new CampaignStore(temp.resolve("campaigns"));
+        saved = MAPPER.readTree(reopened.loadSheet(campaignId, "auto"));
+        assertEquals(0, saved.at("/automationState/pools/charge/value").asInt());
+        assertTrue(saved.at("/automationState/effects").isEmpty());
+        assertEquals(2, saved.at("/automationState/revision").asInt());
+        assertEquals(history + 1, store.historyTail(campaignId, 100).size());
+    }
+
+    @Test
     void automationEndpointsDescribeExecuteJournalAndRejectStaleOrForeignUse() throws Exception {
         automationCompendium();
         campaign.getActors().add(Campaign.Actor.builder().id("auto").name("Ada").ownerId(playerId()).build());

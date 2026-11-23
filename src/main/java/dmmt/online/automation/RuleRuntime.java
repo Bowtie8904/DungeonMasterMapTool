@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.random.RandomGenerator;
 
@@ -142,11 +143,23 @@ public final class RuleRuntime {
     }
 
     public static Resolution execute(RuleCompiler.Program program, Intent intent, ObjectNode hostContext, RandomGenerator random) {
-        return executePrepared(program, prepare(program, intent, hostContext), random, false);
+        return execute(program, intent, hostContext, random, Map.of(program.sourceId(), program));
+    }
+
+    /** Supply all compiled programs referenced by the affected holders' effects. */
+    public static Resolution execute(RuleCompiler.Program program, Intent intent, ObjectNode hostContext,
+                                     RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
+        return executePrepared(program, prepare(program, intent, hostContext), random, false, programs);
     }
 
     public static Resolution preview(RuleCompiler.Program program, Intent intent, ObjectNode hostContext) {
-        return executePrepared(program, prepare(program, intent, hostContext), null, true);
+        return preview(program, intent, hostContext, Map.of(program.sourceId(), program));
+    }
+
+    /** A preview uses the same effect registry and safety checks as a committed resolution. */
+    public static Resolution preview(RuleCompiler.Program program, Intent intent, ObjectNode hostContext,
+                                     Map<String, RuleCompiler.Program> programs) {
+        return executePrepared(program, prepare(program, intent, hostContext), null, true, programs);
     }
 
     static Prepared prepare(RuleCompiler.Program program, Intent intent, ObjectNode hostContext) {
@@ -214,7 +227,9 @@ public final class RuleRuntime {
         return new Prepared(intent, next, revision);
     }
 
-    static Resolution executePrepared(RuleCompiler.Program program, Prepared prepared, RandomGenerator random, boolean preview) {
+    static Resolution executePrepared(RuleCompiler.Program program, Prepared prepared, RandomGenerator random, boolean preview,
+                                      Map<String, RuleCompiler.Program> programs) {
+        if (programs == null) throw RuleJson.error("/programs", "Expected a compiled program registry.");
         Intent intent = prepared.intent();
         ObjectNode rule = program.rule(intent.ruleId());
         ObjectNode next = copyContext(prepared.context());
@@ -232,16 +247,29 @@ public final class RuleRuntime {
             next.set("die", selected.deepCopy());
         }
         List<ObjectNode> published = new ArrayList<>(), rolls = new ArrayList<>();
+        boolean effectOperation = false;
+        Set<String> recipientPools = next.has("recipient") && !program.boundPoolIds().isEmpty()
+                ? new HashSet<>() : Set.of();
         for (JsonNode step : rule.path("do")) {
             if (step.has("if") && !RuleExpression.bool(RuleExpression.evaluate(step.get("if"), next), "/do/if")) continue;
             operation(program, step, next, random, preview, published, rolls);
+            effectOperation |= step.path("op").asText().startsWith("effect.");
+            touchedRecipientPool(program, step, recipientPools);
         }
-        RuleEffects.settle(program, next);
+        boolean effectEnded = RuleEffects.settle(program, next);
+        if (effectOperation || effectEnded || !program.boundPoolIds().isEmpty())
+            RuleEffects.reconcilePools(program, prepared.context(), next, programs, recipientPools);
         String text = preview && rule.path("ui").has("preview") ? "preview" : "report";
         String report = rule.path("ui").has(text) ? RuleTemplate.render(rule.path("ui").path(text).asText(), next) : "";
         next.remove("die");
         next.set("revision", RuleExpression.numeric(revision + 1d, "/revision"));
         return new Resolution(next, report, List.copyOf(published), List.copyOf(rolls));
+    }
+
+    private static void touchedRecipientPool(RuleCompiler.Program program, JsonNode operation, Set<String> pools) {
+        String kind = operation.path("op").asText(), id = operation.path("pool").asText();
+        if ("recipient".equals(operation.path("owner").asText()) && ("pool.spend".equals(kind) || "pool.gain".equals(kind))
+                && program.boundPoolIds().contains(id)) pools.add(id);
     }
 
     /** Clears used limits that reset on any of the given events, leaving pools untouched (a "refresh uses" host request). */

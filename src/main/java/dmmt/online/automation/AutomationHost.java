@@ -304,7 +304,7 @@ public final class AutomationHost {
             action = targetAction(pack, working, event, request, relation, party);
         }
         var targets = action.selection();
-        var resolved = RuleDispatcher.executeTargets(action.candidates(), targets.intent(), targets.recipients(), random);
+        var resolved = RuleDispatcher.executeTargets(action.candidates(), targets.intent(), targets.recipients(), random, pack.programs());
         var targetedActions = resolved.actions().stream().map(RuleDispatcher.TargetActionResult::action).toList();
         ObjectNode after = applyResolved(pack, working, state, event, resolved.sourceContexts(), targetedActions, resolved.outbox());
         for (int i = 0; i < resolved.actions().size(); i++)
@@ -439,7 +439,7 @@ public final class AutomationHost {
             var recipient = new RuleDispatcher.RecipientCandidate(actorId, actor, revision);
             var claim = new RuleDispatcher.ClaimIntent(intent, actorId, revision, 0);
             var resolved = RuleDispatcher.executeClaims(List.of(candidate), List.of(claim), List.of(recipient),
-                    new RuleDispatcher.ClaimLedger(0, Set.of()), random);
+                    new RuleDispatcher.ClaimLedger(0, Set.of()), random, pack.programs());
             var actions = resolved.actions().stream().map(RuleDispatcher.ClaimActionResult::action).toList();
             long published = actions.stream().mapToLong(action -> action.publishedRolls().size()).sum();
             if (published > 1)
@@ -456,7 +456,7 @@ public final class AutomationHost {
             if (party == null) throw RuleJson.error("/request/target", "This action requires a host roster.");
             var candidate = new RuleDispatcher.Candidate(program, context);
             var targets = party.resolve(binding, context, intent, request.get("target"));
-            var resolved = RuleDispatcher.executeTargets(List.of(candidate), targets.intent(), targets.recipients(), random);
+            var resolved = RuleDispatcher.executeTargets(List.of(candidate), targets.intent(), targets.recipients(), random, pack.programs());
             var actions = resolved.actions().stream().map(RuleDispatcher.TargetActionResult::action).toList();
             long published = actions.stream().mapToLong(action -> action.publishedRolls().size()).sum();
             if (published > 1)
@@ -610,7 +610,7 @@ public final class AutomationHost {
 
     private ObjectNode applyEvent(Pack pack, ObjectNode working, ObjectNode state, ObjectNode event,
                                   List<RuleDispatcher.Candidate> candidates, List<RuleRuntime.Intent> intents, RandomGenerator random) {
-        RuleDispatcher.EventResolution resolution = RuleDispatcher.executeEvent(candidates, intents, random);
+        RuleDispatcher.EventResolution resolution = RuleDispatcher.executeEvent(candidates, intents, random, pack.programs());
         return applyResolved(pack, working, state, event, resolution.contexts(), resolution.actions(), resolution.outbox());
     }
 
@@ -692,13 +692,9 @@ public final class AutomationHost {
         if (actor.path("effects").isArray()) {
             ArrayNode kept = RuleEffects.expire(actor.path("effects"), type);
             if (kept.size() != actor.path("effects").size()) {
-                Set<String> losingPools = boundPools(pack, actor.path("effects"));
-                losingPools.removeAll(boundPools(pack, kept));
-                for (String id : losingPools) {
-                    JsonNode pool = actor.path("pools").get(id);
-                    if (pool != null) RuleJson.object(pool, "/actor/pools/" + id).put("value", 0);
-                }
+                ObjectNode beforeExpiry = actor.deepCopy();
                 actor.set("effects", kept);
+                RuleEffects.reconcileHolder(beforeExpiry, actor, Set.of(), pack.programs(), "/actor");
                 changed = true;
             }
         }
@@ -708,18 +704,6 @@ public final class AutomationHost {
         state.put("revision", state.path("revision").asLong() + 1);
         replace(sheet, working);
         return true;
-    }
-
-    private static Set<String> boundPools(Pack pack, JsonNode effects) {
-        Set<String> ids = new java.util.HashSet<>();
-        for (JsonNode instance : effects) {
-            String key = instance.path("effect").asText();
-            int split = key.lastIndexOf('#');
-            if (split < 1) continue;
-            var program = pack.programs().get(key.substring(0, split));
-            if (program != null) ids.addAll(program.poolsBoundTo(key.substring(split + 1)));
-        }
-        return ids;
     }
 
     private List<RuleDispatcher.Candidate> candidates(Pack pack, ObjectNode sheet, ObjectNode event) {

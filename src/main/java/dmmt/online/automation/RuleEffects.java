@@ -4,7 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -179,7 +182,7 @@ public final class RuleEffects {
     }
 
     /** Ends this source's active actor effect instances whose {@code endWhen} condition now holds. */
-    static void settle(RuleCompiler.Program program, ObjectNode context) {
+    static boolean settle(RuleCompiler.Program program, ObjectNode context) {
         boolean ended = false;
         var definitions = program.effects().fields();
         while (definitions.hasNext()) {
@@ -190,19 +193,73 @@ public final class RuleEffects {
                         context.path("source").path("instanceId").asText()) > 0;
         }
         if (ended) refreshCounts(program, context);
-        clearBoundPools(program, context);
+        return ended;
     }
 
-    /** A pool that follows an effect reads zero whenever this source's instance of that effect is not active. */
-    static void clearBoundPools(RuleCompiler.Program program, ObjectNode context) {
-        var pools = program.pools().fields();
-        while (pools.hasNext()) {
-            var pool = pools.next();
-            String bound = pool.getValue().path("whileEffect").asText("");
-            if (bound.isEmpty() || context.path("effects").path(bound).asInt() > 0) continue;
-            JsonNode state = context.path("actor").path("pools").path(pool.getKey());
-            if (state.path("value").asInt() != 0) ((ObjectNode) state).put("value", 0);
+    private record UnresolvedEffect(String instanceId, String definition) {}
+    private record PoolSupport(Set<String> ids, Set<UnresolvedEffect> unresolved) {}
+
+    private static PoolSupport poolSupport(JsonNode effects, Map<String, RuleCompiler.Program> programs, String path) {
+        Set<String> ids = new HashSet<>();
+        Set<UnresolvedEffect> unresolved = new HashSet<>();
+        if (effects.isMissingNode()) return new PoolSupport(ids, unresolved);
+        for (JsonNode instance : instances(effects, path)) {
+            if (!instance.has("effect") && !instance.has("sourceInstanceId")) continue;
+            String key = instance.path("effect").asText("");
+            int split = key.lastIndexOf('#');
+            RuleCompiler.Program program = split > 0 ? programs.get(key.substring(0, split)) : null;
+            String effectId = split > 0 ? key.substring(split + 1) : "";
+            if (program == null || !program.sourceId().equals(key.substring(0, split)) || !program.hasEffect(effectId)) {
+                unresolved.add(new UnresolvedEffect(instance.path("id").asText(), key.isEmpty() ? "<missing>" : key));
+            } else ids.addAll(program.poolsBoundTo(effectId));
         }
+        return new PoolSupport(ids, unresolved);
+    }
+
+    static void reconcilePools(RuleCompiler.Program program, ObjectNode before, ObjectNode after,
+                               Map<String, RuleCompiler.Program> programs, Set<String> recipientPools) {
+        reconcileHolder(before.path("actor"), after.path("actor"), program.boundPoolIds(), programs, "/actor");
+        if (after.has("recipient") && after.get("recipient") != after.get("actor"))
+            reconcileHolder(before.path("recipient"), after.path("recipient"), recipientPools, programs, "/recipient");
+    }
+
+    static void reconcileHolder(JsonNode before, JsonNode after, Set<String> declaredPools,
+                                Map<String, RuleCompiler.Program> programs, String path) {
+        JsonNode oldEffects = before.path("effects"), newEffects = after.path("effects");
+        boolean effectsChanged = !oldEffects.equals(newEffects);
+        if (!effectsChanged && declaredPools.isEmpty()) return;
+        JsonNode pools = after.path("pools");
+        if (!pools.isMissingNode()) RuleJson.object(pools, path + "/pools");
+        PoolSupport current = poolSupport(newEffects, programs, path + "/effects");
+        Set<String> affected = new HashSet<>(declaredPools);
+        if (effectsChanged) {
+            PoolSupport previous = poolSupport(oldEffects, programs, path + "/effects");
+            Set<UnresolvedEffect> removed = new HashSet<>(previous.unresolved());
+            removed.removeAll(current.unresolved());
+            if (!removed.isEmpty() && pools.size() > 0) throw unresolved(path, removed.iterator().next());
+            affected.addAll(previous.ids());
+        }
+        if (affected.isEmpty()) return;
+        affected.removeAll(current.ids());
+        List<ObjectNode> clearing = new ArrayList<>();
+        for (String id : affected) {
+            JsonNode pool = pools.get(id);
+            if (pool == null) continue;
+            String poolPath = path + "/pools/" + id;
+            RuleJson.fields(pool, poolPath, "value", "max");
+            int max = pool.has("max") ? RuleJson.integer(pool.get("max"), poolPath + "/max", 0, 1_000_000) : 1_000_000;
+            int value = RuleJson.integer(pool.get("value"), poolPath + "/value", 0, max);
+            if (value != 0) clearing.add((ObjectNode) pool);
+        }
+        if (!clearing.isEmpty() && !current.unresolved().isEmpty())
+            throw unresolved(path, current.unresolved().iterator().next());
+        clearing.forEach(pool -> pool.put("value", 0));
+    }
+
+    private static IllegalArgumentException unresolved(String path, UnresolvedEffect effect) {
+        return RuleJson.error(path + "/effects", "Cannot reconcile effect-bound pools for instance '"
+                + effect.instanceId() + "': unknown effect definition '" + effect.definition()
+                + "'. Restore its definition or supply the complete compiled program registry.");
     }
 
     /** Exposes {@code effects.<id>} as this source instance's active instance count on the actor. */

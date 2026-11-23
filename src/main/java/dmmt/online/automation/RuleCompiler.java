@@ -123,6 +123,7 @@ public final class RuleCompiler {
         private final ObjectNode limits;
         private final ObjectNode pools;
         private final Map<String, List<String>> poolsByEffect;
+        private final Set<String> boundPoolIds;
         private final ObjectNode effects;
         private final ArrayNode modifiers;
         private final boolean hasTraitModifiers;
@@ -145,6 +146,9 @@ public final class RuleCompiler {
             });
             bound.replaceAll((key, ids) -> List.copyOf(ids));
             this.poolsByEffect = Map.copyOf(bound);
+            Set<String> boundIds = new HashSet<>();
+            bound.values().forEach(boundIds::addAll);
+            this.boundPoolIds = Set.copyOf(boundIds);
             this.effects = decl.effects().deepCopy();
             this.modifiers = modifiers.deepCopy();
             boolean traitModifiers = false;
@@ -200,6 +204,7 @@ public final class RuleCompiler {
         ObjectNode limits() { return limits.deepCopy(); }
         ObjectNode pools() { return pools.deepCopy(); }
         List<String> poolsBoundTo(String effectId) { return poolsByEffect.getOrDefault(effectId, List.of()); }
+        Set<String> boundPoolIds() { return boundPoolIds; }
         boolean hasEffect(String effectId) { return effects.has(effectId); }
         ObjectNode effects() { return effects.deepCopy(); }
         boolean hasModifiers() { return !modifiers.isEmpty(); }

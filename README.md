@@ -39,6 +39,11 @@ Ending a scene or starting a new session with a format-2 pack applies its automa
 resets, and timed effect expiry to saved active characters, including offline ones, in a single campaign commit.
 Reset expressions use the same host-generated actor, table and session facts as lifecycle rules. Pool reset
 expressions see default state and a consistent pre-reset pool snapshot.
+Format-2 effect-bound actor pools retain their balance while another supporting effect on that character remains,
+including effects from a different source or a source no longer on the sheet. Ending or replacing the last
+supporting effect and timed expiry clear the pool in the same transaction. An unresolved automation effect or
+malformed affected pool rejects a potentially unsafe change instead of losing resources. Recomputing derived
+effects and other sources' or recipients' conditional endings remains unfinished.
 Typing a dice expression in chat rolls dice and records the result, but does not trigger or qualify for
 character automation. Roll from the character sheet or its feature when character rules should apply.
 The live catalogs and gameplay still use the existing implementation: full catalog conversion, production

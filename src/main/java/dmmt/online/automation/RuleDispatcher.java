@@ -206,6 +206,12 @@ public final class RuleDispatcher {
 
     public static EventResolution executeEvent(List<Candidate> activeSources, List<RuleRuntime.Intent> selections,
                                                RandomGenerator random) {
+        return executeEvent(activeSources, selections, random, programs(activeSources));
+    }
+
+    /** Supply the compiled programs referenced by effects, including sources no longer active on the sheet. */
+    public static EventResolution executeEvent(List<Candidate> activeSources, List<RuleRuntime.Intent> selections,
+                                               RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
         Snapshot snapshot = validateSources(activeSources);
         Map<String, Candidate> byInstance = new HashMap<>();
         Map<String, ObjectNode> workingContexts = new HashMap<>();
@@ -312,7 +318,7 @@ public final class RuleDispatcher {
             current.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             RuleRuntime.Prepared executable = new RuleRuntime.Prepared(item.intent(), current, snapshot.revision());
             RuleRuntime.Resolution resolution = RuleRuntime.executePrepared(
-                    byInstance.get(instanceId).program(), executable, random, false);
+                    byInstance.get(instanceId).program(), executable, random, false, programs);
             ObjectNode nextContext = resolution.context();
             for (JsonNode command : nextContext.path("outbox")) outbox.add((ObjectNode) command);
             sharedActor = nextContext.path("actor").deepCopy();
@@ -339,6 +345,13 @@ public final class RuleDispatcher {
     public static ClaimResolution executeClaims(List<Candidate> activeSources, List<ClaimIntent> selections,
                                                 List<RecipientCandidate> eligibleRecipients, ClaimLedger ledger,
                                                 RandomGenerator random) {
+        return executeClaims(activeSources, selections, eligibleRecipients, ledger, random, programs(activeSources));
+    }
+
+    /** Supply the compiled programs referenced by source and recipient effects. */
+    public static ClaimResolution executeClaims(List<Candidate> activeSources, List<ClaimIntent> selections,
+                                                List<RecipientCandidate> eligibleRecipients, ClaimLedger ledger,
+                                                RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
         Snapshot snapshot = validateSources(activeSources);
         if (selections == null || eligibleRecipients == null || ledger == null)
             throw RuleJson.error("/claims", "Selections, eligible recipients and claim state are required.");
@@ -467,7 +480,7 @@ public final class RuleDispatcher {
             current.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             RuleRuntime.Prepared executable = new RuleRuntime.Prepared(item.intent(), current, snapshot.revision());
             RuleRuntime.Resolution resolution = RuleRuntime.executePrepared(
-                    byInstance.get(instanceId).program(), executable, random, false);
+                    byInstance.get(instanceId).program(), executable, random, false, programs);
             ObjectNode nextContext = resolution.context();
             collectRecipientCommands(outbox, nextContext, claim.recipientId());
             sharedActor = nextContext.path("actor").deepCopy();
@@ -525,6 +538,13 @@ public final class RuleDispatcher {
     public static TargetResolution executeTargets(List<Candidate> activeSources, TargetIntent selection,
                                                    List<RecipientCandidate> eligibleRecipients,
                                                    RandomGenerator random) {
+        return executeTargets(activeSources, selection, eligibleRecipients, random, programs(activeSources));
+    }
+
+    /** Supply the compiled programs referenced by source and recipient effects. */
+    public static TargetResolution executeTargets(List<Candidate> activeSources, TargetIntent selection,
+                                                   List<RecipientCandidate> eligibleRecipients,
+                                                   RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
         Snapshot snapshot = validateSources(activeSources);
         if (selection == null || eligibleRecipients == null)
             throw RuleJson.error("/target", "A selection and eligible recipient set are required.");
@@ -618,7 +638,7 @@ public final class RuleDispatcher {
             setParticipants(current, sharedActor, item.recipientId().equals(sourceActorId) ? null : workingRecipients.get(item.recipientId()));
             current.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             RuleRuntime.Prepared executable = new RuleRuntime.Prepared(intent, current, snapshot.revision());
-            RuleRuntime.Resolution resolution = RuleRuntime.executePrepared(candidate.program(), executable, random, false);
+            RuleRuntime.Resolution resolution = RuleRuntime.executePrepared(candidate.program(), executable, random, false, programs);
             ObjectNode nextContext = resolution.context();
             collectRecipientCommands(outbox, nextContext, item.recipientId());
             sharedActor = nextContext.path("actor").deepCopy();
@@ -655,6 +675,14 @@ public final class RuleDispatcher {
 
     private record Snapshot(List<Candidate> sources, ObjectNode actor, ObjectNode event, String eventType,
                             long revision) {}
+
+    private static Map<String, RuleCompiler.Program> programs(List<Candidate> sources) {
+        if (sources == null) return Map.of();
+        Map<String, RuleCompiler.Program> programs = new HashMap<>();
+        for (Candidate source : sources)
+            if (source != null) programs.putIfAbsent(source.program().sourceId(), source.program());
+        return programs;
+    }
 
     private static Snapshot validateSources(List<Candidate> activeSources) {
         if (activeSources == null) throw RuleJson.error("/sources", "Expected active sources.");
