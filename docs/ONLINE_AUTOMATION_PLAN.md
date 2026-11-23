@@ -133,8 +133,15 @@ It does not finish a rest, advance the counters or persist anything; a live tran
 preparation with downtime, effect expiry, resets, receipts and the outbox.
 An isolated move primitive derives its event identity and target flag from compiled metadata, applies automatic
 and selected move adjustments before the chosen button, and tracks source-scoped duplicate groups, move slots
-and short-rest long-move allowances. It returns dice, reports and commands without persisting. Post-move ordering,
-recipient and post-outcome choices, complete rest transactions and browser integration remain release gaps.
+and short-rest long-move allowances. It returns dice, reports and commands without persisting. Recipient and
+post-outcome choices, complete rest transactions and browser integration remain release gaps.
+An automatic or option `downtime.move` rule may declare `after: {costs?, do?, report?}`. Its pre-move
+operations set the move plan; after the button resolves, the host executes deferred bodies of rules that actually
+ran, in their original order. Deferred costs are checked initially and paid against the post-move sheet. Results
+and reports are local to the deferred body; it cannot change the completed plan or read the pre-move rule's
+inputs/results. Ordinary dispatch rejects these two-phase rules, and a missing source or failed deferred cost
+rejects the staged move. Converted move modifiers and move-specific passives place their bonuses before the move
+and their side effects and costs afterward. Sources consumed by the move cannot yet supply a deferred benefit.
 The shared Daggerheart ruleset now supplies self-targeted short recovery (1d4 plus tier and move bonus), the two
 mutually exclusive preparation variants, long recovery and work on a project. Reports use the amount actually
 cleared or gained, including permanent and locked HP and capped Hope; a short rest needs a granted allowance for

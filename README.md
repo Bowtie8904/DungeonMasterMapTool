@@ -48,9 +48,9 @@ The staged rest-reset primitive can preserve effects started or replaced during 
 connected to the live rest workflow.
 Converted downtime buttons now describe their host-validated move identity and rest restriction. This metadata
 and the shared ruleset's validated rest limits do not yet make the format-2 rest workflow available.
-The host can stage and validate rest preparation on a private copy, including option costs, but downtime and
-move execution are still isolated primitives; post-move ordering, the final atomic rest transaction and
-the player workflow are still required.
+The host can stage and validate rest preparation and individual moves on a private copy. Move bonuses run
+before recovery; selected passive costs and modifier steps run afterward and failures roll back the move.
+The final atomic rest transaction and player workflow are still required.
 The shared ruleset defines the base self-recovery, preparation and project moves for staged tests, including
 tier-scaled recovery, protected HP and capped Hope. Ally recovery, rerolls and armor overflow are not yet wired.
 Format-2 healing respects permanent HP and temporary locked HP on both the actor and targeted recipients;

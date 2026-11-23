@@ -212,7 +212,20 @@ public final class RuleDispatcher {
     /** Supply the compiled programs referenced by effects, including sources no longer active on the sheet. */
     public static EventResolution executeEvent(List<Candidate> activeSources, List<RuleRuntime.Intent> selections,
                                                RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
+        return executeEvent(activeSources, selections, random, programs, false);
+    }
+
+    static EventResolution executeStagedMove(List<Candidate> activeSources, List<RuleRuntime.Intent> selections,
+                                             RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
+        return executeEvent(activeSources, selections, random, programs, true);
+    }
+
+    private static EventResolution executeEvent(List<Candidate> activeSources, List<RuleRuntime.Intent> selections,
+                                                RandomGenerator random, Map<String, RuleCompiler.Program> programs,
+                                                boolean stagedMove) {
         Snapshot snapshot = validateSources(activeSources);
+        if (stagedMove && !"downtime.move".equals(snapshot.eventType()))
+            throw RuleJson.error("/event/type", "Deferred benefits require a staged downtime move.");
         Map<String, Candidate> byInstance = new HashMap<>();
         Map<String, ObjectNode> workingContexts = new HashMap<>();
         for (Candidate candidate : snapshot.sources()) {
@@ -318,7 +331,7 @@ public final class RuleDispatcher {
             current.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             RuleRuntime.Prepared executable = new RuleRuntime.Prepared(item.intent(), current, snapshot.revision());
             RuleRuntime.Resolution resolution = RuleRuntime.executePrepared(
-                    byInstance.get(instanceId).program(), executable, random, false, programs);
+                    byInstance.get(instanceId).program(), executable, random, false, programs, stagedMove);
             ObjectNode nextContext = resolution.context();
             for (JsonNode command : nextContext.path("outbox")) outbox.add((ObjectNode) command);
             sharedActor = nextContext.path("actor").deepCopy();

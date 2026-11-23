@@ -93,6 +93,7 @@ public final class RuleRuntime {
                 throw new Unavailable("recipient", "There are no eligible targets for this action.");
             description.set("inputs", describeInputs(rule, context));
             description.put("costsRequireInput", preflightCosts(program, rule, context));
+            preflightAfterCosts(program, rule, context);
             description.put("available", true);
         } catch (Unavailable ex) {
             description.put("available", false).put("reasonCode", ex.code())
@@ -187,6 +188,7 @@ public final class RuleRuntime {
         } else if (intent.eachId() != null) throw RuleJson.error("/eachId", "This action does not select a pool item.");
         available(program, rule, binding, next);
         validateInputs(rule, next, intent.inputs());
+        preflightAfterCosts(program, rule, next);
         return new Prepared(intent, next, revision);
     }
 
@@ -240,9 +242,16 @@ public final class RuleRuntime {
 
     static Resolution executePrepared(RuleCompiler.Program program, Prepared prepared, RandomGenerator random, boolean preview,
                                       Map<String, RuleCompiler.Program> programs) {
+        return executePrepared(program, prepared, random, preview, programs, false);
+    }
+
+    static Resolution executePrepared(RuleCompiler.Program program, Prepared prepared, RandomGenerator random, boolean preview,
+                                      Map<String, RuleCompiler.Program> programs, boolean stagedMove) {
         if (programs == null) throw RuleJson.error("/programs", "Expected a compiled program registry.");
         Intent intent = prepared.intent();
         ObjectNode rule = program.rule(intent.ruleId());
+        if (rule.has("after") && !stagedMove)
+            throw new Unavailable("restTransaction", "This benefit requires a complete staged downtime move.");
         ObjectNode next = copyContext(prepared.context());
         if (!next.path("source").path("instanceId").asText().equals(intent.sourceInstanceId()))
             throw new Unavailable("source", "The source instance changed. Reopen this action.");
@@ -257,11 +266,39 @@ public final class RuleRuntime {
             if (selected == null) throw new Unavailable("poolItem", "This pool item was already consumed.");
             next.set("die", selected.deepCopy());
         }
+        String text = preview && rule.path("ui").has("preview") ? "preview" : "report";
+        return executeSteps(program, prepared.context(), next, rule.path("do"), rule.path("ui").path(text),
+                random, preview, programs, revision);
+    }
+
+    static Resolution executeAfter(RuleCompiler.Program program, Intent intent, ObjectNode hostContext,
+                                   RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
+        if (programs == null) throw RuleJson.error("/programs", "Expected a compiled program registry.");
+        ObjectNode rule = program.rule(intent.ruleId());
+        if (!rule.has("after")) throw RuleJson.error("/ruleId", "This move benefit has no deferred operations.");
+        JsonNode binding = binding(rule, intent.bindingId());
+        ObjectNode next = context(program, rule, hostContext);
+        if (!intent.sourceInstanceId().equals(next.path("source").path("instanceId").asText()))
+            throw new Unavailable("source", "The source instance changed. Reopen this rest.");
+        long revision = revision(next);
+        if (revision != intent.expectedRevision())
+            throw new Unavailable("stale", "This move benefit is stale. Reopen this rest.");
+        if (!binding.path("event").asText().equals(next.at("/event/type").asText()))
+            throw new Unavailable("event", "This benefit does not apply to this move.");
+        for (JsonNode cost : rule.path("after").path("costs"))
+            operation(program, cost, next, null, false, new ArrayList<>(), new ArrayList<>());
+        return executeSteps(program, next.deepCopy(), next, rule.path("after").path("do"),
+                rule.path("after").path("report"), random, false, programs, revision);
+    }
+
+    private static Resolution executeSteps(RuleCompiler.Program program, ObjectNode previous, ObjectNode next,
+                                           JsonNode steps, JsonNode reportTemplate, RandomGenerator random,
+                                           boolean preview, Map<String, RuleCompiler.Program> programs, long revision) {
         List<ObjectNode> published = new ArrayList<>(), rolls = new ArrayList<>();
         boolean effectOperation = false;
         Set<String> recipientPools = next.has("recipient") && !program.boundPoolIds().isEmpty()
                 ? new HashSet<>() : Set.of();
-        for (JsonNode step : rule.path("do")) {
+        for (JsonNode step : steps) {
             if (step.has("if") && !RuleExpression.bool(RuleExpression.evaluate(step.get("if"), next), "/do/if")) continue;
             operation(program, step, next, random, preview, published, rolls);
             effectOperation |= step.path("op").asText().startsWith("effect.");
@@ -269,9 +306,8 @@ public final class RuleRuntime {
         }
         boolean effectEnded = RuleEffects.settle(program, next);
         if (effectOperation || effectEnded || !program.boundPoolIds().isEmpty())
-            RuleEffects.reconcilePools(program, prepared.context(), next, programs, recipientPools);
-        String text = preview && rule.path("ui").has("preview") ? "preview" : "report";
-        String report = rule.path("ui").has(text) ? RuleTemplate.render(rule.path("ui").path(text).asText(), next) : "";
+            RuleEffects.reconcilePools(program, previous, next, programs, recipientPools);
+        String report = reportTemplate.isMissingNode() ? "" : RuleTemplate.render(reportTemplate.asText(), next);
         next.remove("die");
         next.set("revision", RuleExpression.numeric(revision + 1d, "/revision"));
         return new Resolution(next, report, List.copyOf(published), List.copyOf(rolls));
@@ -544,6 +580,14 @@ public final class RuleRuntime {
             operation(program, cost, preview, null, true, new ArrayList<>(), new ArrayList<>());
         }
         return false;
+    }
+
+    private static void preflightAfterCosts(RuleCompiler.Program program, ObjectNode rule, ObjectNode context) {
+        JsonNode costs = rule.path("after").path("costs");
+        if (costs.isEmpty()) return;
+        ObjectNode preview = context.deepCopy();
+        for (JsonNode cost : costs)
+            operation(program, cost, preview, null, true, new ArrayList<>(), new ArrayList<>());
     }
 
     private static ArrayNode describeInputs(ObjectNode rule, ObjectNode context) {

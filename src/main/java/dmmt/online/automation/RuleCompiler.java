@@ -367,10 +367,11 @@ public final class RuleCompiler {
             if (binding.has("claimGroup") && "claim.accept".equals(binding.path("event").asText())
                     && "chat".equals(binding.path("surface").asText()))
                 claimGroups.add(binding.path("claimGroup").asText());
-        for (ObjectNode rule : expanded.values()) for (JsonNode operation : rule.path("do"))
-            if ("claim.offer".equals(operation.path("op").asText()) && !claimGroups.contains(operation.path("group").asText()))
-                throw RuleJson.error("/automation/rules/" + rule.path("id").asText() + "/do",
-                        "A claim offer must name a claim.accept chat group declared by this source: " + operation.path("group").asText());
+        for (ObjectNode rule : expanded.values()) for (JsonNode operations : List.of(rule.path("do"), rule.path("after").path("do")))
+            for (JsonNode operation : operations)
+                if ("claim.offer".equals(operation.path("op").asText()) && !claimGroups.contains(operation.path("group").asText()))
+                    throw RuleJson.error("/automation/rules/" + rule.path("id").asText() + "/do",
+                            "A claim offer must name a claim.accept chat group declared by this source: " + operation.path("group").asText());
         return new Program(sourceId, decl, modifiers, expanded).withProfiles(profiles).withAttachment(attachment).withGrants(grants).withLimitOverrides(limitOverrides);
     }
 
@@ -814,7 +815,7 @@ public final class RuleCompiler {
     }
 
     private static void validateRecipeShape(JsonNode rule, String path) {
-        RuleJson.fields(rule, path, "id", "bindings", "when", "inputs", "costs", "limitRef", "do", "ui");
+        RuleJson.fields(rule, path, "id", "bindings", "when", "inputs", "costs", "limitRef", "do", "after", "ui");
         if (rule.has("when") && !containsSubstitution(rule.get("when")))
             RuleExpression.validate(rule.get("when"), path + "/when");
         JsonNode bindings = rule.path("bindings");
@@ -889,6 +890,48 @@ public final class RuleCompiler {
                 }
             }
         }
+        if (rule.has("after") && !substitution(rule.get("after"))) {
+            validateAfterPlacement(rule, path, true);
+            validateRecipeShape(afterRule(rule.get("after")), path + "/after");
+        }
+    }
+
+    private static void validateAfterPlacement(JsonNode rule, String path, boolean allowSubstitutions) {
+        JsonNode after = rule.get("after");
+        String at = path + "/after";
+        RuleJson.fields(after, at, "costs", "do", "report");
+        if (!after.has("costs") && !after.has("do") && !after.has("report"))
+            throw RuleJson.error(at, "A deferred move benefit needs a cost, operation or report.");
+        if (after.has("report") && !(allowSubstitutions && substitution(after.get("report"))))
+            RuleTemplate.validate(RuleJson.text(after.get("report"), at + "/report"));
+        for (JsonNode binding : rule.path("bindings")) {
+            if (allowSubstitutions && substitution(binding)) continue;
+            boolean eventUnknown = allowSubstitutions && substitution(binding.path("event"));
+            boolean surfaceUnknown = allowSubstitutions && substitution(binding.path("surface"));
+            boolean modeUnknown = allowSubstitutions && substitution(binding.path("mode"));
+            if ((!eventUnknown && !"downtime.move".equals(binding.path("event").asText()))
+                    || (!surfaceUnknown && !"downtime".equals(binding.path("surface").asText()))
+                    || (!modeUnknown && !Set.of("automatic", "option").contains(binding.path("mode").asText()))
+                    || binding.has("forEach") || binding.has("targetSelection") || binding.has("claimGroup"))
+                throw RuleJson.error(at, "Deferred benefits require downtime.move automatic or option bindings.");
+            if ("automatic".equals(binding.path("mode").asText()) && after.path("costs").isArray()
+                    && !after.path("costs").isEmpty())
+                throw RuleJson.error(at, "Automatic rules cannot require explicit deferred costs.");
+        }
+        for (JsonNode operation : after.path("do"))
+            if ("plan.adjust".equals(operation.path("op").asText()))
+                throw RuleJson.error(at + "/do", "A completed move's plan cannot be adjusted.");
+    }
+
+    private static ObjectNode afterRule(JsonNode after) {
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "after");
+        rule.putArray("bindings").addObject().put("id", "after").put("event", "downtime.move")
+                .put("surface", "downtime").put("mode", "option");
+        if (after.has("costs")) rule.set("costs", after.get("costs").deepCopy());
+        if (after.has("do")) rule.set("do", after.get("do").deepCopy());
+        ObjectNode ui = rule.putObject("ui").put("label", "Deferred move benefit");
+        if (after.has("report")) ui.set("report", after.get("report").deepCopy());
+        return rule;
     }
 
     private static ObjectNode arguments(JsonNode specs, JsonNode supplied, String path) {
@@ -959,7 +1002,7 @@ public final class RuleCompiler {
         RuleJson.checkTree(rule, path, 0, expandedNodes);
         RuleJson.checkTree(args, path + "/args", 0, expandedNodes);
         if (rules.size() >= 256) throw RuleJson.error(path, "Expanded rules exceed the limit.");
-        RuleJson.fields(rule, path, "id", "bindings", "when", "inputs", "costs", "limitRef", "do", "ui");
+        RuleJson.fields(rule, path, "id", "bindings", "when", "inputs", "costs", "limitRef", "do", "after", "ui");
         String id = RuleJson.id(rule.path("id"), path + "/id");
         if (rules.containsKey(id)) throw RuleJson.error(path + "/id", "Expanded rule ID collision: " + id);
         if (rule.has("when")) RuleExpression.validate(rule.get("when"), path + "/when");
@@ -1015,6 +1058,11 @@ public final class RuleCompiler {
         }
         validateReferences(rule, args, decl, inputs, usesDieContext, path);
         validatePreRollChoices(rule, path);
+        if (rule.has("after")) {
+            validateAfterPlacement(rule, path, false);
+            addRule(new LinkedHashMap<>(), afterRule(rule.get("after")),
+                    args, decl, path + "/after", expandedNodes);
+        }
         if (hasRecipientMutation(rule)) {
             for (JsonNode binding : bindings) if (!binding.has("claimGroup") && !binding.has("targetSelection"))
                 throw RuleJson.error(path + "/bindings", "Every recipient mutation binding requires a claim group or target selection.");
@@ -1246,6 +1294,8 @@ public final class RuleCompiler {
                     (refs, die, at) -> localReferences(refs, args, resolved ? inputs : Set.of(), resolved && deferredInputs,
                             resolved ? results : Set.of(), resolved && deferredResults, at));
         });
+        if (rule.has("after") && !substitution(rule.get("after")))
+            validateRecipeLocalReferences(afterRule(rule.get("after")), args, path + "/after");
     }
 
     private static void localReferences(Set<String> refs, JsonNode args, Set<String> inputs, boolean unknownInputs,

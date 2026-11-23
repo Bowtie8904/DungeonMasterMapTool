@@ -2509,7 +2509,8 @@ class LegacyCatalogConverterTest {
         assertEquals("share-ally", rules.get("share-ally").at("/bindings/0/claimGroup").asText());
         assertEquals("otherPlayersCharacters", rules.get("share-ally").at("/bindings/0/claimScope/recipients").asText());
         assertEquals("recipient.hope", rules.get("share-ally").at("/do/0/pool").asText());
-        assertEquals("Soothing.", rules.get("move-tend").at("/ui/report").asText());
+        assertEquals("Soothing.", rules.get("move-tend").at("/after/report").asText());
+        assertEquals("track.clear", rules.get("move-tend").at("/after/do/0/op").asText());
 
         RuleCompiler.Program program = program(result, 0);
         JsonNode shortRest = run(program, context(program, "{}", PREPARE.formatted("short", 8))).contexts().getFirst().at("/event/rest");
@@ -2526,9 +2527,19 @@ class LegacyCatalogConverterTest {
                  "hp":{"marked":4,"capacity":6},"armorTrack":{"marked":1,"capacity":3},"effects":[]}""";
         ObjectNode tend = context(program, actor, move("tend", "short", true, true));
         assertEquals(List.of("pipe"), available(program, tend, "downtime"));
-        ObjectNode tended = run(program, tend, "pipe").contexts().getFirst();
+        assertEquals("restTransaction", assertThrows(RuleRuntime.Unavailable.class, () -> run(program, tend, "pipe")).code());
+        var staged = RuleDispatcher.executeStagedMove(List.of(new RuleDispatcher.Candidate(program, tend)),
+                List.of(new RuleRuntime.Intent("pipe", "downtime", "fixture", 0, RuleJson.JSON.createObjectNode())),
+                StructuredRollTest.noRandom(), Map.of(program.sourceId(), program));
+        ObjectNode tended = staged.contexts().getFirst();
         assertEquals(3, tended.at("/event/move/bonus").asInt());
-        assertEquals(2, tended.at("/actor/hp/marked").asInt());
+        assertEquals(4, tended.at("/actor/hp/marked").asInt(), "Modifier steps wait until after the move.");
+        tended.withObject("/actor/hp").put("marked", 3);
+        var afterMove = RuleRuntime.executeAfter(program,
+                new RuleRuntime.Intent("move-tend", "downtime", "fixture", 1, RuleJson.JSON.createObjectNode()),
+                tended, StructuredRollTest.noRandom(), Map.of(program.sourceId(), program));
+        assertEquals(1, afterMove.context().at("/actor/hp/marked").asInt());
+        assertEquals("Soothing.", afterMove.report());
         assertEquals(1, run(program, context(program, actor, move("repair", "long", false, true))).contexts().getFirst()
                 .at("/event/move/allies").asInt());
         assertEquals("planField", assertThrows(RuleRuntime.Unavailable.class,

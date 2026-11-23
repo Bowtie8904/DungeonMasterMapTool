@@ -901,7 +901,9 @@ public final class AutomationHost {
             if (!"downtime.move".equals(option.path("event").asText()) || !"option".equals(option.path("mode").asText()))
                 throw RuleJson.error("/request/selections", "Choose only downtime move options.");
         }
-        ObjectNode result = applyEvent(pack, working, state, event, candidates, intents, random);
+        var adjustments = RuleDispatcher.executeStagedMove(candidates, intents, random, pack.programs());
+        ObjectNode result = applyResolved(pack, working, state, event, adjustments.contexts(),
+                adjustments.actions(), adjustments.outbox());
         ObjectNode adjusted = RuleJson.object(result.get("event"), "/event");
         validateRestMove(adjusted, move);
         candidates = candidates(pack, working, adjusted);
@@ -927,6 +929,36 @@ public final class AutomationHost {
         if (progress.slotsUsed() + slots > progress.moves())
             throw new RuleRuntime.Unavailable("restMoves", "No downtime move slots remain.");
         for (String key : List.of("actions", "outbox")) ((ArrayNode) result.get(key)).addAll((ArrayNode) after.get(key));
+        JsonNode completedMove = finalEvent.path("move").deepCopy();
+        for (var adjustment : adjustments.actions()) {
+            var original = byInstance.get(adjustment.sourceInstanceId());
+            if (!original.program().rule(adjustment.ruleId()).has("after")) continue;
+            var activeSources = sources(pack, working);
+            var active = activeSources.stream()
+                    .filter(item -> adjustment.sourceInstanceId().equals(item.instanceId())
+                            && original.program().sourceId().equals(item.sourceId()))
+                    .findFirst().orElseThrow(() -> new RuleRuntime.Unavailable("source",
+                            "A deferred rest benefit's source is no longer active."));
+            ObjectNode currentState = projection.state(working);
+            ObjectNode currentActor = actor(pack, working, currentState, finalEvent, activeSources);
+            var deferred = new RuleRuntime.Intent(adjustment.ruleId(), adjustment.bindingId(),
+                    adjustment.sourceInstanceId(), currentState.path("revision").asLong(), RuleJson.JSON.createObjectNode());
+            var completed = RuleRuntime.executeAfter(original.program(), deferred,
+                    context(currentState, active, currentActor, finalEvent), random, pack.programs());
+            var deferredAction = new RuleDispatcher.ActionResult(adjustment.sourceInstanceId(), adjustment.ruleId(),
+                    adjustment.bindingId(), completed.report(), completed.publishedRolls(), completed.diceRolls());
+            List<ObjectNode> deferredCommands = new ArrayList<>();
+            completed.context().path("outbox").forEach(command -> deferredCommands.add((ObjectNode) command));
+            ObjectNode response = applyResolved(pack, working, currentState, finalEvent,
+                    List.of(completed.context()), List.of(deferredAction), deferredCommands);
+            finalEvent = RuleJson.object(response.get("event"), "/event");
+            validateRestMove(finalEvent, move);
+            if (!completedMove.equals(finalEvent.path("move")))
+                throw RuleJson.error("/event/move", "A deferred benefit cannot change the completed move.");
+            for (String key : List.of("actions", "outbox"))
+                ((ArrayNode) result.get(key)).addAll((ArrayNode) response.get(key));
+            after = response;
+        }
         result.set("event", finalEvent);
         result.put("revision", after.path("revision").asLong());
         Set<RestMoveGroup> groups = new java.util.HashSet<>(progress.groups());

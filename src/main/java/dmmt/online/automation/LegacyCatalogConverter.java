@@ -4794,11 +4794,13 @@ public final class LegacyCatalogConverter {
             if (granted.isEmpty()) p.add(path + "/steps", "An ally benefit needs at least one step.");
             claim.putObject("ui").put("label", label).put("report", "{recipient.name} accepted " + label + ".");
             steps.addObject().put("op", "claim.offer").put("group", group).put("label", label).put("limit", 1);
+            if (move) deferMoveBenefit(rule);
             out.add(claim);
             return out;
         }
         for (int s = 0; s < list.size(); s++) step(list.get(s), path + "/steps/" + s, p, steps, effects, pools);
         if (steps.isEmpty() && !rule.has("costs")) p.add(path, "A rest passive needs an effect.");
+        if (move) deferMoveBenefit(rule);
         return out;
     }
 
@@ -4828,7 +4830,27 @@ public final class LegacyCatalogConverter {
         for (int s = 0; s < list.size(); s++) step(list.get(s), path + "/steps/" + s, p, steps, effects, pools);
         if (modifier.has("note")) ((ObjectNode) rule.get("ui")).put("report", escape(modifier.path("note").asText()));
         if (steps.isEmpty()) p.add(path, "A move modifier needs a bonus, ally count or steps.");
+        deferMoveBenefit(rule);
         return rule;
+    }
+
+    private static void deferMoveBenefit(ObjectNode rule) {
+        ArrayNode before = (ArrayNode) rule.path("do");
+        ArrayNode adjustments = RuleJson.JSON.createArrayNode(), deferred = RuleJson.JSON.createArrayNode();
+        for (JsonNode step : before) {
+            if ("plan.adjust".equals(step.path("op").asText())) adjustments.add(step);
+            else deferred.add(step);
+        }
+        JsonNode costs = rule.remove("costs");
+        ObjectNode ui = (ObjectNode) rule.path("ui");
+        JsonNode report = ui.remove("report");
+        rule.set("do", adjustments);
+        if (!deferred.isEmpty() || costs != null || report != null) {
+            ObjectNode after = rule.putObject("after");
+            if (costs != null) after.set("costs", costs);
+            if (!deferred.isEmpty()) after.set("do", deferred);
+            if (report != null) after.set("report", report);
+        }
     }
 
     /** Sheet metadata: the features acquired with this source, optionally shown grouped beneath it. */
