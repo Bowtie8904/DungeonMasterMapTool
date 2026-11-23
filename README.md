@@ -66,16 +66,17 @@ transaction and player workflow are still required.
 An internal coordinator composes these stages on private source and recipient sheets, reprojects each recipient
 after earlier moves, carries Fear through the rest, and advances each changed sheet once. Other commands needing
 intervening host settlement are rejected rather than evaluated against stale facts. The staged result identifies
-all recipient sheets read, including unchanged eligibility dependencies, for a future atomic commit; offer
-authentication, persistence and interactive choices are not yet connected. An internal, owner-bound retry receipt
-can replay the same staged rest without rolling or staging recipient changes again.
+all recipient sheets read, including unchanged eligibility dependencies, for a future atomic commit. A host-signed
+snapshot offer and owner-bound retry receipt can reject stale or forged rest intents and replay committed results
+without rolling or staging recipients again. Offers expire on host restart; already committed receipts still replay.
+The live host must authenticate owners, compare and commit all dependencies, and provide interactive choices.
 Until that workflow is connected, format-2 catalogs reject legacy client-supplied rests and downtime rerolls.
 Owner and DM sheet saves cannot change host-owned rest counters, and legacy damage snapshots retain those counters
 and the host's automation state. An unreadable or unrecognized catalog cannot silently enable legacy rest;
 the shipped format-1 catalogs retain their existing rest behavior.
 The shared ruleset defines the base self-recovery, preparation and project moves for staged tests, including
 tier-scaled recovery, protected HP and capped Hope. Its ally recovery variants, rerolls and armor overflow are
-not yet wired.
+not yet connected to a live format-2 rest.
 Format-2 healing respects permanent HP and temporary locked HP on both the actor and targeted recipients;
 reports use the amount actually cleared.
 Converted scar gains and healing update the affected character's Hope capacity atomically. Gaining a scar

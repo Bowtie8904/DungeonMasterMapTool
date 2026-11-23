@@ -201,6 +201,102 @@ class RestTransactionTest {
     }
 
     @Test
+    void authenticatedRestOfferBindsHostSnapshotAndRejectsChangesBeforeStaging() throws Exception {
+        var pack = pack();
+        ObjectNode sheet = sheet(), original = sheet.deepCopy(), event = origin();
+        String version = HOST.restOfferVersion(pack, sheet, event, "short", "owner", "stored-v1");
+        ObjectNode rest = request("short").put("requestId", "offered").put("offerVersion", version);
+        move(rest, "mend");
+        var roster = new AutomationHost.RestRoster("stored-v1", scope -> {
+            fail("A stale offer must not load a roster.");
+            return List.of();
+        });
+        var anotherPack = new AutomationHost.Pack("other-pack", pack.programs(), pack.rulesetName(), pack.rest());
+        ObjectNode changedSheet = sheet.deepCopy();
+        changedSheet.withObject("/automationState").put("revision", 10);
+        ObjectNode changedFear = origin();
+        changedFear.withObject("/table").put("fear", 2);
+        List<ObjectNode> changedEvents = List.of(origin().put("sessionId", "other-session"),
+                origin().put("actorId", "other-actor"), changedFear);
+        for (ObjectNode changedEvent : changedEvents) {
+            assertEquals("restOffer", assertThrows(RuleRuntime.Unavailable.class,
+                    () -> HOST.stageOfferedRest(pack, sheet, changedEvent, rest, "owner", "stored-v1",
+                            StructuredRollTest.noRandom(), roster)).code());
+        }
+        assertEquals("restOffer", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageOfferedRest(pack, sheet, event, rest, "owner", "stored-v2",
+                        StructuredRollTest.noRandom(), roster)).code());
+        assertEquals("restOffer", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageOfferedRest(anotherPack, sheet, event, rest, "owner", "stored-v1",
+                        StructuredRollTest.noRandom(), roster)).code());
+        assertEquals("restOffer", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageOfferedRest(pack, changedSheet, event, rest, "owner", "stored-v1",
+                        StructuredRollTest.noRandom(), roster)).code());
+        assertEquals("restOffer", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageOfferedRest(pack, sheet, event, rest, "other-owner", "stored-v1",
+                        StructuredRollTest.noRandom(), roster)).code());
+        assertEquals("restOffer", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageOfferedRest(pack, sheet, event, rest.deepCopy().put("kind", "long"),
+                        "owner", "stored-v1", StructuredRollTest.noRandom(), roster)).code());
+        assertEquals("restOffer", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageOfferedRest(pack, sheet, event, rest.deepCopy().put("offerVersion", version + "x"),
+                        "owner", "stored-v1", StructuredRollTest.noRandom(), roster)).code());
+        assertEquals("restOffer", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageOfferedRest(pack, sheet, event, rest, "owner", "stored-v1",
+                        StructuredRollTest.noRandom(), new AutomationHost.RestRoster("other-version", scope -> {
+                            fail("A mismatched roster must not be loaded.");
+                            return List.of();
+                        }))).code());
+        ObjectNode missing = rest.deepCopy();
+        missing.remove("offerVersion");
+        assertThrows(IllegalArgumentException.class,
+                () -> HOST.stageOfferedRest(pack, sheet, event, missing,
+                        "owner", "stored-v1", StructuredRollTest.noRandom(), roster));
+        ObjectNode reordered = event.deepCopy();
+        reordered.set("type", reordered.remove("type"));
+        assertEquals(version, HOST.restOfferVersion(pack, sheet, reordered, "short", "owner", "stored-v1"));
+        assertEquals(original, sheet);
+    }
+
+    @Test
+    void offeredRestReplaysAfterRestartBeforeCheckingAStaleSnapshot() throws Exception {
+        var pack = pack();
+        ObjectNode sheet = sheet(), rest = request("short").put("requestId", "offered");
+        rest.put("offerVersion", HOST.restOfferVersion(pack, sheet, origin(), "short", "owner", "stored-v1"));
+        move(rest, "mend");
+        var staged = HOST.stageOfferedRest(pack, sheet, origin(), rest, "owner", "stored-v1",
+                StructuredRollTest.faces(4), null);
+        assertFalse(staged.replayed());
+        ObjectNode saved = sheet.deepCopy();
+        AutomationHost restarted = AutomationHost.bundled();
+        var replay = restarted.stageOfferedRest(pack, sheet, origin().put("sessionId", "later-session"), rest,
+                "owner", "stored-v2", StructuredRollTest.noRandom(),
+                new AutomationHost.RestRoster("stored-v2", scope -> {
+                    fail("A retry must not load recipients.");
+                    return List.of();
+                }));
+        assertTrue(replay.replayed());
+        assertEquals(staged.response(), replay.response());
+        assertTrue(replay.recipients().isEmpty());
+        assertTrue(replay.readVersions().isEmpty());
+        assertEquals(saved, sheet);
+        assertEquals("requestId", assertThrows(RuleRuntime.Unavailable.class,
+                () -> restarted.stageOfferedRest(pack, sheet, origin(), rest.deepCopy().put("offerVersion", "different"),
+                        "owner", "stored-v2", StructuredRollTest.noRandom(), null)).code());
+        assertEquals("requestId", assertThrows(RuleRuntime.Unavailable.class,
+                () -> restarted.stageOfferedRest(pack, sheet, origin(), rest,
+                        "other-owner", "stored-v2", StructuredRollTest.noRandom(), null)).code());
+
+        ObjectNode fresh = request("short").put("requestId", "fresh")
+                .put("offerVersion", HOST.restOfferVersion(pack, sheet, origin(), "short", "owner", "stored-v2"))
+                .put("expectedRevision", HOST.revision(sheet));
+        assertEquals("restOffer", assertThrows(RuleRuntime.Unavailable.class,
+                () -> restarted.stageOfferedRest(pack, sheet, origin(), fresh,
+                        "owner", "stored-v2", StructuredRollTest.noRandom(), null)).code());
+        assertEquals(saved, sheet);
+    }
+
+    @Test
     void failedStagedRestDoesNotRecordAReceiptAndTheJournalStaysBounded() throws Exception {
         var pack = pack();
         ObjectNode sheet = sheet(), failed = request("short").put("requestId", "failed");

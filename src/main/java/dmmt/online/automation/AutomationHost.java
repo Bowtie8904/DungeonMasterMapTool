@@ -5,9 +5,15 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dmmt.online.CampaignStore;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -60,9 +66,11 @@ public final class AutomationHost {
     }
 
     private final SheetProjection projection;
+    private final byte[] restOfferKey = new byte[32];
 
     public AutomationHost(SheetProjection projection) {
         this.projection = projection;
+        new SecureRandom().nextBytes(restOfferKey);
     }
 
     public static AutomationHost bundled() {
@@ -823,8 +831,8 @@ public final class AutomationHost {
         return applyEvent(pack, working, projection.state(working), event, candidates(pack, working, event), List.of(), random);
     }
 
-    record RestMember(String id, String name, String sheetVersion, long revision, Supplier<ObjectNode> loadSheet) {
-        RestMember {
+    public record RestMember(String id, String name, String sheetVersion, long revision, Supplier<ObjectNode> loadSheet) {
+        public RestMember {
             RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(id), "/recipient/id");
             if (name == null || name.isBlank() || sheetVersion == null || sheetVersion.isBlank()
                     || revision < 0 || revision > MAX_REST_REVISION || loadSheet == null)
@@ -832,16 +840,16 @@ public final class AutomationHost {
         }
     }
 
-    record RestRoster(String sourceVersion, Function<String, List<RestMember>> loadScope) {
-        RestRoster {
+    public record RestRoster(String sourceVersion, Function<String, List<RestMember>> loadScope) {
+        public RestRoster {
             if (sourceVersion == null || sourceVersion.isBlank() || loadScope == null)
                 throw RuleJson.error("/recipients", "A host source version and roster are required.");
         }
     }
 
-    record RestTransaction(ObjectNode response, Map<String, ObjectNode> recipients, Map<String, String> readVersions,
-                           boolean replayed) {
-        RestTransaction {
+    public record RestTransaction(ObjectNode response, Map<String, ObjectNode> recipients, Map<String, String> readVersions,
+                                  boolean replayed) {
+        public RestTransaction {
             response = response.deepCopy();
             recipients = copySheets(recipients);
             readVersions = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(readVersions));
@@ -955,8 +963,51 @@ public final class AutomationHost {
      */
     RestTransaction stageRestWithReceipt(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request,
                                          String principalId, RandomGenerator random, RestRoster roster) {
+        return stageRestReceipt(pack, sheet, origin, request, principalId, random, roster, null, false);
+    }
+
+    /**
+     * Signs a rest snapshot after the caller has authenticated its owner and obtained the stored-sheet version.
+     * This is a concurrency token, not permission to execute client-supplied rules or event facts.
+     */
+    public String restOfferVersion(Pack pack, ObjectNode sheet, ObjectNode origin, String kind,
+                                   String principalId, String sourceVersion) {
         if (principalId == null || principalId.isBlank()) throw new IllegalArgumentException("Missing automation principal.");
-        RuleJson.fields(request, "/request", "requestId", "kind", "expectedRevision", "preparation", "moves", "completion");
+        if (sourceVersion == null || sourceVersion.isBlank()) throw new IllegalArgumentException("Missing stored sheet version.");
+        if (pack == null || pack.rest() == null) throw new NotReady("The shared ruleset has no rest configuration.");
+        if (!"short".equals(kind) && !"long".equals(kind)) throw RuleJson.error("/rest/kind", "Expected short or long.");
+        RuleJson.object(origin, "/event");
+        RuleJson.id(origin.get("actorId"), "/event/actorId");
+        RuleJson.text(origin.get("sessionId"), "/event/sessionId");
+        RuleJson.checkTree(origin, "/event", 0, new int[]{0});
+        long revision = restRevision(RuleJson.object(sheet, "/sheet").deepCopy());
+        ObjectNode signed = RuleJson.JSON.createObjectNode().put("purpose", "rest-offer-v1")
+                .put("pack", pack.revision()).put("principal", principalId).put("sheetVersion", sourceVersion)
+                .put("revision", revision).put("kind", kind);
+        signed.set("event", canonical(origin));
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(restOfferKey, "HmacSHA256"));
+            byte[] signature = mac.doFinal(canonical(signed).toString().getBytes(StandardCharsets.UTF_8));
+            return "rest-v1." + Base64.getUrlEncoder().withoutPadding().encodeToString(signature);
+        } catch (GeneralSecurityException ex) {
+            throw new IllegalStateException("Cannot authenticate rest offers.", ex);
+        }
+    }
+
+    /** Stages a signed rest; the caller must authenticate ownership and atomically commit all dependencies. */
+    public RestTransaction stageOfferedRest(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request,
+                                            String principalId, String sourceVersion, RandomGenerator random, RestRoster roster) {
+        return stageRestReceipt(pack, sheet, origin, request, principalId, random, roster, sourceVersion, true);
+    }
+
+    private RestTransaction stageRestReceipt(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request,
+                                             String principalId, RandomGenerator random, RestRoster roster,
+                                             String sourceVersion, boolean offered) {
+        if (principalId == null || principalId.isBlank()) throw new IllegalArgumentException("Missing automation principal.");
+        if (offered)
+            RuleJson.fields(request, "/request", "requestId", "offerVersion", "kind", "expectedRevision", "preparation", "moves", "completion");
+        else RuleJson.fields(request, "/request", "requestId", "kind", "expectedRevision", "preparation", "moves", "completion");
         RuleJson.checkTree(request, "/request", 0, new int[]{0});
         String requestId = RuleJson.id(request.get("requestId"), "/request/requestId");
         String fingerprint = intentFingerprint(request);
@@ -965,8 +1016,17 @@ public final class AutomationHost {
         ObjectNode replay = replayReceipt(projection.state(working), requestId, principalId, false, fingerprint, false);
         if (replay != null) return new RestTransaction(replay, Map.of(), Map.of(), true);
 
+        if (offered) {
+            String supplied = RuleJson.text(request.get("offerVersion"), "/request/offerVersion");
+            String expected = restOfferVersion(pack, working, origin, request.path("kind").asText(), principalId, sourceVersion);
+            if (!MessageDigest.isEqual(supplied.getBytes(StandardCharsets.UTF_8), expected.getBytes(StandardCharsets.UTF_8)))
+                throw new RuleRuntime.Unavailable("restOffer", "The rest offer changed. Reopen downtime.");
+            if (roster != null && !sourceVersion.equals(roster.sourceVersion()))
+                throw new RuleRuntime.Unavailable("restOffer", "The rest roster changed. Reopen downtime.");
+        }
         ObjectNode rest = request.deepCopy();
         rest.remove("requestId");
+        rest.remove("offerVersion");
         RestTransaction staged = stageRest(pack, working, origin, rest, random, roster);
         ObjectNode response = staged.response().put("requestId", requestId);
         RuleJson.checkTree(response, "/response", 0, new int[]{0});
