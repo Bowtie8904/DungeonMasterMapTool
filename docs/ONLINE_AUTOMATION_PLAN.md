@@ -131,6 +131,10 @@ checks the expected revision, and applies authorized selected `rest.prepare` opt
 on a copy. Invalid choices, an exhausted short-rest allowance and invalid plans leave the sheet unchanged.
 It does not finish a rest, advance the counters or persist anything; a live transaction still has to compose
 preparation with downtime, effect expiry, resets, receipts and the outbox.
+An isolated move primitive derives its event identity and target flag from compiled metadata, applies automatic
+and selected move adjustments before the chosen button, and tracks source-scoped duplicate groups, move slots
+and short-rest long-move allowances. It returns dice, reports and commands without persisting. Post-move ordering,
+recipient and post-outcome choices, complete rest transactions and browser integration remain release gaps.
 
 Ordinary and targeted sheet requests accept only `sheet` bindings, even when another surface uses the same event.
 Roll options and saved-result actions use their own validated surfaces. The planned authoritative rest flow has not

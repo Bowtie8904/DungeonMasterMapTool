@@ -807,6 +807,7 @@ public final class AutomationHost {
         var candidates = candidates(pack, working, event);
         ObjectNode request = RuleJson.JSON.createObjectNode();
         request.set("selections", choices);
+        RuleJson.checkTree(request, "/request", 0, new int[]{0});
         var intents = selections(request, candidates, revision, "self", "rest", false);
         Map<String, RuleDispatcher.Candidate> byInstance = new HashMap<>();
         candidates.forEach(candidate -> byInstance.put(candidate.instanceId(), candidate));
@@ -826,6 +827,127 @@ public final class AutomationHost {
             throw new RuleRuntime.Unavailable("blocked", response.at("/event/blocked/0/reason").asText());
         replace(sheet, working);
         return response;
+    }
+
+    record RestMoveGroup(String sourceInstanceId, String group) {}
+    record RestProgress(String kind, int moves, int longMoves, int slotsUsed, int longMovesUsed, int count,
+                        Set<RestMoveGroup> groups) {
+        RestProgress { groups = Set.copyOf(groups); }
+    }
+    record RestMoveResult(RestProgress progress, ObjectNode response) {}
+
+    RestProgress restProgress(Pack pack, ObjectNode preparation) {
+        if (pack.rest() == null) throw new NotReady("The shared ruleset has no rest configuration.");
+        JsonNode event = preparation.path("event"), plan = event.path("rest");
+        if (!"rest.prepare".equals(event.path("type").asText()))
+            throw RuleJson.error("/event/type", "Expected a prepared rest.");
+        String kind = plan.path("kind").asText();
+        if (!Set.of("short", "long").contains(kind)) throw RuleJson.error("/event/rest/kind", "Expected short or long.");
+        RestLimits limits = "short".equals(kind) ? pack.rest().shortRest() : pack.rest().longRest();
+        int moves = RuleJson.integer(plan.get("moves"), "/event/rest/moves", 0, limits.maxMoves());
+        int longMoves = RuleJson.integer(plan.get("longMoves"), "/event/rest/longMoves", 0, limits.maxLongMoves());
+        return new RestProgress(kind, moves, longMoves, 0, 0, 0, Set.of());
+    }
+
+    /** Stages one move. Progress and the caller's sheet change only after all move checks succeed. */
+    RestMoveResult restMove(Pack pack, ObjectNode sheet, ObjectNode origin, RestProgress progress,
+                            ObjectNode selection, ArrayNode options, RandomGenerator random) {
+        if (progress.count() >= 64) throw RuleJson.error("/rest/moves", "A rest may contain at most 64 moves.");
+        RuleJson.fields(selection, "/selection", "sourceInstanceId", "ruleId", "bindingId", "inputs");
+        RuleJson.checkTree(selection, "/selection", 0, new int[]{0});
+        String instanceId = RuleJson.id(selection.get("sourceInstanceId"), "/selection/sourceInstanceId");
+        String ruleId = RuleJson.text(selection.get("ruleId"), "/selection/ruleId");
+        String bindingId = RuleJson.text(selection.get("bindingId"), "/selection/bindingId");
+        ObjectNode working = sheet.deepCopy();
+        var element = sources(pack, working).stream().filter(source -> instanceId.equals(source.instanceId())).findFirst()
+                .orElseThrow(() -> new RuleRuntime.Unavailable("source", "This source is no longer active."));
+        var program = pack.programs().get(element.sourceId());
+        if (program == null) throw new RuleRuntime.Unavailable("source", "This source is no longer active.");
+        JsonNode binding = RuleDispatcher.binding(program.rule(ruleId), bindingId);
+        if (!binding.has("restMove") || !allowed(binding.path("audience").asText("self"), "self"))
+            throw new RuleRuntime.Unavailable("move", "This is not an available downtime move.");
+        JsonNode metadata = binding.path("restMove");
+        String id = metadata.path("id").asText(), availability = metadata.path("kind").asText();
+        if ("short".equals(availability) && !"short".equals(progress.kind())
+                || "long".equals(availability) && !"long".equals(progress.kind()))
+            throw new RuleRuntime.Unavailable("move", "This move is not available during this rest.");
+        boolean usesLongAllowance = "short".equals(progress.kind()) && "longMove".equals(availability);
+        if (usesLongAllowance && progress.longMovesUsed() >= progress.longMoves())
+            throw new RuleRuntime.Unavailable("longMove", "No long-rest move remains available during this short rest.");
+        RestMoveGroup group = new RestMoveGroup(instanceId, metadata.path("group").asText(id));
+        if (progress.groups().contains(group))
+            throw new RuleRuntime.Unavailable("duplicateMove", "This downtime move was already chosen.");
+
+        ObjectNode event = RuleJson.object(origin, "/event").deepCopy().put("type", "downtime.move");
+        ObjectNode move = event.putObject("move").put("id", id).put("rest", progress.kind())
+                .put("long", "longMove".equals(availability)).put("ally", metadata.path("ally").asBoolean(false))
+                .put("slots", 1).put("bonus", 0).put("allies", 0);
+        ObjectNode adjustable = move.putObject("adjustable");
+        adjustable.putObject("slots").put("min", 0).put("max", 1);
+        adjustable.putObject("bonus").put("min", -1000).put("max", 1000);
+        adjustable.putObject("allies").put("min", 0).put("max", 128);
+
+        ObjectNode state = projection.state(working);
+        var candidates = candidates(pack, working, event);
+        ObjectNode request = RuleJson.JSON.createObjectNode();
+        request.set("selections", options);
+        RuleJson.checkTree(request, "/request", 0, new int[]{0});
+        var intents = selections(request, candidates, state.path("revision").asLong(), "self", "downtime", false);
+        Map<String, RuleDispatcher.Candidate> byInstance = new HashMap<>();
+        candidates.forEach(candidate -> byInstance.put(candidate.instanceId(), candidate));
+        for (var intent : intents) {
+            JsonNode option = RuleDispatcher.binding(byInstance.get(intent.sourceInstanceId()).program().rule(intent.ruleId()),
+                    intent.bindingId());
+            if (!"downtime.move".equals(option.path("event").asText()) || !"option".equals(option.path("mode").asText()))
+                throw RuleJson.error("/request/selections", "Choose only downtime move options.");
+        }
+        ObjectNode result = applyEvent(pack, working, state, event, candidates, intents, random);
+        ObjectNode adjusted = RuleJson.object(result.get("event"), "/event");
+        validateRestMove(adjusted, move);
+        candidates = candidates(pack, working, adjusted);
+        var candidate = candidates.stream().filter(item -> instanceId.equals(item.instanceId())
+                        && element.sourceId().equals(item.program().sourceId())).findFirst()
+                .orElseThrow(() -> new RuleRuntime.Unavailable("source", "This source is no longer active."));
+        JsonNode currentBinding = RuleDispatcher.binding(candidate.program().rule(ruleId), bindingId);
+        if (!metadata.equals(currentBinding.path("restMove")))
+            throw new RuleRuntime.Unavailable("move", "This downtime move changed.");
+        ObjectNode inputs = selection.has("inputs") ? RuleJson.object(selection.get("inputs"), "/selection/inputs")
+                : RuleJson.JSON.createObjectNode();
+        var intent = new RuleRuntime.Intent(ruleId, bindingId, instanceId, revision(working), inputs);
+        var resolution = RuleRuntime.execute(candidate.program(), intent, candidate.context(), random, pack.programs());
+        var action = new RuleDispatcher.ActionResult(instanceId, ruleId, bindingId, resolution.report(),
+                resolution.publishedRolls(), resolution.diceRolls());
+        List<ObjectNode> commands = new ArrayList<>();
+        resolution.context().path("outbox").forEach(command -> commands.add((ObjectNode) command));
+        ObjectNode after = applyResolved(pack, working, projection.state(working), adjusted,
+                List.of(resolution.context()), List.of(action), commands);
+        ObjectNode finalEvent = RuleJson.object(after.get("event"), "/event");
+        validateRestMove(finalEvent, move);
+        int slots = finalEvent.at("/move/slots").intValue();
+        if (progress.slotsUsed() + slots > progress.moves())
+            throw new RuleRuntime.Unavailable("restMoves", "No downtime move slots remain.");
+        for (String key : List.of("actions", "outbox")) ((ArrayNode) result.get(key)).addAll((ArrayNode) after.get(key));
+        result.set("event", finalEvent);
+        result.put("revision", after.path("revision").asLong());
+        Set<RestMoveGroup> groups = new java.util.HashSet<>(progress.groups());
+        groups.add(group);
+        RestProgress next = new RestProgress(progress.kind(), progress.moves(), progress.longMoves(),
+                progress.slotsUsed() + slots, progress.longMovesUsed() + (usesLongAllowance ? 1 : 0),
+                progress.count() + 1, groups);
+        replace(sheet, working);
+        return new RestMoveResult(next, result);
+    }
+
+    private static void validateRestMove(ObjectNode event, ObjectNode initial) {
+        JsonNode move = event.path("move");
+        for (String field : List.of("id", "rest", "long", "ally", "adjustable"))
+            if (!initial.path(field).equals(move.path(field)))
+                throw RuleJson.error("/event/move/" + field, "The move identity or bounds changed.");
+        RuleJson.integer(move.get("slots"), "/event/move/slots", 0, 1);
+        RuleJson.integer(move.get("bonus"), "/event/move/bonus", -1000, 1000);
+        RuleJson.integer(move.get("allies"), "/event/move/allies", 0, 128);
+        if (!event.path("blocked").isEmpty())
+            throw new RuleRuntime.Unavailable("blocked", event.at("/blocked/0/reason").asText());
     }
 
     private ObjectNode applyEvent(Pack pack, ObjectNode working, ObjectNode state, ObjectNode event,

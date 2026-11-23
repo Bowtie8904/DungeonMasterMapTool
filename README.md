@@ -49,7 +49,8 @@ connected to the live rest workflow.
 Converted downtime buttons now describe their host-validated move identity and rest restriction. This metadata
 and the shared ruleset's validated rest limits do not yet make the format-2 rest workflow available.
 The host can stage and validate rest preparation on a private copy, including option costs, but downtime and
-the final atomic rest transaction are still required.
+move execution are still isolated primitives; post-move ordering, the final atomic rest transaction and
+the player workflow are still required.
 New automation effects record their source character as well as their source instance, so another character
 using the same instance ID cannot take over local effect actions or profiles. Starting a single-holder effect
 now removes that source's copies from other saved characters, including offline or disabled ones, in the same
