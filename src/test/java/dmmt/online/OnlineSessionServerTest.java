@@ -2211,6 +2211,155 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void shippedBaseRewardsAndConvertedAlternativesPersistExclusively() throws Exception {
+        automationCompendium();
+        Path rules = java.nio.file.Files.createDirectories(compendiumDir.resolve("rules"));
+        java.nio.file.Files.writeString(rules.resolve("recipes.json"), dmmt.online.automation.LegacyCatalogConverter.coreRecipes());
+        java.nio.file.Files.writeString(rules.resolve("ruleset.json"), dmmt.online.automation.LegacyCatalogConverter.coreRuleset());
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        var converted = dmmt.online.automation.LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"classes","entries":[
+                 {"id":"brawler","name":"Brawler","automation":{"criticalMelee":{"hope":1,"stress":1}}}]}
+                """);
+        assertTrue(converted.diagnostics().isEmpty(), converted.diagnostics().toString());
+        ((ObjectNode) catalog.at("/entries/0/features/1")).set("automation", converted.catalog().at("/entries/0/automation"));
+        ObjectNode steady = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        ((ObjectNode) steady.at("/profiles/0")).put("range", "melee");
+        steady.withArray("rules").add(MAPPER.readTree("""
+                {"id":"revise","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button"}],
+                 "do":[{"op":"roll.contribute","from":{"read":"event.roll"},"as":"edited",
+                  "contribution":{"id":"bonus","kind":"flat","role":"modifier","label":"Bonus","value":2}},
+                  {"op":"roll.publish","roll":{"read":"result.edited"}}],"ui":{"label":"Revise"}}
+                """));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String owner = cookie(), other = allyCookie("shared-reward-viewer"), campaignId = campaign.getId();
+        long seed = 0;
+        while (true) {
+            var random = new java.util.Random(seed);
+            if (random.nextInt(12) == random.nextInt(12)) break;
+            seed++;
+        }
+        for (boolean chooseBase : List.of(true, false)) {
+            String actorId = chooseBase ? "base-roller" : "alternate-roller";
+            campaign.getActors().add(Campaign.Actor.builder().id(actorId).name("Ada").ownerId(playerId()).build());
+            store.saveSheet(campaignId, actorId, """
+                    {"name":"Ada","level":2,"hope":{"slots":6,"on":1},"stress":{"slots":6,"on":3},
+                     "traits":[{"name":"Finesse","mod":1}],"features":[
+                      {"name":"Forage","instanceId":"f","automationSource":"classes:tester:features:forage"},
+                      {"name":"Steady","instanceId":"s","automationSource":"classes:tester:features:steady"}]}""");
+            String roll = """
+                    {"request":{"requestId":"roll","expectedRevision":0,"selections":[],
+                     "profileRoll":{"sourceInstanceId":"s","profileId":"thrown","kind":"attack"}}}""";
+            diceSeed(seed);
+            var rolled = automationHttp(owner, actorId, roll);
+            assertEquals(200, rolled.statusCode(), rolled.body());
+            JsonNode receipt = MAPPER.readTree(rolled.body());
+            assertTrue(receipt.requiredAt("/event/check/critical").booleanValue());
+            assertEquals(List.of("critical-melee-reward", "revise", "critical-reward"),
+                    receipt.required("resultActions").findValuesAsText("ruleId"));
+            String resultId = receipt.requiredAt("/event/resultId").textValue();
+            String source = chooseBase ? "ruleset:base" : "f";
+            String rule = chooseBase ? "critical-reward" : "critical-melee-reward";
+            String claim = """
+                    {"request":{"requestId":"claim","expectedRevision":1,"resultId":"%s",
+                     "selections":[{"sourceInstanceId":"%s","ruleId":"%s","bindingId":"claim"}]}}
+                    """.formatted(resultId, source, rule);
+            assertEquals(403, automationHttp(other, actorId, claim).statusCode());
+            int history = store.historyTail(campaignId, 100).size();
+            var claimed = automationHttp(owner, actorId, claim);
+            assertEquals(200, claimed.statusCode(), claimed.body());
+            assertEquals(claimed.body(), automationHttp(owner, actorId, claim).body());
+            assertEquals(history + 1, store.historyTail(campaignId, 100).size());
+            JsonNode saved = MAPPER.readTree(store.loadSheet(campaignId, actorId));
+            assertEquals(chooseBase ? 2 : 3, saved.requiredAt("/hope/on").intValue());
+            assertEquals(chooseBase ? 2 : 1, saved.requiredAt("/stress/on").intValue());
+            assertEquals(List.of("revise"), MAPPER.readTree(resultHttp(owner, actorId, resultId).body())
+                    .required("actions").findValuesAsText("ruleId"));
+            String revise = """
+                    {"request":{"requestId":"revise","expectedRevision":2,"resultId":"%s",
+                     "selections":[{"sourceInstanceId":"s","ruleId":"revise","bindingId":"use"}]}}
+                    """.formatted(resultId);
+            var revised = automationHttp(owner, actorId, revise);
+            assertEquals(200, revised.statusCode(), revised.body());
+            assertFalse(MAPPER.readTree(revised.body()).has("resultActions"));
+            assertEquals(revised.body(), automationHttp(owner, actorId, revise).body());
+        }
+
+        campaign.getActors().add(Campaign.Actor.builder().id("capped").name("Capped").ownerId(playerId()).build());
+        store.saveSheet(campaignId, "capped", """
+                {"name":"Capped","hope":{"slots":6,"on":6},"stress":{"slots":6,"on":1},
+                 "traits":[{"name":"Finesse","mod":1}],"features":[
+                  {"name":"Steady","instanceId":"s","automationSource":"classes:tester:features:steady"}]}""");
+        String roll = """
+                {"request":{"requestId":"roll","expectedRevision":0,"selections":[],
+                 "profileRoll":{"sourceInstanceId":"s","profileId":"thrown","kind":"attack"}}}""";
+        diceSeed(seed);
+        JsonNode cappedRoll = MAPPER.readTree(automationHttp(owner, "capped", roll).body());
+        assertEquals(List.of("revise", "critical-reward"), cappedRoll.required("resultActions").findValuesAsText("ruleId"));
+        String claim = """
+                {"request":{"requestId":"claim","expectedRevision":1,"resultId":"%s",
+                 "selections":[{"sourceInstanceId":"ruleset:base","ruleId":"critical-reward","bindingId":"claim"}]}}
+                """.formatted(cappedRoll.requiredAt("/event/resultId").textValue());
+        assertEquals(200, automationHttp(owner, "capped", claim).statusCode());
+        JsonNode capped = MAPPER.readTree(store.loadSheet(campaignId, "capped"));
+        assertEquals(6, capped.requiredAt("/hope/on").intValue());
+        assertEquals(0, capped.requiredAt("/stress/on").intValue());
+        diceSeed(seed);
+        var noBenefit = automationHttp(owner, "capped", roll.replace("\"roll\"", "\"next\"").replace("\"expectedRevision\":0", "\"expectedRevision\":2"));
+        assertEquals(200, noBenefit.statusCode(), noBenefit.body());
+        assertEquals(List.of("revise"), MAPPER.readTree(noBenefit.body()).required("resultActions").findValuesAsText("ruleId"));
+
+        campaign.getActors().add(Campaign.Actor.builder().id("hope-roller").name("Hope").ownerId(playerId()).build());
+        store.saveSheet(campaignId, "hope-roller", """
+                {"name":"Hope","hope":{"slots":6,"on":1},"stress":{"slots":6,"on":2},
+                 "traits":[{"name":"Finesse","mod":1}],"features":[
+                  {"name":"Steady","instanceId":"s","automationSource":"classes:tester:features:steady"}]}""");
+        long hopeSeed = 0;
+        while (true) {
+            var random = new java.util.Random(hopeSeed);
+            if (random.nextInt(12) > random.nextInt(12)) break;
+            hopeSeed++;
+        }
+        diceSeed(hopeSeed);
+        var hopeResponse = automationHttp(owner, "hope-roller", roll);
+        assertEquals(200, hopeResponse.statusCode(), hopeResponse.body());
+        JsonNode hopeRoll = MAPPER.readTree(hopeResponse.body());
+        assertEquals("hope", hopeRoll.requiredAt("/event/check/dominant").textValue());
+        assertFalse(hopeRoll.requiredAt("/event/check/critical").booleanValue());
+        assertEquals(List.of("revise", "hope-reward"), hopeRoll.required("resultActions").findValuesAsText("ruleId"));
+        String hopeResultId = hopeRoll.requiredAt("/event/resultId").textValue();
+        String hopeClaim = """
+                {"request":{"requestId":"claim","expectedRevision":1,"resultId":"%s",
+                 "selections":[{"sourceInstanceId":"ruleset:base","ruleId":"hope-reward","bindingId":"claim"}]}}
+                """.formatted(hopeResultId);
+        String beforeStaleClaims = store.loadSheet(campaignId, "hope-roller");
+        for (String[] change : List.of(
+                new String[]{"ruleset.json", "Gain 1 Hope", "Earn 1 Hope"},
+                new String[]{"recipes.json", "Choose a weapon die to remove", "Select a weapon die to remove"})) {
+            Path document = rules.resolve(change[0]);
+            String original = java.nio.file.Files.readString(document);
+            String changed = original.replace(change[1], change[2]);
+            assertNotEquals(original, changed);
+            assertEquals(original.length(), changed.length());
+            var timestamp = java.nio.file.Files.getLastModifiedTime(document);
+            java.nio.file.Files.writeString(document, changed);
+            java.nio.file.Files.setLastModifiedTime(document, timestamp);
+            assertEquals(409, resultHttp(owner, "hope-roller", hopeResultId).statusCode(),
+                    "A changed shared document invalidates existing result windows.");
+            assertEquals(409, automationHttp(owner, "hope-roller", hopeClaim).statusCode());
+            assertEquals(beforeStaleClaims, store.loadSheet(campaignId, "hope-roller"));
+            java.nio.file.Files.writeString(document, original);
+        }
+        var hopeReceipt = automationHttp(owner, "hope-roller", hopeClaim);
+        assertEquals(200, hopeReceipt.statusCode(), hopeReceipt.body());
+        assertEquals(hopeReceipt.body(), automationHttp(owner, "hope-roller", hopeClaim).body());
+        JsonNode hopeSaved = MAPPER.readTree(store.loadSheet(campaignId, "hope-roller"));
+        assertEquals(2, hopeSaved.requiredAt("/hope/on").intValue());
+        assertEquals(2, hopeSaved.requiredAt("/stress/on").intValue());
+    }
+
+    @Test
     void targetedResultActionsCommitOneChosenRecipient() throws Exception {
         targetedResultAction("one");
     }

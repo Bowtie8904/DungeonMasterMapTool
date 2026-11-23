@@ -116,6 +116,19 @@
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <resource>
+                <directory>dmmap-daggerheart/rules</directory>
+                <targetPath>dmmt/automation</targetPath>
+                <includes>
+                    <include>recipes.json</include>
+                    <include>ruleset.json</include>
+                </includes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

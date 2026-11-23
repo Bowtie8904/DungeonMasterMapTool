@@ -7,6 +7,7 @@ import org.junit.jupiter.api.io.TempDir;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -284,7 +285,29 @@ class LegacyCatalogConverterTest {
         LegacyCatalogConverter.main(new String[]{legacy.toString(), staging.toString()});
         assertTrue(Files.readString(staging.resolve("classes.json")).contains("\"version\" : 2"));
         assertTrue(Files.readString(staging.resolve("conversion-report.json")).contains("\"converted\" : 1"));
+        assertEquals(LegacyCatalogConverter.coreRecipes(), Files.readString(staging.resolve("rules").resolve("recipes.json")));
+        assertEquals(LegacyCatalogConverter.coreRuleset(), Files.readString(staging.resolve("rules").resolve("ruleset.json")));
+        assertFalse(Files.exists(staging.resolve("rules.json")));
         assertTrue(Files.readString(legacy.resolve("classes.json")).contains("\"version\":1"));
+    }
+
+    @Test
+    void conversionPreservesValidatedSharedRulesAndRejectsAnIncompleteDirectory(@TempDir Path temp) throws Exception {
+        Path legacy = Files.createDirectories(temp.resolve("legacy"));
+        Files.writeString(legacy.resolve("classes.json"), catalog("""
+                {"id":"x","name":"X","automation":{"actions":[{"id":"use","label":"Use"}]}}"""));
+        Path rules = Files.createDirectories(legacy.resolve("rules"));
+        Files.writeString(rules.resolve("recipes.json"), LegacyCatalogConverter.coreRecipes());
+        assertThrows(IOException.class, () -> LegacyCatalogConverter.main(new String[]{legacy.toString(), temp.resolve("missing").toString()}));
+        String customized = LegacyCatalogConverter.coreRuleset().replace("Daggerheart rules", "Home rules");
+        Files.writeString(rules.resolve("ruleset.json"), customized);
+        Path staging = temp.resolve("staging");
+        LegacyCatalogConverter.main(new String[]{legacy.toString(), staging.toString()});
+        assertEquals(customized, Files.readString(staging.resolve("rules").resolve("ruleset.json")));
+        assertEquals(LegacyCatalogConverter.coreRecipes(), Files.readString(staging.resolve("rules").resolve("recipes.json")));
+        Files.writeString(rules.resolve("ruleset.json"), "{invalid");
+        assertThrows(AutomationHost.NotReady.class,
+                () -> LegacyCatalogConverter.main(new String[]{legacy.toString(), temp.resolve("invalid").toString()}));
     }
 
     @Test
@@ -792,6 +815,8 @@ class LegacyCatalogConverterTest {
         assertEquals("result", brawler.rule("critical-melee-reward").at("/bindings/0/claimGroupScope").asText());
         assertEquals(List.of("critical-melee-reward"), available(brawler, crit, "roll"));
         assertEquals(List.of(), available(brawler, context(brawler, me, melee.replace("melee\"", "far\"")), "roll"));
+        String capped = me.replace("\"value\":2", "\"value\":6").replace("\"marked\":3", "\"marked\":0");
+        assertEquals(List.of(), available(brawler, context(brawler, capped, melee), "roll"));
         var claim = RuleDispatcher.executeClaims(List.of(new RuleDispatcher.Candidate(brawler, crit)),
                 List.of(new RuleDispatcher.ClaimIntent(new RuleRuntime.Intent("critical-melee-reward", "claim", "fixture", 0, RuleJson.JSON.createObjectNode()), "me", 0, 0)),
                 List.of(new RuleDispatcher.RecipientCandidate("me", (ObjectNode) crit.path("actor").deepCopy(), 0)),

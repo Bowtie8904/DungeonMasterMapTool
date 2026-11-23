@@ -52,7 +52,9 @@ Candidate catalog validation checks recipe argument declarations, defaults, UI t
 For candidate format-2 packs, `rules\recipes.json` and `rules\ruleset.json` are loaded together as shared
 rules. The ruleset is an always-active, per-character source using the same generic operations as other
 sources. An incomplete or invalid `rules` directory makes the pack unavailable; older development fixtures
-without that directory can still use root `rules.json`. Shipped base rules and editor support remain pending.
+without that directory can still use root `rules.json`. The shared ruleset includes the normal Hope and
+critical reward, exclusive with converted alternatives; it applies to integrated format-2 profile rolls.
+Other roll origins and shared-rules editor support remain pending.
 
 In a format-2 pack, an owner can roll a declared attack profile or its damage. The host resolves
 the profile from the saved sheet and commits its edited dice, reactions and costs together. A blocked

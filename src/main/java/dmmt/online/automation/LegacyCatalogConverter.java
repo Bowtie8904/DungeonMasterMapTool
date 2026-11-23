@@ -90,8 +90,17 @@ public final class LegacyCatalogConverter {
 
     /** Shipped recipes that converted catalogs may reference with {@code useRecipe}. */
     public static String coreRecipes() {
-        try (var in = LegacyCatalogConverter.class.getResourceAsStream("/dmmt/automation/core-recipes.json")) {
-            if (in == null) throw new IllegalStateException("Missing core-recipes.json resource.");
+        return sharedRulesResource("recipes.json");
+    }
+
+    /** Shipped default ruleset for conversion of catalogs without a shared rules directory. */
+    public static String coreRuleset() {
+        return sharedRulesResource("ruleset.json");
+    }
+
+    private static String sharedRulesResource(String file) {
+        try (var in = LegacyCatalogConverter.class.getResourceAsStream("/dmmt/automation/" + file)) {
+            if (in == null) throw new IllegalStateException("Missing shared rules resource: " + file);
             return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
         } catch (IOException ex) {
             throw new IllegalStateException(ex);
@@ -103,6 +112,10 @@ public final class LegacyCatalogConverter {
     }
 
     public static Result convert(String legacyJson, Map<String, ObjectNode> sharedPools) throws IOException {
+        return convert(legacyJson, sharedPools, RuleJson.parse(coreRecipes()));
+    }
+
+    private static Result convert(String legacyJson, Map<String, ObjectNode> sharedPools, JsonNode recipes) throws IOException {
         JsonNode parsed = RuleJson.parse(legacyJson, RuleJson.MAX_DOCUMENT_CHARACTERS, RuleJson.MAX_DOCUMENT_NODES);
         if (!parsed.isObject() || !"dmmap-daggerheart".equals(parsed.path("format").asText()) || parsed.path("version").asInt() != 1)
             throw new IllegalArgumentException("Expected a format-1 dmmap-daggerheart catalog.");
@@ -110,7 +123,6 @@ public final class LegacyCatalogConverter {
         catalog.put("version", RuleCompiler.FORMAT_VERSION);
         String category = catalog.path("category").asText();
         Context context = new Context();
-        JsonNode recipes = RuleJson.parse(coreRecipes());
         JsonNode entries = catalog.path("entries");
         for (int i = 0; i < entries.size(); i++) {
             JsonNode entry = entries.get(i);
@@ -1441,7 +1453,11 @@ public final class LegacyCatalogConverter {
                 .put("surface", "roll").put("mode", "button").put("claimGroup", "roll-reward")
                 .put("claimGroupScope", "result").put("audience", "self");
         binding.putObject("claimScope").put("recipients", "sourceActor");
-        applyWhen(reward, when.deepCopy());
+        ArrayNode rewardWhen = when.deepCopy();
+        ArrayNode hasBenefit = rewardWhen.addObject().putArray("or");
+        hasBenefit.addObject().putArray("lt").add(read("actor.hope.value")).add(read("actor.hope.max"));
+        hasBenefit.addObject().putArray("gt").add(read("actor.stress.marked")).add(0);
+        applyWhen(reward, rewardWhen);
         ArrayNode steps = reward.putArray("do");
         steps.addObject().put("op", "resource.gain").put("pool", "actor.hope").put("amount", hope).put("as", "hope");
         steps.addObject().put("op", "track.clear").put("track", "actor.stress").put("amount", stress).put("as", "stress");
@@ -5056,6 +5072,19 @@ public final class LegacyCatalogConverter {
         if (staging.startsWith(source) || source.startsWith(staging))
             throw new IllegalArgumentException("The staging directory must be separate from the shipped catalogs.");
         Files.createDirectories(staging);
+        Path sourceRules = source.resolve("rules");
+        String recipesText, rulesetText;
+        if (Files.notExists(sourceRules)) {
+            recipesText = coreRecipes();
+            rulesetText = coreRuleset();
+        } else {
+            if (!Files.isDirectory(sourceRules))
+                throw new IOException("The reserved rules path is not a directory: " + sourceRules);
+            recipesText = Files.readString(sourceRules.resolve("recipes.json"));
+            rulesetText = Files.readString(sourceRules.resolve("ruleset.json"));
+        }
+        AutomationHost.compile("conversion-rules", Map.of(), recipesText, rulesetText);
+        JsonNode recipes = RuleJson.parse(recipesText);
         ObjectNode report = RuleJson.JSON.createObjectNode();
         ObjectNode catalogs = report.putObject("catalogs");
         Map<String, Integer> reasons = new TreeMap<>();
@@ -5072,7 +5101,7 @@ public final class LegacyCatalogConverter {
         Map<String, ObjectNode> shared = sharedPools(List.copyOf(texts.values()));
         for (var legacyCatalog : texts.entrySet()) {
             Path file = legacyCatalog.getKey();
-            Result result = convert(legacyCatalog.getValue(), shared);
+            Result result = convert(legacyCatalog.getValue(), shared, recipes);
             String json = RuleJson.JSON.writerWithDefaultPrettyPrinter().writeValueAsString(result.catalog());
             outputs.put(result.catalog().path("category").asText(), json);
             Files.writeString(staging.resolve(file.getFileName()), json);
@@ -5088,8 +5117,10 @@ public final class LegacyCatalogConverter {
             ObjectNode ids = entry.putObject("assignedIds");
             result.assignedIds().forEach(ids::put);
         }
-        Files.writeString(staging.resolve("rules.json"), coreRecipes());
-        for (String output : outputs.values()) RuleCatalog.compile(output, coreRecipes());
+        AutomationHost.compile("conversion-pack", outputs, recipesText, rulesetText);
+        Path stagedRules = Files.createDirectories(staging.resolve("rules"));
+        Files.writeString(stagedRules.resolve("recipes.json"), recipesText);
+        Files.writeString(stagedRules.resolve("ruleset.json"), rulesetText);
         report.put("blocks", blocks).put("converted", converted);
         ObjectNode summary = report.putObject("reasons");
         reasons.forEach(summary::put);

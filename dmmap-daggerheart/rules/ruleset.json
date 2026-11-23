@@ -1,0 +1,68 @@
+{
+  "format": "dmmap-daggerheart-ruleset",
+  "version": 2,
+  "name": "Daggerheart rules",
+  "automation": {
+    "rules": [
+      {
+        "id": "hope-reward",
+        "bindings": [{
+          "id": "claim",
+          "event": "roll.finished",
+          "surface": "roll",
+          "mode": "button",
+          "audience": "self",
+          "claimGroup": "roll-reward",
+          "claimGroupScope": "result",
+          "claimScope": { "recipients": "sourceActor" }
+        }],
+        "when": { "and": [
+          { "eq": [{ "read": "event.check.duality" }, true] },
+          { "ne": [{ "read": "event.check.kind" }, "reaction"] },
+          { "ne": [{ "read": "event.check.kind" }, "death"] },
+          { "eq": [{ "read": "event.check.dominant" }, "hope"] },
+          { "eq": [{ "read": "event.check.critical" }, false] },
+          { "lt": [{ "read": "actor.hope.value" }, { "read": "actor.hope.max" }] }
+        ] },
+        "do": [
+          { "op": "resource.gain", "pool": "actor.hope", "amount": 1, "as": "hope" }
+        ],
+        "ui": {
+          "label": "Gain 1 Hope",
+          "report": "{actor.name} gained {result.hope} Hope."
+        }
+      },
+      {
+        "id": "critical-reward",
+        "bindings": [{
+          "id": "claim",
+          "event": "roll.finished",
+          "surface": "roll",
+          "mode": "button",
+          "audience": "self",
+          "claimGroup": "roll-reward",
+          "claimGroupScope": "result",
+          "claimScope": { "recipients": "sourceActor" }
+        }],
+        "when": { "and": [
+          { "eq": [{ "read": "event.check.duality" }, true] },
+          { "ne": [{ "read": "event.check.kind" }, "reaction"] },
+          { "ne": [{ "read": "event.check.kind" }, "death"] },
+          { "eq": [{ "read": "event.check.critical" }, true] },
+          { "or": [
+            { "lt": [{ "read": "actor.hope.value" }, { "read": "actor.hope.max" }] },
+            { "gt": [{ "read": "actor.stress.marked" }, 0] }
+          ] }
+        ] },
+        "do": [
+          { "op": "resource.gain", "pool": "actor.hope", "amount": 1, "as": "hope" },
+          { "op": "track.clear", "track": "actor.stress", "amount": 1, "as": "stress" }
+        ],
+        "ui": {
+          "label": "Gain Hope and clear Stress",
+          "report": "{actor.name} gained {result.hope} Hope and cleared {result.stress} Stress."
+        }
+      }
+    ]
+  }
+}

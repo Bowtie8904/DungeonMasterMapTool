@@ -91,6 +91,21 @@ try {
             throw "Packaged resource differs from source: $relative"
         }
     }
+    if (Test-Path -LiteralPath $sourceRules -PathType Container) {
+        foreach ($rule in @('recipes.json', 'ruleset.json')) {
+            $entry = $archive.GetEntry("dmmt/automation/$rule")
+            if ($null -eq $entry) { throw "Packaged JAR is missing bundled shared rules: $rule" }
+            $stream = $entry.Open()
+            try {
+                $actual = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '')
+            } finally {
+                $stream.Dispose()
+            }
+            if ($actual -ne (Get-FileHash -LiteralPath (Join-Path $sourceRules $rule) -Algorithm SHA256).Hash) {
+                throw "Bundled shared rules differ from source: $rule"
+            }
+        }
+    }
     foreach ($required in @('web/index.html', 'dmmt/icon.png', 'dmmt/ui/dark.css',
         'condition-icons/cond_invisible_round.png', 'condition-icons/cond_restrained_round.png',
         'condition-icons/cond_concentrating_round.png', 'web/condition-icons/cond_bleeding_round.png')) {
