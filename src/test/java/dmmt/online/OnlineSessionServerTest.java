@@ -2153,7 +2153,9 @@ class OnlineSessionServerTest {
                  {"id":"self-gift","bindings":[{"id":"claim","event":"claim.accept","surface":"chat","mode":"button",
                     "claimGroup":"rest-gift","audience":"self","claimScope":{"recipients":"sourceActor"}}],
                   "when":{"gt":[{"read":"event.rest.cleared.stress"},0]},
-                  "do":[{"op":"resource.gain","pool":"recipient.hope","amount":1}],
+                  "do":[{"op":"resource.gain","pool":"recipient.hope","amount":1},
+                        {"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
+                         "quantity":1,"to":"recipient","label":"A potion"}],
                   "ui":{"label":"Gain Hope","report":"{recipient.name} gained Hope."}}
                 ]
                 """));
@@ -2186,7 +2188,163 @@ class OnlineSessionServerTest {
         JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
         assertEquals(2, saved.at("/hope/on").asInt());
         assertEquals(2, saved.at("/automationState/revision").asInt());
+        assertEquals("Minor Health Potion", saved.at("/inventory/0/name").asText());
+        assertEquals(1, saved.at("/inventory/0/qty").asInt());
         assertEquals(accepted.body(), claimHttp(owner, offer, "resting", claim.toString()).body());
+    }
+
+    private void installInventoryGrantActions() throws Exception {
+        automationCompendium();
+        Path classes = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(classes.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/0/automation");
+        automation.removeAll();
+        automation.set("rules", MAPPER.readTree("""
+                [
+                 {"id":"craft","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                  "costs":[{"op":"track.mark","track":"actor.stress","amount":1}],
+                  "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
+                         "quantity":2,"max":3,"scope":"actor","label":"Craft"}],
+                  "ui":{"label":"Craft","report":"Crafted potions."}},
+                 {"id":"craft-one","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
+                         "quantity":1,"max":3,"scope":"actor","label":"Craft"}],
+                  "ui":{"label":"Craft one","report":"Crafted a potion."}},
+                 {"id":"craft-read","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
+                         "quantity":1,"label":"Craft"},
+                        {"op":"value","value":{"size":{"read":"actor.inventory"}},"as":"total"}],
+                  "ui":{"label":"Craft and count","report":"Count: {result.total}."}},
+                 {"id":"forage","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                  "costs":[{"op":"track.mark","track":"actor.stress","amount":1}],
+                  "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
+                         "quantity":2,"tag":"foraged","max":5,"scope":"party","label":"Forage"}],
+                  "ui":{"label":"Forage","report":"Foraged potions."}},
+                 {"id":"gift","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button",
+                    "targetSelection":{"scope":"activePlayerCharacters","cardinality":"one","excludeSource":true}}],
+                  "do":[{"op":"inventory.grant","catalog":"items","entry":"spark-stone",
+                         "quantity":1,"to":"recipient","label":"Gift"}],
+                  "ui":{"label":"Gift","report":"Gave a stone."}}
+                ]
+                """));
+        java.nio.file.Files.writeString(classes, catalog.toString());
+        java.nio.file.Files.writeString(compendiumDir.resolve("items.json"), """
+                {"format":"dmmap-daggerheart","version":2,"category":"items","label":"Items",
+                 "entries":[{"id":"spark-stone","name":"Spark Stone","text":"Glows faintly."}]}
+                """);
+    }
+
+    @Test
+    void formatTwoInventoryGrantsCreateUsableStacksAndRejectCapsAtomically() throws Exception {
+        installInventoryGrantActions();
+        campaign.getActors().add(Campaign.Actor.builder().id("crafter").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "crafter", """
+                {"name":"Ada","hp":{"slots":6,"on":2},"stress":{"slots":6,"on":0},"inventory":[],
+                 "features":[{"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"}]}
+                """);
+        String owner = cookie();
+        String first = """
+                {"request":{"requestId":"craft-first","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"r","ruleId":"craft","bindingId":"sheet"}]}}
+                """;
+        var completed = automationHttp(owner, "crafter", first);
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), "crafter"));
+        JsonNode item = sheet.at("/inventory/0");
+        assertEquals("Minor Health Potion", item.path("name").asText());
+        assertEquals(2, item.path("qty").asInt());
+        assertEquals("consumables:minor-health-potion", item.path("automationSource").asText());
+        assertFalse(item.path("instanceId").asText().isBlank());
+        assertEquals("minor-health-potion", item.at("/catalog/id").asText());
+        assertEquals("Clear 1d4 HP.", item.path("note").asText());
+        assertEquals(1, sheet.path("inventoryRevision").asInt());
+        assertTrue(MAPPER.readTree(automationHttp(owner, "crafter", null).body())
+                .path("actions").findValuesAsText("ruleId").contains("drink"));
+        assertEquals(completed.body(), automationHttp(owner, "crafter", first).body());
+        String merge = first.replace("craft-first", "craft-merge").replace("\"expectedRevision\":0", "\"expectedRevision\":1")
+                .replace("\"ruleId\":\"craft\"", "\"ruleId\":\"craft-one\"");
+        var merged = automationHttp(owner, "crafter", merge);
+        assertEquals(200, merged.statusCode(), merged.body());
+        sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), "crafter"));
+        assertEquals(1, sheet.path("inventory").size());
+        assertEquals(3, sheet.at("/inventory/0/qty").asInt());
+        assertEquals(item.path("instanceId"), sheet.at("/inventory/0/instanceId"));
+        assertEquals(2, sheet.path("inventoryRevision").asInt());
+        assertEquals(merged.body(), automationHttp(owner, "crafter", merge).body());
+        String saved = store.loadSheet(campaign.getId(), "crafter");
+        int history = store.historyTail(campaign.getId(), 100).size();
+        String second = first.replace("craft-first", "craft-second").replace("\"expectedRevision\":0", "\"expectedRevision\":2");
+        var overCap = automationHttp(owner, "crafter", second);
+        assertEquals(409, overCap.statusCode(), overCap.body());
+        assertTrue(overCap.body().contains("limit of 3"), overCap.body());
+        assertEquals(saved, store.loadSheet(campaign.getId(), "crafter"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        String read = second.replace("craft-second", "craft-read").replace("\"ruleId\":\"craft\"", "\"ruleId\":\"craft-read\"");
+        var staleRead = automationHttp(owner, "crafter", read);
+        assertEquals(409, staleRead.statusCode(), staleRead.body());
+        assertTrue(staleRead.body().contains("before its grant has been settled"), staleRead.body());
+        ObjectNode multiple = (ObjectNode) MAPPER.readTree(second);
+        ObjectNode intent = multiple.withObject("/request");
+        intent.put("requestId", "craft-multiple");
+        intent.withArray("selections").addObject().put("sourceInstanceId", "r").put("ruleId", "craft-one")
+                .put("bindingId", "sheet");
+        var unsequenced = automationHttp(owner, "crafter", multiple.toString());
+        assertEquals(409, unsequenced.statusCode(), unsequenced.body());
+        assertTrue(unsequenced.body().contains("multiple automation actions"), unsequenced.body());
+        assertEquals(saved, store.loadSheet(campaign.getId(), "crafter"));
+    }
+
+    @Test
+    void formatTwoInventoryGrantsHonorPartyCapsAndTargetRecipients() throws Exception {
+        installInventoryGrantActions();
+        String owner = cookie();
+        allyCookie("offline-owner");
+        campaign.getActors().add(Campaign.Actor.builder().id("crafter").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Mira").ownerId("offline-owner").build());
+        campaign.getActors().add(Campaign.Actor.builder().id("disabled").name("Borin")
+                .ownerId("offline-owner").disabled(true).build());
+        store.saveSheet(campaign.getId(), "crafter", """
+                {"name":"Ada","hp":{"slots":6,"on":2},"stress":{"slots":6,"on":0},"inventory":[],
+                 "features":[{"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"}]}
+                """);
+        store.saveSheet(campaign.getId(), "ally", "{\"name\":\"Mira\",\"inventory\":[]}");
+        store.saveSheet(campaign.getId(), "disabled", """
+                {"name":"Borin","inventory":[{"name":"Foraged Relic","type":"consumable","qty":4,"foraged":true}]}
+                """);
+        String first = """
+                {"request":{"requestId":"forage","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"r","ruleId":"forage","bindingId":"sheet"}]}}
+                """;
+        String saved = store.loadSheet(campaign.getId(), "crafter");
+        var rejected = automationHttp(owner, "crafter", first);
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertTrue(rejected.body().contains("limit of 5"), rejected.body());
+        assertEquals(saved, store.loadSheet(campaign.getId(), "crafter"));
+        ObjectNode disabled = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "disabled"));
+        ((ObjectNode) disabled.at("/inventory/0")).put("qty", 3);
+        store.saveSheet(campaign.getId(), "disabled", disabled.toString());
+        var accepted = automationHttp(owner, "crafter", first);
+        assertEquals(200, accepted.statusCode(), accepted.body());
+        JsonNode foraged = MAPPER.readTree(store.loadSheet(campaign.getId(), "crafter")).at("/inventory/0");
+        assertEquals(2, foraged.path("qty").asInt());
+        assertTrue(foraged.path("foraged").asBoolean());
+        var described = automationHttp(owner, "crafter", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode actions = MAPPER.readTree(described.body()).path("actions");
+        JsonNode gift = restDescriptor(actions, "gift");
+        JsonNode options = gift.at("/targetSelection/options");
+        assertEquals(List.of("ally"), options.findValuesAsText("id"));
+        ObjectNode request = MAPPER.createObjectNode();
+        ObjectNode intent = request.putObject("request").put("requestId", "gift").put("expectedRevision", 1);
+        intent.putArray("selections").add(restSelection(gift));
+        intent.putObject("target").put("recipientId", "ally").set("version", options.get(0).path("version"));
+        var gifted = automationHttp(owner, "crafter", request.toString());
+        assertEquals(200, gifted.statusCode(), gifted.body());
+        JsonNode item = MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")).at("/inventory/0");
+        assertEquals("Spark Stone", item.path("name").asText());
+        assertEquals("Glows faintly.", item.path("note").asText());
+        assertEquals("spark-stone", item.at("/catalog/id").asText());
+        assertEquals(gifted.body(), automationHttp(owner, "crafter", request.toString()).body());
     }
 
     @Test

@@ -1285,7 +1285,8 @@ public final class RuleCompiler {
                     : (kind.startsWith("effect.") || kind.startsWith("collection."))
                     && "recipient".equals(operation.path("target").asText()) ? "recipient." : "";
             if (target.startsWith("recipient.") || "recipient".equals(operation.path("owner").asText())
-                    || "limit.restore".equals(kind) && "recipient".equals(operation.path("to").asText())) return true;
+                    || Set.of("limit.restore", "inventory.grant").contains(kind)
+                    && "recipient".equals(operation.path("to").asText())) return true;
         }
         return false;
     }

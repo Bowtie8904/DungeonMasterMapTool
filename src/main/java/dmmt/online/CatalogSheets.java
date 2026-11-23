@@ -155,7 +155,7 @@ final class CatalogSheets {
                 || row.path("name").equals(entry.path("_editorOriginal").path("name"));
     }
 
-    private static void refreshItem(ObjectNode sheet, ObjectNode row, ObjectNode file) {
+    static void refreshItem(ObjectNode sheet, ObjectNode row, ObjectNode file) {
         for (JsonNode entry : file.path("entries")) {
             String category = file.path("category").asText();
             if (!matches(row, entry, category)) continue;

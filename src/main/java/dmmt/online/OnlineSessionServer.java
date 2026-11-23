@@ -6759,6 +6759,107 @@ public final class OnlineSessionServer {
         return affected;
     }
 
+    private List<String> automationInventoryParty() {
+        List<String> result = campaign.getActors().stream()
+                .filter(actor -> campaign.player(actor.getOwnerId()) != null)
+                .map(Campaign.Actor::getId).sorted().toList();
+        if (result.size() > 128) throw new IllegalArgumentException("An inventory grant is limited to 128 party characters.");
+        return result;
+    }
+
+    private static boolean automationInventoryEntry(JsonNode item, String category, JsonNode entry) {
+        if (item.path("custom").asBoolean()) return false;
+        String type = "consumables".equals(category) ? "consumable" : "gear";
+        if (!type.equals(item.path("type").asText())) return false;
+        JsonNode link = item.path("catalog");
+        if (link.has("id"))
+            return category.equals(link.path("category").asText()) && entry.path("id").equals(link.path("id"));
+        return entry.path("name").equals(item.path("name"));
+    }
+
+    private static boolean automationInventoryTag(JsonNode item, String tag) {
+        for (JsonNode value : item.path("automationTags")) if (tag.equals(value.asText())) return true;
+        return "foraged".equals(tag) && (item.path("foraged").asBoolean()
+                || item.path("name").asText().startsWith("Foraged "));
+    }
+
+    private static int automationInventoryQuantity(JsonNode item) {
+        JsonNode quantity = item.get("qty");
+        if (quantity == null) return 1;
+        if (!quantity.isIntegralNumber() || !quantity.canConvertToInt() || quantity.intValue() < 0)
+            throw new IllegalArgumentException("An inventory stack has an invalid quantity.");
+        return quantity.intValue();
+    }
+
+    private void grantAutomationInventory(JsonNode command, ObjectNode target, List<ObjectNode> scope,
+                                          HostCatalog.Snapshot catalogs) throws IOException {
+        String category = command.path("catalog").asText(), id = command.path("entry").asText();
+        if (!Set.of("items", "consumables").contains(category))
+            throw new IllegalArgumentException("Inventory grants currently support item and consumable catalogs.");
+        JsonNode document = catalogs.document(category);
+        if (!(document instanceof ObjectNode catalog) || !document.path("entries").isArray())
+            throw new IllegalArgumentException("The " + category + " catalog is unavailable.");
+        JsonNode entry = CompendiumEntries.entry(document, id);
+        if (!entry.path("name").isTextual() || entry.path("name").asText().isBlank())
+            throw new IllegalArgumentException("The granted catalog entry has no name.");
+        JsonNode quantityNode = command.path("quantity");
+        if (!quantityNode.isInt() || quantityNode.intValue() < 1 || quantityNode.intValue() > 100)
+            throw new IllegalArgumentException("Invalid inventory grant quantity.");
+        int quantity = quantityNode.intValue();
+        String tag = command.has("tag") ? command.path("tag").asText() : null;
+        if (command.has("max")) {
+            JsonNode max = command.path("max");
+            if (!max.isInt() || max.intValue() < 1 || max.intValue() > 1000)
+                throw new IllegalArgumentException("Invalid inventory grant limit.");
+            long held = 0;
+            for (ObjectNode sheet : scope) for (JsonNode item : sheet.path("inventory"))
+                if (tag == null ? automationInventoryEntry(item, category, entry) : automationInventoryTag(item, tag))
+                    held += automationInventoryQuantity(item);
+            if (held + quantity > max.intValue())
+                throw new dmmt.online.automation.RuleRuntime.Unavailable("inventoryLimit",
+                        "This grant would exceed the limit of " + max.intValue()
+                                + (tag == null ? " " + entry.path("name").asText() : " " + tag + " items") + ".");
+        }
+        String sourceId = category + ":" + id;
+        ObjectNode stack = null;
+        for (JsonNode item : target.withArray("inventory")) {
+            if (!(item instanceof ObjectNode row) || !automationInventoryEntry(row, category, entry)) continue;
+            if (tag != null && !automationInventoryTag(row, tag)
+                    || tag == null && (!row.path("automationTags").isEmpty() || automationInventoryTag(row, "foraged"))
+                    || tag != null && !"foraged".equals(tag) && automationInventoryTag(row, "foraged")
+                    || row.hasNonNull("automationSource") && !sourceId.equals(row.path("automationSource").asText()))
+                continue;
+            boolean otherTag = false;
+            for (JsonNode value : row.path("automationTags"))
+                if (!value.asText().equals(tag)) otherTag = true;
+            if (otherTag) continue;
+            stack = row;
+            break;
+        }
+        if (stack == null) {
+            stack = target.withArray("inventory").addObject().put("name", entry.path("name").asText())
+                    .put("type", "consumables".equals(category) ? "consumable" : "gear").put("qty", 0);
+            if ("consumables".equals(category)) stack.put("capped", true);
+            if (entry.has("text")) stack.set("note", entry.get("text").deepCopy());
+            if (entry.hasNonNull("automation")) stack.set("automation", entry.get("automation").deepCopy());
+            if (entry.hasNonNull("image")) stack.set("image", entry.get("image").deepCopy());
+            stack.putObject("catalog").put("category", category).put("id", id);
+        }
+        int held = automationInventoryQuantity(stack);
+        if (held > Integer.MAX_VALUE - quantity)
+            throw new IllegalArgumentException("The inventory stack is too large.");
+        stack.put("qty", held + quantity);
+        if (tag != null && !automationInventoryTag(stack, tag)) stack.withArray("automationTags").add(tag);
+        if ("foraged".equals(tag)) stack.put("foraged", true);
+        stack.put("automationItem", id);
+        if (entry.has("automation")) {
+            stack.put("automationSource", sourceId);
+            if (!stack.hasNonNull("instanceId")) stack.put("instanceId", java.util.UUID.randomUUID().toString());
+        }
+        CatalogSheets.refreshItem(target, stack, catalog);
+        target.put("inventoryRevision", target.path("inventoryRevision").asLong(0) + 1);
+    }
+
     private void commitAutomationResults(Map<String, String> originals, Map<String, ObjectNode> changed,
                                          List<ObjectNode> messages, JsonNode commands,
                                          dmmt.online.automation.AutomationHost.Pack pack,
@@ -6780,24 +6881,52 @@ public final class OnlineSessionServer {
                                          String responseActorId, ObjectNode response, Runnable validateRoster,
                                          ObjectNode expectedOffer, ObjectNode replacementOffer) throws IOException {
         Map<String, String> expected = new java.util.LinkedHashMap<>(originals);
-        Set<String> affected = settleSingleHolderEffects(pack, expected, changed, commands);
+        Set<String> affected = new java.util.HashSet<>(settleSingleHolderEffects(pack, expected, changed, commands));
         List<ObjectNode> publishedMessages = new ArrayList<>(messages);
-        pruneAutomationResultWindows(changed);
-        if (response != null && affected.contains(responseActorId)) {
-            String resultId = response.path("event").path("resultId").textValue();
-            if (automationHost.reconcileResultOffer(pack, changed.get(responseActorId), response)
-                    && resultId != null && !response.path("event").has("resultId"))
-                for (ObjectNode message : messages)
-                    if (message.path("automationEvent") instanceof ObjectNode event
-                            && resultId.equals(event.path("resultId").textValue())) event.remove("resultId");
-        }
         int fear = campaign.getFear();
         List<Campaign.Countdown> countdowns = null;
+        List<String> inventoryParty = null;
+        Map<String, ObjectNode> inventorySheets = null;
         for (JsonNode command : commands) {
             String kind = command.required("kind").asText();
             switch (kind) {
                 case "limits.refresh" -> { /* Already applied by AutomationHost. */ }
                 case "effect.endElsewhere" -> { /* Reconciled across staged sheets above. */ }
+                case "inventory.grant" -> {
+                    if (response == null || response.path("actions").size() != 1)
+                        throw new dmmt.online.automation.RuleRuntime.Unavailable("inventorySettlement",
+                                "Inventory grants cannot yet be combined with multiple automation actions.");
+                    String holder = command.path("holderId").asText();
+                    ObjectNode target = changed.get(holder);
+                    if (target == null)
+                        throw new IllegalArgumentException("The inventory grant's recipient is not in this transaction.");
+                    List<ObjectNode> scope = new ArrayList<>();
+                    scope.add(target);
+                    if ("party".equals(command.path("scope").asText())) {
+                        if (inventorySheets == null) {
+                            inventoryParty = automationInventoryParty();
+                            inventorySheets = new java.util.LinkedHashMap<>();
+                            for (String id : inventoryParty) {
+                                String original = store.loadSheet(campaign.getId(), id);
+                                if (expected.containsKey(id) && !java.util.Objects.equals(expected.get(id), original))
+                                    throw new CampaignStore.StaleAutomationSheet();
+                                expected.putIfAbsent(id, original);
+                                ObjectNode sheet = changed.get(id);
+                                if (sheet == null && original != null) {
+                                    JsonNode parsed = MAPPER.readTree(original);
+                                    if (!(parsed instanceof ObjectNode saved))
+                                        throw new IOException("Invalid stored sheet for " + id + ".");
+                                    sheet = saved;
+                                }
+                                if (sheet != null) inventorySheets.put(id, sheet);
+                            }
+                        }
+                        for (var entry : inventorySheets.entrySet())
+                            if (!holder.equals(entry.getKey())) scope.add(entry.getValue());
+                    }
+                    grantAutomationInventory(command, target, scope, catalogs());
+                    affected.add(holder);
+                }
                 case "countdown.start" -> {
                     if (countdowns == null) countdowns = new ArrayList<>(campaign.getCountdowns());
                     int value = command.required("value").intValue();
@@ -6848,16 +6977,32 @@ public final class OnlineSessionServer {
                 default -> throw new IllegalArgumentException("The host cannot apply this automation operation yet: " + kind);
             }
         }
+        pruneAutomationResultWindows(changed);
+        if (response != null && affected.contains(responseActorId)) {
+            String resultId = response.path("event").path("resultId").textValue();
+            if (automationHost.reconcileResultOffer(pack, changed.get(responseActorId), response)
+                    && resultId != null && !response.path("event").has("resultId"))
+                for (ObjectNode message : messages)
+                    if (message.path("automationEvent") instanceof ObjectNode event
+                            && resultId.equals(event.path("resultId").textValue())) event.remove("resultId");
+        }
         for (ObjectNode sheet : changed.values())
             if (sheet.toString().getBytes(StandardCharsets.UTF_8).length > MAX_SHEET_BYTES)
                 throw new IllegalArgumentException("The character sheet is too large.");
         boolean fearChanged = fear != campaign.getFear();
+        List<String> expectedInventoryParty = inventoryParty;
+        Runnable finalValidation = () -> {
+            if (validateRoster != null) validateRoster.run();
+            if (expectedInventoryParty != null && !expectedInventoryParty.equals(automationInventoryParty()))
+                throw new dmmt.online.automation.RuleRuntime.Unavailable("staleRecipient",
+                        "The party changed. Refresh the action before trying again.");
+        };
         if (expectedOffer == null)
             store.saveAutomationResults(campaign.getId(), expected, changed, publishedMessages, fearChanged ? fear : null, countdowns,
-                    validateRoster);
+                    finalValidation);
         else
             store.saveAutomationClaimResults(campaign.getId(), expected, changed, expectedOffer, replacementOffer,
-                    publishedMessages, fearChanged ? fear : null, countdowns, validateRoster);
+                    publishedMessages, fearChanged ? fear : null, countdowns, finalValidation);
         if (fearChanged || countdowns != null) {
             campaign.setFear(fear);
             if (countdowns != null) campaign.setCountdowns(countdowns);

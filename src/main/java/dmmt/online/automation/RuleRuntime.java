@@ -340,12 +340,20 @@ public final class RuleRuntime {
                                            TrackObserver observer, Intent intent, String phase) {
         List<ObjectNode> published = new ArrayList<>(), rolls = new ArrayList<>();
         boolean effectOperation = false;
+        boolean pendingInventoryGrant = false;
         Set<String> recipientPools = next.has("recipient") && !program.boundPoolIds().isEmpty()
                 ? new HashSet<>() : Set.of();
         for (int index = 0; index < steps.size(); index++) {
             JsonNode step = steps.get(index);
+            if (pendingInventoryGrant && (inventoryReferences(RuleExpression.references(step))
+                    || step.path("op").asText().startsWith("collection.")
+                    && "inventory".equals(step.path("collection").asText())
+                    || "inventory.consume".equals(step.path("op").asText())))
+                throw new Unavailable("inventorySettlement",
+                        "A later operation cannot use inventory before its grant has been settled.");
             if (step.has("if") && !RuleExpression.bool(RuleExpression.evaluate(step.get("if"), next), "/do/if")) continue;
             operation(program, step, next, random, preview, published, rolls, observer);
+            pendingInventoryGrant |= "inventory.grant".equals(step.path("op").asText());
             if ("plan.adjust".equals(step.path("op").asText())) {
                 JsonNode plan = RuleExpression.read(next, step.path("plan").asText());
                 ArrayNode adjustments = (ArrayNode) plan.path("adjustments");
@@ -362,10 +370,19 @@ public final class RuleRuntime {
             RuleEffects.reconcilePools(program, previous, next, programs, recipientPools);
         if (observer != null && (effectOperation || effectEnded || !beforeSettlement.equals(next.path("actor"))))
             observer.mutated(next, "effect.settle", beforeSettlement, "actor");
+        if (pendingInventoryGrant && !reportTemplate.isMissingNode()
+                && inventoryReferences(RuleTemplate.references(reportTemplate.asText())))
+            throw new Unavailable("inventorySettlement",
+                    "A report cannot use inventory before its grant has been settled.");
         String report = reportTemplate.isMissingNode() ? "" : RuleTemplate.render(reportTemplate.asText(), next);
         next.remove("die");
         next.set("revision", RuleExpression.numeric(revision + 1d, "/revision"));
         return new Resolution(next, report, List.copyOf(published), List.copyOf(rolls));
+    }
+
+    private static boolean inventoryReferences(Set<String> references) {
+        return references.stream().anyMatch(path -> path.equals("actor.inventory") || path.startsWith("actor.inventory.")
+                || path.equals("recipient.inventory") || path.startsWith("recipient.inventory."));
     }
 
     private static void touchedRecipientPool(RuleCompiler.Program program, JsonNode operation, Set<String> pools) {
@@ -1409,10 +1426,12 @@ public final class RuleRuntime {
                 else if ("limit.restore".equals(kind)) request.put("to", op.path("to").asText())
                         .put("actorId", context.path(op.path("to").asText()).path("id").asText());
                 else if ("inventory.grant".equals(kind)) {
+                    String target = op.path("to").asText("actor");
                     request.put("catalog", op.path("catalog").asText())
                             .put("entry", RuleJson.id(eval(op.path("entry"), context), "/entry"))
                             .put("quantity", whole(op.path("quantity"), context, 1, 100))
-                            .put("to", op.path("to").asText("actor"));
+                            .put("to", target)
+                            .put("holderId", context.path(target).path("id").asText());
                     if (op.has("tag")) request.put("tag", op.path("tag").asText());
                     if (op.has("max")) request.put("max", whole(op.path("max"), context, 1, 1000))
                             .put("scope", op.path("scope").asText("actor"));
