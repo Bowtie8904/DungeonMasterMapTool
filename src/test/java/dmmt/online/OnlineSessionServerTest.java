@@ -3061,6 +3061,10 @@ class OnlineSessionServerTest {
             assertEquals(200, rolled.statusCode(), rolled.body());
             JsonNode receipt = MAPPER.readTree(rolled.body());
             assertTrue(receipt.requiredAt("/event/check/critical").booleanValue());
+            JsonNode criticalMessage = store.historyTail(campaignId, 100).getLast();
+            assertEquals(receipt.required("event"), criticalMessage.required("automationEvent"));
+            assertEquals(criticalMessage.requiredAt("/automationEvent/check/hopeDie"),
+                    criticalMessage.requiredAt("/automationEvent/check/fearDie"));
             assertEquals(List.of("critical-melee-reward", "revise", "critical-reward"),
                     receipt.required("resultActions").findValuesAsText("ruleId"));
             String resultId = receipt.requiredAt("/event/resultId").textValue();
@@ -3336,7 +3340,8 @@ class OnlineSessionServerTest {
         rules.add(MAPPER.readTree("""
             {"id":"edit","bindings":[{"id":"apply","surface":"roll","event":"roll.finished","mode":"button"}],
              "when":{"eq":[{"read":"event.check.dominant"},"fear"]},"ui":{"label":"Edit"},
-             "do":[{"op":"roll.contribute","from":{"read":"event.roll"},"as":"edited",
+             "do":[{"op":"roll.swapRoles","from":{"read":"event.roll"},"first":"hope","second":"fear","as":"swapped"},
+                   {"op":"roll.contribute","from":{"read":"result.swapped"},"as":"edited",
                     "contribution":{"id":"late","kind":"flat","role":"modifier","label":"Late","value":2}},
                    {"op":"roll.publish","roll":{"read":"result.edited"}}]}"""));
         rules.add(MAPPER.readTree("""
@@ -3386,6 +3391,10 @@ class OnlineSessionServerTest {
         assertEquals(409, resultHttp(cookie, "roller", "not-current").statusCode());
         assertEquals(403, resultHttp(allyCookie("result-viewer"), "roller", resultId).statusCode());
         assertEquals("fear", event.at("/check/dominant").asText());
+        assertTrue(event.requiredAt("/check/duality").booleanValue());
+        assertEquals(1, event.requiredAt("/check/hopeDie").intValue());
+        assertEquals(5, event.requiredAt("/check/fearDie").intValue());
+        assertFalse(event.requiredAt("/check/critical").booleanValue());
         assertTrue(event.at("/check/difficulty").isNull());
         assertEquals("far", event.at("/check/range").asText());
         assertEquals(2, event.at("/thresholds/major").intValue());
@@ -3405,6 +3414,8 @@ class OnlineSessionServerTest {
         assertEquals(200, damaged.statusCode(), damaged.body());
         JsonNode damageEvent = MAPPER.readTree(damaged.body()).path("event");
         assertTrue(damageEvent.at("/check/dominant").isNull());
+        assertFalse(damageEvent.requiredAt("/check/duality").booleanValue());
+        assertEquals(damageEvent, store.historyTail(campaign.getId(), 100).getLast().required("automationEvent"));
         assertFalse(damageEvent.at("/check/fixedDice").booleanValue());
         JsonNode base = damageEvent.at("/roll/contributions/0");
         assertEquals("classes:tester:features:steady", base.path("sourceId").asText());
@@ -3436,6 +3447,9 @@ class OnlineSessionServerTest {
         assertEquals(200, edited.statusCode(), edited.body());
         JsonNode revised = MAPPER.readTree(edited.body());
         assertEquals(31, revised.requiredAt("/event/check/total").intValue());
+        assertEquals(5, revised.requiredAt("/event/check/hopeDie").intValue());
+        assertEquals(1, revised.requiredAt("/event/check/fearDie").intValue());
+        assertEquals("hope", revised.requiredAt("/event/check/dominant").textValue());
         assertEquals(List.of("high"), revised.required("resultActions").findValuesAsText("ruleId"),
                 "Neither the earlier reward nor the edit may re-arm on this revision.");
         assertEquals(409, resultHttp(cookie, "roller", resultId).statusCode());
@@ -3448,6 +3462,11 @@ class OnlineSessionServerTest {
         assertEquals(history + 3, log.size());
         assertEquals(event, log.get(history).required("automationEvent"), "Original history is immutable.");
         assertEquals(31, log.getLast().required("total").asInt());
+        assertEquals(revised.required("event"), log.getLast().required("automationEvent"));
+        assertEquals(1, log.getLast().requiredAt("/rolls/0").intValue());
+        assertEquals(5, log.getLast().requiredAt("/rolls/1").intValue());
+        assertEquals("Fear die", log.getLast().requiredAt("/breakdown/0/label").textValue());
+        assertEquals("Hope die", log.getLast().requiredAt("/breakdown/1/label").textValue());
         assertEquals(0, campaign.getFear());
     }
 

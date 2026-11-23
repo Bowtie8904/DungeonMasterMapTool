@@ -8,6 +8,90 @@ const message: RollMessage = {
 };
 
 describe('roll breakdowns', () => {
+  it('renders authoritative profile outcomes independently of dice order, including edits and criticals', () => {
+    class Element {
+      className = '';
+      children: Array<Element | string> = [];
+      attrs = new Map<string, string>();
+      append(...children: Array<Element | string>) { this.children.push(...children); }
+      setAttribute(key: string, value: string) { this.attrs.set(key, value); }
+      get text(): string { return this.children.map(child => typeof child === 'string' ? child : child.text).join(''); }
+      find(cls: string): Element | undefined {
+        return this.className === cls ? this : this.children.flatMap(child => typeof child === 'string' ? [] : [child])
+          .map(child => child.find(cls)).find(Boolean);
+      }
+    }
+    vi.stubGlobal('document', { createElement: () => new Element() });
+    try {
+      const profile: RollMessage = {
+        ...message, kind: 'dice', label: 'Profile', expression: '1d12+1d12+3', rolls: [1, 5], total: 9,
+        breakdown: [{ label: 'Hope die', expression: '1d12', rolls: [1], total: 1 },
+          { label: 'Fear die', expression: '1d12', rolls: [5], total: 5 },
+          { label: 'Finesse', expression: '3', rolls: [], total: 3 }],
+        automationEvent: { type: 'roll.finished', resultId: 'original',
+          check: { kind: 'reaction', duality: true, hopeDie: 1, fearDie: 5, dominant: 'fear',
+            critical: false, difficulty: 10, outcome: 'failure' } },
+      };
+      const actions = document.createElement('div');
+      const renderActions = vi.fn(() => actions);
+      const original = renderLogEntry({ kind: 'roll', m: profile }, 'player', undefined, undefined, renderActions) as unknown as Element;
+      expect(original.find('roll-dice')?.text).toBe('Hope1Fear5');
+      expect(original.find('roll-outcome fear')?.text).toBe('With Fear');
+      expect(original.find('roll-outcome failure')?.text).toBe('Failure / Difficulty 10');
+      expect(original.find('roll-title')?.text).toBe('Profile - Reaction roll');
+      expect(original.find('roll-modifier')?.text).toBe('+3');
+      expect(renderActions).toHaveBeenCalledWith(profile);
+      expect(original.children).toContain(actions);
+      expect(original.className).not.toContain('critical-roll');
+
+      const edited: RollMessage = {
+        ...profile, total: 11,
+        automationEvent: { type: 'roll.finished', resultId: 'edited',
+          check: { kind: 'action', duality: true, hopeDie: 5, fearDie: 1, dominant: 'hope',
+            critical: false, difficulty: 10, outcome: 'success' },
+          roll: { contributions: [{ role: 'fear' }, { role: 'hope' }, { role: 'modifier' }] } },
+      };
+      const revised = renderLogEntry({ kind: 'roll', m: edited }, 'player') as unknown as Element;
+      expect(revised.find('roll-dice')?.text).toBe('Hope5Fear1');
+      expect(revised.find('roll-outcome hope')?.text).toBe('With Hope');
+      expect(revised.find('roll-outcome success')?.text).toBe('Success / Difficulty 10');
+      expect(revised.find('roll-modifier')?.text).toBe('+5');
+      expect(rollDetails(edited).map(detail => detail.label)).toEqual(['Fear die', 'Hope die', 'Finesse']);
+
+      const critical: RollMessage = {
+        ...profile, expression: '1d6+1d4+1d12+1d12', rolls: [2, 3, 5, 5], total: 15,
+        breakdown: [{ label: 'Bonus', expression: '1d6+1d4', rolls: [2, 3], total: 5 },
+          { label: 'Hope die', expression: '1d12', rolls: [5], total: 5 },
+          { label: 'Fear die', expression: '1d12', rolls: [5], total: 5 }],
+        automationEvent: { type: 'roll.finished',
+          check: { kind: 'spellcast', duality: true, hopeDie: 5, fearDie: 5, dominant: 'hope',
+            critical: true, difficulty: 99, outcome: 'success' } },
+      };
+      const crit = renderLogEntry({ kind: 'roll', m: critical }, 'player') as unknown as Element;
+      expect(crit.className).toContain('critical-roll');
+      expect(crit.find('roll-dice')?.text).toBe('Hope5Fear5');
+      expect(crit.find('roll-outcome crit')?.text).toBe('Critical success');
+      expect(crit.find('roll-outcome success')?.text).toBe('Success / Difficulty 99');
+
+      const secret = renderLogEntry({ kind: 'roll', m: { ...critical, secret: true } }, 'player') as unknown as Element;
+      expect(secret.className).not.toContain('critical-roll');
+      expect(secret.find('roll-outcomes')).toBeUndefined();
+      expect(secret.find('roll-dice')?.text).toBe('d6?d4?d12?d12?');
+      expect(secret.find('roll-total')?.text).toBe('TOTAL?');
+
+      const damage: RollMessage = {
+        ...profile, expression: '1d8+1d6+1', rolls: [5, 3], total: 9,
+        breakdown: [{ label: 'Weapon', expression: '1d8+1d6', rolls: [5, 3], total: 8 },
+          { label: 'Bonus', expression: '1', rolls: [], total: 1 }],
+        automationEvent: { type: 'roll.finished', check: { kind: 'damage', duality: false, critical: false } },
+      };
+      const damageCard = renderLogEntry({ kind: 'roll', m: damage }, 'player') as unknown as Element;
+      expect(damageCard.find('roll-dice')?.text).toBe('d85d63');
+      expect(damageCard.find('roll-outcomes')).toBeUndefined();
+      expect(damageCard.className).not.toContain('critical-roll');
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   it('labels each mixed-pool die in attributed, legacy, doubled and secret rolls', () => {
     class Element {
       className = '';

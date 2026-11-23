@@ -56,7 +56,18 @@ export function keptRolls(expression: string, rolls: number[]): boolean[] {
 
 /** Historical messages and older hosts have dice and a formula, but no named sheet sources. */
 export function rollDetails(m: RollMessage): RollDetail[] {
-  if (m.breakdown?.length) return m.breakdown;
+  if (m.breakdown?.length) {
+    const contributions = m.automationEvent?.roll?.contributions;
+    if (!Array.isArray(contributions) || contributions.length !== m.breakdown.length) return m.breakdown;
+    return m.breakdown.map((detail, i) => {
+      const role = contributions[i]?.role;
+      if (role !== 'hope' && role !== 'fear') return detail;
+      const dieLabel = role === 'hope' ? 'Hope die' : 'Fear die';
+      const base = detail.label.replace(/ \((?:Hope|Fear) die\)$/, '');
+      const label = base === 'Hope die' || base === 'Fear die' ? dieLabel : `${base} (${dieLabel})`;
+      return label === detail.label ? detail : { ...detail, label };
+    });
+  }
   const rolls = Array.isArray(m.rolls) ? m.rolls.filter((v): v is number => typeof v === 'number') : [];
   let index = 0;
   const details: RollDetail[] = [];
@@ -86,7 +97,16 @@ export function rollDetails(m: RollMessage): RollDetail[] {
   return doubled ? details.map((d) => ({ ...d, expression: `(${d.expression})*2`, total: d.total * 2 })) : details;
 }
 
+function authoritativeDuality(m: RollMessage) {
+  const check = m.automationEvent?.check;
+  if (check?.duality !== true || typeof check.hopeDie !== 'number' || !Number.isFinite(check.hopeDie)
+      || typeof check.fearDie !== 'number' || !Number.isFinite(check.fearDie)
+      || check.hopeDie <= 0 || check.fearDie <= 0) return null;
+  return { ...check, hopeDie: check.hopeDie, fearDie: check.fearDie };
+}
+
 function isCriticalRoll(m: RollMessage): boolean {
+  if (m.automationEvent) return m.secret !== true && authoritativeDuality(m)?.critical === true;
   if (m.secret === true || (m.kind !== 'duality' && m.deathMove !== 'risk')) return false;
   const rolls = Array.isArray(m.rolls) ? m.rolls.filter((v): v is number => typeof v === 'number') : [];
   if (rolls.length < 2) return false;
@@ -100,10 +120,19 @@ function rollContent(m: RollMessage): HTMLElement {
   const details = rollDetails(m);
   const values = Array.isArray(m.rolls) ? m.rolls.filter((v): v is number => typeof v === 'number') : [];
   const kept = secret ? values.map(() => true) : keptRolls(m.expression, values);
-  const duality = !secret && (m.kind === 'duality' || m.deathMove === 'risk') && values.length >= 2;
+  const authoritative = !secret ? authoritativeDuality(m) : null;
+  const duality = !!authoritative || !secret && !m.automationEvent
+    && (m.kind === 'duality' || m.deathMove === 'risk') && values.length >= 2;
   const dice = el('div', { class: 'roll-dice' });
   let index = 0;
-  for (const detail of details) {
+  if (authoritative) {
+    for (const [name, value] of [['Hope', authoritative.hopeDie], ['Fear', authoritative.fearDie]] as const) {
+      const tile = el('span', { class: `roll-die ${name.toLowerCase()}`, title: `${name} die: ${value}` },
+        el('span', { class: 'roll-die-name' }, name), el('strong', {}, String(value)));
+      tile.setAttribute('aria-label', `${name}: ${value}`);
+      dice.append(tile);
+    }
+  } else for (const detail of details) {
     const sides: string[] = [];
     for (const match of detail.expression.matchAll(/(\d*)d(\d+)(?:k[hl]\d+)?/gi)) {
       const count = Math.min(Number(match[1] || 1), detail.rolls.length - sides.length);
@@ -122,16 +151,26 @@ function rollContent(m: RollMessage): HTMLElement {
     }
   }
   const doubled = !secret && m.expression.startsWith('(') && m.expression.endsWith(')*2');
-  const modifier = m.total / (doubled ? 2 : 1) - (duality ? values[0] + values[1] : values.reduce((n, v, i) => n + (kept[i] ? v : 0), 0));
+  const modifier = m.total / (doubled ? 2 : 1) - (authoritative
+    ? authoritative.hopeDie + authoritative.fearDie
+    : duality ? values[0] + values[1] : values.reduce((n, v, i) => n + (kept[i] ? v : 0), 0));
   const equation = el('div', { class: 'roll-equation' }, dice,
     ...(secret ? [] : [el('span', { class: `roll-modifier${modifier < 0 ? ' negative' : ''}`, title: duality ? 'Combined modifiers, including bonus dice' : 'Combined modifiers' }, signed(modifier))]),
     ...(doubled ? [el('span', { class: 'roll-modifier', title: 'Double the entire rolled damage, including modifiers' }, 'x2 (all)')] : []),
     el('span', { class: 'roll-equals' }, '='),
     el('div', { class: 'roll-total' }, el('span', {}, 'TOTAL'), el('strong', {}, secret ? '?' : String(m.total))));
   const body = el('div', { class: 'roll-body' },
-    el('div', { class: 'roll-title' }, `${m.label ?? (secret ? 'Secret roll' : duality ? 'Duality roll' : 'Dice roll')}${m.source?.split(',').includes('reaction') ? ' - Reaction roll' : ''}`), equation);
+    el('div', { class: 'roll-title' }, `${m.label ?? (secret ? 'Secret roll' : duality ? 'Duality roll' : 'Dice roll')}${m.source?.split(',').includes('reaction') || m.automationEvent?.check?.kind === 'reaction' ? ' - Reaction roll' : ''}`), equation);
   if (secret) return body;
-  if (duality) {
+  if (authoritative) {
+    const outcome = authoritative.critical ? 'crit' : authoritative.dominant;
+    const badges = el('div', { class: 'roll-outcomes' });
+    if (outcome) badges.append(el('span', { class: `roll-outcome ${outcome}` }, OUTCOME_LABEL[outcome]));
+    if (typeof authoritative.difficulty === 'number' && (authoritative.outcome === 'success' || authoritative.outcome === 'failure'))
+      badges.append(el('span', { class: `roll-outcome ${authoritative.outcome}` },
+        `${authoritative.outcome === 'success' ? 'Success' : 'Failure'} / Difficulty ${authoritative.difficulty}`));
+    body.append(badges);
+  } else if (duality) {
     const r = dualityResult(values, m.total);
     const outcome = m.deathResult?.outcome ?? (r.outcome === 'crit' ? 'crit' : (m.outcome ?? r.outcome));
     const badges = el('div', { class: 'roll-outcomes' }, el('span', { class: `roll-outcome ${outcome}` }, OUTCOME_LABEL[outcome]));

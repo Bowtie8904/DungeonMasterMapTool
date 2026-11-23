@@ -5954,7 +5954,13 @@ public final class OnlineSessionServer {
         roll.path("excludedDice").forEach(die -> excluded.add(die.asText()));
         List<String> terms = new ArrayList<>();
         for (JsonNode part : roll.path("contributions")) {
-            ObjectNode detail = breakdown.addObject().put("label", part.path("label").asText());
+            String partLabel = part.path("label").asText();
+            String role = part.path("role").asText();
+            if ("hope".equals(role) || "fear".equals(role)) {
+                String dieLabel = "hope".equals(role) ? "Hope die" : "Fear die";
+                partLabel = "Hope die".equals(partLabel) || "Fear die".equals(partLabel) ? dieLabel : partLabel + " (" + dieLabel + ")";
+            }
+            ObjectNode detail = breakdown.addObject().put("label", partLabel);
             detail.set("total", part.get("total"));
             ArrayNode kept = detail.putArray("rolls");
             List<String> dice = new ArrayList<>();

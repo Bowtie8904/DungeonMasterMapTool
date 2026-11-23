@@ -237,7 +237,22 @@ export interface RollDetail extends RollContribution {
 }
 
 export interface RollMessage {
-  automationEvent?: { type: string; sessionId?: string; resultId?: string };
+  automationEvent?: {
+    type: string;
+    sessionId?: string;
+    resultId?: string;
+    check?: {
+      kind?: string | null;
+      duality?: boolean | null;
+      hopeDie?: number | null;
+      fearDie?: number | null;
+      dominant?: 'hope' | 'fear' | null;
+      critical?: boolean | null;
+      difficulty?: number | null;
+      outcome?: 'success' | 'failure' | null;
+    };
+    roll?: { contributions?: Array<{ role?: string }> };
+  };
   deathrun?: { effectId: string; count: number };
   actionBenefits?: ChatMessage['actionBenefits'];
   id: string | number;
