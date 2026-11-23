@@ -1,7 +1,7 @@
 import { ApiError, hostFetch } from '../api';
 import { el } from '../login';
 import { drawingId } from '../tools';
-import { inputFields, optionFields, type RuleDescriptor, type RuleIntent } from './controls';
+import { inputFields, optionFields, targetFields, type RuleDescriptor, type RuleIntent } from './controls';
 import { actionReports, automationUrl, CONTROL_TEXT, errorDetails } from './panel';
 
 type RestKind = 'short' | 'long';
@@ -29,7 +29,7 @@ interface RestRequest {
   kind: RestKind;
   expectedRevision: number;
   preparation: Selection[];
-  moves: Array<{ selection: Selection; options: Selection[] }>;
+  moves: Array<{ selection: Selection; options: Selection[]; target?: RuleIntent['target'] }>;
   completion: Selection[];
 }
 
@@ -112,7 +112,7 @@ export async function openAutomationRestDialog(actorId: string, kind: RestKind,
 
   const moves = el('div', {}, el('h4', {}, 'Downtime moves'));
   const rows: Array<{ select: HTMLSelectElement; fields: HTMLInputElement[];
-    readInputs: () => RuleIntent['inputs']; readOptions: () => Selection[] }> = [];
+    readInputs: () => RuleIntent['inputs']; readOptions: () => Selection[]; readTarget: () => RuleIntent['target'] }> = [];
   const add = el('button', { type: 'button', class: 'small' }, 'Add downtime move');
   const addMove = () => {
     if (rows.length >= 64) return;
@@ -124,13 +124,15 @@ export async function openAutomationRestDialog(actorId: string, kind: RestKind,
         move.available ? label : `${label} (${move.reason ?? 'unavailable'})`));
     });
     const detail = el('div');
-    const row = { select, fields: [] as HTMLInputElement[], readInputs: () => ({}), readOptions: () => [] as Selection[] };
+    const row = { select, fields: [] as HTMLInputElement[], readInputs: () => ({}), readOptions: () => [] as Selection[],
+      readTarget: (): RuleIntent['target'] => undefined };
     const update = () => {
       row.fields = [];
       detail.replaceChildren();
       const selected = select.value === '' ? undefined : offer.moves[Number(select.value)];
       if (!selected) return;
       if (selected.description) detail.append(el('p', {}, selected.description));
+      row.readTarget = targetFields(detail, selected.targetSelection, row.fields, CONTROL_TEXT);
       row.readInputs = inputFields(detail, selected.inputs ?? [], row.fields, CONTROL_TEXT);
       row.readOptions = optionFields(detail, selected.options, row.fields, CONTROL_TEXT);
     };
@@ -173,8 +175,10 @@ export async function openAutomationRestDialog(actorId: string, kind: RestKind,
           const group = `${move.sourceInstanceId}\u0000${move.restMove.group ?? move.restMove.id}`;
           if (groups.has(group)) throw new Error('The same downtime move cannot be chosen twice.');
           groups.add(group);
+          const target = row.readTarget();
           chosen.push({ selection: { sourceInstanceId: move.sourceInstanceId, ruleId: move.ruleId,
-            bindingId: move.bindingId, inputs: row.readInputs() }, options: row.readOptions() });
+            bindingId: move.bindingId, inputs: row.readInputs() }, options: row.readOptions(),
+            ...(target ? { target } : {}) });
         }
         retry = { requestId: drawingId(), offerVersion: offer.offerVersion, kind, expectedRevision: offer.revision,
           preparation: readPreparation(), moves: chosen, completion: readCompletion() };

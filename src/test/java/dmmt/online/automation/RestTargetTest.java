@@ -580,6 +580,88 @@ class RestTargetTest {
         assertThrows(UnsupportedOperationException.class, () -> result.scopeMembership().get("activeCharacters").add("other"));
     }
 
+    private static ObjectNode rulesetWithTargetReactions(String sourceReaction) throws Exception {
+        ObjectNode ruleset = rulesetWithPartyRecovery("activePlayerCharacters");
+        ruleset.withObject("/automation").putObject("state").put("overflowCount", 0);
+        ((ArrayNode) ruleset.at("/automation/rules/7/do")).insert(0, RuleJson.parse("""
+                {"op":"state.increment","slot":"overflowCount","by":1}
+                """));
+        ObjectNode repair = (ObjectNode) ruleset.at("/automation/rules/4");
+        repair.withArray("costs").addObject().put("op", "track.mark").put("track", "actor.stress").put("amount", 1);
+        ((ObjectNode) repair.at("/do/0")).put("amount", 3);
+        repair.withArray("do").add(RuleJson.parse("""
+                {"op":"track.clear","track":"recipient.hp",
+                 "amount":{"subtract":[{"read":"recipient.hope.value"},2]}}
+                """));
+        ruleset.withObject("/automation").withArray("rules").add(RuleJson.parse("""
+                {"id":"source-reaction","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"stress"]},{"eq":[{"read":"event.change"},"mark"]}]},
+                 "do":[%s],"ui":{"report":"Source reacted."}}
+                """.formatted(sourceReaction)));
+        return ruleset;
+    }
+
+    @Test
+    void targetedMoveSettlesBothHoldersBeforeLaterOperationsAndDeferredBenefits() throws Exception {
+        Setup setup = setup(rulesetWithTargetReactions(
+                "{\"op\":\"resource.gain\",\"pool\":\"actor.hope\",\"amount\":1}"), 4);
+        PartyTargets offers = party(setup, setup.recipient(), new AtomicReference<>());
+        ObjectNode request = transaction(setup);
+        transactionMove(request, "repair", targetRequest(setup, offers, "repair"));
+        ObjectNode beforeRecipient = setup.recipient().deepCopy();
+        var result = stage(setup, request, roster(setup, new java.util.HashMap<>()));
+
+        assertEquals(5, setup.source().at("/hope/on").asInt());
+        assertEquals(0, setup.source().at("/stress/on").asInt());
+        assertEquals(beforeRecipient, setup.recipient());
+        ObjectNode recipient = result.recipients().get("mira");
+        assertEquals(0, recipient.at("/armorTrack/on").asInt());
+        assertEquals(3, recipient.at("/hope/on").asInt());
+        assertEquals(5, recipient.at("/hp/on").asInt(), "The target body reads the recipient's reaction.");
+        assertEquals(1, recipient.at("/automationState/sources/ruleset:base/state/overflowCount").asInt(),
+                "The recipient's reaction state survives subsequent target operations.");
+        assertEquals(8, HOST.revision(recipient));
+        assertEquals(2, result.response().at("/event/table/fear").asInt());
+        assertTrue(result.response().path("actions").findValuesAsText("report").contains("Source reacted."));
+        assertTrue(result.response().path("actions").findValuesAsText("report").contains("Overflow for Mira."));
+        assertTrue(result.response().path("actions").findValuesAsText("report").contains("Mira now has 5 HP marked."));
+    }
+
+    @Test
+    void failedReactionDuringTargetCostRollsBackTheWholeMove() throws Exception {
+        Setup setup = setup(rulesetWithTargetReactions(
+                "{\"op\":\"table.spend\",\"resource\":\"fear\",\"amount\":2,\"label\":\"Cost reaction\"}"), 4);
+        PartyTargets offers = party(setup, setup.recipient(), new AtomicReference<>());
+        ObjectNode request = transaction(setup);
+        transactionMove(request, "repair", targetRequest(setup, offers, "repair"));
+        ObjectNode source = setup.source().deepCopy(), recipient = setup.recipient().deepCopy();
+        var failure = assertThrows(RuleRuntime.Unavailable.class,
+                () -> stage(setup, request, roster(setup, new java.util.HashMap<>())));
+        assertEquals("tableResource", failure.code());
+        assertEquals(source, setup.source());
+        assertEquals(recipient, setup.recipient());
+    }
+
+    @Test
+    void targetedCapacityChangesRejectBeforeCommittingEitherHolder() throws Exception {
+        ObjectNode ruleset = rulesetWithTargetReactions(
+                "{\"op\":\"resource.gain\",\"pool\":\"actor.hope\",\"amount\":1}");
+        ((ArrayNode) ruleset.at("/automation/rules/4/do")).insert(0, RuleJson.parse("""
+                {"op":"track.capacity","track":"recipient.armorTrack","by":1}
+                """));
+        Setup setup = setup(ruleset, 4);
+        PartyTargets offers = party(setup, setup.recipient(), new AtomicReference<>());
+        ObjectNode request = transaction(setup);
+        transactionMove(request, "repair", targetRequest(setup, offers, "repair"));
+        ObjectNode source = setup.source().deepCopy(), recipient = setup.recipient().deepCopy();
+        var failure = assertThrows(RuleRuntime.Unavailable.class,
+                () -> stage(setup, request, roster(setup, new java.util.HashMap<>())));
+        assertEquals("recipientReactions", failure.code());
+        assertTrue(failure.getMessage().contains("track.capacity"));
+        assertEquals(source, setup.source());
+        assertEquals(recipient, setup.recipient());
+    }
+
     @Test
     void privatePartyRecoverySharesTargetedRecipientChangesAndRetainsAllDependencies() throws Exception {
         Setup setup = setup(rulesetWithPartyRecovery("activePlayerCharacters"), 4);

@@ -5849,6 +5849,11 @@ public final class OnlineSessionServer {
         final PartyTargets party;
 
         AutomationRoster(AutomationHost.Pack pack, Campaign.Actor source, String stored, ObjectNode sheet) {
+            this(pack, source, stored, sheet, false);
+        }
+
+        AutomationRoster(AutomationHost.Pack pack, Campaign.Actor source, String stored, ObjectNode sheet,
+                         boolean excludeSource) {
             originals.put(source.getId(), stored);
             sheets.put(source.getId(), sheet);
             party = new PartyTargets(pack.revision(), sheetVersion(stored, source), scope -> {
@@ -5856,6 +5861,7 @@ public final class OnlineSessionServer {
                 try {
                     for (Campaign.Actor actor : automationScope(scope)) {
                         String id = actor.getId();
+                        if (excludeSource && id.equals(source.getId())) continue;
                         if (!originals.containsKey(id)) originals.put(id, store.loadSheet(campaign.getId(), id));
                         String original = originals.get(id);
                         if (original == null) continue;
@@ -6105,7 +6111,8 @@ public final class OnlineSessionServer {
             ObjectNode sheet = original == null ? MAPPER.createObjectNode() : hydrateSheet(actor.getId(), original);
             var pack = automationPack();
             ObjectNode offer = automationHost.describeRest(pack, sheet, automationEvent("rest.prepare", actor),
-                    ctx.queryParam("kind"), playerId, sheetVersion(original, actor));
+                    ctx.queryParam("kind"), playerId, sheetVersion(original, actor),
+                    new AutomationRoster(pack, actor, original, sheet, true).party);
             ctx.header("Cache-Control", "no-store");
             json(ctx, 200, offer);
         } catch (dmmt.online.automation.AutomationHost.NotReady e) {
@@ -6137,11 +6144,6 @@ public final class OnlineSessionServer {
             Campaign.Actor actor = restActor(ctx, playerId);
             if (!requiresAuthoritativeRest())
                 throw new dmmt.online.automation.AutomationHost.NotReady("The host is using legacy rest rules.");
-            for (JsonNode move : body.at("/request/moves"))
-                if (move.has("target")) {
-                    json(ctx, 409, errorBody("Targeted downtime moves are not available yet.").put("code", "restTarget"));
-                    return;
-                }
             String original = store.loadSheet(campaign.getId(), actor.getId());
             ObjectNode sheet = original == null ? MAPPER.createObjectNode() : hydrateSheet(actor.getId(), original);
             var pack = automationPack();

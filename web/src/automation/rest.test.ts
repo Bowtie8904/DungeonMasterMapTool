@@ -115,6 +115,33 @@ describe('host-authored rest dialog', () => {
     expect(dialog.text).toContain('Rest completed.');
   });
 
+  it('requires a host-described recipient and submits its version with the move', async () => {
+    const described = offer();
+    Object.assign(described.moves[0], { targetSelection: { cardinality: 'one', options: [
+      { id: 'mira', label: 'Mira', version: 'target-version' },
+      { id: 'borin', label: 'Borin', version: 'other-version' },
+    ] } });
+    const requests: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      if (!init.body) return Response.json(described);
+      requests.push(String(init.body));
+      return Response.json({ actions: [] });
+    }));
+    await openAutomationRestDialog('hero', 'short', async () => {});
+    const dialog = body.all('dialog')[0], select = dialog.all('select')[0];
+    select.value = '0'; select.change();
+    expect(dialog.text).toContain('Mira');
+    const go = dialog.all('button').find(button => button.text === 'Complete rest')!;
+    go.click();
+    expect(requests).toHaveLength(0);
+    expect(dialog.text).toContain('Select exactly 1');
+    const recipient = dialog.all('fieldset').find(fieldset => fieldset.text.includes('Mira'))!;
+    recipient.all('input')[0].checked = true;
+    go.click();
+    await settle();
+    expect(JSON.parse(requests[0]).request.moves[0].target).toEqual({ recipientId: 'mira', version: 'target-version' });
+  });
+
   it('allows corrections after a rejected request without reusing its ID', async () => {
     const requests: string[] = [];
     vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {

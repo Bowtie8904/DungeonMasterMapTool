@@ -55,9 +55,9 @@ The experimental runtime can observe ordered track changes inside a private tran
 Armor clears and damage marks. A bounded isolated dispatcher can run the owner's supplied automatic reactions
 in order without copying unrelated sources for each event; computed actor pools still refresh even when no
 reaction is bound. Isolated selected and deferred move stages can run the same owner reactions without repeating
-the parent event's automatic adjustments. Private self downtime moves now use those reactions in their adjustment,
-move and deferred phases, including Armor overflow and zero-mark clears; target-recipient reactions still need a
-separate transaction. Active bindings and computed-pool dependencies restrict dispatch without dropping passive
+the parent event's automatic adjustments. Live downtime moves use those reactions in their adjustment,
+move and deferred phases, including Armor overflow and zero-mark clears on a selected recipient. Active bindings
+and computed-pool dependencies restrict dispatch without dropping passive
 projections, and moves without relevant dependencies avoid the observer. An isolated host-owned clear also applies the holder's healing floor and reactions, including
 positive clears with no marks, and returns the actual clear and staged state. Live party recovery selects the
 affected holder's own sources and state even when another character initiated the rest.
@@ -81,9 +81,9 @@ versioned host-selected recipient and its own healing floor; it returns a privat
 the whole move succeeds. Repeated moves require applying each update to a private sheet and rebuilding the
 request-local roster. The base Tend and Repair ally choices remain narrative, as in the legacy client: they
 report recovery for the ally to apply rather than selecting or changing another character. A shared fixture
-checks short and long variants in both engines. Staged completion derives signed recovery facts, runs benefits
-around the rest reset and advances rest counters; failures roll back that stage. Targeted ally moves remain
-unavailable in the live rest dialog.
+checks short and long variants in both engines. Authored targeted ally moves offer eligible characters in the
+live dialog and save both holders' reactions with the rest. Completion derives signed recovery facts, runs benefits
+around the rest reset and advances rest counters; failures roll back the transaction.
 An internal coordinator composes these stages on private source and recipient sheets, reprojects each recipient
 after earlier moves, carries Fear through the rest, and advances each changed sheet once. Other commands needing
 intervening host settlement are rejected rather than evaluated against stale facts. The staged result identifies
@@ -92,7 +92,7 @@ The transaction also retains any host-order dependencies; both can be rechecked 
 scope without loading sheets, and are compared with read sheet bytes inside the atomic commit. A host-signed
 snapshot offer and owner-bound retry receipt can reject stale or forged rest intents and replay committed results
 without rolling or staging recipients again. Offers expire on host restart; already committed receipts still replay.
-The live rest workflow authenticates owners and commits party recoveries; targeted moves and post-outcome
+The live rest workflow authenticates owners and commits targeted moves and party recoveries; post-outcome
 choices remain incomplete. Format-2 catalogs reject legacy
 client-supplied rests and downtime rerolls.
 Owner and DM sheet saves cannot change host-owned rest counters, and legacy damage snapshots retain those counters

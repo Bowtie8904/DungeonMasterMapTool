@@ -137,22 +137,7 @@ export function intentControl(descriptor: ButtonDescriptor, submit: (intent: But
     const fields: HTMLInputElement[] = [];
     dialog.append(el('h4', {}, descriptor.label));
     let readTarget = (): RuleIntent['target'] => party;
-    if (selection?.cardinality === 'one') {
-      const group = el('fieldset', {}, el('legend', {}, text.recipient));
-      const name = `recipient-${randomId()}`;
-      const radios = selection.options.map(option => {
-        const field = el('input', { type: 'radio', name });
-        fields.push(field);
-        group.append(el('label', {}, field, option.label));
-        return { field, option };
-      });
-      readTarget = () => {
-        const chosen = radios.find(row => row.field.checked);
-        if (!chosen) throw new Error(text.selectOptions(1));
-        return { recipientId: chosen.option.id, version: chosen.option.version };
-      };
-      dialog.append(group);
-    }
+    if (selection?.cardinality === 'one') readTarget = targetFields(dialog, selection, fields, text);
     const readInputs = inputFields(dialog, definitions, fields, text);
     const readOptions = optionFields(dialog, options, fields, text);
     const dialogError = el('div', { class: 'error', role: 'alert' });
@@ -188,6 +173,30 @@ export function intentControl(descriptor: ButtonDescriptor, submit: (intent: But
     fields.find(field => !field.disabled)?.focus();
   });
   return root;
+}
+
+export function targetFields(container: HTMLElement, selection: RuleDescriptor['targetSelection'],
+                             fields: HTMLInputElement[], text: ControlText): () => RuleIntent['target'] {
+  if (!selection) return () => undefined;
+  if (selection.cardinality === 'all') {
+    container.append(el('span', { class: 'muted' },
+      `${text.recipients}: ${selection.options.map(option => option.label).join(', ')}`));
+    return () => ({ version: selection.version });
+  }
+  const group = el('fieldset', {}, el('legend', {}, text.recipient));
+  const name = `recipient-${randomId()}`;
+  const radios = selection.options.map(option => {
+    const field = el('input', { type: 'radio', name });
+    fields.push(field);
+    group.append(el('label', {}, field, option.label));
+    return { field, option };
+  });
+  container.append(group);
+  return () => {
+    const chosen = radios.find(row => row.field.checked);
+    if (!chosen) throw new Error(text.selectOptions(1));
+    return { recipientId: chosen.option.id, version: chosen.option.version };
+  };
 }
 
 export function optionFields(container: HTMLElement, options: RuleDescriptor[], fields: HTMLInputElement[],

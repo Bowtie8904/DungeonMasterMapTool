@@ -1980,7 +1980,7 @@ class OnlineSessionServerTest {
         assertEquals(403, restHttp(other, "resting", null, body.toString()).statusCode());
         ObjectNode targeted = body.deepCopy();
         ((ObjectNode) targeted.at("/request/moves/0")).putObject("target").put("recipientId", "forged");
-        assertEquals(409, restHttp(owner, "resting", null, targeted.toString()).statusCode());
+        assertEquals(400, restHttp(owner, "resting", null, targeted.toString()).statusCode());
         assertEquals(before, store.loadSheet(campaign.getId(), "resting"));
 
         var executed = restHttp(owner, "resting", null, body.toString());
@@ -2115,6 +2115,107 @@ class OnlineSessionServerTest {
         assertTrue(rejected.body().contains("Fear"), rejected.body());
         for (var entry : before.entrySet()) assertEquals(entry.getValue(), store.loadSheet(campaign.getId(), entry.getKey()));
         assertEquals(1, campaign.getFear());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+    }
+
+    private void installTargetRestRules(String fearOperation) throws Exception {
+        installPartyRestRules(fearOperation);
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ArrayNode definitions = ruleset.withObject("/automation").withArray("rules");
+        definitions.add(MAPPER.readTree("""
+                {"id":"target-repair","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"button",
+                  "restMove":{"id":"target-repair","kind":"any","ally":true},
+                  "targetSelection":{"cardinality":"one","scope":"activeCharacters","excludeSource":true}}],
+                 "costs":[{"op":"track.mark","track":"actor.stress","amount":1}],
+                 "do":[{"op":"track.clear","track":"recipient.armorTrack","amount":2},
+                       {"op":"track.clear","track":"recipient.hp","amount":{"read":"recipient.hope.value"}}],
+                 "ui":{"label":"Repair an ally","report":"Repaired {recipient.name} with {recipient.hope.value} Hope."}}
+                """));
+        definitions.add(MAPPER.readTree("""
+                {"id":"stress-reaction","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"stress"]},{"eq":[{"read":"event.change"},"mark"]}]},
+                 "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],
+                 "ui":{"report":"Stress reaction for {actor.name}."}}
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+    }
+
+    private static ObjectNode targetRestMove(ObjectNode body, JsonNode offer, String recipientId) {
+        JsonNode descriptor = restDescriptor(offer.path("moves"), "target-repair");
+        JsonNode target = null;
+        for (JsonNode option : descriptor.at("/targetSelection/options"))
+            if (recipientId.equals(option.path("id").asText())) target = option;
+        assertNotNull(target, descriptor.toString());
+        ObjectNode move = addRestMove((ObjectNode) body.path("request"), descriptor);
+        move.putObject("target").put("recipientId", recipientId).put("version", target.path("version").asText());
+        return move;
+    }
+
+    @Test
+    void formatTwoRestCommitsTargetReactionsAndReplaysTheReceipt() throws Exception {
+        installTargetRestRules("gain");
+        addRestParty();
+        String owner = cookie();
+        int fear = campaign.getFear();
+        var described = restHttp(owner, "resting", "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode offer = MAPPER.readTree(described.body());
+        JsonNode targets = restDescriptor(offer.path("moves"), "target-repair").at("/targetSelection/options");
+        assertEquals(List.of("borin", "mira"), targets.findValuesAsText("id"));
+        ObjectNode body = restRequest(offer, "target-rest");
+        targetRestMove(body, offer, "mira");
+        ObjectNode forged = body.deepCopy();
+        ((ObjectNode) forged.at("/request/moves/0/target")).put("version", "stale");
+        assertEquals(409, restHttp(owner, "resting", null, forged.toString()).statusCode());
+
+        var completed = restHttp(owner, "resting", null, body.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode result = MAPPER.readTree(completed.body());
+        assertTrue(result.path("actions").findValuesAsText("report").contains("Stress reaction for resting."));
+        assertTrue(result.path("actions").findValuesAsText("report").contains("Overflow for mira."));
+        assertTrue(result.path("actions").findValuesAsText("report").contains("Repaired mira with 1 Hope."));
+        JsonNode source = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        JsonNode recipient = MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(3, source.at("/stress/on").asInt());
+        assertEquals(1, source.at("/hope/on").asInt());
+        assertEquals(0, recipient.at("/armorTrack/on").asInt());
+        assertEquals(3, recipient.at("/hp/on").asInt(), "The later operation sees the recipient's reaction.");
+        assertEquals(1, recipient.at("/hope/on").asInt());
+        assertEquals(1, recipient.at("/automationState/revision").asInt());
+        assertEquals(fear + 1, campaign.getFear());
+        assertEquals(fear + 1, store.load(campaign.getId()).getFear());
+        int history = store.historyTail(campaign.getId(), 100).size();
+        assertTrue(store.historyTail(campaign.getId(), 100).stream()
+                .anyMatch(message -> message.path("text").asText().contains("Overflow for mira.")));
+        String recipientAfter = store.loadSheet(campaign.getId(), "mira");
+        campaign.actor("mira").setDisabled(true);
+        assertEquals(completed.body(), restHttp(owner, "resting", null, body.toString()).body());
+        assertEquals(recipientAfter, store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        assertEquals(fear + 1, campaign.getFear());
+    }
+
+    @Test
+    void formatTwoRestRollsBackTargetAndSourceWhenARecipientReactionFails() throws Exception {
+        installTargetRestRules("spend");
+        addRestParty();
+        campaign.setFear(0);
+        String owner = cookie();
+        String source = store.loadSheet(campaign.getId(), "resting");
+        String recipient = store.loadSheet(campaign.getId(), "mira");
+        int history = store.historyTail(campaign.getId(), 100).size();
+        var described = restHttp(owner, "resting", "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode offer = MAPPER.readTree(described.body());
+        ObjectNode body = restRequest(offer, "failed-target-rest");
+        targetRestMove(body, offer, "mira");
+        var rejected = restHttp(owner, "resting", null, body.toString());
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertTrue(rejected.body().contains("Fear"), rejected.body());
+        assertEquals(source, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(recipient, store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(0, campaign.getFear());
         assertEquals(history, store.historyTail(campaign.getId(), 100).size());
     }
 
