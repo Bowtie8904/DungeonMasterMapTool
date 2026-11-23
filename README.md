@@ -77,7 +77,8 @@ the shipped format-1 catalogs retain their existing rest behavior.
 The shared ruleset defines the base self-recovery, preparation and project moves for staged tests, including
 tier-scaled recovery, protected HP and capped Hope. Its ally recovery variants, rerolls and armor overflow are
 not yet connected to a live format-2 rest. A staged self move that requests additional party recovery is
-rejected until all affected recipients and their Armor-overflow reactions can be settled atomically.
+rejected until all affected recipients and their Armor-overflow reactions can be settled atomically, even if a
+later adjustment cancels the total. Ordered adjustment records retain each requested amount and its source.
 Format-2 healing respects permanent HP and temporary locked HP on both the actor and targeted recipients;
 reports use the amount actually cleared.
 Converted scar gains and healing update the affected character's Hope capacity atomically. Gaining a scar

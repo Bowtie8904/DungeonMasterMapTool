@@ -2545,8 +2545,12 @@ class LegacyCatalogConverterTest {
                 tended, StructuredRollTest.noRandom(), Map.of(program.sourceId(), program));
         assertEquals(1, afterMove.context().at("/actor/hp/marked").asInt());
         assertEquals("Soothing.", afterMove.report());
-        assertEquals(1, run(program, context(program, actor, move("repair", "long", false, true))).contexts().getFirst()
-                .at("/event/move/allies").asInt());
+        JsonNode repair = run(program, context(program, actor, move("repair", "long", false, true)))
+                .contexts().getFirst().at("/event/move");
+        assertEquals(1, repair.path("allies").asInt());
+        assertEquals(1, repair.at("/adjustments/0/requested").asInt());
+        assertEquals("fixture", repair.at("/adjustments/0/sourceInstanceId").asText());
+        assertEquals(program.sourceId(), repair.at("/adjustments/0/sourceId").asText());
         assertEquals("planField", assertThrows(RuleRuntime.Unavailable.class,
                 () -> run(program, context(program, actor, move("tend", "short", false, false)), "pipe")).code());
 

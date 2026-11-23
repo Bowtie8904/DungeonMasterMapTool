@@ -1165,11 +1165,14 @@ public final class RuleRuntime {
                 int min = bounds.path("min").asInt(0);
                 int max = bounds.path("max").asInt(1000);
                 int current = plan.path(field).asInt(0);
-                int next = Math.max(min, Math.min(max, current + whole(op.path("by"), context, -1000, 1000)));
+                int requested = whole(op.path("by"), context, -1000, 1000);
+                int next = Math.max(min, Math.min(max, current + requested));
                 plan.put(field, next);
                 ArrayNode adjustments = plan.has("adjustments") && plan.get("adjustments").isArray()
                         ? (ArrayNode) plan.get("adjustments") : plan.putArray("adjustments");
-                adjustments.addObject().put("field", field).put("by", next - current).put("sourceId", program.sourceId())
+                adjustments.addObject().put("field", field).put("requested", requested).put("by", next - current)
+                        .put("before", current).put("after", next).put("sourceId", program.sourceId())
+                        .put("sourceInstanceId", context.path("source").path("instanceId").asText())
                         .put("label", RuleTemplate.render(op.path("label").asText(), context));
                 result = RuleExpression.numeric(next, "/result");
             }

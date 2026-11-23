@@ -1628,7 +1628,14 @@ public final class AutomationHost {
         RuleJson.integer(move.get("slots"), "/event/move/slots", 0, 1);
         RuleJson.integer(move.get("bonus"), "/event/move/bonus", -1000, 1000);
         int allies = RuleJson.integer(move.get("allies"), "/event/move/allies", 0, 128);
-        if (!move.path("ally").asBoolean() && allies > 0)
+        boolean partyRecovery = allies > 0;
+        if (!partyRecovery) for (JsonNode adjustment : move.path("adjustments")) {
+            if ("allies".equals(adjustment.path("field").asText()) && adjustment.path("requested").asInt() > 0) {
+                partyRecovery = true;
+                break;
+            }
+        }
+        if (!move.path("ally").asBoolean() && partyRecovery)
             throw new RuleRuntime.Unavailable("restCommand",
                     "This downtime move requires party recovery and recipient track-change settlement, which are not available yet.");
         if (!event.path("blocked").isEmpty())

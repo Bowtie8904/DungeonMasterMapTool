@@ -86,6 +86,13 @@ class RestMoveTest {
         assertEquals(2, result.response().at("/event/rest/start/hope").asInt());
         assertEquals(1, result.progress().slotsUsed());
         assertEquals(3, result.response().at("/event/move/bonus").asInt());
+        var firstAdjustment = result.response().at("/event/move/adjustments/0");
+        assertEquals(2, firstAdjustment.path("requested").asInt());
+        assertEquals(2, firstAdjustment.path("by").asInt());
+        assertEquals(0, firstAdjustment.path("before").asInt());
+        assertEquals(2, firstAdjustment.path("after").asInt());
+        assertEquals("ruleset:base", firstAdjustment.path("sourceId").asText());
+        assertEquals("ruleset:base", firstAdjustment.path("sourceInstanceId").asText());
         assertEquals("mend", result.response().at("/event/move/id").asText());
         assertFalse(result.response().at("/event/move/ally").asBoolean());
         assertEquals(2, sheet.at("/stress/on").asInt());

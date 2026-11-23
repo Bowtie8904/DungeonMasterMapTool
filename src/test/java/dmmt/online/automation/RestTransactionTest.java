@@ -441,6 +441,83 @@ class RestTransactionTest {
     }
 
     @Test
+    void canceledOrClampedPartyRequestsRemainOrderedAndCannotBypassTheGuard() throws Exception {
+        var base = pack();
+        ObjectNode automation = (ObjectNode) RuleJson.parse("""
+                {"rules":[
+                  {"id":"share","bindings":[{"id":"auto","event":"downtime.move","surface":"downtime","mode":"automatic"}],
+                   "when":{"eq":[{"read":"event.move.id"},"mend"]},
+                   "do":[{"op":"plan.adjust","plan":"event.move","field":"allies","by":128,"label":"First"},
+                         {"op":"plan.adjust","plan":"event.move","field":"allies","by":1,"label":"Clamped"},
+                         {"op":"plan.adjust","plan":"event.move","field":"allies","by":-1000,"label":"Cancel"}],
+                   "ui":{"label":"Share"}},
+                  {"id":"narrative","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"button",
+                    "restMove":{"id":"mend","kind":"any","ally":true,"narrative":true}}],
+                   "ui":{"label":"Narrative ally"}},
+                  {"id":"late","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"button",
+                    "restMove":{"id":"late","kind":"any"}}],
+                   "do":[{"op":"plan.adjust","plan":"event.move","field":"allies","by":1,"label":"Late"},
+                         {"op":"plan.adjust","plan":"event.move","field":"allies","by":-1,"label":"Cancel"}],
+                   "ui":{"label":"Late adjustment"}}
+                ]}""");
+        var programs = new java.util.HashMap<>(base.programs());
+        programs.put("features:sharing", RuleCompiler.compile("features:sharing", automation,
+                RuleJson.parse(LegacyCatalogConverter.coreRecipes())));
+        var pack = new AutomationHost.Pack("sharing", programs, base.rulesetName(), base.rest());
+        ObjectNode sheet = sheet();
+        for (String id : List.of("alpha", "beta")) sheet.withArray("features").addObject()
+                .put("name", "Sharing").put("instanceId", id).put("automationSource", "features:sharing");
+        ObjectNode before = sheet.deepCopy();
+        ObjectNode rest = request("short").put("requestId", "canceled");
+        rest.withArray("preparation").add(choice("prepare", "rest"));
+        move(rest, "mend");
+        assertEquals("restCommand", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageRestWithReceipt(pack, sheet, origin(), rest, "owner",
+                        StructuredRollTest.noRandom(), null)).code());
+        assertEquals(before, sheet, "A canceled party request must not leave preparation, a roll, or a receipt.");
+
+        ObjectNode late = request("short");
+        ObjectNode lateMove = late.withArray("moves").addObject();
+        lateMove.set("selection", choice("late", "move").put("sourceInstanceId", "alpha"));
+        lateMove.putArray("options");
+        assertEquals("restCommand", assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.stageSelfRest(pack, sheet, origin(), late, StructuredRollTest.noRandom())).code());
+        assertEquals(before, sheet, "A canceled request inside the move must also roll back.");
+
+        ObjectNode narrative = request("short");
+        ObjectNode narrativeMove = narrative.withArray("moves").addObject();
+        narrativeMove.set("selection", choice("narrative", "move").put("sourceInstanceId", "alpha"));
+        narrativeMove.putArray("options");
+        ObjectNode result = HOST.stageSelfRest(pack, sheet, origin(), narrative, StructuredRollTest.noRandom());
+        var adjustments = result.at("/moveEvents/0/move/adjustments");
+        assertEquals(6, adjustments.size());
+        assertEquals(List.of("alpha", "alpha", "alpha", "beta", "beta", "beta"),
+                adjustments.findValuesAsText("sourceInstanceId"));
+        assertEquals(List.of("First", "Clamped", "Cancel", "First", "Clamped", "Cancel"),
+                adjustments.findValuesAsText("label"));
+        for (int start : List.of(0, 3)) {
+            var first = adjustments.get(start);
+            assertEquals(128, first.path("requested").asInt());
+            assertEquals(128, first.path("by").asInt());
+            assertEquals(0, first.path("before").asInt());
+            assertEquals(128, first.path("after").asInt());
+            assertEquals("features:sharing", first.path("sourceId").asText());
+            var clamped = adjustments.get(start + 1);
+            assertEquals(1, clamped.path("requested").asInt());
+            assertEquals(0, clamped.path("by").asInt());
+            assertEquals(128, clamped.path("before").asInt());
+            assertEquals(128, clamped.path("after").asInt());
+            var canceled = adjustments.get(start + 2);
+            assertEquals(-1000, canceled.path("requested").asInt());
+            assertEquals(-128, canceled.path("by").asInt());
+            assertEquals(128, canceled.path("before").asInt());
+            assertEquals(0, canceled.path("after").asInt());
+        }
+        assertEquals(0, result.at("/moveEvents/0/move/allies").asInt());
+        assertEquals(10, HOST.revision(sheet));
+    }
+
+    @Test
     void fearCarriesThroughEveryRestStageAndLifecyclePoolReset() throws Exception {
         var base = pack();
         ObjectNode automation = (ObjectNode) RuleJson.parse("""
