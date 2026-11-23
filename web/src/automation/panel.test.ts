@@ -117,6 +117,29 @@ describe('saved roll controls', () => {
     expect(fake(card).text).toContain('Gained Hope');
     expect(fake(card).all('button')).toHaveLength(0);
   });
+
+  it('refreshes a lone repeatable result after each distinct use', async () => {
+    const requests: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      if (!init.body) return Response.json({ revision: 5 + requests.length, actions: [action({ repeatable: true })] });
+      requests.push(String(init.body));
+      return Response.json({ revision: 5 + requests.length, actions: [{ report: 'Applied.' }] });
+    }));
+    const card = historyResultControls(roll, 'owner', 'session', true)!;
+    toggleOpen(card);
+    await settle();
+    fake(card).all('button')[0].click();
+    await settle();
+    expect(fake(card).all('button')).toHaveLength(1);
+    fake(card).all('button')[0].click();
+    await settle();
+    expect(requests).toHaveLength(2);
+    const first = JSON.parse(requests[0]).request, second = JSON.parse(requests[1]).request;
+    expect(first.expectedRevision).toBe(5);
+    expect(second.expectedRevision).toBe(6);
+    expect(second.requestId).not.toBe(first.requestId);
+    expect(fake(card).all('button')).toHaveLength(1);
+  });
 });
 
 describe('automation panel', () => {
@@ -224,6 +247,19 @@ describe('automation panel', () => {
     expect(JSON.parse(String(options.body))).toEqual({ request: { requestId: expect.any(String), expectedRevision: 5,
       selections: [], profileRoll: { sourceInstanceId: 's1', profileId: 'cast', kind: 'spellcast' } } });
     expect(panel.text).toContain('Spell: Cast (spellcast): 17 (success)');
+  });
+
+  it('disables exhausted profiles and displays the host reason', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const panel = fake(automationPanel('a1', 'sheet', 'Actions', async () => ({ revision: 5, actions: [], profiles: [
+      { id: 'cast', sourceInstanceId: 's1', label: 'Cast', sourceName: 'Spell', rollKind: 'spellcast',
+        available: false, reason: 'No uses remain.' },
+    ] })));
+    await settle();
+    expect(panel.all('button')[0].disabled).toBe(true);
+    expect(panel.text).toContain('No uses remain.');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('loads a saved target offer after the roll and sends its version with the result action', async () => {

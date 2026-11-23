@@ -76,6 +76,7 @@ public final class RuleRuntime {
         if (binding.has("group")) description.set("group", binding.get("group"));
         if (binding.has("defaultOn")) description.set("defaultOn", binding.get("defaultOn"));
         if (binding.has("exclusiveGroup")) description.set("exclusiveGroup", binding.get("exclusiveGroup"));
+        if (binding.has("repeatable")) description.set("repeatable", binding.get("repeatable"));
         if (binding.has("claimGroup")) description.set("claimGroup", binding.get("claimGroup"));
         if (binding.has("claimGroupScope")) description.set("claimGroupScope", binding.get("claimGroupScope"));
         if (binding.has("claimScope")) description.set("claimScope", binding.get("claimScope"));
@@ -195,6 +196,20 @@ public final class RuleRuntime {
         return Math.max(declared, context.path("actor").path("limitOverrides").path(key).asInt());
     }
 
+    static void reserveUse(RuleCompiler.Program program, ObjectNode context, String limit) {
+        ObjectNode usage = usage(program, context);
+        int current = RuleJson.integer(usage.get(limit), "/usage/" + limit, 0, 1000);
+        if (current >= maxUses(program, context, limit))
+            throw new Unavailable("limit", "No uses remain for this action.");
+        usage.put(limit, current + 1);
+    }
+
+    static void refundUse(RuleCompiler.Program program, ObjectNode context, String limit) {
+        ObjectNode usage = usage(program, context);
+        int current = RuleJson.integer(usage.get(limit), "/usage/" + limit, 0, 1000);
+        usage.put(limit, Math.max(0, current - 1));
+    }
+
     static Prepared reserveCosts(RuleCompiler.Program program, Prepared preflight, ObjectNode currentContext) {
         return reserveCosts(program, preflight, currentContext, true);
     }
@@ -213,12 +228,7 @@ public final class RuleRuntime {
             if (currentContext.has(field)) copyField(currentContext, next, field);
         RuleEffects.refreshCounts(program, next);
         if (reserveSourceCosts && rule.has("limitRef")) {
-            String limit = rule.path("limitRef").asText();
-            ObjectNode usage = (ObjectNode) next.get("usage");
-            int current = RuleJson.integer(usage.get(limit), "/usage/" + limit, 0, 1000);
-            int maximum = maxUses(program, next, limit);
-            if (current >= maximum) throw new Unavailable("limit", "No uses remain for this action.");
-            usage.put(limit, current + 1);
+            reserveUse(program, next, rule.path("limitRef").asText());
         }
         if (reserveSourceCosts) {
             List<ObjectNode> published = new ArrayList<>(), rolls = new ArrayList<>();

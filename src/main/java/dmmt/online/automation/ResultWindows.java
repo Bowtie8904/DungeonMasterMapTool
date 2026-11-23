@@ -31,6 +31,12 @@ final class ResultWindows {
         }
     }
 
+    record ExclusiveGroup(String sourceInstanceId, String group) {
+        static ExclusiveGroup of(JsonNode item) {
+            return new ExclusiveGroup(item.required("sourceInstanceId").textValue(), item.required("exclusiveGroup").textValue());
+        }
+    }
+
     /** Source definition plus current activations, not mutable quantities, labels, or a global sheet revision. */
     static Map<String, ObjectNode> guards(List<SheetProjection.SourceElement> sources, JsonNode effects, String actorId) {
         Map<String, ObjectNode> guards = new HashMap<>();
@@ -68,6 +74,8 @@ final class ResultWindows {
             if (key.eachId() != null) item.put("eachId", key.eachId());
             if (match.has("claimGroup")) item.set("claimGroup", match.get("claimGroup"));
             if (match.has("claimGroupScope")) item.set("claimGroupScope", match.get("claimGroupScope"));
+            if (match.has("exclusiveGroup")) item.set("exclusiveGroup", match.get("exclusiveGroup"));
+            if (match.has("repeatable")) item.set("repeatable", match.get("repeatable"));
             item.set("guard", guards.get(key.sourceInstanceId()));
         }
         int count = buttons.size();
@@ -114,16 +122,26 @@ final class ResultWindows {
         throw stale();
     }
 
-    static void take(ObjectNode window, Button chosen, String claimGroup, String claimGroupScope) {
+    static void take(ObjectNode window, Button chosen, String claimGroup, String claimGroupScope, String exclusiveGroup,
+                     boolean repeatable) {
         ArrayNode buttons = (ArrayNode) window.required("buttons");
         for (int i = 0; i < buttons.size(); i++) if (Button.of(buttons.get(i)).equals(chosen)) {
             if (!java.util.Objects.equals(claimGroup, buttons.get(i).path("claimGroup").textValue())) throw stale();
             if (!claimGroupScope.equals(buttons.get(i).path("claimGroupScope").asText("source"))) throw stale();
+            if (!java.util.Objects.equals(exclusiveGroup, buttons.get(i).path("exclusiveGroup").textValue())) throw stale();
+            if (repeatable != buttons.get(i).path("repeatable").asBoolean(false)) throw stale();
+            if (repeatable && claimGroup == null && exclusiveGroup == null) return;
             ArrayNode used = window.withArray("used");
             if (used.size() >= MAX_BUTTONS) throw RuleJson.error("/result", "Too many edits to this roll.");
             ObjectNode taken = (ObjectNode) buttons.remove(i);
             taken.remove("guard");
             used.add(taken);
+            if (exclusiveGroup != null) {
+                ExclusiveGroup group = ExclusiveGroup.of(taken);
+                for (int other = buttons.size() - 1; other >= 0; other--)
+                    if (buttons.get(other).has("exclusiveGroup") && group.equals(ExclusiveGroup.of(buttons.get(other))))
+                        buttons.remove(other);
+            }
             if (claimGroup != null) {
                 ClaimGroup group = ClaimGroup.of(taken);
                 for (int other = buttons.size() - 1; other >= 0; other--)

@@ -10,6 +10,7 @@ export interface DescribedActions {
   actions: RuleDescriptor[];
   profiles?: Array<{ id: string; label: string; sourceInstanceId: string; sourceName: string; damage?: object;
     effectInstanceId?: string; rollKind?: 'action' | 'reaction' | 'spellcast';
+    available?: boolean; reason?: string;
     options?: Partial<Record<ProfileRollKind, RuleDescriptor[]>> }>;
 }
 
@@ -122,7 +123,7 @@ function resultControls(actorId: string, resultId: string, initial?: DescribedAc
             else paint(receipt.event.resultId, { revision: receipt.revision, actions: receipt.resultActions });
           }
           else { finished = true; ++generation; list.replaceChildren(); }
-        } else if (offer.actions.length === 1) {
+        } else if (offer.actions.length === 1 && !button.repeatable) {
           ++generation; list.replaceChildren();
           finished = true;
           status.textContent = reports.join('\n') || 'Applied.';
@@ -205,7 +206,8 @@ export function automationPanel(actorId: string, surface = 'sheet', title = 'Act
         for (const kind of kinds) {
           if (kind === 'damage' && !profile.damage) continue;
           const label = `${profile.sourceName}: ${profile.label} (${kind})`;
-          controls.push(intentControl({ label, available: true, revision: described!.revision, options: profile.options?.[kind] },
+          controls.push(intentControl({ label, available: profile.available !== false, reason: profile.reason,
+            revision: described!.revision, options: profile.options?.[kind] },
             async ({ requestId, expectedRevision, selections = [] }) => {
               let result: unknown;
               try {

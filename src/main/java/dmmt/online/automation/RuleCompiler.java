@@ -331,7 +331,7 @@ public final class RuleCompiler {
         effects.fields().forEachRemaining(field -> validateEffect(field.getKey(), field.getValue(), state, effects));
         ArrayNode modifiers = automation.has("modifiers") ? modifierList(automation.get("modifiers"), "/automation/modifiers", state, true) : RuleJson.JSON.createArrayNode();
         Decl decl = new Decl(state, limits, pools, effects, attachment != null);
-        ArrayNode profiles = automation.has("profiles") ? profileList(automation.get("profiles")) : RuleJson.JSON.createArrayNode();
+        ArrayNode profiles = automation.has("profiles") ? profileList(automation.get("profiles"), limits) : RuleJson.JSON.createArrayNode();
         JsonNode definitions = automation.path("rules");
         boolean derived = false;
         for (JsonNode effect : effects) derived |= effect.has("while");
@@ -485,14 +485,25 @@ public final class RuleCompiler {
         }
     }
 
-    private static ArrayNode profileList(JsonNode list) {
+    private static ArrayNode profileList(JsonNode list, ObjectNode limits) {
         if (!list.isArray() || list.isEmpty() || list.size() > 8) throw RuleJson.error("/automation/profiles", "Expected 1-8 roll profiles.");
         Set<String> ids = new HashSet<>();
         for (int i = 0; i < list.size(); i++) {
             String path = "/automation/profiles/" + i;
             if (!ids.add(RuleJson.id(list.get(i).path("id"), path + "/id"))) throw RuleJson.error(path + "/id", "Duplicate profile ID.");
-            RuleJson.fields(list.get(i), path, "id", "label", "trait", "range", "damage", "rollKind", "difficulty", "origin");
+            RuleJson.fields(list.get(i), path, "id", "label", "trait", "range", "damage", "rollKind", "difficulty", "origin",
+                    "limitRef", "consumeOn");
             validateProfileBody(list.get(i), path);
+            JsonNode profile = list.get(i);
+            if (profile.has("limitRef")) {
+                String limit = RuleJson.id(profile.get("limitRef"), path + "/limitRef");
+                if (!limits.has(limit)) throw RuleJson.error(path + "/limitRef", "Unknown use budget: " + limit);
+                if (!profile.has("rollKind") || !Set.of("attempt", "success").contains(profile.path("consumeOn").asText()))
+                    throw RuleJson.error(path + "/consumeOn", "An action-roll limit must be consumed on attempt or success.");
+                if ("success".equals(profile.path("consumeOn").asText()) && !profile.has("difficulty"))
+                    throw RuleJson.error(path + "/difficulty", "A success-limited roll needs a difficulty.");
+            } else if (profile.has("consumeOn"))
+                throw RuleJson.error(path + "/consumeOn", "Consumption requires a use budget.");
         }
         return (ArrayNode) list.deepCopy();
     }
@@ -674,7 +685,7 @@ public final class RuleCompiler {
 
     private static void validateBindingBasics(JsonNode binding, String path, boolean allowSubstitutions) {
         RuleJson.fields(binding, path, "id", "event", "surface", "mode", "when", "group",
-                "defaultOn", "forEach", "exclusiveGroup", "priority", "claimGroup", "claimGroupScope", "claimScope", "audience", "targetSelection");
+                "defaultOn", "forEach", "exclusiveGroup", "priority", "claimGroup", "claimGroupScope", "claimScope", "audience", "targetSelection", "repeatable");
         if (!(allowSubstitutions && substitution(binding.path("id")))) RuleJson.id(binding.path("id"), path + "/id");
         if (!(allowSubstitutions && substitution(binding.path("event"))) && !EVENTS.contains(binding.path("event").asText()))
             throw RuleJson.error(path + "/event", "Unknown event.");
@@ -697,6 +708,17 @@ public final class RuleCompiler {
         if (binding.has("defaultOn") && !(allowSubstitutions && substitution(binding.path("mode")))
                 && !"option".equals(binding.path("mode").asText()))
             throw RuleJson.error(path + "/defaultOn", "Defaults are only valid for option bindings.");
+        if (binding.has("repeatable")) {
+            if (!(allowSubstitutions && substitution(binding.get("repeatable"))))
+                RuleExpression.bool(binding.get("repeatable"), path + "/repeatable");
+            boolean eventUnknown = allowSubstitutions && substitution(binding.path("event"));
+            boolean surfaceUnknown = allowSubstitutions && substitution(binding.path("surface"));
+            boolean modeUnknown = allowSubstitutions && substitution(binding.path("mode"));
+            if ((!eventUnknown && !"roll.finished".equals(binding.path("event").asText()))
+                    || (!surfaceUnknown && !"roll".equals(binding.path("surface").asText()))
+                    || (!modeUnknown && !"button".equals(binding.path("mode").asText())))
+                throw RuleJson.error(path + "/repeatable", "Only roll.finished result buttons can be repeatable.");
+        }
         for (String group : List.of("exclusiveGroup", "claimGroup")) if (binding.has(group)) {
             if (!(allowSubstitutions && substitution(binding.get(group)))) RuleJson.id(binding.get(group), path + "/" + group);
             if (!(allowSubstitutions && substitution(binding.path("mode")))

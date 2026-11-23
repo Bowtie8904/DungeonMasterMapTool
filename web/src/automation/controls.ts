@@ -19,6 +19,7 @@ export interface RuleDescriptor {
   mode: 'button' | 'option' | 'automatic';
   defaultOn?: boolean;
   exclusiveGroup?: string;
+  repeatable?: boolean;
   group?: 'result' | 'sourceFeature' | 'otherFeatures';
   label: string;
   description?: string;

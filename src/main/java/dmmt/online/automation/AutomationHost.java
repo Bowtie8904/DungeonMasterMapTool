@@ -169,6 +169,17 @@ public final class AutomationHost {
                 .put("sourceInstanceId", source.instanceId()).put("sourceName", source.name());
         item.setAll((ObjectNode) profile);
         if (effectId != null) item.put("effectInstanceId", effectId);
+        if ("spellcast".equals(profile.path("trait").asText()) && !actor.path("spellcastTrait").path("name").isTextual())
+            item.put("available", false).put("reason", "Choose a Spellcast trait before making this roll.");
+        if (profile.has("limitRef")) {
+            RuleCompiler.Program program = pack.programs().get(source.sourceId());
+            ObjectNode context = RuleRuntime.context(program, null, context(state, source, actor, event));
+            try {
+                RuleRuntime.reserveUse(program, context, profile.path("limitRef").asText());
+            } catch (RuleRuntime.Unavailable unavailable) {
+                item.put("available", false).put("reason", unavailable.getMessage());
+            }
+        }
         if (!hasRollOptions) return;
         ObjectNode options = item.putObject("options");
         for (String kind : ProfileRoll.kinds(profile)) {
@@ -388,6 +399,12 @@ public final class AutomationHost {
         if (profile == null) throw new RuleRuntime.Unavailable("profile", "This profile is no longer available.");
 
         long revision = state.path("revision").longValue();
+        ProfileRoll.facts(event, source, profile, kind, actor, effectId == null && equippedWeapon(working, source));
+        if (profile.has("limitRef")) {
+            ObjectNode context = RuleRuntime.context(program, null, context(state, source, actor, event));
+            RuleRuntime.reserveUse(program, context, profile.path("limitRef").asText());
+            storeSource(state, source.instanceId(), context);
+        }
         ProfileRoll.prepare(event, source, profile, kind, actor, effectId == null && equippedWeapon(working, source),
                 projected.rollModifiers(), random);
         var candidates = candidates(pack, sources, state, actor, event);
@@ -398,14 +415,44 @@ public final class AutomationHost {
             throw new RuleRuntime.Unavailable("blocked", finished.at("/blocked/0/reason").asText());
         if (!finished.path("roll").equals(event.path("roll"))) ProfileRoll.updateCheck(finished);
         finished.put("type", "roll.finished");
+        boolean successOnly = "success".equals(profile.path("consumeOn").asText());
+        String outcome = successOnly ? limitedOutcome(finished) : null;
+        if ("failure".equals(outcome))
+            adjustProfileUse(pack, working, finished, source, program, profile.path("limitRef").asText(), true);
         ObjectNode after = automatic(pack, working, finished, random);
         ObjectNode finalEvent = (ObjectNode) after.get("event");
         if (!finalEvent.path("roll").equals(finished.path("roll"))) ProfileRoll.updateCheck(finalEvent);
+        if (successOnly) {
+            String finalOutcome = limitedOutcome(finalEvent);
+            if (!finalOutcome.equals(outcome))
+                adjustProfileUse(pack, working, finalEvent, source, program, profile.path("limitRef").asText(),
+                        "failure".equals(finalOutcome));
+        }
         result.set("event", finalEvent);
         for (String key : List.of("actions", "outbox"))
             ((ArrayNode) result.get(key)).addAll((ArrayNode) after.get(key));
         projection.state(working).put("revision", revision + 1);
         return result.put("revision", revision + 1);
+    }
+
+    private static String limitedOutcome(ObjectNode event) {
+        String outcome = event.at("/check/outcome").asText();
+        if (!Set.of("success", "failure").contains(outcome))
+            throw new RuleRuntime.Unavailable("outcome", "This use-limited roll must have a definite success or failure.");
+        return outcome;
+    }
+
+    private void adjustProfileUse(Pack pack, ObjectNode working, ObjectNode event, SheetProjection.SourceElement source,
+                                  RuleCompiler.Program program, String limit, boolean refund) {
+        var remaining = sources(pack, working).stream().filter(item -> source.instanceId().equals(item.instanceId())
+                && source.sourceId().equals(item.sourceId())).findFirst().orElse(null);
+        if (remaining == null) return;
+        ObjectNode currentState = projection.state(working);
+        ObjectNode currentActor = actor(pack, working, currentState, event);
+        ObjectNode context = RuleRuntime.context(program, null, context(currentState, remaining, currentActor, event));
+        if (refund) RuleRuntime.refundUse(program, context, limit);
+        else RuleRuntime.reserveUse(program, context, limit);
+        storeSource(currentState, source.instanceId(), context);
     }
 
     private static boolean equippedWeapon(ObjectNode sheet, SheetProjection.SourceElement source) {
@@ -432,7 +479,8 @@ public final class AutomationHost {
         JsonNode binding = RuleDispatcher.binding(program.rule(intent.ruleId()), intent.bindingId());
         String claimGroup = binding.path("claimGroup").textValue();
         ResultWindows.take(window, new ResultWindows.Button(instance, intent.ruleId(), intent.bindingId(), intent.eachId()),
-                claimGroup, binding.path("claimGroupScope").asText("source"));
+                claimGroup, binding.path("claimGroupScope").asText("source"), binding.path("exclusiveGroup").textValue(),
+                binding.path("repeatable").asBoolean(false));
         if (binding.has("targetSelection") != request.has("target"))
             throw RuleJson.error("/request/target", "This result action requires its current target selection.");
         if (claimGroup != null) {
@@ -520,11 +568,17 @@ public final class AutomationHost {
         if (used != null) {
             Set<ResultWindows.Button> spent = new java.util.HashSet<>();
             used.forEach(item -> spent.add(ResultWindows.Button.of(item)));
+            Set<ResultWindows.ExclusiveGroup> spentAlternatives = new java.util.HashSet<>();
+            used.forEach(item -> {
+                if (item.has("exclusiveGroup")) spentAlternatives.add(ResultWindows.ExclusiveGroup.of(item));
+            });
             Set<ResultWindows.ClaimGroup> spentGroups = new java.util.HashSet<>();
             if (usedClaimGroups != null && usedClaimGroups.isArray())
                 usedClaimGroups.forEach(item -> spentGroups.add(ResultWindows.ClaimGroup.of(item)));
             for (int i = matches.size() - 1; i >= 0; i--)
                 if (spent.contains(ResultWindows.Button.of(matches.get(i)))
+                        || matches.get(i).has("exclusiveGroup")
+                        && spentAlternatives.contains(ResultWindows.ExclusiveGroup.of(matches.get(i)))
                         || matches.get(i).has("claimGroup") && spentGroups.contains(ResultWindows.ClaimGroup.of(matches.get(i))))
                     matches.remove(i);
         }

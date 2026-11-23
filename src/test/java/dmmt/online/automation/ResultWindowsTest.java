@@ -31,9 +31,9 @@ class ResultWindowsTest {
         var latest = ResultWindows.lookup(state, "pack", "owner", b);
         assertEquals(7, latest.requiredAt("/event/total").intValue());
         var bonus = ResultWindows.Button.of(first.get(0));
-        assertThrows(RuleRuntime.Unavailable.class, () -> ResultWindows.take(old, bonus, null, "source"));
-        ResultWindows.take(latest, bonus, null, "source");
-        assertThrows(RuleRuntime.Unavailable.class, () -> ResultWindows.take(latest, bonus, null, "source"));
+        assertThrows(RuleRuntime.Unavailable.class, () -> ResultWindows.take(old, bonus, null, "source", null, false));
+        ResultWindows.take(latest, bonus, null, "source", null, false);
+        assertThrows(RuleRuntime.Unavailable.class, () -> ResultWindows.take(latest, bonus, null, "source", null, false));
         ObjectNode saved = state;
         assertThrows(RuleRuntime.Unavailable.class, () -> ResultWindows.lookup(saved, "pack", "other", a));
         assertThrows(RuleRuntime.Unavailable.class, () -> ResultWindows.lookup(saved, "new-pack", "owner", a));
@@ -59,5 +59,29 @@ class ResultWindowsTest {
         ((ObjectNode) effects.get(0)).put("id", "own-recast");
         ResultWindows.prune(state, ResultWindows.guards(sources, effects, "actor"));
         assertThrows(RuleRuntime.Unavailable.class, () -> ResultWindows.lookup(state, "pack", "owner", id));
+    }
+
+    @Test
+    void exclusiveAlternativesAreConsumedOnlyForTheirOwnSource() throws Exception {
+        ObjectNode state = RuleJson.JSON.createObjectNode();
+        ObjectNode event = state.objectNode().put("sourceInstanceId", "a");
+        var sources = List.of(new SheetProjection.SourceElement("features:a", "a", "A", state.objectNode(), null),
+                new SheetProjection.SourceElement("features:b", "b", "B", state.objectNode(), null));
+        ArrayNode matches = (ArrayNode) RuleJson.parse("""
+                [{"sourceInstanceId":"a","ruleId":"one","bindingId":"use","exclusiveGroup":"choice"},
+                 {"sourceInstanceId":"a","ruleId":"two","bindingId":"use","exclusiveGroup":"choice"},
+                 {"sourceInstanceId":"a","ruleId":"other","bindingId":"use","exclusiveGroup":"other"},
+                 {"sourceInstanceId":"b","ruleId":"one","bindingId":"use","exclusiveGroup":"choice"}]""");
+        String id = ResultWindows.publish(state, "pack", "owner", event, matches,
+                ResultWindows.guards(sources, RuleJson.JSON.createArrayNode(), "actor"));
+        ObjectNode window = ResultWindows.lookup(state, "pack", "owner", id);
+        var chosen = ResultWindows.Button.of(matches.get(0));
+        assertThrows(RuleRuntime.Unavailable.class, () -> ResultWindows.take(window, chosen, null, "source", "wrong", false));
+        assertEquals(4, window.required("buttons").size());
+        ResultWindows.take(window, chosen, null, "source", "choice", false);
+        assertEquals(List.of("other", "one"), window.required("buttons").findValuesAsText("ruleId"));
+        assertEquals("choice", window.requiredAt("/used/0/exclusiveGroup").textValue());
+        assertThrows(RuleRuntime.Unavailable.class,
+                () -> ResultWindows.take(window, ResultWindows.Button.of(matches.get(1)), null, "source", "choice", false));
     }
 }

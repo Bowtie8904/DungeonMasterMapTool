@@ -148,7 +148,11 @@ public final class LegacyCatalogConverter {
         if (node.has("automation")) {
             context.blocks++;
             List<Diagnostic> problems = new ArrayList<>();
-            ObjectNode converted = convertBlock(node.get("automation"), path + "/automation", sourceId, problems, shared);
+            String origin = null;
+            if (sourceId.startsWith("domain-cards:") && path.matches("/entries/\\d+")
+                    && node.path("name").isTextual() && !node.path("name").asText().isBlank())
+                origin = "card:" + node.path("name").asText();
+            ObjectNode converted = convertBlock(node.get("automation"), path + "/automation", sourceId, problems, shared, origin);
             boolean empty = node.get("automation").isObject() && node.get("automation").isEmpty();
             if (problems.isEmpty() && !empty) {
                 try { RuleCompiler.compile(sourceId, converted, recipes); }
@@ -229,6 +233,11 @@ public final class LegacyCatalogConverter {
     /** Resources are actor-scoped, so a pool declared by one source (for example a class) can be spent by another. */
     static ObjectNode convertBlock(JsonNode legacy, String path, String sourceId, List<Diagnostic> problems,
                                    Map<String, ObjectNode> shared) {
+        return convertBlock(legacy, path, sourceId, problems, shared, null);
+    }
+
+    private static ObjectNode convertBlock(JsonNode legacy, String path, String sourceId, List<Diagnostic> problems,
+                                           Map<String, ObjectNode> shared, String cardOrigin) {
         ObjectNode out = RuleJson.JSON.createObjectNode();
         Problems p = new Problems(sourceId, problems, new ArrayList<>());
         if (!legacy.isObject()) { p.add(path, "Automation must be an object."); return out; }
@@ -386,11 +395,15 @@ public final class LegacyCatalogConverter {
                 ending.put("op", "effect.endLabeled").put("label", label).put("target", target);
             } else ((ObjectNode) op).put("effect", id);
         }
+        ObjectNode castProfile = null;
         if (legacy.has("spellcastDifficulty")) {
-            ObjectNode rule = spellcastRoll(legacy, path, p, limited);
-            if (rule != null) {
-                rule.put("id", unique(rule.path("id").asText(), ruleIds));
-                rules.add(rule);
+            if (cardOrigin != null) castProfile = spellcastProfile(legacy, path, p, limited, cardOrigin);
+            else {
+                ObjectNode rule = spellcastRoll(legacy, path, p, limited);
+                if (rule != null) {
+                    rule.put("id", unique(rule.path("id").asText(), ruleIds));
+                    rules.add(rule);
+                }
             }
         } else for (String flag : List.of("automaticRestUse", "automaticRestUseOnAttempt"))
             if (legacy.has(flag)) p.add(path + "/" + flag, "Automatic use consumption needs a spellcast difficulty.");
@@ -418,6 +431,13 @@ public final class LegacyCatalogConverter {
         if (legacy.has("alternateProfiles")) {
             ArrayNode profiles = profiles(legacy.get("alternateProfiles"), path + "/alternateProfiles", p);
             if (!profiles.isEmpty()) out.set("profiles", profiles);
+        }
+        if (castProfile != null) {
+            ArrayNode profiles = out.withArray("profiles");
+            Set<String> ids = new HashSet<>();
+            profiles.forEach(profile -> ids.add(profile.path("id").asText()));
+            castProfile.put("id", unique(castProfile.path("id").asText(), ids));
+            profiles.add(castProfile);
         }
         if (legacy.has("hopeReward")) {
             ObjectNode rule = hopeReward(legacy.get("hopeReward"), path + "/hopeReward", p, pools);
@@ -475,7 +495,8 @@ public final class LegacyCatalogConverter {
         if (!pools.local().isEmpty()) out.set("pools", pools.local());
         if (!effects.isEmpty()) out.set("effects", effects);
         if (!rules.isEmpty()) out.set("rules", rules);
-        else if (limited) p.add(path + "/uses", "A use limit without rules has nothing to limit.");
+        else if (limited && (castProfile == null || !castProfile.has("limitRef")))
+            p.add(path + "/uses", "A use limit without rules has nothing to limit.");
         return out;
     }
 
@@ -1057,11 +1078,16 @@ public final class LegacyCatalogConverter {
     }
 
     private static void rollCondition(String roll, String path, Problems p, ArrayNode when) {
-        if (ROLLS.contains(roll)) when.addObject().putArray("eq").add(read("event.check.kind")).add(roll);
+        if ("action".equals(roll)) when.add(actionRollCondition());
+        else if (ROLLS.contains(roll)) when.addObject().putArray("eq").add(read("event.check.kind")).add(roll);
         else if (roll.startsWith("trait:") && TRAITS.contains(roll.substring(6)))
             when.addObject().putArray("eq").add(read("event.check.trait")).add(roll.substring(6));
         else if ("trait".equals(roll)) when.addObject().putArray("ne").add(read("event.check.trait")).addNull();
-        else if ("duality".equals(roll)) when.add(hasFact("event.check.dominant"));
+        else if ("duality".equals(roll)) {
+            ArrayNode either = when.addObject().putArray("or");
+            either.add(flag("event.check.duality", true));
+            either.add(hasFact("event.check.dominant"));
+        }
         else if ("companion".equals(roll)) when.addObject().putArray("eq").add(read("event.check.kind")).add("companion");
         else if (roll.matches("death(:(risk|avoid))?")) {
             when.addObject().putArray("eq").add(read("event.check.kind")).add("death");
@@ -1073,6 +1099,14 @@ public final class LegacyCatalogConverter {
         } else if (roll.matches("(card|feat|featureAction|option):.+"))
             when.addObject().putArray("eq").add(read("event.check.origin")).add(roll);
         else if (!"any".equals(roll)) p.add(path, "Unsupported roll filter: " + roll);
+    }
+
+    private static ObjectNode actionRollCondition() {
+        ObjectNode condition = RuleJson.JSON.createObjectNode();
+        ArrayNode any = condition.putArray("or");
+        for (String kind : List.of("action", "attack", "reaction", "spellcast"))
+            any.addObject().putArray("eq").add(read("event.check.kind")).add(kind);
+        return condition;
     }
 
     private static void commonConditions(JsonNode legacy, String path, Problems p, ArrayNode when) {
@@ -1143,7 +1177,8 @@ public final class LegacyCatalogConverter {
                     continue;
                 }
                 if (!ROLLS.contains(excluded.asText())) { p.add(path + "/excludeRolls", "Unsupported roll filter: " + excluded.asText()); continue; }
-                when.addObject().putArray("ne").add(read("event.check.kind")).add(excluded.asText());
+                if ("action".equals(excluded.asText())) when.addObject().set("not", actionRollCondition());
+                else when.addObject().putArray("ne").add(read("event.check.kind")).add(excluded.asText());
             }
         }
     }
@@ -2056,6 +2091,8 @@ public final class LegacyCatalogConverter {
             }
         }
         if (trigger.has("repeatable") && !trigger.path("repeatable").isBoolean()) p.add(path + "/repeatable", "Expected a boolean.");
+        else if (trigger.path("repeatable").asBoolean(false))
+            ((ObjectNode) rule.path("bindings").get(0)).put("repeatable", true);
         if (trigger.path("weaponAttack").asBoolean(false)) when.add(hasFact("event.check.weapon"));
         if (trigger.path("primaryWeapon").asBoolean(false)) when.addObject().putArray("eq").add(read("event.check.weapon")).add("primary");
         if (trigger.has("weaponDamage")) {
@@ -3071,6 +3108,30 @@ public final class LegacyCatalogConverter {
             offset = matcher.end();
         }
         return plan;
+    }
+
+    private static ObjectNode spellcastProfile(JsonNode legacy, String path, Problems p, boolean limited, String origin) {
+        JsonNode difficulty = legacy.path("spellcastDifficulty");
+        if (!difficulty.isInt() || difficulty.asInt() < 0 || difficulty.asInt() > 1_000_000) {
+            p.add(path + "/spellcastDifficulty", "Expected a nonnegative whole difficulty up to 1000000.");
+            return null;
+        }
+        for (String flag : List.of("automaticRestUse", "automaticRestUseOnAttempt"))
+            if (legacy.has(flag) && !legacy.path(flag).isBoolean()) p.add(path + "/" + flag, "Expected a boolean.");
+        boolean onAttempt = legacy.path("automaticRestUseOnAttempt").asBoolean(false);
+        boolean consumes = legacy.path("automaticRestUse").asBoolean(false);
+        if (onAttempt && !consumes)
+            p.add(path + "/automaticRestUseOnAttempt", "Attempt consumption requires automaticRestUse.");
+        if (consumes && !limited) {
+            p.add(path + "/automaticRestUse", "Automatic use consumption needs a declared use limit.");
+            return null;
+        }
+        ObjectNode profile = RuleJson.JSON.createObjectNode().put("id", "spellcast-roll")
+                .put("label", "Spellcast Roll (Difficulty " + difficulty.asInt() + ")")
+                .put("rollKind", "spellcast").put("trait", "spellcast")
+                .put("difficulty", difficulty.asInt()).put("origin", origin);
+        if (consumes) profile.put("limitRef", "uses").put("consumeOn", onAttempt ? "attempt" : "success");
+        return profile;
     }
 
     /**

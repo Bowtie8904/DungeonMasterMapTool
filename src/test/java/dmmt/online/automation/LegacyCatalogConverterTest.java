@@ -2305,6 +2305,65 @@ class LegacyCatalogConverterTest {
         }
     }
 
+    @Test
+    void topLevelCardSpellcastsBecomeTrustedProfilesWithUniqueIdsAndUsePolicies() throws Exception {
+        String cards = """
+                {"format":"dmmap-daggerheart","version":1,"category":"domain-cards","label":"Cards","entries":[
+                 {"id":"free","name":"Free Spell","automation":{"spellcastDifficulty":13,
+                  "alternateProfiles":[{"label":"Spellcast Roll","damage":"d6"}]}},
+                 {"id":"success","name":"Limited Spell","automation":{"spellcastDifficulty":14,
+                  "uses":{"max":1,"per":"rest"},"automaticRestUse":true}},
+                 {"id":"attempt","name":"Attempt Spell","automation":{"spellcastDifficulty":15,
+                  "uses":{"max":1,"per":"longRest"},"automaticRestUse":true,"automaticRestUseOnAttempt":true}},
+                 {"id":"bad","name":"Bad Spell","automation":{"spellcastDifficulty":13,"automaticRestUse":true}},
+                 {"id":"orphan","name":"Orphan","automation":{"spellcastDifficulty":13,"automaticRestUseOnAttempt":true}}]}""";
+        var result = LegacyCatalogConverter.convert(cards);
+        assertEquals(3, result.converted(), result.diagnostics().toString());
+        JsonNode free = result.catalog().requiredAt("/entries/0/automation/profiles/1");
+        assertEquals("spellcast-roll-2", free.required("id").textValue());
+        assertEquals("spellcast", free.required("rollKind").textValue());
+        assertEquals("spellcast", free.required("trait").textValue());
+        assertEquals("card:Free Spell", free.required("origin").textValue());
+        assertEquals(13, free.required("difficulty").intValue());
+        assertFalse(free.has("limitRef"));
+        JsonNode limited = result.catalog().requiredAt("/entries/1/automation/profiles/0");
+        assertEquals("uses", limited.required("limitRef").textValue());
+        assertEquals("success", limited.required("consumeOn").textValue());
+        assertEquals("attempt", result.catalog().requiredAt("/entries/2/automation/profiles/0/consumeOn").textValue());
+        assertTrue(result.diagnostics().stream().anyMatch(d -> d.path().endsWith("/automaticRestUse")));
+        assertTrue(result.diagnostics().stream().anyMatch(d -> d.path().endsWith("/automaticRestUseOnAttempt")));
+    }
+
+    @Test
+    void actionSelectorsIncludeAllLegacyDualityActionsAndWorkBeforeDiceAreRolled() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"selectors","name":"Selectors","automation":{"rollOptions":[
+                  {"id":"action","label":"Action","roll":"action","value":1},
+                  {"id":"duality","label":"Duality","roll":"duality","value":1},
+                  {"id":"not-action","label":"Not action","roll":"any","excludeRolls":["action"],"value":1}]}}"""));
+        assertEquals(1, result.converted(), result.diagnostics().toString());
+        RuleCompiler.Program program = program(result, 0);
+        for (String kind : List.of("action", "attack", "reaction", "spellcast")) {
+            ObjectNode context = context(program, "{}", """
+                    {"type":"roll.prepare","check":{"kind":"%s","duality":true,"dominant":null}}""".formatted(kind));
+            assertEquals(List.of("action", "duality"), available(program, context, "roll"), kind);
+        }
+        ObjectNode damage = context(program, "{}", """
+                {"type":"roll.prepare","check":{"kind":"damage","duality":false,"dominant":null}}""");
+        assertEquals(List.of("not-action"), available(program, damage, "roll"));
+    }
+
+    @Test
+    void repeatableLegacyTriggerPreservesItsResultBinding() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"repeat","name":"Repeat","automation":{"conditionalRollTriggers":[
+                  {"id":"again","label":"Again","on":"action","repeatable":true,
+                   "cost":{"stress":1},"report":{"text":"Applied."}}]}}"""));
+        assertEquals(1, result.converted(), result.diagnostics().toString());
+        assertTrue(result.catalog().requiredAt("/entries/0/automation/rules/0/bindings/0/repeatable").booleanValue());
+        program(result, 0);
+    }
+
     private static RuleDispatcher.ClaimIntent claimIntent(String rule, String recipient, ObjectNode inputs) {
         return claimIntent(rule, recipient, inputs, 0);
     }

@@ -229,11 +229,200 @@ class AutomationHostTest {
                 "{\"label\":\"Bad\",\"rollKind\":\"spellcast\",\"damage\":{\"sides\":6}}",
                 "{\"label\":\"Bad\",\"rollKind\":\"action\",\"difficulty\":-1}",
                 "{\"label\":\"Bad\",\"origin\":\"untyped\"}",
-                "{\"label\":\"Bad\",\"trait\":\"spellcast\"}")) {
+                "{\"label\":\"Bad\",\"trait\":\"spellcast\"}",
+                "{\"label\":\"Bad\",\"rollKind\":\"action\",\"consumeOn\":\"attempt\"}",
+                "{\"label\":\"Bad\",\"rollKind\":\"action\",\"limitRef\":\"missing\",\"consumeOn\":\"attempt\"}")) {
             ObjectNode automation = (ObjectNode) RuleJson.parse("{\"profiles\":[" + invalid.replaceFirst("\\{", "{\"id\":\"bad\",") + "]}");
             assertThrows(IllegalArgumentException.class,
                     () -> RuleCompiler.compile("classes:test:features:bad", automation, fixture("rewrite/recipes")), invalid);
         }
+    }
+
+    @Test
+    void actionProfileUseBudgetsReserveRefundAndRespectOverrides() throws Exception {
+        ObjectNode classes = fixture("rewrite/host-classes");
+        ObjectNode feature = (ObjectNode) classes.at("/entries/0/features/2/automation");
+        feature.set("limits", RuleJson.parse("{\"uses\":{\"max\":1,\"resetOn\":[\"rest.long\"]}}"));
+        feature.set("profiles", RuleJson.parse("""
+                [{"id":"success","label":"Success use","rollKind":"spellcast","trait":"spellcast",
+                  "difficulty":16,"limitRef":"uses","consumeOn":"success"},
+                 {"id":"attempt","label":"Attempt use","rollKind":"spellcast","trait":"spellcast",
+                  "difficulty":16,"limitRef":"uses","consumeOn":"attempt"}]"""));
+        feature.set("rules", RuleJson.parse("""
+                [{"id":"boost","bindings":[{"id":"use","event":"roll.prepare","surface":"roll","mode":"option"}],
+                  "do":[{"op":"roll.contribute","from":{"read":"event.roll"},"as":"edited",
+                         "contribution":{"id":"bonus","kind":"flat","role":"modifier","label":"Bonus","value":14}},
+                       {"op":"roll.publish","roll":{"read":"result.edited"}}],"ui":{"label":"Boost"}},
+                {"id":"block","bindings":[{"id":"use","event":"roll.prepare","surface":"roll","mode":"option"}],
+                 "do":[{"op":"event.block","reason":"Blocked"}],"ui":{"label":"Block"}},
+                {"id":"indeterminate","bindings":[{"id":"use","event":"roll.prepare","surface":"roll","mode":"option"}],
+                 "do":[{"op":"roll.annotate","from":{"read":"event.roll"},"as":"edited","field":"difficulty","value":null},
+                       {"op":"roll.publish","roll":{"read":"result.edited"}}],"ui":{"label":"Remove difficulty"}}]"""));
+        var pack = AutomationHost.compile("test", Map.of("classes", classes.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet();
+        ((ObjectNode) sheet.at("/traits/0")).put("spellcast", true);
+        ObjectNode event = AutomationHost.event("action.request", "actor", 0);
+        ObjectNode unchangedFresh = sheet.deepCopy();
+        ObjectNode stale = profileRequest("stale", 1, "f-steady", "success", "spellcast");
+        assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, sheet, event, stale, "self", StructuredRollTest.noRandom()));
+        for (String id : List.of("block", "indeterminate")) {
+            ObjectNode denied = profileRequest(id, 0, "f-steady", "success", "spellcast");
+            denied.withArray("selections").addObject().put("sourceInstanceId", "f-steady").put("ruleId", id).put("bindingId", "use");
+            assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, sheet, event, denied, "self", StructuredRollTest.faces(1, 2)));
+            assertEquals(unchangedFresh, sheet);
+        }
+        ObjectNode criticalSheet = sheet.deepCopy();
+        ObjectNode critical = HOST.execute(pack, criticalSheet, event,
+                profileRequest("critical", 0, "f-steady", "success", "spellcast"), "self", StructuredRollTest.faces(1, 1));
+        assertEquals("success", critical.requiredAt("/event/check/outcome").textValue());
+        assertTrue(critical.requiredAt("/event/check/critical").booleanValue());
+        assertEquals(1, criticalSheet.requiredAt("/automationState/sources/f-steady/usage/uses").intValue());
+        ObjectNode failed = profileRequest("failed", 0, "f-steady", "success", "spellcast");
+        ObjectNode receipt = HOST.execute(pack, sheet, event, failed, "self", StructuredRollTest.faces(1, 2));
+        assertEquals("failure", receipt.requiredAt("/event/check/outcome").textValue());
+        assertEquals(0, sheet.requiredAt("/automationState/sources/f-steady/usage/uses").intValue());
+        assertEquals(receipt, HOST.execute(pack, sheet, event, failed, "self", StructuredRollTest.noRandom()));
+
+        ObjectNode success = profileRequest("success", 1, "f-steady", "success", "spellcast");
+        success.withArray("selections").addObject().put("sourceInstanceId", "f-steady").put("ruleId", "boost").put("bindingId", "use");
+        JsonNode boosted = HOST.execute(pack, sheet, event, success, "self", StructuredRollTest.faces(1, 2));
+        assertEquals("success", boosted.requiredAt("/event/check/outcome").textValue());
+        assertEquals(1, sheet.requiredAt("/automationState/sources/f-steady/usage/uses").intValue());
+        JsonNode offer = HOST.describe(pack, sheet, event, "sheet", "self").requiredAt("/profiles/0");
+        assertFalse(offer.required("available").booleanValue());
+        assertTrue(offer.required("reason").textValue().contains("No uses"));
+        ObjectNode unchanged = sheet.deepCopy();
+        ObjectNode exhausted = profileRequest("exhausted", 2, "f-steady", "attempt", "spellcast");
+        assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, sheet, event, exhausted, "self", StructuredRollTest.noRandom()));
+        assertEquals(unchanged, sheet);
+        assertTrue(HOST.resetLimits(pack, sheet, AutomationHost.event("rest.long", "actor", 0)));
+        ObjectNode attempted = profileRequest("attempt", HOST.revision(sheet), "f-steady", "attempt", "spellcast");
+        assertEquals("failure", HOST.execute(pack, sheet, event, attempted, "self", StructuredRollTest.faces(1, 2))
+                .requiredAt("/event/check/outcome").textValue());
+        assertEquals(1, sheet.requiredAt("/automationState/sources/f-steady/usage/uses").intValue());
+
+        ((ObjectNode) classes.at("/entries/0/features/0/automation")).set("limitOverrides", RuleJson.parse("""
+                [{"feature":"Steady","limit":"uses","max":2}]"""));
+        var raised = AutomationHost.compile("raised", Map.of("classes", classes.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode allowed = HOST.describe(raised, sheet, event, "sheet", "self");
+        assertFalse(allowed.requiredAt("/profiles/0").has("available"));
+        ObjectNode extra = profileRequest("extra", HOST.revision(sheet), "f-steady", "attempt", "spellcast");
+        HOST.execute(raised, sheet, event, extra, "self", StructuredRollTest.faces(1, 2));
+        assertEquals(2, sheet.requiredAt("/automationState/sources/f-steady/usage/uses").intValue());
+    }
+
+    @Test
+    void successLimitedProfileReconcilesAutomaticFinishedRollEdits() throws Exception {
+        ObjectNode classes = fixture("rewrite/host-classes");
+        ObjectNode feature = (ObjectNode) classes.at("/entries/0/features/2/automation");
+        feature.set("limits", RuleJson.parse("{\"uses\":{\"max\":1,\"resetOn\":[\"rest.long\"]}}"));
+        feature.set("profiles", RuleJson.parse("""
+                [{"id":"cast","label":"Cast","rollKind":"spellcast","trait":"spellcast",
+                  "difficulty":16,"limitRef":"uses","consumeOn":"success"}]"""));
+        feature.set("rules", RuleJson.parse("""
+                [{"id":"boost","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.check.outcome"},"failure"]},
+                  "do":[{"op":"roll.contribute","from":{"read":"event.roll"},"as":"edited",
+                         "contribution":{"id":"finished.boost","kind":"flat","role":"modifier","label":"Boost","value":20}},
+                        {"op":"roll.publish","roll":{"read":"result.edited"}}],"ui":{"label":"Boost"}}]"""));
+        var pack = AutomationHost.compile("boost", Map.of("classes", classes.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet();
+        ((ObjectNode) sheet.at("/traits/0")).put("spellcast", true);
+        ObjectNode event = AutomationHost.event("action.request", "actor", 0);
+        ObjectNode receipt = HOST.execute(pack, sheet, event, profileRequest("edited", 0, "f-steady", "cast", "spellcast"),
+                "self", StructuredRollTest.faces(1, 2));
+        assertEquals("success", receipt.requiredAt("/event/check/outcome").textValue());
+        assertEquals(1, sheet.requiredAt("/automationState/sources/f-steady/usage/uses").intValue());
+
+        feature.set("rules", RuleJson.parse("""
+                [{"id":"penalty","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"automatic"}],
+                  "do":[{"op":"roll.contribute","from":{"read":"event.roll"},"as":"edited",
+                         "contribution":{"id":"finished.penalty","kind":"flat","role":"modifier","label":"Penalty","value":-30}},
+                        {"op":"roll.publish","roll":{"read":"result.edited"}}],"ui":{"label":"Penalty"}}]"""));
+        pack = AutomationHost.compile("penalty", Map.of("classes", classes.toString()), fixture("rewrite/recipes").toString());
+        sheet = sheet();
+        ((ObjectNode) sheet.at("/traits/0")).put("spellcast", true);
+        receipt = HOST.execute(pack, sheet, event, profileRequest("penalty", 0, "f-steady", "cast", "spellcast"),
+                "self", StructuredRollTest.faces(10, 11));
+        assertEquals("failure", receipt.requiredAt("/event/check/outcome").textValue());
+        assertEquals(0, sheet.requiredAt("/automationState/sources/f-steady/usage/uses").intValue());
+    }
+
+    @Test
+    void exclusiveResultAlternativesStaySpentAfterRollRevision() throws Exception {
+        ObjectNode classes = fixture("rewrite/host-classes");
+        ObjectNode steady = (ObjectNode) classes.at("/entries/0/features/2/automation");
+        steady.set("rules", RuleJson.parse("""
+                [{"id":"one","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button","exclusiveGroup":"choice"}],
+                  "do":[{"op":"track.mark","track":"actor.stress","amount":1}],"ui":{"label":"One"}},
+                 {"id":"two","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button","exclusiveGroup":"choice"}],
+                  "do":[{"op":"value","value":2}],"ui":{"label":"Two"}},
+                 {"id":"late","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button","exclusiveGroup":"choice"}],
+                  "when":{"gte":[{"read":"event.check.total"},100]},
+                  "do":[{"op":"value","value":3}],"ui":{"label":"Late"}},
+                 {"id":"revise","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button"}],
+                  "do":[{"op":"roll.contribute","from":{"read":"event.roll"},"as":"edited",
+                         "contribution":{"id":"choice.bonus","kind":"flat","role":"damage","label":"Bonus","value":100}},
+                        {"op":"roll.publish","roll":{"read":"result.edited"}}],"ui":{"label":"Revise"}}]"""));
+        ObjectNode forage = (ObjectNode) classes.at("/entries/0/features/1/automation");
+        forage.set("rules", RuleJson.parse("""
+                [{"id":"independent","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button","exclusiveGroup":"choice"}],
+                  "do":[{"op":"value","value":1}],"ui":{"label":"Independent"}}]"""));
+        var pack = AutomationHost.compile("test", Map.of("classes", classes.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet(), event = AutomationHost.event("action.request", "actor", 0).put("sessionId", "session");
+        ObjectNode rolled = HOST.execute(pack, sheet, event, profileRequest("roll", 0, "f-steady", "thrown", "damage"),
+                "self", "owner", StructuredRollTest.faces(2));
+        String resultId = rolled.requiredAt("/event/resultId").textValue();
+        assertTrue(rolled.required("resultActions").findValuesAsText("ruleId").containsAll(List.of("one", "two", "revise", "independent")));
+        ObjectNode choose = request("choose", 1, "f-steady", "one").put("resultId", resultId);
+        ((ObjectNode) choose.requiredAt("/selections/0")).put("bindingId", "use");
+        ObjectNode chosen = HOST.execute(pack, sheet, event, choose, "self", "owner", StructuredRollTest.noRandom());
+        assertEquals(chosen, HOST.execute(pack, sheet, event, choose, "self", "owner", StructuredRollTest.noRandom()));
+        List<String> after = HOST.describeResult(pack, sheet, resultId, "self", "owner", event)
+                .required("actions").findValuesAsText("ruleId");
+        assertEquals(List.of("independent", "revise"), after);
+        ObjectNode revision = request("revise", 2, "f-steady", "revise").put("resultId", resultId);
+        ((ObjectNode) revision.requiredAt("/selections/0")).put("bindingId", "use");
+        ObjectNode revised = HOST.execute(pack, sheet, event, revision, "self", "owner", StructuredRollTest.noRandom());
+        assertTrue(revised.requiredAt("/event/check/total").intValue() >= 100);
+        assertEquals(List.of("independent"), revised.required("resultActions").findValuesAsText("ruleId"));
+        ObjectNode spent = request("late", 3, "f-steady", "late").put("resultId", revised.requiredAt("/event/resultId").textValue());
+        ((ObjectNode) spent.requiredAt("/selections/0")).put("bindingId", "use");
+        assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, sheet, event, spent, "self", "owner", StructuredRollTest.noRandom()));
+    }
+
+    @Test
+    void repeatableResultChargesEachNewIntentAndReplaysRetries() throws Exception {
+        ObjectNode classes = fixture("rewrite/host-classes");
+        ObjectNode steady = (ObjectNode) classes.at("/entries/0/features/2/automation");
+        steady.set("rules", RuleJson.parse("""
+                [{"id":"repeat","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button","repeatable":true}],
+                  "costs":[{"op":"track.mark","track":"actor.stress","amount":1}],
+                  "do":[{"op":"value","value":1}],"ui":{"label":"Repeat"}}]"""));
+        var pack = AutomationHost.compile("test", Map.of("classes", classes.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet(), event = AutomationHost.event("action.request", "actor", 0).put("sessionId", "session");
+        int initialStress = sheet.requiredAt("/stress/on").intValue();
+        ObjectNode roll = HOST.execute(pack, sheet, event, profileRequest("roll", 0, "f-steady", "thrown", "damage"),
+                "self", "owner", StructuredRollTest.faces(2));
+        String resultId = roll.requiredAt("/event/resultId").textValue();
+        assertTrue(roll.requiredAt("/resultActions/0/repeatable").booleanValue());
+        for (int revision = 1; revision <= 2; revision++) {
+            ObjectNode use = request("repeat-" + revision, revision, "f-steady", "repeat").put("resultId", resultId);
+            ((ObjectNode) use.requiredAt("/selections/0")).put("bindingId", "use");
+            ObjectNode receipt = HOST.execute(pack, sheet, event, use, "self", "owner", StructuredRollTest.noRandom());
+            assertEquals(initialStress + revision, sheet.requiredAt("/stress/on").intValue());
+            assertEquals(receipt, HOST.execute(pack, sheet, event, use, "self", "owner", StructuredRollTest.noRandom()));
+            assertEquals(List.of("repeat"), HOST.describeResult(pack, sheet, resultId, "self", "owner", event)
+                    .required("actions").findValuesAsText("ruleId"));
+        }
+        ((ObjectNode) sheet.required("stress")).put("on", sheet.requiredAt("/stress/slots").intValue());
+        ObjectNode full = sheet.deepCopy();
+        ObjectNode rejected = request("unaffordable", 3, "f-steady", "repeat").put("resultId", resultId);
+        ((ObjectNode) rejected.requiredAt("/selections/0")).put("bindingId", "use");
+        assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, sheet, event, rejected, "self", "owner", StructuredRollTest.noRandom()));
+        assertEquals(full, sheet);
+        assertEquals(List.of("repeat"), HOST.describeResult(pack, sheet, resultId, "self", "owner", event)
+                .required("actions").findValuesAsText("ruleId"));
     }
 
     @Test
