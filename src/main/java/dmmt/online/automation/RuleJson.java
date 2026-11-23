@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 final class RuleJson {
     static final JsonMapper JSON = JsonMapper.builder()
@@ -19,6 +20,8 @@ final class RuleJson {
     static final int MAX_DEPTH = 32;
     static final int MAX_DOCUMENT_CHARACTERS = 16_000_000;
     static final int MAX_DOCUMENT_NODES = 1_000_000;
+    private static final Set<String> RESERVED_FIELDS = Set.of("__proto__", "constructor", "prototype");
+    private static final Pattern ID = Pattern.compile("[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}");
 
     private RuleJson() {}
 
@@ -38,17 +41,35 @@ final class RuleJson {
     }
 
     static void checkTree(JsonNode node, String path, int depth, int[] count, int maxNodes) {
-        if (node == null || node.isMissingNode()) throw error(path, "Missing JSON value.");
-        if (depth > MAX_DEPTH || ++count[0] > maxNodes) throw error(path, "Rule data exceeds its complexity limit.");
+        checkTree(node, new StringBuilder(path), depth, count, maxNodes);
+    }
+
+    private static void checkTree(JsonNode node, StringBuilder path, int depth, int[] count, int maxNodes) {
+        if (node == null || node.isMissingNode()) throw error(path.toString(), "Missing JSON value.");
+        if (depth > MAX_DEPTH || ++count[0] > maxNodes)
+            throw error(path.toString(), "Rule data exceeds its complexity limit.");
         if (node.isNumber()) RuleExpression.number(node, path);
-        if (node.isTextual() && node.textValue().length() > 16_000) throw error(path, "Text is too long.");
-        if (node.isObject()) node.fields().forEachRemaining(field -> {
-            if (Set.of("__proto__", "constructor", "prototype").contains(field.getKey()))
-                throw error(path + "/" + field.getKey(), "Reserved field name.");
-            checkTree(field.getValue(), path + "/" + field.getKey(), depth + 1, count, maxNodes);
-        });
-        if (node.isArray()) for (int i = 0; i < node.size(); i++)
-            checkTree(node.get(i), path + "/" + i, depth + 1, count, maxNodes);
+        if (node.isTextual() && node.textValue().length() > 16_000) throw error(path.toString(), "Text is too long.");
+        int length = path.length();
+        if (node.isObject()) {
+            var fields = node.fields();
+            while (fields.hasNext()) {
+                var field = fields.next();
+                path.append('/').append(field.getKey());
+                if (reserved(field.getKey())) throw error(path.toString(), "Reserved field name.");
+                checkTree(field.getValue(), path, depth + 1, count, maxNodes);
+                path.setLength(length);
+            }
+        }
+        if (node.isArray()) for (int i = 0; i < node.size(); i++) {
+            path.append('/').append(i);
+            checkTree(node.get(i), path, depth + 1, count, maxNodes);
+            path.setLength(length);
+        }
+    }
+
+    static boolean reserved(String name) {
+        return RESERVED_FIELDS.contains(name);
     }
 
     static ObjectNode object(JsonNode node, String path) {
@@ -72,7 +93,7 @@ final class RuleJson {
 
     static String id(JsonNode node, String path) {
         String id = text(node, path);
-        if (!id.matches("[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}")) throw error(path, "Invalid stable ID.");
+        if (!ID.matcher(id).matches()) throw error(path, "Invalid stable ID.");
         return id;
     }
 

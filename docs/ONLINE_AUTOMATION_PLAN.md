@@ -245,9 +245,10 @@ deferred benefits. Converted Armor overflow fires for over-repair and positive c
 steps see the resulting state, derived facts and Fear. Active event bindings and computed-pool dependencies limit
 dispatch, while passive sources and conditional-effect state remain available to projection. A move without
 listeners, projection dependencies, collection additions or mutable derived-stat reads skips the observer.
-One opt-in, single-thread
-32-idle-source private-rest sample allocated about 38.8 MiB per move both with and without one Armor reaction;
-timings varied substantially between runs. This is not a live persistence, concurrency or release benchmark.
+Reusing validation patterns and building diagnostic paths only on failure preserves validation while reducing
+temporary allocations. In one opt-in, single-thread 32-idle-source private-rest sample, mean allocation fell
+from 38.78 to 27.30 MiB without reactions and from 38.70 to 25.15 MiB with one Armor reaction; timings varied
+substantially between runs. This is not a live persistence, concurrency or release benchmark.
 Targeted-move recipient reactions remain unresolved, and the ordinary whole-rest recovery guard stays in place.
 Converted `repairAllies` adjustments require party recovery and recipient track-change reactions, including
 Armor overflow. Until those transactions are implemented, a staged self move with a positive party-recovery

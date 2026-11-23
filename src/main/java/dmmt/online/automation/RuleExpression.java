@@ -7,12 +7,14 @@ import com.fasterxml.jackson.databind.node.LongNode;
 
 import java.util.Set;
 import java.util.HashSet;
+import java.util.regex.Pattern;
 
 public final class RuleExpression {
     private static final Set<String> ROOTS = Set.of("source", "actor", "recipient", "event", "state", "input", "die", "result", "args", "effects", "gear", "sourcePools");
     private static final Set<String> UNARY = Set.of("not", "floor", "ceil", "negate", "size", "flatten");
     private static final Set<String> BINARY = Set.of("subtract", "divide", "eq", "ne", "gt", "gte", "lt", "lte", "includes", "count", "pluck", "containsText", "at");
     private static final Set<String> MANY = Set.of("add", "multiply", "min", "max", "and", "or");
+    private static final Pattern PATH_PART = Pattern.compile("[a-zA-Z_][a-zA-Z0-9_-]*");
     private static final double MAX_NUMBER = 9_007_199_254_740_991d;
 
     private RuleExpression() {}
@@ -74,7 +76,7 @@ public final class RuleExpression {
         if (parts.length < 2 || parts.length > 12 || !ROOTS.contains(parts[0]))
             throw RuleJson.error(location, "Unknown context path: " + path);
         for (String part : parts)
-            if (!part.matches("[a-zA-Z_][a-zA-Z0-9_-]*") || Set.of("__proto__", "constructor", "prototype").contains(part))
+            if (!PATH_PART.matcher(part).matches() || RuleJson.reserved(part))
                 throw RuleJson.error(location, "Invalid context path: " + path);
     }
 
@@ -214,11 +216,11 @@ public final class RuleExpression {
         return value.booleanValue();
     }
 
-    static double number(JsonNode value, String path) {
-        if (value == null || !value.isNumber()) throw RuleJson.error(path, "Expected a number.");
+    static double number(JsonNode value, CharSequence path) {
+        if (value == null || !value.isNumber()) throw RuleJson.error(path.toString(), "Expected a number.");
         double result = value.doubleValue();
         if (!Double.isFinite(result) || Math.abs(result) > MAX_NUMBER)
-            throw RuleJson.error(path, "Number exceeds the safe numeric range.");
+            throw RuleJson.error(path.toString(), "Number exceeds the safe numeric range.");
         return result;
     }
 
