@@ -4830,8 +4830,13 @@ public final class LegacyCatalogConverter {
             if (!modifier.has(field)) continue;
             JsonNode by = signed(modifier.path(field));
             if (by == null) p.add(path + "/" + field, "Expected a whole number.");
-            else steps.add(planAdjust("event.move", "bonus".equals(field) ? "bonus" : "allies", by,
-                    "bonus".equals(field) ? "Move bonus" : "Additional allies"));
+            else {
+                ObjectNode adjustment = planAdjust("event.move", "bonus".equals(field) ? "bonus" : "allies", by,
+                        "bonus".equals(field) ? "Move bonus" : "Party Armor recovery");
+                if ("repairAllies".equals(field))
+                    adjustment.putObject("partyRecovery").put("track", "armorTrack").put("scope", "activePlayerCharacters");
+                steps.add(adjustment);
+            }
         }
         JsonNode list = modifier.path("steps");
         for (int s = 0; s < list.size(); s++) step(list.get(s), path + "/steps/" + s, p, steps, effects, pools);

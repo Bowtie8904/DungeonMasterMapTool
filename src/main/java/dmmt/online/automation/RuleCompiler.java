@@ -92,7 +92,7 @@ public final class RuleCompiler {
             Map.entry("roll.discard", List.of("from", "role")),
             Map.entry("roll.swapRoles", List.of("from", "first", "second")),
             Map.entry("roll.diceTotal", List.of("from", "dice")),
-            Map.entry("plan.adjust", List.of("plan", "field", "by", "label")),
+            Map.entry("plan.adjust", List.of("plan", "field", "by", "label", "partyRecovery")),
             Map.entry("event.block", List.of("reason")));
     /** Fields evaluated once per die with the {@code die} context root. */
     private static final Set<String> PER_DIE_FIELDS = Set.of("where", "face", "when");
@@ -1294,7 +1294,7 @@ public final class RuleCompiler {
                 expressionReferences(value, at, true, partial, visitor);
             else if ("plan".equals(field) && "roll.resolve".equals(name)
                     || !Set.of("pool", "track", "slot", "role", "effect", "target", "owner", "limit",
-                    "choose", "maxDice", "collection", "to", "plan", "field", "counter", "direction").contains(field))
+                    "choose", "maxDice", "collection", "to", "plan", "field", "counter", "direction", "partyRecovery").contains(field))
                 expressionReferences(value, at, usesDieContext, partial, visitor);
         }
         if (op.has("if")) expressionReferences(op.get("if"), path + "/if", usesDieContext, partial, visitor);
@@ -1457,6 +1457,7 @@ public final class RuleCompiler {
             RuleJson.id(operation.get("field"), path + "/field");
             RuleExpression.validate(operation.get("by"), path + "/by");
             RuleTemplate.validate(RuleJson.text(operation.get("label"), path + "/label"));
+            validatePartyRecovery(operation, path, false);
             return;
         }
         if ("dice.table".equals(op)) {
@@ -1609,9 +1610,28 @@ public final class RuleCompiler {
                 && !("damage.resolve".equals(op) && "armor".equals(field))
                 && !("track.capacity".equals(op) && Set.of("by", "counter", "amount", "direction").contains(field))
                 && !("claim.offer".equals(op) && "limit".equals(field))
+                && !("plan.adjust".equals(op) && "partyRecovery".equals(field))
                 && !("inventory.grant".equals(op) && Set.of("to", "tag", "max", "scope").contains(field)))
             throw RuleJson.error(path + "/" + field, "Missing operation field.");
+        if ("plan.adjust".equals(op)) validatePartyRecovery(operation, path, true);
         return fields;
+    }
+
+    private static void validatePartyRecovery(JsonNode operation, String path, boolean allowSubstitutions) {
+        if (!operation.has("partyRecovery")) return;
+        JsonNode recovery = operation.get("partyRecovery");
+        String at = path + "/partyRecovery";
+        if (allowSubstitutions && substitution(recovery)) return;
+        RuleJson.fields(recovery, at, "track", "scope");
+        JsonNode plan = operation.path("plan");
+        if (!(allowSubstitutions && substitution(plan)) && !"event.move".equals(plan.asText()))
+            throw RuleJson.error(at, "Party recovery requires an event.move plan.");
+        JsonNode track = recovery.path("track"), scope = recovery.path("scope");
+        if (!(allowSubstitutions && substitution(track))
+                && !RuleJson.text(track, at + "/track").matches("[a-zA-Z][a-zA-Z0-9_-]*"))
+            throw RuleJson.error(at + "/track", "Expected an actor track name.");
+        if (!(allowSubstitutions && substitution(scope)) && !TARGET_SCOPES.contains(RuleJson.text(scope, at + "/scope")))
+            throw RuleJson.error(at + "/scope", "Expected a host character scope.");
     }
 
     /** Static {@code options} or one {@code optionsFrom} expression yielding {@code [{id, label}]}; returns the static maximum. */

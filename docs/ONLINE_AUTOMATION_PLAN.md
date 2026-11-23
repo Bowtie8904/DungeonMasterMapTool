@@ -230,8 +230,10 @@ Converted `repairAllies` adjustments require party recovery and recipient track-
 Armor overflow. Until those transactions are implemented, a staged self move with a positive party-recovery
 request is rejected rather than silently omitting recipient changes, including when later adjustments cancel
 the total. `plan.adjust` records each requested and applied delta, before/after values and source instance in
-order, even when clamped; applying each request to the affected characters is still pending. Narrative ally
-moves remain report-only.
+order, even when clamped. A move adjustment may declare `partyRecovery: {track, scope}`; conversion uses
+`armorTrack` and `activePlayerCharacters` for `repairAllies`. The host copies this validated, authored metadata
+into the adjustment record, rather than deriving recovery mechanics from a client-supplied amount. Applying
+each request to affected characters in a staged rest is still pending. Narrative ally moves remain report-only.
 The shared Daggerheart ruleset now supplies self-targeted short recovery (1d4 plus tier and move bonus), the two
 mutually exclusive preparation variants, long recovery and work on a project. Reports use the amount actually
 cleared or gained, including permanent and locked HP and capped Hope; a short rest needs a granted allowance for

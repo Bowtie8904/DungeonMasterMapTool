@@ -1217,10 +1217,11 @@ public final class RuleRuntime {
                 plan.put(field, next);
                 ArrayNode adjustments = plan.has("adjustments") && plan.get("adjustments").isArray()
                         ? (ArrayNode) plan.get("adjustments") : plan.putArray("adjustments");
-                adjustments.addObject().put("field", field).put("requested", requested).put("by", next - current)
+                ObjectNode adjustment = adjustments.addObject().put("field", field).put("requested", requested).put("by", next - current)
                         .put("before", current).put("after", next).put("sourceId", program.sourceId())
                         .put("sourceInstanceId", context.path("source").path("instanceId").asText())
                         .put("label", RuleTemplate.render(op.path("label").asText(), context));
+                if (op.has("partyRecovery")) adjustment.set("partyRecovery", op.get("partyRecovery").deepCopy());
                 result = RuleExpression.numeric(next, "/result");
             }
             case "marks.publish" -> {

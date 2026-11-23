@@ -2582,6 +2582,8 @@ class LegacyCatalogConverterTest {
         assertEquals(1, repair.at("/adjustments/0/requested").asInt());
         assertEquals("fixture", repair.at("/adjustments/0/sourceInstanceId").asText());
         assertEquals(program.sourceId(), repair.at("/adjustments/0/sourceId").asText());
+        assertEquals("armorTrack", repair.at("/adjustments/0/partyRecovery/track").asText());
+        assertEquals("activePlayerCharacters", repair.at("/adjustments/0/partyRecovery/scope").asText());
         assertEquals("planField", assertThrows(RuleRuntime.Unavailable.class,
                 () -> run(program, context(program, actor, move("tend", "short", false, false)), "pipe")).code());
 
