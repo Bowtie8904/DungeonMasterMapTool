@@ -188,6 +188,15 @@ public final class RuleDispatcher {
         ReactionBudget(OwnerProjection projection) { this.projection = projection; }
     }
 
+    private static final class ReactionFailure extends RuntimeException {
+        final RuleRuntime.Unavailable unavailable;
+
+        ReactionFailure(RuleRuntime.Unavailable unavailable) {
+            super(unavailable);
+            this.unavailable = unavailable;
+        }
+    }
+
     private RuleDispatcher() {}
 
     public static ArrayNode describe(List<Candidate> activeSources, String surface) {
@@ -472,6 +481,7 @@ public final class RuleDispatcher {
         List<ObjectNode> outbox = new ArrayList<>();
         RuleRuntime.TrackObserver observer = budget == null ? null : ownerTrackObserver(
                 snapshot, byInstance, workingContexts, random, programs, budget, results, outbox);
+        RuleRuntime.TrackObserver costObserver = reservationObserver(observer);
         List<RuleRuntime.Prepared> prepared = new ArrayList<>();
         ObjectNode sharedActor = snapshot.actor().deepCopy();
         ObjectNode sharedEvent = snapshot.event().deepCopy();
@@ -484,12 +494,14 @@ public final class RuleDispatcher {
             context.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             try {
                 RuleRuntime.Prepared next = RuleRuntime.reserveCosts(
-                        invocation.candidate().program(), item.prepared(), context, true, observer);
+                        invocation.candidate().program(), item.prepared(), context, true, costObserver);
                 prepared.add(next);
                 workingContexts.put(instanceId, next.context().deepCopy());
                 mergeReactionSource(budget, instanceId, next.context());
                 sharedActor = next.context().path("actor").deepCopy();
                 if (observer != null) sharedEvent = next.context().path("event").deepCopy();
+            } catch (ReactionFailure failure) {
+                throw failure.unavailable;
             } catch (RuleRuntime.Unavailable unavailable) {
                 if (!invocation.automatic()) throw unavailable;
             }
@@ -529,6 +541,29 @@ public final class RuleDispatcher {
             updated.add(context);
         }
         return new EventResolution(updated, results, outbox);
+    }
+
+    private static RuleRuntime.TrackObserver reservationObserver(RuleRuntime.TrackObserver observer) {
+        if (observer == null) return null;
+        return new RuleRuntime.TrackObserver() {
+            @Override
+            public void changed(ObjectNode staged, String holder, ObjectNode event) {
+                try {
+                    observer.changed(staged, holder, event);
+                } catch (RuleRuntime.Unavailable failure) {
+                    throw new ReactionFailure(failure);
+                }
+            }
+
+            @Override
+            public void mutated(ObjectNode staged, String operation, ObjectNode previousActor, String target) {
+                try {
+                    observer.mutated(staged, operation, previousActor, target);
+                } catch (RuleRuntime.Unavailable failure) {
+                    throw new ReactionFailure(failure);
+                }
+            }
+        };
     }
 
     private static RuleRuntime.TrackObserver ownerTrackObserver(
@@ -604,7 +639,9 @@ public final class RuleDispatcher {
                     context.set("actor", staged.get("actor").deepCopy());
                     context.set("event", event.deepCopy());
                     context.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
-                    context.remove(List.of("recipient", "outbox"));
+                    if (staged.has("recipient")) context.set("recipient", staged.get("recipient").deepCopy());
+                    else context.remove("recipient");
+                    context.remove("outbox");
                     candidates.add(new Candidate(byInstance.get(instanceId).program(), context));
                 }
                 EventResolution reacted;

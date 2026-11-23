@@ -108,6 +108,13 @@ class RestTargetTest {
     private record Setup(AutomationHost.Pack pack, ObjectNode source, ObjectNode recipient,
                          ObjectNode healthy, ObjectNode preparation, AutomationHost.RestProgress progress) {}
 
+    private static ObjectNode compiledRule(Setup setup, String id) throws ReflectiveOperationException {
+        var field = RuleCompiler.Program.class.getDeclaredField("rules");
+        field.setAccessible(true);
+        Map<?, ?> rules = (Map<?, ?>) field.get(setup.pack().programs().get("ruleset:base"));
+        return (ObjectNode) rules.get(id);
+    }
+
     private static Setup setup(ObjectNode ruleset, int hope) throws Exception {
         var pack = pack(ruleset);
         ObjectNode source = sheet("Ada", 6, hope);
@@ -240,6 +247,126 @@ class RestTargetTest {
         HOST.writeRecipient(setup.recipient(), update);
         assertEquals(4, setup.recipient().at("/hp/on").asInt());
         assertEquals(8, HOST.revision(setup.recipient()));
+    }
+
+    @Test
+    void targetedAdjustmentsAndDeferredBenefitsSettleOwnerReactionsWithCurrentRecipient() throws Exception {
+        ObjectNode ruleset = ruleset();
+        ArrayNode rules = ruleset.withObject("/automation").withArray("rules");
+        rules.add(RuleJson.parse("""
+                {"id":"adjust-armor","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.move.ally"},true]},
+                 "do":[{"op":"track.clear","track":"actor.armorTrack","amount":1}],
+                 "after":{"do":[{"op":"track.clear","track":"actor.armorTrack","amount":1}]},
+                 "ui":{"label":"Adjust armor"}}
+                """));
+        rules.add(RuleJson.parse("""
+                {"id":"armor-reaction","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"armorTrack"]},
+                                  {"eq":[{"read":"event.change"},"clear"]}]},
+                 "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],
+                 "ui":{"report":"Saw {recipient.name} with {recipient.hp.marked} marks."}}
+                """));
+        Setup setup = setup(ruleset, 4);
+        PartyTargets party = party(setup, setup.recipient(), new AtomicReference<>());
+        ObjectNode target = targetRequest(setup, party, "heal");
+
+        var result = move(setup, setup.progress(), "heal", options(), party, target, 4);
+
+        assertEquals(0, setup.source().at("/armorTrack/on").asInt());
+        assertEquals(5, setup.source().at("/hope/on").asInt());
+        assertEquals(4, party.updates().getFirst().snapshot().at("/hp/marked").asInt());
+        List<String> reports = result.response().path("actions").findValuesAsText("report");
+        assertTrue(reports.contains("Saw Mira with 6 marks."), reports.toString());
+        assertTrue(reports.contains("Saw Mira with 4 marks."), reports.toString());
+        assertEquals(2, result.response().path("actions").findValuesAsText("ruleId").stream()
+                .filter("armor-reaction"::equals).count());
+    }
+
+    @Test
+    void targetedAdjustmentAndDeferredPhasesRejectRecipientMutationsEvenWhenTheyDoNothing() throws Exception {
+        List<String> mutations = List.of(
+                """
+                {"op":"track.clear","track":"recipient.armorTrack","amount":0}
+                """,
+                """
+                {"op":"resource.gain","pool":"recipient.hope","amount":0}
+                """,
+                """
+                {"op":"effect.start","effect":"ward","target":"recipient"}
+                """,
+                """
+                {"op":"collection.add","target":"recipient","collection":"features",
+                 "item":{"literal":{"id":"foreign","label":"Foreign"}}}
+                """,
+                """
+                {"op":"pool.gain","pool":"charge","owner":"recipient","amount":0}
+                """);
+        for (String phase : List.of("/automation/rules/0/do", "/automation/rules/0/after/do")) {
+            for (String mutation : mutations) {
+                ObjectNode ruleset = ruleset();
+                ruleset.withObject("/automation").putObject("pools").putObject("charge")
+                        .put("kind", "number").put("scope", "actor").put("max", 4);
+                ObjectNode invalid = ruleset.deepCopy();
+                ((ArrayNode) invalid.at(phase)).add(RuleJson.parse(mutation));
+                assertThrows(AutomationHost.NotReady.class, () -> pack(invalid), phase + mutation);
+
+                Setup setup = setup(ruleset, 4);
+                // Fault-inject an invalid compiled body to exercise the runtime guard as well as the compiler.
+                String body = phase.endsWith("/after/do") ? "/after/do" : "/do";
+                ((ArrayNode) compiledRule(setup, "observe").at(body)).add(RuleJson.parse(mutation));
+                PartyTargets party = party(setup, setup.recipient(), new AtomicReference<>());
+                ObjectNode target = targetRequest(setup, party, "heal");
+                ObjectNode beforeSource = setup.source().deepCopy(), beforeRecipient = setup.recipient().deepCopy();
+
+                var failure = assertThrows(RuleRuntime.Unavailable.class,
+                        () -> move(setup, setup.progress(), "heal", options(), party, target, 4), phase + mutation);
+                assertEquals("recipientReactions", failure.code(), phase + mutation);
+                assertEquals(beforeSource, setup.source());
+                assertEquals(beforeRecipient, setup.recipient());
+                assertTrue(party.updates().isEmpty());
+            }
+        }
+    }
+
+    @Test
+    void failureInReactionToAutomaticCostAbortsTheTargetedMove() throws Exception {
+        for (boolean automatic : List.of(false, true)) {
+            ObjectNode ruleset = ruleset();
+            ArrayNode rules = ruleset.withObject("/automation").withArray("rules");
+            ObjectNode adjustment = (ObjectNode) RuleJson.parse("""
+                {"id":"paid-adjustment","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"automatic"}],
+                 "do":[{"op":"plan.adjust","plan":"event.move","field":"bonus","by":1,"label":"Paid"}],
+                 "ui":{"label":"Paid"}}
+                """);
+            if (!automatic) {
+                ((ObjectNode) adjustment.at("/bindings/0")).put("mode", "option");
+                adjustment.putArray("costs").addObject().put("op", "resource.spend").put("pool", "actor.hope").put("amount", 1);
+            }
+            rules.add(adjustment);
+            rules.add(RuleJson.parse("""
+                {"id":"failed-reaction","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"hope"]},
+                                  {"eq":[{"read":"event.change"},"spend"]}]},
+                 "do":[{"op":"table.spend","resource":"fear","amount":3,"label":"Too much"}],"ui":{}}
+                """));
+            Setup setup = setup(ruleset, 4);
+            if (automatic) {
+                // Explicit automatic costs are rejected by the compiler; simulate a malformed compiled rule.
+                compiledRule(setup, "paid-adjustment").putArray("costs").addObject()
+                        .put("op", "resource.spend").put("pool", "actor.hope").put("amount", 1);
+            }
+            PartyTargets party = party(setup, setup.recipient(), new AtomicReference<>());
+            ObjectNode target = targetRequest(setup, party, "heal");
+            ObjectNode beforeSource = setup.source().deepCopy(), beforeRecipient = setup.recipient().deepCopy();
+
+            var failure = assertThrows(RuleRuntime.Unavailable.class,
+                    () -> move(setup, setup.progress(), "heal", automatic ? options() : options("paid-adjustment"), party, target, 4));
+            assertEquals("tableResource", failure.code());
+            assertEquals(beforeSource, setup.source());
+            assertEquals(beforeRecipient, setup.recipient());
+            assertTrue(party.updates().isEmpty());
+        }
     }
 
     @Test

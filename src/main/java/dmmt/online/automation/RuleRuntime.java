@@ -855,6 +855,14 @@ public final class RuleRuntime {
     private static void operation(RuleCompiler.Program program, JsonNode op, ObjectNode context, RandomGenerator random, boolean preview,
                                   List<ObjectNode> published, List<ObjectNode> rolls, TrackObserver observer) {
         String kind = op.path("op").asText();
+        if (observer != null && (("recipient".equals(op.path("target").asText())
+                && (kind.startsWith("effect.") || kind.startsWith("collection.")))
+                || ("recipient".equals(op.path("owner").asText())
+                && (kind.startsWith("pool.") || "roll.addPoolDie".equals(kind)))
+                || (kind.startsWith("resource.") && op.path("pool").asText().startsWith("recipient."))
+                || (kind.startsWith("track.") && (op.path("track").asText().startsWith("recipient.")
+                || op.path("counter").asText().startsWith("recipient.")))))
+            observer.mutated(context, kind, null, "recipient");
         ObjectNode previousActor = observer != null && kind.startsWith("effect.")
                 ? ((ObjectNode) context.path("actor")).deepCopy() : null;
         JsonNode result;
@@ -1417,8 +1425,11 @@ public final class RuleRuntime {
                 || kind.startsWith("effect.") || kind.startsWith("collection.")
                 || "inventory.consume".equals(kind) || "roll.addPoolDie".equals(kind)
                 || "limits.refresh".equals(kind) || "limit.restore".equals(kind)
-                || "inventory.grant".equals(kind) || "damage.deal".equals(kind)))
-            observer.mutated(context, kind, previousActor, op.path("target").asText(null));
+                || "inventory.grant".equals(kind) || "damage.deal".equals(kind))) {
+            String target = kind.startsWith("pool.") || "roll.addPoolDie".equals(kind)
+                    ? op.path("owner").asText(null) : op.path("target").asText(null);
+            observer.mutated(context, kind, previousActor, target);
+        }
     }
 
     static void trackChanged(TrackObserver observer, ObjectNode context, String path, String change, int requested,

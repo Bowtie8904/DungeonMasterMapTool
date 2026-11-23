@@ -249,7 +249,7 @@ Reusing validation patterns and building diagnostic paths only on failure preser
 temporary allocations. In one opt-in, single-thread 32-idle-source private-rest sample, mean allocation fell
 from 38.78 to 27.30 MiB without reactions and from 38.70 to 25.15 MiB with one Armor reaction; timings varied
 substantially between runs. This is not a live persistence, concurrency or release benchmark.
-Targeted-move recipient reactions remain unresolved, and the ordinary whole-rest recovery guard stays in place.
+Targeted-move adjustments and deferred benefits settle actor reactions with the current recipient available; recipient mutations in those phases and failed nested reactions abort the staged move. The compiler also rejects recipient writes in these phases and explicit automatic costs. Targeted-button recipient reactions remain unresolved, and the ordinary whole-rest recovery guard stays in place.
 Converted `repairAllies` adjustments require party recovery and recipient track-change reactions, including
 Armor overflow. Until those transactions are implemented, a staged self move with a positive party-recovery
 request is rejected rather than silently omitting recipient changes, including when later adjustments cancel
