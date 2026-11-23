@@ -21,15 +21,17 @@ public final class RuleEffects {
 
     /** Evaluates the program's passive modifiers whose conditions currently hold. */
     public static ArrayNode passives(RuleCompiler.Program program, ObjectNode hostContext) {
-        return passives(program, hostContext, false);
+        return passives(program, hostContext, false, false);
     }
 
-    static ArrayNode traitPassives(RuleCompiler.Program program, ObjectNode hostContext) {
-        return passives(program, hostContext, true);
+    static ArrayNode projectedPassives(RuleCompiler.Program program, ObjectNode hostContext, boolean traitsOnly) {
+        return passives(program, hostContext, traitsOnly, true);
     }
 
-    private static ArrayNode passives(RuleCompiler.Program program, ObjectNode hostContext, boolean traitsOnly) {
-        ObjectNode context = RuleRuntime.context(program, null, hostContext);
+    private static ArrayNode passives(RuleCompiler.Program program, ObjectNode hostContext,
+                                      boolean traitsOnly, boolean projected) {
+        ObjectNode context = projected ? RuleRuntime.projectionContext(program, hostContext)
+                : RuleRuntime.context(program, null, hostContext);
         ArrayNode out = RuleJson.JSON.createArrayNode();
         for (JsonNode modifier : program.modifiers()) {
             if (traitsOnly && !modifier.path("stat").asText().startsWith("trait.")) continue;
@@ -50,7 +52,16 @@ public final class RuleEffects {
      * projected actor so their modifiers, labels and counts apply exactly while the condition holds.
      */
     public static ArrayNode derived(RuleCompiler.Program program, ObjectNode hostContext) {
-        ObjectNode context = RuleRuntime.context(program, null, hostContext);
+        return derived(program, hostContext, false);
+    }
+
+    static ArrayNode projectedDerived(RuleCompiler.Program program, ObjectNode hostContext) {
+        return derived(program, hostContext, true);
+    }
+
+    private static ArrayNode derived(RuleCompiler.Program program, ObjectNode hostContext, boolean projected) {
+        ObjectNode context = projected ? RuleRuntime.projectionContext(program, hostContext)
+                : RuleRuntime.context(program, null, hostContext);
         ArrayNode out = RuleJson.JSON.createArrayNode();
         String instanceId = context.path("source").path("instanceId").asText();
         program.effects().fields().forEachRemaining(entry -> {

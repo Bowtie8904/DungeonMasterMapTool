@@ -2076,6 +2076,14 @@ public final class AutomationHost {
 
     private ArrayNode activationEffects(Pack pack, ObjectNode sheet, ObjectNode state, ObjectNode event,
                                         List<SheetProjection.SourceElement> sources) {
+        for (var element : sources) {
+            RuleCompiler.Program program = pack.programs().get(element.sourceId());
+            if (program != null && program.hasComputedActorPools()) {
+                ObjectNode actor = projectActor(pack, sheet, state, event, sources, false).actor();
+                return actor.path("effects").isArray()
+                        ? (ArrayNode) actor.path("effects").deepCopy() : RuleJson.JSON.createArrayNode();
+            }
+        }
         ObjectNode actor = projection.actor(sheet);
         if (event.hasNonNull("actorId")) actor.set("id", event.get("actorId"));
         actor.set("stats", projection.stats(actor, List.of()));
@@ -2090,7 +2098,34 @@ public final class AutomationHost {
 
     private ActorProjection projectActor(Pack pack, ObjectNode sheet, ObjectNode state, ObjectNode event,
                                          List<SheetProjection.SourceElement> sources, boolean collectRollModifiers) {
-        ObjectNode actor = projection.actor(sheet);
+        List<SheetProjection.SourceElement> computedPools = new ArrayList<>();
+        ActorProjection result = projectActorView(pack, sheet, state, event, sources, collectRollModifiers,
+                projection.actor(sheet), computedPools);
+        if (computedPools.isEmpty()) return result;
+        if (computedPools.size() > 1)
+            computedPools.sort(java.util.Comparator.comparing(SheetProjection.SourceElement::instanceId));
+        ObjectNode actor = result.actor();
+        JsonNode before = actor.path("pools").deepCopy();
+        for (SheetProjection.SourceElement element : computedPools) {
+            ObjectNode view = context(state, element, actor, event);
+            RuleRuntime.clampComputedActorPools(pack.programs().get(element.sourceId()), view);
+            actor = (ObjectNode) view.get("actor");
+        }
+        if (!before.equals(actor.path("pools"))) {
+            ObjectNode original = projection.actor(sheet);
+            original.set("pools", actor.path("pools").deepCopy());
+            result = projectActorView(pack, sheet, state, event, sources, collectRollModifiers, original, null);
+            actor = result.actor();
+        }
+        for (SheetProjection.SourceElement element : computedPools)
+            RuleRuntime.requireStableComputedActorPools(pack.programs().get(element.sourceId()),
+                    context(state, element, actor, event));
+        return result;
+    }
+
+    private ActorProjection projectActorView(Pack pack, ObjectNode sheet, ObjectNode state, ObjectNode event,
+                                             List<SheetProjection.SourceElement> sources, boolean collectRollModifiers,
+                                             ObjectNode actor, List<SheetProjection.SourceElement> computedPools) {
         if (event.hasNonNull("actorId")) actor.set("id", event.get("actorId"));
         ObjectNode base = actor.deepCopy();
         base.set("stats", projection.stats(actor, List.of()));
@@ -2103,6 +2138,7 @@ public final class AutomationHost {
         for (SheetProjection.SourceElement element : sources) {
             RuleCompiler.Program program = pack.programs().get(element.sourceId());
             if (program == null) continue;
+            if (computedPools != null && program.hasComputedActorPools()) computedPools.add(element);
             for (JsonNode override : program.limitOverrides()) {
                 String key = override.path("feature").asText() + ":" + override.path("limit").asText();
                 limitOverrides.put(key, Math.max(limitOverrides.path(key).asInt(), override.path("max").asInt()));
@@ -2111,7 +2147,7 @@ public final class AutomationHost {
                 passiveSources.add(new PassiveProjection(element, program));
                 readsDerivedTraits |= program.readsDerivedTraits();
             }
-            derived.addAll(RuleEffects.derived(program, context(state, element, base, event)));
+            derived.addAll(RuleEffects.projectedDerived(program, context(state, element, base, event)));
         }
         if (!derived.isEmpty()) {
             ArrayNode effects = actor.path("effects").isArray() ? (ArrayNode) actor.get("effects") : actor.putArray("effects");
@@ -2123,7 +2159,8 @@ public final class AutomationHost {
             List<JsonNode> traitModifiers = new ArrayList<>();
             for (PassiveProjection source : passiveSources)
                 if (source.program().hasTraitModifiers())
-                    RuleEffects.traitPassives(source.program(), context(state, source.source(), base, event)).forEach(traitModifiers::add);
+                    RuleEffects.projectedPassives(source.program(), context(state, source.source(), base, event), true)
+                            .forEach(traitModifiers::add);
             for (JsonNode modifier : effectModifiers)
                 if (modifier.path("stat").asText().startsWith("trait.")) traitModifiers.add(modifier);
             if (!traitModifiers.isEmpty()) {
@@ -2135,7 +2172,7 @@ public final class AutomationHost {
             }
         }
         for (PassiveProjection source : passiveSources) {
-            ArrayNode values = RuleEffects.passives(source.program(), context(state, source.source(), base, event));
+            ArrayNode values = RuleEffects.projectedPassives(source.program(), context(state, source.source(), base, event), false);
             values.forEach(modifiers::add);
             if (collectRollModifiers) for (JsonNode modifier : values)
                 if (modifier.path("stat").asText().startsWith("roll."))

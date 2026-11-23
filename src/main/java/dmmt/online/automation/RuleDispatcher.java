@@ -304,12 +304,9 @@ public final class RuleDispatcher {
         RuleRuntime.revision(staged);
         Snapshot snapshot = validateSources(activeSources);
         if (!snapshot.sources().isEmpty()) {
-            for (Candidate candidate : snapshot.sources()) {
-                ObjectNode context = candidate.context();
-                if (!actor.equals(context.get("actor")) || !event.equals(context.get("event"))
-                        || RuleRuntime.revision(context) != revision)
-                    throw new RuleRuntime.Unavailable("stale", "Recovery sources must match the holder and event snapshot.");
-            }
+            if (!actor.equals(snapshot.originalActor()) || !event.equals(snapshot.event())
+                    || snapshot.revision() != revision)
+                throw new RuleRuntime.Unavailable("stale", "Recovery sources must match the holder and event snapshot.");
             staged.set("actor", snapshot.actor().deepCopy());
         } else staged.set("actor", actor.deepCopy());
         staged.set("event", event.deepCopy());
@@ -609,6 +606,8 @@ public final class RuleDispatcher {
             JsonNode binding = binding(rule, intent.bindingId());
             JsonNode ownerId = snapshot.actor().get("id");
             boolean self = ownerId != null && claimIntent.recipientId().equals(ownerId.asText());
+            if (self && !sameSelfSnapshot(snapshot, recipient))
+                throw new RuleRuntime.Unavailable("staleRecipient", "The source character changed while resolving its claim.");
             String recipients = binding.path("claimScope").path("recipients").asText("otherPlayersCharacters");
             boolean excludeSource = binding.path("claimScope").path("excludeSource").asBoolean(false);
             if ("sourceActor".equals(recipients) && !self)
@@ -792,7 +791,7 @@ public final class RuleDispatcher {
                 throw RuleJson.error("/recipients/" + recipient.actorId(), "Recipient snapshot ID does not match.");
             if (recipientsById.putIfAbsent(recipient.actorId(), recipient) != null)
                 throw RuleJson.error("/recipients/" + recipient.actorId(), "Duplicate eligible recipient.");
-            if (recipient.actorId().equals(snapshot.actor().path("id").asText()) && !actor.equals(snapshot.actor()))
+            if (recipient.actorId().equals(snapshot.actor().path("id").asText()) && !sameSelfSnapshot(snapshot, recipient))
                 throw new RuleRuntime.Unavailable("staleRecipient", "The source character changed while resolving its target.");
             workingRecipients.put(recipient.actorId(), actor);
         }
@@ -816,7 +815,8 @@ public final class RuleDispatcher {
         if (targetSelection.path("excludeSource").asBoolean(false)) targetIds.remove(sourceActorId);
         if (targetSelection.has("where")) {
             ObjectNode eligibilityContext = candidate.context();
-            targetIds.removeIf(id -> !RuleRuntime.recipientEligible(targetSelection, eligibilityContext, recipientsById.get(id).snapshot()));
+            targetIds.removeIf(id -> !RuleRuntime.recipientEligible(targetSelection, eligibilityContext,
+                    id.equals(sourceActorId) ? snapshot.actor() : recipientsById.get(id).snapshot()));
             if ("one".equals(cardinality) && targetIds.isEmpty())
                 throw new RuleRuntime.Unavailable("recipient", "This recipient is no longer eligible.");
         }
@@ -894,8 +894,14 @@ public final class RuleDispatcher {
             outbox.add(((ObjectNode) command).put("recipientId", recipientId));
     }
 
-    private record Snapshot(List<Candidate> sources, ObjectNode actor, ObjectNode event, String eventType,
+    private record Snapshot(List<Candidate> sources, ObjectNode actor, ObjectNode originalActor, ObjectNode event, String eventType,
                             long revision) {}
+
+    private static boolean sameSelfSnapshot(Snapshot source, RecipientCandidate recipient) {
+        ObjectNode actor = recipient.snapshot();
+        return recipient.revision() == source.revision()
+                && (actor.equals(source.originalActor()) || actor.equals(source.actor()));
+    }
 
     private static Map<String, RuleCompiler.Program> programs(List<Candidate> sources) {
         if (sources == null) return Map.of();
@@ -939,20 +945,46 @@ public final class RuleDispatcher {
                 throw RuleJson.error("/revision", "Active sources must use the same revision.");
             }
         }
+        ObjectNode originalActor;
         if (sharedActor == null) {
             sharedActor = RuleJson.JSON.createObjectNode();
+            originalActor = sharedActor.deepCopy();
             sharedEvent = RuleJson.JSON.createObjectNode();
             sharedType = "";
             sharedRevision = 0L;
         } else {
+            originalActor = sources.stream().anyMatch(candidate -> candidate.program().hasComputedActorPools())
+                    ? sharedActor.deepCopy() : sharedActor;
             for (Candidate candidate : sources) {
-                ObjectNode view = candidate.context().deepCopy();
+                if (!candidate.program().hasComputedActorPools()) continue;
+                ObjectNode view = candidate.context();
                 view.set("actor", sharedActor);
                 RuleRuntime.clampComputedActorPools(candidate.program(), view);
                 sharedActor = (ObjectNode) view.get("actor");
             }
+            if (!originalActor.equals(sharedActor)) {
+                boolean derivedEffects = false;
+                for (JsonNode effect : originalActor.path("effects"))
+                    derivedEffects |= effect.path("derived").asBoolean();
+                if (originalActor.has("stats") || derivedEffects)
+                    throw new RuleRuntime.Unavailable("computedPoolProjection",
+                            "Computed pools changed on an already projected actor. Reproject its statistics and effects before dispatch.");
+                List<Candidate> normalized = new ArrayList<>();
+                for (Candidate candidate : sources) {
+                    ObjectNode context = candidate.context();
+                    context.set("actor", sharedActor);
+                    normalized.add(new Candidate(candidate.program(), context));
+                }
+                sources = normalized;
+            }
+            for (Candidate candidate : sources) {
+                if (!candidate.program().hasComputedActorPools()) continue;
+                ObjectNode view = candidate.context();
+                view.set("actor", sharedActor);
+                RuleRuntime.requireStableComputedActorPools(candidate.program(), view);
+            }
         }
-        return new Snapshot(List.copyOf(sources), sharedActor, sharedEvent, sharedType, sharedRevision);
+        return new Snapshot(List.copyOf(sources), sharedActor, originalActor, sharedEvent, sharedType, sharedRevision);
     }
 
     static JsonNode binding(ObjectNode rule, String id) {

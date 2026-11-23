@@ -465,6 +465,15 @@ public final class RuleRuntime {
     }
 
     static ObjectNode context(RuleCompiler.Program program, ObjectNode rule, ObjectNode hostContext) {
+        return context(program, rule, hostContext, false);
+    }
+
+    static ObjectNode projectionContext(RuleCompiler.Program program, ObjectNode hostContext) {
+        return context(program, null, hostContext, true);
+    }
+
+    private static ObjectNode context(RuleCompiler.Program program, ObjectNode rule, ObjectNode hostContext,
+                                      boolean preserveComputedActorPools) {
         RuleJson.checkTree(hostContext, "/context", 0, new int[]{0});
         ObjectNode next = copyContext(hostContext);
         ObjectNode source = RuleJson.object(next.path("source"), "/source");
@@ -472,19 +481,23 @@ public final class RuleRuntime {
         RuleJson.id(source.get("instanceId"), "/source/instanceId");
         if (next.has("recipient")) RuleJson.object(next.get("recipient"), "/recipient");
         revision(next);
-        ObjectNode state = program.initialState();
-        if (next.has("state")) RuleJson.object(next.get("state"), "/state").fields().forEachRemaining(field -> {
-            if (!state.has(field.getKey())) throw RuleJson.error("/state/" + field.getKey(), "Undeclared state slot.");
-            state.set(field.getKey(), field.getValue().deepCopy());
-        });
-        next.set("state", state);
+        initializeState(program, next);
         usage(program, next);
-        initializePools(program, next);
+        initializePools(program, next, preserveComputedActorPools);
         next.set("args", rule == null ? RuleJson.JSON.createObjectNode() : rule.path("args").deepCopy());
         next.putObject("input");
         next.putObject("result");
         RuleEffects.refreshCounts(program, next);
         return next;
+    }
+
+    private static void initializeState(RuleCompiler.Program program, ObjectNode context) {
+        ObjectNode state = program.initialState();
+        if (context.has("state")) RuleJson.object(context.get("state"), "/state").fields().forEachRemaining(field -> {
+            if (!state.has(field.getKey())) throw RuleJson.error("/state/" + field.getKey(), "Undeclared state slot.");
+            state.set(field.getKey(), field.getValue().deepCopy());
+        });
+        context.set("state", state);
     }
 
     private static ObjectNode usage(RuleCompiler.Program program, ObjectNode next) {
@@ -513,7 +526,30 @@ public final class RuleRuntime {
     }
 
     static void clampComputedActorPools(RuleCompiler.Program program, ObjectNode context) {
-        var pools = program.pools().fields();
+        ObjectNode definitions = program.pools();
+        boolean present = false;
+        var candidates = definitions.fields();
+        while (candidates.hasNext()) {
+            var candidate = candidates.next();
+            if ("actor".equals(candidate.getValue().path("scope").asText()) && !candidate.getValue().path("max").isInt()
+                    && context.path("actor").path("pools").has(candidate.getKey())) {
+                present = true;
+                break;
+            }
+        }
+        if (!present) return;
+        if (program.computedActorPoolsReadSourcePools()) {
+            ObjectNode initialized = context(program, null, context);
+            ObjectNode actorPools = RuleJson.object(context.path("actor").path("pools"), "/actor/pools");
+            definitions.fields().forEachRemaining(pool -> {
+                if ("actor".equals(pool.getValue().path("scope").asText()) && !pool.getValue().path("max").isInt()
+                        && actorPools.has(pool.getKey()))
+                    actorPools.set(pool.getKey(), initialized.path("actor").path("pools").get(pool.getKey()).deepCopy());
+            });
+            return;
+        }
+        initializeState(program, context);
+        var pools = definitions.fields();
         while (pools.hasNext()) {
             var pool = pools.next();
             if ("actor".equals(pool.getValue().path("scope").asText()) && !pool.getValue().path("max").isInt()
@@ -522,10 +558,24 @@ public final class RuleRuntime {
         }
     }
 
-    private static void initializePools(RuleCompiler.Program program, ObjectNode context) {
+    static void requireStableComputedActorPools(RuleCompiler.Program program, ObjectNode context) {
+        ObjectNode check = context.deepCopy();
+        clampComputedActorPools(program, check);
+        if (!context.path("actor").path("pools").equals(check.path("actor").path("pools")))
+            throw new Unavailable("computedPoolDependencies",
+                    "Computed actor pool capacities are order-dependent or cyclic. Adjust their dependencies before using automation.");
+    }
+
+    private static void initializePools(RuleCompiler.Program program, ObjectNode context, boolean preserveComputedActorPools) {
         ObjectNode definitions = program.pools();
         var pools = definitions.fields();
-        while (pools.hasNext()) poolState(program, context, pools.next().getKey());
+        while (pools.hasNext()) {
+            var pool = pools.next();
+            if (preserveComputedActorPools && "actor".equals(pool.getValue().path("scope").asText())
+                    && !pool.getValue().path("max").isInt()
+                    && context.path("actor").path("pools").has(pool.getKey())) continue;
+            poolState(program, context, pool.getKey());
+        }
     }
 
     private static ObjectNode poolState(RuleCompiler.Program program, ObjectNode context, String id) {

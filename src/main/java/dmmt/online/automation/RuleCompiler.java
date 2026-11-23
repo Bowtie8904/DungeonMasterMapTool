@@ -125,6 +125,7 @@ public final class RuleCompiler {
         private final ObjectNode limits;
         private final ObjectNode pools;
         private final boolean hasComputedActorPools;
+        private final boolean computedActorPoolsReadSourcePools;
         private final Map<String, List<String>> poolsByEffect;
         private final Set<String> boundPoolIds;
         private final ObjectNode effects;
@@ -143,15 +144,18 @@ public final class RuleCompiler {
             this.limits = decl.limits().deepCopy();
             this.pools = decl.pools().deepCopy();
             boolean computedActorPools = false;
+            boolean readsSourcePools = false;
             var poolDefinitions = this.pools.elements();
             while (poolDefinitions.hasNext()) {
                 JsonNode definition = poolDefinitions.next();
                 if ("actor".equals(definition.path("scope").asText()) && !definition.path("max").isInt()) {
                     computedActorPools = true;
-                    break;
+                    readsSourcePools |= RuleExpression.references(definition.path("max")).stream()
+                            .anyMatch(ref -> ref.startsWith("sourcePools."));
                 }
             }
             this.hasComputedActorPools = computedActorPools;
+            this.computedActorPoolsReadSourcePools = readsSourcePools;
             Map<String, List<String>> bound = new HashMap<>();
             this.pools.fields().forEachRemaining(entry -> {
                 if (entry.getValue().has("whileEffect"))
@@ -217,6 +221,7 @@ public final class RuleCompiler {
         ObjectNode limits() { return limits.deepCopy(); }
         ObjectNode pools() { return pools.deepCopy(); }
         boolean hasComputedActorPools() { return hasComputedActorPools; }
+        boolean computedActorPoolsReadSourcePools() { return computedActorPoolsReadSourcePools; }
         List<String> poolsBoundTo(String effectId) { return poolsByEffect.getOrDefault(effectId, List.of()); }
         Set<String> boundPoolIds() { return boundPoolIds; }
         boolean hasEffect(String effectId) { return effects.has(effectId); }
