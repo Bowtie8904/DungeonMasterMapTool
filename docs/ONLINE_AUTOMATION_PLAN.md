@@ -241,8 +241,9 @@ the parent while retaining each event's own type, actor and track-change details
 Converted `repairAllies` adjustments require party recovery and recipient track-change reactions, including
 Armor overflow. Until those transactions are implemented, a staged self move with a positive party-recovery
 request is rejected rather than silently omitting recipient changes, including when later adjustments cancel
-the total. `plan.adjust` records each requested and applied delta, before/after values and source instance in
-order, even when clamped. A move adjustment may declare `partyRecovery: {track, scope}`; conversion uses
+the total. `plan.adjust` records each requested and applied delta, before/after values, source instance, executing
+rule and binding, phase and expanded step index in order, even when clamped. Nested reactions retain their own
+operation identities. A move adjustment may declare `partyRecovery: {track, scope}`; conversion uses
 `armorTrack` and `activePlayerCharacters` for `repairAllies`. The host copies this validated, authored metadata
 into the adjustment record, rather than deriving recovery mechanics from a client-supplied amount. Applying
 each request to affected characters in a staged rest is still pending. Narrative ally moves remain report-only.

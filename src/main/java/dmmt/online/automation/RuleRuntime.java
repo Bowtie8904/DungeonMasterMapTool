@@ -306,7 +306,7 @@ public final class RuleRuntime {
         }
         String text = preview && rule.path("ui").has("preview") ? "preview" : "report";
         return executeSteps(program, prepared.context(), next, rule.path("do"), rule.path("ui").path(text),
-                random, preview, programs, revision, preview ? null : observer);
+                random, preview, programs, revision, preview ? null : observer, intent, "do");
     }
 
     static Resolution executeAfter(RuleCompiler.Program program, Intent intent, ObjectNode hostContext,
@@ -331,20 +331,28 @@ public final class RuleRuntime {
         for (JsonNode cost : rule.path("after").path("costs"))
             operation(program, cost, next, null, false, new ArrayList<>(), new ArrayList<>(), observer);
         return executeSteps(program, next.deepCopy(), next, rule.path("after").path("do"),
-                rule.path("after").path("report"), random, false, programs, revision, observer);
+                rule.path("after").path("report"), random, false, programs, revision, observer, intent, "after");
     }
 
     private static Resolution executeSteps(RuleCompiler.Program program, ObjectNode previous, ObjectNode next,
                                            JsonNode steps, JsonNode reportTemplate, RandomGenerator random,
                                            boolean preview, Map<String, RuleCompiler.Program> programs, long revision,
-                                           TrackObserver observer) {
+                                           TrackObserver observer, Intent intent, String phase) {
         List<ObjectNode> published = new ArrayList<>(), rolls = new ArrayList<>();
         boolean effectOperation = false;
         Set<String> recipientPools = next.has("recipient") && !program.boundPoolIds().isEmpty()
                 ? new HashSet<>() : Set.of();
-        for (JsonNode step : steps) {
+        for (int index = 0; index < steps.size(); index++) {
+            JsonNode step = steps.get(index);
             if (step.has("if") && !RuleExpression.bool(RuleExpression.evaluate(step.get("if"), next), "/do/if")) continue;
             operation(program, step, next, random, preview, published, rolls, observer);
+            if ("plan.adjust".equals(step.path("op").asText())) {
+                JsonNode plan = RuleExpression.read(next, step.path("plan").asText());
+                ArrayNode adjustments = (ArrayNode) plan.path("adjustments");
+                ((ObjectNode) adjustments.get(adjustments.size() - 1))
+                        .put("ruleId", intent.ruleId()).put("bindingId", intent.bindingId())
+                        .put("phase", phase).put("stepIndex", index);
+            }
             effectOperation |= step.path("op").asText().startsWith("effect.");
             touchedRecipientPool(program, step, recipientPools);
         }

@@ -291,6 +291,10 @@ class OwnerTrackReactionsTest {
         assertEquals("Bonus 1.", result.actions().getLast().report());
         assertEquals(1, completed.at("/move/bonus").asInt());
         assertEquals("Reaction", completed.at("/move/adjustments/0/label").asText());
+        assertEquals("reaction", completed.at("/move/adjustments/0/ruleId").asText());
+        assertEquals("changed", completed.at("/move/adjustments/0/bindingId").asText());
+        assertEquals("do", completed.at("/move/adjustments/0/phase").asText());
+        assertEquals(0, completed.at("/move/adjustments/0/stepIndex").asInt());
         assertEquals("Blocked by reaction", completed.at("/blocked/0/reason").asText());
         for (String field : List.of("type", "actorId", "track", "change", "requested", "before", "after"))
             assertEquals(original.path("event").path(field), completed.path(field), field);

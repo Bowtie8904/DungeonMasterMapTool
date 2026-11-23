@@ -50,6 +50,42 @@ class PartyRecoveryMetadataTest {
         assertFalse(adjustments.get(2).has("partyRecovery"));
         assertEquals("items:share", adjustments.at("/1/sourceId").asText());
         assertEquals("share-1", adjustments.at("/1/sourceInstanceId").asText());
+        for (int index = 0; index < adjustments.size(); index++) {
+            JsonNode adjustment = adjustments.get(index);
+            assertEquals("share", adjustment.path("ruleId").asText());
+            assertEquals("move", adjustment.path("bindingId").asText());
+            assertEquals("do", adjustment.path("phase").asText());
+            assertEquals(index, adjustment.path("stepIndex").asInt());
+        }
+    }
+
+    @Test
+    void adjustmentIdentityUsesTheCompiledStepAndActualBinding() throws Exception {
+        ObjectNode automation = (ObjectNode) RuleJson.parse("""
+                {"rules":[{"id":"share","bindings":[
+                   {"id":"automatic","event":"downtime.move","surface":"downtime","mode":"automatic"},
+                   {"id":"selected","event":"downtime.move","surface":"downtime","mode":"option"}],
+                 "do":[{"op":"value","value":0,"if":false},
+                       {"op":"plan.adjust","plan":"event.move","field":"bonus","by":1,"label":"Share"}],
+                 "ui":{"label":"Share"}}]}
+                """);
+        var program = compile(automation);
+        ObjectNode context = (ObjectNode) RuleJson.parse("""
+                {"source":{"id":"items:share","instanceId":"share-1","name":"Share"},
+                 "actor":{"id":"ada"},"revision":0,"event":{"type":"downtime.move","actorId":"ada",
+                 "move":{"bonus":0,"adjustable":{"bonus":{"min":0,"max":10}}}}}
+                """);
+        var selected = new RuleRuntime.Intent("share", "selected", "share-1", 0, RuleJson.JSON.createObjectNode());
+        var result = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context)),
+                List.of(selected), StructuredRollTest.noRandom());
+        JsonNode adjustments = result.contexts().getFirst().at("/event/move/adjustments");
+        assertEquals(2, adjustments.size());
+        assertEquals(List.of("automatic", "selected"), adjustments.findValuesAsText("bindingId"));
+        for (JsonNode adjustment : adjustments) {
+            assertEquals("share", adjustment.path("ruleId").asText());
+            assertEquals("do", adjustment.path("phase").asText());
+            assertEquals(1, adjustment.path("stepIndex").asInt());
+        }
     }
 
     @Test
