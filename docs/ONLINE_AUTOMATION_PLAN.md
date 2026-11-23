@@ -143,8 +143,8 @@ Pending choices live in the running host and expire on restart or cache eviction
 `POST .../rest/choices` first accepts `{request}` with no completion selections, then
 `{requestId, choiceVersion, selections}` for before-reset choices. `POST .../rest/complete` accepts
 `{choiceVersion, request}` with both phases' selections in order. Each response supplies the next signed
-choice version and host-derived descriptors; exact retries reuse the staged outcomes. If preparation needs an
-automatic roll, `{request, prepare: true}` stages it before move selection and `{request, preparedVersion}`
+choice version and host-derived descriptors; exact retries reuse the staged outcomes. If automatic preparation
+needs a roll or cross-holder effect or inventory settlement, `{request, prepare: true}` stages it before move selection and `{request, preparedVersion}`
 continues with the chosen moves without rerolling. Older direct requests cannot skip this preparation.
 Converted companions use their current sheet Stress track as the source of their unmarked-slot pool. They return
 before long-rest moves and clear the owner's net Stress recovered by each completed move; unavailable companions
@@ -154,8 +154,10 @@ Single-action, claim and rest `inventory.grant` commands settle catalog-linked i
 one current spent source limit through the generic chat controls. The claim ledger, sheet, report and exact-retry
 receipt commit atomically. Offers to characters without a player owner are rejected; more than 64 spent limits
 must be reduced before choosing.
-Self-targeted single-holder effects are transferred before whole-rest party recovery, including offline and disabled
-holders, so recipient reactions see the current effects. Targeted-move transfers still require interstage settlement.
+Self-targeted single-holder effects transfer after preparation and between moves. Selected ally moves also
+settle recipient effect starts and ends immediately, including transfers from offline or disabled holders, so
+subsequent operations and recovery reactions see the updated effects. Other reaction phases still reject
+recipient effect mutations that lack ordered lifecycle settlement.
 
 The live host rejects legacy client-supplied rests and downtime rerolls when any category declares format 2,
 including an incomplete pack. It cannot classify malformed, unreadable or unknown-version categories as legacy.
@@ -235,12 +237,12 @@ The internal rest coordinator composes the initial effect snapshot, early expiry
 completion on private source and recipient sheets. Recipient offers retain their original host versions while later
 moves reproject earlier staged changes; every changed sheet advances once, and failure discards the sequence.
 Recipient sheets are loaded only when selected or needed for eligibility. It accepts ordered Fear changes,
-countdowns and already-applied limit refresh commands; a self-only rest settles single-holder cleanup before recovery.
+countdowns and already-applied limit refresh commands; supported single-holder cleanup settles between stages.
 Other commands that could change facts read by later stages are rejected. The result separately identifies every
 recipient sheet read and its original host version, including unchanged sheets used by eligibility predicates.
 The live party-recovery workflow compares read sheet bytes and scope membership and host order under the store
-lock before journaling all changed sheets, Fear, reports and the retry receipt. Post-roll choices and additional
-multi-holder command settlement remain necessary.
+lock before journaling all changed sheets, Fear, reports and the retry receipt. Additional ordered multi-holder
+command settlement remains necessary.
 A staged rest also retains the sorted members of every inspected host scope, including unloaded characters,
 and rejects a membership change between moves. The rest result and its receipt wrapper also retain any host-order
 dependencies. The live commit rechecks membership and order from one roster snapshot per scope and compares all

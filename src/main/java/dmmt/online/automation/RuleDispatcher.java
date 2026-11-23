@@ -180,9 +180,9 @@ public final class RuleDispatcher {
                            ObjectNode previousActor, String target);
     }
 
-    @FunctionalInterface
     interface RecipientTrackReactions {
         void changed(ObjectNode staged, ObjectNode event, List<TargetActionResult> actions, List<ObjectNode> outbox);
+        void effectsChanged(ObjectNode staged, Map<String, ObjectNode> contexts);
     }
 
     private static final class ReactionBudget {
@@ -1088,6 +1088,13 @@ public final class RuleDispatcher {
                         throw new RuleRuntime.Unavailable("inventorySettlement",
                                 "A later reaction requires the inventory grant to be settled first.");
                     if ("recipient".equals(target)) {
+                        if ("effect.start".equals(operation) || "effect.end".equals(operation)) {
+                            if (previousActor != null) {
+                                recipientReactions.effectsChanged(staged, workingContexts);
+                                RuleEffects.refreshCounts(byInstance.get(intent.sourceInstanceId()).program(), staged);
+                            }
+                            return;
+                        }
                         if ("track.capacity".equals(operation)
                                 || !operation.startsWith("track.") && !operation.startsWith("resource."))
                             throw new RuleRuntime.Unavailable("recipientReactions",

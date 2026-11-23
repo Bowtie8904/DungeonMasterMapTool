@@ -1540,6 +1540,8 @@ public final class AutomationHost {
         response.putArray("moveEvents");
         List<ObjectNode> completedMoves = settlePartyRecovery ? new ArrayList<>() : null;
         response.set("preparationEvent", prepared.path("event").deepCopy());
+        if (settlePartyRecovery)
+            settleRestEffects(pack, working, recipients, (ArrayNode) prepared.get("outbox"));
         appendRestStage(prepared, actions, outbox, targeted);
         return new StagedRest(pack, sheet.deepCopy(), working, stagedOrigin, progress, initial, recipients,
                 targeted, settlePartyRecovery, response, completedMoves, revision);
@@ -1592,6 +1594,8 @@ public final class AutomationHost {
             moveEvents.add(completedMove);
             if (party != null && !result.recipientApplied()) recipients.apply(party.updates());
             settleRestInventory(working, result.response(), recipients, roster, settleTargetInventory);
+            if (staged.settlePartyRecovery)
+                settleRestEffects(pack, working, recipients, (ArrayNode) result.response().get("outbox"));
             appendRestStage(result.response(), actions, outbox, targeted);
             carryRestTable(stagedOrigin, result.response().required("event"));
             projection.state(working).put("revision", staged.revision);
@@ -1604,12 +1608,14 @@ public final class AutomationHost {
         Pack pack = staged.pack;
         ObjectNode working = staged.working, response = staged.response;
         ArrayNode actions = (ArrayNode) response.get("actions"), outbox = (ArrayNode) response.get("outbox");
+        if (staged.settlePartyRecovery)
+            settleRestEffects(pack, working, staged.recipients, (ArrayNode) finished.get("outbox"));
         appendRestStage(finished, actions, outbox, staged.targeted);
         response.set("completionOptions", finished.path("completionOptions").deepCopy());
         response.set("completionEvents", finished.path("completionEvents").deepCopy());
         ObjectNode finalEvent = RuleJson.object(finished.get("event"), "/event");
         if (staged.settlePartyRecovery) {
-            settleRestEffects(staged, outbox);
+            settleRestEffects(pack, working, staged.recipients, outbox);
             ObjectNode recovery = stageRestPartyRecoveries(pack, staged.original, finalEvent,
                     staged.completedMoves, staged.recipients, random);
             appendRestStage(recovery, actions, outbox, true);
@@ -1759,19 +1765,27 @@ public final class AutomationHost {
             prepared = prepareRest(pack, preview, origin, kind, revision, RuleJson.JSON.createArrayNode(), noSampling, initial);
         } catch (RuleRuntime.Unavailable failure) {
             if (!"randomPreview".equals(failure.code())) throw failure;
-            ObjectNode offer = RuleJson.JSON.createObjectNode().put("kind", kind).put("revision", revision)
-                    .put("offerVersion", version).put("postOutcomeChoices", true).put("prepareBeforeMoves", true);
-            offer.set("plan", initialEvent.path("rest").deepCopy());
-            offer.set("preparation", preparation);
-            offer.putArray("moves");
-            offer.putArray("completion");
-            return offer;
+            return restPreparationOffer(kind, revision, version, initialEvent, preparation);
         }
+        for (JsonNode command : prepared.path("outbox"))
+            if (Set.of("effect.endElsewhere", "inventory.grant").contains(command.path("kind").asText()))
+                return restPreparationOffer(kind, revision, version, initialEvent, preparation);
         projection.state(preview).put("revision", revision);
         RestProgress progress = restProgress(pack, prepared);
         ObjectNode stagedOrigin = origin.deepCopy();
         carryRestTable(stagedOrigin, prepared.required("event"));
         return restPlanOffer(pack, preview, stagedOrigin, progress, prepared.path("event"), revision, version, preparation, party);
+    }
+
+    private static ObjectNode restPreparationOffer(String kind, long revision, String version,
+                                                   ObjectNode event, ArrayNode preparation) {
+        ObjectNode offer = RuleJson.JSON.createObjectNode().put("kind", kind).put("revision", revision)
+                .put("offerVersion", version).put("postOutcomeChoices", true).put("prepareBeforeMoves", true);
+        offer.set("plan", event.path("rest").deepCopy());
+        offer.set("preparation", preparation);
+        offer.putArray("moves");
+        offer.putArray("completion");
+        return offer;
     }
 
     private ObjectNode restPlanOffer(Pack pack, ObjectNode preview, ObjectNode stagedOrigin, RestProgress progress,
@@ -2163,27 +2177,29 @@ public final class AutomationHost {
         }
     }
 
-    private void settleRestEffects(StagedRest staged, ArrayNode outbox) {
+    private void settleRestEffects(Pack pack, ObjectNode source, StagedRestRecipients recipients, ArrayNode outbox) {
         ArrayNode commands = RuleJson.JSON.createArrayNode();
         for (JsonNode command : outbox) {
             if (!"effect.endElsewhere".equals(command.path("kind").asText())) continue;
-            SingleHolderEffect effect = singleHolderCommand(staged.pack, command);
-            if (!staged.recipients.sourceId.equals(effect.sourceActorId())
-                    || !staged.recipients.sourceId.equals(effect.holder()))
+            SingleHolderEffect effect = singleHolderCommand(pack, command);
+            if (!recipients.sourceId.equals(effect.sourceActorId())
+                    || !recipients.sourceId.equals(effect.holder()))
                 throw new RuleRuntime.Unavailable("restCommand",
                         "A targeted single-holder effect requires settlement during the move.");
             commands.add(command.deepCopy());
         }
         if (commands.isEmpty()) return;
-        var settle = staged.recipients.roster.endEffectsElsewhere();
+        var settle = recipients.roster.endEffectsElsewhere();
         if (settle == null)
             throw new RuleRuntime.Unavailable("restCommand",
                     "Single-holder effect cleanup requires a host character roster.");
-        Map<String, ObjectNode> sheets = staged.recipients.currentSheets();
-        sheets.put(staged.recipients.sourceId, staged.working);
+        Map<String, ObjectNode> sheets = recipients.currentSheets();
+        sheets.put(recipients.sourceId, source);
         List<RestEffectSheet> updated = settle.apply(commands, sheets);
         if (updated == null) throw RuleJson.error("/recipients", "Expected settled effect holders.");
-        for (RestEffectSheet item : updated) staged.recipients.applyEffectSheet(item);
+        for (RestEffectSheet item : updated) recipients.applyEffectSheet(item);
+        for (int i = outbox.size() - 1; i >= 0; i--)
+            if ("effect.endElsewhere".equals(outbox.get(i).path("kind").asText())) outbox.remove(i);
     }
 
     /** Rechecks only membership; the caller must compare read sheet bytes within the same commit boundary. */
@@ -2368,11 +2384,11 @@ public final class AutomationHost {
             return recipientSnapshot(pack, participant.sheet, event, id);
         }
 
-        private StagedRecipientReactions reactions(String actorId, RandomGenerator random) {
+        private StagedRecipientReactions reactions(String actorId, RandomGenerator random, ObjectNode source) {
             StagedRecipient participant = participants.get(actorId);
             if (participant == null || participant.sheet == null)
                 throw RuleJson.error("/recipients", "The staged recipient was not read from the host roster.");
-            return new StagedRecipientReactions(pack, participant, random);
+            return new StagedRecipientReactions(pack, participant, random, source);
         }
 
         private Map<String, ObjectNode> changed() {
@@ -2399,12 +2415,67 @@ public final class AutomationHost {
             private final StagedRecipient participant;
             private final RandomGenerator random;
             private final ObjectNode working;
+            private final ObjectNode source;
 
-            private StagedRecipientReactions(Pack pack, StagedRecipient participant, RandomGenerator random) {
+            private StagedRecipientReactions(Pack pack, StagedRecipient participant, RandomGenerator random,
+                                             ObjectNode source) {
                 this.pack = pack;
                 this.participant = participant;
                 this.random = random;
                 this.working = participant.sheet.deepCopy();
+                this.source = source;
+            }
+
+            @Override
+            public void effectsChanged(ObjectNode staged, Map<String, ObjectNode> contexts) {
+                String id = participant.member.id();
+                ObjectNode event = RuleJson.object(staged.get("event"), "/event");
+                ObjectNode before = recipientSnapshot(pack, working, event, id);
+                ObjectNode recipient = RuleJson.object(staged.get("recipient"), "/recipient");
+                RuleEffects.reconcileHolder(before, recipient, Set.of(), pack.programs(), "/recipient");
+                projection.write(working, projection.actor(working), persisted(recipient));
+
+                ArrayNode pending = staged.withArray("/outbox");
+                ArrayNode effects = RuleJson.JSON.createArrayNode();
+                for (JsonNode command : pending) {
+                    if (!"effect.endElsewhere".equals(command.path("kind").asText())) continue;
+                    SingleHolderEffect effect = singleHolderCommand(pack, command);
+                    if (!sourceId.equals(effect.sourceActorId()) || !id.equals(effect.holder()))
+                        throw new RuleRuntime.Unavailable("restCommand", "The effect holder changed during this move.");
+                    effects.add(command.deepCopy());
+                }
+                if (!effects.isEmpty()) {
+                    if (roster.endEffectsElsewhere() == null)
+                        throw new RuleRuntime.Unavailable("restCommand", "Single-holder effect cleanup requires a host character roster.");
+                    ObjectNode stagedSource = source.deepCopy();
+                    ObjectNode sourceState = projection.state(stagedSource);
+                    contexts.forEach((instance, context) -> storeSource(sourceState, instance, context));
+                    storeSource(sourceState, staged.at("/source/instanceId").asText(), staged);
+                    projection.write(stagedSource, projection.actor(stagedSource),
+                            persisted(RuleJson.object(staged.get("actor"), "/actor")));
+                    Map<String, ObjectNode> sheets = currentSheets();
+                    sheets.put(sourceId, stagedSource);
+                    sheets.put(id, working);
+                    List<RestEffectSheet> updated = roster.endEffectsElsewhere().apply(effects, sheets);
+                    if (updated == null) throw RuleJson.error("/recipients", "Expected settled effect holders.");
+                    for (RestEffectSheet item : updated) {
+                        if (sourceId.equals(item.member().id())) {
+                            if (item.sheet() != stagedSource)
+                                throw RuleJson.error("/recipients", "The source effect cleanup changed its staged sheet.");
+                        } else if (id.equals(item.member().id())) {
+                            throw RuleJson.error("/recipients", "Single-holder cleanup cannot remove the new effect.");
+                        } else applyEffectSheet(item);
+                    }
+                    ObjectNode originalState = projection.state(source);
+                    replace(source, stagedSource);
+                    ObjectNode updatedState = projection.state(source);
+                    replace(originalState, updatedState);
+                    source.set(projection.stateField(), originalState);
+                    for (int i = pending.size() - 1; i >= 0; i--)
+                        if ("effect.endElsewhere".equals(pending.get(i).path("kind").asText())) pending.remove(i);
+                    staged.set("actor", actor(pack, source, originalState, event));
+                }
+                staged.set("recipient", recipientSnapshot(pack, working, event, id));
             }
 
             @Override
@@ -2572,9 +2643,14 @@ public final class AutomationHost {
         RestProgress { groups = Set.copyOf(groups); plan = plan.deepCopy(); }
         @Override public ObjectNode plan() { return plan.deepCopy(); }
     }
+    @FunctionalInterface
+    private interface RestReactionFactory {
+        StagedRestRecipients.StagedRecipientReactions create(String id, RandomGenerator random, ObjectNode source);
+    }
+
     record RestTarget(PartyTargets party, ObjectNode request,
                       BiFunction<RuleDispatcher.RecipientUpdate, ObjectNode, ObjectNode> reproject,
-                      BiFunction<String, RandomGenerator, StagedRestRecipients.StagedRecipientReactions> reactions) {
+                      RestReactionFactory reactions) {
         RestTarget(PartyTargets party, ObjectNode request,
                    BiFunction<RuleDispatcher.RecipientUpdate, ObjectNode, ObjectNode> reproject) {
             this(party, request, reproject, null);
@@ -2754,7 +2830,7 @@ public final class AutomationHost {
             if (target.reactions() == null) {
                 resolved = RuleDispatcher.executeTargets(candidates, chosen.intent(), chosen.recipients(), random, pack.programs());
             } else {
-                recipientReactions = target.reactions().apply(chosen.recipients().getFirst().actorId(), random);
+                recipientReactions = target.reactions().create(chosen.recipients().getFirst().actorId(), random, working);
                 boolean canSettleInventory = settleTargetInventory
                         && candidates.stream().noneMatch(source -> source.program().stateMayAffectProjection())
                         && candidates.getFirst().context().path("actor").path("effects").isEmpty()

@@ -97,8 +97,8 @@ snapshot offer and owner-bound retry receipt can reject stale or forged rest int
 without rolling or staging recipients again. Offers expire on host restart; already committed receipts still replay.
 The live rest workflow authenticates owners and commits targeted moves and party recoveries. Completion benefits
 are offered after the move outcomes and again after the reset, with no second prompt when no choices are available.
-If automatic preparation rolls determine the move allowance, they run once before moves are offered; retrying a
-lost response preserves the sampled result.
+If automatic preparation needs a roll or cross-holder effect or inventory settlement, it runs before moves are
+offered; retrying a lost response preserves the prepared result.
 Format-2 catalogs reject legacy
 client-supplied rests and downtime rerolls.
 Owner and DM sheet saves cannot change host-owned rest counters, and legacy damage snapshots retain those counters
@@ -110,7 +110,8 @@ long-rest moves; downtime rerolls remain incomplete. Ordered adjustment records 
 amount, source, rule, binding and compiled step; converted party-repair modifiers identify the recipient scope
 and track and settle recipient Armor-overflow reactions atomically. An indexed post-rest declaration can schedule a fixed recovery from a named initial
 sheet-source location for matching self moves even if its ordinary modifier was filtered or the source disappeared.
-Self-targeted single-holder effects transfer from previous holders before party recovery reactions run.
+Single-holder effects started on the resting character or a selected ally transfer from previous holders before
+later rest operations and recovery reactions run; unsupported reaction-phase effect changes are rejected.
 Converted source-rest party repairs use the initial loadout and the legacy host's move matching; effect-carried
 rest blocks are not included. Nonpositive legacy integer requests are ignored and unsupported amounts are
 diagnosed. The live coordinator applies ordered requests in host roster order after the rest, with each
