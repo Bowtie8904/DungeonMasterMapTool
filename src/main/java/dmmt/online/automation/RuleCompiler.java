@@ -23,6 +23,7 @@ public final class RuleCompiler {
             "death", "downtime", "creation", "companion");
     static final Set<String> AUDIENCES = Set.of("self", "others", "party", "any");
     static final Set<String> CLAIM_RECIPIENTS = Set.of("otherPlayersCharacters", "playerCharacters", "sourceActor");
+    static final Set<String> TARGET_SCOPES = Set.of("connectedPlayerCharacters", "activeCharacters", "activePlayerCharacters");
     /** Actor-owned lists that {@code collection.*} operations may change; each item is an object with an {@code id}. */
     static final Set<String> COLLECTIONS = Set.of("inventory", "features", "loadout", "vault", "heritage", "conditions", "companions");
     private static final Set<String> MODES = Set.of("button", "option", "automatic");
@@ -873,7 +874,7 @@ public final class RuleCompiler {
                     && !Set.of("one", "all").contains(targets.path("cardinality").asText()))
                 throw RuleJson.error(at + "/cardinality", "Expected one or all.");
             if (!(allowSubstitutions && substitution(targets.path("scope")))
-                    && !Set.of("connectedPlayerCharacters", "activeCharacters", "activePlayerCharacters").contains(targets.path("scope").asText()))
+                    && !TARGET_SCOPES.contains(targets.path("scope").asText()))
                 throw RuleJson.error(at + "/scope", "Expected connectedPlayerCharacters, activeCharacters or activePlayerCharacters.");
             if (targets.has("excludeSource") && !(allowSubstitutions && substitution(targets.get("excludeSource")))
                     && !targets.path("excludeSource").isBoolean())

@@ -34,6 +34,7 @@ public final class AutomationHost {
     private static final String EFFECT_PROFILE = "effect.profile";
     // Runtime revisions pass through double-valued expressions; reserve room for intermediate stages.
     private static final long MAX_REST_REVISION = 1L << 52;
+    private static final int MAX_PARTY_RECOVERIES = 1024;
     private static final Set<String> STAGED_REST_COMMANDS = Set.of(
             "countdown.start", "limits.refresh", "effect.endElsewhere", "table.gain", "table.spend");
     private static final Set<String> STAGED_TARGET_REST_COMMANDS = Set.of(
@@ -847,6 +848,28 @@ public final class AutomationHost {
         }
     }
 
+    record PartyRecoveryRequest(String sourceId, String sourceInstanceId, String track, int requested, String label) {
+        PartyRecoveryRequest {
+            RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(sourceId), "/recovery/sourceId");
+            RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(sourceInstanceId), "/recovery/sourceInstanceId");
+            if (track == null || !track.matches("[a-zA-Z][a-zA-Z0-9_-]*"))
+                throw RuleJson.error("/recovery/track", "Expected an actor track name.");
+            if (requested < 1 || requested > 1_000_000)
+                throw RuleJson.error("/recovery/requested", "Expected a positive recovery amount up to 1000000.");
+            RuleJson.text(RuleJson.JSON.getNodeFactory().textNode(label), "/recovery/label");
+        }
+    }
+
+    record PartyRecovery(ObjectNode response, Map<String, ObjectNode> recipients, Map<String, String> readVersions) {
+        PartyRecovery {
+            response = response.deepCopy();
+            recipients = copySheets(recipients);
+            readVersions = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(readVersions));
+        }
+        @Override public ObjectNode response() { return response.deepCopy(); }
+        @Override public Map<String, ObjectNode> recipients() { return copySheets(recipients); }
+    }
+
     public record RestTransaction(ObjectNode response, Map<String, ObjectNode> recipients, Map<String, String> readVersions,
                                   boolean replayed) {
         public RestTransaction {
@@ -901,6 +924,71 @@ public final class AutomationHost {
             projection.state(working).put("revision", recovered.revision());
             replace(sheet, working);
         }
+        return response;
+    }
+
+    /** Stages trusted recovery requests for a host-selected scope without persisting or publishing them. */
+    PartyRecovery stagePartyRecovery(Pack pack, ObjectNode event, RestRoster roster, String scope,
+                                     List<PartyRecoveryRequest> requests, RandomGenerator random) {
+        RuleJson.object(event, "/event");
+        String sourceId = RuleJson.id(event.get("actorId"), "/event/actorId");
+        RuleJson.text(event.get("type"), "/event/type");
+        RuleJson.checkTree(event, "/event", 0, new int[]{0});
+        if (pack == null || roster == null || random == null)
+            throw RuleJson.error("/recovery", "A compiled pack, host roster and random source are required.");
+        if (scope == null || !RuleCompiler.TARGET_SCOPES.contains(scope))
+            throw RuleJson.error("/recovery/scope", "Expected a host character scope.");
+        if (requests == null || requests.size() > 128 || requests.stream().anyMatch(java.util.Objects::isNull))
+            throw RuleJson.error("/recovery/requests", "Expected at most 128 recovery requests.");
+        StagedRestRecipients recipients = new StagedRestRecipients(pack, sourceId, roster);
+        ObjectNode response = recoverParty(recipients, event, scope, requests, random);
+        return new PartyRecovery(response, recipients.changed(), recipients.readVersions());
+    }
+
+    private ObjectNode recoverParty(StagedRestRecipients recipients, ObjectNode parentEvent, String scope,
+                                    List<PartyRecoveryRequest> requests, RandomGenerator random) {
+        ObjectNode response = RuleJson.JSON.createObjectNode();
+        ArrayNode actions = response.putArray("actions"), outbox = response.putArray("outbox");
+        ArrayNode clears = response.putArray("clears");
+        ArrayNode membership = response.putArray("membership");
+        response.put("scope", scope).put("scopeInspected", !requests.isEmpty());
+        ObjectNode event = parentEvent.deepCopy();
+        if (!requests.isEmpty()) {
+            List<StagedRecipient> members = recipients.scoped(scope);
+            if ((long) requests.size() * members.size() > MAX_PARTY_RECOVERIES)
+                throw RuleJson.error("/recovery/requests", "A transaction is limited to 1024 recipient recoveries.");
+            for (StagedRecipient member : members)
+                membership.addObject().put("id", member.member.id()).put("name", member.member.name())
+                        .put("sheetVersion", member.member.sheetVersion()).put("revision", member.member.revision());
+            for (int requestIndex = 0; requestIndex < requests.size(); requestIndex++) {
+                PartyRecoveryRequest request = requests.get(requestIndex);
+                for (StagedRecipient member : members) {
+                    ObjectNode sheet = member.sheet();
+                    ObjectNode recovered = stageHolderRecovery(recipients.pack, sheet, event, member.member.id(),
+                            request.track(), request.requested(), random);
+                    for (JsonNode command : recovered.path("outbox")) {
+                        if (!STAGED_TARGET_REST_COMMANDS.contains(command.path("kind").asText()))
+                            throw new RuleRuntime.Unavailable("restCommand",
+                                    "This recovery requires host settlement before later recipients: " + command.path("kind").asText() + ".");
+                        outbox.add(((ObjectNode) command).deepCopy().put("actorId", member.member.id()));
+                    }
+                    for (JsonNode action : recovered.path("actions"))
+                        actions.add(((ObjectNode) action).deepCopy().put("actorId", member.member.id()));
+                    clears.addObject().put("requestIndex", requestIndex).put("holderId", member.member.id())
+                            .put("holderName", member.member.name()).put("sourceId", request.sourceId())
+                            .put("sourceInstanceId", request.sourceInstanceId()).put("track", request.track())
+                            .put("requested", request.requested()).put("cleared", recovered.path("cleared").asInt())
+                            .put("label", request.label());
+                    event = ((ObjectNode) recovered.get("event")).deepCopy();
+                    if (recovered.path("revision").asLong() != member.member.revision()) {
+                        projection.state(sheet).put("revision", member.member.revision());
+                        recipients.changed.add(member.member.id());
+                    }
+                }
+            }
+        }
+        response.set("event", event);
+        RuleJson.checkTree(response, "/recovery", 0, new int[]{0});
         return response;
     }
 
@@ -1130,29 +1218,38 @@ public final class AutomationHost {
 
         private PartyTargets party() {
             return new PartyTargets(pack.revision(), roster.sourceVersion(), scope -> {
-                List<RestMember> members = roster.loadScope().apply(scope);
-                if (members == null || members.size() > 128)
-                    throw RuleJson.error("/recipients", "A rest is limited to 128 characters.");
                 List<PartyTargets.Member> result = new ArrayList<>();
-                Set<String> seen = new java.util.HashSet<>();
-                for (RestMember member : members) {
-                    if (member == null || !seen.add(member.id()))
-                        throw RuleJson.error("/recipients", "Duplicate or missing target.");
-                    if (sourceId.equals(member.id())) continue;
-                    StagedRecipient participant = participants.get(member.id());
-                    if (participant == null) {
-                        if (participants.size() == 128) throw RuleJson.error("/recipients", "A rest is limited to 128 characters.");
-                        participant = new StagedRecipient(member);
-                        participants.put(member.id(), participant);
-                    } else if (!participant.sameVersion(member)) {
-                        throw new RuleRuntime.Unavailable("staleRecipient", "A character changed. Reopen this rest.");
-                    }
-                    StagedRecipient selected = participant;
+                for (StagedRecipient selected : scoped(scope)) {
+                    RestMember member = selected.member;
                     result.add(new PartyTargets.Member(member.id(), member.name(), member.sheetVersion(), member.revision(),
                             event -> recipientSnapshot(pack, selected.sheet(), event, member.id())));
                 }
                 return result;
             });
+        }
+
+        private List<StagedRecipient> scoped(String scope) {
+            List<RestMember> members = roster.loadScope().apply(scope);
+            if (members == null || members.size() > 128)
+                throw RuleJson.error("/recipients", "A rest is limited to 128 characters.");
+            List<StagedRecipient> result = new ArrayList<>();
+            Set<String> seen = new java.util.HashSet<>();
+            for (RestMember member : members) {
+                if (member == null || !seen.add(member.id()))
+                    throw RuleJson.error("/recipients", "Duplicate or missing target.");
+                if (sourceId.equals(member.id())) continue;
+                StagedRecipient participant = participants.get(member.id());
+                if (participant == null) {
+                    if (participants.size() == 128) throw RuleJson.error("/recipients", "A rest is limited to 128 characters.");
+                    participant = new StagedRecipient(member);
+                    participants.put(member.id(), participant);
+                } else if (!participant.sameVersion(member)) {
+                    throw new RuleRuntime.Unavailable("staleRecipient", "A character changed. Reopen this rest.");
+                }
+                result.add(participant);
+            }
+            result.sort(java.util.Comparator.comparing(participant -> participant.member.id()));
+            return List.copyOf(result);
         }
 
         private void apply(List<RuleDispatcher.RecipientUpdate> updates) {
