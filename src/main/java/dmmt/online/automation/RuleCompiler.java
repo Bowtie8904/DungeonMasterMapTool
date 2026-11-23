@@ -217,6 +217,7 @@ public final class RuleCompiler {
         public String sourceId() { return sourceId; }
         List<BindingRef> resultButtons() { return resultButtons; }
         public Set<String> ruleIds() { return Set.copyOf(rules.keySet()); }
+        List<String> orderedRuleIds() { return List.copyOf(rules.keySet()); }
         List<AutomaticBinding> automatic(String event) { return automaticByEvent.getOrDefault(event, List.of()); }
         List<BindingRef> bindings(String event, String surface) {
             return bindingsByEventSurface.getOrDefault(new BindingKey(event, surface), List.of());

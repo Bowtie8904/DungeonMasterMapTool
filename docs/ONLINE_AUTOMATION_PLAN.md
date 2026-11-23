@@ -247,6 +247,11 @@ operation identities. A move adjustment may declare `partyRecovery: {track, scop
 `armorTrack` and `activePlayerCharacters` for `repairAllies`. The host copies this validated, authored metadata
 into the adjustment record, rather than deriving recovery mechanics from a client-supplied amount. Applying
 each request to affected characters in a staged rest is still pending. Narrative ally moves remain report-only.
+An internal whole-rest ordering primitive validates each recorded source, rule, binding and step against the
+initial sheet and compiled pack, then orders by source, rule, step and move instead of dispatch order. This
+preserves converted loadout modifier/pick order in the supported cases, including individually clamped requests.
+It accepts only private host-produced events and does not settle recipient changes or reproduce legacy server
+applicability checks that differ from ordinary move modifiers.
 The shared Daggerheart ruleset now supplies self-targeted short recovery (1d4 plus tier and move bonus), the two
 mutually exclusive preparation variants, long recovery and work on a project. Reports use the amount actually
 cleared or gained, including permanent and locked HP and capped Hope; a short rest needs a granted allowance for

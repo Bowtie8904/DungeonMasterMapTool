@@ -98,7 +98,8 @@ not yet connected to a live format-2 rest. A staged self move that requests addi
 rejected until all affected recipients and their Armor-overflow reactions can be settled atomically, even if a
 later adjustment cancels the total. Ordered adjustment records retain each requested amount, source, rule,
 binding and compiled step; converted party-repair modifiers additionally identify the recipient scope and track
-without settling them yet.
+without settling them yet. An internal ordering primitive reconstructs source, rule, step and move order across
+a rest from host-generated events; it does not yet settle recipients or cover all legacy modifier applicability.
 Format-2 healing respects permanent HP and temporary locked HP on both the actor and targeted recipients;
 reports use the amount actually cleared.
 Converted scar gains and healing update the affected character's Hope capacity atomically. Gaining a scar

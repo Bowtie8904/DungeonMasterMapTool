@@ -869,6 +869,12 @@ public final class AutomationHost {
         }
     }
 
+    record RestPartyRecovery(int moveIndex, int adjustmentIndex, ScopedPartyRecoveryRequest request) {}
+
+    private record RecoverySourceOrder(int index, String sourceId, RuleCompiler.Program program) {}
+
+    private record OrderedRestRecovery(RestPartyRecovery recovery, int sourceIndex, int ruleIndex, int stepIndex) {}
+
     record PartyRecovery(ObjectNode response, Map<String, ObjectNode> recipients, Map<String, String> readVersions,
                          Map<String, List<String>> scopeMembership) {
         PartyRecovery {
@@ -1107,6 +1113,84 @@ public final class AutomationHost {
         if (allies > 0 && !hasPositiveAllies)
             throw new RuleRuntime.Unavailable("restCommand", "The party recovery request has no authored adjustment.");
         return List.copyOf(result);
+    }
+
+    /**
+     * Orders host-produced adjustments across a rest. Event contents and requested amounts must originate from
+     * the private rest transaction, not from a client; checking provenance does not authenticate an event.
+     */
+    List<RestPartyRecovery> orderRestPartyRecoveries(Pack pack, ObjectNode initialSheet, String actorId,
+                                                     List<ObjectNode> moveEvents) {
+        if (pack == null) throw RuleJson.error("/recovery", "A compiled pack is required.");
+        RuleJson.object(initialSheet, "/sheet");
+        RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(actorId), "/event/actorId");
+        if (moveEvents == null || moveEvents.size() > 64 || moveEvents.stream().anyMatch(java.util.Objects::isNull))
+            throw RuleJson.error("/rest/moves", "Expected at most 64 host-generated move events.");
+        Map<String, RecoverySourceOrder> sourceOrder = null;
+        Map<RuleCompiler.Program, Map<String, Integer>> ruleOrders = new HashMap<>();
+        List<OrderedRestRecovery> ordered = new ArrayList<>();
+        for (int moveIndex = 0; moveIndex < moveEvents.size(); moveIndex++) {
+            ObjectNode event = moveEvents.get(moveIndex);
+            RuleJson.checkTree(event, "/event", 0, new int[]{0});
+            if (!actorId.equals(RuleJson.id(event.get("actorId"), "/event/actorId")))
+                throw RuleJson.error("/event/actorId", "A rest move belongs to a different character.");
+            List<ScopedPartyRecoveryRequest> requests = partyRecoveryRequests(event);
+            if (requests.isEmpty()) continue;
+            if (sourceOrder == null) {
+                sourceOrder = new HashMap<>();
+                List<SheetProjection.SourceElement> sources = sources(pack, initialSheet);
+                for (int i = 0; i < sources.size(); i++) {
+                    var source = sources.get(i);
+                    sourceOrder.put(source.instanceId(), new RecoverySourceOrder(i, source.sourceId(),
+                            pack.programs().get(source.sourceId())));
+                }
+            }
+            JsonNode adjustments = event.at("/move/adjustments");
+            int requestIndex = 0;
+            for (int adjustmentIndex = 0; adjustmentIndex < adjustments.size(); adjustmentIndex++) {
+                JsonNode adjustment = adjustments.get(adjustmentIndex);
+                if (adjustment.path("requested").asInt() <= 0 || !adjustment.has("partyRecovery")) continue;
+                ScopedPartyRecoveryRequest request = requests.get(requestIndex++);
+                String at = "/event/move/adjustments/" + adjustmentIndex;
+                RecoverySourceOrder source = sourceOrder.get(request.request().sourceInstanceId());
+                if (source == null || source.program() == null || !source.sourceId().equals(request.request().sourceId()))
+                    throw new RuleRuntime.Unavailable("source",
+                            "A party recovery source was not present at the start of this rest.");
+                String ruleId = RuleJson.id(adjustment.get("ruleId"), at + "/ruleId");
+                String bindingId = RuleJson.id(adjustment.get("bindingId"), at + "/bindingId");
+                if (!"do".equals(RuleJson.text(adjustment.get("phase"), at + "/phase")))
+                    throw RuleJson.error(at + "/phase", "Expected a pre-move operation.");
+                ObjectNode rule = source.program().rule(ruleId);
+                JsonNode binding = RuleDispatcher.binding(rule, bindingId);
+                if (!"downtime.move".equals(binding.path("event").asText())
+                        || !"downtime".equals(binding.path("surface").asText()))
+                    throw new RuleRuntime.Unavailable("restCommand",
+                            "A recovery triggered by another event cannot yet be ordered across a rest.");
+                JsonNode steps = rule.path("do");
+                if (steps.isEmpty()) throw RuleJson.error(at + "/stepIndex", "The recovery rule has no operations.");
+                int stepIndex = RuleJson.integer(adjustment.get("stepIndex"), at + "/stepIndex", 0, steps.size() - 1);
+                JsonNode step = steps.get(stepIndex);
+                if (!"plan.adjust".equals(step.path("op").asText()) || !"event.move".equals(step.path("plan").asText())
+                        || !step.path("field").equals(adjustment.path("field"))
+                        || !step.path("partyRecovery").equals(adjustment.path("partyRecovery")))
+                    throw RuleJson.error(at, "The recovery does not match its compiled operation.");
+                Map<String, Integer> rules = ruleOrders.computeIfAbsent(source.program(), program -> {
+                    Map<String, Integer> indexes = new HashMap<>();
+                    List<String> ids = program.orderedRuleIds();
+                    for (int i = 0; i < ids.size(); i++) indexes.put(ids.get(i), i);
+                    return indexes;
+                });
+                if (ordered.size() == 128)
+                    throw RuleJson.error("/rest/moves", "A rest is limited to 128 party recovery requests.");
+                ordered.add(new OrderedRestRecovery(new RestPartyRecovery(moveIndex, adjustmentIndex, request),
+                        source.index(), rules.get(ruleId), stepIndex));
+            }
+        }
+        ordered.sort(java.util.Comparator.comparingInt(OrderedRestRecovery::sourceIndex)
+                .thenComparingInt(OrderedRestRecovery::ruleIndex).thenComparingInt(OrderedRestRecovery::stepIndex)
+                .thenComparingInt(item -> item.recovery().moveIndex())
+                .thenComparingInt(item -> item.recovery().adjustmentIndex()));
+        return ordered.stream().map(OrderedRestRecovery::recovery).toList();
     }
 
     /** Stages an ordered sequence with potentially different host-selected scopes. */
