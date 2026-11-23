@@ -60,12 +60,16 @@ export function rollDetails(m: RollMessage): RollDetail[] {
     const contributions = m.automationEvent?.roll?.contributions;
     if (!Array.isArray(contributions) || contributions.length !== m.breakdown.length) return m.breakdown;
     return m.breakdown.map((detail, i) => {
-      const role = contributions[i]?.role;
-      if (role !== 'hope' && role !== 'fear') return detail;
-      const dieLabel = role === 'hope' ? 'Hope die' : 'Fear die';
-      const base = detail.label.replace(/ \((?:Hope|Fear) die\)$/, '');
-      const label = base === 'Hope die' || base === 'Fear die' ? dieLabel : `${base} (${dieLabel})`;
-      return label === detail.label ? detail : { ...detail, label };
+      const part = contributions[i];
+      let label = detail.label;
+      if (part?.role === 'hope' || part?.role === 'fear') {
+        const dieLabel = part.role === 'hope' ? 'Hope die' : 'Fear die';
+        const base = label.replace(/ \((?:Hope|Fear) die\)$/, '');
+        label = base === 'Hope die' || base === 'Fear die' ? dieLabel : `${base} (${dieLabel})`;
+      }
+      const rolls = part?.kind === 'dice' && part.sign === -1
+        ? detail.rolls.map(value => -Math.abs(value)) : detail.rolls;
+      return label === detail.label && rolls === detail.rolls ? detail : { ...detail, label, rolls };
     });
   }
   const rolls = Array.isArray(m.rolls) ? m.rolls.filter((v): v is number => typeof v === 'number') : [];
@@ -118,7 +122,12 @@ function isCriticalRoll(m: RollMessage): boolean {
 function rollContent(m: RollMessage): HTMLElement {
   const secret = m.secret === true;
   const details = rollDetails(m);
-  const values = Array.isArray(m.rolls) ? m.rolls.filter((v): v is number => typeof v === 'number') : [];
+  let values = Array.isArray(m.rolls) ? m.rolls.filter((v): v is number => typeof v === 'number') : [];
+  const contributions = m.automationEvent?.roll?.contributions;
+  if (Array.isArray(contributions) && contributions.length === m.breakdown?.length) {
+    const attributed = details.flatMap(detail => detail.rolls);
+    if (attributed.length === values.length) values = attributed;
+  }
   const kept = secret ? values.map(() => true) : keptRolls(m.expression, values);
   const authoritative = !secret ? authoritativeDuality(m) : null;
   const duality = !!authoritative || !secret && !m.automationEvent

@@ -251,7 +251,7 @@ export interface RollMessage {
       difficulty?: number | null;
       outcome?: 'success' | 'failure' | null;
     };
-    roll?: { contributions?: Array<{ role?: string }> };
+    roll?: { contributions?: Array<{ kind?: string; role?: string; sign?: number }> };
   };
   deathrun?: { effectId: string; count: number };
   actionBenefits?: ChatMessage['actionBenefits'];

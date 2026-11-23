@@ -3471,6 +3471,71 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void profileDamageHistoryPreservesSignedKeptDice() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        var rules = (ArrayNode) catalog.at("/entries/0/features/2/automation/rules");
+        rules.removeAll();
+        rules.add(MAPPER.readTree("""
+            {"id":"penalty","bindings":[{"id":"auto","surface":"roll","event":"roll.prepare","mode":"automatic"}],
+             "when":{"eq":[{"read":"event.check.kind"},"damage"]},"ui":{"label":"Penalty"},
+             "do":[{"op":"roll.contribute","from":{"read":"event.roll"},"as":"withPenalty",
+                    "contribution":{"id":"penalty","kind":"dice","role":"modifier","label":"Penalty",
+                                    "count":3,"sides":6,"keepHighest":2,"sign":-1}},
+                   {"op":"roll.keptDice","from":{"read":"result.withPenalty"},"role":"modifier","as":"penaltyDice"},
+                   {"op":"roll.dropLowest","from":{"read":"result.withPenalty"},"dice":{"read":"result.penaltyDice"},
+                    "count":1,"as":"finalRoll"},
+                   {"op":"roll.publish","roll":{"read":"result.finalRoll"}}]}"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        campaign.getActors().add(Campaign.Actor.builder().id("signed").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "signed", """
+            {"name":"Ada","level":2,"stress":{"slots":6,"on":0},"traits":[{"name":"Finesse","mod":3}],
+             "features":[{"name":"Steady","instanceId":"s","automationSource":"classes:tester:features:steady"}]}""");
+        String cookie = cookie();
+        String request = """
+            {"request":{"requestId":"signed-damage","expectedRevision":0,
+             "profileRoll":{"sourceInstanceId":"s","profileId":"thrown","kind":"damage"},"selections":[]}}""";
+        int history = store.historyTail(campaign.getId(), 100).size();
+        diceSeed(0);
+        var response = automationHttp(cookie, "signed", request);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode event = MAPPER.readTree(response.body()).required("event");
+        JsonNode roll = event.required("roll");
+        JsonNode penalty = null;
+        int penaltyIndex = -1;
+        for (int i = 0; i < roll.path("contributions").size(); i++) {
+            if ("penalty".equals(roll.path("contributions").get(i).path("id").asText())) {
+                penalty = roll.path("contributions").get(i);
+                penaltyIndex = i;
+            }
+        }
+        assertNotNull(penalty);
+        assertEquals(-1, penalty.path("sign").asInt());
+        assertEquals(3, penalty.path("dice").size());
+        assertEquals(1, roll.path("excludedDice").size());
+        String excluded = roll.path("excludedDice").get(0).asText();
+        int kept = 0, discarded = 0;
+        for (JsonNode die : penalty.path("dice")) {
+            if (!die.path("kept").asBoolean()) discarded++;
+            else if (!excluded.equals(die.path("id").asText())) kept = die.path("face").asInt();
+        }
+        assertEquals(1, discarded);
+        assertTrue(kept > 0);
+        var log = store.historyTail(campaign.getId(), 100);
+        assertEquals(history + 1, log.size());
+        JsonNode message = log.getLast();
+        assertEquals(event, message.required("automationEvent"));
+        assertEquals(-kept, message.path("breakdown").get(penaltyIndex).path("rolls").get(0).asInt());
+        assertEquals(-kept, message.path("rolls").get(message.path("rolls").size() - 1).asInt());
+        assertEquals(-kept, message.path("breakdown").get(penaltyIndex).path("total").asInt());
+        assertEquals("1d6+1-1d6", message.path("expression").asText());
+        assertEquals(roll.path("total"), message.path("total"));
+        assertEquals(response.body(), automationHttp(cookie, "signed", request).body());
+        assertEquals(log, store.historyTail(campaign.getId(), 100));
+    }
+
+    @Test
     void profileRollStagesOptionsReactionsAndHistoryInOneRequest() throws Exception {
         automationCompendium();
         Path file = compendiumDir.resolve("classes.json");

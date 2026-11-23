@@ -5964,10 +5964,11 @@ public final class OnlineSessionServer {
             detail.set("total", part.get("total"));
             ArrayNode kept = detail.putArray("rolls");
             List<String> dice = new ArrayList<>();
+            int sign = part.path("sign").asInt(1);
             for (JsonNode die : part.path("dice")) {
                 if (!die.path("kept").asBoolean() || excluded.contains(die.path("id").asText())) continue;
-                kept.add(die.get("face"));
-                dice.add((part.path("sign").asInt(1) < 0 ? "-" : "+") + "1d" + die.path("sides").asInt());
+                kept.add(sign * die.path("face").asInt());
+                dice.add((sign < 0 ? "-" : "+") + "1d" + die.path("sides").asInt());
             }
             faces.addAll(kept);
             String term = dice.isEmpty() ? part.required("total").asText() : String.join("", dice);

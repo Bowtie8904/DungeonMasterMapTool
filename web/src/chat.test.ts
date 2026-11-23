@@ -8,6 +8,50 @@ const message: RollMessage = {
 };
 
 describe('roll breakdowns', () => {
+  it('renders signed profile damage from both current and historical host messages', () => {
+    class Element {
+      className = '';
+      children: Array<Element | string> = [];
+      append(...children: Array<Element | string>) { this.children.push(...children); }
+      setAttribute() {}
+      get text(): string { return this.children.map(child => typeof child === 'string' ? child : child.text).join(''); }
+      find(cls: string): Element | undefined {
+        return this.className.split(' ').includes(cls) ? this : this.children.flatMap(child => typeof child === 'string' ? [] : [child])
+          .map(child => child.find(cls)).find(Boolean);
+      }
+    }
+    vi.stubGlobal('document', { createElement: () => new Element() });
+    try {
+      const historical: RollMessage = {
+        ...message, kind: 'dice', expression: '1d8-1d6+2', rolls: [5, 3], total: 4,
+        breakdown: [{ label: 'Weapon', expression: '1d8', rolls: [5], total: 5 },
+          { label: 'Penalty', expression: '-1d6', rolls: [3], total: -3 },
+          { label: 'Bonus', expression: '2', rolls: [], total: 2 }],
+        automationEvent: { type: 'roll.finished',
+          roll: { contributions: [{ kind: 'dice', role: 'damage' },
+            { kind: 'dice', role: 'modifier', sign: -1 }, { kind: 'flat', role: 'modifier' }] } },
+      };
+      for (const roll of [
+        historical,
+        { ...historical, rolls: [5, -3],
+          breakdown: historical.breakdown!.map((detail, index) => index === 1 ? { ...detail, rolls: [-3] } : detail) },
+      ]) {
+        const card = renderLogEntry({ kind: 'roll', m: roll }, 'player') as unknown as Element;
+        expect(card.find('roll-dice')?.text).toBe('d85d6-3');
+        expect(card.find('roll-modifier')?.text).toBe('+2');
+        expect(card.find('roll-total')?.text).toBe('TOTAL4');
+        expect(rollDetails(roll)[1].rolls).toEqual([-3]);
+      }
+      expect(historical.rolls).toEqual([5, 3]);
+      expect(historical.breakdown![1].rolls).toEqual([3]);
+      const legacy = { ...historical, automationEvent: undefined };
+      expect(rollDetails(legacy)[1].rolls).toEqual([3]);
+      const secret = renderLogEntry({ kind: 'roll', m: { ...historical, secret: true } }, 'player') as unknown as Element;
+      expect(secret.find('roll-dice')?.text).toBe('d8?d6?');
+      expect(secret.find('roll-total')?.text).toBe('TOTAL?');
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   it('renders authoritative profile outcomes independently of dice order, including edits and criticals', () => {
     class Element {
       className = '';

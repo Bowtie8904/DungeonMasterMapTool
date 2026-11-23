@@ -121,6 +121,9 @@ Profile-roll chat reads its Hope and Fear faces, critical/dominant result and an
 the persisted host check rather than guessing from dice order. Breakdown labels follow the final roles after
 a swap; a revised result creates a new history entry and leaves the original intact. Damage and legacy rolls
 retain their existing presentation, and owner result controls remain separate from legacy roll buttons.
+Kept profile dice include their contribution sign in the chat equation and breakdown. For earlier format-2
+messages with unsigned flattened faces, the browser uses the saved structured contribution sign without
+rewriting history; discarded and excluded dice remain absent from the flattened display.
 
 Unused recipe bodies also validate concrete binding IDs, event/surface/mode names, audience, defaults, priority, result groups, static conditions, target and claim scopes, UI templates, and complete input definitions without substitutions. Duplicate concrete input IDs and automatic rules with concrete inputs or costs are rejected as well. Local argument, input and result references are checked against their availability and operation order; scopes or expressions affected by substitutions are deferred to expansion. Input details containing substitutions and checks depending on the eventual source's declarations still run at expansion; full unused-body semantic linking is not yet complete. Expanded rules also validate references in target filters, roll plans and dice-table outcome templates.
 

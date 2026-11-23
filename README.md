@@ -82,7 +82,8 @@ its written difficulty and origin come from the rules, not the player. The host 
 the profile from the saved sheet and commits its edited dice, reactions and costs together. A blocked
 profile roll spends nothing, and a retry does not roll again. Chat displays the host's final Hope/Fear,
 critical and written-difficulty results even when a rule swaps die roles; the breakdown identifies their
-current roles. Equipped weapons with stable automation
+current roles. Negative dice contributions appear as subtractions in damage rolls, including previously
+saved format-2 chat. Equipped weapons with stable automation
 source and instance IDs also offer their ordinary attack and damage; saved customized weapon statistics
 and mixed dice pools are used. An effect on its own active source can also offer its profile: stored effects
 use frozen facts, while derived effects are available only while their condition holds. Ending or replacing
