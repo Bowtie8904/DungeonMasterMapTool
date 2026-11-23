@@ -63,6 +63,7 @@ public final class LegacyCatalogConverter {
     private static final List<String> SEVERITIES = List.of("minor", "major", "severe", "massive");
     private static final Pattern DICE = Pattern.compile("([1-9][0-9]?)d([1-9][0-9]{0,2})");
     private static final Pattern ACTION_DAMAGE = Pattern.compile("(?i)(\\d*)d(\\d+)(?:([+-])(\\d+))?");
+    private static final Pattern REPORT_DICE_TERM = Pattern.compile("([+-]?)(?:(\\d*)[dD](\\d+)|(\\d+))");
     private static final Pattern POOL_DICE = Pattern.compile("@([a-z][a-z0-9_]*)(d\\d+(?:[+-]\\d+)?)");
     private static final Set<String> ACTION_FIELDS = Set.of("toggleEffect", "splendorAction", "id", "label", "description", "cost", "steps", "report", "damage",
             "requiresEffect", "excludesEffect", "endEffect", "uses", "usesSource", "actionRoll", "target",
@@ -2970,28 +2971,106 @@ public final class LegacyCatalogConverter {
         report(legacy, path, p, ui, null, null);
     }
 
-    /** With steps and pools, a computed or pool-valued report amount is evaluated first and shown from {@code result.reportAmount}. */
+    /** Action report values are captured after costs but before the action's subsequent steps. */
     private static void report(JsonNode legacy, String path, Problems p, ObjectNode ui, ArrayNode steps, Pools pools) {
         if (!legacy.has("report")) return;
         JsonNode report = legacy.get("report");
         String text = report.isTextual() ? escape(report.asText()) : null;
         if (report.isObject()) {
-            p.onlyFields(report, path + "/report", Set.of("text", "amount"));
+            p.onlyFields(report, path + "/report", Set.of("text", "amount", "dice"));
             text = escape(report.path("text").asText(""));
-            if (report.has("amount")) {
+            if (report.has("dice")) {
+                if (steps == null) p.add(path + "/report/dice", "Rolled reports are supported only for actions.");
+                else {
+                    for (String otherRoll : List.of("table", "actionRoll", "damage", "sendRoll", "resourceRoll"))
+                        if (legacy.has(otherRoll)) p.add(path + "/report/dice", "Rolled reports cannot yet preserve the order of " + otherRoll + ".");
+                    ObjectNode plan = reportRoll(report.get("dice"), path + "/report/dice", p);
+                    if (plan != null) {
+                        ObjectNode roll = RuleJson.JSON.createObjectNode().put("op", "roll.resolve").put("as", "reportRoll");
+                        roll.putObject("plan").set("literal", plan);
+                        steps.insert(0, roll);
+                        ObjectNode value = RuleJson.JSON.createObjectNode();
+                        value.putArray("max").add(0).add(read("result.reportRoll.total"));
+                        steps.insertObject(1).put("op", "value").put("as", "reportAmount").set("value", value);
+                        text = substituteReportAmount(text, "{result.reportAmount}");
+                    }
+                }
+            } else if (report.has("amount")) {
                 JsonNode amount = report.get("amount");
-                JsonNode value = amount.isInt() ? null : computed(amount.asText());
-                if (amount.isInt()) text = text.replace("{{amount}}", amount.asText());
-                else if (value != null && value.has("read")) text = text.replace("{{amount}}", "{" + value.path("read").asText() + "}");
-                else if (steps != null && (value != null || pools.has(amount.asText().replaceFirst("^@", "")))) {
-                    if (value == null) value = read("actor.pools." + amount.asText().substring(1) + ".value");
-                    steps.insertObject(0).put("op", "value").put("as", "reportAmount").set("value", value);
-                    text = text.replace("{{amount}}", "{result.reportAmount}");
-                } else p.add(path + "/report/amount", "Report amounts must be whole numbers or a directly projected value.");
-            }
+                JsonNode value = null;
+                if (amount.isTextual()) {
+                    String token = amount.asText();
+                    String trait = TRAITS.stream().filter(name -> token.equals("@" + name)).findFirst().orElse(null);
+                    value = trait == null ? computed(token) : read("actor.stats.trait." + trait);
+                    if (value == null && steps != null && token.startsWith("@") && pools.has(token.substring(1)))
+                        value = read("actor.pools." + token.substring(1) + ".value");
+                }
+                if (amount.isInt()) text = substituteReportAmount(text, Integer.toString(Math.max(0, amount.asInt())));
+                else if (value != null && steps != null) {
+                    if (legacy.has("toggleEffect"))
+                        p.add(path + "/report/amount", "A computed report after toggling an effect cannot yet preserve legacy ordering.");
+                    if (RuleExpression.references(value).stream().anyMatch(ref -> ref.startsWith("actor.stats."))
+                            && List.of("cost", "selectAmount", "castTokens", "resourceRoll", "portions").stream().anyMatch(legacy::has))
+                        p.add(path + "/report/amount", "Derived report values after payment require recalculating actor stats.");
+                    ObjectNode bounded = RuleJson.JSON.createObjectNode();
+                    bounded.putArray("max").add(0).add(value);
+                    steps.insertObject(0).put("op", "value").put("as", "reportAmount").set("value", bounded);
+                    text = substituteReportAmount(text, "{result.reportAmount}");
+                } else p.add(path + "/report/amount", value != null && steps == null
+                        ? "Computed reports outside actions cannot yet preserve their evaluation order."
+                        : "Report amounts must be whole numbers or a directly projected value.");
+            } else text = substituteReportAmount(text, "0");
         }
         if (text == null || text.isBlank()) p.add(path + "/report", "Report text is missing.");
         else ui.put("report", text);
+    }
+
+    private static String substituteReportAmount(String text, String value) {
+        int index = text.indexOf("{{amount}}");
+        return index < 0 ? text : text.substring(0, index) + value + text.substring(index + "{{amount}}".length());
+    }
+
+    /** Parse the entire legacy expression into bounded, ordered generic roll contributions. */
+    private static ObjectNode reportRoll(JsonNode dice, String path, Problems p) {
+        if (!dice.isTextual()) { p.add(path, "Expected a dice expression."); return null; }
+        String expression = dice.asText().replaceAll("\\s", "");
+        if (expression.isEmpty() || expression.length() > 1024) {
+            p.add(path, "Expected a nonempty dice expression of at most 1024 characters.");
+            return null;
+        }
+        ObjectNode plan = RuleJson.JSON.createObjectNode().put("id", "report");
+        ArrayNode contributions = plan.putArray("contributions");
+        var matcher = REPORT_DICE_TERM.matcher(expression);
+        int offset = 0, totalDice = 0;
+        while (offset < expression.length()) {
+            matcher.region(offset, expression.length());
+            if (!matcher.lookingAt() || offset > 0 && matcher.group(1).isEmpty() || contributions.size() == 256) {
+                p.add(path, "Unsupported report dice expression: " + dice.asText());
+                return null;
+            }
+            int sign = "-".equals(matcher.group(1)) ? -1 : 1;
+            ObjectNode part = contributions.addObject().put("id", "term-" + contributions.size())
+                    .put("role", "base").put("sourceId", "core").put("label", "Report");
+            try {
+                if (matcher.group(3) != null) {
+                    int count = matcher.group(2).isEmpty() ? 1 : Integer.parseInt(matcher.group(2));
+                    int sides = Integer.parseInt(matcher.group(3));
+                    if (count > 1024 || sides < 2 || sides > 1000 || totalDice + count > 1024)
+                        throw new NumberFormatException();
+                    totalDice += count;
+                    part.put("kind", "dice").put("count", count).put("sides", sides).put("sign", sign);
+                } else {
+                    int flat = Integer.parseInt(matcher.group(4));
+                    if (flat > 1_000_000) throw new NumberFormatException();
+                    part.put("kind", "flat").put("value", sign * flat);
+                }
+            } catch (NumberFormatException invalid) {
+                p.add(path, "Report dice exceed the supported count, die-size or flat-value bounds: " + dice.asText());
+                return null;
+            }
+            offset = matcher.end();
+        }
+        return plan;
     }
 
     /**

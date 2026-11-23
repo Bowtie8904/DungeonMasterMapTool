@@ -1386,6 +1386,10 @@ class LegacyCatalogConverterTest {
     }
 
     private static RuleDispatcher.EventResolution run(RuleCompiler.Program program, ObjectNode context, String... rules) {
+        return run(program, context, RandomGenerator.getDefault(), rules);
+    }
+
+    private static RuleDispatcher.EventResolution run(RuleCompiler.Program program, ObjectNode context, RandomGenerator random, String... rules) {
         String binding = switch (context.at("/event/type").asText()) {
             case "action.request" -> "sheet";
             case "downtime.move" -> "downtime";
@@ -1396,7 +1400,7 @@ class LegacyCatalogConverterTest {
         };
         List<RuleRuntime.Intent> intents = java.util.Arrays.stream(rules)
                 .map(rule -> new RuleRuntime.Intent(rule, binding, "fixture", context.path("revision").asLong(), RuleJson.JSON.createObjectNode())).toList();
-        return RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context)), intents, RandomGenerator.getDefault());
+        return RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context)), intents, random);
     }
 
     private static List<String> available(RuleCompiler.Program program, ObjectNode context, String surface) {
@@ -2105,17 +2109,20 @@ class LegacyCatalogConverterTest {
         JsonNode block = block(result, 0);
         assertEquals("actor.stats.tier", block.at("/modifiers/0/value/negate/read").asText());
         JsonNode heal = block.at("/rules/0");
-        assertEquals("actor.proficiency.value", heal.at("/do/0/amount/read").asText());
-        assertEquals("dice.roll", heal.at("/do/1/op").asText());
-        assertEquals(4, heal.at("/do/1/sides").asInt());
-        assertEquals("Cleared {actor.proficiency.value}.", heal.at("/ui/report").asText());
+        assertEquals("actor.proficiency.value", heal.at("/do/0/value/max/1/read").asText());
+        assertEquals("actor.proficiency.value", heal.at("/do/1/amount/read").asText());
+        assertEquals("dice.roll", heal.at("/do/2/op").asText());
+        assertEquals(4, heal.at("/do/2/sides").asInt());
+        assertEquals("Cleared {result.reportAmount}.", heal.at("/ui/report").asText());
         assertEquals("actor.hope.value", block.at("/rules/1/costs/0/amount/read").asText());
 
         RuleCompiler.Program program = program(result, 0);
         ObjectNode context = context(program, """
                 {"hope":{"value":3,"max":6},"proficiency":{"value":2},"hp":{"marked":5,"capacity":6},
                  "stress":{"marked":6,"capacity":6}}""", "{\"type\":\"action.request\"}");
-        ObjectNode after = run(program, context, "heal").contexts().getFirst();
+        var healed = run(program, context, "heal");
+        assertEquals("Cleared 2.", healed.actions().getFirst().report());
+        ObjectNode after = healed.contexts().getFirst();
         assertEquals(3, after.at("/actor/hp/marked").asInt());
         int stress = after.at("/actor/stress/marked").asInt();
         assertTrue(stress >= 1 && stress <= 4, "stress " + stress);
@@ -2637,10 +2644,159 @@ class LegacyCatalogConverterTest {
     void computedReportAmountsEvaluateBeforeReporting() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"clarity","name":"Clarity","automation":{"actions":[{"id":"use","label":"Clarity",
-                 "report":{"amount":"@Instinct","text":"Clear {amount} Stress."}}]}}"""));
-        assertEquals(1, result.converted(), result.diagnostics().toString());
-        assertNotNull(program(result, 0));
+                 "report":{"amount":"@Instinct","text":"Clear {amount} Stress."}}]}},
+                {"id":"snapshot","name":"Snapshot","automation":{"actions":[{"id":"use","label":"Snapshot",
+                 "cost":{"hope":1},"report":{"amount":"@hope","text":"Hope: {amount}."},
+                 "steps":[{"op":"gain","resource":"hope","amount":1}]}]}},
+                {"id":"negative","name":"Negative","automation":{"actions":[{"id":"use","label":"Negative",
+                 "report":{"amount":-2,"text":"Amount: {amount}."}}]}}"""));
+        assertEquals(3, result.converted(), result.diagnostics().toString());
+        RuleCompiler.Program clarity = program(result, 0);
         assertTrue(block(result, 0).toString().contains("{result.reportAmount}"), block(result, 0).toString());
+        for (int total : new int[]{3, -2}) {
+            ObjectNode context = context(clarity, """
+                    {"traits":{"Instinct":-1},"stats":{"trait":{"Instinct":%d}}}""".formatted(total), "{\"type\":\"action.request\"}");
+            assertEquals("Clear " + Math.max(0, total) + " Stress.", run(clarity, context, "use").actions().getFirst().report());
+        }
+        RuleCompiler.Program snapshot = program(result, 1);
+        ObjectNode before = context(snapshot, "{\"hope\":{\"value\":3,\"max\":6}}", "{\"type\":\"action.request\"}");
+        var after = run(snapshot, before, "use");
+        assertEquals("Hope: 2.", after.actions().getFirst().report());
+        assertEquals(3, after.contexts().getFirst().at("/actor/hope/value").asInt());
+        RuleCompiler.Program negative = program(result, 2);
+        assertEquals("Amount: 0.", run(negative, context(negative, "{}", "{\"type\":\"action.request\"}"), "use").actions().getFirst().report());
+
+        var afterPayment = LegacyCatalogConverter.convert(catalog("""
+                {"id":"paid","name":"Paid","automation":{"actions":[{"id":"use","label":"Paid","cost":{"hope":1},
+                 "report":{"amount":"@Instinct","text":"Amount {amount}."}}]}}"""));
+        assertEquals(0, afterPayment.converted(), afterPayment.diagnostics().toString());
+        assertTrue(afterPayment.diagnostics().stream().anyMatch(d -> d.path().endsWith("/report/amount")
+                && d.message().contains("recalculating actor stats")), afterPayment.diagnostics().toString());
+        var trigger = LegacyCatalogConverter.convert(catalog("""
+                {"id":"trigger","name":"Trigger","automation":{"rollTriggers":[{"id":"use","label":"Trigger","on":"action",
+                 "report":{"amount":"@hope","text":"Amount {amount}."}}]}}"""));
+        assertEquals(0, trigger.converted(), trigger.diagnostics().toString());
+        assertTrue(trigger.diagnostics().stream().anyMatch(d -> d.path().endsWith("/report/amount")
+                && d.message().contains("outside actions")), trigger.diagnostics().toString());
+    }
+
+    @Test
+    void shippedWardenReportDiceRollOnceAndSpendOnlyOnSuccess() throws Exception {
+        JsonNode classes = RuleJson.parse(Files.readString(Path.of("dmmap-daggerheart", "classes.json")));
+        JsonNode feature = null;
+        for (JsonNode entry : classes.path("entries")) for (JsonNode candidate : entry.path("features"))
+            if ("Warden’s Protection".equals(candidate.path("name").asText())) feature = candidate;
+        assertNotNull(feature);
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"warden","name":"Warden","automation":%s}""".formatted(feature.path("automation"))));
+        assertEquals(1, result.converted(), result.diagnostics().toString());
+        RuleCompiler.Program program = program(result, 0);
+        ObjectNode before = context(program, "{\"hope\":{\"value\":6,\"max\":6}}", "{\"type\":\"action.request\"}");
+        var applied = run(program, before, StructuredRollTest.faces(4), "use");
+        assertEquals("Clear 2 HP on each of up to 4 allies within Close range.", applied.actions().getFirst().report());
+        assertEquals(4, applied.contexts().getFirst().at("/actor/hope/value").asInt());
+        assertEquals(1, applied.contexts().getFirst().at("/usage/uses").asInt());
+        JsonNode roll = applied.actions().getFirst().diceRolls().getFirst();
+        assertEquals(4, roll.path("total").asInt());
+        assertEquals(4, roll.at("/contributions/0/dice/0/face").asInt());
+        assertEquals(6, before.at("/actor/hope/value").asInt(), "The submitted state remains immutable.");
+
+        ObjectNode unaffordable = context(program, "{\"hope\":{\"value\":1,\"max\":6}}", "{\"type\":\"action.request\"}");
+        assertThrows(RuntimeException.class, () -> run(program, unaffordable, StructuredRollTest.noRandom(), "use"));
+        assertEquals(1, unaffordable.at("/actor/hope/value").asInt());
+        assertTrue(unaffordable.path("usage").isMissingNode());
+    }
+
+    @Test
+    void reportDicePreserveSignedTermsPrecedenceAndNonnegativeDisplay() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"mixed","name":"Mixed","automation":{"actions":[{"id":"use","label":"Mixed",
+                 "report":{"dice":" 2D6 - d4 + 2 - 9 ","amount":99,"text":"Result {amount}; again {amount}."},
+                 "steps":[{"op":"gain","resource":"hope","amount":1}]}]}}"""));
+        assertEquals(1, result.converted(), result.diagnostics().toString());
+        RuleCompiler.Program program = program(result, 0);
+        for (int[] faces : new int[][]{{6, 5, 1}, {1, 1, 4}}) {
+            ObjectNode before = context(program, "{\"hope\":{\"value\":0,\"max\":6}}", "{\"type\":\"action.request\"}");
+            var applied = run(program, before, StructuredRollTest.faces(faces), "use");
+            int total = faces[0] + faces[1] - faces[2] + 2 - 9;
+            assertEquals("Result " + Math.max(0, total) + "; again {amount}.", applied.actions().getFirst().report());
+            assertEquals(total, applied.actions().getFirst().diceRolls().getFirst().path("total").asInt());
+            assertEquals(1, applied.contexts().getFirst().at("/actor/hope/value").asInt());
+        }
+    }
+
+    @Test
+    void reportDicePrecedeStepDiceAndLateFailuresDoNotCommit() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"ordered","name":"Ordered","automation":{"uses":{"max":1,"per":"rest"},"actions":[
+                 {"id":"use","label":"Ordered","cost":{"hope":1},
+                  "report":{"dice":"1d4","text":"Report {amount}."},
+                  "steps":[{"op":"clear","resource":"stress","amount":"1d6"},
+                           {"op":"mark","resource":"hp","amount":2}]}]}}"""));
+        assertEquals(1, result.converted(), result.diagnostics().toString());
+        RuleCompiler.Program program = program(result, 0);
+        ObjectNode before = context(program, """
+                {"hope":{"value":2,"max":6},"stress":{"marked":4,"capacity":6},"hp":{"marked":0,"capacity":6}}""",
+                "{\"type\":\"action.request\"}");
+        var applied = run(program, before, StructuredRollTest.faces(4, 2), "use");
+        assertEquals("Report 4.", applied.actions().getFirst().report());
+        assertEquals(2, applied.contexts().getFirst().at("/actor/stress/marked").asInt());
+        assertEquals(2, applied.actions().getFirst().diceRolls().size());
+        assertEquals(4, applied.actions().getFirst().diceRolls().get(0).path("total").asInt());
+        assertEquals(2, applied.actions().getFirst().diceRolls().get(1).path("total").asInt());
+
+        ObjectNode full = context(program, """
+                {"hope":{"value":2,"max":6},"stress":{"marked":4,"capacity":6},"hp":{"marked":5,"capacity":6}}""",
+                "{\"type\":\"action.request\"}");
+        ObjectNode unchanged = full.deepCopy();
+        assertThrows(RuntimeException.class, () -> run(program, full, StructuredRollTest.faces(4, 2), "use"));
+        assertEquals(unchanged, full);
+    }
+
+    @Test
+    void rejectsMalformedUnboundedAndUnorderedReportDice() throws Exception {
+        for (String expression : List.of("", "1d4oops", "1d4 2d6", "1d4++1", "1d1", "1d1001", "1025d6",
+                "600d6+600d6", "1d6+1000001", "999999999999999999999999d4", "1" + "+1".repeat(256))) {
+            String json = RuleJson.JSON.writeValueAsString(expression);
+            var result = LegacyCatalogConverter.convert(catalog("""
+                    {"id":"invalid","name":"Invalid","automation":{"actions":[{"id":"use","label":"Invalid",
+                     "report":{"dice":%s,"text":"Amount {amount}."}}]}}""".formatted(json)));
+            assertEquals(0, result.converted(), expression);
+            assertTrue(result.diagnostics().stream().anyMatch(d -> d.path().endsWith("/report/dice")), result.diagnostics().toString());
+        }
+        var unordered = LegacyCatalogConverter.convert(catalog("""
+                {"id":"unordered","name":"Unordered","automation":{"actions":[{"id":"use","label":"Unordered",
+                 "actionRoll":{"trait":"Agility"},"report":{"dice":"1d4","text":"Amount {amount}."}}]}}"""));
+        assertEquals(0, unordered.converted(), unordered.diagnostics().toString());
+        assertTrue(unordered.diagnostics().stream().anyMatch(d -> d.path().endsWith("/report/dice")), unordered.diagnostics().toString());
+        var trigger = LegacyCatalogConverter.convert(catalog("""
+                {"id":"trigger","name":"Trigger","automation":{"rollTriggers":[{"id":"use","label":"Trigger","on":"action",
+                 "report":{"dice":"1d4","text":"Amount {amount}."}}]}}"""));
+        assertEquals(0, trigger.converted(), trigger.diagnostics().toString());
+        assertTrue(trigger.diagnostics().stream().anyMatch(d -> d.path().endsWith("/report/dice")), trigger.diagnostics().toString());
+    }
+
+    @Test
+    void reportDiceAcceptEngineBoundsAndZeroDiceWithoutRandomness() throws Exception {
+        for (String expression : List.of("0d4+1", "d1000", "1000000", "1" + "+1".repeat(255), "1024d2")) {
+            var result = LegacyCatalogConverter.convert(catalog("""
+                    {"id":"bounded","name":"Bounded","automation":{"actions":[{"id":"use","label":"Bounded",
+                     "report":{"dice":%s,"text":"Amount {amount}."}}]}}""".formatted(RuleJson.JSON.writeValueAsString(expression))));
+            assertEquals(1, result.converted(), result.diagnostics().toString());
+            RuleCompiler.Program program = program(result, 0);
+            int count = expression.equals("1024d2") ? 1024 : expression.equals("d1000") ? 1 : 0;
+            int[] faces = new int[count];
+            java.util.Arrays.fill(faces, 1);
+            var applied = run(program, context(program, "{}", "{\"type\":\"action.request\"}"),
+                    StructuredRollTest.faces(faces), "use");
+            int expected = switch (expression) {
+                case "0d4+1", "d1000" -> 1;
+                case "1000000" -> 1_000_000;
+                case "1024d2" -> 1024;
+                default -> 256;
+            };
+            assertEquals("Amount " + expected + ".", applied.actions().getFirst().report(), expression);
+        }
     }
     @Test
     void dualityDieRerollsConvert() throws Exception {

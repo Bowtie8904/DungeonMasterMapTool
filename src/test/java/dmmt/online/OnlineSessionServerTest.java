@@ -1573,6 +1573,71 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void convertedWardenRollReportAndUsePersistAtomicallyAndReplay() throws Exception {
+        automationCompendium();
+        JsonNode classes = MAPPER.readTree(Path.of("dmmap-daggerheart", "classes.json").toFile());
+        JsonNode feature = null;
+        for (JsonNode entry : classes.path("entries")) for (JsonNode candidate : entry.path("features"))
+            if ("Warden’s Protection".equals(candidate.path("name").asText())) feature = candidate;
+        assertNotNull(feature);
+        ObjectNode legacy = MAPPER.createObjectNode().put("format", "dmmap-daggerheart").put("version", 1)
+                .put("category", "classes").put("label", "Fixture");
+        legacy.putArray("entries").addObject().put("id", "warden").put("name", "Warden")
+                .putArray("features").add(feature.deepCopy());
+        var converted = dmmt.online.automation.LegacyCatalogConverter.convert(legacy.toString());
+        assertEquals(1, converted.converted(), converted.diagnostics().toString());
+        String catalog = converted.catalog().toString();
+        String sourceId = dmmt.online.automation.RuleCatalog.compile(catalog,
+                dmmt.online.automation.LegacyCatalogConverter.coreRecipes()).getFirst().id();
+        java.nio.file.Files.writeString(compendiumDir.resolve("classes.json"), catalog);
+
+        String campaignId = campaign.getId();
+        campaign.getActors().add(Campaign.Actor.builder().id("warden").name("Warden").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Ally").ownerId(playerId()).build());
+        ObjectNode sheet = MAPPER.createObjectNode().put("name", "Warden").put("level", 2);
+        sheet.putObject("hope").put("slots", 6).put("on", 1);
+        sheet.putArray("features").addObject().put("name", feature.path("name").asText())
+                .put("automationSource", sourceId).put("instanceId", "f-warden");
+        store.saveSheet(campaignId, "warden", sheet.toString());
+        store.saveSheet(campaignId, "ally", "{\"name\":\"Ally\",\"hp\":{\"slots\":6,\"on\":3}}");
+        String owner = cookie(), other = allyCookie("warden-viewer");
+        String request = """
+                {"request":{"requestId":"warden-use","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"f-warden","ruleId":"use","bindingId":"sheet"}]}}""";
+        long seed = seedFor(random -> random.nextInt(4) == 3);
+        diceSeed(seed);
+        int history = store.historyTail(campaignId, 100).size();
+        assertEquals(403, automationHttp(other, "warden", request).statusCode());
+        assertEquals(409, automationHttp(owner, "warden", request).statusCode());
+        assertEquals(history, store.historyTail(campaignId, 100).size());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaignId, "warden")).at("/hope/on").asInt());
+
+        sheet.withObject("/hope").put("on", 6);
+        store.saveSheet(campaignId, "warden", sheet.toString());
+        var applied = automationHttp(owner, "warden", request);
+        assertEquals(200, applied.statusCode(), applied.body());
+        JsonNode receipt = MAPPER.readTree(applied.body());
+        assertEquals("Clear 2 HP on each of up to 4 allies within Close range.", receipt.at("/actions/0/report").asText());
+        assertEquals(4, receipt.at("/actions/0/diceRolls/0/contributions/0/dice/0/face").asInt());
+        assertEquals(4, MAPPER.readTree(store.loadSheet(campaignId, "warden")).at("/hope/on").asInt());
+        assertEquals(3, MAPPER.readTree(store.loadSheet(campaignId, "ally")).at("/hp/on").asInt(),
+                "The narrative report must not guess or mutate targets.");
+        assertEquals(history + 1, store.historyTail(campaignId, 100).size());
+        assertTrue(store.historyTail(campaignId, 100).getLast().path("text").asText().contains(receipt.at("/actions/0/report").asText()));
+        assertEquals(applied.body(), automationHttp(owner, "warden", request).body());
+        assertEquals(history + 1, store.historyTail(campaignId, 100).size());
+        var second = automationHttp(owner, "warden", request.replace("warden-use", "warden-again")
+                .replace("\"expectedRevision\":0", "\"expectedRevision\":1"));
+        assertEquals(409, second.statusCode(), second.body());
+
+        var reopened = new CampaignStore(temp.resolve("campaigns"));
+        JsonNode saved = MAPPER.readTree(reopened.loadSheet(campaignId, "warden"));
+        assertEquals(4, saved.at("/hope/on").asInt());
+        assertEquals(1, saved.at("/automationState/sources/f-warden/usage/uses").asInt(), saved.toString());
+        assertTrue(saved.at("/automationState/journal").toString().contains("up to 4 allies"), saved.toString());
+    }
+
+    @Test
     void automationSheetRequestsRejectBindingsFromOtherSurfacesWithoutCommitting() throws Exception {
         automationCompendium();
         Path catalogPath = compendiumDir.resolve("classes.json");

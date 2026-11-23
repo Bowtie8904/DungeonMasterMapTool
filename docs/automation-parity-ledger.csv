@@ -235,7 +235,7 @@ classes,/entries/70/features/0/automation,guardian-vengeance-specialization [Gua
 classes,/entries/71/features/0/automation,guardian-vengeance-foundation [Guardian: Vengeance] > At Ease,creation,converted-candidate,,not captured,unverified
 classes,/entries/71/features/1/automation,guardian-vengeance-foundation [Guardian: Vengeance] > Revenge,actions,converted-candidate,,not captured,unverified
 classes,/entries/72/features/0/automation,druid-warden-of-renewal-mastery [Druid: Warden of Renewal] > Defender,actions,converted-candidate,,not captured,unverified
-classes,/entries/73/features/1/automation,druid-warden-of-renewal-specialization [Druid: Warden of Renewal] > Warden’s Protection,actions;uses,unconverted,/entries/73/features/1/automation/actions/0/report/dice: Unsupported legacy field: dice,not captured,unverified
+classes,/entries/73/features/1/automation,druid-warden-of-renewal-specialization [Druid: Warden of Renewal] > Warden’s Protection,actions;uses,converted-candidate,,not captured,unverified
 classes,/entries/74/features/0/automation,druid-warden-of-renewal-foundation [Druid: Warden of Renewal] > Clarity of Nature,actions;uses,converted-candidate,,not captured,unverified
 classes,/entries/74/features/1/automation,druid-warden-of-renewal-foundation [Druid: Warden of Renewal] > Regeneration,actions,converted-candidate,,not captured,unverified
 classes,/entries/75/features/0/automation,druid-warden-of-the-elements-mastery [Druid: Warden of the Elements] > Elemental Dominion,grantsFeatures;groupGrantedFeatures,converted-candidate,,not captured,unverified
