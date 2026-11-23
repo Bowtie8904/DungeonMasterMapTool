@@ -1094,6 +1094,62 @@ class AutomationHostTest {
     }
 
     @Test
+    void storedEffectInspectionUsesTheDeclaredFactAndPreservesProjectionFallbacks() throws Exception {
+        ObjectNode spec = (ObjectNode) RuleJson.parse("""
+                {"format":"dmmap-sheet-projection","version":2,
+                 "stateField":"automationState","sourceField":"automationSource","instanceField":"instanceId","nameField":"name",
+                 "sources":[{"path":"features"}],
+                 "actor":{"effects":{"kind":"engine","path":"custom.effects","default":[]}}}""");
+        SheetProjection engine = SheetProjection.parse(spec.toString());
+        ObjectNode saved = (ObjectNode) RuleJson.parse("""
+                {"custom":{"effects":[{"id":"one","effect":"classes:tester:features:rally#ward",
+                  "sourceInstanceId":"f-rally","sourceActorId":"ada"}]}}""");
+        assertSame(saved.at("/custom/effects"), engine.actorFact(saved, "effects"));
+        assertEquals(engine.actor(saved).path("effects"), engine.actorFact(saved, "effects"));
+        assertEquals(engine.actor(RuleJson.JSON.createObjectNode()).path("effects"),
+                engine.actorFact(RuleJson.JSON.createObjectNode(), "effects"));
+        saved.withObject("/custom").putNull("effects");
+        assertEquals(engine.actor(saved).path("effects"), engine.actorFact(saved, "effects"));
+
+        ((ObjectNode) spec.at("/actor")).set("effects", RuleJson.parse("""
+                {"kind":"collection","path":"conditions","fields":{"id":"id","label":"name"}}"""));
+        SheetProjection collection = SheetProjection.parse(spec.toString());
+        ObjectNode conditions = (ObjectNode) RuleJson.parse("{\"conditions\":[{\"id\":\"one\",\"name\":\"Marked\"}]}");
+        assertEquals(collection.actor(conditions).path("effects"), collection.actorFact(conditions, "effects"));
+        assertFalse(collection.actorFact(conditions, "absent").isArray());
+    }
+
+    @Test
+    void inspectingSingleHolderEffectsDoesNotChangeAnUnrelatedOrFailedSheet() throws Exception {
+        ObjectNode catalog = fixture("rewrite/host-classes");
+        ((ObjectNode) catalog.at("/entries/0/features/0/automation")).putObject("effects")
+                .putObject("ward").put("label", "Ward").put("singleHolder", true);
+        var pack = AutomationHost.compile("ward", Map.of("classes", catalog.toString()), fixture("rewrite/recipes").toString());
+        var command = new AutomationHost.SingleHolderEffect("ada", "f-rally", "classes:tester:features:rally#ward", "ada");
+        ObjectNode sheet = sheet();
+        ObjectNode state = HOST.projection().state(sheet);
+        var effects = state.putArray("effects");
+        effects.addObject().put("id", "foreign").put("effect", command.effect())
+                .put("sourceInstanceId", command.sourceInstanceId()).put("sourceActorId", "other");
+        ObjectNode before = sheet.deepCopy();
+        assertFalse(HOST.endEffectsElsewhere(pack, sheet, AutomationHost.event("action.request", "bea", 0), List.of(command), true));
+        assertSame(effects, sheet.at("/automationState/effects"));
+        assertEquals(before, sheet);
+
+        effects.addObject().put("id", "ambiguous").put("effect", command.effect())
+                .put("sourceInstanceId", command.sourceInstanceId());
+        before = sheet.deepCopy();
+        assertThrows(IllegalArgumentException.class, () -> HOST.endEffectsElsewhere(pack, sheet,
+                AutomationHost.event("action.request", "bea", 0), List.of(command), true));
+        assertEquals(before, sheet);
+
+        ((ObjectNode) effects.get(1)).put("sourceActorId", "ada");
+        assertTrue(HOST.endEffectsElsewhere(pack, sheet, AutomationHost.event("action.request", "bea", 0), List.of(command), true));
+        assertEquals(List.of("foreign"), sheet.at("/automationState/effects").findValuesAsText("id"));
+        assertEquals(1, sheet.at("/automationState/revision").asInt());
+    }
+
+    @Test
     void passiveTraitCyclesAreRejectedButFrozenEffectValuesMayReadCurrentTraits() throws Exception {
         String catalog = """
                 {"format":"dmmap-daggerheart","version":2,"category":"classes","label":"Fixture","entries":[

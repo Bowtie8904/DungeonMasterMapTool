@@ -291,6 +291,15 @@ public final class SheetProjection {
         return actor;
     }
 
+    /** A read-only view of one engine-owned fact, without projecting unrelated sheet fields. */
+    JsonNode actorFact(ObjectNode sheet, String name) {
+        JsonNode fact = spec.path("actor").path(name);
+        if (!"engine".equals(fact.path("kind").asText())) return actor(sheet).path(name);
+        JsonNode value = get(sheet, fact.path("path").asText());
+        if (!value.isMissingNode() && !value.isNull()) return value;
+        return fact.has("default") ? fact.get("default") : RuleJson.JSON.createArrayNode();
+    }
+
     private static ObjectNode collectionEntry(JsonNode fact, JsonNode item) {
         if (!item.isObject()) return null;
         ObjectNode mapped = RuleJson.JSON.createObjectNode();

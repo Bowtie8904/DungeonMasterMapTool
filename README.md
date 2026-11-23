@@ -49,6 +49,7 @@ using the same instance ID cannot take over local effect actions or profiles. St
 now removes that source's copies from other saved characters, including offline or disabled ones, in the same
 transaction. The host preserves supported pools and surviving result actions; ambiguous older effect identities
 must be migrated or repaired instead of being guessed. The full saved-effect identity migration remains pending.
+Transfers inspect unrelated sheets' stored effects without rebuilding their complete actor projections.
 Typing a dice expression in chat rolls dice and records the result, but does not trigger or qualify for
 character automation. Roll from the character sheet or its feature when character rules should apply.
 The live catalogs and gameplay still use the existing implementation: full catalog conversion, production

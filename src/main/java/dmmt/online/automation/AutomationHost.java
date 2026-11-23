@@ -654,11 +654,10 @@ public final class AutomationHost {
     public boolean endEffectsElsewhere(Pack pack, ObjectNode sheet, ObjectNode event,
                                        List<SingleHolderEffect> commands, boolean advanceRevision) {
         String holder = RuleJson.id(event.get("actorId"), "/event/actorId");
-        ObjectNode stored = projection.actor(sheet);
-        ArrayNode effects = RuleEffects.instances(stored.path("effects"), "/actor/effects");
-        boolean removed = false;
-        for (int i = effects.size() - 1; i >= 0; i--) {
-            JsonNode effect = effects.get(i);
+        ArrayNode original = RuleEffects.instances(projection.actorFact(sheet, "effects"), "/actor/effects");
+        ArrayNode effects = null;
+        for (int i = original.size() - 1; i >= 0; i--) {
+            JsonNode effect = original.get(i);
             for (SingleHolderEffect command : commands) {
                 if (holder.equals(command.holder()) || !command.effect().equals(effect.path("effect").asText())
                         || !command.sourceInstanceId().equals(effect.path("sourceInstanceId").asText())) continue;
@@ -667,13 +666,13 @@ public final class AutomationHost {
                             + effect.path("id").asText() + "' on character '" + holder
                             + "'. Migrate or repair its source identity before transferring it.");
                 if (effect.path("sourceActorId").textValue().equals(command.sourceActorId())) {
+                    if (effects == null) effects = original.deepCopy();
                     effects.remove(i);
-                    removed = true;
                     break;
                 }
             }
         }
-        if (!removed) return false;
+        if (effects == null) return false;
         ObjectNode working = sheet.deepCopy();
         ObjectNode state = projection.state(working);
         ObjectNode before = actor(pack, working, state, event);

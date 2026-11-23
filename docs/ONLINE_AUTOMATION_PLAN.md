@@ -76,7 +76,8 @@ within the transaction. It reconciles pools and result windows, compares every r
 changes, reports and host commands together. A revised result's receipt and retry journal retain only buttons
 that survive the transfer; a completely revoked offer is also removed from its chat event. Ambiguous pre-migration
 identities and unsafe pool state reject the transaction without spending costs. Roster scanning is skipped when
-no single-holder start occurs.
+no single-holder start occurs. For the standard engine-owned effects field, unrelated sheets are inspected
+without building complete actor projections; other projection mappings retain the full-projection path.
 Lifecycle resets use the same host-generated event as automatic rules, retaining actor identity, table facts and session identity for projections and expressions.
 Numeric pool reset expressions evaluate against initialized declared state and pools from one pre-reset snapshot
 per source, independently of declaration order; unchanged default pools are not persisted by the reset.
@@ -134,6 +135,8 @@ for a separate loopback sample of single-holder starts with 32 saved, unrelated 
 After 10 warmups, 30 POSTs measured 34.82 ms median, 43.71 ms p95 and 2.79 MiB mean allocation in one local run.
 This measures roster inspection and persistence without matching prior effects, not concurrent clients or a
 worst-case sheet size.
+Another same-workload run measured 34.97 ms median, 44.84 ms p95 and 2.79 MiB before the targeted effect read,
+and 35.30 ms, 41.24 ms and 2.69 MiB afterward. The sample shows lower allocation, not a reliable latency improvement.
 
 The separate `mvn "-Ddmmt.benchmark.automation=true" "-Dtest=OnlineSessionServerTest#measurePersistedMixedWeaponDamage" test` samples a single sheet with 12 KB of notes and a full retry journal. Its weapon damage roll has two proficiency-scaled pools, conditional and unconditional passives, a stored effect, a selected option, and an automatic reaction adding and dropping one die per pool. After 20 warm-ups, 40 complete persisted POSTs measured 37.22 ms median, 51.55 ms p95, and 11.82 MiB mean allocation per request.
 
