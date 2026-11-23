@@ -97,6 +97,28 @@ public final class RuleEffects {
         return kept;
     }
 
+    static boolean hasEarlyRestExpiry(JsonNode effects, String event, Set<String> eligibleIds) {
+        if (!RuleRuntime.isRestEvent(event)) throw RuleJson.error("/event", "Expected a rest event.");
+        for (JsonNode effect : instances(effects, "/effects"))
+            if (earlyRestExpiry(effect, event, eligibleIds)) return true;
+        return false;
+    }
+
+    static ArrayNode expireBeforeMoves(JsonNode effects, String event, Set<String> eligibleIds) {
+        if (!RuleRuntime.isRestEvent(event)) throw RuleJson.error("/event", "Expected a rest event.");
+        ArrayNode kept = RuleJson.JSON.createArrayNode();
+        for (JsonNode effect : instances(effects, "/effects"))
+            if (!earlyRestExpiry(effect, event, eligibleIds)) kept.add(effect.deepCopy());
+        return kept;
+    }
+
+    private static boolean earlyRestExpiry(JsonNode effect, String event, Set<String> eligibleIds) {
+        if (!"beforeMoves".equals(effect.path("restExpiry").asText())
+                || eligibleIds != null && !eligibleIds.contains(effect.path("id").asText())) return false;
+        for (JsonNode until : effect.path("until")) if (event.equals(until.asText())) return true;
+        return false;
+    }
+
     /** Collects the frozen modifiers of every active effect instance. */
     public static ArrayNode modifiers(JsonNode effects) {
         ArrayNode out = RuleJson.JSON.createArrayNode();
@@ -157,6 +179,13 @@ public final class RuleEffects {
         instance.put("kind", definition.path("kind").asText("buff"));
         if (!group.isEmpty()) instance.put("group", group);
         if (definition.has("profile")) instance.set("profile", definition.get("profile").deepCopy());
+        if (definition.has("restExpiry")) instance.set("restExpiry", definition.get("restExpiry").deepCopy());
+        if (definition.has("locks")) {
+            ObjectNode locks = instance.putObject("locks");
+            definition.path("locks").fields().forEachRemaining(lock -> locks.put(lock.getKey(),
+                    RuleJson.integer(RuleExpression.evaluate(lock.getValue(), context),
+                            "/effects/" + effectId + "/locks/" + lock.getKey(), 0, 1000)));
+        }
         ArrayNode until = instance.putArray("until");
         definition.path("until").forEach(until::add);
         freeze(definition, context, instance.putArray("modifiers"));
@@ -316,6 +345,32 @@ public final class RuleEffects {
             RuleJson.object(effect, path);
             if (!ids.add(RuleJson.text(effect.get("id"), path + "/id"))) throw RuleJson.error(path, "Duplicate effect instance ID.");
             if (effect.has("modifiers") && !effect.get("modifiers").isArray()) throw RuleJson.error(path + "/modifiers", "Expected a list.");
+            if (effect.has("restExpiry")) {
+                if (!"beforeMoves".equals(effect.path("restExpiry").asText()))
+                    throw RuleJson.error(path + "/restExpiry", "Expected beforeMoves.");
+                JsonNode until = effect.path("until");
+                if (!until.isArray() || until.isEmpty() || until.size() > RuleCompiler.RESET_EVENTS.size())
+                    throw RuleJson.error(path + "/until", "Early expiry requires rest events.");
+                boolean rests = false;
+                for (int i = 0; i < until.size(); i++) {
+                    JsonNode event = until.get(i);
+                    if (!event.isTextual() || !RuleCompiler.RESET_EVENTS.contains(event.textValue()))
+                        throw RuleJson.error(path + "/until", "Unknown or duplicate reset event.");
+                    for (int j = 0; j < i; j++)
+                        if (until.get(j).equals(event)) throw RuleJson.error(path + "/until", "Unknown or duplicate reset event.");
+                    rests |= RuleRuntime.isRestEvent(event.textValue());
+                }
+                if (!rests) throw RuleJson.error(path + "/until", "Early expiry requires a rest event.");
+            }
+            if (effect.has("locks")) {
+                ObjectNode locks = RuleJson.object(effect.get("locks"), path + "/locks");
+                if (locks.isEmpty() || locks.size() > 8) throw RuleJson.error(path + "/locks", "Expected 1-8 track locks.");
+                locks.fields().forEachRemaining(lock -> {
+                    String at = path + "/locks/" + lock.getKey();
+                    RuleCompiler.trackLockName(lock.getKey(), at);
+                    RuleJson.integer(lock.getValue(), at, 0, 1000);
+                });
+            }
         }
         return (ArrayNode) effects;
     }

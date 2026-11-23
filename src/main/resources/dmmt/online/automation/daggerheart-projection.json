@@ -23,7 +23,8 @@
             "writable": ["marked", "capacity"], "atLeast": { "total": "capacity" }, "max": 1000,
             "markedFloor": { "base": "permanentHp", "sum": [
               { "path": "effects", "field": "lockedHp" }
-            ], "actorSum": [{ "path": "effects", "field": "lockedHp" }] } },
+            ], "actorSum": [{ "path": "effects", "field": "lockedHp" },
+              { "path": "effects", "field": "locks.hp" }] } },
     "stress": { "kind": "object", "path": "stress", "fields": { "marked": "on", "capacity": "slots" },
                 "writable": ["marked", "capacity"], "atLeast": { "total": "capacity" }, "max": 1000 },
     "armorTrack": { "kind": "object", "path": "armorTrack", "fields": { "marked": "on", "capacity": "slots" },

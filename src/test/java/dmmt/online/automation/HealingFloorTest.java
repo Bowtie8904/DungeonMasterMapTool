@@ -112,6 +112,10 @@ class HealingFloorTest {
         var program = RuleCompiler.compile("features:heal", automation, fixture("rewrite/recipes"));
         ObjectNode sourceSheet = sheet(), recipientSheet = sheet().put("name", "Mira").put("permanentHp", 2);
         sourceSheet.remove("effects");
+        engineLock(recipientSheet);
+        ObjectNode locked = (ObjectNode) recipientSheet.at("/automationState/effects/0");
+        locked.remove("lockedHp");
+        locked.putObject("locks").put("hp", 1);
         ObjectNode sourceActor = HOST.projection().actor(sourceSheet).put("id", "ada");
         ObjectNode recipientActor = HOST.projection().actor(recipientSheet).put("id", "mira");
         ObjectNode context = RuleJson.JSON.createObjectNode().put("revision", 0);
@@ -123,10 +127,10 @@ class HealingFloorTest {
                 RuleJson.JSON.createObjectNode()), "mira", 0L);
         var result = RuleDispatcher.executeTargets(List.of(candidate), intent,
                 List.of(new RuleDispatcher.RecipientCandidate("mira", recipientActor, 0)), StructuredRollTest.noRandom());
-        assertEquals(4, result.recipients().getFirst().snapshot().at("/hp/marked").asInt());
-        assertEquals("Cleared 2 HP.", result.actions().getFirst().action().report());
+        assertEquals(5, result.recipients().getFirst().snapshot().at("/hp/marked").asInt());
+        assertEquals("Cleared 1 HP.", result.actions().getFirst().action().report());
         HOST.projection().write(recipientSheet, recipientActor, result.recipients().getFirst().snapshot());
-        assertEquals(4, recipientSheet.at("/hp/on").asInt());
+        assertEquals(5, recipientSheet.at("/hp/on").asInt());
         assertEquals(6, sourceSheet.at("/hp/on").asInt());
     }
 

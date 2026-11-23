@@ -801,6 +801,11 @@ public final class AutomationHost {
     /** Stages rest preparation only; the caller must complete and atomically commit the entire rest. */
     ObjectNode prepareRest(Pack pack, ObjectNode sheet, ObjectNode origin, String kind, long expectedRevision,
                            ArrayNode choices, RandomGenerator random) {
+        return prepareRest(pack, sheet, origin, kind, expectedRevision, choices, random, null);
+    }
+
+    ObjectNode prepareRest(Pack pack, ObjectNode sheet, ObjectNode origin, String kind, long expectedRevision,
+                           ArrayNode choices, RandomGenerator random, Set<String> initialEffectIds) {
         if (pack.rest() == null) throw new NotReady("The shared ruleset has no rest configuration.");
         if (!Set.of("short", "long").contains(kind)) throw RuleJson.error("/rest/kind", "Expected short or long.");
         ObjectNode working = sheet.deepCopy();
@@ -808,6 +813,8 @@ public final class AutomationHost {
         long revision = state.path("revision").asLong();
         if (expectedRevision < 0 || expectedRevision != revision)
             throw new RuleRuntime.Unavailable("stale", "The character changed. Reopen this rest.");
+        if (RuleEffects.hasEarlyRestExpiry(projection.actorFact(working, "effects"), "rest." + kind, initialEffectIds))
+            throw new RuleRuntime.Unavailable("restExpiry", "Rest effects that end before downtime must be released first.");
         int consecutive = working.has("shortRestsInRow")
                 ? RuleJson.integer(working.get("shortRestsInRow"), "/sheet/shortRestsInRow", 0, 1_000_000) : 0;
         RestLimits limits = "short".equals(kind) ? pack.rest().shortRest() : pack.rest().longRest();
@@ -1039,6 +1046,9 @@ public final class AutomationHost {
                 || progress.slotsUsed() > progress.count() || progress.longMovesUsed() > progress.count()
                 || progress.groups().size() != progress.count())
             throw RuleJson.error("/rest", "The staged rest progress is invalid.");
+        if (RuleEffects.hasEarlyRestExpiry(projection.actorFact(working, "effects"),
+                "rest." + progress.kind(), initialEffectIds))
+            throw new RuleRuntime.Unavailable("restExpiry", "Rest effects that end before downtime were not released.");
 
         int consecutive = working.has("shortRestsInRow")
                 ? RuleJson.integer(working.get("shortRestsInRow"), "/sheet/shortRestsInRow", 0, 1_000_000) : 0;
@@ -1232,6 +1242,27 @@ public final class AutomationHost {
         for (JsonNode effect : RuleEffects.instances(projection.actorFact(sheet, "effects"), "/actor/effects"))
             ids.add(effect.path("id").asText());
         return Set.copyOf(ids);
+    }
+
+    /** Expires initial effects marked for early rest removal without resetting limits or later effects. */
+    boolean expireRestBeforeMoves(Pack pack, ObjectNode sheet, ObjectNode event, Set<String> initialEffectIds) {
+        if (initialEffectIds == null) throw RuleJson.error("/effects", "The initial rest effect snapshot is required.");
+        String type = RuleJson.text(RuleJson.object(event, "/event").get("type"), "/event/type");
+        if (!RuleRuntime.isRestEvent(type)) throw RuleJson.error("/event/type", "Expected a short or long rest.");
+        Set<String> initial = Set.copyOf(initialEffectIds);
+        if (!RuleEffects.hasEarlyRestExpiry(projection.actorFact(sheet, "effects"), type, initial)) return false;
+        ObjectNode working = sheet.deepCopy();
+        ObjectNode state = projection.state(working);
+        ObjectNode actor = actor(pack, working, state, event);
+        ArrayNode kept = RuleEffects.expireBeforeMoves(actor.path("effects"), type, initial);
+        ObjectNode before = actor.deepCopy();
+        actor.set("effects", kept);
+        RuleEffects.reconcileHolder(before, actor, Set.of(), pack.programs(), "/actor");
+        projection.write(working, projection.actor(working), persisted(actor));
+        state = projection.state(working);
+        state.put("revision", state.path("revision").asLong() + 1);
+        replace(sheet, working);
+        return true;
     }
 
     /** Resets a rest without expiring effects created after its validated initial snapshot. */

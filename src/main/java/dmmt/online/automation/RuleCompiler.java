@@ -98,6 +98,7 @@ public final class RuleCompiler {
     private static final Set<String> CONTRIBUTION_FIELDS = Set.of("id", "kind", "role", "label", "count", "sides",
             "keepHighest", "maximize", "sign", "value", "of", "factor", "editable");
     static final Set<String> RESET_EVENTS = Set.of("rest.short", "rest.long", "scene.end", "session.start");
+    private static final java.util.regex.Pattern TRACK_FACT = java.util.regex.Pattern.compile("[A-Za-z][A-Za-z0-9_]{0,63}");
     private static final java.util.regex.Pattern STATS = java.util.regex.Pattern.compile(
             "evasion|armorScore|thresholds\\.major|thresholds\\.severe|proficiency|hp\\.max|stress\\.max|hope\\.max|loadout\\.max"
                     + "|roll\\.(attack|damage|spellcast|action|reaction)|trait\\.(Agility|Strength|Finesse|Instinct|Presence|Knowledge)");
@@ -444,7 +445,8 @@ public final class RuleCompiler {
     private static void validateEffect(String id, JsonNode effect, ObjectNode state, ObjectNode effects) {
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(id), "/automation/effects");
         String path = "/automation/effects/" + id;
-        RuleJson.fields(effect, path,         "label", "text", "kind", "until", "stacking", "modifiers", "profile", "while", "endWhen", "exclusiveGroup", "singleHolder");
+        RuleJson.fields(effect, path, "label", "text", "kind", "until", "stacking", "modifiers", "profile",
+                "while", "endWhen", "exclusiveGroup", "singleHolder", "locks", "restExpiry");
         if (effect.has("endWhen")) {
             if (effect.has("while")) throw RuleJson.error(path + "/endWhen", "A derived effect (with while) cannot also declare endWhen.");
             RuleExpression.validate(effect.get("endWhen"), path + "/endWhen");
@@ -455,7 +457,7 @@ public final class RuleCompiler {
             }
         }
         if (effect.has("while")) {
-                    for (String field : List.of("until", "stacking", "exclusiveGroup", "singleHolder"))
+            for (String field : List.of("until", "stacking", "exclusiveGroup", "singleHolder", "locks", "restExpiry"))
                 if (effect.has(field)) throw RuleJson.error(path + "/" + field, "A derived effect (with while) is active exactly while its condition holds; it cannot also declare " + field + ".");
             RuleExpression.validate(effect.get("while"), path + "/while");
             for (String ref : RuleExpression.references(effect.get("while"))) {
@@ -478,12 +480,40 @@ public final class RuleCompiler {
             throw RuleJson.error(path + "/stacking", "Expected replace, replaceAnySource, stack or unique.");
         if (effect.has("singleHolder") && !effect.get("singleHolder").isBoolean()) throw RuleJson.error(path + "/singleHolder", "Expected a boolean.");
         if (effect.has("until")) resetEvents(effect.get("until"), path + "/until");
+        if (effect.has("restExpiry")) {
+            if (!"beforeMoves".equals(effect.path("restExpiry").asText()))
+                throw RuleJson.error(path + "/restExpiry", "Expected beforeMoves.");
+            boolean rests = false;
+            for (JsonNode event : effect.path("until"))
+                rests |= "rest.short".equals(event.asText()) || "rest.long".equals(event.asText());
+            if (!rests) throw RuleJson.error(path + "/restExpiry", "Early expiry requires at least one rest event.");
+        }
+        if (effect.has("locks")) {
+            ObjectNode locks = RuleJson.object(effect.get("locks"), path + "/locks");
+            if (locks.isEmpty() || locks.size() > 8) throw RuleJson.error(path + "/locks", "Expected 1-8 track locks.");
+            locks.fields().forEachRemaining(lock -> {
+                String at = path + "/locks/" + lock.getKey();
+                trackLockName(lock.getKey(), at);
+                RuleExpression.validate(lock.getValue(), at);
+                for (String ref : RuleExpression.references(lock.getValue())) {
+                    String[] parts = ref.split("\\.");
+                    if (!Set.of("source", "actor", "state", "effects").contains(parts[0])
+                            || "state".equals(parts[0]) && (parts.length < 2 || !state.has(parts[1])))
+                        throw RuleJson.error(at, "A track lock may only read source, actor, effects and declared state: " + ref);
+                }
+            });
+        }
         if (effect.has("profile")) validateProfile(effect.get("profile"), path + "/profile");
         if (effect.has("modifiers")) {
             ArrayNode list = modifierList(effect.get("modifiers"), path + "/modifiers", state, false);
             for (JsonNode modifier : list) if (modifier.has("when"))
                 throw RuleJson.error(path + "/modifiers", "Effect modifiers are resolved when the effect starts; use separate effects instead of conditions.");
         }
+    }
+
+    static void trackLockName(String name, String path) {
+        if (!TRACK_FACT.matcher(name).matches())
+            throw RuleJson.error(path, "Expected a projected track fact name.");
     }
 
     private static ArrayNode profileList(JsonNode list, ObjectNode limits) {

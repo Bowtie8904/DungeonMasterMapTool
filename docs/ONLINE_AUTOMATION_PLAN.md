@@ -152,6 +152,16 @@ requires both HP and Stress changes to be zero separately.
 Descriptions expose the phase, and dispatch rejects a selected binding or skips an automatic binding in the
 other phase. A missing phase means `beforeReset`; a malformed phase is rejected. Converted `noRecovery`
 passives run after the snapshot reset so their new effects survive, while ordinary rest passives run before it.
+Started effects may declare `locks`, for example `"locks": {"hp": {"read": "actor.hope.value"}}`.
+Each lock name is one projection-path segment, and its expression may read source, actor, effects or declared
+state. The host freezes 1–8 integer values from 0 through 1,000 at activation; derived `while` effects cannot
+declare locks. Locks only protect tracks whose projection explicitly includes them: the bundled Daggerheart HP
+floor sums `locks.hp` on stored effects for both actor and recipient healing.
+An effect with a short- or long-rest `until` event can also declare `"restExpiry": "beforeMoves"`. The
+staged host removes matching effects from the initial validated snapshot before preparation and moves, without
+refreshing uses or removing other effects. It reconciles supported pools and rejects invalid or unresolved
+effects atomically. Effects started or replaced after that snapshot survive the current rest; effects without
+early expiry retain normal reset ordering. Conversion of legacy locks and the live rest transaction are pending.
 Staged completion derives `event.rest.cleared` for numeric start facts as starting minus current values,
 dispatches both phases around the snapshot reset, and advances the rest counters on a private copy.
 Conditional options that no longer apply are reported as skipped; invalid choices, inputs, costs and blocked
