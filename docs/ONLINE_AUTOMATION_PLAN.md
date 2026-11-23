@@ -167,7 +167,14 @@ dispatches both phases around the snapshot reset, and advances the rest counters
 Conditional options that no longer apply are reported as skipped; invalid choices, inputs, costs and blocked
 outcomes reject the stage. Reports and host requests remain ordered for a future atomic commit. The self-only
 move primitive rejects ally or targeted moves rather than applying them to the wrong character. The host still
-needs to compose preparation, moves and completion with recipient handling, publication and persistence.
+needs recipient handling, publication and persistence.
+The internal self-rest coordinator composes the initial effect snapshot, early expiry, preparation, ordered
+self moves and completion on one private sheet copy. It checks the original revision once, returns ordered
+actions, dice and commands with the preparation and move events, and advances the sheet revision once; any
+failure discards the entire sequence. Until per-stage host settlement is available it accepts only countdown,
+already-applied limit refresh and single-holder cleanup commands, rejecting commands that could change facts
+read by later stages. It is not a live workflow: authenticated offers, recipient and post-roll choices, command
+settlement, persisted reports, retries and the atomic campaign commit remain necessary.
 The shared Daggerheart ruleset now supplies self-targeted short recovery (1d4 plus tier and move bonus), the two
 mutually exclusive preparation variants, long recovery and work on a project. Reports use the amount actually
 cleared or gained, including permanent and locked HP and capped Hope; a short rest needs a granted allowance for

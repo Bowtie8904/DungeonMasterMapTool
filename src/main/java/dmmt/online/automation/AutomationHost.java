@@ -23,6 +23,9 @@ public final class AutomationHost {
     public static final int JOURNAL_LIMIT = 32;
     private static final Set<String> RELATIONS = Set.of("self", "other", "dm");
     private static final String EFFECT_PROFILE = "effect.profile";
+    // Runtime revisions pass through double-valued expressions; reserve room for intermediate stages.
+    private static final long MAX_REST_REVISION = 1L << 52;
+    private static final Set<String> STAGED_REST_COMMANDS = Set.of("countdown.start", "limits.refresh", "effect.endElsewhere");
     static final String RULESET_SOURCE = "ruleset:base";
 
     /** Compiled automation keyed by fully qualified source ID. */
@@ -796,6 +799,100 @@ public final class AutomationHost {
             return response;
         }
         return applyEvent(pack, working, projection.state(working), event, candidates(pack, working, event), List.of(), random);
+    }
+
+    /**
+     * Stages a complete self-only rest without publishing or persistence. A live caller must authenticate offered
+     * choices, settle the outbox and journal and commit the resulting sheet and reports as one transaction.
+     */
+    ObjectNode stageSelfRest(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request, RandomGenerator random) {
+        RuleJson.fields(request, "/request", "kind", "expectedRevision", "preparation", "moves", "completion");
+        RuleJson.checkTree(request, "/request", 0, new int[]{0});
+        String kind = RuleJson.text(request.get("kind"), "/request/kind");
+        if (!Set.of("short", "long").contains(kind)) throw RuleJson.error("/request/kind", "Expected short or long.");
+        JsonNode expected = request.path("expectedRevision");
+        if (!expected.isIntegralNumber() || !expected.canConvertToLong() || expected.longValue() < 0)
+            throw RuleJson.error("/request/expectedRevision", "Expected a nonnegative host revision.");
+        ArrayNode preparation = restSelections(request.get("preparation"), "/request/preparation");
+        ArrayNode moves = restSelections(request.get("moves"), "/request/moves");
+        ArrayNode completion = restSelections(request.get("completion"), "/request/completion");
+        if (moves.size() > 64) throw RuleJson.error("/request/moves", "A rest may contain at most 64 moves.");
+        for (int i = 0; i < moves.size(); i++) {
+            String at = "/request/moves/" + i;
+            RuleJson.fields(moves.get(i), at, "selection", "options");
+            RuleJson.object(moves.get(i).get("selection"), at + "/selection");
+            restSelections(moves.get(i).get("options"), at + "/options");
+        }
+        RuleJson.id(RuleJson.object(origin, "/event").get("actorId"), "/event/actorId");
+        if (pack.rest() == null) throw new NotReady("The shared ruleset has no rest configuration.");
+
+        JsonNode persistedState = sheet.get(projection.stateField());
+        if (persistedState != null) {
+            RuleJson.object(persistedState, "/automationState");
+            if (persistedState.has("sources") && !persistedState.path("sources").isObject())
+                throw RuleJson.error("/automationState/sources", "Expected an object.");
+            if (persistedState.has("journal") && !persistedState.path("journal").isArray())
+                throw RuleJson.error("/automationState/journal", "Expected a list.");
+        }
+        ObjectNode working = sheet.deepCopy();
+        ObjectNode state = projection.state(working);
+        JsonNode savedRevision = state.path("revision");
+        if (!savedRevision.isIntegralNumber() || !savedRevision.canConvertToLong()
+                || savedRevision.longValue() < 0 || savedRevision.longValue() > MAX_REST_REVISION)
+            throw RuleJson.error("/automationState/revision", "Expected a nonnegative, representable host revision.");
+        long revision = savedRevision.longValue();
+        if (expected.longValue() != revision)
+            throw new RuleRuntime.Unavailable("stale", "The character changed. Reopen this rest.");
+
+        Set<String> initial = restEffectSnapshot(working);
+        ObjectNode restEvent = origin.deepCopy().put("type", "rest." + kind);
+        expireRestBeforeMoves(pack, working, restEvent, initial);
+        projection.state(working).put("revision", revision);
+        ObjectNode prepared = prepareRest(pack, working, origin, kind, revision, preparation, random, initial);
+        projection.state(working).put("revision", revision);
+        RestProgress progress = restProgress(pack, prepared);
+
+        ObjectNode response = RuleJson.JSON.createObjectNode();
+        ArrayNode actions = response.putArray("actions"), outbox = response.putArray("outbox");
+        ArrayNode moveEvents = response.putArray("moveEvents");
+        response.set("preparationEvent", prepared.path("event").deepCopy());
+        appendRestStage(prepared, actions, outbox);
+        for (JsonNode move : moves) {
+            RestMoveResult result = restMove(pack, working, origin, progress, (ObjectNode) move.get("selection"),
+                    (ArrayNode) move.get("options"), random);
+            progress = result.progress();
+            moveEvents.add(result.response().path("event").deepCopy());
+            appendRestStage(result.response(), actions, outbox);
+            projection.state(working).put("revision", revision);
+        }
+        ObjectNode finished = completeRest(pack, working, origin, progress, initial, completion, random);
+        appendRestStage(finished, actions, outbox);
+        response.set("event", finished.path("event").deepCopy());
+        response.set("skipped", finished.path("skipped").deepCopy());
+        response.putObject("progress").put("moves", progress.moves()).put("longMoves", progress.longMoves())
+                .put("slotsUsed", progress.slotsUsed()).put("longMovesUsed", progress.longMovesUsed())
+                .put("count", progress.count());
+        response.put("revision", revision + 1);
+        projection.state(working).put("revision", revision + 1);
+        RuleJson.checkTree(response, "/response", 0, new int[]{0});
+        replace(sheet, working);
+        return response;
+    }
+
+    private static ArrayNode restSelections(JsonNode node, String path) {
+        if (!(node instanceof ArrayNode array)) throw RuleJson.error(path, "Expected a list.");
+        return array;
+    }
+
+    private static void appendRestStage(ObjectNode stage, ArrayNode actions, ArrayNode outbox) {
+        for (JsonNode command : stage.path("outbox")) {
+            String kind = command.path("kind").asText();
+            if (!STAGED_REST_COMMANDS.contains(kind))
+                throw new RuleRuntime.Unavailable("restCommand",
+                        "This rest requires host settlement before later stages: " + kind + ".");
+        }
+        actions.addAll((ArrayNode) stage.get("actions"));
+        outbox.addAll((ArrayNode) stage.get("outbox"));
     }
 
     /** Stages rest preparation only; the caller must complete and atomically commit the entire rest. */

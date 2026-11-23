@@ -55,6 +55,10 @@ passive costs and modifier steps run afterward and failures roll back the move. 
 signed recovery facts, runs benefits around the rest reset and advances rest counters; failures roll back
 that stage. Ally moves are rejected until recipient transactions are available. The final atomic rest
 transaction and player workflow are still required.
+An internal self-only coordinator now composes these stages on one private copy, retaining ordered reports and
+dice and advancing the sheet revision once. Commands needing intervening host settlement are rejected rather than
+evaluated against stale facts; offer authentication, persistence, retry receipts and interactive choices are not
+yet connected.
 The shared ruleset defines the base self-recovery, preparation and project moves for staged tests, including
 tier-scaled recovery, protected HP and capped Hope. Ally recovery, rerolls and armor overflow are not yet wired.
 Format-2 healing respects permanent HP and temporary locked HP on both the actor and targeted recipients;
