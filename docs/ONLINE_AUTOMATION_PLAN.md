@@ -104,6 +104,11 @@ An owner profile roll with matching result buttons returns `resultActions` and a
 
 The sheet renders ordinary result actions from the private roll receipt. If a result has a target action, it fetches fresh recipient offers after the roll is saved; the roll itself still needs only one POST. A chat card loads actions only when its owner opens **Result actions**; restoring history does not issue a request per card. The host resolves current single-target or whole-party choices, stages all sheets and consumes the button atomically, without repeating finished-roll reactions. A targeted result can publish one roll revision; multiple publications are rejected without spending anything. Owner-only descriptors are not mirrored into chat action reports. An uncertain POST can be retried with the original intent; a rejected stale action refreshes without submitting again.
 
+The shared Healing Hands successful-HP fixture now runs through the converted card and HTTP host as well as the
+legacy path. It checks the seeded cast, actual cleared amount and report, locked recipients, alternatives, retry
+and engine-owned effect protection. Recipient long-rest expiry is exercised in isolation; a live format-2 rest
+transaction and shared Stress/failure scenarios remain release gaps.
+
 Ordinary and targeted sheet requests accept only `sheet` bindings, even when another surface uses the same event.
 Roll options and saved-result actions use their own validated surfaces. The planned authoritative rest flow has not
 yet been connected to the separate downtime descriptors; a sheet request is not a rest or downtime transaction.

@@ -638,6 +638,150 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void convertedHealingHandsMatchesSharedSuccessfulTargetFixture() throws Exception {
+        JsonNode scenario;
+        try (var input = getClass().getResourceAsStream("/dmmt/automation/parity/healing-hands.json")) {
+            scenario = MAPPER.readTree(input);
+        }
+        JsonNode cards = MAPPER.readTree(Path.of("dmmap-daggerheart", "domain-cards.json").toFile());
+        JsonNode card = null;
+        for (JsonNode candidate : cards.path("entries"))
+            if ("healing-hands".equals(candidate.path("id").asText())) card = candidate;
+        assertNotNull(card);
+        ObjectNode legacy = MAPPER.createObjectNode().put("format", "dmmap-daggerheart").put("version", 1)
+                .put("category", "domain-cards").put("label", "Fixture");
+        legacy.putArray("entries").add(card.deepCopy());
+        var converted = dmmt.online.automation.LegacyCatalogConverter.convert(legacy.toString());
+        assertEquals(1, converted.converted(), converted.diagnostics().toString());
+        automationCompendium();
+        java.nio.file.Files.writeString(compendiumDir.resolve("domain-cards.json"), converted.catalog().toString());
+
+        String campaignId = campaign.getId(), target = scenario.requiredAt("/cast/target").asText();
+        campaign.getActors().add(Campaign.Actor.builder().id("healer").name("healer").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id(target).name(target).ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("second").name("second").ownerId(playerId()).build());
+        ObjectNode healer = MAPPER.createObjectNode().put("name", "healer").put("level", 2);
+        healer.putObject("stress").put("slots", 6).set("on", scenario.requiredAt("/before/healerStress"));
+        healer.putObject("hope").put("slots", 6).put("on", 0);
+        healer.putArray("traits").addObject().put("name", "Presence").put("mod", 30).put("spellcast", true);
+        healer.putArray("loadout").addObject().put("name", card.required("name").asText())
+                .put("automationSource", scenario.required("source").asText()).put("instanceId", "healing");
+        ObjectNode patient = MAPPER.createObjectNode().put("name", target).put("level", 2);
+        patient.putObject("hp").put("slots", 6).set("on", scenario.requiredAt("/before/patientHpMarked"));
+        patient.putObject("stress").put("slots", 6).put("on", 3);
+        store.saveSheet(campaignId, "healer", healer.toString());
+        store.saveSheet(campaignId, target, patient.toString());
+        store.saveSheet(campaignId, "second", """
+                {"name":"second","level":2,"hp":{"slots":6,"on":3},"stress":{"slots":6,"on":3}}""");
+        String owner = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket socket = connect(owner, inbox);
+        try {
+            inbox.next("hello");
+            var offered = automationHttp(owner, "healer", null);
+            assertEquals(200, offered.statusCode(), offered.body());
+            JsonNode profile = MAPPER.readTree(offered.body()).requiredAt("/profiles/0");
+            assertEquals("spellcast", profile.required("rollKind").asText());
+            ObjectNode cast = MAPPER.createObjectNode();
+            ObjectNode request = cast.putObject("request").put("requestId", "healing-cast").put("expectedRevision", 0);
+            request.putArray("selections");
+            request.putObject("profileRoll").put("sourceInstanceId", "healing")
+                    .put("profileId", profile.required("id").asText()).put("kind", "spellcast");
+            diceSeed(scenario.requiredAt("/cast/seed").asLong());
+            var rolled = automationHttp(owner, "healer", cast.toString());
+            assertEquals(200, rolled.statusCode(), rolled.body());
+            JsonNode roll = MAPPER.readTree(rolled.body()), expected = scenario.required("expected");
+            assertEquals(expected.required("total"), roll.requiredAt("/event/check/total"));
+            assertEquals("success", roll.requiredAt("/event/check/outcome").asText());
+            assertEquals(expected.requiredAt("/faces/0"), roll.requiredAt("/event/check/hopeDie"));
+            assertEquals(expected.requiredAt("/faces/1"), roll.requiredAt("/event/check/fearDie"));
+            String resultId = roll.requiredAt("/event/resultId").asText();
+            var resultOffer = resultHttp(owner, "healer", resultId);
+            assertEquals(200, resultOffer.statusCode(), resultOffer.body());
+            JsonNode action = null;
+            for (JsonNode item : MAPPER.readTree(resultOffer.body()).required("actions"))
+                if (scenario.requiredAt("/cast/choice").asText().equals(item.path("ruleId").asText())) action = item;
+            assertNotNull(action, resultOffer.body());
+            JsonNode targetOption = null, secondOption = null;
+            for (JsonNode option : action.requiredAt("/targetSelection/options"))
+                if (target.equals(option.path("id").asText())) targetOption = option;
+                else if ("second".equals(option.path("id").asText())) secondOption = option;
+            assertNotNull(targetOption, action.toString());
+            assertNotNull(secondOption, action.toString());
+
+            ObjectNode choose = MAPPER.createObjectNode();
+            ObjectNode selection = choose.putObject("request").put("requestId", "healing-hp")
+                    .put("expectedRevision", 1).put("resultId", resultId);
+            selection.putArray("selections").addObject().put("sourceInstanceId", "healing")
+                    .put("ruleId", action.required("ruleId").asText()).put("bindingId", action.required("bindingId").asText());
+            selection.putObject("target").put("recipientId", "healer").set("version", targetOption.required("version"));
+            assertEquals(expected.required("selfTargetAllowed").asBoolean() ? 200 : 409,
+                    automationHttp(owner, "healer", choose.toString()).statusCode());
+            ((ObjectNode) selection.required("target")).put("recipientId", target);
+            var healed = automationHttp(owner, "healer", choose.toString());
+            assertEquals(200, healed.statusCode(), healed.body());
+            JsonNode savedHealer = MAPPER.readTree(store.loadSheet(campaignId, "healer"));
+            JsonNode savedPatient = MAPPER.readTree(store.loadSheet(campaignId, target));
+            assertEquals(expected.required("healerStress"), savedHealer.requiredAt("/stress/on"));
+            assertEquals(expected.required("patientHpMarked"), savedPatient.requiredAt("/hp/on"));
+            assertEquals(1, savedPatient.requiredAt("/automationState/effects").size());
+            assertEquals("rest.long", savedPatient.requiredAt("/automationState/effects/0/until/0").asText());
+            assertTrue(store.historyTail(campaignId, 100).stream()
+                    .anyMatch(message -> message.path("text").asText().contains(expected.required("reportLine").asText())),
+                    healed.body() + " history=" + store.historyTail(campaignId, 100));
+            int history = store.historyTail(campaignId, 100).size();
+            assertEquals(healed.body(), automationHttp(owner, "healer", choose.toString()).body());
+            assertEquals(history, store.historyTail(campaignId, 100).size());
+            selection.put("requestId", "duplicate").put("expectedRevision", 2);
+            assertEquals(expected.required("sameRollReusable").asBoolean() ? 200 : 409,
+                    automationHttp(owner, "healer", choose.toString()).statusCode());
+            ((ObjectNode) selection.requiredAt("/selections/0")).put("ruleId", "stress");
+            ((ObjectNode) selection.required("target")).put("recipientId", "second").set("version", secondOption.required("version"));
+            selection.put("requestId", "alternative");
+            assertEquals(409, automationHttp(owner, "healer", choose.toString()).statusCode());
+            assertEquals(3, MAPPER.readTree(store.loadSheet(campaignId, "second")).requiredAt("/stress/on").asInt());
+
+            String uri = "http://localhost:" + port + "/api/sheet/" + target;
+            JsonNode loaded = MAPPER.readTree(http.send(HttpRequest.newBuilder(URI.create(uri)).header("Cookie", owner)
+                    .GET().build(), HttpResponse.BodyHandlers.ofString()).body());
+            ObjectNode edited = (ObjectNode) loaded.required("sheet").deepCopy();
+            edited.withObject("/automationState").putArray("effects");
+            var saved = http.send(HttpRequest.newBuilder(URI.create(uri)).header("Cookie", owner)
+                    .header("Content-Type", "application/json").header("If-Match", loaded.required("version").asText())
+                    .PUT(HttpRequest.BodyPublishers.ofString(edited.toString())).build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, saved.statusCode(), saved.body());
+            assertEquals(savedPatient.requiredAt("/automationState/effects"),
+                    MAPPER.readTree(store.loadSheet(campaignId, target)).requiredAt("/automationState/effects"));
+
+            request.put("requestId", "healing-again").put("expectedRevision", 2);
+            diceSeed(scenario.requiredAt("/cast/seed").asLong());
+            var rerolled = automationHttp(owner, "healer", cast.toString());
+            assertEquals(200, rerolled.statusCode(), rerolled.body());
+            String nextResult = MAPPER.readTree(rerolled.body()).requiredAt("/event/resultId").asText();
+            JsonNode nextOffer = MAPPER.readTree(resultHttp(owner, "healer", nextResult).body()).required("actions");
+            for (JsonNode next : nextOffer) for (JsonNode option : next.path("targetSelection").path("options"))
+                assertNotEquals(target, option.path("id").asText(), next.toString());
+            selection.put("requestId", "locked").put("expectedRevision", 3).put("resultId", nextResult);
+            ((ObjectNode) selection.requiredAt("/selections/0")).put("ruleId", "hp");
+            ((ObjectNode) selection.required("target")).put("recipientId", target).set("version", targetOption.required("version"));
+            assertEquals(expected.required("newRollBypassesLock").asBoolean() ? 200 : 409,
+                    automationHttp(owner, "healer", choose.toString()).statusCode());
+            assertEquals(expected.required("patientHpMarked"), MAPPER.readTree(store.loadSheet(campaignId, target)).requiredAt("/hp/on"));
+
+            var pack = dmmt.online.automation.AutomationHost.compile("fixture",
+                    Map.of("domain-cards", converted.catalog().toString()),
+                    dmmt.online.automation.LegacyCatalogConverter.coreRecipes());
+            var host = dmmt.online.automation.AutomationHost.bundled();
+            ObjectNode restedPatient = (ObjectNode) savedPatient.deepCopy();
+            assertFalse(host.resetLimits(pack, restedPatient, dmmt.online.automation.AutomationHost.event("rest.short", target, 0)));
+            assertEquals(1, restedPatient.requiredAt("/automationState/effects").size());
+            assertTrue(host.resetLimits(pack, restedPatient, dmmt.online.automation.AutomationHost.event("rest.long", target, 0)));
+            assertTrue(restedPatient.requiredAt("/automationState/effects").isEmpty());
+            assertEquals(1, MAPPER.readTree(store.loadSheet(campaignId, target)).requiredAt("/automationState/effects").size());
+        } finally { socket.abort(); }
+    }
+
+    @Test
     void splendorSalvationAllocationsAreAtomicAndBoundedByStressAndWounds() throws Exception {
         splendorActor("beam", "Salvation Beam");
         splendorActor("first");

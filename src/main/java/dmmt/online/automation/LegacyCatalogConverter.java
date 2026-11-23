@@ -2262,7 +2262,7 @@ public final class LegacyCatalogConverter {
         JsonNode extra = trigger.has("check") ? RuleJson.JSON.missingNode() : trigger.path("steps");
         amountStore(trigger.path("selectAmount"), path + "/selectAmount", p, pools, steps, effects);
         for (int i = 0; i < extra.size(); i++) step(extra.get(i), path + "/steps/" + i, p, steps, effects, pools, operationTarget);
-        if (healingHands) healingHandsRecovery(rule, path, p, steps, effects);
+        String healingResource = healingHands ? healingHandsRecovery(trigger, rule, path, p, steps, effects) : null;
         if (secondWindTrigger) secondWind(rule, steps, "recipient");
         if (salvationBeam) salvationBeam(rule, steps);
         if (invigoration) steps.addObject().put("op", "limit.restore").put("to", "recipient").put("label", "Restore one spent limited feature use");
@@ -2280,6 +2280,9 @@ public final class LegacyCatalogConverter {
         if ("resurrection".equals(splendor)) resurrection(ui, steps);
         if (!steps.isEmpty()) rule.set("do", steps);
         report(trigger, path, p, ui);
+        if (healingResource != null)
+            ui.put("report", "{recipient.name}: cleared {result.healingHandsCleared} " + healingResource + "."
+                    + (ui.has("report") ? " " + ui.path("report").asText() : ""));
         if (trigger.has("removeFear") && !ui.has("report")) ui.put("report", "Removed {result.removedFear.amount} GM Fear.");
         if (trigger.has("damage"))
             ui.put("report", "Damage total: {result.triggerDamage.total}." + (ui.has("report") ? " " + ui.path("report").asText() : ""));
@@ -2542,7 +2545,25 @@ public final class LegacyCatalogConverter {
         ui.put("report", "Rolled {result.face}: on 5 or less {source.name} is permanently vaulted; on 6 it remains available.");
     }
     /** One Healing Hands benefit per ally per long rest: the recovery debuff both gates and follows each heal. */
-    private static void healingHandsRecovery(ObjectNode rule, String path, Problems p, ArrayNode steps, ObjectNode effects) {
+    private static String healingHandsRecovery(JsonNode trigger, ObjectNode rule, String path, Problems p,
+                                               ArrayNode steps, ObjectNode effects) {
+        String resource = trigger.path("steps").path(0).path("resource").asText();
+        if (!Set.of("hp", "stress").contains(resource)) {
+            p.add(path + "/steps/0/resource", "Healing Hands needs an HP or Stress recovery step.");
+            return null;
+        }
+        ObjectNode recoveryStep = null;
+        for (JsonNode candidate : steps)
+            if ("track.clear".equals(candidate.path("op").asText())
+                    && ("recipient." + resource).equals(candidate.path("track").asText())) {
+                recoveryStep = (ObjectNode) candidate;
+                break;
+            }
+        if (recoveryStep == null) {
+            p.add(path + "/steps/0", "Healing Hands needs a recipient recovery step.");
+            return null;
+        }
+        recoveryStep.put("as", "healingHandsCleared");
         ObjectNode recovery = RuleJson.JSON.createObjectNode().put("name", "Healing Hands recovery").put("kind", "debuff").put("until", "longRest")
                 .put("text", "Cannot be healed by Healing Hands again until a long rest.");
         String id = null;
@@ -2551,13 +2572,14 @@ public final class LegacyCatalogConverter {
             if ("Healing Hands recovery".equals(entry.getValue().path("label").asText())) id = entry.getKey();
         }
         if (id == null) id = declareEffect(recovery, path + "/splendorAction", p, effects);
-        if (id == null) return;
+        if (id == null) return null;
         steps.addObject().put("op", "effect.start").put("effect", id).put("target", "recipient");
         ObjectNode pluck = RuleJson.JSON.createObjectNode();
         pluck.putArray("pluck").add(read("recipient.effects")).add("label");
         ObjectNode includes = RuleJson.JSON.createObjectNode();
         includes.putArray("includes").add(pluck).add("Healing Hands recovery");
         ((ObjectNode) rule.path("bindings").get(0).path("targetSelection")).putObject("where").set("not", includes);
+        return "hp".equals(resource) ? "HP" : "Stress";
     }
 
     /** Daggerheart severity bands from {@code event.thresholds}; massive damage is at least twice the severe threshold. */

@@ -884,7 +884,9 @@ class LegacyCatalogConverterTest {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"t","name":"T","automation":{"spellcastDifficulty":13,"conditionalRollTriggers":[
                   {"id":"hp","label":"Heal 2 HP","on":"card:T","when":"success","difficulty":13,"splendorAction":"healingHands","hostOwned":true,
-                   "excludeSourceActor":true,"exclusiveRollGroup":"healing","target":"actor","cost":{"stress":1},"steps":[{"op":"clear","resource":"hp","amount":2}]}]}}"""));
+                   "excludeSourceActor":true,"exclusiveRollGroup":"healing","target":"actor","cost":{"stress":1},"steps":[{"op":"clear","resource":"hp","amount":2}]},
+                  {"id":"stress","label":"Heal 2 Stress","on":"card:T","when":"success","difficulty":13,"splendorAction":"healingHands","hostOwned":true,
+                   "excludeSourceActor":true,"exclusiveRollGroup":"healing","target":"actor","cost":{"stress":1},"steps":[{"op":"clear","resource":"stress","amount":2}]}]}}"""));
         assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
         JsonNode selection = block(result, 0).at("/rules/0/bindings/0/targetSelection");
         assertTrue(selection.has("where"), selection.toString());
@@ -903,6 +905,19 @@ class LegacyCatalogConverterTest {
                 List.of(new RuleDispatcher.RecipientCandidate("mira", (ObjectNode) RuleJson.parse(mira), 2)), StructuredRollTest.noRandom());
         assertEquals(2, resolved.recipients().getFirst().snapshot().at("/hp/marked").asInt(), resolved.toString());
         assertEquals(1, resolved.sourceContexts().getFirst().at("/actor/stress/marked").asInt());
+        assertEquals("Mira: cleared 2 HP.", resolved.actions().getFirst().action().report());
+        for (int marked : List.of(0, 1)) {
+            for (String track : List.of("hp", "stress")) {
+                ObjectNode recipient = (ObjectNode) RuleJson.parse("""
+                        {"id":"mira","name":"Mira","effects":[],"%s":{"marked":%d,"capacity":6}}""".formatted(track, marked));
+                var limited = RuleDispatcher.executeTargets(List.of(new RuleDispatcher.Candidate(program, source)),
+                        new RuleDispatcher.TargetIntent(new RuleRuntime.Intent(track, "use", "fixture", 0,
+                                RuleJson.JSON.createObjectNode()), "mira", 2L),
+                        List.of(new RuleDispatcher.RecipientCandidate("mira", recipient, 2)), StructuredRollTest.noRandom());
+                assertEquals("Mira: cleared " + marked + ("hp".equals(track) ? " HP." : " Stress."),
+                        limited.actions().getFirst().action().report());
+            }
+        }
         String healed = "{\"id\":\"bo\",\"name\":\"Bo\",\"hp\":{\"marked\":4,\"capacity\":6},\"effects\":[{\"label\":\"Healing Hands recovery\"}]}";
         assertThrows(RuleRuntime.Unavailable.class, () -> RuleDispatcher.executeTargets(List.of(new RuleDispatcher.Candidate(program, source)),
                 new RuleDispatcher.TargetIntent(new RuleRuntime.Intent("hp", "use", "fixture", 0, RuleJson.JSON.createObjectNode()), "bo", 1L),
