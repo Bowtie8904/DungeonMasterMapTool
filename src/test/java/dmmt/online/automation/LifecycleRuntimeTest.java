@@ -72,6 +72,63 @@ class LifecycleRuntimeTest {
         JsonNode effect = result.context().path("actor").path("effects").get(0);
         assertEquals("Claws", effect.path("profile").path("label").asText());
         assertEquals(8, effect.path("profile").path("damage").path("sides").asInt());
+        assertEquals("actor", effect.path("sourceActorId").asText());
+    }
+
+    @Test
+    void uniqueAndReplacementStackingScopeMatchingInstancesToTheirSourceActor() throws Exception {
+        ObjectNode original = context("action.request");
+        original.withObject("/actor").putArray("effects").addObject().put("id", "foreign")
+                .put("effect", "features:lifecycle#wildForm").put("sourceInstanceId", "inst-1")
+                .put("sourceActorId", "other");
+        var started = run("shift", "sheet", original, "{}").context();
+        assertEquals(2, started.at("/actor/effects").size());
+        assertEquals(1, started.at("/effects/wildForm").asInt());
+        assertEquals("effectActive", assertThrows(RuleRuntime.Unavailable.class,
+                () -> run("shift", "sheet", started.put("revision", 0), "{}")).code());
+        RuleEffects.end(program(), "wildForm", "actor", started);
+        assertEquals(1, started.at("/actor/effects").size());
+        assertEquals("foreign", started.at("/actor/effects/0/id").asText());
+        assertEquals(0, started.at("/effects/wildForm").asInt());
+
+        ObjectNode replacement = fixture("rewrite/lifecycle");
+        ((ObjectNode) replacement.at("/effects/wildForm")).put("stacking", "replace");
+        var replaceProgram = RuleCompiler.compile("features:lifecycle", replacement, fixture("rewrite/recipes"));
+        ObjectNode mixed = context("action.request");
+        var effects = mixed.withObject("/actor").putArray("effects");
+        effects.addObject().put("id", "foreign").put("effect", "features:lifecycle#wildForm")
+                .put("sourceInstanceId", "inst-1").put("sourceActorId", "other");
+        effects.addObject().put("id", "own").put("effect", "features:lifecycle#wildForm")
+                .put("sourceInstanceId", "inst-1").put("sourceActorId", "actor");
+        var replaced = RuleRuntime.execute(replaceProgram, new RuleRuntime.Intent("shift", "sheet", "inst-1", 0,
+                RuleJson.JSON.createObjectNode()), mixed, noRandom()).context();
+        assertEquals(2, replaced.at("/actor/effects").size());
+        assertEquals("foreign", replaced.at("/actor/effects/0/id").asText());
+        assertEquals("actor", replaced.at("/actor/effects/1/sourceActorId").asText());
+        assertNotEquals("own", replaced.at("/actor/effects/1/id").asText());
+    }
+
+    @Test
+    void singleHolderRequestsRequireStableSourceAndHolderIdentity() throws Exception {
+        ObjectNode document = fixture("rewrite/lifecycle");
+        ((ObjectNode) document.at("/effects/wildForm")).put("singleHolder", true);
+        var single = RuleCompiler.compile("features:lifecycle", document, fixture("rewrite/recipes"));
+        var intent = new RuleRuntime.Intent("shift", "sheet", "inst-1", 0, RuleJson.JSON.createObjectNode());
+        ObjectNode missing = context("action.request");
+        ((ObjectNode) missing.get("actor")).remove("id");
+        ObjectNode before = missing.deepCopy();
+        assertThrows(IllegalArgumentException.class, () -> RuleRuntime.execute(single, intent, missing, noRandom()));
+        assertEquals(before, missing);
+        var started = RuleRuntime.execute(single, intent, context("action.request"), noRandom()).context();
+        assertEquals("actor", started.at("/actor/effects/0/sourceActorId").asText());
+        assertEquals("actor", started.at("/outbox/0/sourceActorId").asText());
+        assertEquals("actor", started.at("/outbox/0/holder").asText());
+
+        ObjectNode recipient = context("action.request");
+        recipient.putObject("recipient").put("id", "other");
+        RuleEffects.start(single, "wildForm", "recipient", recipient);
+        assertEquals("actor", recipient.at("/recipient/effects/0/sourceActorId").asText());
+        assertEquals("other", recipient.at("/outbox/0/holder").asText());
     }
 
     @Test

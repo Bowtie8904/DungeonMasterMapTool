@@ -32,7 +32,7 @@ final class ResultWindows {
     }
 
     /** Source definition plus current activations, not mutable quantities, labels, or a global sheet revision. */
-    static Map<String, ObjectNode> guards(List<SheetProjection.SourceElement> sources, JsonNode effects) {
+    static Map<String, ObjectNode> guards(List<SheetProjection.SourceElement> sources, JsonNode effects, String actorId) {
         Map<String, ObjectNode> guards = new HashMap<>();
         for (var source : sources) {
             var guard = RuleJson.JSON.createObjectNode().put("sourceId", source.sourceId());
@@ -41,7 +41,7 @@ final class ResultWindows {
         }
         for (var effect : effects) {
             var guard = guards.get(effect.path("sourceInstanceId").textValue());
-            if (guard != null)
+            if (guard != null && RuleEffects.sourceActorMatches(effect, actorId))
                 ((ObjectNode) guard.get("activations")).put(effect.required("id").textValue(), true);
         }
         return guards;

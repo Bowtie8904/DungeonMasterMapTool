@@ -461,6 +461,31 @@ class AutomationHostTest {
     }
 
     @Test
+    void effectProfilesRejectAnotherActorsMatchingSourceInstance() throws Exception {
+        ObjectNode classes = fixture("rewrite/host-classes");
+        ObjectNode automation = (ObjectNode) classes.at("/entries/0/features/2/automation");
+        ObjectNode form = automation.putObject("effects").putObject("form").put("label", "Form");
+        form.set("profile", RuleJson.parse("""
+                {"label":"Claw","trait":"Finesse","range":"melee","damage":{"sides":6}}"""));
+        var pack = AutomationHost.compile("test", Map.of("classes", classes.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet(), origin = AutomationHost.event("action.request", "actor", 0);
+        ObjectNode effect = HOST.projection().state(sheet).putArray("effects").addObject()
+                .put("id", "activation").put("effect", "classes:tester:features:steady#form")
+                .put("sourceInstanceId", "f-steady").put("sourceActorId", "other");
+        effect.set("profile", form.required("profile").deepCopy());
+        assertEquals(1, HOST.describe(pack, sheet, origin, "sheet", "self").path("profiles").size());
+        ObjectNode roll = profileRequest("forged", 0, "f-steady", "effect.profile", "damage");
+        ((ObjectNode) roll.required("profileRoll")).put("effectInstanceId", "activation");
+        ObjectNode before = sheet.deepCopy();
+        assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, sheet, origin, roll, "self", StructuredRollTest.noRandom()));
+        assertEquals(before, sheet);
+        effect.remove("sourceActorId");
+        assertEquals(2, HOST.describe(pack, sheet, origin, "sheet", "self").path("profiles").size());
+        effect.put("sourceActorId", "actor");
+        assertEquals(2, HOST.describe(pack, sheet, origin, "sheet", "self").path("profiles").size());
+    }
+
+    @Test
     void derivedEffectProfilesFollowTheConditionAndDoNotReviveOldResults() throws Exception {
         ObjectNode classes = fixture("rewrite/host-classes");
         ObjectNode automation = (ObjectNode) classes.at("/entries/0/features/2/automation");

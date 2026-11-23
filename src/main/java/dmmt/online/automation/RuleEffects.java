@@ -62,6 +62,8 @@ public final class RuleEffects {
                     .put("effect", program.sourceId() + "#" + entry.getKey())
                     .put("sourceInstanceId", instanceId)
                     .put("label", RuleTemplate.render(definition.path("label").asText(), context));
+            String sourceActorId = context.path("actor").path("id").textValue();
+            if (sourceActorId != null && !sourceActorId.isBlank()) instance.put("sourceActorId", sourceActorId);
             if (definition.has("text")) instance.put("text", RuleTemplate.render(definition.path("text").asText(), context));
             instance.put("kind", definition.path("kind").asText("buff")).put("derived", true);
             if (definition.has("profile")) instance.set("profile", definition.get("profile").deepCopy());
@@ -120,10 +122,17 @@ public final class RuleEffects {
         ArrayNode list = owned(context, target);
         String key = program.sourceId() + "#" + effectId;
         String instanceId = context.path("source").path("instanceId").asText();
+        String sourceActorId = context.path("actor").path("id").textValue();
+        boolean singleHolder = definition.path("singleHolder").asBoolean(false);
+        String holder = null;
+        if (singleHolder) {
+            sourceActorId = RuleJson.id(context.path("actor").get("id"), "/actor/id");
+            holder = RuleJson.id(context.path(target).get("id"), "/" + target + "/id");
+        }
         String stacking = definition.path("stacking").asText("replace");
         if ("unique".equals(stacking)) for (JsonNode effect : list)
-            if (matches(effect, key, instanceId)) throw new RuleRuntime.Unavailable("effectActive", "This effect is already active.");
-        if ("replace".equals(stacking)) remove(list, key, instanceId);
+            if (matches(effect, key, instanceId, sourceActorId)) throw new RuleRuntime.Unavailable("effectActive", "This effect is already active.");
+        if ("replace".equals(stacking)) remove(list, key, instanceId, sourceActorId);
         if ("replaceAnySource".equals(stacking)) for (int i = list.size() - 1; i >= 0; i--)
             if (key.equals(list.get(i).path("effect").asText()) && !list.get(i).path("derived").asBoolean()) list.remove(i);
         String group = definition.path("exclusiveGroup").asText("");
@@ -136,6 +145,7 @@ public final class RuleEffects {
                 .put("effect", key)
                 .put("sourceInstanceId", instanceId)
                 .put("label", RuleTemplate.render(definition.path("label").asText(), context));
+        if (sourceActorId != null && !sourceActorId.isBlank()) instance.put("sourceActorId", sourceActorId);
         if (definition.has("text")) instance.put("text", RuleTemplate.render(definition.path("text").asText(), context));
         instance.put("kind", definition.path("kind").asText("buff"));
         if (!group.isEmpty()) instance.put("group", group);
@@ -144,11 +154,12 @@ public final class RuleEffects {
         definition.path("until").forEach(until::add);
         freeze(definition, context, instance.putArray("modifiers"));
         list.add(instance);
-        if (definition.path("singleHolder").asBoolean(false)) {
+        if (singleHolder) {
             ArrayNode outbox = context.has("outbox") ? (ArrayNode) context.get("outbox") : context.putArray("outbox");
             if (outbox.size() >= 32) throw RuleJson.error("/outbox", "Too many host requests.");
-            outbox.addObject().put("kind", "effect.endElsewhere").put("sourceInstanceId", instanceId).put("effect", key)
-                    .put("holder", context.path(target).path("id").asText()).put("label", instance.path("label").asText());
+            outbox.addObject().put("kind", "effect.endElsewhere").put("sourceActorId", sourceActorId)
+                    .put("sourceInstanceId", instanceId).put("effect", key).put("holder", holder)
+                    .put("label", instance.path("label").asText());
         }
         refreshCounts(program, context);
         return instance.deepCopy();
@@ -166,7 +177,7 @@ public final class RuleEffects {
     static int end(RuleCompiler.Program program, String effectId, String target, ObjectNode context) {
         program.effect(effectId);
         int removed = remove(owned(context, target), program.sourceId() + "#" + effectId,
-                context.path("source").path("instanceId").asText());
+                context.path("source").path("instanceId").asText(), context.path("actor").path("id").textValue());
         refreshCounts(program, context);
         return removed;
     }
@@ -190,7 +201,7 @@ public final class RuleEffects {
             if (!definition.getValue().has("endWhen") || context.path("effects").path(definition.getKey()).asInt() == 0) continue;
             if (RuleExpression.bool(RuleExpression.evaluate(definition.getValue().get("endWhen"), context), "/effects/" + definition.getKey() + "/endWhen"))
                 ended |= remove(owned(context, "actor"), program.sourceId() + "#" + definition.getKey(),
-                        context.path("source").path("instanceId").asText()) > 0;
+                        context.path("source").path("instanceId").asText(), context.path("actor").path("id").textValue()) > 0;
         }
         if (ended) refreshCounts(program, context);
         return ended;
@@ -268,9 +279,10 @@ public final class RuleEffects {
         JsonNode actorEffects = context.path("actor").path("effects");
         if (!actorEffects.isMissingNode()) instances(actorEffects, "/actor/effects");
         String instanceId = context.path("source").path("instanceId").asText();
+        String sourceActorId = context.path("actor").path("id").textValue();
         program.effects().fieldNames().forEachRemaining(id -> {
             int count = 0;
-            for (JsonNode effect : actorEffects) if (matches(effect, program.sourceId() + "#" + id, instanceId)) count++;
+            for (JsonNode effect : actorEffects) if (matches(effect, program.sourceId() + "#" + id, instanceId, sourceActorId)) count++;
             counts.put(id, count);
         });
     }
@@ -293,13 +305,18 @@ public final class RuleEffects {
         return (ArrayNode) effects;
     }
 
-    private static boolean matches(JsonNode effect, String key, String instanceId) {
-        return key.equals(effect.path("effect").asText()) && instanceId.equals(effect.path("sourceInstanceId").asText());
+    static boolean sourceActorMatches(JsonNode effect, String sourceActorId) {
+        return !effect.has("sourceActorId") || sourceActorId != null && sourceActorId.equals(effect.path("sourceActorId").textValue());
     }
 
-    private static int remove(ArrayNode list, String key, String instanceId) {
+    private static boolean matches(JsonNode effect, String key, String instanceId, String sourceActorId) {
+        return key.equals(effect.path("effect").asText()) && instanceId.equals(effect.path("sourceInstanceId").asText())
+                && sourceActorMatches(effect, sourceActorId);
+    }
+
+    private static int remove(ArrayNode list, String key, String instanceId, String sourceActorId) {
         int removed = 0;
-        for (int i = list.size() - 1; i >= 0; i--) if (matches(list.get(i), key, instanceId)) { list.remove(i); removed++; }
+        for (int i = list.size() - 1; i >= 0; i--) if (matches(list.get(i), key, instanceId, sourceActorId)) { list.remove(i); removed++; }
         return removed;
     }
 }

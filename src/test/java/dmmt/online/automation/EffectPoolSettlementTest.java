@@ -137,6 +137,22 @@ class EffectPoolSettlementTest {
     }
 
     @Test
+    void conditionalAndExplicitEndingsDoNotRemoveAnotherActorsMatchingSourceInstance() throws Exception {
+        var pack = pack();
+        ObjectNode sheet = sheet();
+        effect(sheet, "foreign", OWNER, "stance", "owner-a", "Stance");
+        ((ObjectNode) sheet.at("/automationState/effects/0")).put("sourceActorId", "bea");
+        execute(pack, sheet, "start", 0, "owner-a", "open");
+        assertEquals("ada", sheet.at("/automationState/effects/1/sourceActorId").asText());
+        execute(pack, sheet, "drain", 1, "owner-a", "drain");
+        assertEquals(List.of("foreign"), sheet.at("/automationState/effects").findValuesAsText("id"));
+        assertEquals(3, sheet.at("/automationState/pools/charge/value").asInt());
+        execute(pack, sheet, "end", 2, "owner-a", "end");
+        assertEquals(List.of("foreign"), sheet.at("/automationState/effects").findValuesAsText("id"));
+        assertEquals(3, sheet.at("/automationState/pools/charge/value").asInt());
+    }
+
+    @Test
     void labelEndUsesTheWholePackEvenWhenTheRemovedEffectSourceIsNotOnTheSheet() throws Exception {
         var pack = pack();
         ObjectNode sheet = sheet();

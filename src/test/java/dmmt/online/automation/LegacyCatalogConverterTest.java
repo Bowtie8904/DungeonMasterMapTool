@@ -1215,6 +1215,7 @@ class LegacyCatalogConverterTest {
                 List.of(new RuleRuntime.Intent("drink", "sheet", "fixture", 0, RuleJson.JSON.createObjectNode())), StructuredRollTest.noRandom()).contexts().getFirst();
         assertEquals("effect.endElsewhere", started.at("/outbox/0/kind").asText(), started.toString());
         assertEquals("ari", started.at("/outbox/0/holder").asText(), started.toString());
+        assertEquals("ari", started.at("/outbox/0/sourceActorId").asText(), started.toString());
         String prepare = "{\"type\":\"roll.prepare\",\"check\":{\"kind\":\"action\",\"trait\":\"Agility\"},\"roll\":{\"id\":\"d\",\"contributions\":[{\"id\":\"base\",\"kind\":\"flat\",\"role\":\"modifier\",\"sourceId\":\"core\",\"label\":\"Base\",\"value\":0}]}}";
         ObjectNode rolled = context(program, started.path("actor").toString(), prepare);
         JsonNode after = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, rolled)), List.of(), StructuredRollTest.noRandom()).contexts().getFirst();

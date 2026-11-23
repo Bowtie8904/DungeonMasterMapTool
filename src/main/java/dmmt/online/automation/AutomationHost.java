@@ -152,7 +152,7 @@ public final class AutomationHost {
         for (JsonNode effect : actor.path("effects")) {
             var source = active.get(effect.path("sourceInstanceId").textValue());
             if (source == null) continue;
-            ObjectNode profile = effectProfile(pack, source, effect);
+            ObjectNode profile = effectProfile(pack, source, effect, actor.path("id").textValue());
             if (profile != null)
                 describeProfile(profiles, pack, sources, state, actor, event, source, profile,
                         RuleJson.text(effect.get("id"), "/effects/id"), false, hasRollOptions, relation);
@@ -178,8 +178,8 @@ public final class AutomationHost {
         }
     }
 
-    private static ObjectNode effectProfile(Pack pack, SheetProjection.SourceElement source, JsonNode effect) {
-        if (!effect.has("profile")) return null;
+    private static ObjectNode effectProfile(Pack pack, SheetProjection.SourceElement source, JsonNode effect, String actorId) {
+        if (!effect.has("profile") || !RuleEffects.sourceActorMatches(effect, actorId)) return null;
         String key = effect.path("effect").asText("");
         String prefix = source.sourceId() + "#";
         RuleCompiler.Program program = pack.programs().get(source.sourceId());
@@ -374,7 +374,7 @@ public final class AutomationHost {
                 for (JsonNode effect : actor.path("effects"))
                     if (effectId.equals(effect.path("id").textValue())
                             && instance.equals(effect.path("sourceInstanceId").textValue()))
-                        profile = effectProfile(pack, source, effect);
+                        profile = effectProfile(pack, source, effect, actor.path("id").textValue());
         } else {
             if (equippedWeapon(working, source)) {
                 JsonNode base = ProfileRoll.weaponProfile(source, declared);
@@ -414,7 +414,8 @@ public final class AutomationHost {
     private ObjectNode resultAction(Pack pack, ObjectNode working, ObjectNode state, ObjectNode origin,
                                     ObjectNode request, String principal, RandomGenerator random, PartyTargets party) {
         var sources = sources(pack, working);
-        ResultWindows.prune(state, ResultWindows.guards(sources, activationEffects(pack, working, state, origin, sources)));
+        ResultWindows.prune(state, ResultWindows.guards(sources, activationEffects(pack, working, state, origin, sources),
+                origin.path("actorId").textValue()));
         var window = ResultWindows.lookup(state, pack.revision(), principal, RuleJson.id(request.get("resultId"), "/request/resultId"));
         ObjectNode event = savedResultEvent(window, origin);
         ObjectNode actor = actor(pack, working, state, event, sources);
@@ -509,7 +510,8 @@ public final class AutomationHost {
             boolean active = false;
             for (JsonNode effect : actor.path("effects"))
                 if (effect.path("id").equals(event.path("effectInstanceId"))
-                        && effect.path("sourceInstanceId").equals(event.path("sourceInstanceId"))) active = true;
+                        && effect.path("sourceInstanceId").equals(event.path("sourceInstanceId"))
+                        && RuleEffects.sourceActorMatches(effect, actor.path("id").textValue())) active = true;
             if (!active) return;
         }
         ArrayNode matches = resultButtons(pack, sources, state, actor, event, null, null);
@@ -524,7 +526,8 @@ public final class AutomationHost {
                         || matches.get(i).has("claimGroup") && spentGroups.contains(ResultWindows.ClaimGroup.of(matches.get(i))))
                     matches.remove(i);
         }
-        String id = ResultWindows.publish(state, pack.revision(), principal, event, matches, ResultWindows.guards(sources, actor.path("effects")));
+        String id = ResultWindows.publish(state, pack.revision(), principal, event, matches,
+                ResultWindows.guards(sources, actor.path("effects"), actor.path("id").textValue()));
         if (id != null) {
             if (used != null) ResultWindows.lookup(state, pack.revision(), principal, id).set("used", used.deepCopy());
             if (usedClaimGroups != null && usedClaimGroups.isArray())
@@ -566,7 +569,8 @@ public final class AutomationHost {
         if (!"self".equals(relation)) throw new SecurityException("Only the character owner may use this roll result.");
         ObjectNode copy = sheet.deepCopy(), state = projection.state(copy);
         var sources = sources(pack, copy);
-        ResultWindows.prune(state, ResultWindows.guards(sources, activationEffects(pack, copy, state, origin, sources)));
+        ResultWindows.prune(state, ResultWindows.guards(sources, activationEffects(pack, copy, state, origin, sources),
+                origin.path("actorId").textValue()));
         var window = ResultWindows.lookup(state, pack.revision(), principal, id);
         Set<ResultWindows.Button> retained = new java.util.HashSet<>();
         window.required("buttons").forEach(item -> retained.add(ResultWindows.Button.of(item)));
@@ -588,7 +592,8 @@ public final class AutomationHost {
     public void pruneResultWindows(Pack pack, ObjectNode sheet, ObjectNode event) {
         if (!(sheet.path(projection.stateField()) instanceof ObjectNode state) || !state.has("resultWindows")) return;
         var sources = sources(pack, sheet);
-        ResultWindows.prune(state, ResultWindows.guards(sources, activationEffects(pack, sheet, state, event, sources)));
+        ResultWindows.prune(state, ResultWindows.guards(sources, activationEffects(pack, sheet, state, event, sources),
+                event.path("actorId").textValue()));
     }
 
     /** Dispatch a host transition in the caller's staged sheet transaction, without creating a player retry record. */

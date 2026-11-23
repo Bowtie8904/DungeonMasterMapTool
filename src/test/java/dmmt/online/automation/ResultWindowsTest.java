@@ -17,7 +17,7 @@ class ResultWindowsTest {
                 new SheetProjection.SourceElement("features:edge", "edge", "Edge", state.objectNode(), null));
         var effects = (ArrayNode) RuleJson.parse("""
                 [{"id":"first-activation","sourceInstanceId":"edge"}]""");
-        var guards = ResultWindows.guards(sources, effects);
+        var guards = ResultWindows.guards(sources, effects, "actor");
         var first = (ArrayNode) RuleJson.parse("""
                 [{"sourceInstanceId":"edge","ruleId":"bonus","bindingId":"button"},
                  {"sourceInstanceId":"edge","ruleId":"restore","bindingId":"button"}]""");
@@ -38,7 +38,26 @@ class ResultWindowsTest {
         assertThrows(RuleRuntime.Unavailable.class, () -> ResultWindows.lookup(saved, "pack", "other", a));
         assertThrows(RuleRuntime.Unavailable.class, () -> ResultWindows.lookup(saved, "new-pack", "owner", a));
         ((ObjectNode) effects.get(0)).put("id", "new-activation");
-        ResultWindows.prune(state, ResultWindows.guards(sources, effects));
+        ResultWindows.prune(state, ResultWindows.guards(sources, effects, "actor"));
         assertTrue(state.isEmpty());
+    }
+
+    @Test
+    void anotherActorsMatchingInstanceDoesNotChangeLocalActivationGuards() throws Exception {
+        var state = RuleJson.JSON.createObjectNode();
+        var event = state.objectNode().put("sourceInstanceId", "edge");
+        var sources = List.of(new SheetProjection.SourceElement("features:edge", "edge", "Edge", state.objectNode(), null));
+        var effects = (ArrayNode) RuleJson.parse("""
+                [{"id":"own","sourceInstanceId":"edge","sourceActorId":"actor"},
+                 {"id":"foreign","sourceInstanceId":"edge","sourceActorId":"other"}]""");
+        var buttons = (ArrayNode) RuleJson.parse("""
+                [{"sourceInstanceId":"edge","ruleId":"bonus","bindingId":"button"}]""");
+        String id = ResultWindows.publish(state, "pack", "owner", event, buttons, ResultWindows.guards(sources, effects, "actor"));
+        ((ObjectNode) effects.get(1)).put("id", "foreign-recast");
+        ResultWindows.prune(state, ResultWindows.guards(sources, effects, "actor"));
+        assertNotNull(ResultWindows.lookup(state, "pack", "owner", id));
+        ((ObjectNode) effects.get(0)).put("id", "own-recast");
+        ResultWindows.prune(state, ResultWindows.guards(sources, effects, "actor"));
+        assertThrows(RuleRuntime.Unavailable.class, () -> ResultWindows.lookup(state, "pack", "owner", id));
     }
 }

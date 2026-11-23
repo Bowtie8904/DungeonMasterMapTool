@@ -44,6 +44,9 @@ including effects from a different source or a source no longer on the sheet. En
 supporting effect and timed expiry clear the pool in the same transaction. An unresolved automation effect or
 malformed affected pool rejects a potentially unsafe change instead of losing resources. Recomputing derived
 effects and other sources' or recipients' conditional endings remains unfinished.
+New automation effects record their source character as well as their source instance, so another character
+using the same instance ID cannot take over local effect actions or profiles. Older effects still need the
+planned identity migration; cross-holder single-effect enforcement is not yet connected.
 Typing a dice expression in chat rolls dice and records the result, but does not trigger or qualify for
 character automation. Roll from the character sheet or its feature when character rules should apply.
 The live catalogs and gameplay still use the existing implementation: full catalog conversion, production
