@@ -458,6 +458,13 @@ public final class CampaignStore {
 
     synchronized void saveAutomationResults(String campaignId, Map<String, String> expectedSheets, Map<String, ObjectNode> sheets,
                                             List<ObjectNode> messages, Integer fear, List<Campaign.Countdown> countdowns) throws IOException {
+        saveAutomationResults(campaignId, expectedSheets, sheets, messages, fear, countdowns, null);
+    }
+
+    synchronized void saveAutomationResults(String campaignId, Map<String, String> expectedSheets, Map<String, ObjectNode> sheets,
+                                            List<ObjectNode> messages, Integer fear, List<Campaign.Countdown> countdowns,
+                                            Runnable validateRoster) throws IOException {
+        if (validateRoster != null) validateRoster.run();
         checkAutomationSheets(campaignId, expectedSheets, sheets);
         saveSheetsAndResults(campaignId, sheets, null, messages, fear, countdowns, null, null);
     }

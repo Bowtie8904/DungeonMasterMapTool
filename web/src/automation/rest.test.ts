@@ -69,7 +69,8 @@ describe('host-authored rest dialog', () => {
       calls.push(init.body ? 'post' : 'get');
       if (!init.body) return Response.json(offer());
       submitted = JSON.parse(String(init.body)) as Record<string, unknown>;
-      return Response.json({ actions: [{ report: 'Recovered 2 HP.' }] });
+      return Response.json({ actions: [{ report: 'Recovered 2 HP.' }],
+        partyRecoveries: [{ holderName: 'Mira', track: 'armorTrack', requested: 2, cleared: 1, label: 'Shared repair' }] });
     }));
     const handled = await openAutomationRestDialog('hero', 'short', async () => { calls.push('flush'); });
     expect(handled).toBe(true);
@@ -90,6 +91,7 @@ describe('host-authored rest dialog', () => {
       completion: [],
     });
     expect(dialog.text).toContain('Recovered 2 HP.');
+    expect(dialog.text).toContain('Mira cleared 1 armorTrack (requested 2; Shared repair).');
     expect(calls).toEqual(['flush', 'get', 'post']);
   });
 

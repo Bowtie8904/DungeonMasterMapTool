@@ -53,6 +53,35 @@ class CampaignStoreTest {
     }
 
     @Test
+    void automationRestChecksRosterAndSheetBytesInsideTheCommitLock() throws Exception {
+        var store = new CampaignStore(dir);
+        String id = store.create("Rest").getId();
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        store.saveSheet(id, "source", "{\"marks\":2}");
+        store.saveSheet(id, "recipient", "{\"marks\":1}");
+        var originals = java.util.Map.of("source", store.loadSheet(id, "source"),
+                "recipient", store.loadSheet(id, "recipient"));
+        var changed = java.util.Map.of("source", mapper.createObjectNode().put("marks", 0),
+                "recipient", mapper.createObjectNode().put("marks", 0));
+        var report = mapper.createObjectNode().put("id", 1).put("ts", 10).put("text", "Recovery");
+        Runnable staleRoster = () -> {
+            assertTrue(Thread.holdsLock(store));
+            throw new IllegalStateException("Roster changed.");
+        };
+        assertThrows(IllegalStateException.class,
+                () -> store.saveAutomationResults(id, originals, changed, List.of(report), null, null, staleRoster));
+        assertEquals(originals.get("source"), store.loadSheet(id, "source"));
+        assertEquals(originals.get("recipient"), store.loadSheet(id, "recipient"));
+        assertTrue(store.historyTail(id, 10).isEmpty());
+
+        store.saveSheet(id, "recipient", "{\"marks\":3}");
+        assertThrows(CampaignStore.StaleAutomationSheet.class, () -> store.saveAutomationResults(id, originals,
+                changed, List.of(report), null, null, () -> assertTrue(Thread.holdsLock(store))));
+        assertEquals(originals.get("source"), store.loadSheet(id, "source"));
+        assertTrue(store.historyTail(id, 10).isEmpty());
+    }
+
+    @Test
     void automationClaimsCompareOfferAndSheetsBeforeWritingAnything() throws Exception {
         var store = new CampaignStore(dir);
         String id = store.create("Claims").getId();

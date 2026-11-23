@@ -59,9 +59,8 @@ the parent event's automatic adjustments. Private self downtime moves now use th
 move and deferred phases, including Armor overflow and zero-mark clears; target-recipient reactions still need a
 separate transaction. Active bindings and computed-pool dependencies restrict dispatch without dropping passive
 projections, and moves without relevant dependencies avoid the observer. An isolated host-owned clear also applies the holder's healing floor and reactions, including
-positive clears with no marks, and returns the actual clear and staged state. Source activation and live
-cross-character recovery are not yet connected. A sheet-backed recovery stage selects the affected
-holder's own sources and state even when another character initiated the parent event; it is not a live action.
+positive clears with no marks, and returns the actual clear and staged state. Live party recovery selects the
+affected holder's own sources and state even when another character initiated the rest.
 Existing computed actor pools are clamped before action descriptions, target eligibility and rule execution, with
 pool-dependent effects and stats reprojected. Sheet-backed holder reactions also reproject stats, derived effects
 and actor pools between relevant mutations, including holder-owned effect changes and their bound pools. They reject
@@ -69,8 +68,8 @@ changing sources, cross-holder effect cleanup, computed source pools, deferred i
 and unsettled conditional endings until those lifecycles are supported. Unstable dependencies are rejected, and
 inspecting an action does not write the adjusted pool to the sheet.
 An isolated party stage applies each host-supplied clear separately, preserving request order across different
-host-selected scopes and retaining each inspected membership and read version. A separate variant follows the
-host roster's character order and records it as an additional dependency. It is not connected to the rest workflow.
+host-selected scopes and retaining each inspected membership and read version. Live rest recovery follows the
+host roster's character order and records it as an additional dependency.
 Converted downtime buttons describe their host-validated move identity and rest restriction. With a format-2
 ruleset, the owner can choose a short or long self rest and its offered downtime moves in the sheet. The host
 checks the signed offer, resolves the complete rest, and saves its sheet, supported commands, reports and retry
@@ -83,38 +82,33 @@ the whole move succeeds. Repeated moves require applying each update to a privat
 request-local roster. The base Tend and Repair ally choices remain narrative, as in the legacy client: they
 report recovery for the ally to apply rather than selecting or changing another character. A shared fixture
 checks short and long variants in both engines. Staged completion derives signed recovery facts, runs benefits
-around the rest reset and advances rest counters; failures roll back that stage. Live multi-character rest
-transactions remain required.
+around the rest reset and advances rest counters; failures roll back that stage. Targeted ally moves remain
+unavailable in the live rest dialog.
 An internal coordinator composes these stages on private source and recipient sheets, reprojects each recipient
 after earlier moves, carries Fear through the rest, and advances each changed sheet once. Other commands needing
 intervening host settlement are rejected rather than evaluated against stale facts. The staged result identifies
 all recipient sheets read, including unchanged eligibility dependencies, and each inspected scope's membership.
 The transaction also retains any host-order dependencies; both can be rechecked from one roster snapshot per
-scope without loading sheets, but must be compared with the read versions inside the future atomic commit. A host-signed
+scope without loading sheets, and are compared with read sheet bytes inside the atomic commit. A host-signed
 snapshot offer and owner-bound retry receipt can reject stale or forged rest intents and replay committed results
 without rolling or staging recipients again. Offers expire on host restart; already committed receipts still replay.
-The live self-rest workflow authenticates owners and commits its sheet; multi-character rests still need to
-compare and commit all dependencies and provide post-outcome choices. Format-2 catalogs reject legacy
+The live rest workflow authenticates owners and commits party recoveries; targeted moves and post-outcome
+choices remain incomplete. Format-2 catalogs reject legacy
 client-supplied rests and downtime rerolls.
 Owner and DM sheet saves cannot change host-owned rest counters, and legacy damage snapshots retain those counters
 and the host's automation state. An unreadable or unrecognized catalog cannot silently enable legacy rest;
 the shipped format-1 catalogs retain their existing rest behavior.
 The shared ruleset defines the base self-recovery, preparation and project moves for staged tests, including
 tier-scaled recovery, protected HP and capped Hope. Narrative ally variants report recovery for manual
-application; rerolls, armor overflow and automated party recovery remain incomplete. A self move that requests
-additional party recovery is
-rejected until all affected recipients and their Armor-overflow reactions can be settled atomically, even if a
-later adjustment cancels the total. Ordered adjustment records retain each requested amount, source, rule,
-binding and compiled step; converted party-repair modifiers additionally identify the recipient scope and track
-without settling them yet. An indexed post-rest declaration can schedule a fixed recovery from a named initial
+application; rerolls and companion recovery remain incomplete. Ordered adjustment records retain each requested
+amount, source, rule, binding and compiled step; converted party-repair modifiers identify the recipient scope
+and track and settle recipient Armor-overflow reactions atomically. An indexed post-rest declaration can schedule a fixed recovery from a named initial
 sheet-source location for matching self moves even if its ordinary modifier was filtered or the source disappeared.
 Converted source-rest party repairs use the initial loadout and the legacy host's move matching; effect-carried
 rest blocks are not included. Nonpositive legacy integer requests are ignored and unsupported amounts are
-diagnosed. A private stage applies the ordered requests in host roster order after a completed rest, with each
-recipient's reactions and the final rest's table state. An internal-only coordinator variant shares recipient
-sheets between earlier targeted moves and these recoveries, retains their original dependencies, and rolls back
-the whole stage on failure. The ordinary guard also rejects scheduled requests that never produced a move
-adjustment. Targeted-move recipient reactions, interleaved ally passives and the live workflow remain unfinished.
+diagnosed. The live coordinator applies ordered requests in host roster order after the rest, with each
+recipient's reactions and the final table state, and rolls back the transaction on failure. Targeted-move
+recipient reactions and interleaved ally passives remain unfinished.
 Format-2 healing respects permanent HP and temporary locked HP on both the actor and targeted recipients;
 reports use the amount actually cleared.
 Converted scar gains and healing update the affected character's Hope capacity atomically. Gaining a scar

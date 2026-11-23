@@ -1515,7 +1515,7 @@ public final class AutomationHost {
         ArrayNode moveEvents = response.putArray("moveEvents");
         List<ObjectNode> completedMoves = settlePartyRecovery ? new ArrayList<>() : null;
         response.set("preparationEvent", prepared.path("event").deepCopy());
-        appendRestStage(prepared, actions, outbox, targeted || settlePartyRecovery);
+        appendRestStage(prepared, actions, outbox, targeted);
         for (JsonNode move : moves) {
             PartyTargets party = move.has("target") ? recipients.party() : null;
             RestTarget target = party == null ? null : new RestTarget(party, (ObjectNode) move.get("target"), recipients::reproject);
@@ -1525,16 +1525,21 @@ public final class AutomationHost {
             ObjectNode completedMove = RuleJson.object(result.response().get("event"), "/event").deepCopy();
             if (completedMoves != null) completedMoves.add(completedMove);
             moveEvents.add(completedMove);
-            appendRestStage(result.response(), actions, outbox, targeted || settlePartyRecovery);
+            appendRestStage(result.response(), actions, outbox, targeted);
             carryRestTable(stagedOrigin, result.response().required("event"));
             if (party != null) recipients.apply(party.updates());
             projection.state(working).put("revision", revision);
         }
         ObjectNode finished = completeRest(pack, working, stagedOrigin, progress, initial, completion, random);
-        appendRestStage(finished, actions, outbox, targeted || settlePartyRecovery);
+        appendRestStage(finished, actions, outbox, targeted);
         ObjectNode finalEvent = RuleJson.object(finished.get("event"), "/event");
         if (settlePartyRecovery) {
             ObjectNode recovery = stageRestPartyRecoveries(pack, sheet, finalEvent, completedMoves, recipients, random);
+            if (!recovery.path("clears").isEmpty())
+                for (JsonNode command : outbox)
+                    if ("effect.endElsewhere".equals(command.path("kind").asText()))
+                        throw new RuleRuntime.Unavailable("restCommand",
+                                "Single-holder effect cleanup must settle before party recovery.");
             appendRestStage(recovery, actions, outbox, true);
             response.set("partyRecoveries", recovery.path("clears").deepCopy());
             finalEvent = RuleJson.object(recovery.get("event"), "/event");
@@ -1671,6 +1676,14 @@ public final class AutomationHost {
     public RestTransaction stageOfferedRest(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request,
                                             String principalId, String sourceVersion, RandomGenerator random, RestRoster roster) {
         return stageRestReceipt(pack, sheet, origin, request, principalId, random, roster, sourceVersion, true, false);
+    }
+
+    /** Stages a signed rest and its ordered party recoveries in the same private transaction. */
+    public RestTransaction stageOfferedRestWithPartyRecovery(Pack pack, ObjectNode sheet, ObjectNode origin,
+                                                              ObjectNode request, String principalId,
+                                                              String sourceVersion, RandomGenerator random,
+                                                              RestRoster roster) {
+        return stageRestReceipt(pack, sheet, origin, request, principalId, random, roster, sourceVersion, true, true);
     }
 
     private RestTransaction stageRestReceipt(Pack pack, ObjectNode sheet, ObjectNode origin, ObjectNode request,

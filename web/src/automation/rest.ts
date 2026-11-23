@@ -51,6 +51,21 @@ async function submitRest(actorId: string, request: RestRequest): Promise<unknow
   return response.json();
 }
 
+function restReports(response: unknown): string[] {
+  const reports = actionReports(response);
+  if (!response || typeof response !== 'object' || Array.isArray(response)) return reports;
+  const recoveries = (response as Record<string, unknown>).partyRecoveries;
+  if (!Array.isArray(recoveries)) return reports;
+  for (const recovery of recoveries) {
+    if (!recovery || typeof recovery !== 'object') continue;
+    const { holderName, track, requested, cleared, label } = recovery as Record<string, unknown>;
+    if (typeof holderName === 'string' && typeof track === 'string' && typeof label === 'string'
+        && typeof requested === 'number' && typeof cleared === 'number')
+      reports.push(`${holderName} cleared ${cleared} ${track} (requested ${requested}; ${label}).`);
+  }
+  return reports;
+}
+
 /** Returns false only when the host explicitly uses the legacy rest workflow. */
 export async function openAutomationRestDialog(actorId: string, kind: RestKind,
                                                before: () => Promise<void>): Promise<boolean> {
@@ -175,7 +190,7 @@ export async function openAutomationRestDialog(actorId: string, kind: RestKind,
     cancel.disabled = true;
     go.textContent = CONTROL_TEXT.pending;
     void submitRest(actorId, retry).then(receipt => {
-      const reports = actionReports(receipt);
+      const reports = restReports(receipt);
       content.replaceChildren(el('p', { role: 'status' }, reports.length ? reports.join('\n') : 'Rest completed.'));
       actions.replaceChildren(cancel);
       cancel.textContent = 'Done';

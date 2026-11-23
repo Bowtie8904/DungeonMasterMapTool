@@ -2021,6 +2021,103 @@ class OnlineSessionServerTest {
         assertEquals(2, afterLong.at("/automationState/revision").asInt());
     }
 
+    private void installPartyRestRules(String fearOperation) throws Exception {
+        installRestRules();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ArrayNode definitions = ruleset.withObject("/automation").withArray("rules");
+        definitions.add(MAPPER.readTree("""
+                {"id":"share-repair","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.move.id"},"tend"]},
+                                  {"eq":[{"read":"event.move.ally"},false]}]},
+                 "do":[{"op":"plan.adjust","plan":"event.move","field":"allies","by":2,"label":"Shared repair",
+                        "partyRecovery":{"track":"armorTrack","scope":"activePlayerCharacters"}}],"ui":{}}
+                """));
+        definitions.add(MAPPER.readTree("""
+                {"id":"overflow","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"armorTrack"]},
+                                  {"eq":[{"read":"event.change"},"clear"]},
+                                  {"gt":[{"read":"event.requested"},
+                                         {"subtract":[{"read":"event.before.marked"},{"read":"event.after.marked"}]}]}]},
+                 "do":[{"op":"resource.gain","pool":"actor.hope","amount":1},
+                       {"op":"table.%s","resource":"fear","amount":1,"label":"Overflow"}],
+                 "ui":{"report":"Overflow for {actor.name}."}}
+                """.formatted(fearOperation)));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+    }
+
+    private void addRestParty() throws Exception {
+        for (String id : List.of("resting", "mira", "borin", "retired"))
+            campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId())
+                    .disabled("retired".equals(id)).build());
+        for (String id : List.of("resting", "mira", "borin", "retired")) {
+            int armor = "mira".equals(id) ? 1 : "resting".equals(id) || "retired".equals(id) ? 2 : 0;
+            store.saveSheet(campaign.getId(), id, """
+                    {"name":"%s","level":1,"hp":{"slots":6,"on":4},"stress":{"slots":6,"on":2},
+                     "armorTrack":{"slots":3,"on":%d},"hope":{"slots":6,"on":0}}
+                    """.formatted(id, armor));
+        }
+    }
+
+    @Test
+    void formatTwoRestCommitsPartyRecoveryAndRecipientReactionsOnce() throws Exception {
+        installPartyRestRules("gain");
+        addRestParty();
+        String owner = cookie(), retired = store.loadSheet(campaign.getId(), "retired");
+        int fear = campaign.getFear();
+        var described = restHttp(owner, "resting", "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode offer = MAPPER.readTree(described.body());
+        ObjectNode body = restRequest(offer, "shared-rest");
+        addRestMove((ObjectNode) body.path("request"), restDescriptor(offer.path("moves"), "rest-tend"));
+        var completed = restHttp(owner, "resting", null, body.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode receipt = MAPPER.readTree(completed.body());
+        assertEquals(List.of("mira", "borin"), receipt.path("partyRecoveries").findValuesAsText("holderId"));
+        assertEquals(List.of(1, 0), receipt.path("partyRecoveries").findValues("cleared").stream().map(JsonNode::asInt).toList());
+        assertEquals(fear + 2, campaign.getFear());
+        assertEquals(fear + 2, store.load(campaign.getId()).getFear());
+        for (String id : List.of("mira", "borin")) {
+            JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+            assertEquals(0, saved.at("/armorTrack/on").asInt());
+            assertEquals(1, saved.at("/hope/on").asInt());
+            assertEquals(1, saved.at("/automationState/revision").asInt());
+        }
+        assertEquals(retired, store.loadSheet(campaign.getId(), "retired"));
+        List<JsonNode> messages = store.historyTail(campaign.getId(), 100);
+        assertTrue(messages.stream().anyMatch(message -> message.path("text").asText().contains("mira cleared 1 armorTrack")));
+        assertTrue(messages.stream().anyMatch(message -> message.path("text").asText().contains("Overflow for borin.")));
+        int history = messages.size();
+        String mira = store.loadSheet(campaign.getId(), "mira"), borin = store.loadSheet(campaign.getId(), "borin");
+        campaign.actor("mira").setDisabled(true);
+        assertEquals(completed.body(), restHttp(owner, "resting", null, body.toString()).body());
+        assertEquals(mira, store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(borin, store.loadSheet(campaign.getId(), "borin"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        assertEquals(fear + 2, campaign.getFear());
+    }
+
+    @Test
+    void formatTwoRestRollsBackAllPartyRecoveryWhenAReactionFails() throws Exception {
+        installPartyRestRules("spend");
+        addRestParty();
+        campaign.setFear(1);
+        String owner = cookie();
+        Map<String, String> before = new java.util.LinkedHashMap<>();
+        for (String id : List.of("resting", "mira", "borin"))
+            before.put(id, store.loadSheet(campaign.getId(), id));
+        JsonNode offer = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode body = restRequest(offer, "failed-shared-rest");
+        addRestMove((ObjectNode) body.path("request"), restDescriptor(offer.path("moves"), "rest-tend"));
+        int history = store.historyTail(campaign.getId(), 100).size();
+        var rejected = restHttp(owner, "resting", null, body.toString());
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertTrue(rejected.body().contains("Fear"), rejected.body());
+        for (var entry : before.entrySet()) assertEquals(entry.getValue(), store.loadSheet(campaign.getId(), entry.getKey()));
+        assertEquals(1, campaign.getFear());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+    }
+
     @Test
     void formatTwoRestDoesNotFallBackWhenRulesAreBroken() throws Exception {
         installRestRules();

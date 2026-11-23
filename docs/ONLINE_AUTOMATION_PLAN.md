@@ -136,9 +136,9 @@ the live self-rest workflow; legacy effect locks still need conversion.
 The versioned `/api/automation/{version}/{actorId}/rest` endpoint offers and commits owner-only self rests.
 The host derives descriptors and facts, signs the offer, stages the complete rest, and atomically saves the sheet,
 supported commands, reports and retry receipt. The browser flushes pending edits and renders preparation, move
-and completion controls. Cross-holder moves and party recovery remain rejected; completion choices currently use
-pre-move availability and must be offered again after outcomes. Automatic preparation rolls are rejected during
-preview until interactive post-roll choices are supported.
+and completion controls. Authored party recovery now commits recipient sheets, reactions and reports with the
+rest. Targeted moves remain unoffered; completion choices use pre-move availability and must be offered again
+after outcomes. Automatic preparation rolls are rejected during preview until interactive post-roll choices exist.
 
 The live host rejects legacy client-supplied rests and downtime rerolls when any category declares format 2,
 including an incomplete pack. It cannot classify malformed, unreadable or unknown-version categories as legacy.
@@ -221,14 +221,14 @@ moves reproject earlier staged changes; every changed sheet advances once, and f
 Recipient sheets are loaded only when selected or needed for eligibility. It accepts ordered Fear changes,
 countdowns and already-applied limit refresh commands; a self-only rest can also emit single-holder cleanup.
 Other commands that could change facts read by later stages are rejected. The result separately identifies every
-recipient sheet read and its original host version, including unchanged sheets used by eligibility predicates;
-the eventual multi-character caller must compare their original stored bytes atomically with the changed sheets.
-The live self-rest workflow commits supported commands and reports; post-roll choices and multi-holder settlement
-remain necessary.
+recipient sheet read and its original host version, including unchanged sheets used by eligibility predicates.
+The live party-recovery workflow compares read sheet bytes and scope membership and host order under the store
+lock before journaling all changed sheets, Fear, reports and the retry receipt. Post-roll choices and additional
+multi-holder command settlement remain necessary.
 A staged rest also retains the sorted members of every inspected host scope, including unloaded characters,
 and rejects a membership change between moves. The rest result and its receipt wrapper also retain any host-order
-dependencies. The host can recheck membership and order from one roster snapshot per scope without hydrating
-sheets; the eventual commit must compare them and all read sheet bytes under the same lock or atomic transaction.
+dependencies. The live commit rechecks membership and order from one roster snapshot per scope and compares all
+read sheet bytes under the same store lock.
 Exact receipt replays return no recipient dependencies and do not reload scopes.
 A host-signed offer binds the owner principal, actor, session and other host event facts, rest kind, pack revision,
 source sheet revision and original stored-sheet version. A fresh request must present the offer before staging;
@@ -256,16 +256,14 @@ Reusing validation patterns and building diagnostic paths only on failure preser
 temporary allocations. In one opt-in, single-thread 32-idle-source private-rest sample, mean allocation fell
 from 38.78 to 27.30 MiB without reactions and from 38.70 to 25.15 MiB with one Armor reaction; timings varied
 substantially between runs. This is not a live persistence, concurrency or release benchmark.
-Targeted-move adjustments and deferred benefits settle actor reactions with the current recipient available; recipient mutations in those phases and failed nested reactions abort the staged move. The compiler also rejects recipient writes in these phases and explicit automatic costs. Targeted-button recipient reactions remain unresolved, and the ordinary whole-rest recovery guard stays in place.
-Converted `repairAllies` adjustments require party recovery and recipient track-change reactions, including
-Armor overflow. Until those transactions are implemented, a staged self move with a positive party-recovery
-request is rejected rather than silently omitting recipient changes, including when later adjustments cancel
-the total. `plan.adjust` records each requested and applied delta, before/after values, source instance, executing
+Targeted-move adjustments and deferred benefits settle actor reactions with the current recipient available; recipient mutations in those phases and failed nested reactions abort the staged move. The compiler also rejects recipient writes in these phases and explicit automatic costs. Targeted-button recipient reactions remain unresolved.
+Converted `repairAllies` adjustments use live party recovery and recipient track-change reactions, including
+Armor overflow. `plan.adjust` records each requested and applied delta, before/after values, source instance, executing
 rule and binding, phase and expanded step index in order, even when clamped. Nested reactions retain their own
 operation identities. A move adjustment may declare `partyRecovery: {track, scope}`; conversion uses
 `armorTrack` and `activePlayerCharacters` for `repairAllies`. The host copies this validated, authored metadata
 into the adjustment record, rather than deriving recovery mechanics from a client-supplied amount. The ordinary
-staged rest still rejects these requests. Narrative ally moves remain report-only.
+staging API without recovery still rejects these requests. Narrative ally moves remain report-only.
 A recovery may additionally declare `afterRest: {sourcePath, move}`. It must have a fixed positive integer
 `by` of at most 1,000, a literal label and exactly one automatic `downtime.move`/`downtime` binding, without a
 conditional step or use budget. The compiler indexes these declarations by move. For matching self moves the
@@ -274,8 +272,7 @@ rule's condition was false or the source subsequently disappeared. Its fixed amo
 against any recorded adjustment; `adjustmentIndex: -1` means no matching adjustment was recorded. Sources at
 other locations and ally moves do not schedule it. Converted top-level `repairAllies` declarations use `loadout`
 and bypass rest, target and effect filters just as the old host loop did; effect-carried rest blocks are not
-searched by that loop. Nonpositive legacy integers are ignored and unsupported amounts are diagnosed. The rest
-guard rejects a matching schedule even if its adjustment was gated out or its source was consumed.
+searched by that loop. Nonpositive legacy integers are ignored and unsupported amounts are diagnosed.
 The internal whole-rest ordering primitive validates recorded source, rule, binding and step against the initial
 sheet and compiled pack, then orders by source, rule, step and move instead of dispatch order. It accepts only
 private host-produced events; provenance does not authenticate client data. A separate party stage can use the
@@ -283,17 +280,14 @@ host roster's original character order rather than sorted IDs, recording both me
 before commit without loading sheets. Existing sorted targeting and recovery remain unchanged. A whole-rest
 recovery stage combines these primitives after a completed private rest, supplies each reaction with its
 originating move facts, carries the post-rest table state, and rejects attempts to change completed event facts.
-An internal-only coordinator variant shares its lazy recipient sheets with earlier targeted moves, so recovery
-reactions see prior changes and each affected sheet advances once. Its result and optional receipt retain every
-read version, membership and host-order dependency; exact retries do not reload recipients. Unannotated recovery,
-changed scopes and unsettled ally offers or other unsupported commands fail the entire private stage. Live
-multi-character rests still require recipient reactions, per-card ally passives, authenticated post-outcome
-choices, command settlement and atomic multi-sheet persistence.
+The live coordinator shares lazy recipient sheets across moves and recovery, advances each changed sheet once,
+and atomically checks its dependencies; exact retries do not reload recipients. Unannotated recovery, changed
+scopes and unsettled commands fail the whole rest. Targeted-move reactions, per-card ally passives,
+authenticated post-outcome choices and additional command settlement remain unfinished.
 The shared Daggerheart ruleset now supplies self-targeted short recovery (1d4 plus tier and move bonus), the two
 mutually exclusive preparation variants, long recovery and work on a project. Reports use the amount actually
 cleared or gained, including permanent and locked HP and capped Hope; a short rest needs a granted allowance for
-a long move. Narrative ally variants are available as reports; rerolls, armor overflow and companion recovery
-remain unfinished.
+a long move. Narrative ally variants are available as reports; rerolls and companion recovery remain unfinished.
 The sheet projection supplies permanent and temporary marked-HP floors to generic track clearing. The
 engine recomputes locks held in its effect list as operations run, so ending a lock before healing in the same
 action allows the newly recoverable HP to clear. Recipient healing uses the recipient's floor, and capacity
