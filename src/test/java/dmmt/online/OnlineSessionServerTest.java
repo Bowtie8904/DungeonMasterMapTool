@@ -1872,6 +1872,12 @@ class OnlineSessionServerTest {
         return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    private HttpResponse<String> basicCheckHttp(String cookie, String actorId, String kind, String trait) throws Exception {
+        return http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/automation/"
+                + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + "/" + actorId + "/check?kind=" + kind + "&trait=" + trait))
+                .header("Cookie", cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
+    }
+
     private HttpResponse<String> restHttp(String cookie, String actorId, String kind, String body) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/automation/"
                 + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + "/" + actorId + "/rest"
@@ -5315,6 +5321,108 @@ class OnlineSessionServerTest {
         assertEquals(200, applied.statusCode(), applied.body());
         assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "auto")).at("/hope/on").asInt());
         assertEquals(applied.body(), automationHttp(cookie, "auto", request).body());
+    }
+
+    @Test
+    void ordinaryChecksUseHostRollOptionsReactionsAndJournal() throws Exception {
+        installRestRules();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withArray("rules").addAll((ArrayNode) MAPPER.readTree("""
+                [
+                 {"id":"check-boost","bindings":[{"id":"use","event":"roll.prepare","surface":"roll","mode":"option","defaultOn":true}],
+                  "when":{"eq":[{"read":"event.check.kind"},"action"]},
+                  "costs":[{"op":"track.mark","track":"actor.stress","amount":1}],
+                  "do":[{"op":"roll.contribute","from":{"read":"event.roll"},"as":"boosted",
+                         "contribution":{"id":"bonus","kind":"flat","role":"modifier","label":"Boost","value":5}},
+                        {"op":"roll.publish","roll":{"read":"result.boosted"}}],
+                  "ui":{"label":"Boost"}},
+                 {"id":"check-block","bindings":[{"id":"use","event":"roll.prepare","surface":"roll","mode":"automatic"}],
+                  "when":{"and":[{"eq":[{"read":"event.check.kind"},"reaction"]},
+                                  {"eq":[{"read":"event.table.fear"},0]}]},
+                  "do":[{"op":"event.block","reason":"No reactions."}],"ui":{}},
+                 {"id":"check-reward","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.check.kind"},"action"]},
+                  "do":[{"op":"table.gain","resource":"fear","amount":1,"label":"Reward"}],"ui":{}},
+                 {"id":"check-result","bindings":[{"id":"use","event":"roll.finished","surface":"chat","mode":"button"}],
+                  "when":{"eq":[{"read":"event.check.kind"},"action"]},
+                  "ui":{"label":"Use action result"}}
+                ]
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        campaign.getActors().add(Campaign.Actor.builder().id("roller").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "roller", """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":1},"stress":{"slots":6,"on":0},
+                 "hope":{"slots":6,"on":1},"armorTrack":{"slots":3,"on":0},
+                 "traits":[{"name":"Agility","mod":3},{"name":"Finesse","mod":-1}]}
+                """);
+        String owner = cookie(), other = allyCookie("check-viewer");
+        campaign.setFear(1);
+        String initial = store.loadSheet(campaign.getId(), "roller");
+        int history = store.historyTail(campaign.getId(), 100).size();
+        var offerResponse = basicCheckHttp(owner, "roller", "action", "Agility");
+        assertEquals(200, offerResponse.statusCode(), offerResponse.body());
+        JsonNode offer = MAPPER.readTree(offerResponse.body());
+        assertEquals("Agility Action", offer.path("label").asText());
+        JsonNode boost = restDescriptor(offer.path("options"), "check-boost");
+        assertTrue(boost.path("defaultOn").asBoolean());
+        assertTrue(boost.path("available").asBoolean());
+        assertEquals(403, basicCheckHttp(other, "roller", "action", "Agility").statusCode());
+        assertEquals(400, basicCheckHttp(owner, "roller", "action", "Bogus").statusCode());
+        var wrongVersion = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port
+                        + "/api/automation/0/roller/check?kind=action&trait=Agility"))
+                .header("Cookie", owner).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(409, wrongVersion.statusCode());
+        assertEquals("automationCompatibilityMismatch", MAPPER.readTree(wrongVersion.body()).path("code").asText());
+        assertEquals(initial, store.loadSheet(campaign.getId(), "roller"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+
+        ObjectNode request = MAPPER.createObjectNode();
+        ObjectNode intent = request.putObject("request").put("requestId", "ordinary-action")
+                .put("expectedRevision", offer.path("revision").asLong());
+        intent.putObject("checkRoll").put("kind", "action").put("trait", "Agility");
+        intent.putArray("selections").add(restSelection(boost));
+        assertEquals(403, automationHttp(other, "roller", request.toString()).statusCode());
+        ObjectNode forged = request.deepCopy();
+        ((ObjectNode) forged.at("/request/checkRoll")).put("total", 100);
+        assertEquals(400, automationHttp(owner, "roller", forged.toString()).statusCode());
+        diceSeed(0);
+        var rolled = automationHttp(owner, "roller", request.toString());
+        assertEquals(200, rolled.statusCode(), rolled.body());
+        JsonNode receipt = MAPPER.readTree(rolled.body());
+        JsonNode event = receipt.path("event");
+        assertEquals("roll.finished", event.path("type").asText());
+        assertEquals("action", event.at("/check/kind").asText());
+        assertEquals("Agility", event.at("/check/trait").asText());
+        assertEquals(14, event.at("/check/total").asInt());
+        assertEquals(2, event.at("/table/fear").asInt());
+        assertFalse(event.at("/check/outcome").isMissingNode());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "roller")).at("/stress/on").asInt());
+        assertEquals(2, campaign.getFear());
+        assertEquals(List.of("Use action result"), receipt.path("resultActions").findValuesAsText("label"));
+        assertEquals(event, store.historyTail(campaign.getId(), 100).getLast().path("automationEvent"));
+        int afterHistory = store.historyTail(campaign.getId(), 100).size();
+        assertEquals(rolled.body(), automationHttp(owner, "roller", request.toString()).body());
+        assertEquals(afterHistory, store.historyTail(campaign.getId(), 100).size());
+
+        campaign.setFear(0);
+        ObjectNode reaction = MAPPER.createObjectNode();
+        ObjectNode next = reaction.putObject("request").put("requestId", "ordinary-reaction").put("expectedRevision", 1);
+        next.putObject("checkRoll").put("kind", "reaction").put("trait", "Finesse");
+        next.putArray("selections");
+        String saved = store.loadSheet(campaign.getId(), "roller");
+        var blocked = automationHttp(owner, "roller", reaction.toString());
+        assertEquals(409, blocked.statusCode(), blocked.body());
+        assertTrue(blocked.body().contains("No reactions."));
+        assertEquals(saved, store.loadSheet(campaign.getId(), "roller"));
+        assertEquals(afterHistory, store.historyTail(campaign.getId(), 100).size());
+        campaign.setFear(1);
+        JsonNode reactionOffer = MAPPER.readTree(basicCheckHttp(owner, "roller", "reaction", "Finesse").body());
+        assertTrue(reactionOffer.path("options").isEmpty());
+        var resolved = automationHttp(owner, "roller", reaction.toString());
+        assertEquals(200, resolved.statusCode(), resolved.body());
+        assertEquals("reaction", MAPPER.readTree(resolved.body()).at("/event/check/kind").asText());
+        assertEquals("Finesse", MAPPER.readTree(resolved.body()).at("/event/check/trait").asText());
     }
 
     @Test

@@ -36,6 +36,7 @@ import { openCompanionMancer, openLevelUp, openMancer, openTransformation } from
 import { companionAvailable, companionFeatures, companionRules, companionWeapon, hasCompanionTraining, markCompanionDamage, resolveBonded } from './companion';
 import { rich, inline } from './rich';
 import { automationPanel } from '../automation/panel';
+import { openAutomationCheckDialog } from '../automation/check';
 import { openAutomationRestDialog } from '../automation/rest';
 import { MAX_LEVEL, replaceAncestry } from './rules';
 import { chooseAncestryFeature } from './ancestry-choice';
@@ -129,6 +130,7 @@ export interface SheetViewOptions {
   onRest?: (rest: NonNullable<import('../api').FeatureRequest['rest']>,
     rebase?: (sheet: CharacterSheet) => NonNullable<import('../api').FeatureRequest['rest']>) => Promise<void>;
   beforeAutomationRest?: () => Promise<void>;
+  beforeAutomationRoll?: () => Promise<void>;
   restActors?: () => import('../protocol').Actor[];
   /** Posts a short message (action results) to the shared chat. */
   onLog?: (text: string, rollSource?: RollSource, restDice?: import('./rest').RestDie[], incomingDamage?: boolean) => void;
@@ -497,10 +499,17 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     return sent;
   };
   const rollDuality = (label: string, trait: TraitName | null, targets: string[], weapon?: Weapon, rollSource?: RollSource, difficulty?: number) => {
-    const allTargets = [...targets, 'action', ...(weapon?.profile ? [`weaponProfile:${weapon.profile}`] : [])];
-    const bonus = rollBonus(c, allTargets, weapon, false);
-    const send = sendRoll(allTargets.join(','), weapon?.name, rollSource ?? (targets.includes('companion') ? rollSourceFor(c, 'companion') : weapon ? rollSourceFor(c, `weapon:${weapon.name}`) : undefined));
-    openRollDialog(root, c, label, trait ? traitContributions(c, trait) : [], bonus, request => send({ ...request, ...(difficulty === undefined ? {} : { difficulty }) }), () => { consumeBonus(c, bonus); render(); }, allTargets, undefined, undefined, weapon, false, undefined, undefined, undefined, undefined, 0, undefined, undefined, opts.supportsDomainCardAutomation);
+    const legacy = () => {
+      const allTargets = [...targets, 'action', ...(weapon?.profile ? [`weaponProfile:${weapon.profile}`] : [])];
+      const bonus = rollBonus(c, allTargets, weapon, false);
+      const send = sendRoll(allTargets.join(','), weapon?.name, rollSource ?? (targets.includes('companion') ? rollSourceFor(c, 'companion') : weapon ? rollSourceFor(c, `weapon:${weapon.name}`) : undefined));
+      openRollDialog(root, c, label, trait ? traitContributions(c, trait) : [], bonus, request => send({ ...request, ...(difficulty === undefined ? {} : { difficulty }) }), () => { consumeBonus(c, bonus); render(); }, allTargets, undefined, undefined, weapon, false, undefined, undefined, undefined, undefined, 0, undefined, undefined, opts.supportsDomainCardAutomation);
+    };
+    const basic = !weapon && !rollSource && difficulty === undefined && targets.length === 1
+      && (targets[0] === 'reaction' || targets[0] === `trait:${trait}`);
+    if (!basic || !trait || !opts.actorId || !opts.beforeAutomationRoll) { legacy(); return; }
+    void openAutomationCheckDialog(opts.actorId, targets[0] === 'reaction' ? 'reaction' : 'action', trait, label, opts.beforeAutomationRoll)
+      .then(handled => { if (!handled) legacy(); });
   };
   if (opts.bus) opts.bus.reactionRoll = (label, trait) => {
     rollDuality(label, trait, ['reaction']);

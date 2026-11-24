@@ -15,8 +15,17 @@ Start with the [Deathrun and homebrew example](#example-2-deathrun-and-a-mechani
 authenticated request with an absent or different version receives a 409 with both versions; it cannot read
 actions or mutate a sheet. The browser does not fall back to the unversioned endpoint, and an older host that
 lacks the versioned route is treated as unavailable for optional action descriptions. This adds no request to a
-roll and leaves existing format-1 gameplay and DM Link unchanged. It does not negotiate all sheet and gameplay
-traffic; that remains a cutover prerequisite.
+profile roll and leaves existing format-1 gameplay and DM Link unchanged. Ordinary checks fetch their own
+pre-roll offer. This does not negotiate all sheet and gameplay traffic; that remains a cutover prerequisite.
+
+**Ordinary checks (format 2).** Trait tiles and prompted reactions fetch an owner-only
+`GET /api/automation/{version}/{actorId}/check?kind=action|reaction&trait=...` offer, then submit
+`request.checkRoll` with the selected host-described options. The host derives the profile and roll facts,
+enforces prepare blocks, runs automatic finished reactions, journals the result and publishes it to chat.
+Pending sheet edits are flushed first; an uncertain submission retries the same intent. Format-1 hosts keep
+the legacy dialog. Core manual advantage, Experience costs and the action/reaction switch still need generic
+ruleset controls; other non-profile roll origins are not yet wired. Prompt text is shown in the dialog but
+the committed reaction currently uses the host's generic label.
 
 **Profile rolls (format 2).** The automation endpoint accepts an owner-only `request.profileRoll` with
 `sourceInstanceId`, `profileId` and `kind` (`attack`, `damage`, `action`, `reaction` or `spellcast`);

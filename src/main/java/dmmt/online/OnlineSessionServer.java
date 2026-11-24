@@ -342,6 +342,7 @@ public final class OnlineSessionServer {
         javalin.post("/api/automation/{id}", this::handleUnversionedAutomation);
         javalin.get("/api/automation/{version}/{id}", ctx -> withSheetOperation(ctx, this::handleAutomationDescribe));
         javalin.post("/api/automation/{version}/{id}", ctx -> withSheetOperation(ctx, this::handleAutomationExecute));
+        javalin.get("/api/automation/{version}/{id}/check", ctx -> withSheetOperation(ctx, this::handleAutomationCheckDescribe));
         javalin.get("/api/automation/{version}/{id}/rest", ctx -> withSheetOperation(ctx, this::handleRestDescribe));
         javalin.post("/api/automation/{version}/{id}/rest", ctx -> withSheetOperation(ctx, this::handleRestExecute));
         javalin.post("/api/automation/{version}/{id}/rest/choices", ctx -> withSheetOperation(ctx, this::handleRestChoices));
@@ -6105,6 +6106,36 @@ public final class OnlineSessionServer {
         }
     }
 
+    private synchronized void handleAutomationCheckDescribe(Context ctx) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null || !requireAutomationVersion(ctx)) return;
+        try {
+            Campaign.Actor actor = automationActor(ctx.pathParam("id"));
+            String relation = automationRelation(ctx, playerId, actor);
+            if (!"self".equals(relation)) throw new SecurityException("Only the character owner may roll a check.");
+            ctx.header("Cache-Control", "no-store");
+            if (!catalogs().requiresReplacementAutomation()) {
+                json(ctx, 200, MAPPER.createObjectNode().put("legacy", true));
+                return;
+            }
+            String original = store.loadSheet(campaign.getId(), actor.getId());
+            ObjectNode sheet = original == null ? MAPPER.createObjectNode() : hydrateSheet(actor.getId(), original);
+            ObjectNode response = automationHost.describeCheck(automationPack(), sheet, automationEvent("action.request", actor),
+                    ctx.queryParam("kind"), ctx.queryParam("trait"), relation);
+            json(ctx, 200, response);
+        } catch (dmmt.online.automation.AutomationHost.NotReady e) {
+            json(ctx, 409, errorBody("Automation is unavailable: " + e.getMessage()));
+        } catch (dmmt.online.automation.RuleRuntime.Unavailable e) {
+            json(ctx, 409, errorBody(e.getMessage()).put("code", e.code()));
+        } catch (SecurityException e) {
+            json(ctx, 403, errorBody(e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            json(ctx, 400, errorBody(e.getMessage()));
+        } catch (IOException | java.io.UncheckedIOException e) {
+            json(ctx, 500, errorBody("Could not read the roll offer or host catalogs."));
+        }
+    }
+
     private synchronized void handleAutomationExecute(Context ctx) {
         String playerId = requirePlayer(ctx);
         if (playerId == null || !requireAutomationVersion(ctx)) return;
@@ -6120,8 +6151,9 @@ public final class OnlineSessionServer {
             if (body.size() != 1 || !body.path("request").isObject())
                 throw new IllegalArgumentException("Invalid automation request.");
             if (!body.at("/request/selections").isArray() ||
-                    (body.at("/request/selections").isEmpty() && !body.path("request").has("profileRoll")))
-                throw new IllegalArgumentException("Select an automation action or a roll profile.");
+                    (body.at("/request/selections").isEmpty() && !body.path("request").has("profileRoll")
+                            && !body.path("request").has("checkRoll")))
+                throw new IllegalArgumentException("Select an automation action or a roll.");
             Campaign.Actor actor = automationActor(ctx.pathParam("id"));
             String original = store.loadSheet(campaign.getId(), actor.getId());
             ObjectNode sheet = original == null ? MAPPER.createObjectNode() : hydrateSheet(actor.getId(), original);
@@ -6147,7 +6179,8 @@ public final class OnlineSessionServer {
                 }
                 changed.values().forEach(staged -> staged.put("featureRevision", staged.path("featureRevision").asLong(0) + 1));
                 List<ObjectNode> messages = new ArrayList<>();
-                if (body.path("request").has("profileRoll") || response.path("resultPublished").asBoolean())
+                if (body.path("request").has("profileRoll") || body.path("request").has("checkRoll")
+                        || response.path("resultPublished").asBoolean())
                     messages.add(profileRollMessage(actor, response.path("event")));
                 messages.addAll(automationReports(actor, sourceNames, response));
                 commitAutomationResults(roster == null ? java.util.Collections.singletonMap(actor.getId(), original) : roster.originals,

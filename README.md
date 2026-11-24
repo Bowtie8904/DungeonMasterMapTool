@@ -182,6 +182,10 @@ Other-character effect profiles are not yet integrated. Matching passive and act
 contributions; weapon passives apply only to that weapon's profiles. Existing sheets still need the
 planned identity migration. Typed chat dice stay separate. Other roll origins are not yet integrated
 with these modifiers.
+With format-2 catalogs, ordinary trait rolls and prompted reactions also use host-described options and
+host-owned results; pending sheet edits are saved before the offer is loaded. Manual advantage, Experience
+costs and the normal-roll/reaction switch still need ruleset controls, and prompted reactions currently use
+the host's generic reaction label in chat.
 Choose any offered options and their inputs together before pressing the profile's roll button. If no options are available, the button rolls immediately. Opening the choices does not contact the host; **Retry** resends the same selection if the reply was lost. The converter now maps top-level domain-card spellcasts with a written difficulty to these profiles, including automatic rest-use limits. Uses are reserved before rolling and refunded on failure when the card consumes only on success; an exhausted profile is disabled. Nested spells and other feature-action roll origins are not yet converted to these profiles.
 Format-2 authors must put choices based on the new faces or total on a result action, not a pre-roll option. A pre-roll option can use previously stored dice and can change the new dice when it executes.
 

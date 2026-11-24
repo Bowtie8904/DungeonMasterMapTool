@@ -263,6 +263,44 @@ public final class AutomationHost {
         return ((ObjectNode) effect.get("profile")).deepCopy().put("id", EFFECT_PROFILE);
     }
 
+    /** Describes ordinary trait checks using the same pre-roll options as authored profiles. */
+    public ObjectNode describeCheck(Pack pack, ObjectNode sheet, ObjectNode origin, String kind, String trait,
+                                    String relation) {
+        if (!"self".equals(relation)) throw new SecurityException("Only the character owner may roll a check.");
+        ObjectNode profile = basicCheckProfile(RuleJson.JSON.createObjectNode().put("kind", kind).put("trait", trait));
+        ObjectNode working = sheet.deepCopy();
+        ObjectNode state = projection.state(working);
+        var sources = sources(pack, working);
+        var source = basicCheckSource(sources);
+        ObjectNode actor = actor(pack, working, state, origin, sources);
+        ObjectNode event = origin.deepCopy();
+        ProfileRoll.facts(event, source, profile, kind, actor, false);
+        ObjectNode result = RuleJson.JSON.createObjectNode().put("revision", revision(working))
+                .put("label", profile.path("label").asText());
+        result.set("options", RuleDispatcher.describeRollOptions(candidates(pack, sources, state, actor, event),
+                audience -> allowed(audience, relation)));
+        return result;
+    }
+
+    private static SheetProjection.SourceElement basicCheckSource(List<SheetProjection.SourceElement> sources) {
+        return sources.stream().filter(source -> RULESET_SOURCE.equals(source.instanceId())
+                        && RULESET_SOURCE.equals(source.sourceId())).findFirst()
+                .orElseThrow(() -> new NotReady("Ordinary checks require a shared ruleset."));
+    }
+
+    private static ObjectNode basicCheckProfile(JsonNode intent) {
+        RuleJson.fields(intent, "/request/checkRoll", "kind", "trait");
+        String kind = RuleJson.text(intent.get("kind"), "/request/checkRoll/kind");
+        String trait = RuleJson.text(intent.get("trait"), "/request/checkRoll/trait");
+        if (!Set.of("action", "reaction").contains(kind))
+            throw RuleJson.error("/request/checkRoll/kind", "Expected an action or reaction check.");
+        if (!Set.of("Agility", "Strength", "Finesse", "Instinct", "Presence", "Knowledge").contains(trait))
+            throw RuleJson.error("/request/checkRoll/trait", "Expected a character trait.");
+        return RuleJson.JSON.createObjectNode().put("id", "basic.check")
+                .put("label", trait + ("reaction".equals(kind) ? " Reaction" : " Action"))
+                .put("rollKind", kind).put("trait", trait);
+    }
+
     /**
      * Executes selected bindings plus automatic reactions for {@code event}. Repeated request IDs return the journaled
      * response without running again. The sheet is changed in place only on success.
@@ -281,8 +319,10 @@ public final class AutomationHost {
                               String principalId, RandomGenerator random, PartyTargets party) {
         relation(relation);
         if (principalId == null || principalId.isBlank()) throw new IllegalArgumentException("Missing automation principal.");
-        RuleJson.fields(request, "/request", "requestId", "expectedRevision", "selections", "profileRoll", "target", "resultId");
+        RuleJson.fields(request, "/request", "requestId", "expectedRevision", "selections", "profileRoll", "checkRoll", "target", "resultId");
         RuleJson.checkTree(request, "/request", 0, new int[]{0});
+        if (request.has("checkRoll") && (request.has("profileRoll") || request.has("resultId") || request.has("target")))
+            throw RuleJson.error("/request/checkRoll", "Choose either a check or another action.");
         if (request.has("resultId")) {
             if (!"self".equals(relation)) throw new SecurityException("Only the character owner may use this roll result.");
             if (request.has("profileRoll") || request.path("selections").size() != 1)
@@ -292,8 +332,8 @@ public final class AutomationHost {
             throw new SecurityException("A scoped DM sheet grant cannot target other characters.");
         if (request.has("target") && (request.has("profileRoll") || request.path("selections").size() != 1))
             throw RuleJson.error("/request/target", "Choose a single target action.");
-        if (request.has("profileRoll") && !"self".equals(relation))
-            throw new SecurityException("Only the character owner may roll an attack profile.");
+        if ((request.has("profileRoll") || request.has("checkRoll")) && !"self".equals(relation))
+            throw new SecurityException("Only the character owner may make this roll.");
         String requestId = RuleJson.id(request.get("requestId"), "/request/requestId");
         String fingerprint = intentFingerprint(request);
         ObjectNode working = sheet.deepCopy();
@@ -305,7 +345,7 @@ public final class AutomationHost {
             throw new RuleRuntime.Unavailable("stale", "The character changed. Reopen this action.");
 
         ObjectNode response;
-        if (request.has("profileRoll")) {
+        if (request.has("profileRoll") || request.has("checkRoll")) {
             response = profileRoll(pack, working, state, event, request, random);
             offerResult(pack, working, response, principalId, null, null);
         } else if (request.has("resultId")) {
@@ -443,13 +483,15 @@ public final class AutomationHost {
 
     private ObjectNode profileRoll(Pack pack, ObjectNode working, ObjectNode state, ObjectNode origin,
                                    ObjectNode request, RandomGenerator random) {
-        JsonNode intent = request.get("profileRoll");
-        RuleJson.fields(intent, "/request/profileRoll", "sourceInstanceId", "profileId", "kind", "effectInstanceId");
-        String instance = RuleJson.id(intent.get("sourceInstanceId"), "/request/profileRoll/sourceInstanceId");
-        String profileId = RuleJson.id(intent.get("profileId"), "/request/profileRoll/profileId");
-        String kind = RuleJson.text(intent.get("kind"), "/request/profileRoll/kind");
+        boolean check = request.has("checkRoll");
+        JsonNode intent = request.get(check ? "checkRoll" : "profileRoll");
+        ObjectNode checkProfile = check ? basicCheckProfile(intent) : null;
+        if (!check) RuleJson.fields(intent, "/request/profileRoll", "sourceInstanceId", "profileId", "kind", "effectInstanceId");
+        String instance = check ? RULESET_SOURCE : RuleJson.id(intent.get("sourceInstanceId"), "/request/profileRoll/sourceInstanceId");
+        String profileId = check ? checkProfile.path("id").asText() : RuleJson.id(intent.get("profileId"), "/request/profileRoll/profileId");
+        String kind = RuleJson.text(intent.get("kind"), check ? "/request/checkRoll/kind" : "/request/profileRoll/kind");
         var sources = sources(pack, working);
-        var source = sources.stream().filter(item -> instance.equals(item.instanceId())).findFirst()
+        var source = check ? basicCheckSource(sources) : sources.stream().filter(item -> instance.equals(item.instanceId())).findFirst()
                 .orElseThrow(() -> new RuleRuntime.Unavailable("source", "This source is no longer active."));
         var program = pack.programs().get(source.sourceId());
         ObjectNode event = origin.deepCopy();
@@ -458,15 +500,15 @@ public final class AutomationHost {
         if (effectId != null) event.put("effectInstanceId", effectId);
         ActorProjection projected = projectActor(pack, working, state, event, sources, true);
         ObjectNode actor = projected.actor();
-        JsonNode profile = null;
+        JsonNode profile = checkProfile;
         ArrayNode declared = program == null ? RuleJson.JSON.createArrayNode() : program.profiles();
-        if (effectId != null) {
+        if (!check && effectId != null) {
             if (EFFECT_PROFILE.equals(profileId))
                 for (JsonNode effect : actor.path("effects"))
                     if (effectId.equals(effect.path("id").textValue())
                             && instance.equals(effect.path("sourceInstanceId").textValue()))
                         profile = effectProfile(pack, source, effect, actor.path("id").textValue());
-        } else {
+        } else if (!check) {
             if (equippedWeapon(working, source)) {
                 JsonNode base = ProfileRoll.weaponProfile(source, declared);
                 if (profileId.equals(base.path("id").asText())) profile = base;
