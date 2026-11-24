@@ -4418,6 +4418,116 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void targetedRestSettlesRecipientGrantsInAdjustmentAndDeferredSteps() throws Exception {
+        installRestRules();
+        Path consumablesFile = compendiumDir.resolve("consumables.json");
+        ObjectNode consumables = (ObjectNode) MAPPER.readTree(consumablesFile.toFile());
+        consumables.withArray("entries").addObject().put("id", "minor-mana-potion")
+                .put("name", "Minor Mana Potion").put("rarity", "Common").put("text", "A test potion.");
+        java.nio.file.Files.writeString(consumablesFile, consumables.toString());
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withArray("rules").addAll((ArrayNode) MAPPER.readTree("""
+                [
+                 {"id":"potion-care","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"button",
+                    "restMove":{"id":"potion-care","kind":"short","ally":true},
+                    "targetSelection":{"cardinality":"one","scope":"activeCharacters","excludeSource":true}}],
+                  "do":[{"op":"track.clear","track":"recipient.hp","amount":1}],
+                  "ui":{"label":"Give care"}},
+                 {"id":"potion-direct","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"button",
+                    "restMove":{"id":"potion-direct","kind":"short","ally":true},
+                    "targetSelection":{"cardinality":"one","scope":"activeCharacters","excludeSource":true}}],
+                  "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
+                         "quantity":1,"to":"recipient","label":"Direct potion"},
+                        {"op":"track.clear","track":"recipient.hp","amount":1},
+                        {"op":"value","value":{"size":{"read":"recipient.inventory"}},"as":"count"}],
+                  "ui":{"label":"Give directly","report":"Directly gave {result.count} supplies to {recipient.name}."}},
+                 {"id":"potion-before","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.move.id"},"potion-care"]},
+                  "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
+                         "quantity":1,"to":"recipient","tag":"foraged","max":3,"scope":"party","label":"First potion"}],
+                  "after":{"do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-mana-potion",
+                                  "quantity":1,"to":"recipient","label":"Second potion"},
+                                 {"op":"track.clear","track":"recipient.stress","amount":1},
+                                 {"op":"value","value":{"size":{"read":"recipient.inventory"}},"as":"count"}],
+                           "report":"The ally has {result.count} supplies."},
+                  "ui":{}},
+                 {"id":"potion-fail","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"option"}],
+                  "when":{"eq":[{"read":"event.move.id"},"potion-care"]},
+                  "after":{"costs":[{"op":"resource.spend","pool":"actor.hope","amount":6}]},
+                  "ui":{"label":"Unaffordable care"}},
+                 {"id":"potion-watch","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                  "when":{"and":[{"eq":[{"read":"actor.name"},"mira"]},
+                                   {"or":[{"eq":[{"read":"event.track"},"hp"]},
+                                          {"eq":[{"read":"event.track"},"stress"]}]},
+                                   {"gt":[{"size":{"read":"actor.inventory"}},0]}]},
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1},
+                        {"op":"value","value":{"size":{"read":"actor.inventory"}},"as":"count"}],
+                  "ui":{"report":"Saw {result.count} supplies for {actor.name}."}}
+                ]
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        addRestParty();
+        String owner = cookie();
+        var described = restHttp(owner, "resting", "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode rest = MAPPER.readTree(described.body());
+        ObjectNode failing = restRequest(rest, "failed-potion-care");
+        ObjectNode failingMove = targetRestMove(failing, rest, "potion-care", "mira");
+        failingMove.withArray("options").add(restSelection(restDescriptor(
+                restDescriptor(rest.path("moves"), "potion-care").path("options"), "potion-fail")));
+        String beforeSource = store.loadSheet(campaign.getId(), "resting");
+        String beforeRecipient = store.loadSheet(campaign.getId(), "mira");
+        int history = store.historyTail(campaign.getId(), 100).size();
+        var rejected = restHttp(owner, "resting", null, failing.toString());
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertEquals(beforeSource, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(beforeRecipient, store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+
+        ObjectNode stale = restRequest(rest, "stale-potion-care");
+        targetRestMove(stale, rest, "potion-care", "mira");
+        var first = restChoiceHttp(owner, "resting", "choices", stale);
+        assertEquals(200, first.statusCode(), first.body());
+        ObjectNode advance = MAPPER.createObjectNode().put("requestId", "stale-potion-care")
+                .put("choiceVersion", MAPPER.readTree(first.body()).path("choiceVersion").asText());
+        advance.putArray("selections");
+        var second = restChoiceHttp(owner, "resting", "choices", advance);
+        assertEquals(200, second.statusCode(), second.body());
+        String beforeOther = store.loadSheet(campaign.getId(), "borin");
+        ObjectNode changedOther = (ObjectNode) MAPPER.readTree(beforeOther);
+        changedOther.put("gold", 1);
+        store.saveSheet(campaign.getId(), "borin", changedOther.toString());
+        ObjectNode complete = MAPPER.createObjectNode()
+                .put("choiceVersion", MAPPER.readTree(second.body()).path("choiceVersion").asText());
+        complete.set("request", stale.path("request").deepCopy());
+        var staleResult = restChoiceHttp(owner, "resting", "complete", complete);
+        assertEquals(409, staleResult.statusCode(), staleResult.body());
+        assertEquals(beforeSource, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(beforeRecipient, store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        store.saveSheet(campaign.getId(), "borin", beforeOther);
+
+        ObjectNode request = restRequest(rest, "potion-care");
+        targetRestMove(request, rest, "potion-care", "mira");
+        targetRestMove(request, rest, "potion-direct", "borin");
+        var completed = restHttp(owner, "resting", null, request.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        List<String> reports = MAPPER.readTree(completed.body()).path("actions").findValuesAsText("report");
+        assertTrue(reports.contains("Saw 1 supplies for mira."), reports.toString());
+        assertTrue(reports.contains("Saw 2 supplies for mira."), reports.toString());
+        assertTrue(reports.contains("The ally has 2 supplies."), reports.toString());
+        assertTrue(reports.contains("Directly gave 1 supplies to borin."), reports.toString());
+        JsonNode savedRecipient = MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(2, savedRecipient.path("inventory").size());
+        assertEquals(2, savedRecipient.at("/hope/on").asInt());
+        assertEquals(1, savedRecipient.at("/automationState/revision").asInt());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "borin")).path("inventory").size());
+        assertEquals(completed.body(), restHttp(owner, "resting", null, request.toString()).body());
+        assertEquals(savedRecipient, MAPPER.readTree(store.loadSheet(campaign.getId(), "mira")));
+    }
+
+    @Test
     void targetedRestSettlesAdjustmentAndDeferredEffectLifecycles() throws Exception {
         installRestRules();
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");

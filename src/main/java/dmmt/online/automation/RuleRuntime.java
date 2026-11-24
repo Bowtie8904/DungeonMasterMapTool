@@ -407,7 +407,9 @@ public final class RuleRuntime {
                         "A later operation cannot use inventory before its grant has been settled.");
             if (step.has("if") && !RuleExpression.bool(RuleExpression.evaluate(step.get("if"), next), "/do/if")) continue;
             operation(program, step, next, random, preview, published, rolls, observer);
-            pendingInventoryGrant |= "inventory.grant".equals(step.path("op").asText());
+            if ("inventory.grant".equals(step.path("op").asText()))
+                for (JsonNode command : next.path("outbox"))
+                    pendingInventoryGrant |= "inventory.grant".equals(command.path("kind").asText());
             if ("plan.adjust".equals(step.path("op").asText())) {
                 JsonNode plan = RuleExpression.read(next, step.path("plan").asText());
                 ArrayNode adjustments = (ArrayNode) plan.path("adjustments");
@@ -1640,7 +1642,8 @@ public final class RuleRuntime {
                 || "inventory.consume".equals(kind) || "roll.addPoolDie".equals(kind)
                 || "limits.refresh".equals(kind)
                 || "inventory.grant".equals(kind) || "damage.deal".equals(kind))) {
-            String target = kind.startsWith("pool.") || "roll.addPoolDie".equals(kind)
+            String target = "inventory.grant".equals(kind) ? op.path("to").asText("actor")
+                    : kind.startsWith("pool.") || "roll.addPoolDie".equals(kind)
                     ? op.path("owner").asText(null)
                     : "flag.set".equals(kind) ? op.path("flag").asText().split("\\.")[0] : op.path("target").asText(null);
             observer.mutated(context, kind, previousActor, target);

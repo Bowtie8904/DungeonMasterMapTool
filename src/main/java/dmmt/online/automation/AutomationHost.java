@@ -2617,6 +2617,16 @@ public final class AutomationHost {
                 this.source = source;
             }
 
+            private ObjectNode stagedSource(ObjectNode staged, Map<String, ObjectNode> contexts) {
+                ObjectNode stagedSource = source.deepCopy();
+                ObjectNode state = projection.state(stagedSource);
+                contexts.forEach((instance, context) -> storeSource(state, instance, context));
+                storeSource(state, staged.at("/source/instanceId").asText(), staged);
+                projection.write(stagedSource, projection.actor(stagedSource),
+                        persisted(RuleJson.object(staged.get("actor"), "/actor")));
+                return stagedSource;
+            }
+
             @Override
             public void holderChanged(ObjectNode staged, Map<String, ObjectNode> contexts) {
                 String id = participant.member.id();
@@ -2638,12 +2648,7 @@ public final class AutomationHost {
                 if (!effects.isEmpty()) {
                     if (roster.endEffectsElsewhere() == null)
                         throw new RuleRuntime.Unavailable("restCommand", "Single-holder effect cleanup requires a host character roster.");
-                    ObjectNode stagedSource = source.deepCopy();
-                    ObjectNode sourceState = projection.state(stagedSource);
-                    contexts.forEach((instance, context) -> storeSource(sourceState, instance, context));
-                    storeSource(sourceState, staged.at("/source/instanceId").asText(), staged);
-                    projection.write(stagedSource, projection.actor(stagedSource),
-                            persisted(RuleJson.object(staged.get("actor"), "/actor")));
+                    ObjectNode stagedSource = stagedSource(staged, contexts);
                     Map<String, ObjectNode> sheets = currentSheets();
                     sheets.put(sourceId, stagedSource);
                     sheets.put(id, working);
@@ -2667,6 +2672,26 @@ public final class AutomationHost {
                     staged.set("actor", actor(pack, source, originalState, event));
                 }
                 staged.set("recipient", recipientSnapshot(pack, working, event, id));
+            }
+
+            @Override
+            public void grantInventory(ObjectNode staged, Map<String, ObjectNode> contexts) {
+                if (roster.grantInventory() == null)
+                    throw new RuleRuntime.Unavailable("restCommand", "This rest requires inventory grant settlement.");
+                String id = participant.member.id();
+                ArrayNode pending = staged.withArray("/outbox");
+                int index = pending.size() - 1;
+                if (index < 0 || !"inventory.grant".equals(pending.path(index).path("kind").asText())
+                        || !id.equals(pending.path(index).path("holderId").asText()))
+                    throw RuleJson.error("/outbox", "The inventory grant does not match the selected recipient.");
+                projection.write(working, projection.actor(working),
+                        persisted(RuleJson.object(staged.get("recipient"), "/recipient")));
+                Map<String, ObjectNode> sheets = currentSheets();
+                sheets.put(sourceId, stagedSource(staged, contexts));
+                sheets.put(id, working);
+                roster.grantInventory().accept((ObjectNode) pending.get(index), sheets);
+                pending.remove(index);
+                staged.set("recipient", recipientSnapshot(pack, working, RuleJson.object(staged.get("event"), "/event"), id));
             }
 
             @Override

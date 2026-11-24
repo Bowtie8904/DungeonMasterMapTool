@@ -188,6 +188,7 @@ public final class RuleDispatcher {
     interface RecipientTrackReactions {
         void changed(ObjectNode staged, ObjectNode event, List<TargetActionResult> actions, List<ObjectNode> outbox);
         void holderChanged(ObjectNode staged, Map<String, ObjectNode> contexts);
+        void grantInventory(ObjectNode staged, Map<String, ObjectNode> contexts);
     }
 
     private static final class ReactionBudget {
@@ -658,6 +659,13 @@ public final class RuleDispatcher {
             public void mutated(ObjectNode staged, String operation, ObjectNode previousActor, String target) {
                 if (!"recipient".equals(target)) {
                     owner.mutated(staged, operation, previousActor, target);
+                    return;
+                }
+                if ("inventory.grant".equals(operation)) {
+                    if (budget.inventoryPending)
+                        throw new RuleRuntime.Unavailable("inventorySettlement",
+                                "A prior inventory grant must be settled first.");
+                    recipient.grantInventory(staged, budget.contexts);
                     return;
                 }
                 if (Set.of("effect.start", "effect.end", "effect.endLabeled", "pool.spend", "pool.gain",
@@ -1214,6 +1222,13 @@ public final class RuleDispatcher {
                         throw new RuleRuntime.Unavailable("inventorySettlement",
                                 "A later reaction requires the inventory grant to be settled first.");
                     if ("recipient".equals(target)) {
+                        if ("inventory.grant".equals(operation)) {
+                            if (budget.inventoryPending)
+                                throw new RuleRuntime.Unavailable("inventorySettlement",
+                                        "A prior inventory grant must be settled first.");
+                            recipientReactions.grantInventory(staged, workingContexts);
+                            return;
+                        }
                         if (Set.of("effect.start", "effect.end", "effect.endLabeled", "pool.spend", "pool.gain",
                                 "flag.set", "collection.add", "collection.remove").contains(operation)) {
                             if (previousActor != null) {

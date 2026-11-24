@@ -309,6 +309,9 @@ class RestTargetTest {
                 {"op":"flag.set","flag":"recipient.companionUnavailable","value":false}
                 """,
                 """
+                {"op":"inventory.grant","catalog":"items","entry":"ration","quantity":1,"label":"Ration","to":"recipient"}
+                """,
+                """
                 {"op":"pool.gain","pool":"charge","owner":"recipient","amount":0}
                 """);
         for (String phase : List.of("/automation/rules/0/do", "/automation/rules/0/after/do")) {
@@ -321,7 +324,8 @@ class RestTargetTest {
                 if (mutation.contains("\"track.clear\"") || mutation.contains("\"resource.gain\"")
                         || mutation.contains("\"track.capacity\"") || mutation.contains("\"effect.start\"")
                         || mutation.contains("\"effect.endLabeled\"") || mutation.contains("\"pool.gain\"")
-                        || mutation.contains("\"collection.add\"") || mutation.contains("\"flag.set\""))
+                        || mutation.contains("\"collection.add\"") || mutation.contains("\"flag.set\"")
+                        || mutation.contains("\"inventory.grant\""))
                     assertDoesNotThrow(() -> pack(invalid), phase + mutation);
                 else assertThrows(AutomationHost.NotReady.class, () -> pack(invalid), phase + mutation);
 
@@ -335,17 +339,12 @@ class RestTargetTest {
 
                 var failure = assertThrows(RuleRuntime.Unavailable.class,
                         () -> move(setup, setup.progress(), "heal", options(), party, target, 4), phase + mutation);
-                assertEquals("recipientReactions", failure.code(), phase + mutation);
+                assertEquals(mutation.contains("\"inventory.grant\"") ? "restCommand" : "recipientReactions",
+                        failure.code(), phase + mutation);
                 assertEquals(beforeSource, setup.source());
                 assertEquals(beforeRecipient, setup.recipient());
                 assertTrue(party.updates().isEmpty());
             }
-            ObjectNode unsupported = ruleset();
-            ((ArrayNode) unsupported.at(phase)).add(RuleJson.parse("""
-                    {"op":"inventory.grant","catalog":"items","entry":"ration",
-                     "quantity":1,"label":"Ration","to":"recipient"}
-                    """));
-            assertThrows(AutomationHost.NotReady.class, () -> pack(unsupported), phase);
         }
     }
 

@@ -169,7 +169,10 @@ rather than reordered.
 Converted companions use their current sheet Stress track as the source of their unmarked-slot pool. They return
 before long-rest moves and clear the owner's net Stress recovered by each completed move; unavailable companions
 do not recover during short rests. `CompanionRestRecoveryTest` and the live HTTP fixture cover this ordering.
-Single-action, claim and rest `inventory.grant` commands settle catalog-linked item/consumable stacks and actor or party caps atomically; rest grants follow earlier track reactions and are visible to deferred benefits, later moves and completion phases. Later inventory-dependent reads or track reactions within the granting action, and grants that require dynamic effect/pool projection, are rejected until ordered settlement is available.
+Single-action, claim and rest `inventory.grant` commands settle catalog-linked item/consumable stacks and actor
+or party caps atomically. During targeted moves, recipient grants settle immediately in adjustments, the
+selected move and deferred benefits, so later reads and reactions see the items. Actor grants with later
+inventory reads or track reactions in the same action, and unsupported dynamic projections, still reject.
 `limit.restore` creates a saved recipient-specific claim instead of changing a use immediately; its owner selects
 one current spent source limit through the generic chat controls. The claim ledger, sheet, report and exact-retry
 receipt commit atomically. Offers to characters without a player owner are rejected; more than 64 spent limits
@@ -179,8 +182,7 @@ selected moves and deferred benefits settle recipient track changes and effect s
 including label-based endings of other sources' effects and transfers from offline or disabled holders, so later
 operations and reactions see updated effects and effect-bound pools.
 Adjustments and deferred benefits can also change recipient actor pools, writable collections and boolean facts;
-later reactions use the updated recipient and active sources. Recipient inventory grants in these phases remain
-unsupported.
+later reactions use the updated recipient and active sources.
 The host provides target-specific move and adjustment descriptors when availability, labels or inputs depend on
 an ally; the browser switches them with the recipient and the transaction rechecks the choices. Before selection,
 recipient-dependent text uses `...`, and a move is enabled when at least one offered recipient can use it.
