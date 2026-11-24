@@ -311,6 +311,10 @@ public final class RuleCompiler {
         /** Features granted alongside this source ({@code features}, {@code display}), or {@code null}. Sheet metadata only. */
         public ObjectNode grants() { return grants == null ? null : grants.deepCopy(); }
         private Program withGrants(ObjectNode declaration) { grants = declaration == null ? null : declaration.deepCopy(); return this; }
+        private ObjectNode entitlements;
+        /** Named whole-number sheet entitlements ({@code id -> count}) this source grants, or {@code null}. Sheet metadata only. */
+        public ObjectNode entitlements() { return entitlements == null ? null : entitlements.deepCopy(); }
+        private Program withEntitlements(ObjectNode declaration) { entitlements = declaration == null ? null : declaration.deepCopy(); return this; }
 
         /**
          * Reasons this source cannot be attached to the described gear, in declaration order; empty when it may attach.
@@ -365,8 +369,9 @@ public final class RuleCompiler {
     static Program compileWithRecipes(String sourceId, JsonNode automation, Map<String, ObjectNode> recipes) {
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(sourceId), "/sourceId");
         RuleJson.checkTree(automation, "/automation", 0, new int[]{0});
-        RuleJson.fields(automation, "/automation", "state", "limits", "pools", "effects", "modifiers", "profiles", "rules", "attachment", "grants", "limitOverrides");
+        RuleJson.fields(automation, "/automation", "state", "limits", "pools", "effects", "modifiers", "profiles", "rules",         "attachment", "grants", "entitlements", "limitOverrides");
         ObjectNode grants = automation.has("grants") ? grants(automation.get("grants")) : null;
+                ObjectNode entitlements = automation.has("entitlements") ? entitlements(automation.get("entitlements")) : null;
         ArrayNode limitOverrides = automation.has("limitOverrides") ? limitOverrides(automation.get("limitOverrides")) : RuleJson.JSON.createArrayNode();
         ObjectNode attachment = automation.has("attachment") ? attachment(automation.get("attachment")) : null;
         ObjectNode state = automation.has("state") ? RuleJson.object(automation.get("state"), "/automation/state") : RuleJson.JSON.createObjectNode();
@@ -420,8 +425,8 @@ public final class RuleCompiler {
         JsonNode definitions = automation.path("rules");
         boolean derived = false;
         for (JsonNode effect : effects) derived |= effect.has("while");
-        if (definitions.isMissingNode() && (!modifiers.isEmpty() || !pools.isEmpty() || !profiles.isEmpty() || attachment != null || grants != null || derived || !limitOverrides.isEmpty()))
-            return new Program(sourceId, decl, modifiers, Map.of()).withProfiles(profiles).withAttachment(attachment).withGrants(grants).withLimitOverrides(limitOverrides);
+        if (definitions.isMissingNode() && (!modifiers.isEmpty() || !pools.isEmpty() || !profiles.isEmpty() || attachment != null || grants != null || entitlements != null || derived || !limitOverrides.isEmpty()))
+            return new Program(sourceId, decl, modifiers, Map.of()).withProfiles(profiles).withAttachment(attachment).withGrants(grants).withEntitlements(entitlements).withLimitOverrides(limitOverrides);
         if (!definitions.isArray() || definitions.isEmpty() || definitions.size() > 256)
             throw RuleJson.error("/automation/rules", "Expected 1-256 rules (or only passive modifiers, pools, profiles, derived effects, grants and an attachment).");
         Map<String, ObjectNode> expanded = new LinkedHashMap<>();
@@ -457,7 +462,7 @@ public final class RuleCompiler {
                 if ("claim.offer".equals(operation.path("op").asText()) && !claimGroups.contains(operation.path("group").asText()))
                     throw RuleJson.error("/automation/rules/" + rule.path("id").asText() + "/do",
                             "A claim offer must name a claim.accept chat group declared by this source: " + operation.path("group").asText());
-        return new Program(sourceId, decl, modifiers, expanded).withProfiles(profiles).withAttachment(attachment).withGrants(grants).withLimitOverrides(limitOverrides);
+        return new Program(sourceId, decl, modifiers, expanded).withProfiles(profiles).withAttachment(attachment).withGrants(grants).withEntitlements(entitlements).withLimitOverrides(limitOverrides);
     }
 
     /** Raises another sheet feature's use limit while this source is present: {@code [{feature, limit, max}]}. */
@@ -485,6 +490,18 @@ public final class RuleCompiler {
             if (!names.add(RuleJson.text(features.get(i), path + "/features/" + i))) throw RuleJson.error(path + "/features/" + i, "Duplicate feature name.");
         if (declaration.has("display") && !Set.of("grouped", "separate").contains(declaration.path("display").asText()))
             throw RuleJson.error(path + "/display", "Expected grouped or separate.");
+        return (ObjectNode) declaration.deepCopy();
+    }
+
+    /** Sheet metadata: named counts (1-16) of choices the character gains from this source, such as companion training options. */
+    private static ObjectNode entitlements(JsonNode declaration) {
+        String path = "/automation/entitlements";
+        if (!declaration.isObject() || declaration.isEmpty() || declaration.size() > 16)
+            throw RuleJson.error(path, "Expected 1-16 entitlements.");
+        declaration.fieldNames().forEachRemaining(id -> {
+            RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(id), path + "/" + id);
+            RuleJson.integer(declaration.get(id), path + "/" + id, 1, 16);
+        });
         return (ObjectNode) declaration.deepCopy();
     }
 

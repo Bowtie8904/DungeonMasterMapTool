@@ -1245,7 +1245,7 @@ class LegacyCatalogConverterTest {
                            assertTrue(pet.at("/pools/companion-stress-slots/max").toString().contains("actor.companionStress.capacity"), pet.toString());
                            assertTrue(pet.path("rules").toString().contains("downtime.completed"), pet.toString());
         assertTrue(pet.at("/pools").has("companion-armored") && !pet.at("/pools").has("companion-resilient"), pet.toString());
-        String loyal = block(result, 1).toString();
+        assertEquals(1, pet.at("/entitlements/companionTraining").asInt(), pet.toString());        String loyal = block(result, 1).toString();
         assertTrue(loyal.contains("companion-stress-slots") && loyal.contains("companion-armored"), loyal);
         for (int i = 0; i < 2; i++) assertNotNull(program(result, i));
     }

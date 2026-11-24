@@ -177,6 +177,18 @@ class EffectRuntimeTest {
     }
 
     @Test
+    void entitlementsAreRulelessSheetMetadataWithBoundedCounts() throws Exception {
+        ObjectNode recipes = fixture("rewrite/recipes");
+        RuleCompiler.Program program = RuleCompiler.compile("features:training",
+                RuleJson.parse("{\"entitlements\":{\"familiarSlots\":2,\"mountTraining\":1}}"), recipes);
+        assertEquals(2, program.entitlements().path("familiarSlots").asInt());
+        assertEquals(1, program.entitlements().path("mountTraining").asInt());
+        assertThrows(IllegalArgumentException.class, () -> RuleCompiler.compile("features:x", RuleJson.parse("{\"entitlements\":{\"a\":0}}"), recipes));
+        assertThrows(IllegalArgumentException.class, () -> RuleCompiler.compile("features:x", RuleJson.parse("{\"entitlements\":{\"a\":\"two\"}}"), recipes));
+        assertThrows(IllegalArgumentException.class, () -> RuleCompiler.compile("features:x", RuleJson.parse("{\"entitlements\":{}}"), recipes));
+    }
+
+    @Test
     void derivedEffectsFollowTheirConditionAndExclusiveGroupsReplaceAcrossSources() throws Exception {
         String rules = """
                 {"effects":{

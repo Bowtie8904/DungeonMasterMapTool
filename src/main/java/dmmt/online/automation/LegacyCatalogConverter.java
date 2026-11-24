@@ -291,6 +291,7 @@ public final class LegacyCatalogConverter {
         if (legacy.has("companion")) companion(legacy.get("companion"), path + "/companion", p, pools.local(), lifecycle);
         if (legacy.has("companionTraining") && (!legacy.path("companionTraining").isInt() || legacy.path("companionTraining").asInt() < 1))
             p.add(path + "/companionTraining", "Expected a positive whole number of training options.");
+        else if (legacy.has("companionTraining")) out.putObject("entitlements").put("companionTraining", legacy.get("companionTraining").asInt());
         ArrayNode passive = RuleJson.JSON.createArrayNode();
         for (String family : List.of("modifiers", "conditionalModifiers")) {
             JsonNode list = legacy.path(family);
