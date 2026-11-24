@@ -2811,6 +2811,7 @@ public final class AutomationHost {
                 root.set("actor", actor);
                 root.set("event", event.deepCopy());
                 ObjectNode projected = ownerProjection.project(root, contexts, "track.changed", null, "actor");
+                contexts.forEach((instance, context) -> storeSource(state, instance, context));
                 projection.write(working, projection.actor(working), persisted(projected));
                 candidates = candidates(pack, sources, state, projected, event);
                 if (!candidates.isEmpty()) {

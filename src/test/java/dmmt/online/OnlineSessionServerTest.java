@@ -3808,6 +3808,33 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void allyRecoveryClampsComputedSourcePoolsWithoutTrackListeners() throws Exception {
+        installRestRules();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").putObject("pools").putObject("tokens")
+                .put("kind", "number").put("scope", "source").put("initial", 4)
+                .putObject("max").put("read", "actor.hp.marked");
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        addRestParty();
+        ObjectNode ally = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        ally.withObject("/automationState/sources/ruleset:base/sourcePools/tokens").put("value", 4).put("max", 4);
+        store.saveSheet(campaign.getId(), "mira", ally.toString());
+        String owner = cookie();
+        JsonNode offer = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode body = restRequest(offer, "ally-pool-without-listener");
+        targetRestMove(body, offer, "rest-tend-ally", "mira");
+        diceSeed(seedForDie(4, 1));
+        var completed = restHttp(owner, "resting", null, body.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(2, saved.at("/hp/on").asInt());
+        assertEquals(2, saved.at("/automationState/sources/ruleset:base/sourcePools/tokens/value").asInt());
+        assertEquals(2, saved.at("/automationState/sources/ruleset:base/sourcePools/tokens/max").asInt());
+        assertEquals(completed.body(), restHttp(owner, "resting", null, body.toString()).body());
+    }
+
+    @Test
     void restSettlesPreparationAndCompletionGrantsBeforeLaterReadsAndReactions() throws Exception {
         installRestRules();
         Path consumablesFile = compendiumDir.resolve("consumables.json");
