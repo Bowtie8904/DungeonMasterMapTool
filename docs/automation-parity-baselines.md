@@ -33,3 +33,8 @@ the base Tend and Repair ally reports for short and long rests. Both engines con
 and unchanged source-track expectations; these report-only moves do not select a recipient.
 
 Before cutover, replace remaining `not captured` fields with versioned fixtures containing request/event inputs, deterministic dice, before/after sheet and campaign state, chat/report output and reset/expiry result. Then execute the fixtures against the replacement host and record `parity`, `gap` or `unconverted` per block. Keep known fidelity gaps explicit; do not infer a baseline from labels or converter output.
+
+## Parity ledger
+
+ParityLedgerTest replays every ledger row through the new engine with deterministic dice and compares it with src/test/resources/dmmt/automation/parity/ledger-baseline.json (regenerate with PARITY_CAPTURE=1 npx vitest run src/daggerheart/parity-capture.test.ts in web; rewrite the ledger with -Dparity.writeLedger=true). Rows with unprobed fields stay unverified.
+

@@ -256,7 +256,10 @@ function probeRolls(row: Row) {
       let blocker: string | null = null;
       try { selected = configuredRollOption(probe.sheet, mine); } catch (e) { blocker = (e as Error).message; }
       blocker ??= selectionBlocker(probe.sheet, [selected], !!selected.option.experience);
-      const entry: Record<string, unknown> = { label: mine.option.label, ...(mine.option.advantage ? { advantage: mine.option.advantage } : {}) };
+      const entry: Record<string, unknown> = { label: mine.option.label, ...(mine.option.advantage ? { advantage: mine.option.advantage } : {}),
+        ...(mine.option.required ? { required: true } : {}),
+        ...(mine.option.multiplier || mine.option.proficiency || mine.option.maximizeDie || mine.option.damageDice
+          || (scenario.id === 'damage' && (mine.option.matchingDice || mine.option.combo || mine.option.traitChoices)) ? { deferred: true } : {}) };
       if (blocker) entry.blocker = blocker;
       else {
         const base = rollBonus(probe.sheet, scenario.targets, probeWeapon, false);

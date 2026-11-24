@@ -12935,6 +12935,7 @@
      "offered": {
       "resonance": {
        "label": "Sacred Resonance",
+       "deferred": true,
        "total": 0,
        "advantageSuggested": 0,
        "spent": {}
@@ -13817,6 +13818,7 @@
      "offered": {
       "first-strike": {
        "label": "First Strike (double damage)",
+       "deferred": true,
        "total": 0,
        "advantageSuggested": 0,
        "spent": {}
@@ -20641,6 +20643,7 @@
      "offered": {
       "reprisal": {
        "label": "+1 Proficiency",
+       "deferred": true,
        "total": 0,
        "advantageSuggested": 0,
        "spent": {}
@@ -25001,6 +25004,7 @@
      "offered": {
       "stress": {
        "label": "Combo Strike",
+       "deferred": true,
        "total": 0,
        "advantageSuggested": 0,
        "spent": {
@@ -52309,6 +52313,7 @@
      "offered": {
       "finesse": {
        "label": "Cruel Precision",
+       "deferred": true,
        "total": 0,
        "advantageSuggested": 0,
        "spent": {}
@@ -57210,6 +57215,7 @@
      "offered": {
       "double": {
        "label": "Invoke Torment: target has full Stress",
+       "deferred": true,
        "total": 0,
        "advantageSuggested": 0,
        "spent": {}
@@ -66769,6 +66775,7 @@
      "offered": {
       "maximum": {
        "label": "Versatile Fighter: maximize a damage die",
+       "deferred": true,
        "total": 0,
        "advantageSuggested": 0,
        "spent": {
@@ -77365,6 +77372,7 @@
      "offered": {
       "girdle": {
        "label": "Titan’s Girdle",
+       "deferred": true,
        "total": 0,
        "advantageSuggested": 0,
        "spent": {}
@@ -84958,6 +84966,7 @@
      "offered": {
       "painful": {
        "label": "Painful: mark a Stress",
+       "required": true,
        "total": 0,
        "advantageSuggested": 0,
        "spent": {
@@ -86552,6 +86561,7 @@
      "offered": {
       "greedy": {
        "label": "Greedy: spend a handful of gold, +1 Proficiency",
+       "deferred": true,
        "total": 0,
        "advantageSuggested": 0,
        "spent": {
@@ -86709,6 +86719,7 @@
      "offered": {
       "painful": {
        "label": "Painful: mark a Stress",
+       "required": true,
        "total": 0,
        "advantageSuggested": 0,
        "spent": {
@@ -92400,6 +92411,7 @@
      "offered": {
       "accelerator": {
        "label": "Accelerator: move to Far range, +1 Proficiency",
+       "deferred": true,
        "total": 0,
        "advantageSuggested": 0,
        "spent": {

@@ -2018,9 +2018,14 @@ public final class LegacyCatalogConverter {
     private static void rollCondition(String roll, String path, Problems p, ArrayNode when) {
         if ("action".equals(roll)) when.add(actionRollCondition());
         else if (ROLLS.contains(roll)) when.addObject().putArray("eq").add(read("event.check.kind")).add(roll);
-        else if (roll.startsWith("trait:") && TRAITS.contains(roll.substring(6)))
+        else if (roll.startsWith("trait:") && TRAITS.contains(roll.substring(6))) {
             when.addObject().putArray("eq").add(read("event.check.trait")).add(roll.substring(6));
-        else if ("trait".equals(roll)) when.addObject().putArray("ne").add(read("event.check.trait")).addNull();
+            when.addObject().putArray("ne").add(read("event.check.kind")).add("damage");
+        }
+        else if ("trait".equals(roll)) {
+            when.addObject().putArray("ne").add(read("event.check.trait")).addNull();
+            when.addObject().putArray("ne").add(read("event.check.kind")).add("damage");
+        }
         else if ("duality".equals(roll)) {
             ArrayNode either = when.addObject().putArray("or");
             either.add(flag("event.check.duality", true));

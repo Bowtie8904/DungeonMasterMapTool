@@ -34,7 +34,8 @@ final class ProfileRoll {
         while (hasProfile(declaredProfiles, id)) id += ".base";
         String name = RuleJson.text(weapon.get("name"), "/weapon/name");
         String trait = RuleJson.text(weapon.get("trait"), "/weapon/trait");
-        if (!List.of("Agility", "Strength", "Finesse", "Instinct", "Presence", "Knowledge").contains(trait))
+        if ("Spellcast".equalsIgnoreCase(trait)) trait = "spellcast";
+        if (!List.of("Agility", "Strength", "Finesse", "Instinct", "Presence", "Knowledge", "spellcast").contains(trait))
             throw RuleJson.error("/weapon/trait", "Unknown weapon trait.");
         String range = switch (RuleJson.text(weapon.get("range"), "/weapon/range").replaceAll("\\s+", "").toLowerCase(Locale.ROOT)) {
             case "melee" -> "melee";
