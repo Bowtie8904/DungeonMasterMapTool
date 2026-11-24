@@ -80,19 +80,25 @@ class RestEarlyExpiryTest {
     }
 
     @Test
-    void legacyRestLocksRejectTheOfferWithoutChangingTheSheet() throws Exception {
+    void legacyRestLocksEndBeforeDowntimeLikeEarlyExpiryLocks() throws Exception {
         var pack = pack("rest.short", "rest.long");
         ObjectNode sheet = sheet();
+        sheet.withObject("/hp").put("on", 4);
         sheet.putArray("effects").addObject().put("id", "legacy-lock")
                 .put("lockedHp", 1).put("until", "rest");
-        ObjectNode before = sheet.deepCopy();
-        var failure = assertThrows(RuleRuntime.Unavailable.class,
-                () -> HOST.describeRest(pack, sheet, origin().put("sessionId", "session"),
-                        "short", "owner", "version"));
-        assertEquals("restExpiry", failure.code());
-        assertTrue(failure.getMessage().contains("legacy rest HP lock"));
-        assertEquals(before, sheet);
+        sheet.withArray("/effects").addObject().put("id", "kept").put("lockedHp", 1).put("until", "manual");
+        Set<String> initial = HOST.restEffectSnapshot(sheet);
+        long revision = HOST.revision(sheet);
+        assertEquals("restExpiry", assertThrows(RuleRuntime.Unavailable.class,
+                () -> prepare(pack, sheet.deepCopy(), "short", initial)).code());
+        assertTrue(HOST.expireRestBeforeMoves(pack, sheet, rest("short"), initial));
+        assertEquals(List.of("kept"), sheet.path("effects").findValuesAsText("id"));
+        assertEquals(revision + 1, HOST.revision(sheet));
+        assertFalse(HOST.expireRestBeforeMoves(pack, sheet, rest("short"), initial));
+        ObjectNode prepared = prepare(pack, sheet, "short", initial);
+        assertEquals("short", HOST.restProgress(pack, prepared).kind());
     }
+
 
     @Test
     void initialLocksEndBeforeHealingWithoutRefreshingUsesOrOtherEffectsEarly() throws Exception {

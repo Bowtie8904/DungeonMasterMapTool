@@ -33,7 +33,7 @@ public final class LegacyCatalogConverter {
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
             "damage", "alternateProfiles", "damageTypeChoice", "rest", "restReroll", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions", "conditionalRollOptions",
             "hopeReward", "classResourceOnly", "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "zeroHopeClearArmor",
-            "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases", "hideSpellcast", "companion", "companionTraining", "conditionalDamageRewards", "experienceRefund");
+            "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases", "hideSpellcast", "companion", "companionTraining", "conditionalDamageRewards", "experienceRefund", "partyDowntime");
     private static final Set<String> DEATH_KINDS = Set.of("hopeBonus", "hopeSpend", "mask", "spectral", "egg", "battleHardened",
             "unbreakable", "undying", "lifeWard");
     /** Legacy gated families that are their base family plus extra conditions, which every family converts the same way. */
@@ -256,6 +256,8 @@ public final class LegacyCatalogConverter {
         if (!legacy.isObject()) { p.add(path, "Automation must be an object."); return out; }
         if (legacy.has("attach")) return attachment(legacy, path, sourceId, problems, shared, p);
         if (isDeathrun(legacy)) return deathrun(legacy, path, p);
+        if (legacy.has("partyDowntime"))
+            p.add(path + "/partyDowntime", "Manual disposition: a campaign-wide downtime move granted to every character has no format-2 equivalent; the rest host offers only the resting actor's own sources.");
         p.onlyFields(legacy, path, BLOCK_FIELDS);
         boolean limited = false;
         if (legacy.has("uses")) {
@@ -4399,7 +4401,9 @@ public final class LegacyCatalogConverter {
             if (id != null) out.addObject().put("op", "effect.start").put("effect", id).put("target", operationTarget);
             return;
         }
-        p.onlyFields(step, path, Set.of("op", "resource", "amount"));
+        if (step.has("fallbackEffect"))
+            p.add(path + "/fallbackEffect", "Manual disposition: a fallback effect for a pool the holder lacks belongs to a party-granted move, which format 2 does not offer.");
+        p.onlyFields(step, path, Set.of("op", "resource", "amount", "fallbackEffect"));
         String resource = step.path("resource").asText();
         JsonNode amount = step.path("amount");
         boolean clearAllTrack = "all".equals(amount.asText()) && "clear".equals(op) && TRACKS.containsKey(resource);

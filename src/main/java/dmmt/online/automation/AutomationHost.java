@@ -3388,7 +3388,7 @@ public final class AutomationHost {
                                             Set<String> initialEffectIds) {
         if (pack.rest() == null) throw new NotReady("The shared ruleset has no rest configuration.");
         if (!Set.of("short", "long").contains(kind)) throw RuleJson.error("/rest/kind", "Expected short or long.");
-        if (RuleEffects.hasEarlyRestExpiry(projection.actorFact(working, "effects"), "rest." + kind, initialEffectIds))
+        if (hasLegacyRestLock(working) || RuleEffects.hasEarlyRestExpiry(projection.actorFact(working, "effects"), "rest." + kind, initialEffectIds))
             throw new RuleRuntime.Unavailable("restExpiry", "Rest effects that end before downtime must be released first.");
         int consecutive = working.has("shortRestsInRow")
                 ? RuleJson.integer(working.get("shortRestsInRow"), "/sheet/shortRestsInRow", 0, 1_000_000) : 0;
@@ -4048,7 +4048,7 @@ public final class AutomationHost {
                 || progress.slotsUsed() > progress.count() || progress.longMovesUsed() > progress.count()
                 || progress.groups().size() != progress.count())
             throw RuleJson.error("/rest", "The staged rest progress is invalid.");
-        if (RuleEffects.hasEarlyRestExpiry(projection.actorFact(working, "effects"),
+        if (hasLegacyRestLock(working) || RuleEffects.hasEarlyRestExpiry(projection.actorFact(working, "effects"),
                 "rest." + progress.kind(), initialEffectIds))
             throw new RuleRuntime.Unavailable("restExpiry", "Rest effects that end before downtime were not released.");
 
@@ -4326,15 +4326,20 @@ public final class AutomationHost {
 
     /** Captures the stored effects present before any downtime move is executed. */
     Set<String> restEffectSnapshot(ObjectNode sheet) {
-        for (JsonNode effect : sheet.path("effects")) {
-            if (effect.path("lockedHp").asInt() > 0 && "rest".equals(effect.path("until").asText()))
-                throw new RuleRuntime.Unavailable("restExpiry",
-                        "A legacy rest HP lock cannot be converted yet. Ask the GM to resolve it using legacy rest before starting an automation rest.");
-        }
         Set<String> ids = new java.util.HashSet<>();
         for (JsonNode effect : RuleEffects.instances(projection.actorFact(sheet, "effects"), "/actor/effects"))
             ids.add(effect.path("id").asText());
         return Set.copyOf(ids);
+    }
+
+    /** A stored legacy rest HP lock behaves like a format-2 lock with early rest expiry: it ends before downtime. */
+    private static boolean isLegacyRestLock(JsonNode effect) {
+        return effect.path("lockedHp").asInt() > 0 && "rest".equals(effect.path("until").asText());
+    }
+
+    private static boolean hasLegacyRestLock(JsonNode sheet) {
+        for (JsonNode effect : sheet.path("effects")) if (isLegacyRestLock(effect)) return true;
+        return false;
     }
 
     /** Expires initial effects marked for early rest removal without resetting limits or later effects. */
@@ -4343,16 +4348,22 @@ public final class AutomationHost {
         String type = RuleJson.text(RuleJson.object(event, "/event").get("type"), "/event/type");
         if (!RuleRuntime.isRestEvent(type)) throw RuleJson.error("/event/type", "Expected a short or long rest.");
         Set<String> initial = Set.copyOf(initialEffectIds);
-        if (!RuleEffects.hasEarlyRestExpiry(projection.actorFact(sheet, "effects"), type, initial)) return false;
+        boolean legacy = hasLegacyRestLock(sheet);
+        boolean early = RuleEffects.hasEarlyRestExpiry(projection.actorFact(sheet, "effects"), type, initial);
+        if (!legacy && !early) return false;
         ObjectNode working = sheet.deepCopy();
+        if (legacy && working.path("effects") instanceof ArrayNode stored)
+            for (int i = stored.size() - 1; i >= 0; i--) if (isLegacyRestLock(stored.get(i))) stored.remove(i);
         ObjectNode state = projection.state(working);
-        ObjectNode actor = actor(pack, working, state, event);
-        ArrayNode kept = RuleEffects.expireBeforeMoves(actor.path("effects"), type, initial);
-        ObjectNode before = actor.deepCopy();
-        actor.set("effects", kept);
-        RuleEffects.reconcileHolder(before, actor, Set.of(), pack.programs(), "/actor");
-        projection.write(working, projection.actor(working), persisted(actor));
-        state = projection.state(working);
+        if (early) {
+            ObjectNode actor = actor(pack, working, state, event);
+            ArrayNode kept = RuleEffects.expireBeforeMoves(actor.path("effects"), type, initial);
+            ObjectNode before = actor.deepCopy();
+            actor.set("effects", kept);
+            RuleEffects.reconcileHolder(before, actor, Set.of(), pack.programs(), "/actor");
+            projection.write(working, projection.actor(working), persisted(actor));
+            state = projection.state(working);
+        }
         state.put("revision", state.path("revision").asLong() + 1);
         replace(sheet, working);
         return true;

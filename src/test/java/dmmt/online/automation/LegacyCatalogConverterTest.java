@@ -92,6 +92,18 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void partyDowntimeGrantsAreAPreciseManualDisposition() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"trainer","name":"Trainer","automation":{"partyDowntime":true,"actions":[{"id":"train","label":"Train",
+                 "timing":"downtime","steps":[{"op":"gain","resource":"dice","amount":1,
+                 "fallbackEffect":{"name":"Die","kind":"buff","until":"manual"}}]}]}}"""));
+        assertEquals(0, result.converted());
+        String text = result.diagnostics().toString();
+        assertTrue(text.contains("/partyDowntime") && text.contains("Manual disposition"), text);
+        assertTrue(text.contains("/fallbackEffect"), text);
+    }
+
+    @Test
     void consumesHostOwnedFlagsAcrossActionsOptionsAndTriggers() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"owned","name":"Owned","automation":{

@@ -200,8 +200,11 @@ The converted path also covers engine-owned effect protection, version conflicts
 choices and transaction replay. Recipient long-rest expiry is exercised in isolation; complete cross-holder
 effect lifecycles remain a release gap.
 
-The rest-reset primitive expires only effects present in its initial snapshot. Legacy rest HP locks are not
-converted: automation rests reject them and direct the GM to resolve them with legacy rest.
+The rest-reset primitive expires only effects present in its initial snapshot. Stored legacy until-rest HP locks
+(Volatile Toxins) are released before downtime like early-expiry `locks` effects, and the release bumps the sheet
+revision. Shipped use of consumed or inactive sources supplying deferred downtime benefits, and of inter-reaction
+or multi-holder command settlement in rest paths: none. Martial Preparation (`partyDowntime`, step
+`fallbackEffect`) is a documented manual disposition: a campaign-wide downtime move has no format-2 equivalent.
 
 The versioned `/api/automation/{version}/{actorId}/rest` endpoint offers and commits owner-only self rests.
 The host derives descriptors and facts, signs the offer, stages the complete rest, and atomically saves the sheet,
