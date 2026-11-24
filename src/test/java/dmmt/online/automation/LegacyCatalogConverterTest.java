@@ -2207,6 +2207,24 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void storedPoolsConditionalMitigationAndNoHpEndingConvertGenerically() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"bulwark","name":"Bulwark","automation":{"resources":[{"id":"bank","label":"Bank","initial":0,"resetOn":"rest"}],
+                  "mitigation":[
+                    {"id":"bank","label":"Bank","storeDamage":"bank","reduce":1},
+                    {"id":"half","label":"Halve and keep","halve":true,
+                     "storeHalvedDamage":{"name":"Kept","until":"scene","rollOptions":[{"id":"spend","label":"Spend","roll":"damage","dice":"1d6"}]}},
+                    {"id":"plate","label":"Plate","passive":true,"armorSeverity":1,"endEffectIfNoHp":"Plated"}],
+                  "conditionalMitigation":[{"id":"cheap","label":"Cheap","reduce":2,"cost":{"hp":"@hp"}}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        JsonNode block = block(result, 0);
+        assertTrue(block.toString().contains("pool.gain"), block.toString());
+        assertTrue(block.toString().contains("damage.without"), block.toString());
+        assertTrue(block.toString().contains("event.marks.hitPoints.wouldMark"), block.toString());
+        program(result, 0);
+    }
+
+    @Test
     void mitigationIncreasesRecoveriesQuantitiesAndTableReactionsConvert() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"edge","name":"Edge","automation":{"resources":[{"id":"thorns","label":"Thorns","initial":0,"resetOn":"rest"}],"mitigation":[

@@ -31,13 +31,14 @@ public final class LegacyCatalogConverter {
     private static final List<String> FAMILIES = List.of("actions", "rollOptions", "rollTriggers", "conditionalRollTriggers", "mitigation");
     private static final Set<String> BLOCK_FIELDS = Set.of("actions", "reloading", "uses", "modifiers", "resources", "rollOptions", "rollTriggers",
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
-            "damage", "alternateProfiles", "damageTypeChoice", "rest", "restReroll", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions", "conditionalRollOptions",
+            "damage", "alternateProfiles", "damageTypeChoice", "rest", "restReroll", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions", "conditionalRollOptions", "conditionalMitigation",
             "hopeReward", "classResourceOnly", "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "zeroHopeClearArmor",
             "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases", "hideSpellcast", "companion", "companionTraining", "conditionalDamageRewards", "experienceRefund", "partyDowntime", "requirement", "unarmoredBase", "ignoreWeaponBurden", "unarmedWeapon");
     private static final Set<String> DEATH_KINDS = Set.of("hopeBonus", "hopeSpend", "mask", "spectral", "egg", "battleHardened",
             "unbreakable", "undying", "lifeWard");
     /** Legacy gated families that are their base family plus extra conditions, which every family converts the same way. */
-    private static final Map<String, String> GATED_FAMILIES = Map.of("conditionalActions", "actions", "conditionalRollOptions", "rollOptions");
+    private static final Map<String, String> GATED_FAMILIES = Map.of("conditionalActions", "actions", "conditionalRollOptions", "rollOptions",
+            "conditionalMitigation", "mitigation");
     private static final Map<String, String> RANGES = Map.of("melee", "melee", "very close", "veryClose", "veryclose", "veryClose",
             "close", "close", "far", "far", "very far", "veryFar", "veryfar", "veryFar");
     private static final Set<String> RESOURCE_FIELDS = Set.of("id", "label", "initial", "max", "resetOn", "resetValue", "minimumReset",
@@ -47,7 +48,7 @@ public final class LegacyCatalogConverter {
             "usesSource", "endEffect", "hostOwned", "consumeItem", "quantity", "proficiency", "hopeDie", "diceResource", "condition", "loadoutDomain",
             "required", "traitValue", "multiplier", "allResourceDice", "steps", "damageDie", "diceByLevel", "diceByFeature", "diceConditions", "magicOnly", "weaponRanges",
             "ignoreDisadvantage", "matchingDice", "resourceMultiplier", "input", "experience", "derivedProficiency", "traitChoices", "chooseTrait", "maximizeDie", "requiresRollOutcome", "combo", "secondaryWeaponDie", "linkedDamageTrait", "advantageDie",
-            "magicDamage", "dieSizes", "fearDie", "resourceEmpty", "requiresResource", "expendOn");
+            "magicDamage", "dieSizes", "fearDie", "resourceEmpty", "requiresResource", "expendOn", "ownWeapon");
     private static final Set<String> TRIGGER_FIELDS = Set.of("id", "label", "description", "on", "cost", "reroll", "when", "outcome",
             "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
@@ -58,7 +59,8 @@ public final class LegacyCatalogConverter {
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
             "markedHpOnly", "finalSevere", "markStress", "gainHope", "giveFear", "clearStress", "gainTokens", "armorCost", "followUp", "hiddenRoll", "consumeItem", "preserveAfterIncomingDamage", "loadoutDomain",
-            "double", "recoveryChoice", "reflectHp", "quantity", "advancesSourcePool", "patronDice", "destroyResourceOnMax", "reportRoll", "companionIntercept", "companionArmored");
+            "double", "recoveryChoice", "reflectHp", "quantity", "advancesSourcePool", "patronDice", "destroyResourceOnMax", "reportRoll", "companionIntercept", "companionArmored",
+            "storeRoll", "storeHalvedDamage", "storeDamage", "endEffectIfNoHp");
     private static final List<String> MARKS_FIELDS = List.of("severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor");
     private static final List<String> PREPARE_FIELDS = List.of("negate", "halve", "reduce", "double");
     private static final List<String> SEVERITIES = List.of("minor", "major", "severe", "massive");
@@ -343,7 +345,7 @@ public final class LegacyCatalogConverter {
         for (int n = 0; n < queue.size() && n < 256; n++) {
             Nested next = queue.get(n);
             JsonNode legacyRule = next.legacy();
-            if (Set.of("rest", "consumeLongRestMove", "endOnDamage", "endOnDealtDamage", "effectDamage", "undying", "lifeWard",             "creation", "maintainEnd", "effectResources", "surgeEnd").contains(next.family())) {
+            if (Set.of("rest", "consumeLongRestMove", "endOnDamage", "endIfNoHp", "endOnDealtDamage", "effectDamage", "undying", "lifeWard",             "creation", "maintainEnd", "effectResources", "surgeEnd").contains(next.family())) {
                 List<ObjectNode> restRules = switch (next.family()) {
                                 case "effectResources" -> { effectResources(legacyRule, next.path(), p, pools); yield List.of(); }
                                 case "surgeEnd" -> surgeEnd(legacyRule, next.path(), p, pools);
@@ -352,6 +354,7 @@ public final class LegacyCatalogConverter {
                     case "creation" -> creation(legacyRule, next.path(), p);
                     case "lifeWard" -> List.of(lifeWard(legacyRule.path("effect").asText()));
                     case "endOnDamage" -> List.of(endOnDamage(legacyRule));
+                    case "endIfNoHp" -> List.of(endIfNoHp(legacyRule));
                     case "endOnDealtDamage" -> List.of(endOnDealtDamage(legacyRule));
                     case "maintainEnd" -> List.of(maintainEnd(legacyRule));
                     case "effectDamage" -> effectDamage(legacyRule, next.path(), p);
@@ -1775,6 +1778,11 @@ public final class LegacyCatalogConverter {
         if (Set.of("primary", "secondary").contains(weapon)) when.addObject().putArray("eq").add(read("event.check.weapon")).add(weapon);
         else if ("any".equals(weapon)) when.add(hasFact("event.check.weapon"));
         else if (!weapon.isEmpty()) p.add(path + "/weapon", "Unsupported weapon filter: " + weapon);
+        if (option.has("ownWeapon")) {
+            if (!option.path("ownWeapon").asBoolean(false) || !p.sourceId().startsWith("weapons:")) p.add(path + "/ownWeapon", "Only a weapon can restrict an option to rolls made with itself.");
+            else if (!binding.path("mode").asText().equals("automatic") || !option.path("required").asBoolean(false))
+                when.addObject().putArray("eq").add(read("event.check.weaponSource")).add(read("source.instanceId"));
+        }
         commonConditions(option, path, p, when);
         if (option.has("condition")) {
             JsonNode condition = option.get("condition");
@@ -3304,11 +3312,22 @@ public final class LegacyCatalogConverter {
         }
         ArrayNode steps = rule.putArray("do");
         String id = slug(mitigation.path("id").asText()), label = escape(mitigation.path("label").asText(""));
+        String storedPool = storedPool(mitigation, path, p, pools, stage, id, steps);
+        if (mitigation.has("endEffectIfNoHp")) {
+            if (!"marks".equals(stage) || !mitigation.path("endEffectIfNoHp").isTextual())
+                p.add(path + "/endEffectIfNoHp", "Ending an effect needs its name and a marks-plan change it can be measured against.");
+            else p.nested().add(new Nested("endIfNoHp", RuleJson.JSON.createObjectNode().put("effect", mitigation.path("endEffectIfNoHp").asText()), path + "/endEffectIfNoHp"));
+        }
         switch (stage) {
             case "prepare" -> {
                 // Chosen while damage is prepared so the automatic ending, which runs before selected options, already sees it.
                 if (preserve) steps.addObject().put("op", "state.set").put("slot", keepSlot(mitigation.path("preserveAfterIncomingDamage").asText())).put("value", true);
                 else prepareSteps(mitigation, path, p, steps, id, label, quantity);
+                if (mitigation.has("storeRoll") && storedPool != null) {
+                    ObjectNode clear = steps.addObject().put("op", "pool.spend").put("pool", storedPool);
+                    clear.set("amount", read("actor.pools." + storedPool + ".value"));
+                    steps.addObject().put("op", "pool.gain").put("pool", storedPool).set("amount", read("result.reduction"));
+                }
             }
             case "marks" -> marksSteps(mitigation, path, p, steps, id, label, quantity);
             default -> {}
@@ -3457,6 +3476,59 @@ public final class LegacyCatalogConverter {
             when.addObject().putArray("eq").add(read(wouldMark)).add(0);
             when.addObject().putArray("eq").add(read(marked)).add(0);
         }
+    }
+
+    /**
+     * Stored damage and rolls: the amount is banked in a per-source number pool that a later damage roll spends as a flat
+     * bonus. {@code storeDamage} banks the incoming damage into a declared pool; {@code storeHalvedDamage} (with
+     * {@code halve}) banks the halved-away part and {@code storeRoll} replaces the pool with the rolled reduction. The
+     * legacy marker effect becomes the pool plus a nested damage roll option that adds it and empties the pool.
+     * Returns the pool ID for the two effect-defined forms. The banked amount is read while damage is prepared, so
+     * options that run earlier in the same preparation are already reflected in it.
+     */
+    private static String storedPool(JsonNode mitigation, String path, Problems p, Pools pools, String stage, String id, ArrayNode steps) {
+        if (mitigation.has("storeDamage")) {
+            String pool = mitigation.path("storeDamage").asText();
+            if (!"prepare".equals(stage) || !pools.has(pool)) p.add(path + "/storeDamage", "Storing damage needs a declared pool and an option that changes the damage amount.");
+            else steps.addObject().put("op", "pool.gain").put("pool", pool).set("amount", read("event.damage.amount"));
+            return null;
+        }
+        boolean halved = mitigation.has("storeHalvedDamage"), rolled = mitigation.has("storeRoll");
+        if (!halved && !rolled) return null;
+        String field = halved ? "storeHalvedDamage" : "storeRoll";
+        JsonNode def = mitigation.get(field);
+        if (!def.isObject() || !def.path("name").isTextual() || !def.path("rollOptions").isArray() || def.path("rollOptions").size() != 1
+                || !"prepare".equals(stage) || halved && !mitigation.path("halve").asBoolean(false)
+                || rolled && (!mitigation.has("roll") || mitigation.path("roll").has("success"))) {
+            p.add(path + "/" + field, "Stored amounts need a named effect with one damage roll option and a halving or rolled reduction.");
+            return null;
+        }
+        String until = def.path("until").asText("manual");
+        List<String> resets = "manual".equals(until) ? List.of() : RESETS.get(until);
+        if (resets == null) { p.add(path + "/" + field + "/until", "Unsupported stored amount duration: " + until); return null; }
+        String pool = "stored_" + id.replace('-', '_');
+        if (pools.has(pool)) { p.add(path + "/" + field, "Duplicate stored pool: " + pool); return null; }
+        ObjectNode declared = pools.local().putObject(pool).put("kind", "number").put("scope", "actor").put("label", escape(def.path("name").asText()));
+        declared.put("max", 1_000_000);
+        if (!resets.isEmpty()) resets.forEach(declared.putArray("resetOn")::add);
+        if (halved) {
+            ObjectNode half = RuleJson.JSON.createObjectNode();
+            half.putArray("divide").add(read("event.damage.amount")).add(2);
+            steps.addObject().put("op", "pool.gain").put("pool", pool).set("amount", RuleJson.JSON.createObjectNode().set("floor", half));
+        }
+        ObjectNode option = def.path("rollOptions").get(0).deepCopy();
+        if (!"damage".equals(option.path("roll").asText())) { p.add(path + "/" + field + "/rollOptions/0", "Expected a damage roll option."); return null; }
+        option.remove("value");
+        option.remove("endEffect");
+        option.put("id", id + "-stored").put("usesSource", false);
+        option.putObject("resourceMultiplier").put("resource", pool).put("value", 1);
+        option.putArray("steps").addObject().put("op", "clear").put("resource", pool).put("amount", "all");
+        if (option.has("weaponName")) {
+            option.remove("weaponName");
+            option.put("ownWeapon", true);
+        }
+        p.nested().add(new Nested("rollOptions", option, path + "/" + field + "/rollOptions/0"));
+        return pool;
     }
 
     private static void prepareSteps(JsonNode mitigation, String path, Problems p, ArrayNode steps, String id, String label, boolean quantity) {
@@ -5206,7 +5278,7 @@ public final class LegacyCatalogConverter {
         return legacy.isTextual() ? computed(legacy.asText()) : null;
     }
 
-    private static final Set<String> NONNEGATIVE = Set.of("actor.proficiency.value", "actor.level", "actor.hope.value", "input.amount",
+    private static final Set<String> NONNEGATIVE = Set.of("actor.proficiency.value", "actor.level", "actor.hope.value", "input.amount", "event.marks.hitPoints.wouldMark",
             "actor.stats.tier", "actor.stats.proficiency", "actor.stats.armorScore", "actor.stats.armorAvailable", "event.table.fear");
 
     /**
@@ -5223,6 +5295,7 @@ public final class LegacyCatalogConverter {
             case "hope" -> read("actor.hope.value");
             case "fear" -> read("event.table.fear");
             case "amount" -> read("input.amount");
+            case "hp" -> read("event.marks.hitPoints.wouldMark");
             case "sourcepool_protection" -> read("sourcePools.protection.value");
             case "proficiency" -> read("actor.proficiency.value");
             case "total_proficiency" -> read("actor.stats.proficiency");
@@ -5828,6 +5901,22 @@ public final class LegacyCatalogConverter {
         steps.addObject().put("op", "track.mark").put("track", "actor.stress").put("amount", 1);
         rule.putObject("ui").put("label", escape(effect) + " ends");
         return List.of(rule);
+    }
+
+    private static ObjectNode endIfNoHp(JsonNode legacy) {
+        String effect = legacy.path("effect").asText();
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "end-" + slug(effect) + "-without-hp");
+        rule.putArray("bindings").addObject().put("id", "use").put("event", "damage.applied").put("surface", "damage").put("mode", "automatic");
+        ArrayNode when = RuleJson.JSON.createArrayNode();
+        when.add(labelPresent(effect));
+        when.addObject().putArray("eq").add(read("event.applied.hitPoints")).add(0);
+        applyWhen(rule, when);
+        ArrayNode steps = rule.putArray("do");
+        steps.addObject().put("op", "damage.without").put("as", "without").set("from", read("event.marks"));
+        ObjectNode end = steps.addObject().put("op", "effect.end").put("effect", effect).put("target", "actor");
+        end.putObject("if").putArray("gt").add(read("result.without.hitPoints.wouldMark")).add(0);
+        rule.putObject("ui").put("label", escape(effect) + " ends");
+        return rule;
     }
 
     private static ObjectNode endOnDamage(JsonNode legacy) {

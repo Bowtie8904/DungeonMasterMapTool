@@ -245,6 +245,26 @@ public final class StructuredDamage {
         return plan;
     }
 
+    /**
+     * Counterfactual of a marks plan: the derived values the plan would have had if every adjustment written by
+     * {@code sourceId} had never been made, replaying the remaining adjustments in order.
+     */
+    static ObjectNode without(JsonNode value, String sourceId) {
+        ObjectNode plan = validatePlan(value);
+        ObjectNode copy = plan.deepCopy();
+        ObjectNode armor = (ObjectNode) copy.get("armor");
+        armor.put("allowed", 1).put("steps", 1).put("saved", 0);
+        copy.put("severityReduction", 0);
+        ((ObjectNode) copy.get("hitPoints")).put("bonus", 0).put("max", MAX_MARKS);
+        for (JsonNode adjustment : plan.path("adjustments")) {
+            if (sourceId.equals(adjustment.path("sourceId").asText())) continue;
+            String[] parts = adjustment.path("field").asText().split("\\.");
+            if (parts.length == 1) copy.put(parts[0], adjustment.path("after").asInt());
+            else ((ObjectNode) copy.get(parts[0])).put(parts[1], adjustment.path("after").asInt());
+        }
+        return derive(copy);
+    }
+
     /** Sets one adjustable field and records the change; returns {@code {marks, adjustment}}. */
     static ObjectNode adjust(JsonNode value, String field, int to, String id, String sourceId, String label) {
         ObjectNode plan = validatePlan(value);

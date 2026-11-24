@@ -1502,6 +1502,7 @@ public final class RuleRuntime {
                     op.path("thresholds"), op.path("armor"), op.path("hitPoints"), context, observer);
             case "damage.assess" -> result = StructuredDamage.assess(eval(op.path("from"), context), op.path("type"),
                     op.path("thresholds"), op.path("massive"), op.path("armor"), op.path("hitPoints"), context);
+            case "damage.without" -> result = StructuredDamage.without(eval(op.path("from"), context), program.sourceId());
             case "damage.adjust" -> {
                 int to = whole(op.path("to"), context, -1000, 1000);
                 ObjectNode adjusted = StructuredDamage.adjust(eval(op.path("from"), context), op.path("field").asText(), to,

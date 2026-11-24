@@ -178,6 +178,30 @@ class StructuredDamageTest {
     }
 
     @Test
+    void withoutReplaysOnlyOtherSourcesAdjustments() throws Exception {
+        ObjectNode plan = assess(marksContext(12, 0, 2), 1, false);
+        plan = (ObjectNode) StructuredDamage.adjust(plan, "severityReduction", 1, "own", "features:x", "Own").get("marks");
+        plan = (ObjectNode) StructuredDamage.adjust(plan, "armor.steps", 2, "other", "features:y", "Other").get("marks");
+        ObjectNode without = StructuredDamage.without(plan, "features:x");
+        assertEquals(0, without.path("severityReduction").asInt());
+        assertEquals(1, without.path("armor").path("steps").asInt() - assess(marksContext(12, 0, 2), 1, false).path("armor").path("steps").asInt());
+        assertEquals(2, without.path("adjustments").size(), "History is kept.");
+        assertEquals(2, plan.path("adjustments").size(), "The input plan is untouched.");
+
+        RuleCompiler.Program program = RuleCompiler.compile("features:x", RuleJson.parse("""
+                {"rules":[{"id":"check","bindings":[{"id":"b","event":"damage.applied","surface":"damage","mode":"button"}],
+                  "do":[{"op":"damage.without","from":{"read":"event.marks"},"as":"w"}],"ui":{"label":"Check"}}]}
+                """), fixture("rewrite/recipes"));
+        ObjectNode context = marksContext(12, 0, 2);
+        context.putObject("source").put("id", program.sourceId()).put("instanceId", "one").put("name", "Ward");
+        context.put("revision", 0);
+        ((ObjectNode) context.path("event")).put("type", "damage.applied").set("marks", plan);
+        ObjectNode after = RuleRuntime.execute(program, new RuleRuntime.Intent("check", "b", "one", 0,
+                (ObjectNode) RuleJson.parse("{}")), context, noRandom()).context();
+        assertEquals(without, after.path("result").path("w"));
+    }
+
+    @Test
     void storedPoolDieReducesPreSeverityDamageByActualCappedAmount() throws Exception {
         RuleCompiler.Program program = program();
         ObjectNode before = context(program, "action.request", 4);

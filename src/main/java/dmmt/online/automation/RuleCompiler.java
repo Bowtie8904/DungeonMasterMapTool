@@ -63,6 +63,7 @@ public final class RuleCompiler {
             Map.entry("damage.resolve", List.of("from", "thresholds", "armor", "hitPoints")),
             Map.entry("damage.assess", List.of("from", "type", "thresholds", "massive", "armor", "hitPoints")),
             Map.entry("damage.adjust", List.of("from", "field", "to", "id", "label")),
+            Map.entry("damage.without", List.of("from")),
             Map.entry("marks.publish", List.of("marks")),
             Map.entry("damage.mark", List.of("from", "armor", "hitPoints")),
             Map.entry("set.subtract", List.of("from", "items")),
