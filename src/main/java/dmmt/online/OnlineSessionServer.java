@@ -7507,6 +7507,16 @@ public final class OnlineSessionServer {
                         throw new IllegalArgumentException("The feature roll's actor is no longer available.");
                     publishedMessages.add(rollPosition++, profileRollMessage(roller, event));
                 }
+                case "beastform.assume" -> {
+                    String holder = command.path("holderId").asText();
+                    ObjectNode target = changed.get(holder);
+                    if (target == null)
+                        throw new IllegalArgumentException("The Beastform's character is not in this transaction.");
+                    ObjectNode choice = command.deepCopy();
+                    BeastformRules.assume(target, catalogs().document("classes"), choice, command.path("evolution").asBoolean(),
+                            command.path("anyTier").asBoolean(), "manual".equals(command.path("until").asText()) ? "" : command.path("until").asText());
+                    affected.add(holder);
+                }
                 case "heritage.replace" -> {
                     String holder = command.path("holderId").asText();
                     ObjectNode target = changed.get(holder);

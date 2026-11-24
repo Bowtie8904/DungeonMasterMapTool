@@ -24,6 +24,7 @@ public final class RuleCompiler {
     static final Set<String> AUDIENCES = Set.of("self", "others", "party", "any");
     static final Set<String> CLAIM_RECIPIENTS = Set.of("otherPlayersCharacters", "playerCharacters", "sourceActor");
     static final Set<String> TARGET_SCOPES = Set.of("connectedPlayerCharacters", "activeCharacters", "activePlayerCharacters");
+    static final Set<String> RESETS_UNTIL = Set.of("manual", "scene", "shortRest", "longRest", "rest");
     /** Actor-owned lists that {@code collection.*} operations may change; each item is an object with an {@code id}. */
     static final Set<String> COLLECTIONS = Set.of("inventory", "features", "loadout", "vault", "heritage", "conditions", "companions");
     private static final Set<String> MODES = Set.of("button", "option", "automatic");
@@ -50,6 +51,7 @@ public final class RuleCompiler {
             Map.entry("downtime.offerRoll", List.of("roll", "label", "offset", "group")),
             Map.entry("inventory.grant", List.of("catalog", "entry", "quantity", "label", "to", "tag", "max", "scope")),
             Map.entry("heritage.replace", List.of("ancestry", "feature")),
+            Map.entry("beastform.assume", List.of("form", "base", "categories", "advantages", "features", "trait", "evolution", "anyTier", "until")),
             Map.entry("state.set", List.of("slot", "value")),
             Map.entry("state.increment", List.of("slot", "by")),
             Map.entry("flag.set", List.of("flag", "value")),
@@ -343,6 +345,10 @@ public final class RuleCompiler {
         /** Features granted alongside this source ({@code features}, {@code display}), or {@code null}. Sheet metadata only. */
         public ObjectNode grants() { return grants == null ? null : grants.deepCopy(); }
         private Program withGrants(ObjectNode declaration) { grants = declaration == null ? null : declaration.deepCopy(); return this; }
+        private ObjectNode provides;
+        /** Named string lists ({@code id -> values}) this source contributes to {@code actor.provides}, or {@code null}. */
+        public ObjectNode provides() { return provides == null ? null : provides.deepCopy(); }
+        private Program withProvides(ObjectNode declaration) { provides = declaration == null ? null : declaration.deepCopy(); return this; }
         private ObjectNode entitlements;
         /** Named whole-number sheet entitlements ({@code id -> count}) this source grants, or {@code null}. Sheet metadata only. */
         public ObjectNode entitlements() { return entitlements == null ? null : entitlements.deepCopy(); }
@@ -401,11 +407,12 @@ public final class RuleCompiler {
     static Program compileWithRecipes(String sourceId, JsonNode automation, Map<String, ObjectNode> recipes) {
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(sourceId), "/sourceId");
         RuleJson.checkTree(automation, "/automation", 0, new int[]{0});
-        RuleJson.fields(automation, "/automation", "state", "limits", "pools", "effects", "modifiers", "profiles", "rules",         "attachment", "grants", "entitlements", "limitOverrides", "sourceFields", "partyGrant", "unarmedWeapon");
+        RuleJson.fields(automation, "/automation", "state", "limits", "pools", "effects", "modifiers", "profiles", "rules",         "attachment", "grants", "entitlements", "limitOverrides", "sourceFields", "partyGrant", "unarmedWeapon", "provides");
         ObjectNode sourceFields = automation.has("sourceFields") ? sourceFields(automation.get("sourceFields")) : null;
         if (automation.has("partyGrant") && !automation.get("partyGrant").isBoolean()) throw RuleJson.error("/automation/partyGrant", "Expected a boolean.");
         boolean partyGrant = automation.path("partyGrant").asBoolean(false);
         ObjectNode unarmedWeapon = Program.unarmedWeapon(automation.get("unarmedWeapon"));
+        ObjectNode provides = automation.has("provides") ? provides(automation.get("provides")) : null;
         ObjectNode grants = automation.has("grants") ? grants(automation.get("grants")) : null;
                 ObjectNode entitlements = automation.has("entitlements") ? entitlements(automation.get("entitlements")) : null;
         ArrayNode limitOverrides = automation.has("limitOverrides") ? limitOverrides(automation.get("limitOverrides")) : RuleJson.JSON.createArrayNode();
@@ -461,8 +468,8 @@ public final class RuleCompiler {
         JsonNode definitions = automation.path("rules");
         boolean derived = false;
         for (JsonNode effect : effects) derived |= effect.has("while");
-        if (definitions.isMissingNode() && (!modifiers.isEmpty() || !pools.isEmpty() || !profiles.isEmpty() || attachment != null || grants != null || entitlements != null || derived || !limitOverrides.isEmpty()))
-            return new Program(sourceId, decl, modifiers, Map.of()).withProfiles(profiles).withAttachment(attachment).withGrants(grants).            withEntitlements(entitlements).withLimitOverrides(limitOverrides).withSourceFields(sourceFields).withPartyGrant(partyGrant).withUnarmedWeapon(unarmedWeapon);
+        if (definitions.isMissingNode() && (!modifiers.isEmpty() || !pools.isEmpty() || !profiles.isEmpty() || attachment != null || grants != null || entitlements != null || provides != null || derived || !limitOverrides.isEmpty()))
+            return new Program(sourceId, decl, modifiers, Map.of()).withProfiles(profiles).withAttachment(attachment).withGrants(grants).            withEntitlements(entitlements).withLimitOverrides(limitOverrides).withSourceFields(sourceFields).withPartyGrant(partyGrant).withUnarmedWeapon(unarmedWeapon).withProvides(provides);
         if (!definitions.isArray() || definitions.isEmpty() || definitions.size() > 256)
             throw RuleJson.error("/automation/rules", "Expected 1-256 rules (or only passive modifiers, pools, profiles, derived effects, grants and an attachment).");
         Map<String, ObjectNode> expanded = new LinkedHashMap<>();
@@ -504,7 +511,7 @@ public final class RuleCompiler {
                         && (sourceFields == null || !sourceFields.has(operation.path("field").asText())))
                     throw RuleJson.error("/automation/rules/" + rule.path("id").asText() + "/do",
                             "source.set must name a field declared in sourceFields: " + operation.path("field").asText());
-        return new Program(sourceId, decl, modifiers, expanded).withProfiles(profiles).withAttachment(attachment).withGrants(grants).withEntitlements(entitlements).withLimitOverrides(limitOverrides).withSourceFields(sourceFields).withPartyGrant(partyGrant).withUnarmedWeapon(unarmedWeapon);
+        return new Program(sourceId, decl, modifiers, expanded).withProfiles(profiles).withAttachment(attachment).withGrants(grants).withEntitlements(entitlements).withLimitOverrides(limitOverrides).withSourceFields(sourceFields).withPartyGrant(partyGrant).withUnarmedWeapon(unarmedWeapon).withProvides(provides);
     }
 
     private static final Set<String> RESERVED_SOURCE_FIELDS = Set.of("id", "instanceId", "name", "quantity", "qty", "automation",
@@ -557,6 +564,18 @@ public final class RuleCompiler {
     }
 
     /** Sheet metadata: named counts (1-16) of choices the character gains from this source, such as companion training options. */
+    private static ObjectNode provides(JsonNode declaration) {
+        String path = "/automation/provides";
+        if (!declaration.isObject() || declaration.isEmpty() || declaration.size() > 16) throw RuleJson.error(path, "Expected 1-16 provided lists.");
+        declaration.fields().forEachRemaining(field -> {
+            RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(field.getKey()), path);
+            JsonNode list = field.getValue();
+            if (!list.isArray() || list.isEmpty() || list.size() > 32) throw RuleJson.error(path + "/" + field.getKey(), "Expected 1-32 text values.");
+            for (JsonNode value : list) RuleJson.text(value, path + "/" + field.getKey());
+        });
+        return (ObjectNode) declaration.deepCopy();
+    }
+
     private static ObjectNode entitlements(JsonNode declaration) {
         String path = "/automation/entitlements";
         if (!declaration.isObject() || declaration.isEmpty() || declaration.size() > 16)
@@ -1739,6 +1758,16 @@ public final class RuleCompiler {
             for (int i = 0; i < outcomes.size(); i++) RuleTemplate.validate(RuleJson.text(outcomes.get(i), path + "/outcomes/" + i));
             return;
         }
+        if ("beastform.assume".equals(op)) {
+            RuleExpression.validate(operation.get("form"), path + "/form");
+            for (String field : List.of("base", "categories", "advantages", "features", "trait"))
+                if (operation.has(field)) RuleExpression.validate(operation.get(field), path + "/" + field);
+            for (String field : List.of("evolution", "anyTier"))
+                if (operation.has(field) && !operation.get(field).isBoolean()) throw RuleJson.error(path + "/" + field, "Expected a boolean.");
+            if (operation.has("until") && !RESETS_UNTIL.contains(RuleJson.text(operation.get("until"), path + "/until")))
+                throw RuleJson.error(path + "/until", "Expected manual, scene, shortRest, longRest or rest.");
+            return;
+        }
         if ("heritage.replace".equals(op)) {
             RuleExpression.validate(operation.get("ancestry"), path + "/ancestry");
             RuleExpression.validate(operation.get("feature"), path + "/feature");
@@ -1915,6 +1944,7 @@ public final class RuleCompiler {
                 && !("roll.resolve".equals(op) && "metadata".equals(field))
                 && !("damage.resolve".equals(op) && "armor".equals(field))
                 && !("track.capacity".equals(op) && Set.of("by", "counter", "amount", "direction").contains(field))
+                && !("beastform.assume".equals(op) && !"form".equals(field))
                 && !("dice.sequence".equals(op) && "advantaged".equals(field))
                 && !("claim.offer".equals(op) && "limit".equals(field))
                 && !("plan.adjust".equals(op) && "partyRecovery".equals(field))

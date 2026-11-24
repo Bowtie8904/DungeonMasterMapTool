@@ -1788,6 +1788,27 @@ public final class RuleRuntime {
                 else request.put("value", whole(op.path("value"), context, 1, 1000));
                 result = request.deepCopy();
             }
+            case "beastform.assume" -> {
+                ObjectNode actor = RuleJson.object(context.path("actor"), "/actor");
+                ArrayNode outbox = context.has("outbox") ? (ArrayNode) context.get("outbox") : context.putArray("outbox");
+                if (outbox.size() >= 32) throw RuleJson.error("/outbox", "Too many host requests.");
+                ObjectNode request = outbox.addObject().put("kind", kind)
+                        .put("sourceInstanceId", context.path("source").path("instanceId").asText())
+                        .put("holderId", RuleJson.id(actor.get("id"), "/actor/id"))
+                        .put("evolution", op.path("evolution").asBoolean(false)).put("anyTier", op.path("anyTier").asBoolean(false))
+                        .put("until", op.path("until").asText("manual"));
+                request.put("form", RuleJson.text(eval(op.path("form"), context), "/form"));
+                for (String field : List.of("base", "trait"))
+                    if (op.has(field)) request.put(field, RuleJson.text(eval(op.path(field), context), "/" + field));
+                for (String field : List.of("categories", "advantages", "features")) {
+                    if (!op.has(field)) continue;
+                    JsonNode picked = eval(op.path(field), context);
+                    if (!picked.isArray() || picked.size() > 16) throw RuleJson.error("/" + field, "Expected up to 16 choices.");
+                    ArrayNode names = request.putArray(field);
+                    for (JsonNode name : picked) names.add(RuleJson.text(name, "/" + field));
+                }
+                result = request.deepCopy();
+            }
             case "heritage.replace" -> {
                 ObjectNode actor = RuleJson.object(context.path("actor"), "/actor");
                 String ancestry = RuleJson.text(eval(op.path("ancestry"), context), "/ancestry"),

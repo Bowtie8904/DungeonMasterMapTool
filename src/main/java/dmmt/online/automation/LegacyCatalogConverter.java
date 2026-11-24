@@ -8,6 +8,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -33,7 +35,7 @@ public final class LegacyCatalogConverter {
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
             "damage", "alternateProfiles", "damageTypeChoice", "rest", "restReroll", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions",             "conditionalRollOptions", "conditionalMitigation", "elementChoice", "stances",
             "hopeReward", "classResourceOnly", "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "zeroHopeClearArmor",
-            "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases", "hideSpellcast", "companion", "companionTraining", "conditionalDamageRewards", "experienceRefund", "partyDowntime", "requirement", "unarmoredBase", "ignoreWeaponBurden", "unarmedWeapon",             "spellcastSuccessSteps", "banishDifficulty", "equipEffect", "dicePool");
+            "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases", "hideSpellcast", "companion", "companionTraining", "conditionalDamageRewards", "experienceRefund", "partyDowntime", "requirement", "unarmoredBase", "ignoreWeaponBurden", "unarmedWeapon",             "spellcastSuccessSteps", "banishDifficulty", "equipEffect", "dicePool", "beastforms", "beastformFree");
     private static final Set<String> DEATH_KINDS = Set.of("hopeBonus", "hopeSpend", "mask", "spectral", "egg", "battleHardened",
             "unbreakable", "undying", "lifeWard");
     /** Legacy gated families that are their base family plus extra conditions, which every family converts the same way. */
@@ -73,7 +75,7 @@ public final class LegacyCatalogConverter {
             "excludeSourceActor", "hostOwned", "selectAmount", "resourceRoll", "hopeDice", "layerRoll", "doomsday", "deferSourceUse", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
             "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime", "table",
             "hostRollAction", "bloodAutomation", "castTokens", "patronDice", "witchAction", "requiresCompanion",             "specialAction", "codexSwap", "spendFavor", "menacingReach",
-            "costConditions", "refocus", "chooseEffects", "channelRawPower", "requiresFeature", "mutagens", "rollDicePool", "followUpAction", "chatOnly", "ancestryChoice");
+            "costConditions", "refocus", "chooseEffects", "channelRawPower", "requiresFeature", "mutagens", "rollDicePool", "followUpAction", "chatOnly", "ancestryChoice", "beastform", "evolution", "assumeBeastform");
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
@@ -138,6 +140,9 @@ public final class LegacyCatalogConverter {
         Context context = new Context();
         JsonNode entries = catalog.path("entries");
         FEATURE_EFFECTS.set(featureEffects(entries));
+        List<JsonNode> forms = new ArrayList<>();
+        for (JsonNode entry : entries) for (JsonNode feature : entry.path("features")) feature.path("automation").path("beastforms").forEach(forms::add);
+        BEASTFORMS.set(forms);
         try {
         for (int i = 0; i < entries.size(); i++) {
             JsonNode entry = entries.get(i);
@@ -150,7 +155,7 @@ public final class LegacyCatalogConverter {
                     && !entry.path("name").asText().isBlank() ? "card:" + entry.path("name").asText() : null;
             walk((ObjectNode) entry, category + ":" + entry.path("id").asText(), path, recipes, context, sharedPools, cardKey);
         }
-        } finally { FEATURE_EFFECTS.remove(); }
+        } finally { FEATURE_EFFECTS.remove(); BEASTFORMS.remove(); }
         return new Result(catalog, context.blocks, context.converted, List.copyOf(context.diagnostics), Map.copyOf(context.assignedIds));
     }
 
@@ -312,6 +317,13 @@ public final class LegacyCatalogConverter {
         if (legacy.has("companionTraining") && (!legacy.path("companionTraining").isInt() || legacy.path("companionTraining").asInt() < 1))
             p.add(path + "/companionTraining", "Expected a positive whole number of training options.");
         else if (legacy.has("companionTraining")) out.putObject("entitlements").put("companionTraining", legacy.get("companionTraining").asInt());
+        if (legacy.has("beastformFree")) {
+            JsonNode names = legacy.get("beastformFree");
+            boolean valid = names.isArray() && !names.isEmpty() && names.size() <= 16;
+            if (valid) for (JsonNode name : names) valid &= name.isTextual() && !name.asText().isBlank() && name.asText().length() <= 32;
+            if (!valid) p.add(path + "/beastformFree", "Expected 1-16 Beastform names.");
+            else out.putObject("provides").set("beastformFree", names.deepCopy());
+        }
         if (legacy.has("banishDifficulty")) {
             if (!legacy.path("banishDifficulty").asBoolean(false)) p.add(path + "/banishDifficulty", "Expected true.");
             else out.putObject("sourceFields").putObject("banishDifficulty").put("label", "Banish difficulty")
@@ -417,7 +429,9 @@ public final class LegacyCatalogConverter {
                 legacyRule = zone(legacyRule, next.path(), p, effects, pools);
             legacyRule = witch(legacyRule, next.path(), p, pools, grants);
             ObjectNode rule = switch (next.family()) {
-                case "actions" -> legacyRule.has("rollDicePool")
+                case "actions" -> legacyRule.has("beastform") || legacyRule.has("evolution")
+                        ? beastformAction(legacyRule, next.path(), p, effects, pools, usesBudget, actionOrigin, cardKey, extra)
+                        : legacyRule.has("rollDicePool")
                         ? dicePoolRoll(legacyRule, next.path(), p, dicePool, usesBudget)
                         : legacyRule.has("deathMove")
                         ? deathAction(legacyRule, death, next.path(), p, effects, pools, usesBudget, extra, out)
@@ -1595,6 +1609,153 @@ public final class LegacyCatalogConverter {
         } else replace.set("ancestry", read("input.pick.ancestry"));
         replace.set("feature", read("input.pick.feature"));
     }
+    private static ObjectNode literalOption(String name, int tier) {
+        ObjectNode option = RuleJson.JSON.createObjectNode().put("name", name);
+        if (tier > 0) option.put("tier", tier);
+        return option;
+    }
+
+    private static ObjectNode atMostTier(Collection<JsonNode> forms, int maxTier) {
+        ObjectNode list = RuleJson.JSON.createObjectNode();
+        ArrayNode options = list.putArray("literal");
+        for (JsonNode form : forms) if (form.path("tier").asInt() <= maxTier) options.add(literalOption(form.path("name").asText(), form.path("tier").asInt()));
+        return list;
+    }
+
+    private static ObjectNode pickRecord(ArrayNode inputs, String id, String label, ObjectNode from, ObjectNode where) {
+        ObjectNode input = inputs.addObject().put("id", id).put("kind", "record.select").put("label", label)
+                .put("choiceLabel", where == null ? "{input.option.name}" : "{input.option.name} (tier {input.option.tier})");
+        input.set("from", from);
+        if (where != null) input.set("where", where);
+        return input;
+    }
+
+    private static void pickSeveral(ArrayNode inputs, String id, String label, Collection<String> names, int count) {
+        ObjectNode input = inputs.addObject().put("id", id).put("kind", "choice").put("label", label).put("count", count);
+        ArrayNode options = input.putArray("options");
+        Set<String> ids = new HashSet<>();
+        for (String name : names) options.addObject().put("id", unique(slug(name), ids)).put("label", escape(name));
+    }
+
+    /**
+     * {@code beastform} (stress) and {@code evolution} (Hope plus a raised trait) actions: one rule per kind of form, since
+     * the inputs of an evolved or hybrid form differ. Ordinary forms of your tier or lower are one record choice; an evolved
+     * form adds its base category, a hybrid its categories, advantages and features. The Stress cost is the action's Stress
+     * (unless a held item makes the form free) plus the hybrid's, and {@code beastform.assume} writes the form.
+     */
+    private static ObjectNode beastformAction(JsonNode legacy, String path, Problems p, ObjectNode effects, Pools pools,
+                                              boolean limited, String origin, String cardKey, List<ObjectNode> extra) {
+        boolean evolution = legacy.path("evolution").asBoolean(false);
+        if (evolution == legacy.path("beastform").asBoolean(false)) { p.add(path, "Expected exactly one of beastform or evolution."); return null; }
+        List<JsonNode> forms = BEASTFORMS.get();
+        if (forms == null || forms.isEmpty()) { p.add(path, "Converting a Beastform action requires the class Beastform catalog."); return null; }
+        List<JsonNode> ordinary = forms.stream().filter(f -> !f.has("evolved") && !f.has("hybrid")).toList();
+        List<JsonNode> special = forms.stream().filter(f -> f.has("evolved") || f.has("hybrid")).toList();
+        int baseStress = evolution ? 0 : legacy.path("cost").path("stress").asInt(0);
+        List<JsonNode> variants = new ArrayList<>();
+        variants.add(null);
+        variants.addAll(special);
+        ObjectNode first = null;
+        for (JsonNode form : variants) {
+            ObjectNode copy = ((ObjectNode) legacy).deepCopy();
+            copy.remove("beastform");
+            copy.remove("evolution");
+            if (copy.path("cost") instanceof ObjectNode cost) cost.remove("stress");
+            String formName = form == null ? null : form.path("name").asText();
+            if (form != null) {
+                copy.put("id", legacy.path("id").asText() + "-" + slug(formName));
+                copy.put("label", legacy.path("label").asText() + ": " + formName);
+            }
+            ObjectNode rule = action(copy, path, p, effects, pools, limited, origin, cardKey);
+            if (rule == null) return null;
+            ArrayNode inputs = rule.putArray("inputs");
+            ObjectNode assume = RuleJson.JSON.createObjectNode().put("op", "beastform.assume");
+            if (form == null) {
+                ObjectNode within = RuleJson.JSON.createObjectNode();
+                within.putArray("lte").add(read("input.option.tier")).add(read("actor.stats.tier"));
+                pickRecord(inputs, "form", "Beastform", atMostTier(ordinary, 4), within);
+                assume.set("form", read("input.form.name"));
+            } else {
+                ObjectNode gate = RuleJson.JSON.createObjectNode();
+                gate.putArray("gte").add(read("actor.stats.tier")).add(form.path("tier").asInt());
+                ObjectNode existing = rule.has("when") ? (ObjectNode) rule.get("when") : null;
+                if (existing == null) rule.set("when", gate);
+                else rule.putObject("when").putArray("and").add(existing).add(gate);
+                assume.put("form", formName);
+                if (form.has("evolved")) {
+                    pickRecord(inputs, "base", "Ordinary category", atMostTier(ordinary, form.path("evolved").path("maxTier").asInt()), null);
+                    assume.set("base", read("input.base.name"));
+                } else {
+                    JsonNode hybrid = form.path("hybrid");
+                    int maxTier = hybrid.path("maxTier").asInt();
+                    List<JsonNode> parts = ordinary.stream().filter(f -> f.path("tier").asInt() <= maxTier).toList();
+                    Set<String> advantages = new LinkedHashSet<>(), features = new LinkedHashSet<>();
+                    Set<String> names = new LinkedHashSet<>();
+                    for (JsonNode part : parts) {
+                        names.add(part.path("name").asText());
+                        part.path("advantages").forEach(a -> advantages.add(a.asText()));
+                        part.path("features").forEach(f -> features.add(f.path("name").asText()));
+                    }
+                    int categories = hybrid.path("count").asInt(), wantedAdvantages = hybrid.path("advantages").asInt(), wantedFeatures = hybrid.path("features").asInt();
+                    if (categories < 1 || categories > names.size() || wantedAdvantages < 1 || wantedAdvantages > advantages.size()
+                            || wantedFeatures < 1 || wantedFeatures > features.size() || names.size() > 64 || advantages.size() > 64 || features.size() > 64) {
+                        p.add(path, "Unsupported hybrid Beastform: " + formName);
+                        return null;
+                    }
+                    pickSeveral(inputs, "categories", "Ordinary categories", names, categories);
+                    pickSeveral(inputs, "advantages", "Advantages", advantages, wantedAdvantages);
+                    pickSeveral(inputs, "features", "Features", features, wantedFeatures);
+                    assume.set("categories", read("input.categories"));
+                    assume.set("advantages", read("input.advantages"));
+                    assume.set("features", read("input.features"));
+                }
+            }
+            if (evolution) {
+                ObjectNode traits = RuleJson.JSON.createObjectNode();
+                ArrayNode list = traits.putArray("literal");
+                for (String trait : List.of("Agility", "Strength", "Finesse", "Instinct", "Presence", "Knowledge")) list.add(literalOption(trait, 0));
+                pickRecord(inputs, "trait", "Trait raised by Evolution", traits, null);
+                assume.put("evolution", true);
+                assume.set("trait", read("input.trait.name"));
+            }
+            int hybridStress = form != null ? form.path("hybrid").path("stress").asInt(0) : 0;
+            if (baseStress + hybridStress > 0) {
+                ObjectNode amount = RuleJson.JSON.createObjectNode();
+                if (baseStress == 0) amount.put("literal", hybridStress);
+                else {
+                    ObjectNode name = form == null ? read("input.form.name") : RuleJson.JSON.createObjectNode().put("literal", formName);
+                    ObjectNode free = RuleJson.JSON.createObjectNode();
+                    free.putArray("if").add(RuleJson.JSON.createObjectNode().put("exists", "actor.provides.beastformFree"))
+                            .add(RuleJson.JSON.createObjectNode().set("includes", RuleJson.JSON.createArrayNode().add(read("actor.provides.beastformFree")).add(name)))
+                            .add(false);
+                    amount.putArray("if").add(free).add(hybridStress).add(baseStress + hybridStress);
+                }
+                ArrayNode costs = rule.has("costs") ? (ArrayNode) rule.get("costs") : rule.putArray("costs");
+                costs.addObject().put("op", "track.mark").put("track", TRACKS.get("stress")).set("amount", amount.has("literal") ? amount.get("literal") : amount);
+            }
+            ArrayNode steps = rule.has("do") ? (ArrayNode) rule.get("do") : rule.putArray("do");
+            steps.add(assume);
+            ObjectNode ui = (ObjectNode) rule.get("ui");
+            if (!legacy.has("report"))
+                ui.put("report", "Transformed into " + (form == null ? "{input.form.name}" : escape(formName))
+                        + (evolution ? "; Evolution: +1 {input.trait.name}" : "") + ".");
+            if (first == null) first = rule; else extra.add(rule);
+        }
+        return first;
+    }
+
+    /** {@code assumeBeastform}: transform into one named ordinary form of any tier, as a plain fixed step (Yeti Coat). */
+    private static void assumeBeastform(JsonNode spec, String path, Problems p, ArrayNode steps) {
+        p.onlyFields(spec, path, Set.of("form", "until"));
+        String form = spec.path("form").asText(""), until = spec.path("until").asText("manual");
+        if (form.isBlank() || form.length() > 64) { p.add(path + "/form", "Expected a Beastform name."); return; }
+        if (!Set.of("manual", "scene", "shortRest", "longRest", "rest").contains(until)) { p.add(path + "/until", "Unsupported duration: " + until); return; }
+        List<JsonNode> forms = BEASTFORMS.get();
+        if (forms != null && !forms.isEmpty() && forms.stream().noneMatch(f -> form.equals(f.path("name").asText()) && !f.has("evolved") && !f.has("hybrid")))
+            p.add(path + "/form", "The class catalog has no ordinary " + form + " Beastform.");
+        ObjectNode assume = steps.addObject().put("op", "beastform.assume").put("form", form).put("anyTier", true).put("until", until);
+        assume.put("form", form);
+    }
     private static ObjectNode eqNode(JsonNode left, Object right) {
         ObjectNode eq = RuleJson.JSON.createObjectNode();
         ArrayNode pair = eq.putArray("eq").add(left);
@@ -1642,6 +1803,7 @@ public final class LegacyCatalogConverter {
      * per-amount offers publish a claim limit.
      */
     private static final ThreadLocal<JsonNode> ANCESTRY_CATALOG = new ThreadLocal<>();
+    private static final ThreadLocal<List<JsonNode>> BEASTFORMS = new ThreadLocal<>();
     private static final ThreadLocal<Map<String, Set<String>>> FEATURE_EFFECTS = new ThreadLocal<>();
 
     /** Effect names started by each named feature of the catalog, so another feature can react to them. */
@@ -5059,6 +5221,7 @@ public final class LegacyCatalogConverter {
         if (action.has("chooseEffects")) chooseEffects(action.get("chooseEffects"), path + "/chooseEffects", p, effects, rule, steps);
         if (action.has("mutagens")) mutagens(action.get("mutagens"), path + "/mutagens", p, effects, rule, steps);
         if (action.has("ancestryChoice")) ancestryChoice(action.get("ancestryChoice"), path + "/ancestryChoice", p, rule, steps);
+        if (action.has("assumeBeastform")) assumeBeastform(action.get("assumeBeastform"), path + "/assumeBeastform", p, steps);
         if (action.has("channelRawPower")) channelRawPower(action.get("channelRawPower"), path + "/channelRawPower", p, effects, rule, steps);
         String reachReport = action.has("menacingReach") ? menacingReach(action, path, p, effects, steps) : null;
         endEffect(action, steps, operationTarget);

@@ -40,7 +40,7 @@ public final class AutomationHost {
     private static final int MAX_REACTION_PROJECTION_PASSES = 16;
     private static final Set<String> STAGED_REST_COMMANDS = Set.of(
             "countdown.start", "limits.refresh", "effect.endElsewhere", "table.gain", "table.spend", "claim.offer", "limit.restore",
-            "recovery.offerRoll", "downtime.offerRoll", "heritage.replace");
+            "recovery.offerRoll", "downtime.offerRoll", "heritage.replace", "beastform.assume");
     private static final Set<String> STAGED_TARGET_REST_COMMANDS = Set.of(
             "countdown.start", "limits.refresh", "table.gain", "table.spend", "claim.offer", "limit.restore",
             "recovery.offerRoll", "downtime.offerRoll");
@@ -4696,10 +4696,19 @@ public final class AutomationHost {
         ObjectNode limitOverrides = RuleJson.JSON.createObjectNode();
         ArrayNode derived = RuleJson.JSON.createArrayNode();
         boolean readsDerivedTraits = false;
+        ObjectNode provides = RuleJson.JSON.createObjectNode();
         for (SheetProjection.SourceElement element : sources) {
             RuleCompiler.Program program = pack.programs().get(element.sourceId());
             if (program == null) continue;
             if (computedPools != null && program.hasComputedActorPools()) computedPools.add(element);
+            if (program.provides() != null) program.provides().fields().forEachRemaining(field -> {
+                ArrayNode list = provides.withArray(field.getKey());
+                for (JsonNode value : field.getValue()) {
+                    boolean present = false;
+                    for (JsonNode existing : list) present |= existing.equals(value);
+                    if (!present) list.add(value);
+                }
+            });
             for (JsonNode override : program.limitOverrides()) {
                 String key = override.path("feature").asText() + ":" + override.path("limit").asText();
                 limitOverrides.put(key, Math.max(limitOverrides.path(key).asInt(), override.path("max").asInt()));
@@ -4750,6 +4759,7 @@ public final class AutomationHost {
                                 modifier.path("label").asText(effect.path("label").asText()), false));
         }
         actor.set("stats", projection.stats(actor, modifiers));
+        actor.set("provides", provides);
         if (!limitOverrides.isEmpty()) actor.set("limitOverrides", limitOverrides);
         return new ActorProjection(actor, rollModifiers);
     }
