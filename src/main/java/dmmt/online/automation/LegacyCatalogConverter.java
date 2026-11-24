@@ -54,7 +54,7 @@ public final class LegacyCatalogConverter {
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
             "chatBenefits", "allowSourceOwner", "loadoutDomain", "primaryWeapon", "anyWeapon", "advantage", "giveFear", "check", "choices",
             "magicOnly", "weaponRanges", "addDice", "damageDice", "damageDiceBelow", "rerollDualityDie", "spendHopeAmount", "disadvantage", "removeFear", "weaponDamage", "rollSection", "containsDie", "resourceRoll", "selectAmount",
-            "target", "excludeSourceActor", "splendorAction", "hostRollAction", "otherPlayerOnly", "spentTokenDamage", "bloodAutomation", "swapDuality", "repeatable", "weapon", "tokenGain", "matchResource", "magicAction", "damageSource", "spellDomain", "vaultSource", "rerollResourceDice", "rerollAnyDie", "dualityDieBonus");
+            "target", "excludeSourceActor", "splendorAction", "hostRollAction", "otherPlayerOnly", "spentTokenDamage", "bloodAutomation", "swapDuality", "repeatable", "weapon", "tokenGain", "matchResource", "magicAction", "damageSource", "spellDomain", "vaultSource", "rerollResourceDice", "rerollAnyDie", "dualityDieBonus", "actionRoll", "spendFavor");
     private static final Set<String> MITIGATION_FIELDS = Set.of("id", "label", "description", "when", "cost", "negate", "halve", "reduce",
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
@@ -72,7 +72,7 @@ public final class LegacyCatalogConverter {
             "requiresEffect", "excludesEffect", "endEffect", "uses", "usesSource", "actionRoll", "target",
             "excludeSourceActor", "hostOwned", "selectAmount", "resourceRoll", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
             "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime", "table",
-            "hostRollAction", "bloodAutomation", "castTokens", "patronDice", "witchAction", "requiresCompanion", "specialAction", "codexSwap");
+            "hostRollAction", "bloodAutomation", "castTokens", "patronDice", "witchAction", "requiresCompanion", "specialAction", "codexSwap", "spendFavor");
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
@@ -382,7 +382,7 @@ public final class LegacyCatalogConverter {
                     if (option != null) ((ObjectNode) option.get("ui")).put("label", "{source.name}");
                     yield option;
                 }
-                case "rollTriggers", "conditionalRollTriggers" -> rollTrigger(legacyRule, next.path(), p, effects, pools, usesBudget);
+                case "rollTriggers", "conditionalRollTriggers" -> rollTrigger(legacyRule, next.path(), p, effects, pools, usesBudget, actionOrigin, cardKey);
                 default -> mitigation(legacyRule, next.path(), p, effects, pools, usesBudget);
             };
             if (rule == null) { extra.clear(); grants.clear(); continue; }
@@ -2480,7 +2480,20 @@ public final class LegacyCatalogConverter {
     }
 
     private static ObjectNode rollTrigger(JsonNode trigger, String path, Problems p, ObjectNode effects, Pools pools, boolean limited) {
+        return rollTrigger(trigger, path, p, effects, pools, limited, null, null);
+    }
+
+    private static ObjectNode rollTrigger(JsonNode trigger, String path, Problems p, ObjectNode effects, Pools pools, boolean limited,
+                                          String origin, String cardKey) {
+        if (trigger.has("chatDamage") && !trigger.has("damage") && trigger.isObject()) {
+            // The legacy chat button rolls this spell damage on demand; the rule rolls the same dice as its own damage step.
+            ObjectNode renamed = ((ObjectNode) trigger).deepCopy();
+            renamed.set("damage", renamed.remove("chatDamage"));
+            trigger = renamed;
+        }
         p.onlyFields(trigger, path, TRIGGER_FIELDS);
+        boolean favorGate = trigger.path("spendFavor").asBoolean(false);
+        if (favorGate) trigger = spendFavor(trigger, path, p, pools);
         hostOwned(trigger, path, p);
         hostRollAction(trigger, path, p);
         boolean spentTokenDamage = false;
@@ -2504,8 +2517,12 @@ public final class LegacyCatalogConverter {
         if (trigger.has("exclusiveRollGroup") && (!trigger.path("exclusiveRollGroup").isTextual()
                 || trigger.path("exclusiveRollGroup").asText().isBlank()))
             p.add(path + "/exclusiveRollGroup", "Expected a nonempty exclusive group name.");
-        ObjectNode rule = ruleShell(trigger, path, p, "roll.finished", "roll", "button");
+        boolean incomingDamage = "incomingDamage".equals(trigger.path("on").asText());
+        ObjectNode rule = incomingDamage ? ruleShell(trigger, path, p, "damage.applied", "damage", "button")
+                : ruleShell(trigger, path, p, "roll.finished", "roll", "button");
         if (rule == null) return null;
+        if (incomingDamage && (!"ally".equals(trigger.path("audience").asText()) || !trigger.has("actionRoll")))
+            p.add(path + "/on", "An incomingDamage trigger needs the ally audience and an action roll.");
         if (trigger.has("audience")) {
             String audience = switch (trigger.path("audience").asText()) {
                 case "ally" -> "others";
@@ -2566,7 +2583,13 @@ public final class LegacyCatalogConverter {
             when.addObject().put("exists", spent);
             when.addObject().putArray("gte").add(read(spent)).add(1);
         }
-        if (trigger.has("on")) rollCondition(trigger.path("on").asText(), path + "/on", p, when);
+        if (trigger.has("on") && !incomingDamage) rollCondition(trigger.path("on").asText(), path + "/on", p, when);
+        if (favorGate) {
+            // The legacy trigger is unavailable once the roll is known to have missed its difficulty.
+            ArrayNode ok = when.addObject().putArray("or");
+            ok.addObject().putArray("eq").add(read("event.check.difficulty")).addNull();
+            ok.addObject().putArray("gte").add(read("event.check.total")).add(read("event.check.difficulty"));
+        }
         if (trigger.has("when")) {
             String condition = trigger.path("when").asText();
             if (Set.of("hope", "fear").contains(condition)) when.addObject().putArray("eq").add(read("event.check.dominant")).add(condition);
@@ -2888,6 +2911,14 @@ public final class LegacyCatalogConverter {
         if (trigger.has("damage"))
             actionDamage(trigger.get("damage"), path + "/damage", trigger, p, steps, read("event.check.critical"), "triggerDamage");
         if (trigger.has("sendRoll")) sentRoll(trigger.get("sendRoll"), path + "/sendRoll", trigger, p, steps);
+        if (trigger.has("actionRoll")) actionRoll(trigger.get("actionRoll"), path + "/actionRoll", trigger, p, steps);
+        if (origin != null && incomingDamage) for (JsonNode step : steps) {
+            // The reaction button rolls the same action, so follow-up triggers recognise its origin.
+            if ("roll.resolve".equals(step.path("op").asText()) && step.at("/plan/literal/metadata") instanceof ObjectNode metadata) {
+                metadata.put("origin", origin);
+                if (cardKey != null) metadata.put("actionOrigin", "featureAction:" + cardKey + ":" + trigger.path("id").asText());
+            }
+        }
         if (trigger.has("resourceRoll")) resourceRoll(trigger.get("resourceRoll"), path + "/resourceRoll", trigger, p, pools, rule, steps);
         if (trigger.has("check")) check(trigger, path, p, rule, steps, effects, pools, operationTarget);
         else if (trigger.has("choices")) rollChoices(trigger, path, p, rule, steps, effects, pools, operationTarget, from);
@@ -3963,6 +3994,21 @@ public final class LegacyCatalogConverter {
         return copy;
     }
 
+    /**
+     * {@code spendFavor}: the player chooses how many Favor to spend and the report states the equal Stress the target
+     * marks. The legacy host only reported it too; the rule pays the chosen Favor.
+     */
+    private static JsonNode spendFavor(JsonNode owner, String path, Problems p, Pools pools) {
+        if (!owner.path("spendFavor").isBoolean()) p.add(path + "/spendFavor", "Expected a boolean.");
+        if (!pools.has("favor")) p.add(path + "/spendFavor", "Spending Favor needs a Favor resource.");
+        if (owner.has("selectAmount")) p.add(path + "/spendFavor", "Spending Favor cannot also select another amount.");
+        ObjectNode copy = owner.deepCopy();
+        copy.remove("spendFavor");
+        copy.putObject("selectAmount").put("resource", "favor").put("label", "Favor to spend");
+        if (!copy.has("report")) copy.put("report", "Spent {input.amount} Favor; the target marks {input.amount} Stress.");
+        return copy;
+    }
+
     private static ObjectNode action(JsonNode action, String path, Problems p, ObjectNode effects, Pools pools,
                                      boolean limited, String origin, String cardKey) {
         p.onlyFields(action, path, ACTION_FIELDS);
@@ -3971,6 +4017,7 @@ public final class LegacyCatalogConverter {
         hostRollAction(action, path, p);
         boolean spendsTokens = action.has("castTokens");
         if (spendsTokens) action = castTokens(action, path, p);
+        if (action.path("spendFavor").asBoolean(false)) action = spendFavor(action, path, p, pools);
         String id = action.path("id").asText();
         if (!ID.matcher(id).matches()) { p.add(path + "/id", "Invalid action ID: " + id); return null; }
         String label = action.path("label").asText("");

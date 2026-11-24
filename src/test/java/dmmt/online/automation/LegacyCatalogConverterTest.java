@@ -2225,6 +2225,24 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void chatDamageIncomingReactionsAndFavorSpendsConvertGenerically() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"pact","name":"Pact","automation":{"resources":[{"id":"favor","label":"Favor","initial":3,"resetOn":"rest"}],
+                  "actions":[{"id":"foes","label":"Foes","spendFavor":true},
+                    {"id":"guard","label":"Guard","actionRoll":{"trait":"spellcast","reaction":true}}],
+                  "rollTriggers":[
+                    {"id":"foes","label":"Foes","on":"action","when":"hope","spendFavor":true},
+                    {"id":"guard","label":"Guard","on":"incomingDamage","audience":"ally","actionRoll":{"trait":"spellcast","reaction":true}},
+                    {"id":"bolt","label":"Bolt","on":"attack","chatDamage":{"dice":"1d6","type":"magic"}}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        JsonNode block = block(result, 0);
+        assertTrue(block.toString().contains("\"event\":\"damage.applied\""), block.toString());
+        assertTrue(block.toString().contains("Favor to spend"), block.toString());
+        assertTrue(block.toString().contains("roll.resolve"), block.toString());
+        program(result, 0);
+    }
+
+    @Test
     void mitigationIncreasesRecoveriesQuantitiesAndTableReactionsConvert() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"edge","name":"Edge","automation":{"resources":[{"id":"thorns","label":"Thorns","initial":0,"resetOn":"rest"}],"mitigation":[
