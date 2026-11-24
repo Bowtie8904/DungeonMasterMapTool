@@ -82,6 +82,12 @@ export async function executeDeathOption(actorId: string, intent: RuleIntent): P
     deathAction: true, selections: [selectionFromIntent(intent)] });
 }
 
+export async function executeDamage(actorId: string, request: {
+  requestId: string; expectedRevision: number; selections?: import('./controls').RollSelection[];
+  damage: { amount: number; armor: number; type?: string };
+}): Promise<unknown> {
+  return postIntent(actorId, { ...request, selections: request.selections ?? [] });
+}
 export async function executeDeathRoll(actorId: string, move: string, request: {
   requestId: string; expectedRevision: number; selections: import('./controls').RollSelection[];
 }): Promise<unknown> {

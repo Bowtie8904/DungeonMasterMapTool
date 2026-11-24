@@ -37,6 +37,7 @@ import { companionAvailable, companionFeatures, companionRules, companionWeapon,
 import { rich, inline } from './rich';
 import { automationPanel } from '../automation/panel';
 import { openAutomationCheckDialog, type ReactionPromptRef } from '../automation/check';
+import { openAutomationDamageDialog } from '../automation/damage';
 import { openAutomationDeathDialog } from '../automation/death';
 import { openAutomationRestDialog } from '../automation/rest';
 import { MAX_LEVEL, replaceAncestry } from './rules';
@@ -253,7 +254,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     if (!opts.actorId || !opts.beforeAutomationRoll) { legacy(); return; }
     void openAutomationDeathDialog(opts.actorId, opts.beforeAutomationRoll).then(handled => { if (!handled) legacy(); });
   };
-  const openDamage = (host: HTMLElement = root) => openDamageDialog(host, c, (summary, severity, incomingDamage) => {
+  const openLegacyDamage = (host: HTMLElement = root) => openDamageDialog(host, c, (summary, severity, incomingDamage) => {
     opts.onLog?.(summary, undefined, undefined, incomingDamage);
     opts.onChange?.();
     render();
@@ -261,6 +262,11 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       void opts.onDamageTaken(severity).catch((e: Error) => opts.onLog?.(`Could not expire damage-linked effects: ${e.message}`));
     }
   }, undefined, opts.onIncomingDamage, (label, value) => opts.onLog?.(`${label}\nWard Die: 1d8 = ${value}\nIncoming damage reduced by ${value}.${value === 8 ? ' The Rune Ward trinket is destroyed.' : ''}`));
+  const openDamage = (host: HTMLElement = root) => {
+    if (!opts.actorId || !opts.beforeAutomationRoll) { openLegacyDamage(host); return; }
+    void openAutomationDamageDialog(opts.actorId, opts.beforeAutomationRoll, () => opts.onChange?.())
+      .then(handled => { if (!handled) openLegacyDamage(host); });
+  };
   const inventoryQuery = { equipment: '', loot: '' };
   const expandedDescriptions = new Set<string>();
   const expandedQuickDescriptions = new Set<string>();
