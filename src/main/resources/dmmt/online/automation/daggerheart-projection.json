@@ -18,6 +18,8 @@
     "name": { "kind": "value", "path": "name" },
     "level": { "kind": "value", "path": "level" },
     "evasion": { "kind": "value", "path": "evasion" },
+    "ancestry": { "kind": "value", "type": "string", "path": "ancestry", "writable": true, "default": "" },
+    "ancestryFeature": { "kind": "value", "type": "string", "path": "ancestryFeature", "writable": true, "default": "" },
     "gold": { "kind": "value", "path": "gold", "writable": true, "min": 0, "max": 1000000 },
     "scars": { "kind": "value", "path": "scars", "writable": true, "min": 0, "max": 1000, "default": 0 },
     "hp": { "kind": "object", "path": "hp", "fields": { "marked": "on", "capacity": "slots", "permanent": "permanentHp" },

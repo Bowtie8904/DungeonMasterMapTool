@@ -73,7 +73,7 @@ public final class LegacyCatalogConverter {
             "excludeSourceActor", "hostOwned", "selectAmount", "resourceRoll", "hopeDice", "layerRoll", "doomsday", "deferSourceUse", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
             "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime", "table",
             "hostRollAction", "bloodAutomation", "castTokens", "patronDice", "witchAction", "requiresCompanion",             "specialAction", "codexSwap", "spendFavor", "menacingReach",
-            "costConditions", "refocus", "chooseEffects", "channelRawPower", "requiresFeature", "mutagens", "rollDicePool", "followUpAction", "chatOnly");
+            "costConditions", "refocus", "chooseEffects", "channelRawPower", "requiresFeature", "mutagens", "rollDicePool", "followUpAction", "chatOnly", "ancestryChoice");
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
@@ -115,6 +115,13 @@ public final class LegacyCatalogConverter {
 
     public static Result convert(String legacyJson) throws IOException {
         return convert(legacyJson, Map.of());
+    }
+
+    /** Conversion of a catalog whose actions list ancestries (Shapeshifter) needs the ancestry catalog the options are taken from. */
+    public static Result convert(String legacyJson, Map<String, ObjectNode> sharedPools, String ancestriesJson) throws IOException {
+        ANCESTRY_CATALOG.set(RuleJson.parse(ancestriesJson, RuleJson.MAX_DOCUMENT_CHARACTERS, RuleJson.MAX_DOCUMENT_NODES));
+        try { return convert(legacyJson, sharedPools); }
+        finally { ANCESTRY_CATALOG.remove(); }
     }
 
     public static Result convert(String legacyJson, Map<String, ObjectNode> sharedPools) throws IOException {
@@ -1544,6 +1551,50 @@ public final class LegacyCatalogConverter {
         starts.forEach(steps::add);
     }
 
+    /**
+     * {@code ancestryChoice}: the player picks one ancestry feature (any ancestry for "ancestry"; for "feature" only a different
+     * feature of the current ancestry) and {@code heritage.replace} swaps the heritage row. The options are the ancestry
+     * catalog's (ancestry, feature) pairs; a mixed "A / B" ancestry offers only the first feature of A and the second of B.
+     */
+    private static void ancestryChoice(JsonNode mode, String path, Problems p, ObjectNode rule, ArrayNode steps) {
+        if (!Set.of("ancestry", "feature").contains(mode.asText())) { p.add(path, "Expected ancestry or feature."); return; }
+        if (rule.has("inputs")) { p.add(path, "An ancestry choice cannot share an action with another input."); return; }
+        JsonNode catalog = ANCESTRY_CATALOG.get();
+        if (catalog == null) { p.add(path, "Converting an ancestry choice requires the ancestry catalog."); return; }
+        ArrayNode options = RuleJson.JSON.createArrayNode();
+        for (JsonNode entry : catalog.path("entries")) {
+            int slot = 0;
+            for (JsonNode feature : entry.path("features")) {
+                options.addObject().put("ancestry", entry.path("name").asText()).put("feature", feature.path("name").asText()).put("slot", slot++);
+            }
+        }
+        if (options.isEmpty() || options.size() > 64) { p.add(path, "Expected 1 to 64 ancestry features."); return; }
+        boolean feature = "feature".equals(mode.asText());
+        ObjectNode input = rule.putArray("inputs").addObject().put("id", "pick").put("kind", "record.select")
+                .put("label", feature ? "Ancestry feature to retain" : "Ancestry and feature to take")
+                .put("choiceLabel", "{input.option.ancestry} - {input.option.feature}");
+        input.putObject("from").set("literal", options);
+        ObjectNode replace = steps.addObject().put("op", "heritage.replace");
+        if (feature) {
+            ObjectNode names = RuleJson.JSON.createObjectNode();
+            names.putArray("split").add(read("actor.ancestry")).add(" / ");
+            ObjectNode index = RuleJson.JSON.createObjectNode();
+            index.putArray("indexOf").add(names).add(read("input.option.ancestry"));
+            ObjectNode single = RuleJson.JSON.createObjectNode();
+            single.putArray("eq").add(RuleJson.JSON.createObjectNode().set("size", names)).add(1);
+            ObjectNode slotMatches = RuleJson.JSON.createObjectNode();
+            slotMatches.putArray("eq").add(index).add(read("input.option.slot"));
+            ObjectNode member = RuleJson.JSON.createObjectNode();
+            member.putArray("ne").add(index).add(-1);
+            ObjectNode either = RuleJson.JSON.createObjectNode();
+            either.putArray("or").add(single).add(slotMatches);
+            ObjectNode different = RuleJson.JSON.createObjectNode();
+            different.putArray("ne").add(read("input.option.feature")).add(read("actor.ancestryFeature"));
+            input.putObject("where").putArray("and").add(member).add(either).add(different);
+            replace.set("ancestry", read("actor.ancestry"));
+        } else replace.set("ancestry", read("input.pick.ancestry"));
+        replace.set("feature", read("input.pick.feature"));
+    }
     private static ObjectNode eqNode(JsonNode left, Object right) {
         ObjectNode eq = RuleJson.JSON.createObjectNode();
         ArrayNode pair = eq.putArray("eq").add(left);
@@ -1590,6 +1641,7 @@ public final class LegacyCatalogConverter {
      * is scoped to the offering source instance; each recipient may claim once per offer, and exclusive benefits or
      * per-amount offers publish a claim limit.
      */
+    private static final ThreadLocal<JsonNode> ANCESTRY_CATALOG = new ThreadLocal<>();
     private static final ThreadLocal<Map<String, Set<String>>> FEATURE_EFFECTS = new ThreadLocal<>();
 
     /** Effect names started by each named feature of the catalog, so another feature can react to them. */
@@ -5006,6 +5058,7 @@ public final class LegacyCatalogConverter {
         if (action.has("refocus")) refocus(action, path, p, pools, steps);
         if (action.has("chooseEffects")) chooseEffects(action.get("chooseEffects"), path + "/chooseEffects", p, effects, rule, steps);
         if (action.has("mutagens")) mutagens(action.get("mutagens"), path + "/mutagens", p, effects, rule, steps);
+        if (action.has("ancestryChoice")) ancestryChoice(action.get("ancestryChoice"), path + "/ancestryChoice", p, rule, steps);
         if (action.has("channelRawPower")) channelRawPower(action.get("channelRawPower"), path + "/channelRawPower", p, effects, rule, steps);
         String reachReport = action.has("menacingReach") ? menacingReach(action, path, p, effects, steps) : null;
         endEffect(action, steps, operationTarget);
@@ -7386,6 +7439,10 @@ public final class LegacyCatalogConverter {
                 texts.put(file, text);
         }
         Map<String, ObjectNode> shared = sharedPools(List.copyOf(texts.values()));
+        for (String text : texts.values()) {
+            JsonNode parsedCatalog = RuleJson.parse(text, RuleJson.MAX_DOCUMENT_CHARACTERS, RuleJson.MAX_DOCUMENT_NODES);
+            if ("ancestries".equals(parsedCatalog.path("category").asText())) ANCESTRY_CATALOG.set(parsedCatalog);
+        }
         for (var legacyCatalog : texts.entrySet()) {
             Path file = legacyCatalog.getKey();
             Result result = convert(legacyCatalog.getValue(), shared, recipes);

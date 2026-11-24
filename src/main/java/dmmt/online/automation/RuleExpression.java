@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
 public final class RuleExpression {
     private static final Set<String> ROOTS = Set.of("source", "actor", "recipient", "event", "state", "input", "die", "result", "args", "effects", "gear", "sourcePools");
     private static final Set<String> UNARY = Set.of("not", "floor", "ceil", "negate", "size", "flatten");
-    private static final Set<String> BINARY = Set.of("subtract", "divide", "eq", "ne", "gt", "gte", "lt", "lte", "includes", "count", "pluck", "containsText", "at", "effectValue", "indexOf");
+    private static final Set<String> BINARY = Set.of("subtract", "divide", "eq", "ne", "gt", "gte", "lt", "lte", "includes", "count", "pluck", "containsText", "at", "effectValue", "indexOf", "split");
     private static final Set<String> MANY = Set.of("add", "multiply", "min", "max", "and", "or");
     private static final Pattern PATH_PART = Pattern.compile("[a-zA-Z_][a-zA-Z0-9_-]*");
     private static final double MAX_NUMBER = 9_007_199_254_740_991d;
@@ -171,6 +171,14 @@ public final class RuleExpression {
             int found = 0;
             for (JsonNode element : values[0]) if (equal(element, values[1])) found++;
             return numeric(found, path);
+        }
+        if ("split".equals(op)) {
+            if (!values[0].isTextual() || !values[1].isTextual() || values[1].asText().isEmpty())
+                throw RuleJson.error(path, "split requires a text and a non-empty separator.");
+            var parts = RuleJson.JSON.createArrayNode();
+            for (String part : values[0].asText().split(java.util.regex.Pattern.quote(values[1].asText()), -1)) parts.add(part);
+            if (parts.size() > 64) throw RuleJson.error(path, "split produced too many parts.");
+            return parts;
         }
         if ("containsText".equals(op)) {
             if (!values[0].isTextual() || !values[1].isTextual()) throw RuleJson.error(path, "containsText requires two texts.");

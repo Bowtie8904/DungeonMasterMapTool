@@ -1788,6 +1788,21 @@ public final class RuleRuntime {
                 else request.put("value", whole(op.path("value"), context, 1, 1000));
                 result = request.deepCopy();
             }
+            case "heritage.replace" -> {
+                ObjectNode actor = RuleJson.object(context.path("actor"), "/actor");
+                String ancestry = RuleJson.text(eval(op.path("ancestry"), context), "/ancestry"),
+                        feature = RuleJson.text(eval(op.path("feature"), context), "/feature");
+                if (ancestry.isBlank() || ancestry.length() > 128 || feature.isBlank() || feature.length() > 128)
+                    throw RuleJson.error("/op", "Choose a valid ancestry and feature.");
+                ArrayNode outbox = context.has("outbox") ? (ArrayNode) context.get("outbox") : context.putArray("outbox");
+                if (outbox.size() >= 32) throw RuleJson.error("/outbox", "Too many host requests.");
+                ObjectNode request = outbox.addObject().put("kind", kind)
+                        .put("sourceInstanceId", context.path("source").path("instanceId").asText())
+                        .put("holderId", RuleJson.id(actor.get("id"), "/actor/id"))
+                        .put("ancestry", ancestry).put("feature", feature);
+                actor.put("ancestry", ancestry).put("ancestryFeature", feature);
+                result = request.deepCopy();
+            }
             default -> throw RuleJson.error("/op", "Unsupported operation: " + kind);
         }
         if (op.has("as")) ((ObjectNode) context.get("result")).set(op.path("as").asText(), result.deepCopy());

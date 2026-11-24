@@ -49,6 +49,7 @@ public final class RuleCompiler {
             Map.entry("recovery.offerRoll", List.of("roll", "track", "label", "offset")),
             Map.entry("downtime.offerRoll", List.of("roll", "label", "offset", "group")),
             Map.entry("inventory.grant", List.of("catalog", "entry", "quantity", "label", "to", "tag", "max", "scope")),
+            Map.entry("heritage.replace", List.of("ancestry", "feature")),
             Map.entry("state.set", List.of("slot", "value")),
             Map.entry("state.increment", List.of("slot", "by")),
             Map.entry("flag.set", List.of("flag", "value")),
@@ -1736,6 +1737,11 @@ public final class RuleCompiler {
             if (!outcomes.isArray() || outcomes.size() < 2 || outcomes.size() > 100)
                 throw RuleJson.error(path + "/outcomes", "Expected 2-100 outcomes, one per die face.");
             for (int i = 0; i < outcomes.size(); i++) RuleTemplate.validate(RuleJson.text(outcomes.get(i), path + "/outcomes/" + i));
+            return;
+        }
+        if ("heritage.replace".equals(op)) {
+            RuleExpression.validate(operation.get("ancestry"), path + "/ancestry");
+            RuleExpression.validate(operation.get("feature"), path + "/feature");
             return;
         }
         if ("inventory.grant".equals(op)) {

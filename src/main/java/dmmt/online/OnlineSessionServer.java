@@ -7507,6 +7507,16 @@ public final class OnlineSessionServer {
                         throw new IllegalArgumentException("The feature roll's actor is no longer available.");
                     publishedMessages.add(rollPosition++, profileRollMessage(roller, event));
                 }
+                case "heritage.replace" -> {
+                    String holder = command.path("holderId").asText();
+                    ObjectNode target = changed.get(holder);
+                    if (target == null)
+                        throw new IllegalArgumentException("The ancestry change's character is not in this transaction.");
+                    HeritageRules.replace(target, catalogs().document("ancestries"),
+                            command.path("ancestry").asText(), command.path("feature").asText());
+                    automationHost.endEffectsOfRemovedSources(pack, target, automationEvent("rest.commit", automationActor(holder)));
+                    affected.add(holder);
+                }
                 case "inventory.grant" -> {
                     if (response == null || response.path("actions").size() != 1)
                         throw new dmmt.online.automation.RuleRuntime.Unavailable("inventorySettlement",

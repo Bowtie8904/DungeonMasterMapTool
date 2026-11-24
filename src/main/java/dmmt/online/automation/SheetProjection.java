@@ -250,8 +250,12 @@ public final class SheetProjection {
                 RuleJson.fields(fact, at, "kind", "path", "writable", "min", "max", "default", "type");
                 bounds(fact, at);
                 if (fact.has("default") && !fact.get("default").isValueNode()) throw RuleJson.error(at + "/default", "Expected a plain default value.");
-                if (fact.has("type") && !"boolean".equals(fact.path("type").asText()))
-                    throw RuleJson.error(at + "/type", "The only explicit value type is boolean.");
+                if (fact.has("type") && !Set.of("boolean", "string").contains(fact.path("type").asText()))
+                    throw RuleJson.error(at + "/type", "Explicit value types are boolean and string.");
+                if ("string".equals(fact.path("type").asText())) {
+                    if (fact.has("min") || fact.has("max")) throw RuleJson.error(at, "String facts cannot have numeric bounds.");
+                    if (fact.has("default") && !fact.get("default").isTextual()) throw RuleJson.error(at + "/default", "Expected a text default.");
+                }
                 if ("boolean".equals(fact.path("type").asText())) {
                     if (fact.has("min") || fact.has("max")) throw RuleJson.error(at, "Boolean facts cannot have numeric bounds.");
                     if (fact.has("default")) RuleExpression.bool(fact.get("default"), at + "/default");
@@ -768,6 +772,9 @@ public final class SheetProjection {
                     if ("boolean".equals(fact.path("type").asText())) {
                         set(sheet, fact.path("path").asText(),
                                 RuleJson.JSON.getNodeFactory().booleanNode(RuleExpression.bool(next, at)));
+                    } else if ("string".equals(fact.path("type").asText())) {
+                        if (!next.isTextual() || next.asText().length() > 128) throw RuleJson.error(at, "Expected text of up to 128 characters.");
+                        set(sheet, fact.path("path").asText(), next);
                     } else {
                         set(sheet, fact.path("path").asText(), RuleExpression.numeric(RuleJson.integer(next, at,
                                 fact.path("min").asInt(0), fact.path("max").asInt(1_000_000)), at));
