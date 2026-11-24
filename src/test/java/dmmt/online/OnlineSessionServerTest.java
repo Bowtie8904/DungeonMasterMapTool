@@ -6090,6 +6090,96 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void convertedExperienceReplacementWorksThroughTheLiveCheckEndpoint() throws Exception {
+        installRestRules();
+        JsonNode classes = MAPPER.readTree(Path.of("dmmap-daggerheart", "classes.json").toFile());
+        JsonNode adept = null;
+        for (JsonNode entry : classes.path("entries")) for (JsonNode feature : entry.path("features"))
+            if ("Adept".equals(feature.path("name").asText())) adept = feature;
+        assertNotNull(adept);
+        ObjectNode legacy = MAPPER.createObjectNode().put("format", "dmmap-daggerheart").put("version", 1)
+                .put("category", "classes").put("label", "Fixture");
+        legacy.putArray("entries").addObject().put("id", "guardian").put("name", "Guardian")
+                .putArray("features").add(adept.deepCopy());
+        var converted = dmmt.online.automation.LegacyCatalogConverter.convert(legacy.toString());
+        assertEquals(1, converted.converted(), converted.diagnostics().toString());
+        String catalog = converted.catalog().toString();
+        String sourceId = dmmt.online.automation.RuleCatalog.compile(catalog,
+                dmmt.online.automation.LegacyCatalogConverter.coreRecipes()).getFirst().id();
+        java.nio.file.Files.writeString(compendiumDir.resolve("classes.json"), catalog);
+        Path rulesetFile = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(rulesetFile.toFile());
+        ruleset.withObject("/automation").withObject("/state").put("stressMarks", 0);
+        ruleset.withObject("/automation").withArray("rules").add(MAPPER.readTree("""
+                {"id":"other-stress","bindings":[{"id":"use","event":"roll.prepare","surface":"roll","mode":"option"}],
+                 "costs":[{"op":"track.mark","track":"actor.stress","amount":1}],"ui":{"label":"Other Stress"}}
+                """));
+        ruleset.withObject("/automation").withArray("rules").add(MAPPER.readTree("""
+                {"id":"watch-stress","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.track"},"stress"]},
+                 "do":[{"op":"state.increment","slot":"stressMarks","by":1}],"ui":{}}
+                """));
+        java.nio.file.Files.writeString(rulesetFile, ruleset.toString());
+
+        campaign.getActors().add(Campaign.Actor.builder().id("roller").name("Ada").ownerId(playerId()).build());
+        ObjectNode sheet = (ObjectNode) MAPPER.readTree("""
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":0},"stress":{"slots":6,"on":5},
+                 "hope":{"slots":6,"on":1},"armorTrack":{"slots":3,"on":0},
+                 "traits":[{"name":"Agility","mod":3}],"experiences":[{"name":"Sailing","mod":3}],
+                 "features":[{"name":"Adept","instanceId":"adept-instance"}]}
+                """);
+        ((ObjectNode) sheet.at("/features/0")).put("automationSource", sourceId);
+        store.saveSheet(campaign.getId(), "roller", sheet.toString());
+        String owner = cookie(), other = allyCookie("adept-viewer");
+        JsonNode offer = MAPPER.readTree(basicCheckHttp(owner, "roller", "action", "Agility").body());
+        JsonNode replacement = restDescriptor(offer.path("options"), "adept");
+        JsonNode normal = restDescriptor(offer.path("options"), "experience");
+        assertTrue(replacement.path("available").asBoolean(), replacement.toString());
+        assertEquals(normal.path("exclusiveGroup"), replacement.path("exclusiveGroup"));
+        ObjectNode selection = restSelection(replacement);
+        selection.withObject("/inputs").set("experience", replacement.at("/inputs/0/options/0/value").deepCopy());
+        ObjectNode body = MAPPER.createObjectNode();
+        ObjectNode request = body.putObject("request").put("requestId", "adept-check")
+                .put("expectedRevision", offer.path("revision").asLong());
+        request.putObject("checkRoll").put("kind", "action").put("trait", "Agility");
+        request.putArray("selections").add(selection);
+        int history = store.historyTail(campaign.getId(), 100).size();
+        assertEquals(403, automationHttp(other, "roller", body.toString()).statusCode());
+        ObjectNode forged = body.deepCopy();
+        ((ObjectNode) forged.at("/request/selections/0/inputs/experience")).put("mod", 99);
+        assertEquals(409, automationHttp(owner, "roller", forged.toString()).statusCode());
+        ObjectNode combined = body.deepCopy();
+        ((ArrayNode) combined.at("/request/selections")).add(restSelection(restDescriptor(offer.path("options"), "other-stress")));
+        assertEquals(409, automationHttp(owner, "roller", combined.toString()).statusCode());
+        ObjectNode both = body.deepCopy();
+        ObjectNode normalSelection = restSelection(normal);
+        normalSelection.withObject("/inputs").set("experience", normal.at("/inputs/0/options/0/value").deepCopy());
+        ((ArrayNode) both.at("/request/selections")).add(normalSelection);
+        var exclusive = automationHttp(owner, "roller", both.toString());
+        assertEquals(400, exclusive.statusCode(), exclusive.body());
+        assertTrue(exclusive.body().contains("exclusive"), exclusive.body());
+        assertEquals(sheet, MAPPER.readTree(store.loadSheet(campaign.getId(), "roller")));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+
+        ((ObjectNode) sheet.at("/stress")).put("on", 0);
+        ((ObjectNode) sheet.at("/hope")).put("on", 0);
+        store.saveSheet(campaign.getId(), "roller", sheet.toString());
+        diceSeed(0);
+        var rolled = automationHttp(owner, "roller", body.toString());
+        assertEquals(200, rolled.statusCode(), rolled.body());
+        JsonNode event = MAPPER.readTree(rolled.body()).path("event");
+        assertEquals(15, event.at("/check/total").asInt());
+        assertTrue(event.path("roll").toString().contains("Experience - Sailing"));
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "roller"));
+        assertEquals(1, saved.at("/stress/on").asInt());
+        assertEquals(0, saved.at("/hope/on").asInt());
+        assertEquals(1, saved.at("/automationState/sources/ruleset:base/state/stressMarks").asInt());
+        int afterHistory = store.historyTail(campaign.getId(), 100).size();
+        assertEquals(rolled.body(), automationHttp(owner, "roller", body.toString()).body());
+        assertEquals(afterHistory, store.historyTail(campaign.getId(), 100).size());
+    }
+
+    @Test
     void rollModesResolveSuggestionsOverridesAndScaleBeforeFinishedEvents() throws Exception {
         installRestRules();
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");

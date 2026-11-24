@@ -46,7 +46,7 @@ public final class LegacyCatalogConverter {
             "defaultOn", "exclusive", "requiresEffect", "excludesEffect", "weapon", "weaponRange", "excludeRolls", "effect", "uses",
             "usesSource", "endEffect", "hostOwned", "consumeItem", "quantity", "proficiency", "hopeDie", "diceResource", "condition", "loadoutDomain",
             "required", "traitValue", "multiplier", "allResourceDice", "steps", "damageDie", "diceByLevel", "diceByFeature", "diceConditions", "magicOnly", "weaponRanges",
-            "ignoreDisadvantage", "matchingDice", "resourceMultiplier", "input");
+            "ignoreDisadvantage", "matchingDice", "resourceMultiplier", "input", "experience");
     private static final Set<String> TRIGGER_FIELDS = Set.of("id", "label", "description", "on", "cost", "reroll", "when", "outcome",
             "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
@@ -1680,6 +1680,25 @@ public final class LegacyCatalogConverter {
                 typed = read("input.bonus");
             }
         }
+        JsonNode experience = option.get("experience");
+        if (experience != null) {
+            p.onlyFields(experience, path + "/experience", Set.of("resource", "multiplier"));
+            if (!Set.of("hope", "stress").contains(experience.path("resource").asText()))
+                p.add(path + "/experience/resource", "Expected hope or stress.");
+            if (!experience.path("multiplier").isInt() || experience.path("multiplier").asInt() < 1
+                    || experience.path("multiplier").asInt() > 10)
+                p.add(path + "/experience/multiplier", "Expected a whole multiplier from 1 to 10.");
+            if (!"option".equals(binding.path("mode").asText()) || option.has("exclusive") || option.has("multiplier"))
+                p.add(path + "/experience", "An Experience replacement must be an exclusive optional roll choice.");
+            binding.put("exclusiveGroup", "core-experience");
+            when.add(flag("event.check.duality", true));
+            ArrayNode hasExperiences = when.addObject().putArray("gt");
+            hasExperiences.addObject().set("size", read("actor.experiences"));
+            hasExperiences.add(0);
+            ObjectNode input = rule.withArray("/inputs").addObject().put("id", "experience").put("kind", "record.select")
+                    .put("label", "Choose an Experience").put("choiceLabel", "{input.option.name} ({input.option.mod|signed})");
+            input.set("from", read("actor.experiences"));
+        }
         String id = option.path("id").asText(), label = escape(option.path("label").asText(""));
         int proficiency = 0;
         if (option.has("proficiency")) {
@@ -1692,12 +1711,24 @@ public final class LegacyCatalogConverter {
         applyWhen(rule, when);
         if (option.has("cost")) costs(option.get("cost"), path + "/cost", p, pools, rule);
         if (quantity != null) for (JsonNode cost : rule.path("costs")) times((ObjectNode) cost, "amount", quantity);
+        if (experience != null) {
+            ObjectNode cost = rule.withArray("/costs").addObject();
+            if ("stress".equals(experience.path("resource").asText()))
+                cost.put("op", "track.mark").put("track", "actor.stress").put("amount", 1);
+            else cost.put("op", "resource.spend").put("pool", "actor.hope").put("amount", 1);
+        }
         if (limited) rule.put("limitRef", "uses");
         ArrayNode steps = RuleJson.JSON.createArrayNode();
         String role = option.has("diceResource") ? option.path("diceResource").asText() : "damage".equals(roll) ? "damage" : "modifier";
         if (option.has("diceResource") && (!ID.matcher(role).matches() || Set.of("hope", "fear").contains(role)))
             p.add(path + "/diceResource", "Expected a resource ID to tag the option's dice with.");
         List<ObjectNode> parts = new ArrayList<>();
+        if (experience != null) {
+            ObjectNode value = RuleJson.JSON.createObjectNode();
+            value.putArray("multiply").add(read("input.experience.mod")).add(experience.path("multiplier").asInt());
+            parts.add((ObjectNode) contribution(id + "-experience", "flat", "modifier",
+                    "Experience - {input.experience.name}").set("value", value));
+        }
         if (option.has("value")) {
             JsonNode value = signed(option.path("value"));
             if (value == null) p.add(path + "/value", "Unsupported bonus value: " + option.path("value"));

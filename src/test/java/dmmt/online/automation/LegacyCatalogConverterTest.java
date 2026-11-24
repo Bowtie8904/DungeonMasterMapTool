@@ -1856,6 +1856,42 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void experienceCostReplacementsConvertWithoutFeatureSpecificLogic() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"stress-choice","name":"Stress choice","automation":{"rollOptions":[
+                  {"id":"adept","label":"Adept","roll":"duality","experience":{"resource":"stress","multiplier":2}}]}},
+                {"id":"hope-choice","name":"Hope choice","automation":{"rollOptions":[
+                  {"id":"triple","label":"Triple","roll":"duality","experience":{"resource":"hope","multiplier":3}}]}}
+                """));
+        assertEquals(2, result.converted(), result.diagnostics().toString());
+        for (int i = 0; i < 2; i++) {
+            RuleCompiler.Program program = program(result, i);
+            JsonNode rule = block(result, i).path("rules").get(0);
+            assertEquals("core-experience", rule.at("/bindings/0/exclusiveGroup").asText());
+            assertEquals("record.select", rule.at("/inputs/0/kind").asText());
+            assertEquals(i == 0 ? "track.mark" : "resource.spend", rule.at("/costs/0/op").asText());
+            ObjectNode context = context(program, """
+                    {"hope":{"value":2,"max":6},"stress":{"marked":0,"capacity":6},
+                     "experiences":[{"name":"Sailing","mod":2}]}""",
+                    "{\"type\":\"roll.prepare\",\"check\":{\"kind\":\"action\",\"duality\":true},\"roll\":" + ROLL + "}");
+            var intent = new RuleRuntime.Intent(i == 0 ? "adept" : "triple", "use", "fixture", 0,
+                    (ObjectNode) RuleJson.parse("{\"experience\":{\"name\":\"Sailing\",\"mod\":2}}"));
+            ObjectNode applied = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context)),
+                    List.of(intent), StructuredRollTest.noRandom()).contexts().getFirst();
+            assertEquals(i == 0 ? 5 : 7, applied.at("/event/roll/total").asInt());
+            assertEquals(i == 0 ? 1 : 0, applied.at("/actor/stress/marked").asInt());
+            assertEquals(i == 0 ? 2 : 1, applied.at("/actor/hope/value").asInt());
+        }
+        var bad = LegacyCatalogConverter.convert(catalog("""
+                {"id":"bad","name":"Bad","automation":{"rollOptions":[
+                  {"id":"bad","label":"Bad","roll":"duality","exclusive":"other",
+                   "experience":{"resource":"magic","multiplier":0}}]}}"""));
+        assertEquals(0, bad.converted());
+        assertTrue(bad.diagnostics().toString().contains("/experience/resource"));
+        assertTrue(bad.diagnostics().toString().contains("/experience/multiplier"));
+    }
+
+    @Test
     void rollOptionQuantitiesResizedHopeDiceAndProficiencyDice() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"surge","name":"Surge","automation":{"rollOptions":[

@@ -27,7 +27,8 @@ reactions stay fixed. Prompted checks reference a public, matching DM history en
 the committed label; exact retries remain valid after deletion. A shared ruleset option spends 1 Hope for a
 selected Experience on duality rolls. The host checks the selected name and modifier against the current sheet,
 including after ordinary sheet edits. Selected advantage/disadvantage suggestions cancel or coalesce; a manual
-mode can override them, and disadvantage can be ignored. Experience cost replacement/refund and other non-profile
+mode can override them, and disadvantage can be ignored. Converted Experience alternatives can replace Hope
+with Stress and change the modifier while remaining exclusive with the ordinary option; refunds and other non-profile
 roll origins remain incomplete. Format-1 hosts keep the legacy dialog.
 
 **Record inputs.** `record.select` takes a projected scalar-record collection in `from` and a `choiceLabel`
@@ -36,6 +37,9 @@ current collection before any cost; duplicate records are one choice and orderin
 Automatic `roll.prepared` rules run after selected prepare options and before `roll.finished`; `roll.contribute`
 can insert a non-scale contribution `beforeScales`. Explicit scale dependencies on discarded mode dice are
 rejected rather than silently rebound.
+
+Legacy Experience cost replacements become exclusive `record.select` options with the configured Hope or
+Stress cost and modifier multiplier. They share the `core-experience` group with the standard ruleset option.
 
 **Profile rolls (format 2).** The automation endpoint accepts an owner-only `request.profileRoll` with
 `sourceInstanceId`, `profileId` and `kind` (`attack`, `damage`, `action`, `reaction` or `spellcast`);

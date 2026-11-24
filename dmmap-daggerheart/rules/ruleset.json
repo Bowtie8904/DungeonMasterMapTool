@@ -74,7 +74,7 @@
       },
       {
         "id": "experience",
-        "bindings": [{ "id": "use", "event": "roll.prepare", "surface": "roll", "mode": "option" }],
+        "bindings": [{ "id": "use", "event": "roll.prepare", "surface": "roll", "mode": "option", "exclusiveGroup": "core-experience" }],
         "when": { "and": [
           { "eq": [{ "read": "event.check.duality" }, true] },
           { "gt": [{ "size": { "read": "actor.experiences" } }, 0] }
