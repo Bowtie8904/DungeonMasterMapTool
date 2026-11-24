@@ -539,7 +539,14 @@ public final class RuleCompiler {
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(id), "/automation/effects");
         String path = "/automation/effects/" + id;
         RuleJson.fields(effect, path, "label", "text", "kind", "until", "stacking", "modifiers", "profile",
-                "while", "endWhen", "exclusiveGroup", "singleHolder", "locks", "restExpiry", "blocksMovement", "blocksDeathMoves", "onlineCondition", "value");
+                "while", "endWhen", "exclusiveGroup", "singleHolder", "locks", "restExpiry", "blocksMovement", "blocksDeathMoves", "onlineCondition", "value", "endsWithSource");
+        if (effect.has("endsWithSource")) {
+            String source = RuleJson.id(effect.get("endsWithSource"), path + "/endsWithSource");
+            JsonNode sibling = effects.get(source);
+            if (source.equals(id) || sibling == null || sibling.has("while") || sibling.has("endsWithSource"))
+                throw RuleJson.error(path + "/endsWithSource", "Expected a different declared, non-derived effect that does not itself end with a source.");
+            if (effect.has("while")) throw RuleJson.error(path + "/endsWithSource", "A derived effect cannot end with a source effect.");
+        }
         if (effect.has("onlineCondition")) onlineCondition(effect.get("onlineCondition"), path + "/onlineCondition");
         if (effect.has("value")) {
             ObjectNode value = RuleJson.object(effect.get("value"), path + "/value");

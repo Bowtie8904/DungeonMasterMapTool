@@ -97,6 +97,24 @@ class EffectRuntimeTest {
     }
 
     @Test
+    void endsWithSourceMustNameADifferentDeclaredStoredEffect() throws Exception {
+        String ok = """
+                {"effects":{"circle":{"label":"Circle"},"benefit":{"label":"Benefit","endsWithSource":"circle"}},
+                 "rules":[{"id":"r","bindings":[{"id":"s","event":"action.request","surface":"sheet","mode":"button"}],
+                   "do":[{"op":"effect.start","effect":"circle","target":"actor"}],"ui":{"label":"R"}}]}""";
+        RuleCompiler.compile("features:ward", RuleJson.parse(ok), fixture("rewrite/recipes"));
+        for (String bad : List.of("\"benefit\"", "\"missing\"", "3")) {
+            String block = ok.replace("\"endsWithSource\":\"circle\"", "\"endsWithSource\":" + (bad.equals("3") ? bad : bad));
+            assertThrows(IllegalArgumentException.class, () -> RuleCompiler.compile("features:ward", RuleJson.parse(block), fixture("rewrite/recipes")));
+        }
+        String chained = """
+                {"effects":{"a":{"label":"A"},"b":{"label":"B","endsWithSource":"a"},"c":{"label":"C","endsWithSource":"b"}},
+                 "rules":[{"id":"r","bindings":[{"id":"s","event":"action.request","surface":"sheet","mode":"button"}],
+                   "do":[{"op":"effect.start","effect":"a","target":"actor"}],"ui":{"label":"R"}}]}""";
+        assertThrows(IllegalArgumentException.class, () -> RuleCompiler.compile("features:ward", RuleJson.parse(chained), fixture("rewrite/recipes")));
+    }
+
+    @Test
     void effectInstancesStoreAValueThatRollsReadAndRulesAdvanceUntilItOverflows() throws Exception {
         String block = """
                 {"effects":{"die":{"label":"Die","until":["scene.end"],"value":{"initial":{"read":"actor.size"},"max":3}}},

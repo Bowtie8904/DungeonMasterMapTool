@@ -6064,7 +6064,8 @@ public final class OnlineSessionServer {
                     members.put(id, new AutomationHost.RestMember(id, actor.getName(), sheetVersion(original, actor),
                             revision, loaded::deepCopy));
                 }
-                Set<String> affected = settleSingleHolderEffects(automationPack(), originals, sheets, commands);
+                Set<String> affected = new java.util.HashSet<>(settleSingleHolderEffects(automationPack(), originals, sheets, commands));
+                affected.addAll(settleDependentEffects(automationPack(), originals, sheets));
                 List<AutomationHost.RestEffectSheet> result = new ArrayList<>();
                 for (String id : affected) {
                     AutomationHost.RestMember member = members.get(id);
@@ -7290,7 +7291,25 @@ public final class OnlineSessionServer {
             latest.put(key, effect);
         }
         if (latest.isEmpty()) return Set.of();
-        List<dmmt.online.automation.AutomationHost.SingleHolderEffect> effects = List.copyOf(latest.values());
+        return endSingleHolderEffects(pack, originals, changed, List.copyOf(latest.values()));
+    }
+
+    /** Ends recipient effects that end with a source effect which a staged sheet no longer stores. */
+    private Set<String> settleDependentEffects(dmmt.online.automation.AutomationHost.Pack pack,
+                                               Map<String, String> originals, Map<String, ObjectNode> changed) throws IOException {
+        List<dmmt.online.automation.AutomationHost.SingleHolderEffect> ends = new ArrayList<>();
+        for (var entry : List.copyOf(changed.entrySet())) {
+            String original = originals.get(entry.getKey());
+            if (original == null) continue;
+            JsonNode before = MAPPER.readTree(original);
+            if (before instanceof ObjectNode saved) ends.addAll(automationHost.dependentEffectEnds(pack, saved, entry.getValue()));
+        }
+        return ends.isEmpty() ? Set.of() : endSingleHolderEffects(pack, originals, changed, ends);
+    }
+
+    private Set<String> endSingleHolderEffects(dmmt.online.automation.AutomationHost.Pack pack,
+                                               Map<String, String> originals, Map<String, ObjectNode> changed,
+                                               List<dmmt.online.automation.AutomationHost.SingleHolderEffect> effects) throws IOException {
         Set<String> affected = new java.util.HashSet<>();
         for (Campaign.Actor actor : campaign.getActors()) {
             String id = actor.getId();
@@ -7457,6 +7476,7 @@ public final class OnlineSessionServer {
                                          Campaign.Actor renamedActor, String name) throws IOException {
         Map<String, String> expected = new java.util.LinkedHashMap<>(originals);
         Set<String> affected = new java.util.HashSet<>(settleSingleHolderEffects(pack, expected, changed, commands));
+        affected.addAll(settleDependentEffects(pack, expected, changed));
         List<ObjectNode> publishedMessages = new ArrayList<>(messages);
         int fear = campaign.getFear();
         List<Campaign.Countdown> countdowns = null;

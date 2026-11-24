@@ -1098,6 +1098,32 @@ public final class AutomationHost {
         return new SingleHolderEffect(sourceActor, instance, effect, holder);
     }
 
+    /**
+     * Lists the requests that end recipient copies of effects declared with {@code endsWithSource} because the source
+     * effect instance was stored in {@code before} but is no longer stored in {@code after}.
+     */
+    public List<SingleHolderEffect> dependentEffectEnds(Pack pack, ObjectNode before, ObjectNode after) {
+        Set<String> remaining = new java.util.HashSet<>();
+        for (JsonNode effect : RuleEffects.instances(projection.actorFact(after, "effects"), "/actor/effects"))
+            remaining.add(effect.path("effect").asText() + "|" + effect.path("sourceInstanceId").asText() + "|" + effect.path("sourceActorId").asText());
+        List<SingleHolderEffect> ends = new ArrayList<>();
+        for (JsonNode effect : RuleEffects.instances(projection.actorFact(before, "effects"), "/actor/effects")) {
+            if (effect.path("derived").asBoolean() || remaining.contains(effect.path("effect").asText() + "|"
+                    + effect.path("sourceInstanceId").asText() + "|" + effect.path("sourceActorId").asText())) continue;
+            String key = effect.path("effect").asText("");
+            int split = key.lastIndexOf('#');
+            RuleCompiler.Program program = split > 0 ? pack.programs().get(key.substring(0, split)) : null;
+            if (program == null || !RuleEffects.hasSourceActorId(effect)) continue;
+            String source = key.substring(split + 1);
+            program.effects().fields().forEachRemaining(dependent -> {
+                if (source.equals(dependent.getValue().path("endsWithSource").asText()))
+                    ends.add(new SingleHolderEffect(effect.path("sourceActorId").asText(), effect.path("sourceInstanceId").asText(),
+                            program.sourceId() + "#" + dependent.getKey(), ""));
+            });
+        }
+        return ends;
+    }
+
     /** Removes other holders' matching stored effects, preserving supporting pools and the original sheet on failure. */
     public boolean endEffectsElsewhere(Pack pack, ObjectNode sheet, ObjectNode event,
                                        List<SingleHolderEffect> commands, boolean advanceRevision) {

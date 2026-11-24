@@ -78,7 +78,7 @@ public final class LegacyCatalogConverter {
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
             "actions", "rollOptions", "rollTriggers", "mitigation", "rest", "consumeLongRestMove", "group", "endOnDamage", "endOnSourceSevere", "endAfterIncomingDamage", "damage",
             "unique", "exclusiveSource", "endOnMarkedHp", "endOnDealtDamage", "endOnAttack", "endOnAction", "lifeWard", "tokenResource", "maintainOnAction",
-            "blocksMovement", "endOnMarkedHpCount", "resources", "surgeResource", "onlineCondition", "die", "counter");
+            "blocksMovement", "endOnMarkedHpCount", "resources", "surgeResource", "onlineCondition", "die", "counter", "requiresSourceEffect");
     private static final Set<String> REST_FIELDS = Set.of("extraMoves", "longMovesInShort", "passives", "modifiers", "requiresEffect", "expireItem");
     private static final Set<String> PASSIVE_FIELDS = Set.of("id", "label", "defaultOn", "condition", "steps", "extraMoves", "consumeItem",
             "rest", "move", "bonus", "minHope", "cost", "chooseAlly", "hostOwned", "castBeforeRest", "requiresEffect", "excludesEffect", "reroll");
@@ -422,6 +422,19 @@ public final class LegacyCatalogConverter {
             p.nested().clear();
         }
         keepEffects(rules, path, p, out);
+        List<String> declaredIds = new ArrayList<>();
+        effects.fieldNames().forEachRemaining(declaredIds::add);
+        for (int i = 0; i < declaredIds.size(); i++) {
+            if (!(effects.get(declaredIds.get(i)) instanceof ObjectNode dependent) || !dependent.has("endsWithSource")) continue;
+            String label = escape(dependent.path("endsWithSource").asText());
+            String source = null;
+            for (int j = i - 1; j >= 0 && source == null; j--)
+                if (label.equals(effects.path(declaredIds.get(j)).path("label").asText())) source = declaredIds.get(j);
+            if (source == null) {
+                dependent.remove("endsWithSource");
+                p.add(path, "No earlier effect '" + label + "' is declared for requiresSourceEffect.");
+            } else dependent.put("endsWithSource", source);
+        }
         for (JsonNode rule : rules) for (JsonNode op : rule.path("do")) {
             if ("effect.advance".equals(op.path("op").asText())) {
                 String label = op.path("effect").asText();
@@ -5243,6 +5256,11 @@ public final class LegacyCatalogConverter {
         if (effect.has("exclusiveSource")) {
             if (!effect.path("exclusiveSource").isBoolean()) p.add(path + "/exclusiveSource", "Expected a boolean.");
             else if (effect.path("exclusiveSource").asBoolean()) declared.put("singleHolder", true);
+        }
+        if (effect.has("requiresSourceEffect")) {
+            if (!effect.path("requiresSourceEffect").isTextual() || effect.path("requiresSourceEffect").asText().isBlank())
+                p.add(path + "/requiresSourceEffect", "Expected the name of the caster effect.");
+            else declared.put("endsWithSource", effect.path("requiresSourceEffect").asText());
         }
         if (effect.has("tokenResource")) {
             if (!effect.path("tokenResource").isTextual() || effect.path("tokenResource").asText().isBlank())

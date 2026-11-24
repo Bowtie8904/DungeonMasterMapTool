@@ -1163,6 +1163,26 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void recipientEffectsThatRequireASourceEffectEndWithTheNearestEarlierEffectOfThatName() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"t","name":"T","automation":{"conditionalActions":[
+                 {"id":"a","label":"A","steps":[{"op":"effect","effect":{"name":"Aura","kind":"buff","until":"manual"}}],
+                  "chatBenefits":[{"id":"join","label":"Join","steps":[{"op":"effect","effect":{"name":"Shared","kind":"buff","until":"manual","requiresSourceEffect":"Aura"}}]}]},
+                 {"id":"b","label":"B","steps":[{"op":"effect","effect":{"name":"Aura","kind":"buff","until":"manual"}}],
+                  "chatBenefits":[{"id":"join","label":"Join","steps":[{"op":"effect","effect":{"name":"Shared","kind":"buff","until":"manual","requiresSourceEffect":"Aura"}}]}]}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        JsonNode block = block(result, 0);
+        assertEquals("aura", block.at("/effects/shared/endsWithSource").asText(), block.toString());
+        assertEquals("aura-2", block.at("/effects/shared-2/endsWithSource").asText(), block.toString());
+        assertNotNull(program(result, 0));
+
+        var unknown = LegacyCatalogConverter.convert(catalog("""
+                {"id":"t","name":"T","automation":{"actions":[{"id":"go","label":"Go","steps":[
+                 {"op":"effect","effect":{"name":"Lone","kind":"buff","until":"manual","requiresSourceEffect":"Missing"}}]}]}}"""));
+        assertFalse(unknown.diagnostics().isEmpty());
+    }
+
+    @Test
     void witchTalismansAreGrantedAsTransferableItems() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"ward","name":"Ward","automation":{"uses":{"max":1,"per":"rest"},

@@ -1496,6 +1496,31 @@ class AutomationHostTest {
     }
 
     @Test
+    void endsWithSourceListsDependentEndsOnlyWhenTheSourceInstanceIsGone() throws Exception {
+        ObjectNode catalog = fixture("rewrite/host-classes");
+        ObjectNode effects = ((ObjectNode) catalog.at("/entries/0/features/0/automation")).putObject("effects");
+        effects.putObject("circle").put("label", "Circle");
+        effects.putObject("benefit").put("label", "Benefit").put("endsWithSource", "circle");
+        var pack = AutomationHost.compile("circle", Map.of("classes", catalog.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode before = sheet();
+        HOST.projection().state(before).putArray("effects").addObject().put("id", "c1")
+                .put("effect", "classes:tester:features:rally#circle").put("sourceInstanceId", "f-rally").put("sourceActorId", "ada");
+        ObjectNode same = before.deepCopy();
+        assertEquals(List.of(), HOST.dependentEffectEnds(pack, before, same));
+        ObjectNode gone = before.deepCopy();
+        ((ObjectNode) HOST.projection().state(gone)).putArray("effects");
+        assertEquals(List.of(new AutomationHost.SingleHolderEffect("ada", "f-rally", "classes:tester:features:rally#benefit", "")),
+                HOST.dependentEffectEnds(pack, before, gone));
+
+        ObjectNode copy = sheet();
+        HOST.projection().state(copy).putArray("effects").addObject().put("id", "b1")
+                .put("effect", "classes:tester:features:rally#benefit").put("sourceInstanceId", "f-rally").put("sourceActorId", "ada");
+        assertTrue(HOST.endEffectsElsewhere(pack, copy, AutomationHost.event("action.request", "bea", 0),
+                HOST.dependentEffectEnds(pack, before, gone), true));
+        assertEquals(0, copy.at("/automationState/effects").size());
+    }
+
+    @Test
     void inspectingSingleHolderEffectsDoesNotChangeAnUnrelatedOrFailedSheet() throws Exception {
         ObjectNode catalog = fixture("rewrite/host-classes");
         ((ObjectNode) catalog.at("/entries/0/features/0/automation")).putObject("effects")
