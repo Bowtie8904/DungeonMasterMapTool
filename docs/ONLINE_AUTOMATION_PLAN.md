@@ -97,13 +97,13 @@ original roll's automatic reactions; a nested roll's publication does not revise
 cannot also declare a target selection. Interactive feature prepare choices, downtime rolls and untyped dice
 still need live integration.
 
-**Death options (format 2).** Owner-only authored alternatives and Risk It All use host-described controls,
-versioned journaled transactions, and atomic reactions/reports. Risk rolls dispatch the roll pipeline with
-death kind/move, paid and automatic modifiers, raw-face criticals and Undying-style result revisions; saved
+**Death options (format 2).** Owner-only authored alternatives, Blaze of Glory, Avoid Death and Risk It All use
+host-described controls, versioned journaled transactions, and atomic reactions/reports. Avoid applies a
+host-managed movement-blocking effect that ends on healing or a long rest, and scars when appropriate. Risk rolls
+dispatch the roll pipeline with death kind/move, paid and automatic modifiers, raw-face criticals and Undying-style result revisions; saved
 result controls enforce one recovery, the adjusted-Hope budget and current HP floors. Manual roll mode and
-Experience do not apply to death rolls. Blaze of Glory, Avoid Death and final-HP Undying remain to integrate;
-final-HP outcome revisions are rejected with an actionable error until then. Format-1 hosts continue to use
-their existing death dialog.
+Experience do not apply to death rolls. Final-HP Undying outcome revisions remain unsupported and are rejected
+with an actionable error. Format-1 hosts continue to use their existing death dialog.
 
 Explicit effect starts, replacements and endings in these transactions dispatch `effect.started`/`effect.ended`
 to the affected holder's automatic rules, with `event.effect` containing the instance, `actorId` identifying
@@ -202,9 +202,8 @@ The converted path also covers engine-owned effect protection, version conflicts
 choices and transaction replay. Recipient long-rest expiry is exercised in isolation; complete cross-holder
 effect lifecycles remain a release gap.
 
-The staged rest-reset primitive snapshots the original stored effect IDs and expires only those IDs, preserving
-effects started or replaced during the same downtime and reconciling surviving effect-bound pools. It is used by
-the live self-rest workflow; legacy effect locks still need conversion.
+The rest-reset primitive expires only effects present in its initial snapshot. Legacy rest HP locks are not
+converted: automation rests reject them and direct the GM to resolve them with legacy rest.
 
 The versioned `/api/automation/{version}/{actorId}/rest` endpoint offers and commits owner-only self rests.
 The host derives descriptors and facts, signs the offer, stages the complete rest, and atomically saves the sheet,
@@ -300,17 +299,17 @@ the versioned roster offer before adjustments so their conditions can read that 
 after adjustments, and applies source costs once against the chosen recipient's current protected tracks.
 The bundled Tend and Repair ally variants target an active character's saved sheet. They report the actual recovery
 after the recipient's healing floor and clamp negative short-rest recovery to zero.
-Deferred bodies see a freshly reprojected recipient, including derived statistics; only after they succeed is the recipient update staged. Commands
-needing interstage settlement are rejected. The caller must apply that update to a private sheet and construct
+Deferred bodies see a freshly reprojected recipient, including derived statistics; only after they succeed is the
+recipient update staged. Unsupported commands needing interstage settlement are rejected. The caller must apply
+that update to a private sheet and construct
 a fresh request-local roster before a later target move; reusing a roster with an unapplied update is rejected.
 The live transaction commits these recipient updates together with post-outcome choices.
 An automatic or option `downtime.move` rule may declare `after: {costs?, do?, report?}`. Its pre-move
 operations set the move plan; after the button resolves, the host executes deferred bodies of rules that actually
 ran, in their original order. Deferred costs are checked initially and paid against the post-move sheet. Results
 and reports are local to the deferred body; it cannot change the completed plan or read the pre-move rule's
-inputs/results. Ordinary dispatch rejects these two-phase rules, and a missing source or failed deferred cost
-rejects the staged move. Converted move modifiers and move-specific passives place their bonuses before the move
-and their side effects and costs afterward. Sources consumed by the move cannot yet supply a deferred benefit.
+inputs/results. Ordinary dispatch rejects these two-phase rules. A consumed or otherwise inactive source cannot
+supply its deferred benefit and rejects the staged move; failed deferred costs also reject it.
 The shared rest configuration may also declare up to 32 `startFacts`, mapping names to scalar paths on the
 projected actor. Preparation captures these before any option costs or moves, and the staged move progress
 retains an immutable prepared plan. The bundled ruleset captures starting HP marks, Stress marks, Armor marks
@@ -330,7 +329,7 @@ An effect with a short- or long-rest `until` event can also declare `"restExpiry
 staged host removes matching effects from the initial validated snapshot before preparation and moves, without
 refreshing uses or removing other effects. It reconciles supported pools and rejects invalid or unresolved
 effects atomically. Effects started or replaced after that snapshot survive the current rest; effects without
-early expiry retain normal reset ordering. Conversion of legacy locks and multi-character rests are pending.
+early expiry retain normal reset ordering. Legacy `lockedHp` rest effects are rejected rather than silently retained.
 Staged completion derives `event.rest.cleared` for numeric start facts as starting minus current values,
 dispatches both phases around the snapshot reset, and advances the rest counters on a private copy.
 Conditional options that no longer apply are reported as skipped; invalid choices, inputs, costs and blocked
@@ -345,8 +344,9 @@ countdowns and already-applied limit refresh commands; supported single-holder c
 Other commands that could change facts read by later stages are rejected. The result separately identifies every
 recipient sheet read and its original host version, including unchanged sheets used by eligibility predicates.
 The live party-recovery workflow compares read sheet bytes and scope membership and host order under the store
-lock before journaling all changed sheets, Fear, reports and the retry receipt. Additional ordered multi-holder
-command settlement remains necessary.
+lock before journaling all changed sheets, Fear, reports and the retry receipt. Commands needing unsupported
+inter-reaction or multi-holder settlement, including some inventory grants and effect transfers, are rejected.
+Positive party recovery is supported by the live coordinator; primitive paths without settlement still reject it.
 A staged rest also retains the sorted members of every inspected host scope, including unloaded characters,
 and rejects a membership change between moves. The rest result and its receipt wrapper also retain any host-order
 dependencies. The live commit rechecks membership and order from one roster snapshot per scope and compares all
