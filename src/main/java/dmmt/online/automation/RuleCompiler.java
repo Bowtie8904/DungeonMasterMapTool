@@ -38,6 +38,7 @@ public final class RuleCompiler {
             Map.entry("pool.removeDie", List.of("pool", "dieId", "owner")),
             Map.entry("track.mark", List.of("track", "amount")),
             Map.entry("track.clear", List.of("track", "amount")),
+            Map.entry("track.markPermanent", List.of("track", "amount")),
             Map.entry("inventory.consume", List.of("amount")),
             Map.entry("dice.roll", List.of("count", "sides")),
             Map.entry("dice.hits", List.of("count", "sides", "atLeast")),
@@ -1391,7 +1392,7 @@ public final class RuleCompiler {
         String kind = operation.path("op").asText();
         String target = Set.of("resource.spend", "resource.gain").contains(kind)
                 ? operation.path("pool").asText()
-                : Set.of("track.mark", "track.clear", "track.capacity").contains(kind) ? operation.path("track").asText()
+                : Set.of("track.mark", "track.clear", "track.capacity", "track.markPermanent").contains(kind) ? operation.path("track").asText()
                 : "flag.set".equals(kind) ? operation.path("flag").asText()
                 : (kind.startsWith("effect.") || kind.startsWith("collection."))
                 && "recipient".equals(operation.path("target").asText()) ? "recipient." : "";
@@ -1737,7 +1738,7 @@ public final class RuleCompiler {
             } else if (Set.of("pool", "track").contains(field)) {
                 String target = RuleJson.text(value, path + "/" + field);
                 if (("resource.spend".equals(op) || "resource.gain".equals(op)) && "pool".equals(field)
-                        || Set.of("track.mark", "track.clear", "track.capacity").contains(op) && "track".equals(field)) {
+                        || Set.of("track.mark", "track.clear", "track.capacity", "track.markPermanent").contains(op) && "track".equals(field)) {
                     if (!target.matches("(actor|recipient)\\.[a-zA-Z][a-zA-Z0-9_-]*"))
                         throw RuleJson.error(path + "/" + field, "Expected an actor or recipient pool/track, not an arbitrary state path.");
                     if (cost && target.startsWith("recipient."))

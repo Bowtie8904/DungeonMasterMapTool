@@ -19,8 +19,8 @@
     "evasion": { "kind": "value", "path": "evasion" },
     "gold": { "kind": "value", "path": "gold", "writable": true, "min": 0, "max": 1000000 },
     "scars": { "kind": "value", "path": "scars", "writable": true, "min": 0, "max": 1000, "default": 0 },
-    "hp": { "kind": "object", "path": "hp", "fields": { "marked": "on", "capacity": "slots" },
-            "writable": ["marked", "capacity"], "atLeast": { "total": "capacity" }, "max": 1000,
+    "hp": { "kind": "object", "path": "hp", "fields": { "marked": "on", "capacity": "slots", "permanent": "permanentHp" },
+            "writable": ["marked", "capacity", "permanent"], "atLeast": { "total": "capacity" }, "max": 1000,
             "markedFloor": { "base": "permanentHp", "sum": [
               { "path": "effects", "field": "lockedHp" }
             ], "actorSum": [{ "path": "effects", "field": "lockedHp" },

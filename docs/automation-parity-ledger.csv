@@ -426,7 +426,7 @@
 "consumables","/entries/112/automation","votive-bloom-nectar [Votive Bloom Nectar]","actions","converted-candidate","","not captured","unverified"
 "consumables","/entries/113/automation","wardstone-charm [Wardstone Charm]","actions","converted-candidate","","not captured","unverified"
 "consumables","/entries/114/automation","wine-of-discourse [Wine of Discourse]","actions","converted-candidate","","not captured","unverified"
-"consumables","/entries/115/automation","witherroot-ichor [Witherroot Ichor]","actions","unconverted","/entries/115/automation/actions/0/steps/1/resource: Manual disposition: permanently marked HP is guarded by the death-move host (only Won't Stay Dead may change it) and has no writable rules track, so the step cannot be applied automatically.","not captured","unverified"
+"consumables","/entries/115/automation","witherroot-ichor [Witherroot Ichor]","actions","converted-candidate","","not captured","unverified"
 "consumables","/entries/116/automation","witherroot-tonic [Witherroot Tonic]","actions","converted-candidate","","not captured","unverified"
 "consumables","/entries/117/automation","yifang-sands [Yifang Sands]","actions","converted-candidate","","not captured","unverified"
 "consumables","/entries/118/automation","elixir-of-eternal-hope [Elixir of Eternal Hope]","actions","converted-candidate","","not captured","unverified"

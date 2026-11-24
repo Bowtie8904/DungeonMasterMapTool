@@ -5521,8 +5521,11 @@ public final class LegacyCatalogConverter {
                     ObjectNode converted = out.addObject().put("op", "pool.spend").put("pool", resource);
                     if ("recipient".equals(operationTarget)) converted.put("owner", "recipient");
                     converted.set("amount", "recipient".equals(operationTarget) ? read("recipient.pools." + resource + ".value") : poolValue(pools, resource));
-                } else if ("permanentHp".equals(resource))
-                    p.add(path + "/resource", "Manual disposition: permanently marked HP is guarded by the death-move host (only Won't Stay Dead may change it) and has no writable rules track, so the step cannot be applied automatically.");
+                } else if ("permanentHp".equals(resource)) {
+                    if ("mark".equals(op) && "actor".equals(operationTarget))
+                        out.addObject().put("op", "track.markPermanent").put("track", TRACKS.get("hp")).set("amount", value);
+                    else if ("mark".equals(op)) p.add(path + "/resource", "Permanent HP is marked on the acting character.");
+                }
                 else p.add(path + "/resource", "Unsupported track: " + resource);
             }
             case "gain" -> {

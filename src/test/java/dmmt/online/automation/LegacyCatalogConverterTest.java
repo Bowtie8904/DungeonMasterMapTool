@@ -1104,6 +1104,38 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void permanentHpMarksFollowTheLegacyClampAndConvertForAnyAction() throws Exception {
+        var result = LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"consumables","label":"Fixture","entries":[
+                  {"id":"ichor","name":"Ichor","automation":{"actions":[{"id":"drink","label":"Drink","steps":[
+                    {"op":"mark","resource":"hp","amount":1},{"op":"mark","resource":"permanentHp","amount":2},
+                    {"op":"clear","resource":"permanentHp","amount":1}]}]}},
+                  {"id":"blight","name":"Blight","automation":{"actions":[{"id":"curse","label":"Curse","steps":[
+                    {"op":"mark","resource":"permanentHp","amount":3}]}]}}]}""");
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        JsonNode steps = block(result, 0).at("/rules/0/do");
+        assertEquals(2, steps.size(), steps.toString());
+        assertEquals("track.markPermanent", steps.at("/1/op").asText());
+        assertEquals("actor.hp", steps.at("/1/track").asText());
+        RuleRuntime.Intent drink = new RuleRuntime.Intent("drink", "sheet", "fixture", 0, RuleJson.JSON.createObjectNode());
+        RuleCompiler.Program program = program(result, 0);
+        String actor = "{\"effects\":[],\"hp\":{\"marked\":%d,\"capacity\":6,\"permanent\":%d}}";
+        ObjectNode drinking = context(program, actor.formatted(2, 0), "{\"type\":\"action.request\"}");
+        drinking.with("source").put("quantity", 2);
+        JsonNode done = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, drinking)), List.of(drink), StructuredRollTest.noRandom()).contexts().getFirst();
+        assertEquals(5, done.at("/actor/hp/marked").asInt(), done.toString());
+        assertEquals(2, done.at("/actor/hp/permanent").asInt(), done.toString());
+
+        RuleCompiler.Program other = program(result, 1);
+        RuleRuntime.Intent curse = new RuleRuntime.Intent("curse", "sheet", "fixture", 0, RuleJson.JSON.createObjectNode());
+        ObjectNode cursing = context(other, actor.formatted(5, 5), "{\"type\":\"action.request\"}");
+        cursing.with("source").put("quantity", 2);
+        JsonNode clamped = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(other, cursing)), List.of(curse), StructuredRollTest.noRandom()).contexts().getFirst();
+        assertEquals(6, clamped.at("/actor/hp/permanent").asInt(), "Only the one remaining slot is lost: " + clamped);
+        assertEquals(6, clamped.at("/actor/hp/marked").asInt(), clamped.toString());
+    }
+
+    @Test
     void salvationBeamSpendsChosenStressToHealOneWoundedAlly() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"t","name":"T","automation":{"spellcastDifficulty":16,"conditionalRollTriggers":[
@@ -3541,7 +3573,6 @@ class LegacyCatalogConverterTest {
         String[][] cases = {
                 {"{\"ignoreWeaponBurden\":true}", "two-handed Burden"},
                 {"{\"unarmedWeapon\":{\"name\":\"Fists\"}}", "unarmed weapon"},
-                {"{\"actions\":[{\"id\":\"s\",\"label\":\"S\",\"steps\":[{\"op\":\"mark\",\"resource\":\"permanentHp\",\"amount\":1}]}]}", "permanently marked HP"},
                 {"{\"conditionalActions\":[{\"id\":\"swap\",\"label\":\"Swap\",\"codexSwap\":true}]}", "vault-to-loadout"},
                 {"{\"rollOptions\":[{\"id\":\"c\",\"label\":\"C\",\"roll\":\"damage\",\"combo\":true}]}", "Combo Die size"},
                 {"{\"rollOptions\":[{\"id\":\"s\",\"label\":\"S\",\"roll\":\"damage\",\"secondaryWeaponDie\":true}]}", "secondary weapon's damage expression"}};

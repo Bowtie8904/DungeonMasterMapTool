@@ -1595,6 +1595,23 @@ public final class RuleRuntime {
                 usage.put(limit, next);
                 result = RuleExpression.numeric(spent - next, "/result");
             }
+            case "track.markPermanent" -> {
+                String path = op.path("track").asText();
+                ObjectNode track = RuleJson.object(RuleExpression.read(context, path), "/" + path);
+                int capacity = RuleJson.integer(track.get("capacity"), "/" + path + "/capacity", 0, 1000);
+                int marked = RuleJson.integer(track.get("marked"), "/" + path + "/marked", 0, capacity);
+                int permanent = track.has("permanent") ? RuleJson.integer(track.get("permanent"), "/" + path + "/permanent", 0, capacity) : 0;
+                int amount = whole(op.path("amount"), context, 0, 1_000_000);
+                int lost = Math.min(amount, Math.max(0, capacity - permanent));
+                ObjectNode before = observer == null ? null : track.deepCopy();
+                track.put("permanent", permanent + lost);
+                track.put("marked", Math.min(capacity, marked + lost));
+                if (track.has("minimumCapacity")) track.put("minimumCapacity", permanent + lost);
+                if (track.has("minimumMarkedBase")) track.put("minimumMarkedBase", track.path("minimumMarkedBase").asInt() + lost);
+                if (lost > 0 && track.path("marked").asInt() != marked)
+                    trackChanged(observer, context, path, "mark", track.path("marked").asInt() - marked, before, track);
+                result = RuleExpression.numeric(lost, "/result");
+            }
             case "track.capacity" -> {
                 String path = op.path("track").asText();
                 ObjectNode track = RuleJson.object(RuleExpression.read(context, path), "/" + path);
