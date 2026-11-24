@@ -73,7 +73,7 @@ public final class LegacyCatalogConverter {
             "excludeSourceActor", "hostOwned", "selectAmount", "resourceRoll", "hopeDice", "layerRoll", "doomsday", "deferSourceUse", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
             "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime", "table",
             "hostRollAction", "bloodAutomation", "castTokens", "patronDice", "witchAction", "requiresCompanion",             "specialAction", "codexSwap", "spendFavor", "menacingReach",
-            "costConditions", "refocus", "chooseEffects", "channelRawPower", "requiresFeature", "mutagens", "rollDicePool");
+            "costConditions", "refocus", "chooseEffects", "channelRawPower", "requiresFeature", "mutagens", "rollDicePool", "followUpAction", "chatOnly");
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
@@ -4748,6 +4748,17 @@ public final class LegacyCatalogConverter {
         return copy;
     }
 
+    /**
+     * {@code followUpAction} / {@code chatOnly}: the legacy report message offered a Spellcast follow-up button. The
+     * follow-up converts as an ordinary action of its own; the flags only validate the pairing.
+     */
+    private static void followUp(JsonNode action, String path, Problems p) {
+        if (action.has("followUpAction") && (!action.path("followUpAction").isTextual() || !ID.matcher(action.path("followUpAction").asText()).matches()))
+            p.add(path + "/followUpAction", "Expected an action ID.");
+        if (action.has("chatOnly") && !action.path("chatOnly").asBoolean(false)) p.add(path + "/chatOnly", "Expected true.");
+        if (action.path("chatOnly").asBoolean(false) && !action.has("actionRoll")) p.add(path + "/chatOnly", "A chat follow-up needs an action roll.");
+    }
+
     private static ObjectNode action(JsonNode action, String path, Problems p, ObjectNode effects, Pools pools,
                                      boolean limited, String origin, String cardKey) {
         p.onlyFields(action, path, ACTION_FIELDS);
@@ -4766,6 +4777,7 @@ public final class LegacyCatalogConverter {
         }
         if (action.has("codexSwap"))
             p.add(path + "/codexSwap", "Manual disposition: swapping this card with a chosen vault card needs a vault-to-loadout move that respects slot, domain and permanent-vault rules, and the rules runtime has no such operation.");
+        followUp(action, path, p);
         hostRollAction(action, path, p);
         boolean spendsTokens = action.has("castTokens");
         if (spendsTokens) action = castTokens(action, path, p);

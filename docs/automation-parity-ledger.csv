@@ -710,7 +710,7 @@
 "domain-cards","/entries/200/automation","tempest [Tempest]","actions;conditionalRollTriggers","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/201/automation","terrify [Terrify]","conditionalRollTriggers","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/202/automation","thorn-skin [Thorn Skin]","actions;mitigation;resources","converted-candidate","","not captured","unverified"
-"domain-cards","/entries/203/automation","thought-delver [Thought Delver]","actions;hideSpellcast","unconverted","/entries/203/automation/actions/0/followUpAction: Unsupported legacy field: followUpAction | /entries/203/automation/actions/1/chatOnly: Unsupported legacy field: chatOnly","not captured","unverified"
+"domain-cards","/entries/203/automation","thought-delver [Thought Delver]","actions;hideSpellcast","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/205/automation","towering-stalk [Towering Stalk]","actions;conditionalRollTriggers","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/206/automation","transcendent-union [Transcendent Union]","actions;uses","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/207/automation","troublemaker [Troublemaker]","actions;conditionalRollTriggers;uses","converted-candidate","","not captured","unverified"
