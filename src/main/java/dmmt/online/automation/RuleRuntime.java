@@ -1084,7 +1084,7 @@ public final class RuleRuntime {
                 String eventType = context.at("/event/type").asText();
                 boolean shortRest = switch (eventType) {
                     case "downtime.move" -> "short".equals(context.at("/event/move/rest").asText());
-                    case "rest.prepare", "rest.short", "track.changed" ->
+                    case "rest.prepare", "rest.short", "downtime.completed", "track.changed" ->
                             "short".equals(context.at("/event/rest/kind").asText());
                     default -> false;
                 };

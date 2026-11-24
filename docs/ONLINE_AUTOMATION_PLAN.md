@@ -172,7 +172,8 @@ updates the saved roll, not already settled table outcomes, counts or report eff
 than 32 dice is rejected. Converted downtime action, sent, damage and resource rolls, checks, outcome tables,
 action-step rolls and rest-passive rolls also offer their full expression, including preparation, move and
 completion passives. Short-rest track-change reactions can publish their own generic roll offers for self and
-ally holders, including when a later recovery reroll triggers another reaction. Recovery rerolls account for signed
+ally holders, including when a later recovery reroll triggers another reaction; completed-move reactions can
+publish them too. Recovery rerolls account for signed
 offsets, the original remaining allowance and the holder's current healing floor. Rolls in other reaction phases
 still need live offers.
 

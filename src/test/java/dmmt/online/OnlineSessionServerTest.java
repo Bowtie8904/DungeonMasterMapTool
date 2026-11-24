@@ -2509,6 +2509,48 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void completedDowntimeReactionsOfferDiceForRerolls() throws Exception {
+        installRestRerollRules();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withArray("rules").add(MAPPER.readTree("""
+                {"id":"completion-spark","bindings":[{"id":"done","event":"downtime.completed",
+                  "surface":"downtime","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.rest.kind"},"short"]},
+                 "do":[{"op":"dice.roll","count":1,"sides":6,"as":"spark"},
+                       {"op":"downtime.offerRoll","roll":{"read":"result.spark"},"label":"Completion spark"}],"ui":{}}
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        String owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("actor").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "actor", """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":0},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},
+                 "loadout":[{"name":"Second Chance","instanceId":"chance","automationSource":"domain-cards:reroller"}]}
+                """);
+        JsonNode rest = MAPPER.readTree(restHttp(owner, "actor", "short", null).body());
+        ObjectNode body = restRequest(rest, "completion-spark-rest");
+        addRestMove((ObjectNode) body.path("request"), restDescriptor(rest.path("moves"), "rest-prepare"));
+        diceSeed(seedForDie(6, 2));
+        var completed = restHttp(owner, "actor", null, body.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        assertEquals(completed.body(), restHttp(owner, "actor", null, body.toString()).body());
+        JsonNode offer = store.historyTail(campaign.getId(), 100).stream()
+                .filter(message -> "Completion spark".equals(
+                        message.at("/automationRecoveryRoll/roll/contributions/0/label").asText()))
+                .findFirst().orElseThrow();
+        assertEquals(2, offer.at("/automationRecoveryRoll/roll/total").asInt());
+        var description = recoveryRollHttp(owner, offer, "actor", null);
+        assertEquals(200, description.statusCode(), description.body());
+        ObjectNode request = recoveryRollRequest(MAPPER.readTree(description.body()), "completion-spark-reroll");
+        diceSeed(seedForDie(6, 5));
+        var rerolled = recoveryRollHttp(owner, offer, "actor", request.toString());
+        assertEquals(200, rerolled.statusCode(), rerolled.body());
+        assertEquals(5, MAPPER.readTree(rerolled.body()).path("kept").asInt());
+        assertEquals(rerolled.body(), recoveryRollHttp(owner, offer, "actor", request.toString()).body());
+    }
+
+    @Test
     void recoveryRerollsRetainShortRestContextForFurtherReactions() throws Exception {
         installRestRerollRules();
         installRecoverySparkRule();
