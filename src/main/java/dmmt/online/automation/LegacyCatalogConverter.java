@@ -33,7 +33,7 @@ public final class LegacyCatalogConverter {
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
             "damage", "alternateProfiles", "damageTypeChoice", "rest", "restReroll", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions", "conditionalRollOptions", "conditionalMitigation",
             "hopeReward", "classResourceOnly", "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "zeroHopeClearArmor",
-            "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases", "hideSpellcast", "companion", "companionTraining", "conditionalDamageRewards", "experienceRefund", "partyDowntime", "requirement", "unarmoredBase", "ignoreWeaponBurden", "unarmedWeapon");
+            "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases", "hideSpellcast", "companion", "companionTraining", "conditionalDamageRewards", "experienceRefund", "partyDowntime", "requirement", "unarmoredBase", "ignoreWeaponBurden", "unarmedWeapon", "spellcastSuccessSteps");
     private static final Set<String> DEATH_KINDS = Set.of("hopeBonus", "hopeSpend", "mask", "spectral", "egg", "battleHardened",
             "unbreakable", "undying", "lifeWard");
     /** Legacy gated families that are their base family plus extra conditions, which every family converts the same way. */
@@ -70,7 +70,7 @@ public final class LegacyCatalogConverter {
     private static final Pattern POOL_DICE = Pattern.compile("@([a-z][a-z0-9_]*)(d\\d+(?:[+-]\\d+)?)");
     private static final Set<String> ACTION_FIELDS = Set.of("toggleEffect", "splendorAction", "id", "label", "description", "cost", "steps", "report", "damage",
             "requiresEffect", "excludesEffect", "endEffect", "uses", "usesSource", "actionRoll", "target",
-            "excludeSourceActor", "hostOwned", "selectAmount", "resourceRoll", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
+            "excludeSourceActor", "hostOwned", "selectAmount", "resourceRoll", "hopeDice", "layerRoll", "deferSourceUse", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
             "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime", "table",
             "hostRollAction", "bloodAutomation", "castTokens", "patronDice", "witchAction", "requiresCompanion", "specialAction", "codexSwap", "spendFavor",
             "costConditions", "refocus", "chooseEffects", "channelRawPower");
@@ -471,6 +471,14 @@ public final class LegacyCatalogConverter {
             }
         } else for (String flag : List.of("automaticRestUse", "automaticRestUseOnAttempt"))
             if (legacy.has(flag)) p.add(path + "/" + flag, "Automatic use consumption needs a spellcast difficulty.");
+        if (legacy.has("spellcastSuccessSteps")) {
+            ObjectNode rule = spellcastSuccess(legacy.get("spellcastSuccessSteps"), path + "/spellcastSuccessSteps", p, effects, pools,
+                    legacy.has("spellcastDifficulty") ? cardOrigin : null);
+            if (rule != null) {
+                rule.put("id", unique(rule.path("id").asText(), ruleIds));
+                rules.add(rule);
+            }
+        }
         if (legacy.has("damage")) {
             ObjectNode rule = weaponDamage(legacy.get("damage"), path + "/damage", p);
             if (rule != null) {
@@ -4167,6 +4175,34 @@ public final class LegacyCatalogConverter {
         return rule;
     }
 
+    /**
+     * {@code spellcastSuccessSteps} run automatically when this card's spellcast roll meets its written difficulty,
+     * including a critical success: an automatic {@code roll.finished} rule on the card's own spellcast origin.
+     */
+    private static ObjectNode spellcastSuccess(JsonNode steps, String path, Problems p, ObjectNode effects, Pools pools, String origin) {
+        if (origin == null) {
+            p.add(path, "Success steps need a spellcast difficulty on a domain card.");
+            return null;
+        }
+        if (!steps.isArray() || steps.isEmpty()) {
+            p.add(path, "Expected a nonempty list of steps.");
+            return null;
+        }
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "spellcast-success");
+        rule.putArray("bindings").addObject().put("id", "use").put("event", "roll.finished").put("surface", "roll").put("mode", "automatic");
+        ArrayNode when = RuleJson.JSON.createArrayNode();
+        when.addObject().putArray("eq").add(read("event.check.kind")).add("spellcast");
+        when.add(originCondition(origin));
+        ArrayNode succeeded = when.addObject().putArray("or");
+        succeeded.addObject().putArray("eq").add(read("event.check.outcome")).add("success");
+        succeeded.addObject().putArray("eq").add(read("event.check.critical")).add(true);
+        applyWhen(rule, when);
+        ArrayNode out = rule.putArray("do");
+        for (int i = 0; i < steps.size(); i++) step(steps.get(i), path + "/" + i, p, out, effects, pools);
+        rule.putObject("ui").put("label", "Spellcast success");
+        return rule;
+    }
+
     /** Maps a legacy target mode to a binding target selection; returns the operation target for the action steps. */
     private static String targetSelection(JsonNode legacy, String path, Problems p, ObjectNode binding) {
         if (!legacy.has("target")) return "actor";
@@ -4242,6 +4278,19 @@ public final class LegacyCatalogConverter {
     private static ObjectNode action(JsonNode action, String path, Problems p, ObjectNode effects, Pools pools,
                                      boolean limited, String origin, String cardKey) {
         p.onlyFields(action, path, ACTION_FIELDS);
+        if (action.has("hopeDice") && action instanceof ObjectNode hopeAction) {
+            // A Hope die roll spends Hope for a chosen number of dice of the given size: exactly a resource roll on Hope.
+            JsonNode spec = hopeAction.get("hopeDice");
+            if (!spec.isObject() || action.has("resourceRoll")) p.add(path + "/hopeDice", "Expected one Hope die description and no other resource roll.");
+            else {
+                p.onlyFields(spec, path + "/hopeDice", Set.of("sides", "type", "bonusPerDie"));
+                ObjectNode converted = hopeAction.deepCopy();
+                converted.remove("hopeDice");
+                ObjectNode roll = ((ObjectNode) spec.deepCopy()).put("resource", "hope");
+                converted.set("resourceRoll", roll);
+                action = converted;
+            }
+        }
         if (action.has("codexSwap"))
             p.add(path + "/codexSwap", "Manual disposition: swapping this card with a chosen vault card needs a vault-to-loadout move that respects slot, domain and permanent-vault rules, and the rules runtime has no such operation.");
         hostRollAction(action, path, p);
@@ -4319,7 +4368,10 @@ public final class LegacyCatalogConverter {
                 costs.addObject().put("op", "resource.spend").put("pool", "actor.hope").set("amount", read("input.amount"));
             }
         }
-        if (limited) rule.put("limitRef", "uses");
+        if (limited) {
+            rule.put("limitRef", "uses");
+            if (action.path("deferSourceUse").asBoolean(false)) rule.put("limitSpend", false);
+        } else if (action.has("deferSourceUse")) p.add(path + "/deferSourceUse", "Deferring a source use needs a limited feature.");
         ArrayNode steps = RuleJson.JSON.createArrayNode();
         if (action.has("actionRoll")) actionRoll(action.get("actionRoll"), path + "/actionRoll", action, p, steps);
         if (spendsTokens && rule.has("inputs") && !steps.isEmpty())
@@ -4389,6 +4441,7 @@ public final class LegacyCatalogConverter {
             }
         }
         String specialReport = action.has("specialAction") ? specialAction(action, path, p, effects, rule, steps) : null;
+        if (action.has("layerRoll")) specialReport = layerRoll(action.get("layerRoll"), path + "/layerRoll", p, pools, steps);
         if (action.has("timing")) {
             for (int i = 0; i < steps.size(); i++) {
                 JsonNode sampled = steps.get(i);
@@ -4424,6 +4477,21 @@ public final class LegacyCatalogConverter {
         sentRollReport(action, ui);
         checkReport(action, ui);
         return rule;
+    }
+
+    /**
+     * A layered defence: roll one d6 per layer in a counted pool; any 5 or higher destroys one layer, otherwise every
+     * layer is lost. Returns the default report.
+     */
+    private static String layerRoll(JsonNode legacy, String path, Problems p, Pools pools, ArrayNode steps) {
+        String pool = legacy.asText("");
+        if (!pools.has(pool)) { p.add(path, "Unknown layer pool: " + pool); return null; }
+        steps.addObject().put("op", "dice.hits").put("sides", 6).put("atLeast", 5).put("as", "layers").set("count", poolValue(pools, pool));
+        ObjectNode spend = steps.addObject().put("op", "pool.spend").put("pool", pool);
+        ArrayNode amount = spend.putObject("amount").putArray("if");
+        amount.addObject().putArray("gt").add(read("result.layers")).add(0);
+        amount.add(1).add(poolValue(pools, pool));
+        return "{result.layers} layer dice rolled 5 or higher. If any did, the attack fails and one layer is destroyed; otherwise take the damage and the layers are lost.";
     }
 
     /**
@@ -5320,7 +5388,7 @@ public final class LegacyCatalogConverter {
         }
         if (step.has("fallbackEffect"))
             p.add(path + "/fallbackEffect", "Manual disposition: a fallback effect for a pool the holder lacks belongs to a party-granted move, which format 2 does not offer.");
-        p.onlyFields(step, path, Set.of("op", "resource", "amount", "fallbackEffect"));
+        p.onlyFields(step, path, Set.of("op", "resource", "amount", "fallbackEffect", "minimumAmount"));
         String resource = step.path("resource").asText();
         JsonNode amount = step.path("amount");
         boolean clearAllTrack = "all".equals(amount.asText()) && "clear".equals(op) && TRACKS.containsKey(resource);
@@ -5356,6 +5424,13 @@ public final class LegacyCatalogConverter {
         if (value == null && !clearAllTrack && !clearAllPool && !markAllTrack) {
             p.add(path + "/amount", "Computed amounts need an explicit expression: " + amount);
             return;
+        }
+        if (step.has("minimumAmount")) {
+            if (!step.get("minimumAmount").isInt() || step.get("minimumAmount").asInt() < 1 || value == null)
+                { p.add(path + "/minimumAmount", "Expected a positive whole minimum next to an explicit amount."); return; }
+            ObjectNode floor = RuleJson.JSON.createObjectNode();
+            floor.putArray("max").add(step.get("minimumAmount").asInt()).add(value);
+            value = floor;
         }
         switch (op) {
             case "clear", "mark" -> {

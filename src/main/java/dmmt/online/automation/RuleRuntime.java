@@ -318,7 +318,7 @@ public final class RuleRuntime {
             if (currentContext.has(field)) copyField(currentContext, next, field);
         if (observer != null && currentContext.has("event")) next.set("event", currentContext.get("event").deepCopy());
         RuleEffects.refreshCounts(program, next);
-        if (reserveSourceCosts && rule.has("limitRef")) {
+        if (reserveSourceCosts && rule.has("limitRef") && rule.path("limitSpend").asBoolean(true)) {
             reserveUse(program, next, rule.path("limitRef").asText());
         }
         if (reserveSourceCosts) {

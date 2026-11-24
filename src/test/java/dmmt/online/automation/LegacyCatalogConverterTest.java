@@ -2601,6 +2601,32 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void miscSingletonsConvertGenerically() throws Exception {
+        var cards = LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"domain-cards","label":"Cards","entries":[
+                {"id":"glide","name":"Glide","automation":{"spellcastDifficulty":12,"resources":[{"id":"lift","label":"Lift","initial":0}],
+                  "spellcastSuccessSteps":[{"op":"gain","resource":"lift","amount":"@total_finesse","minimumAmount":2}]}}]}""");
+        assertEquals(1, cards.converted(), cards.diagnostics().toString());
+        JsonNode glide = cards.catalog().at("/entries/0/automation/rules/0");
+        assertEquals("roll.finished", glide.at("/bindings/0/event").asText());
+        assertTrue(glide.toString().contains("\"max\""), "minimumAmount wraps the amount in max");
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"sling","name":"Sling","automation":{"conditionalActions":[{"id":"use","label":"Sling","hopeDice":{"sides":8,"type":"physical"}}]}},
+                {"id":"echo","name":"Echo","automation":{"uses":{"max":2,"per":"rest"},"actions":[{"id":"cast","label":"Echo","deferSourceUse":true,
+                  "actionRoll":{"trait":"spellcast","reaction":true}}]}},
+                {"id":"ward","name":"Ward","automation":{"resources":[{"id":"shell","label":"Shell","initial":3}],
+                  "actions":[{"id":"hit","label":"Hit","hostOwned":true,"usesSource":false,"layerRoll":"shell"}]}}"""));
+        assertEquals(3, result.converted(), result.diagnostics().toString());
+        assertEquals("resourceDamage", result.catalog().at("/entries/0/automation/rules/0/do/0/as").asText());
+        JsonNode echo = result.catalog().at("/entries/1/automation");
+        assertEquals("uses", echo.at("/rules/0/limitRef").asText());
+        assertFalse(echo.at("/rules/0/limitSpend").asBoolean(true));
+        assertTrue(result.catalog().at("/entries/2/automation").toString().contains("dice.hits"));
+        program(result, 1);
+        program(result, 2);
+    }
+
+    @Test
     void containsDieReadsEveryFaceOfTheFinishedRollAndRollSectionsBecomeGroups() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"redirect","name":"Redirect","automation":{"rollTriggers":[{"id":"redirect","label":"Redirect","on":"any",

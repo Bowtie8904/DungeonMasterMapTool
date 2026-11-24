@@ -1032,7 +1032,7 @@ public final class RuleCompiler {
     }
 
     private static void validateRecipeShape(JsonNode rule, String path) {
-        RuleJson.fields(rule, path, "id", "bindings", "when", "inputs", "costs", "limitRef", "do", "after", "ui");
+        RuleJson.fields(rule, path, "id", "bindings", "when", "inputs", "costs", "limitRef", "limitSpend", "do", "after", "ui");
         if (rule.has("when") && !containsSubstitution(rule.get("when")))
             RuleExpression.validate(rule.get("when"), path + "/when");
         JsonNode bindings = rule.path("bindings");
@@ -1220,10 +1220,12 @@ public final class RuleCompiler {
         RuleJson.checkTree(rule, path, 0, expandedNodes);
         RuleJson.checkTree(args, path + "/args", 0, expandedNodes);
         if (rules.size() >= 256) throw RuleJson.error(path, "Expanded rules exceed the limit.");
-        RuleJson.fields(rule, path, "id", "bindings", "when", "inputs", "costs", "limitRef", "do", "after", "ui");
+        RuleJson.fields(rule, path, "id", "bindings", "when", "inputs", "costs", "limitRef", "limitSpend", "do", "after", "ui");
         String id = RuleJson.id(rule.path("id"), path + "/id");
         if (rules.containsKey(id)) throw RuleJson.error(path + "/id", "Expanded rule ID collision: " + id);
         if (rule.has("when")) RuleExpression.validate(rule.get("when"), path + "/when");
+        if (rule.has("limitSpend") && (!rule.get("limitSpend").isBoolean() || !rule.has("limitRef")))
+            throw RuleJson.error(path + "/limitSpend", "Expected a boolean next to limitRef.");
         if (rule.has("limitRef") && !limits.has(RuleJson.text(rule.get("limitRef"), path + "/limitRef")))
             throw RuleJson.error(path + "/limitRef", "Unknown use budget.");
         JsonNode bindings = rule.path("bindings");
