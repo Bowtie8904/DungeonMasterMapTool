@@ -4325,6 +4325,99 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void targetedRestReprojectsRecipientCollectionsAndFlags() throws Exception {
+        installRestRules();
+        Path classesFile = compendiumDir.resolve("classes.json");
+        ObjectNode classes = (ObjectNode) MAPPER.readTree(classesFile.toFile());
+        ((ArrayNode) classes.at("/entries/0/features/2/automation/rules")).add(MAPPER.readTree("""
+                {"id":"old-watch","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.track"},"hp"]},
+                 "do":[{"op":"table.gain","resource":"fear","amount":1,"label":"Old"}],
+                 "ui":{"report":"Old source reacted."}}
+                """));
+        java.nio.file.Files.writeString(classesFile, classes.toString());
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withArray("rules").addAll((ArrayNode) MAPPER.readTree("""
+                [
+                 {"id":"gift-care","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"button",
+                    "restMove":{"id":"gift-care","kind":"short","ally":true},
+                    "targetSelection":{"cardinality":"one","scope":"activeCharacters","excludeSource":true}}],
+                  "do":[{"op":"track.clear","track":"recipient.hp","amount":1}],
+                  "ui":{"label":"Give care"}},
+                 {"id":"gift-before","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.move.id"},"gift-care"]},
+                  "do":[{"op":"collection.remove","target":"recipient","collection":"features","item":"old-reaction"},
+                        {"op":"collection.add","target":"recipient","collection":"features",
+                         "item":{"object":{"id":"gift","label":"Gift"}}},
+                        {"op":"flag.set","flag":"recipient.companionUnavailable","value":false}],
+                  "after":{"do":[{"op":"collection.remove","target":"recipient","collection":"features","item":"gift"},
+                                  {"op":"collection.add","target":"recipient","collection":"inventory",
+                                   "item":{"object":{"id":"bandage","label":"Bandage","quantity":2}}},
+                                  {"op":"track.clear","track":"recipient.stress","amount":1}]},
+                  "ui":{}},
+                 {"id":"gift-fail","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"option"}],
+                  "when":{"eq":[{"read":"event.move.id"},"gift-care"]},
+                  "after":{"do":[{"op":"collection.remove","target":"recipient","collection":"features","item":"missing"}]},
+                  "ui":{"label":"Remove missing gift"}},
+                 {"id":"gift-watch","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                  "when":{"and":[{"eq":[{"read":"actor.name"},"mira"]},
+                    {"or":[{"and":[{"eq":[{"read":"event.track"},"hp"]},
+                                     {"eq":[{"read":"actor.companionUnavailable"},false]},
+                                     {"includes":[{"pluck":[{"read":"actor.features"},"id"]},"gift"]}]},
+                           {"and":[{"eq":[{"read":"event.track"},"stress"]},
+                                     {"not":{"includes":[{"pluck":[{"read":"actor.features"},"id"]},"gift"]}},
+                                     {"includes":[{"pluck":[{"read":"actor.inventory"},"id"]},"bandage"]}]}]}]},
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],
+                  "ui":{"report":"Gift state observed for {actor.name}."}}
+                ]
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        addRestParty();
+        ObjectNode recipient = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        recipient.putArray("features").addObject().put("name", "Old reaction").put("automationItem", "old-reaction")
+                .put("automationSource", "classes:tester:features:steady").put("instanceId", "old");
+        recipient.putObject("companion").put("unavailable", true).putObject("stress").put("on", 1).put("slots", 3);
+        store.saveSheet(campaign.getId(), "mira", recipient.toString());
+
+        String owner = cookie();
+        var described = restHttp(owner, "resting", "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode rest = MAPPER.readTree(described.body());
+        ObjectNode failing = restRequest(rest, "failed-gift-care");
+        ObjectNode failingMove = targetRestMove(failing, rest, "gift-care", "mira");
+        failingMove.withArray("options").add(restSelection(restDescriptor(
+                restDescriptor(rest.path("moves"), "gift-care").path("options"), "gift-fail")));
+        String beforeSource = store.loadSheet(campaign.getId(), "resting");
+        String beforeRecipient = store.loadSheet(campaign.getId(), "mira");
+        int fear = campaign.getFear(), history = store.historyTail(campaign.getId(), 100).size();
+        var rejected = restHttp(owner, "resting", null, failing.toString());
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertEquals(beforeSource, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(beforeRecipient, store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(fear, campaign.getFear());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+
+        ObjectNode request = restRequest(rest, "gift-care");
+        targetRestMove(request, rest, "gift-care", "mira");
+        var completed = restHttp(owner, "resting", null, request.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode receipt = MAPPER.readTree(completed.body());
+        List<String> reports = receipt.path("actions").findValuesAsText("report");
+        assertEquals(2, reports.stream().filter("Gift state observed for mira."::equals).count(), reports.toString());
+        assertFalse(reports.contains("Old source reacted."), reports.toString());
+        JsonNode savedRecipient = MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(2, savedRecipient.at("/hope/on").asInt());
+        assertFalse(savedRecipient.at("/companion/unavailable").asBoolean());
+        assertTrue(savedRecipient.path("features").isEmpty());
+        assertEquals("bandage", savedRecipient.at("/inventory/0/automationItem").asText());
+        assertEquals(2, savedRecipient.at("/inventory/0/qty").asInt());
+        assertEquals(fear, campaign.getFear());
+        assertEquals(completed.body(), restHttp(owner, "resting", null, request.toString()).body());
+        assertEquals(savedRecipient, MAPPER.readTree(store.loadSheet(campaign.getId(), "mira")));
+    }
+
+    @Test
     void targetedRestSettlesAdjustmentAndDeferredEffectLifecycles() throws Exception {
         installRestRules();
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");

@@ -660,7 +660,8 @@ public final class RuleDispatcher {
                     owner.mutated(staged, operation, previousActor, target);
                     return;
                 }
-                if (Set.of("effect.start", "effect.end", "effect.endLabeled", "pool.spend", "pool.gain").contains(operation)) {
+                if (Set.of("effect.start", "effect.end", "effect.endLabeled", "pool.spend", "pool.gain",
+                        "flag.set", "collection.add", "collection.remove").contains(operation)) {
                     if (previousActor != null) {
                         recipient.holderChanged(staged, budget.contexts);
                         Candidate source = sources.get(staged.at("/source/instanceId").asText());
@@ -1213,7 +1214,8 @@ public final class RuleDispatcher {
                         throw new RuleRuntime.Unavailable("inventorySettlement",
                                 "A later reaction requires the inventory grant to be settled first.");
                     if ("recipient".equals(target)) {
-                        if (Set.of("effect.start", "effect.end", "effect.endLabeled", "pool.spend", "pool.gain").contains(operation)) {
+                        if (Set.of("effect.start", "effect.end", "effect.endLabeled", "pool.spend", "pool.gain",
+                                "flag.set", "collection.add", "collection.remove").contains(operation)) {
                             if (previousActor != null) {
                                 recipientReactions.holderChanged(staged, workingContexts);
                                 RuleEffects.refreshCounts(byInstance.get(intent.sourceInstanceId()).program(), staged);

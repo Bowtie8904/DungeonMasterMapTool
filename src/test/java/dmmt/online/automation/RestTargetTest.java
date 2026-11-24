@@ -306,6 +306,9 @@ class RestTargetTest {
                  "item":{"literal":{"id":"foreign","label":"Foreign"}}}
                 """,
                 """
+                {"op":"flag.set","flag":"recipient.companionUnavailable","value":false}
+                """,
+                """
                 {"op":"pool.gain","pool":"charge","owner":"recipient","amount":0}
                 """);
         for (String phase : List.of("/automation/rules/0/do", "/automation/rules/0/after/do")) {
@@ -317,7 +320,8 @@ class RestTargetTest {
                 ((ArrayNode) invalid.at(phase)).add(RuleJson.parse(mutation));
                 if (mutation.contains("\"track.clear\"") || mutation.contains("\"resource.gain\"")
                         || mutation.contains("\"track.capacity\"") || mutation.contains("\"effect.start\"")
-                        || mutation.contains("\"effect.endLabeled\"") || mutation.contains("\"pool.gain\""))
+                        || mutation.contains("\"effect.endLabeled\"") || mutation.contains("\"pool.gain\"")
+                        || mutation.contains("\"collection.add\"") || mutation.contains("\"flag.set\""))
                     assertDoesNotThrow(() -> pack(invalid), phase + mutation);
                 else assertThrows(AutomationHost.NotReady.class, () -> pack(invalid), phase + mutation);
 
@@ -336,6 +340,12 @@ class RestTargetTest {
                 assertEquals(beforeRecipient, setup.recipient());
                 assertTrue(party.updates().isEmpty());
             }
+            ObjectNode unsupported = ruleset();
+            ((ArrayNode) unsupported.at(phase)).add(RuleJson.parse("""
+                    {"op":"inventory.grant","catalog":"items","entry":"ration",
+                     "quantity":1,"label":"Ration","to":"recipient"}
+                    """));
+            assertThrows(AutomationHost.NotReady.class, () -> pack(unsupported), phase);
         }
     }
 

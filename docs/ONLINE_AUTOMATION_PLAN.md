@@ -178,7 +178,9 @@ Self-targeted single-holder effects transfer after preparation and between moves
 selected moves and deferred benefits settle recipient track changes and effect starts and ends immediately,
 including label-based endings of other sources' effects and transfers from offline or disabled holders, so later
 operations and reactions see updated effects and effect-bound pools.
-Recipient collection and pool mutations in adjustments or deferred benefits remain unsupported.
+Adjustments and deferred benefits can also change recipient actor pools, writable collections and boolean facts;
+later reactions use the updated recipient and active sources. Recipient inventory grants in these phases remain
+unsupported.
 The host provides target-specific move and adjustment descriptors when availability, labels or inputs depend on
 an ally; the browser switches them with the recipient and the transaction rechecks the choices. Before selection,
 recipient-dependent text uses `...`, and a move is enabled when at least one offered recipient can use it.
@@ -268,7 +270,7 @@ dispatches both phases around the snapshot reset, and advances the rest counters
 Conditional options that no longer apply are reported as skipped; invalid choices, inputs, costs and blocked
 outcomes reject the stage. The live self-rest transaction publishes reports and persists supported host requests.
 Moves without the required recipient transaction reject targeted bindings rather than applying them to the wrong
-character. Full recipient coordination remains pending.
+character. The live coordinator handles the supported recipient mutations and reactions described above.
 The internal rest coordinator composes the initial effect snapshot, early expiry, preparation, ordered moves and
 completion on private source and recipient sheets. Recipient offers retain their original host versions while later
 moves reproject earlier staged changes; every changed sheet advances once, and failure discards the sequence.
@@ -312,9 +314,9 @@ Reusing validation patterns and building diagnostic paths only on failure preser
 temporary allocations. In one opt-in, single-thread 32-idle-source private-rest sample, mean allocation fell
 from 38.78 to 27.30 MiB without reactions and from 38.70 to 25.15 MiB with one Armor reaction; timings varied
 substantially between runs. This is not a live persistence, concurrency or release benchmark.
-Targeted-move adjustments, costs, buttons and deferred benefits settle recipient track reactions and actor-scoped
-pool changes; later operations see the reprojected holder and Fear. Unsupported recipient collection mutations
-and failed nested reactions abort the rest.
+Targeted-move adjustments, costs, buttons and deferred benefits settle recipient track reactions, actor-scoped
+pools, writable collections and boolean facts; later operations see the reprojected holder and Fear. Unsupported
+recipient commands and failed nested reactions abort the rest.
 Converted `repairAllies` adjustments use live party recovery and recipient track-change reactions, including
 Armor overflow. Live self and ally recovery also exercise converted Overflowing Armor. `plan.adjust` records
 each requested and applied delta, before/after values, source instance, executing rule and binding, phase and
