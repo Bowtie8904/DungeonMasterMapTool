@@ -6542,12 +6542,12 @@ public final class OnlineSessionServer {
             ArrayNode newDice = StructuredRoll.dice(after, "downtime", true);
             boolean recoveryOffer = saved.has("track");
             if (oldDice.isEmpty() || oldDice.size() > 32 || oldDice.size() != newDice.size()
-                    || recoveryOffer && oldDice.size() != 1 || !downtimeRollShape(before).equals(downtimeRollShape(after)))
+                    || !downtimeRollShape(before).equals(downtimeRollShape(after)))
                 throw new IllegalArgumentException("A downtime-roll action must edit only the offered dice.");
             int previous = before.path("total").asInt(), kept = after.path("total").asInt();
             int remaining = recoveryOffer ? (int) claimLong(saved.get("remaining"), "remaining recovery") : 0;
             if (remaining > 1000) throw new IllegalArgumentException("Invalid remaining recovery.");
-            int requested = Math.min(remaining, Math.max(0, kept - previous));
+            int requested = Math.min(remaining, Math.max(0, Math.max(0, kept) - Math.max(0, previous)));
             int cleared = 0;
             ObjectNode recovery = null;
             if (requested > 0) {
@@ -7346,8 +7346,7 @@ public final class OnlineSessionServer {
                     ObjectNode roll = StructuredRoll.validate(command.path("roll"));
                     ArrayNode dice = StructuredRoll.dice(roll, "downtime", true);
                     boolean recovery = "recovery.offerRoll".equals(kind);
-                    if (dice.isEmpty() || dice.size() > 32 || recovery
-                            && (dice.size() != 1 || roll.path("contributions").size() != 1))
+                    if (dice.isEmpty() || dice.size() > 32)
                         throw new IllegalArgumentException("A downtime offer requires valid offered dice.");
                     int remaining = recovery ? (int) claimLong(command.get("remaining"), "remaining recovery") : 0;
                     if (recovery && (remaining > 1000 || !command.path("track").asText().matches("[a-zA-Z][a-zA-Z0-9_-]*")))

@@ -3403,7 +3403,25 @@ public final class LegacyCatalogConverter {
         else noChoices(action, path, p);
         JsonNode list = action.has("check") ? RuleJson.JSON.missingNode() : action.path("steps");
         amountStore(action.path("selectAmount"), path + "/selectAmount", p, pools, steps, effects);
-        for (int i = 0; i < list.size(); i++) step(list.get(i), path + "/steps/" + i, p, steps, effects, pools, operationTarget);
+        for (int i = 0; i < list.size(); i++) {
+            JsonNode legacyStep = list.get(i);
+            int first = steps.size();
+            step(legacyStep, path + "/steps/" + i, p, steps, effects, pools, operationTarget);
+            if (action.has("timing") && steps.size() > first + 1
+                    && "dice.roll".equals(steps.get(first).path("op").asText())) {
+                JsonNode sampled = steps.get(first), settled = steps.get(steps.size() - 1);
+                boolean recovery = "track.clear".equals(settled.path("op").asText());
+                ObjectNode offer = steps.addObject().put("op", recovery ? "recovery.offerRoll" : "downtime.offerRoll")
+                        .put("label", escape(label));
+                offer.set("roll", read("result." + sampled.path("as").asText()));
+                if (recovery) offer.put("track", settled.path("track").asText());
+                else offer.put("group", true);
+                var expression = ACTION_DAMAGE.matcher(legacyStep.path("amount").asText().trim());
+                if (expression.matches() && expression.group(3) != null)
+                    offer.put("offset", Integer.parseInt(expression.group(4)) * ("-".equals(expression.group(3)) ? -1 : 1));
+                offer.putObject("if").putArray("eq").add(read("event.move.rest")).add("short");
+            }
+        }
         amountHeal(action.path("selectAmount"), path + "/selectAmount", p, steps);
         if (action.has("table")) actionTable(action.get("table"), path + "/table", p, steps, effects, pools, operationTarget);
         endEffect(action, steps, operationTarget);

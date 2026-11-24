@@ -1093,6 +1093,7 @@ public final class RuleRuntime {
                 ArrayNode outbox = context.has("outbox") ? (ArrayNode) context.get("outbox") : context.putArray("outbox");
                 ArrayNode offered = RuleJson.JSON.createArrayNode();
                 if (!recovery && sampled.has("contributions") && value.equals(sampled)) {
+                    if (op.has("offset")) throw RuleJson.error("/offset", "A structured roll already contains its offsets.");
                     ObjectNode roll = StructuredRoll.validate(sampled).put("id", "downtime-" + java.util.UUID.randomUUID());
                     for (JsonNode part : roll.path("contributions"))
                         if ("dice".equals(part.path("kind").asText())) ((ObjectNode) part).put("role", "downtime");
@@ -1110,9 +1111,13 @@ public final class RuleRuntime {
                     int sides = RuleJson.integer(sampled.get("sides"), "/roll/sides", 2, 1000);
                     JsonNode faces = sampled.path("faces");
                     if (!faces.isArray() || faces.isEmpty()
-                            || !(value.equals(faces) || value.isNumber() && value.asDouble() == sampled.path("total").asDouble())
-                            || recovery && faces.size() != 1)
+                            || !(value.equals(faces) || value.isNumber() && value.asDouble() == sampled.path("total").asDouble()))
                         throw RuleJson.error("/roll", "A downtime offer must reference the last sampled roll.");
+                    boolean group = recovery || op.path("group").asBoolean();
+                    double offsetValue = op.has("offset") ? RuleExpression.number(eval(op.get("offset"), context), "/offset") : 0;
+                    if (offsetValue != Math.rint(offsetValue) || Math.abs(offsetValue) > 1_000_000 || offsetValue != 0 && !group)
+                        throw RuleJson.error("/offset", "An offset requires a grouped roll and a bounded whole number.");
+                    int offset = (int) offsetValue;
                     String trackName = null;
                     int remaining = 0;
                     if (recovery) {
@@ -1127,13 +1132,21 @@ public final class RuleRuntime {
                     }
                     if (outbox.size() + faces.size() > 32)
                         throw new Unavailable("restRoll", "A downtime action can offer at most 32 dice.");
-                    for (JsonNode face : faces) {
+                    int groups = group ? 1 : faces.size();
+                    for (int i = 0; i < groups; i++) {
                         ObjectNode roll = RuleJson.JSON.createObjectNode().put("id", "downtime-" + java.util.UUID.randomUUID());
-                        ObjectNode contribution = roll.putArray("contributions").addObject()
+                        ArrayNode contributions = roll.putArray("contributions");
+                        ObjectNode contribution = contributions.addObject()
                                 .put("id", "downtime").put("kind", "dice").put("role", "downtime")
                                 .put("sourceId", program.sourceId()).put("label", label);
-                        contribution.putArray("dice").addObject().put("id", "downtime.d1")
-                                .put("sides", sides).put("face", face.asInt()).put("kept", true).put("origin", "rolled");
+                        ArrayNode dice = contribution.putArray("dice");
+                        int first = group ? 0 : i, last = group ? faces.size() : i + 1;
+                        for (int j = first; j < last; j++)
+                            dice.addObject().put("id", "downtime.d" + (j + 1))
+                                    .put("sides", sides).put("face", faces.get(j).asInt()).put("kept", true).put("origin", "rolled");
+                        if (offset != 0) contributions.addObject().put("id", "offset").put("kind", "flat")
+                                .put("role", "downtime").put("sourceId", program.sourceId()).put("label", label)
+                                .put("value", offset);
                         ObjectNode request = outbox.addObject().put("kind", kind).put("label", label)
                                 .put("sourceActorId", RuleJson.id(context.at("/actor/id"), "/actor/id"))
                                 .put("holderId", RuleJson.id(holder.get("id"), "/holder/id"));

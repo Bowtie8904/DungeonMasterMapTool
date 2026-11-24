@@ -2211,6 +2211,72 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void downtimeStepRecoveryRerollsRespectOffsetsAndRemainingMarks() throws Exception {
+        installRestRerollRules();
+        var converted = dmmt.online.automation.LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"domain-cards","entries":[
+                 {"id":"care","name":"Care","automation":{"actions":[
+                   {"id":"heal","label":"Care","timing":"downtime","steps":[
+                     {"op":"clear","resource":"stress","amount":"1d6-2"},
+                     {"op":"clear","resource":"hp","amount":"2d6+1"}]}]}}]}
+                """);
+        assertEquals(1, converted.converted(), converted.diagnostics().toString());
+        Path catalogFile = compendiumDir.resolve("domain-cards.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(catalogFile.toFile());
+        catalog.withArray("entries").add(converted.catalog().at("/entries/0").deepCopy());
+        java.nio.file.Files.writeString(catalogFile, catalog.toString());
+        String owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("patient").name("Mira").ownerId(playerId()).build());
+        for (String id : List.of("first", "second")) {
+            campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId()).build());
+            store.saveSheet(campaign.getId(), id, """
+                    {"name":"%s","level":1,"hp":{"slots":6,"on":0},"stress":{"slots":6,"on":0},
+                     "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},
+                     "loadout":[{"name":"Second Chance","instanceId":"chance","automationSource":"domain-cards:reroller"}]}
+                    """.formatted(id));
+        }
+        store.saveSheet(campaign.getId(), "patient", """
+                {"name":"Mira","level":1,"hp":{"slots":8,"on":8},"stress":{"slots":6,"on":5},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},
+                 "loadout":[{"name":"Care","instanceId":"care","automationSource":"domain-cards:care"}]}
+                """);
+        var described = restHttp(owner, "patient", "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode rest = MAPPER.readTree(described.body());
+        ObjectNode body = restRequest(rest, "care-rest");
+        addRestMove((ObjectNode) body.path("request"), restDescriptor(rest.path("moves"), "heal"));
+        diceSeed(seedForDice(new int[]{6, 6, 6}, new int[]{1, 1, 1}));
+        var completed = restHttp(owner, "patient", null, body.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        var offers = store.historyTail(campaign.getId(), 100).stream()
+                .filter(message -> message.path("automationRecoveryRoll").isObject()).toList();
+        assertEquals(2, offers.size());
+        JsonNode stress = offers.stream().filter(message -> "stress".equals(message.at("/automationRecoveryRoll/track").asText()))
+                .findFirst().orElseThrow();
+        JsonNode hp = offers.stream().filter(message -> "hp".equals(message.at("/automationRecoveryRoll/track").asText()))
+                .findFirst().orElseThrow();
+        assertEquals(-1, stress.at("/automationRecoveryRoll/roll/total").asInt());
+        assertEquals(3, hp.at("/automationRecoveryRoll/roll/total").asInt());
+        JsonNode stressDescription = MAPPER.readTree(recoveryRollHttp(owner, stress, "first", null).body());
+        ObjectNode stressRequest = recoveryRollRequest(stressDescription, "care-stress");
+        diceSeed(seedForDie(6, 3));
+        var stressResult = recoveryRollHttp(owner, stress, "first", stressRequest.toString());
+        assertEquals(200, stressResult.statusCode(), stressResult.body());
+        assertEquals(1, MAPPER.readTree(stressResult.body()).path("cleared").asInt());
+        assertEquals(stressResult.body(), recoveryRollHttp(owner, stress, "first", stressRequest.toString()).body());
+        JsonNode hpDescription = MAPPER.readTree(recoveryRollHttp(owner, hp, "second", null).body());
+        ObjectNode hpRequest = recoveryRollRequest(hpDescription, "care-hp");
+        diceSeed(seedForDice(new int[]{6, 6}, new int[]{6, 6}));
+        var hpResult = recoveryRollHttp(owner, hp, "second", hpRequest.toString());
+        assertEquals(200, hpResult.statusCode(), hpResult.body());
+        assertEquals(5, MAPPER.readTree(hpResult.body()).path("cleared").asInt());
+        JsonNode patient = MAPPER.readTree(store.loadSheet(campaign.getId(), "patient"));
+        assertEquals(4, patient.at("/stress/on").asInt());
+        assertEquals(0, patient.at("/hp/on").asInt());
+        assertEquals(2, patient.at("/hope/on").asInt());
+    }
+
+    @Test
     void selfRecoveryRerollsUseOneRevisionAndKeepHigherResults() throws Exception {
         installRestRerollRules();
         String owner = cookie();

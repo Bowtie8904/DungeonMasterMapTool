@@ -2953,6 +2953,32 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void downtimeStepsOfferRecoveryAndOtherRolledAmountsAfterSettlement() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"breather","name":"Breather","automation":{"actions":[
+                 {"id":"clear","label":"Clear","timing":"downtime",
+                  "steps":[{"op":"clear","resource":"stress","amount":"2d6-2"}]},
+                 {"id":"gain","label":"Gain","timing":"downtime",
+                  "steps":[{"op":"gain","resource":"hope","amount":"1d4+1"}]}]}}"""));
+        assertEquals(1, result.converted(), result.diagnostics().toString());
+        RuleCompiler.Program program = program(result, 0);
+        String actor = "{\"id\":\"actor\",\"name\":\"Ash\",\"stress\":{\"marked\":5,\"capacity\":6},\"hope\":{\"value\":0,\"max\":6}}";
+        var recovery = run(program, context(program, actor, move("clear", "short", false, false)),
+                StructuredRollTest.faces(2, 1), "clear");
+        assertEquals(4, recovery.contexts().getFirst().at("/actor/stress/marked").asInt());
+        JsonNode recoveryOffer = recovery.outbox().getFirst();
+        assertEquals("recovery.offerRoll", recoveryOffer.path("kind").asText());
+        assertEquals(4, recoveryOffer.path("remaining").asInt());
+        assertEquals(1, recoveryOffer.at("/roll/total").asInt());
+        assertEquals(2, StructuredRoll.dice(recoveryOffer.path("roll"), "downtime", true).size());
+        var gain = run(program, context(program, actor, move("gain", "short", false, false)),
+                StructuredRollTest.faces(3), "gain");
+        assertEquals(4, gain.contexts().getFirst().at("/actor/hope/value").asInt());
+        assertEquals("downtime.offerRoll", gain.outbox().getFirst().path("kind").asText());
+        assertEquals(4, gain.outbox().getFirst().at("/roll/total").asInt());
+    }
+
+    @Test
     void reportDicePrecedeStepDiceAndLateFailuresDoNotCommit() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"ordered","name":"Ordered","automation":{"uses":{"max":1,"per":"rest"},"actions":[

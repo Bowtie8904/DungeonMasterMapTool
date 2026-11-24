@@ -107,8 +107,9 @@ the shipped format-1 catalogs retain their existing rest behavior.
 The shared ruleset defines the base recovery, preparation and project moves, including tier-scaled recovery,
 protected HP and capped Hope. Short-rest recovery dice offer authored reroll actions in chat; the host applies
 any improvement to the affected character with its healing floor and reactions. Converted downtime table,
-repeat-count and report rolls also offer rerolls; already resolved outcomes and counts do not change. Other
-action-step dice are not yet offered. Converted companions recover the owner's net cleared Stress and return before long-rest moves.
+repeat-count, report and action-step rolls also offer rerolls; already resolved outcomes and counts do not
+change. Rolls in other rest phases are not yet offered. Converted companions recover the owner's net cleared
+Stress and return before long-rest moves.
 Ordered adjustment records retain each requested
 amount, source, rule, binding and compiled step; converted party-repair modifiers identify the recipient scope
 and track and settle recipient Armor-overflow reactions atomically. An indexed post-rest declaration can schedule a fixed recovery from a named initial

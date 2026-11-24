@@ -163,7 +163,9 @@ Short-rest recovery dice can publish generic chat offers; an owned source may ed
 the exact-retry receipt atomically. Converted downtime tables also offer each result die and repeat-count die;
 converted downtime report expressions offer their complete signed roll and keep the higher total. Rerolling
 updates the saved roll, not already settled table outcomes, counts or report effects. An action offering more
-than 32 dice is rejected; other action-step dice still need live offers.
+than 32 dice is rejected. Converted downtime action-step rolls also offer their full expression; recovery
+rerolls account for signed offsets, the original remaining allowance and the holder's current healing floor.
+Rolls in rest passives and other reaction phases still need live offers.
 
 The live host rejects legacy client-supplied rests and downtime rerolls when any category declares format 2,
 including an incomplete pack. It cannot classify malformed, unreadable or unknown-version categories as legacy.
@@ -311,8 +313,8 @@ additional command settlement remains unfinished.
 The shared Daggerheart ruleset now supplies self-targeted short recovery (1d4 plus tier and move bonus), the two
 mutually exclusive preparation variants, long recovery and work on a project. Reports use the amount actually
 cleared or gained, including permanent and locked HP and capped Hope; a short rest needs a granted allowance for
-a long move. The ally variants update the selected recipient. Recovery, downtime-table and report-roll offers
-use the live reroll flow described above; other action-step dice remain unfinished.
+a long move. The ally variants update the selected recipient. Recovery, downtime-table, report and action-step
+roll offers use the live reroll flow described above; other rest-phase dice remain unfinished.
 The sheet projection supplies permanent and temporary marked-HP floors to generic track clearing. The
 engine recomputes locks held in its effect list as operations run, so ending a lock before healing in the same
 action allows the newly recoverable HP to clear. Recipient healing uses the recipient's floor, and capacity

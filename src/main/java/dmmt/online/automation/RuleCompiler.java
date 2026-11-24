@@ -43,8 +43,8 @@ public final class RuleCompiler {
             Map.entry("dice.hits", List.of("count", "sides", "atLeast")),
             Map.entry("dice.highest", List.of("count", "sides")),
             Map.entry("dice.table", List.of("count", "outcomes")),
-            Map.entry("recovery.offerRoll", List.of("roll", "track", "label")),
-            Map.entry("downtime.offerRoll", List.of("roll", "label")),
+            Map.entry("recovery.offerRoll", List.of("roll", "track", "label", "offset")),
+            Map.entry("downtime.offerRoll", List.of("roll", "label", "offset", "group")),
             Map.entry("inventory.grant", List.of("catalog", "entry", "quantity", "label", "to", "tag", "max", "scope")),
             Map.entry("state.set", List.of("slot", "value")),
             Map.entry("state.increment", List.of("slot", "by")),
@@ -1561,6 +1561,9 @@ public final class RuleCompiler {
             if ("recovery.offerRoll".equals(op) && !RuleJson.text(operation.get("track"), path + "/track")
                     .matches("(actor|recipient)\\.[a-zA-Z][a-zA-Z0-9_-]*"))
                 throw RuleJson.error(path + "/track", "Expected an actor or recipient recovery track.");
+            if (operation.has("offset")) RuleExpression.validate(operation.get("offset"), path + "/offset");
+            if (operation.has("group") && !operation.get("group").isBoolean())
+                throw RuleJson.error(path + "/group", "Expected a boolean.");
             RuleTemplate.validate(RuleJson.text(operation.get("label"), path + "/label"));
             return;
         }
@@ -1696,6 +1699,8 @@ public final class RuleCompiler {
                 && !("track.capacity".equals(op) && Set.of("by", "counter", "amount", "direction").contains(field))
                 && !("claim.offer".equals(op) && "limit".equals(field))
                 && !("plan.adjust".equals(op) && "partyRecovery".equals(field))
+                && !(Set.of("recovery.offerRoll", "downtime.offerRoll").contains(op) && "offset".equals(field))
+                && !("downtime.offerRoll".equals(op) && "group".equals(field))
                 && !("inventory.grant".equals(op) && Set.of("to", "tag", "max", "scope").contains(field)))
             throw RuleJson.error(path + "/" + field, "Missing operation field.");
         if ("plan.adjust".equals(op)) validatePartyRecovery(operation, path, true);
