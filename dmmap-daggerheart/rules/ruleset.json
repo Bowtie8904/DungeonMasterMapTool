@@ -84,7 +84,11 @@
           "from": { "read": "actor.experiences" },
           "choiceLabel": "{input.option.name} ({input.option.mod|signed})"
         }],
-        "costs": [{ "op": "resource.spend", "pool": "actor.hope", "amount": 1 }],
+        "costs": [{ "op": "resource.spend", "pool": "actor.hope",
+          "amount": { "max": [0, { "subtract": [1, { "if": [
+            { "exists": "event.costAdjustments.g_core-experience" },
+            { "read": "event.costAdjustments.g_core-experience" }, 0
+          ] }] }] } }],
         "do": [
           { "op": "roll.contribute", "from": { "read": "event.roll" }, "as": "withExperience",
             "contribution": { "id": "experience", "kind": "flat", "role": "modifier",

@@ -15,7 +15,7 @@ import java.util.Set;
 
 public final class RuleCompiler {
     public static final int FORMAT_VERSION = 2;
-    private static final Set<String> EVENTS = Set.of("action.request", "roll.prepare", "roll.prepared", "roll.finished",
+    private static final Set<String> EVENTS = Set.of("action.request", "roll.costs", "roll.prepare", "roll.prepared", "roll.finished",
             "damage.prepare", "damage.marks", "damage.applied", "claim.accept", "rest.prepare", "rest.short", "rest.long", "scene.end", "session.start",
             "downtime.move", "downtime.completed", "rest.roll", "death.options", "track.changed", "pool.changed", "equipment.changed", "effect.started",
             "effect.ended", "creation.apply");
@@ -806,6 +806,13 @@ public final class RuleCompiler {
             throw RuleJson.error(path + "/surface", "Unknown surface.");
         if (!(allowSubstitutions && substitution(binding.path("mode"))) && !MODES.contains(binding.path("mode").asText()))
             throw RuleJson.error(path + "/mode", "Unknown binding mode.");
+        if ("roll.costs".equals(binding.path("event").asText())) {
+            boolean surfaceUnknown = allowSubstitutions && substitution(binding.path("surface"));
+            boolean modeUnknown = allowSubstitutions && substitution(binding.path("mode"));
+            if ((!surfaceUnknown && !"roll".equals(binding.path("surface").asText()))
+                    || (!modeUnknown && !"automatic".equals(binding.path("mode").asText())) || binding.has("forEach"))
+                throw RuleJson.error(path, "A roll.costs binding requires automatic mode on the roll surface without forEach.");
+        }
         if (binding.has("when") && !(allowSubstitutions && containsSubstitution(binding.get("when"))))
             RuleExpression.validate(binding.get("when"), path + "/when");
         if (binding.has("audience") && !(allowSubstitutions && substitution(binding.get("audience")))
@@ -886,7 +893,9 @@ public final class RuleCompiler {
         for (String group : List.of("exclusiveGroup", "claimGroup")) if (binding.has(group)) {
             if (!(allowSubstitutions && substitution(binding.get(group)))) RuleJson.id(binding.get(group), path + "/" + group);
             if (!(allowSubstitutions && substitution(binding.path("mode")))
-                    && !Set.of("button", "option").contains(binding.path("mode").asText()))
+                    && !Set.of("button", "option").contains(binding.path("mode").asText())
+                    && !("exclusiveGroup".equals(group) && "automatic".equals(binding.path("mode").asText())
+                    && (allowSubstitutions && substitution(binding.path("event")) || "roll.costs".equals(binding.path("event").asText()))))
                 throw RuleJson.error(path + "/" + group, "Groups require selected bindings.");
         }
         if (binding.has("claimGroupScope")) {

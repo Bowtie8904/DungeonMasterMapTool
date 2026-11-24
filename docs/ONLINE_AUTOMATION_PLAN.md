@@ -28,8 +28,9 @@ the committed label; exact retries remain valid after deletion. A shared ruleset
 selected Experience on duality rolls. The host checks the selected name and modifier against the current sheet,
 including after ordinary sheet edits. Selected advantage/disadvantage suggestions cancel or coalesce; a manual
 mode can override them, and disadvantage can be ignored. Converted Experience alternatives can replace Hope
-with Stress and change the modifier while remaining exclusive with the ordinary option; refunds and other non-profile
-roll origins remain incomplete. Format-1 hosts keep the legacy dialog.
+with Stress and change the modifier while remaining exclusive with the ordinary option. Converted Experience
+refunds roll before spending, preserve aggregate affordability, and do not emit a track change when successful.
+Other non-profile roll origins remain incomplete. Format-1 hosts keep the legacy dialog.
 
 **Record inputs.** `record.select` takes a projected scalar-record collection in `from` and a `choiceLabel`
 template using `input.option`. The host offers those records, then matches the submitted record against the
@@ -40,6 +41,10 @@ rejected rather than silently rebound.
 
 Legacy Experience cost replacements become exclusive `record.select` options with the configured Hope or
 Stress cost and modifier multiplier. They share the `core-experience` group with the standard ruleset option.
+Before spending, automatic `roll.costs` rules can adjust selected groups through `event.costAdjustments`.
+Fields are `g_` plus the group ID with `_`, `.` and `:` escaped as `_u`, `_d` and `_c`; adjustable field IDs
+must fit the 128-character rule ID limit. Nominal combined costs must be affordable before this phase. Multiple
+eligible automatic resolvers in the same exclusive group reject the roll; their reports and effects commit with it.
 
 **Profile rolls (format 2).** The automation endpoint accepts an owner-only `request.profileRoll` with
 `sourceInstanceId`, `profileId` and `kind` (`attack`, `damage`, `action`, `reaction` or `spellcast`);

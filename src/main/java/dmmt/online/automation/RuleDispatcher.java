@@ -300,6 +300,11 @@ public final class RuleDispatcher {
         return executeEvent(activeSources, selections, random, programs, false, null);
     }
 
+    static void validateEventCosts(List<Candidate> activeSources, List<RuleRuntime.Intent> selections,
+                                   Map<String, RuleCompiler.Program> programs) {
+        executeEvent(activeSources, selections, null, programs, false, null, true, true);
+    }
+
     static EventResolution executeStagedMove(List<Candidate> activeSources, List<RuleRuntime.Intent> selections,
                                              RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
         return executeEvent(activeSources, selections, random, programs, true, null);
@@ -483,6 +488,13 @@ public final class RuleDispatcher {
     private static EventResolution executeEvent(List<Candidate> activeSources, List<RuleRuntime.Intent> selections,
                                                 RandomGenerator random, Map<String, RuleCompiler.Program> programs,
                                                 boolean stagedMove, ReactionBudget budget, boolean includeAutomatic) {
+        return executeEvent(activeSources, selections, random, programs, stagedMove, budget, includeAutomatic, false);
+    }
+
+    private static EventResolution executeEvent(List<Candidate> activeSources, List<RuleRuntime.Intent> selections,
+                                                RandomGenerator random, Map<String, RuleCompiler.Program> programs,
+                                                boolean stagedMove, ReactionBudget budget, boolean includeAutomatic,
+                                                boolean costsOnly) {
         Snapshot snapshot = validateSources(activeSources);
         if (RuleRuntime.isRestEvent(snapshot.eventType()))
             RuleRuntime.restPhase(snapshot.event());
@@ -502,6 +514,7 @@ public final class RuleDispatcher {
         List<Invocation> invocations = new ArrayList<>();
         Set<ActionKey> selectedKeys = new HashSet<>();
         Set<String> exclusiveGroups = new HashSet<>();
+        Set<String> automaticExclusiveGroups = new HashSet<>();
         for (RuleRuntime.Intent intent : selections) {
             if (intent == null) throw RuleJson.error("/selections", "A selected binding is missing.");
             Candidate candidate = byInstance.get(intent.sourceInstanceId());
@@ -536,10 +549,14 @@ public final class RuleDispatcher {
             for (var binding : automatic) {
                 ObjectNode description = RuleRuntime.describe(program, binding.ruleId(), binding.bindingId(), context);
                 if (!description.path("available").asBoolean()) continue;
+                JsonNode declaration = binding(program.rule(binding.ruleId()), binding.bindingId());
+                String group = declaration.path("exclusiveGroup").asText(null);
+                if (group != null && !automaticExclusiveGroups.add(group))
+                    throw new RuleRuntime.Unavailable("exclusiveGroup", "Multiple automatic cost resolvers cannot use the same exclusive group.");
                 RuleRuntime.Intent intent = new RuleRuntime.Intent(binding.ruleId(), binding.bindingId(),
                         context.path("source").path("instanceId").asText(),
                         snapshot.revision(), RuleJson.JSON.createObjectNode());
-                invocations.add(new Invocation(candidate, intent, "automatic", binding.priority(), null, true, null, null));
+                invocations.add(new Invocation(candidate, intent, "automatic", binding.priority(), group, true, null, null));
             }
         }
 
@@ -602,6 +619,8 @@ public final class RuleDispatcher {
                 if (!invocation.automatic()) throw unavailable;
             }
         }
+
+        if (costsOnly) return new EventResolution(List.of(), List.of(), List.of());
 
         for (RuleRuntime.Prepared item : prepared) {
             String instanceId = item.intent().sourceInstanceId();

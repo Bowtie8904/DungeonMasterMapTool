@@ -545,7 +545,43 @@ public final class AutomationHost {
                 projected.rollModifiers(), random);
         var candidates = candidates(pack, sources, state, actor, event);
         var intents = selections(request, candidates, revision, "self", "roll", true);
+        ObjectNode costEvent = event.deepCopy().put("type", "roll.costs");
+        ObjectNode adjustments = costEvent.putObject("costAdjustments");
+        ObjectNode adjustable = adjustments.putObject("adjustable");
+        Map<String, RuleDispatcher.Candidate> byInstance = new HashMap<>();
+        for (var candidate : candidates) byInstance.put(candidate.instanceId(), candidate);
+        for (var selection : intents) {
+            var candidate = byInstance.get(selection.sourceInstanceId());
+            JsonNode binding = RuleDispatcher.binding(candidate.program().rule(selection.ruleId()), selection.bindingId());
+            if (!binding.has("exclusiveGroup")) continue;
+            String field = "g_" + binding.path("exclusiveGroup").asText()
+                    .replace("_", "_u").replace(".", "_d").replace(":", "_c");
+            adjustments.put(field, 0);
+            adjustable.putObject(field).put("min", 0).put("max", 1000);
+        }
+        var costCandidates = candidates(pack, working, costEvent);
+        boolean hasCostResolver = costCandidates.stream().anyMatch(candidate ->
+                candidate.program().automatic("roll.costs").stream().anyMatch(binding ->
+                        RuleRuntime.describe(candidate.program(), binding.ruleId(), binding.bindingId(), candidate.context())
+                                .path("available").asBoolean()));
+        ObjectNode costs = null;
+        if (hasCostResolver) {
+            RuleDispatcher.validateEventCosts(candidates, intents, pack.programs());
+            costs = automatic(pack, working, costEvent, random);
+            event = (ObjectNode) costs.required("event");
+            if (!event.path("roll").equals(costEvent.path("roll"))) ProfileRoll.updateCheck(event);
+            event.put("type", "roll.prepare");
+            state = projection.state(working);
+            state.put("revision", revision);
+            candidates = candidates(pack, working, event);
+            intents = selections(request, candidates, revision, "self", "roll", true);
+        }
         ObjectNode result = applyEvent(pack, working, state, event, candidates, intents, random);
+        if (costs != null) for (String key : List.of("actions", "outbox")) {
+            ArrayNode combined = ((ArrayNode) costs.get(key)).deepCopy();
+            combined.addAll((ArrayNode) result.get(key));
+            result.set(key, combined);
+        }
         ObjectNode finished = (ObjectNode) result.get("event");
         if (finished.path("blocked").size() > 0)
             throw new RuleRuntime.Unavailable("blocked", finished.at("/blocked/0/reason").asText());

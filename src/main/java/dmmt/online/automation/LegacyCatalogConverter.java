@@ -33,7 +33,7 @@ public final class LegacyCatalogConverter {
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
             "damage", "alternateProfiles", "damageTypeChoice", "rest", "restReroll", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions", "conditionalRollOptions",
             "hopeReward", "classResourceOnly", "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "zeroHopeClearArmor",
-            "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases", "hideSpellcast", "companion", "companionTraining", "conditionalDamageRewards");
+            "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases", "hideSpellcast", "companion", "companionTraining", "conditionalDamageRewards", "experienceRefund");
     private static final Set<String> DEATH_KINDS = Set.of("hopeBonus", "hopeSpend", "mask", "spectral", "egg", "battleHardened",
             "unbreakable", "undying", "lifeWard");
     /** Legacy gated families that are their base family plus extra conditions, which every family converts the same way. */
@@ -281,6 +281,11 @@ public final class LegacyCatalogConverter {
         ArrayNode rules = RuleJson.JSON.createArrayNode();
         ObjectNode effects = RuleJson.JSON.createObjectNode();
         Set<String> ruleIds = new HashSet<>();
+        if (legacy.has("experienceRefund")) {
+            ObjectNode refund = experienceRefund(legacy.get("experienceRefund"), path + "/experienceRefund", p);
+            refund.put("id", unique(refund.path("id").asText(), ruleIds));
+            rules.add(refund);
+        }
         if (legacy.has("restReroll")) {
             if (!legacy.path("restReroll").isBoolean()) p.add(path + "/restReroll", "Expected a boolean.");
             else if (legacy.path("restReroll").asBoolean()) {
@@ -1714,8 +1719,9 @@ public final class LegacyCatalogConverter {
         if (experience != null) {
             ObjectNode cost = rule.withArray("/costs").addObject();
             if ("stress".equals(experience.path("resource").asText()))
-                cost.put("op", "track.mark").put("track", "actor.stress").put("amount", 1);
-            else cost.put("op", "resource.spend").put("pool", "actor.hope").put("amount", 1);
+                cost.put("op", "track.mark").put("track", "actor.stress");
+            else cost.put("op", "resource.spend").put("pool", "actor.hope");
+            cost.set("amount", adjustedExperienceCost());
         }
         if (limited) rule.put("limitRef", "uses");
         ArrayNode steps = RuleJson.JSON.createArrayNode();
@@ -1729,6 +1735,7 @@ public final class LegacyCatalogConverter {
             parts.add((ObjectNode) contribution(id + "-experience", "flat", "modifier",
                     "Experience - {input.experience.name}").set("value", value));
         }
+
         if (option.has("value")) {
             JsonNode value = signed(option.path("value"));
             if (value == null) p.add(path + "/value", "Unsupported bonus value: " + option.path("value"));
@@ -1918,6 +1925,45 @@ public final class LegacyCatalogConverter {
         }
         if (!steps.isEmpty()) rule.set("do", steps);
         labels(option, path, p, rule);
+        return rule;
+    }
+
+    private static ObjectNode adjustedExperienceCost() {
+        ObjectNode amount = RuleJson.JSON.createObjectNode();
+        ArrayNode subtraction = amount.putArray("max").add(0).addObject().putArray("subtract");
+        subtraction.add(1);
+        ArrayNode discount = subtraction.addObject().putArray("if");
+        discount.addObject().put("exists", "event.costAdjustments.g_core-experience");
+        discount.add(read("event.costAdjustments.g_core-experience"));
+        discount.add(0);
+        return amount;
+    }
+
+    private static ObjectNode experienceRefund(JsonNode legacy, String path, Problems p) {
+        p.onlyFields(legacy, path, Set.of("dice", "min"));
+        var dice = DICE.matcher(legacy.path("dice").asText(""));
+        int count = 0, sides = 0;
+        if (dice.matches()) {
+            count = Integer.parseInt(dice.group(1));
+            sides = Integer.parseInt(dice.group(2));
+        }
+        if (count < 1 || sides < 2)
+            p.add(path + "/dice", "Expected bounded dice such as 1d6.");
+        if (!legacy.path("min").isInt() || legacy.path("min").asInt() < 1
+                || legacy.path("min").asInt() > count * sides)
+            p.add(path + "/min", "Expected a reachable positive die total.");
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "experience-refund");
+        rule.putArray("bindings").addObject().put("id", "resolve").put("event", "roll.costs")
+                .put("surface", "roll").put("mode", "automatic").put("exclusiveGroup", "core-experience-refund");
+        rule.putObject("when").put("exists", "event.costAdjustments.g_core-experience");
+        ArrayNode steps = rule.putArray("do");
+        steps.addObject().put("op", "dice.roll").put("count", count).put("sides", sides).put("as", "refund");
+        ObjectNode adjustment = steps.addObject().put("op", "plan.adjust").put("plan", "event.costAdjustments")
+                .put("field", "g_core-experience").put("label", "{source.name}").put("as", "discount");
+        ArrayNode choice = adjustment.putObject("by").putArray("if");
+        choice.addObject().putArray("gte").add(read("result.refund")).add(legacy.path("min").asInt());
+        choice.add(1).add(0);
+        rule.putObject("ui").put("report", "{source.name}: Experience cost roll {result.refund}; discount {result.discount}.");
         return rule;
     }
 

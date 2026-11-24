@@ -1892,6 +1892,40 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void experienceRefundsConvertToGenericCostAdjustments() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"honed","name":"Honed","automation":{"experienceRefund":{"dice":"1d6","min":5}}},
+                {"id":"other","name":"Other","automation":{"experienceRefund":{"dice":"1d4","min":3}}}
+                """));
+        assertEquals(2, result.converted(), result.diagnostics().toString());
+        for (int i = 0; i < 2; i++) {
+            RuleCompiler.Program program = program(result, i);
+            JsonNode binding = block(result, i).at("/rules/0/bindings/0");
+            assertEquals("roll.costs", binding.path("event").asText());
+            assertEquals("automatic", binding.path("mode").asText());
+            for (int face : new int[]{i == 0 ? 4 : 2, i == 0 ? 5 : 3}) {
+                ObjectNode context = context(program, "{}", """
+                        {"type":"roll.costs","costAdjustments":{"g_core-experience":0,
+                         "adjustable":{"g_core-experience":{"min":0,"max":1000}}}}
+                        """);
+                var resolved = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context)),
+                        List.of(), StructuredRollTest.faces(face));
+                int discount = face >= (i == 0 ? 5 : 3) ? 1 : 0;
+                assertEquals(discount, resolved.contexts().getFirst().at("/event/costAdjustments/g_core-experience").asInt());
+                assertTrue(resolved.actions().getFirst().report().contains("discount " + discount));
+            }
+            ObjectNode withoutCost = context(program, "{}", "{\"type\":\"roll.costs\",\"costAdjustments\":{}}");
+            assertTrue(RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, withoutCost)),
+                    List.of(), StructuredRollTest.noRandom()).actions().isEmpty());
+        }
+        var bad = LegacyCatalogConverter.convert(catalog("""
+                {"id":"bad","name":"Bad","automation":{"experienceRefund":{"dice":"1d6","min":8}}}
+                """));
+        assertEquals(0, bad.converted());
+        assertTrue(bad.diagnostics().toString().contains("/experienceRefund/min"));
+    }
+
+    @Test
     void rollOptionQuantitiesResizedHopeDiceAndProficiencyDice() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"surge","name":"Surge","automation":{"rollOptions":[

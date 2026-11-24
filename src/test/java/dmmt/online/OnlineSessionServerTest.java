@@ -6180,6 +6180,213 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void convertedExperienceRefundsResolveBeforeCostsAndReplayExactlyOnce() throws Exception {
+        installRestRules();
+        JsonNode classes = MAPPER.readTree(Path.of("dmmap-daggerheart", "classes.json").toFile());
+        ObjectNode legacy = MAPPER.createObjectNode().put("format", "dmmap-daggerheart").put("version", 1)
+                .put("category", "classes").put("label", "Fixture");
+        ArrayNode features = legacy.putArray("entries").addObject().put("id", "guardian").put("name", "Guardian")
+                .putArray("features");
+        for (String name : List.of("Adept", "Honed Expertise")) {
+            JsonNode match = null;
+            for (JsonNode entry : classes.path("entries")) for (JsonNode feature : entry.path("features"))
+                if (name.equals(feature.path("name").asText())) match = feature;
+            assertNotNull(match, name);
+            features.add(match.deepCopy());
+        }
+        var converted = dmmt.online.automation.LegacyCatalogConverter.convert(legacy.toString());
+        assertEquals(2, converted.converted(), converted.diagnostics().toString());
+        String catalog = converted.catalog().toString();
+        var compiled = dmmt.online.automation.RuleCatalog.compile(catalog,
+                dmmt.online.automation.LegacyCatalogConverter.coreRecipes());
+        String adept = compiled.stream().map(source -> source.id()).filter(id -> id.endsWith(":adept")).findFirst().orElseThrow();
+        String honed = compiled.stream().map(source -> source.id()).filter(id -> id.endsWith(":honed-expertise")).findFirst().orElseThrow();
+        java.nio.file.Files.writeString(compendiumDir.resolve("classes.json"), catalog);
+        Path rulesetFile = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(rulesetFile.toFile());
+        ruleset.withObject("/automation").withObject("/state").put("hopeChanges", 0).put("stressChanges", 0);
+        ArrayNode rules = ruleset.withObject("/automation").withArray("rules");
+        for (String resource : List.of("hope", "stress")) {
+            rules.add(MAPPER.readTree("""
+                    {"id":"extra-%s","bindings":[{"id":"use","event":"roll.prepare","surface":"roll","mode":"option"}],
+                     "costs":[%s],"ui":{"label":"Extra %s"}}
+                    """.formatted(resource, "hope".equals(resource)
+                    ? "{\"op\":\"resource.spend\",\"pool\":\"actor.hope\",\"amount\":1}"
+                    : "{\"op\":\"track.mark\",\"track\":\"actor.stress\",\"amount\":1}", resource)));
+            rules.add(MAPPER.readTree("""
+                    {"id":"watch-%s","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                     "when":{"eq":[{"read":"event.track"},"%s"]},
+                     "do":[{"op":"state.increment","slot":"%sChanges","by":1}],"ui":{}}
+                    """.formatted(resource, resource, resource)));
+        }
+        rules.add(MAPPER.readTree("""
+                {"id":"block-check","bindings":[{"id":"use","event":"roll.prepare","surface":"roll","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.table.fear"},0]},
+                 "do":[{"op":"event.block","reason":"Blocked check."}],"ui":{}}
+                """));
+        java.nio.file.Files.writeString(rulesetFile, ruleset.toString());
+        campaign.setFear(1);
+        campaign.getActors().add(Campaign.Actor.builder().id("roller").name("Ada").ownerId(playerId()).build());
+        ObjectNode sheet = (ObjectNode) MAPPER.readTree("""
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":0},"stress":{"slots":6,"on":5},
+                 "hope":{"slots":6,"on":1},"armorTrack":{"slots":3,"on":0},
+                 "traits":[{"name":"Agility","mod":3}],"experiences":[{"name":"Sailing","mod":3}],
+                 "features":[{"name":"Adept","instanceId":"adept-instance"},
+                             {"name":"Honed Expertise","instanceId":"honed-instance"}]}
+                """);
+        ((ObjectNode) sheet.at("/features/0")).put("automationSource", adept);
+        ((ObjectNode) sheet.at("/features/1")).put("automationSource", honed);
+        store.saveSheet(campaign.getId(), "roller", sheet.toString());
+        String owner = cookie(), other = allyCookie("refund-viewer");
+        JsonNode offer = MAPPER.readTree(basicCheckHttp(owner, "roller", "action", "Agility").body());
+        JsonNode normal = restDescriptor(offer.path("options"), "experience");
+        ObjectNode selection = restSelection(normal);
+        selection.withObject("/inputs").set("experience", normal.at("/inputs/0/options/0/value").deepCopy());
+        ObjectNode body = MAPPER.createObjectNode();
+        ObjectNode request = body.putObject("request").put("requestId", "refund-validation")
+                .put("expectedRevision", offer.path("revision").asLong());
+        request.putObject("checkRoll").put("kind", "action").put("trait", "Agility");
+        request.putArray("selections").add(selection);
+        int history = store.historyTail(campaign.getId(), 100).size();
+        assertEquals(403, automationHttp(other, "roller", body.toString()).statusCode());
+        ObjectNode forged = body.deepCopy();
+        ((ObjectNode) forged.at("/request/selections/0/inputs/experience")).put("mod", 99);
+        assertEquals(409, automationHttp(owner, "roller", forged.toString()).statusCode());
+        ObjectNode stale = body.deepCopy();
+        ((ObjectNode) stale.path("request")).put("expectedRevision", offer.path("revision").asLong() + 1);
+        assertEquals(409, automationHttp(owner, "roller", stale.toString()).statusCode());
+        ObjectNode forgedEvent = body.deepCopy();
+        forgedEvent.putObject("event").putObject("costAdjustments").put("g_core-experience", 1);
+        assertEquals(400, automationHttp(owner, "roller", forgedEvent.toString()).statusCode());
+        ObjectNode combined = body.deepCopy();
+        ((ArrayNode) combined.at("/request/selections")).add(restSelection(restDescriptor(offer.path("options"), "extra-hope")));
+        diceSeed(seedForDice(new int[]{12, 12, 6}, new int[]{4, 6, 5}));
+        assertEquals(409, automationHttp(owner, "roller", combined.toString()).statusCode());
+        var randomField = OnlineSessionServer.class.getDeclaredField("diceRandom");
+        randomField.setAccessible(true);
+        assertEquals(5, ((java.util.Random) randomField.get(server)).nextInt(6) + 1,
+                "The refund die must not be rolled before aggregate affordability is checked.");
+        JsonNode stressOption = restDescriptor(offer.path("options"), "adept");
+        ObjectNode stressSelection = restSelection(stressOption);
+        stressSelection.withObject("/inputs").set("experience", stressOption.at("/inputs/0/options/0/value").deepCopy());
+        ObjectNode combinedStress = body.deepCopy();
+        ArrayNode stressChoices = (ArrayNode) combinedStress.at("/request/selections");
+        stressChoices.removeAll().add(stressSelection).add(restSelection(restDescriptor(offer.path("options"), "extra-stress")));
+        diceSeed(seedForDice(new int[]{12, 12, 6}, new int[]{4, 6, 5}));
+        assertEquals(409, automationHttp(owner, "roller", combinedStress.toString()).statusCode());
+        assertEquals(5, ((java.util.Random) randomField.get(server)).nextInt(6) + 1);
+        assertEquals(sheet, MAPPER.readTree(store.loadSheet(campaign.getId(), "roller")));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+
+        campaign.setFear(0);
+        diceSeed(seedForDice(new int[]{12, 12, 6}, new int[]{4, 6, 5}));
+        var blocked = automationHttp(owner, "roller", body.toString());
+        assertEquals(409, blocked.statusCode(), blocked.body());
+        assertTrue(blocked.body().contains("Blocked check."), blocked.body());
+        assertEquals(sheet, MAPPER.readTree(store.loadSheet(campaign.getId(), "roller")));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        campaign.setFear(1);
+
+        ObjectNode duplicate = sheet.deepCopy();
+        ((ObjectNode) duplicate.withArray("/features").add(sheet.at("/features/1").deepCopy()).get(2))
+                .put("instanceId", "second-honed");
+        store.saveSheet(campaign.getId(), "roller", duplicate.toString());
+        var multiple = automationHttp(owner, "roller", body.toString());
+        assertEquals(409, multiple.statusCode(), multiple.body());
+        assertTrue(multiple.body().contains("Multiple automatic cost resolvers"), multiple.body());
+        assertEquals(duplicate, MAPPER.readTree(store.loadSheet(campaign.getId(), "roller")));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+
+        for (boolean replacement : List.of(false, true)) for (boolean refunded : List.of(false, true)) {
+            ObjectNode fresh = sheet.deepCopy();
+            store.saveSheet(campaign.getId(), "roller", fresh.toString());
+            JsonNode latest = MAPPER.readTree(basicCheckHttp(owner, "roller", "action", "Agility").body());
+            JsonNode option = restDescriptor(latest.path("options"), replacement ? "adept" : "experience");
+            ObjectNode chosen = restSelection(option);
+            chosen.withObject("/inputs").set("experience", option.at("/inputs/0/options/0/value").deepCopy());
+            ObjectNode attempt = MAPPER.createObjectNode();
+            ObjectNode current = attempt.putObject("request").put("requestId", "refund-" + replacement + "-" + refunded)
+                    .put("expectedRevision", latest.path("revision").asLong());
+            current.putObject("checkRoll").put("kind", "action").put("trait", "Agility");
+            current.putArray("selections").add(chosen);
+            diceSeed(seedForDice(new int[]{12, 12, 6}, new int[]{4, 6, refunded ? 5 : 4}));
+            var rolled = automationHttp(owner, "roller", attempt.toString());
+            assertEquals(200, rolled.statusCode(), rolled.body());
+            JsonNode receipt = MAPPER.readTree(rolled.body());
+            assertEquals(replacement ? 19 : 16, receipt.at("/event/check/total").asInt());
+            assertEquals(refunded ? 1 : 0, receipt.at("/event/costAdjustments/g_core-experience").asInt());
+            assertTrue(receipt.path("actions").toString().contains("discount " + (refunded ? 1 : 0)), receipt.toString());
+            JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "roller"));
+            assertEquals(replacement || refunded ? 1 : 0, saved.at("/hope/on").asInt());
+            assertEquals(replacement && !refunded ? 6 : 5, saved.at("/stress/on").asInt());
+            assertEquals(!replacement && !refunded ? 1 : 0,
+                    saved.at("/automationState/sources/ruleset:base/state/hopeChanges").asInt());
+            assertEquals(replacement && !refunded ? 1 : 0,
+                    saved.at("/automationState/sources/ruleset:base/state/stressChanges").asInt());
+            int after = store.historyTail(campaign.getId(), 100).size();
+            assertTrue(store.historyTail(campaign.getId(), 100).toString().contains("discount " + (refunded ? 1 : 0)));
+            assertEquals(rolled.body(), automationHttp(owner, "roller", attempt.toString()).body());
+            assertEquals(after, store.historyTail(campaign.getId(), 100).size());
+        }
+    }
+
+    @Test
+    void genericCostResolversPreserveStateAndUpdateCheckFacts() throws Exception {
+        installRestRules();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withObject("/state").put("resolved", 0).put("observed", 0);
+        ArrayNode rules = ruleset.withObject("/automation").withArray("rules");
+        rules.add(MAPPER.readTree("""
+                {"id":"travel-option","bindings":[{"id":"use","event":"roll.prepare","surface":"roll","mode":"option",
+                 "exclusiveGroup":"travel.pack:discount"}],
+                 "costs":[{"op":"resource.spend","pool":"actor.hope","amount":{"max":[0,{"subtract":[2,{"if":[
+                   {"exists":"event.costAdjustments.g_travel_dpack_cdiscount"},
+                   {"read":"event.costAdjustments.g_travel_dpack_cdiscount"},0]}]}]}}],
+                 "ui":{"label":"Travel option"}}
+                """));
+        rules.add(MAPPER.readTree("""
+                {"id":"travel-discount","bindings":[{"id":"use","event":"roll.costs","surface":"roll","mode":"automatic"}],
+                 "when":{"exists":"event.costAdjustments.g_travel_dpack_cdiscount"},
+                 "do":[{"op":"state.increment","slot":"resolved","by":1},
+                       {"op":"plan.adjust","plan":"event.costAdjustments","field":"g_travel_dpack_cdiscount","by":1,"label":"Travel"},
+                       {"op":"roll.contribute","from":{"read":"event.roll"},"as":"edited",
+                        "contribution":{"id":"travel","kind":"flat","role":"modifier","label":"Travel","value":4}},
+                       {"op":"roll.publish","roll":{"read":"result.edited"}}],"ui":{"report":"Travel adjusted."}}
+                """));
+        rules.add(MAPPER.readTree("""
+                {"id":"observe-adjusted-total","bindings":[{"id":"use","event":"roll.prepare","surface":"roll","mode":"automatic"}],
+                 "when":{"gte":[{"read":"event.check.total"},17]},
+                 "do":[{"op":"state.increment","slot":"observed","by":1}],"ui":{}}
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        campaign.getActors().add(Campaign.Actor.builder().id("traveler").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "traveler", """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":0},"stress":{"slots":6,"on":0},
+                 "hope":{"slots":6,"on":2},"armorTrack":{"slots":3,"on":0},
+                 "traits":[{"name":"Agility","mod":3}]}
+                """);
+        String owner = cookie();
+        JsonNode offer = MAPPER.readTree(basicCheckHttp(owner, "traveler", "action", "Agility").body());
+        ObjectNode body = MAPPER.createObjectNode();
+        ObjectNode request = body.putObject("request").put("requestId", "travel-check")
+                .put("expectedRevision", offer.path("revision").asLong());
+        request.putObject("checkRoll").put("kind", "action").put("trait", "Agility");
+        request.putArray("selections").add(restSelection(restDescriptor(offer.path("options"), "travel-option")));
+        diceSeed(seedForDice(new int[]{12, 12}, new int[]{4, 6}));
+        var rolled = automationHttp(owner, "traveler", body.toString());
+        assertEquals(200, rolled.statusCode(), rolled.body());
+        JsonNode receipt = MAPPER.readTree(rolled.body());
+        assertEquals(17, receipt.at("/event/check/total").asInt());
+        assertEquals(1, receipt.at("/event/costAdjustments/g_travel_dpack_cdiscount").asInt());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "traveler"));
+        assertEquals(1, saved.at("/hope/on").asInt());
+        assertEquals(1, saved.at("/automationState/sources/ruleset:base/state/resolved").asInt());
+        assertEquals(1, saved.at("/automationState/sources/ruleset:base/state/observed").asInt());
+        assertEquals(rolled.body(), automationHttp(owner, "traveler", body.toString()).body());
+    }
+
+    @Test
     void rollModesResolveSuggestionsOverridesAndScaleBeforeFinishedEvents() throws Exception {
         installRestRules();
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
