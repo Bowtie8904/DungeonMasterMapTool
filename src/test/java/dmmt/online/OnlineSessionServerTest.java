@@ -2712,6 +2712,87 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void recoveryRerollCostsPublishNestedDowntimeAndRecoveryOffersAtomically() throws Exception {
+        installRestRerollRules();
+        Path catalogFile = compendiumDir.resolve("domain-cards.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(catalogFile.toFile());
+        for (JsonNode rule : catalog.at("/entries/0/automation/rules")) {
+            if ("rest-reroll".equals(rule.path("id").asText()))
+                ((ObjectNode) rule).putArray("costs").addObject()
+                        .put("op", "resource.spend").put("pool", "actor.hope").put("amount", 1);
+        }
+        java.nio.file.Files.writeString(catalogFile, catalog.toString());
+        Path rulesFile = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(rulesFile.toFile());
+        ruleset.withObject("/automation").withArray("rules").add(MAPPER.readTree("""
+                {"id":"reroll-cost-spark","bindings":[{"id":"change","event":"track.changed",
+                   "surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"hope"]},
+                                  {"eq":[{"read":"event.change"},"spend"]},
+                                  {"eq":[{"read":"event.rest.kind"},"short"]}]},
+                 "do":[{"op":"dice.roll","count":1,"sides":6,"as":"spark"},
+                       {"op":"track.clear","track":"actor.stress","amount":{"read":"result.spark"}},
+                       {"op":"downtime.offerRoll","roll":{"read":"result.spark"},"label":"Cost spark"},
+                       {"op":"recovery.offerRoll","roll":{"read":"result.spark"},"track":"actor.stress","label":"Cost recovery"},
+                       {"op":"table.spend","resource":"fear","amount":1,"label":"Spark"}],"ui":{"report":"A reroll sparked recovery."}}
+                """));
+        java.nio.file.Files.writeString(rulesFile, ruleset.toString());
+        String owner = cookie();
+        for (String id : List.of("patient", "helper")) {
+            campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId()).build());
+            store.saveSheet(campaign.getId(), id, """
+                    {"name":"%s","level":1,"hp":{"slots":8,"on":%d},"stress":{"slots":6,"on":%d},
+                     "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":2},
+                     "loadout":[{"name":"Second Chance","instanceId":"chance","automationSource":"domain-cards:reroller"}]}
+                    """.formatted(id, "patient".equals(id) ? 7 : 0, "patient".equals(id) ? 5 : 0));
+        }
+        JsonNode recovery = recoveryOffer(owner, "patient", "rest-tend", "cost-spark-rest", 1);
+        JsonNode described = MAPPER.readTree(recoveryRollHttp(owner, recovery, "patient", null).body());
+        ObjectNode request = recoveryRollRequest(described, "cost-spark-reroll");
+        String original = store.loadSheet(campaign.getId(), "patient");
+        int historyBefore = store.historyTail(campaign.getId(), 100).size();
+        diceSeed(seedForDie(6, 2));
+        var rejected = recoveryRollHttp(owner, recovery, "patient", request.toString());
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertTrue(rejected.body().contains("Not enough GM Fear"), rejected.body());
+        assertEquals(original, store.loadSheet(campaign.getId(), "patient"));
+        assertEquals(historyBefore, store.historyTail(campaign.getId(), 100).size());
+
+        campaign.setFear(1);
+        diceSeed(seedForDice(new int[]{6, 4}, new int[]{2, 4}));
+        var accepted = recoveryRollHttp(owner, recovery, "patient", request.toString());
+        assertEquals(200, accepted.statusCode(), accepted.body());
+        assertEquals(0, campaign.getFear());
+        assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "patient")).at("/stress/on").asInt());
+        var offers = store.historyTail(campaign.getId(), 100).stream()
+                .filter(message -> "patient".equals(message.at("/automationRecoveryRoll/holderId").asText()))
+                .filter(message -> message.at("/automationRecoveryRoll/roll/contributions/0/label").asText().startsWith("Cost "))
+                .toList();
+        assertEquals(2, offers.size());
+        JsonNode extra = offers.stream().filter(message -> "stress".equals(message.at("/automationRecoveryRoll/track").asText()))
+                .findFirst().orElseThrow();
+        JsonNode ordinary = offers.stream().filter(message -> !message.at("/automationRecoveryRoll/track").isTextual())
+                .findFirst().orElseThrow();
+        assertEquals(200, recoveryRollHttp(owner, ordinary, "helper", null).statusCode());
+        assertEquals(3, extra.at("/automationRecoveryRoll/remaining").asInt());
+        int afterFirst = store.historyTail(campaign.getId(), 100).size();
+        assertEquals(accepted.body(), recoveryRollHttp(owner, recovery, "patient", request.toString()).body());
+        assertEquals(afterFirst, store.historyTail(campaign.getId(), 100).size());
+
+        JsonNode extraDescription = MAPPER.readTree(recoveryRollHttp(owner, extra, "helper", null).body());
+        ObjectNode extraRequest = recoveryRollRequest(extraDescription, "cost-spark-extra");
+        campaign.setFear(1);
+        diceSeed(seedForDice(new int[]{6, 6}, new int[]{2, 5}));
+        var extraAccepted = recoveryRollHttp(owner, extra, "helper", extraRequest.toString());
+        assertEquals(200, extraAccepted.statusCode(), extraAccepted.body());
+        assertEquals(3, MAPPER.readTree(extraAccepted.body()).path("cleared").asInt());
+        assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "patient")).at("/stress/on").asInt());
+        int afterSecond = store.historyTail(campaign.getId(), 100).size();
+        assertEquals(extraAccepted.body(), recoveryRollHttp(owner, extra, "helper", extraRequest.toString()).body());
+        assertEquals(afterSecond, store.historyTail(campaign.getId(), 100).size());
+    }
+
+    @Test
     void selfRecoveryRerollsUseOneRevisionAndKeepHigherResults() throws Exception {
         installRestRerollRules();
         String owner = cookie();

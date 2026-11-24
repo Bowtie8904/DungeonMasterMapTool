@@ -223,7 +223,8 @@ than 32 dice is rejected. Converted downtime action, sent, damage and resource r
 action-step rolls and rest-passive rolls also offer their full expression, including preparation, move and
 completion passives. Short-rest track-change reactions can publish their own generic roll offers for self and
 ally holders, including when a later recovery reroll triggers another reaction; completed-move reactions can
-publish them too. Recovery rerolls account for signed
+publish them too. Reactions to reroll-action costs can publish further downtime and recovery offers in the same
+atomic transaction. Recovery rerolls account for signed
 offsets, the original remaining allowance and the holder's current healing floor. Rolls in other reaction phases
 still need live offers.
 

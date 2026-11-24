@@ -1148,7 +1148,8 @@ public final class AutomationHost {
         if (!result.path("event").path("blocked").isEmpty())
             throw new RuleRuntime.Unavailable("blocked", result.at("/event/blocked/0/reason").asText());
         for (JsonNode command : result.path("outbox"))
-            if (!Set.of("limits.refresh", "table.gain", "table.spend", "countdown.start").contains(command.path("kind").asText()))
+            if (!Set.of("limits.refresh", "table.gain", "table.spend", "countdown.start",
+                    "recovery.offerRoll", "downtime.offerRoll").contains(command.path("kind").asText()))
                 throw new RuleRuntime.Unavailable("restCommand", "This recovery-roll action requires unsupported ordered settlement.");
         replace(sheet, working);
         return result;
