@@ -3629,6 +3629,163 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void restSettlesPreparationAndCompletionGrantsBeforeLaterReadsAndReactions() throws Exception {
+        installRestRules();
+        Path consumablesFile = compendiumDir.resolve("consumables.json");
+        ObjectNode consumables = (ObjectNode) MAPPER.readTree(consumablesFile.toFile());
+        ObjectNode potion = (ObjectNode) consumables.at("/entries/0/automation");
+        potion.putObject("state").put("seen", 0);
+        potion.putArray("modifiers").addObject().put("stat", "trait.Agility").put("value", 2);
+        potion.withArray("rules").add(MAPPER.readTree("""
+                {"id":"watch","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.track"},"stress"]},
+                 "do":[{"op":"state.increment","slot":"seen","by":1},
+                       {"op":"resource.gain","pool":"actor.hope","amount":1}],
+                 "ui":{"report":"Supply reacted."}}
+                """));
+        for (String id : List.of("minor-mana-potion", "minor-focus-potion"))
+            consumables.withArray("entries").addObject().put("id", id).put("name", id)
+                    .put("rarity", "Common").put("text", "A test potion.");
+        java.nio.file.Files.writeString(consumablesFile, consumables.toString());
+        Path rulesFile = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(rulesFile.toFile());
+        ruleset.withObject("/automation").withArray("rules").addAll((ArrayNode) MAPPER.readTree("""
+                [
+                 {"id":"prepare-supply","bindings":[{"id":"rest","event":"rest.prepare","surface":"rest","mode":"automatic"}],
+                  "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion","quantity":1,"label":"Prepared supply"},
+                        {"op":"track.mark","track":"actor.stress","amount":1},
+                        {"op":"value","value":{"size":{"read":"actor.inventory"}},"as":"count"}],
+                  "ui":{"report":"Prepared {result.count} supplies."}},
+                 {"id":"before-supply","bindings":[{"id":"rest","event":"rest.short","surface":"rest","mode":"automatic"}],
+                  "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-mana-potion","quantity":1,"label":"Before supply"},
+                        {"op":"track.mark","track":"actor.stress","amount":1},
+                        {"op":"value","value":{"size":{"read":"actor.inventory"}},"as":"count"}],
+                  "ui":{"report":"Before reset: {result.count} supplies."}},
+                 {"id":"after-supply","bindings":[{"id":"rest","event":"rest.short","surface":"rest","mode":"option","restPhase":"afterReset"}],
+                  "when":{"gte":[{"size":{"read":"actor.inventory"}},2]},
+                  "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-focus-potion","quantity":1,"label":"After supply"},
+                        {"op":"track.mark","track":"actor.stress","amount":1},
+                        {"op":"value","value":{"size":{"read":"actor.inventory"}},"as":"count"},
+                        {"op":"value","value":{"read":"actor.stats.trait.Agility"},"as":"agility"}],
+                  "ui":{"label":"Finish supplies","report":"After reset: {result.count} supplies, Agility {result.agility}."}}
+                ]
+                """));
+        java.nio.file.Files.writeString(rulesFile, ruleset.toString());
+        campaign.getActors().add(Campaign.Actor.builder().id("resting").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "resting", """
+                {"name":"Ada","hp":{"slots":6,"on":2},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},"inventory":[]}
+                """);
+        String owner = cookie(), other = allyCookie("other-rest-owner");
+        String original = store.loadSheet(campaign.getId(), "resting");
+        int history = store.historyTail(campaign.getId(), 100).size();
+        var described = restHttp(owner, "resting", "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode offer = MAPPER.readTree(described.body());
+        assertTrue(offer.path("prepareBeforeMoves").asBoolean());
+        ObjectNode request = restRequest(offer, "phase-supplies");
+        ObjectNode preparing = request.deepCopy().put("prepare", true);
+        assertEquals(403, restChoiceHttp(other, "resting", "choices", preparing).statusCode());
+        var preparation = restChoiceHttp(owner, "resting", "choices", preparing);
+        assertEquals(200, preparation.statusCode(), preparation.body());
+        assertEquals(preparation.body(), restChoiceHttp(owner, "resting", "choices", preparing).body());
+        assertEquals(original, store.loadSheet(campaign.getId(), "resting"));
+        request.put("preparedVersion", MAPPER.readTree(preparation.body()).path("choiceVersion").asText());
+        var before = restChoiceHttp(owner, "resting", "choices", request);
+        assertEquals(200, before.statusCode(), before.body());
+        ObjectNode advance = MAPPER.createObjectNode().put("requestId", "phase-supplies")
+                .put("choiceVersion", MAPPER.readTree(before.body()).path("choiceVersion").asText());
+        advance.putArray("selections");
+        var after = restChoiceHttp(owner, "resting", "choices", advance);
+        assertEquals(200, after.statusCode(), after.body());
+        JsonNode afterOffer = MAPPER.readTree(after.body());
+        JsonNode finish = restDescriptor(afterOffer.path("actions"), "after-supply");
+        assertTrue(finish.path("available").asBoolean(), finish.toString());
+        assertEquals(original, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        ObjectNode complete = MAPPER.createObjectNode().put("choiceVersion", afterOffer.path("choiceVersion").asText());
+        complete.set("request", request.path("request").deepCopy());
+        complete.withObject("/request").withArray("completion").add(restSelection(finish));
+        ObjectNode invalid = complete.deepCopy();
+        ((ObjectNode) invalid.at("/request/completion/0")).put("ruleId", "not-offered");
+        assertEquals(400, restChoiceHttp(owner, "resting", "complete", invalid).statusCode());
+        assertEquals(original, store.loadSheet(campaign.getId(), "resting"));
+        var completed = restChoiceHttp(owner, "resting", "complete", complete);
+        assertEquals(200, completed.statusCode(), completed.body());
+        assertEquals(completed.body(), restChoiceHttp(owner, "resting", "complete", complete).body());
+        List<String> reports = MAPPER.readTree(completed.body()).path("actions").findValuesAsText("report");
+        assertEquals(3, reports.stream().filter("Supply reacted."::equals).count(), reports.toString());
+        assertTrue(reports.contains("Prepared 1 supplies."), reports.toString());
+        assertTrue(reports.contains("Before reset: 2 supplies."), reports.toString());
+        assertTrue(reports.contains("After reset: 3 supplies, Agility 2."), reports.toString());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(3, saved.path("inventory").size());
+        assertEquals(3, saved.at("/stress/on").asInt());
+        assertEquals(3, saved.at("/hope/on").asInt());
+        String supplyInstance = saved.at("/inventory/0/instanceId").asText();
+        assertEquals(3, saved.at("/automationState/sources/" + supplyInstance + "/state/seen").asInt());
+        assertEquals(1, saved.at("/automationState/revision").asInt());
+    }
+
+    @Test
+    void directRestSettlesCompletionGrantsAndRollsBackOnFailure() throws Exception {
+        installRestRules();
+        Path consumablesFile = compendiumDir.resolve("consumables.json");
+        ObjectNode consumables = (ObjectNode) MAPPER.readTree(consumablesFile.toFile());
+        ((ObjectNode) consumables.at("/entries/0/automation")).withArray("rules").add(MAPPER.readTree("""
+                {"id":"watch","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.track"},"stress"]},
+                 "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"report":"Supply reacted."}}
+                """));
+        java.nio.file.Files.writeString(consumablesFile, consumables.toString());
+        Path rulesFile = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(rulesFile.toFile());
+        ruleset.withObject("/automation").withArray("rules").addAll((ArrayNode) MAPPER.readTree("""
+                [
+                 {"id":"before-supply","bindings":[{"id":"rest","event":"rest.short","surface":"rest","mode":"automatic"}],
+                  "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion","quantity":1,"label":"Supply"},
+                        {"op":"track.mark","track":"actor.stress","amount":1}],
+                  "ui":{"report":"Supply prepared."}},
+                 {"id":"after-supply","bindings":[{"id":"rest","event":"rest.short","surface":"rest","mode":"automatic","restPhase":"afterReset"}],
+                  "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion","quantity":1,"label":"Supply"},
+                        {"op":"track.mark","track":"actor.stress","amount":1},
+                        {"op":"value","value":{"size":{"read":"actor.inventory"}},"as":"count"}],
+                  "ui":{"report":"Finished with {result.count} supplies."}},
+                 {"id":"supply-failure","bindings":[{"id":"rest","event":"rest.short","surface":"rest","mode":"option","restPhase":"afterReset"}],
+                  "costs":[{"op":"resource.spend","pool":"actor.hope","amount":6}],
+                  "ui":{"label":"Unaffordable supply"}}
+                ]
+                """));
+        java.nio.file.Files.writeString(rulesFile, ruleset.toString());
+        campaign.getActors().add(Campaign.Actor.builder().id("resting").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "resting", """
+                {"name":"Ada","hp":{"slots":6,"on":2},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},"inventory":[]}
+                """);
+        String owner = cookie(), original = store.loadSheet(campaign.getId(), "resting");
+        int history = store.historyTail(campaign.getId(), 100).size();
+        JsonNode offer = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode failed = restRequest(offer, "failed-phase-supplies");
+        failed.withObject("/request").withArray("completion")
+                .add(restSelection(restDescriptor(offer.path("completion"), "supply-failure")));
+        assertEquals(409, restHttp(owner, "resting", null, failed.toString()).statusCode());
+        assertEquals(original, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        ObjectNode request = restRequest(offer, "direct-phase-supplies");
+        var completed = restHttp(owner, "resting", null, request.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        List<String> reports = MAPPER.readTree(completed.body()).path("actions").findValuesAsText("report");
+        assertEquals(2, reports.stream().filter("Supply reacted."::equals).count(), reports.toString());
+        assertTrue(reports.contains("Finished with 1 supplies."), reports.toString());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(2, saved.at("/inventory/0/qty").asInt());
+        assertEquals(2, saved.at("/stress/on").asInt());
+        assertEquals(2, saved.at("/hope/on").asInt());
+        assertEquals(1, saved.at("/automationState/revision").asInt());
+        assertEquals(completed.body(), restHttp(owner, "resting", null, request.toString()).body());
+    }
+
+    @Test
     void actorRestGrantChecksPartyCapsAgainstStagedRecipientInventory() throws Exception {
         installRestRules();
         Path consumablesFile = compendiumDir.resolve("consumables.json");

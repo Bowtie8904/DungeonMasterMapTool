@@ -87,8 +87,8 @@ track reactions and protected HP floor. Authored targeted ally moves offer eligi
 live dialog and save both holders' reactions with the rest. Completion derives signed recovery facts, runs benefits
 around the rest reset and advances rest counters; failures roll back the transaction.
 Move details and options that depend on an ally update when a recipient is selected; the host checks them again when the rest is submitted.
-Actor and ally inventory grants settle during move adjustments, actions and deferred benefits, so later steps
-and reactions see the new items and activated sources.
+Actor inventory grants settle during preparation, moves and completion; ally grants settle during move
+adjustments, actions and deferred benefits. Later steps and reactions see the new items and activated sources.
 An internal coordinator composes these stages on private source and recipient sheets, reprojects each recipient
 after earlier moves, carries Fear through the rest, and advances each changed sheet once. Other commands needing
 intervening host settlement are rejected rather than evaluated against stale facts. The staged result identifies

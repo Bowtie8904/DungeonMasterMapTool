@@ -1643,7 +1643,7 @@ public final class AutomationHost {
         StagedRest staged = beginRest(pack, sheet, origin, request, random, roster, settlePartyRecovery);
         ObjectNode finished = completeRest(pack, staged.working, staged.origin, staged.progress,
                 staged.initialEffects, restSelections(request.get("completion"), "/request/completion"), random,
-                (working, stage) -> settleRestInventory(working, stage, staged.recipients, roster));
+                (working, stage) -> settleRestInventory(working, stage, staged.recipients, roster), staged.recipients);
         RestTransaction transaction = finishRest(staged, finished, random);
         replace(sheet, staged.working);
         return transaction;
@@ -1685,7 +1685,7 @@ public final class AutomationHost {
         ObjectNode restEvent = origin.deepCopy().put("type", "rest." + kind);
         expireRestBeforeMoves(pack, working, restEvent, initial);
         projection.state(working).put("revision", revision);
-        ObjectNode prepared = prepareRest(pack, working, origin, kind, revision, preparation, random, initial);
+        ObjectNode prepared = prepareRest(pack, working, origin, kind, revision, preparation, random, initial, recipients);
         projection.state(working).put("revision", revision);
         settleRestInventory(working, prepared, recipients, roster);
         RestProgress progress = restProgress(pack, prepared);
@@ -1921,7 +1921,10 @@ public final class AutomationHost {
         try {
             prepared = prepareRest(pack, preview, origin, kind, revision, RuleJson.JSON.createArrayNode(), noSampling, initial);
         } catch (RuleRuntime.Unavailable failure) {
-            if (!"randomPreview".equals(failure.code())) throw failure;
+            boolean inventoryNeedsSettlement = "inventorySettlement".equals(failure.code())
+                    || Set.of("reactionSettlement", "reactionCommand").contains(failure.code())
+                    && failure.getMessage().contains("inventory.grant");
+            if (!"randomPreview".equals(failure.code()) && !inventoryNeedsSettlement) throw failure;
             return restPreparationOffer(kind, revision, version, initialEvent, preparation);
         }
         for (JsonNode command : prepared.path("outbox"))
@@ -2178,7 +2181,8 @@ public final class AutomationHost {
         ObjectNode completion = emptyRestCompletion();
         ObjectNode afterEvent = advanceRestCompletion(staged.pack, staged.working, staged.origin, staged.progress,
                 staged.initialEffects, facts, selection.before(), selection.sources(), completion, random,
-                (working, stage) -> settleRestInventory(working, stage, staged.recipients, staged.recipients.roster));
+                (working, stage) -> settleRestInventory(working, stage, staged.recipients, staged.recipients.roster),
+                staged.recipients);
         ObjectNode signedRequest = previous.request.deepCopy();
         signedRequest.set("completion", choices.deepCopy());
         ObjectNode offer = restChoiceOffer(staged, signedRequest, previous.principalId, previous.sourceVersion,
@@ -2198,7 +2202,8 @@ public final class AutomationHost {
         if (!selection.before().isEmpty())
             throw RuleJson.error("/choice", "Choose only after-reset benefits in this phase.");
         requireOfferedRestChoices(previous.offer.path("actions"), choices);
-        runRestPhase(staged.pack, staged.working, previous.afterEvent, selection.after(), selection.sources(), completion, random);
+        runRestPhase(staged.pack, staged.working, previous.afterEvent, selection.after(), selection.sources(),
+                completion, random, staged.recipients);
         settleRestInventory(staged.working, completion, staged.recipients, staged.recipients.roster);
         completion.put("revision", revision(staged.working));
         RestTransaction finished = finishRest(staged, completion, random);
@@ -2786,6 +2791,12 @@ public final class AutomationHost {
 
     ObjectNode prepareRest(Pack pack, ObjectNode sheet, ObjectNode origin, String kind, long expectedRevision,
                            ArrayNode choices, RandomGenerator random, Set<String> initialEffectIds) {
+        return prepareRest(pack, sheet, origin, kind, expectedRevision, choices, random, initialEffectIds, null);
+    }
+
+    private ObjectNode prepareRest(Pack pack, ObjectNode sheet, ObjectNode origin, String kind, long expectedRevision,
+                                   ArrayNode choices, RandomGenerator random, Set<String> initialEffectIds,
+                                   StagedRestRecipients recipients) {
         ObjectNode working = sheet.deepCopy();
         ObjectNode state = projection.state(working);
         long revision = state.path("revision").asLong();
@@ -2817,7 +2828,7 @@ public final class AutomationHost {
             ((ObjectNode) event.path("rest")).put("rollPolicy", "keepHigher");
             candidates = candidates(pack, working, event);
         }
-        ObjectNode response = applyEvent(pack, working, state, event, candidates, intents, random);
+        ObjectNode response = applyRestEvent(pack, working, state, event, candidates, intents, random, recipients);
         JsonNode result = response.path("event").path("rest");
         if (!kind.equals(result.path("kind").asText()) || !adjustable.equals(result.path("adjustable"))
                 || !start.equals(result.path("start")))
@@ -3307,6 +3318,9 @@ public final class AutomationHost {
             }
 
             @Override
+            public boolean settlesInventory() { return true; }
+
+            @Override
             public List<RuleDispatcher.Candidate> grantInventory(ObjectNode staged, Map<String, ObjectNode> contexts) {
                 ArrayNode pending = staged.withArray("/outbox");
                 int index = pending.size() - 1;
@@ -3373,12 +3387,12 @@ public final class AutomationHost {
      */
     ObjectNode completeRest(Pack pack, ObjectNode sheet, ObjectNode origin, RestProgress progress,
                             Set<String> initialEffectIds, ArrayNode choices, RandomGenerator random) {
-        return completeRest(pack, sheet, origin, progress, initialEffectIds, choices, random, null);
+        return completeRest(pack, sheet, origin, progress, initialEffectIds, choices, random, null, null);
     }
 
     private ObjectNode completeRest(Pack pack, ObjectNode sheet, ObjectNode origin, RestProgress progress,
                                    Set<String> initialEffectIds, ArrayNode choices, RandomGenerator random,
-                                   BiConsumer<ObjectNode, ObjectNode> settleCommands) {
+                                   BiConsumer<ObjectNode, ObjectNode> settleCommands, StagedRestRecipients recipients) {
         if (pack.rest() == null) throw new NotReady("The shared ruleset has no rest configuration.");
         if (progress == null) throw RuleJson.error("/rest", "A prepared rest is required.");
         if (initialEffectIds == null) throw RuleJson.error("/effects", "The initial rest effect snapshot is required.");
@@ -3388,8 +3402,8 @@ public final class AutomationHost {
         RestCompletionPlan selection = restCompletionPlan(pack, working, facts.beforeEvent(), choices, Set.of());
         ObjectNode response = emptyRestCompletion();
         ObjectNode afterEvent = advanceRestCompletion(pack, working, origin, progress, initialEffectIds,
-                facts, selection.before(), selection.sources(), response, random, settleCommands);
-        runRestPhase(pack, working, afterEvent, selection.after(), selection.sources(), response, random);
+                facts, selection.before(), selection.sources(), response, random, settleCommands, recipients);
+        runRestPhase(pack, working, afterEvent, selection.after(), selection.sources(), response, random, recipients);
         if (settleCommands != null) settleCommands.accept(working, response);
         response.put("revision", revision(working));
         replace(sheet, working);
@@ -3474,13 +3488,14 @@ public final class AutomationHost {
                                              Set<String> initialEffectIds, RestCompletionFacts facts,
                                              ArrayNode choices, Map<RestChoiceKey, String> approvedSources,
                                              ObjectNode response, RandomGenerator random,
-                                             BiConsumer<ObjectNode, ObjectNode> settleCommands) {
+                                             BiConsumer<ObjectNode, ObjectNode> settleCommands,
+                                             StagedRestRecipients recipients) {
         ObjectNode beforeEvent = facts.beforeEvent();
         ObjectNode offered = (ObjectNode) response.get("completionOptions");
         ObjectNode completionEvents = (ObjectNode) response.get("completionEvents");
         offered.set("beforeReset", restCompletionOptions(pack, working, beforeEvent, "beforeReset"));
         completionEvents.set("beforeReset", beforeEvent.deepCopy());
-        runRestPhase(pack, working, beforeEvent, choices, approvedSources, response, random);
+        runRestPhase(pack, working, beforeEvent, choices, approvedSources, response, random, recipients);
         if (settleCommands != null) settleCommands.accept(working, response);
         ObjectNode settledBeforeEvent = RuleJson.object(response.get("event"), "/event");
         working.put("shortRestsInRow", "short".equals(progress.kind()) ? facts.consecutive() + 1 : 0);
@@ -3522,7 +3537,8 @@ public final class AutomationHost {
     }
 
     private void runRestPhase(Pack pack, ObjectNode sheet, ObjectNode event, ArrayNode choices,
-                              Map<RestChoiceKey, String> approvedSources, ObjectNode combined, RandomGenerator random) {
+                              Map<RestChoiceKey, String> approvedSources, ObjectNode combined, RandomGenerator random,
+                              StagedRestRecipients recipients) {
         var candidates = candidates(pack, sheet, event);
         ObjectNode request = RuleJson.JSON.createObjectNode();
         request.set("selections", choices);
@@ -3546,7 +3562,7 @@ public final class AutomationHost {
                         .put("phase", RuleRuntime.restPhase(event)).put("reason", unavailable.getMessage());
             }
         }
-        ObjectNode result = applyEvent(pack, sheet, projection.state(sheet), event, candidates, active, random);
+        ObjectNode result = applyRestEvent(pack, sheet, projection.state(sheet), event, candidates, active, random, recipients);
         JsonNode finalEvent = result.path("event");
         if (!event.path("rest").equals(finalEvent.path("rest")))
             throw RuleJson.error("/event/rest", "A rest completion rule cannot change the prepared rest.");
@@ -3601,6 +3617,16 @@ public final class AutomationHost {
         } else {
             resolution = RuleDispatcher.executeEvent(candidates, intents, random, pack.programs());
         }
+        return applyResolved(pack, working, state, event, resolution.contexts(), resolution.actions(), resolution.outbox());
+    }
+
+    private ObjectNode applyRestEvent(Pack pack, ObjectNode working, ObjectNode state, ObjectNode event,
+                                      List<RuleDispatcher.Candidate> candidates, List<RuleRuntime.Intent> intents,
+                                      RandomGenerator random, StagedRestRecipients recipients) {
+        if (recipients == null || recipients.roster.grantInventory() == null || candidates.isEmpty())
+            return applyEvent(pack, working, state, event, candidates, intents, random);
+        var resolution = RuleDispatcher.executeLiveWithOwnerReactions(candidates, intents, random, pack.programs(),
+                ownerRestProjection(pack, working, state, candidates, recipients, null));
         return applyResolved(pack, working, state, event, resolution.contexts(), resolution.actions(), resolution.outbox());
     }
 

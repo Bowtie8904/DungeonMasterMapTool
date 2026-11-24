@@ -187,6 +187,8 @@ public final class RuleDispatcher {
         default List<Candidate> grantInventory(ObjectNode staged, Map<String, ObjectNode> contexts) {
             return null;
         }
+
+        default boolean settlesInventory() { return false; }
     }
 
     interface RecipientTrackReactions {
@@ -874,7 +876,9 @@ public final class RuleDispatcher {
 
             @Override
             public void mutated(ObjectNode staged, String operation, ObjectNode previousActor, String target) {
-                if (budget.liveRoot && budget.depth == 0 && !"limits.refresh".equals(operation)) return;
+                if (budget.liveRoot && budget.depth == 0 && !"limits.refresh".equals(operation)
+                        && !("inventory.grant".equals(operation) && budget.projection != null
+                        && budget.projection.settlesInventory())) return;
                 reproject(staged, operation, previousActor, target);
             }
         };
