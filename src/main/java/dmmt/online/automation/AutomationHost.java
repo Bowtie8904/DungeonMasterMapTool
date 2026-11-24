@@ -5211,10 +5211,19 @@ public final class AutomationHost {
                 List.of(new RuleDispatcher.RecipientCandidate(recipientId, recipient, expectedRecipientRevision)),
                 ledger, random, pack.programs());
         var actions = resolved.actions().stream().map(RuleDispatcher.ClaimActionResult::action).toList();
-        if (actions.stream().anyMatch(action -> !action.publishedRolls().isEmpty()))
-            throw RuleJson.error("/claim/selection", "Claim actions cannot publish or revise rolls yet.");
+        long published = actions.stream().mapToLong(action -> action.publishedRolls().size()).sum();
+        if (published > 1)
+            throw RuleJson.error("/claim/selection", "A claim action may publish at most one revision of its roll.");
         ObjectNode result = applyResolved(pack, sourceSheet, projection.state(sourceSheet), event,
                 resolved.sourceContexts(), actions, resolved.outbox());
+        if (!result.at("/event/blocked").isEmpty())
+            throw new RuleRuntime.Unavailable("blocked", result.at("/event/blocked/0/reason").asText());
+        if (published == 1) {
+            ObjectNode revised = actions.stream().flatMap(action -> action.publishedRolls().stream()).findFirst().orElseThrow();
+            ((ObjectNode) result.required("event")).set("roll", revised);
+            ProfileRoll.updateCheck((ObjectNode) result.required("event"));
+            result.put("resultPublished", true);
+        }
         for (var update : resolved.recipients()) writeRecipient(recipientSheet, update);
         result.put("claimRevision", resolved.ledger().revision());
         return result;

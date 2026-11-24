@@ -6605,7 +6605,10 @@ public final class OnlineSessionServer {
             if (!restoration) changed.put(participants.source().getId(), participants.sourceSheet());
             changed.put(participants.recipient().getId(), participants.recipientSheet());
             changed.values().forEach(sheet -> sheet.put("featureRevision", sheet.path("featureRevision").asLong(0) + 1));
-            List<ObjectNode> messages = automationReports(participants.source(), sourceNames, result);
+            List<ObjectNode> messages = new ArrayList<>();
+            if (result.path("resultPublished").asBoolean())
+                messages.add(profileRollMessage(participants.source(), result.path("event")));
+            messages.addAll(automationReports(participants.source(), sourceNames, result));
             String sourceOwner = participants.source().getOwnerId(), recipientOwner = participants.recipient().getOwnerId();
             Runnable validateRoster = () -> {
                 Campaign.Actor source = campaign.actor(participants.source().getId());

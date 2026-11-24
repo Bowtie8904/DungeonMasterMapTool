@@ -8315,6 +8315,90 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void rollResultAndSheetActionsOfferClaimsThatOtherPlayersAcceptInChat() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode feature = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        feature.set("profiles", MAPPER.readTree("""
+                [{"id":"cast","label":"Cast","rollKind":"spellcast","trait":"spellcast","difficulty":13,"origin":"feat:Signal"}]"""));
+        feature.set("profiles", MAPPER.readTree("""
+                [{"id":"cast","label":"Cast","rollKind":"spellcast","trait":"spellcast","difficulty":13,"origin":"feat:Signal"}]"""));
+        feature.set("rules", MAPPER.readTree("""
+                [{"id":"offer","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button"}],
+                  "when":{"eq":[{"read":"event.check.origin"},"feat:Signal"]},
+                  "do":[{"op":"claim.offer","group":"boons","label":"Signal offers a boon","limit":1}],
+                  "ui":{"label":"Share the signal"}},
+                 {"id":"sheet-offer","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"claim.offer","group":"boons","label":"Signal offers a boon","limit":1}],
+                  "ui":{"label":"Offer boon"}},
+                 {"id":"boost-offer","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button"}],
+                  "when":{"eq":[{"read":"event.check.origin"},"feat:Signal"]},
+                  "do":[{"op":"claim.offer","group":"boost","label":"Signal boosts the roll","limit":1}],
+                  "ui":{"label":"Share a boost"}},
+                 {"id":"boost","bindings":[{"id":"claim","event":"claim.accept","surface":"chat","mode":"button",
+                   "claimGroup":"boost","audience":"others","claimScope":{"recipients":"otherPlayersCharacters"}}],
+                  "do":[{"op":"roll.contribute","from":{"read":"event.roll"},
+                    "contribution":{"id":"boost","kind":"flat","role":"modifier","label":"Boost","value":4},"as":"next"},
+                    {"op":"roll.publish","roll":{"read":"result.next"}}],
+                  "ui":{"label":"Boost the roll"}},
+                 {"id":"party-hope","bindings":[{"id":"claim","event":"claim.accept","surface":"chat","mode":"button",
+                   "claimGroup":"boons","audience":"others","claimScope":{"recipients":"otherPlayersCharacters"}}],
+                  "do":[{"op":"resource.gain","pool":"recipient.hope","amount":1}],
+                  "ui":{"label":"Gain Hope","report":"{recipient.name} gained Hope."}}]"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String campaignId = campaign.getId();
+        campaign.getActors().add(Campaign.Actor.builder().id("actor").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("mira").name("Mira").ownerId("mira-player").build());
+        store.saveSheet(campaignId, "actor", """
+                {"name":"Ada","hope":{"slots":6,"on":2},"stress":{"slots":6,"on":0},
+                 "traits":[{"name":"Agility","mod":3,"spellcast":true}],
+                 "features":[{"name":"Steady","instanceId":"s","automationSource":"classes:tester:features:steady"}]}""");
+        store.saveSheet(campaignId, "mira", """
+                {"name":"Mira","hope":{"slots":6,"on":1},"stress":{"slots":6,"on":0}}""");
+        String owner = cookie(), mira = allyCookie("mira-player");
+        diceSeed(0);
+
+        var offeredFromSheet = automationHttp(owner, "actor", """
+                {"request":{"requestId":"sheet-offer","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"s","ruleId":"sheet-offer","bindingId":"use"}]}}""");
+        assertEquals(200, offeredFromSheet.statusCode(), offeredFromSheet.body());
+        var rolled = automationHttp(owner, "actor", """
+                {"request":{"requestId":"profile-cast","expectedRevision":1,"selections":[],
+                 "profileRoll":{"sourceInstanceId":"s","profileId":"cast","kind":"spellcast"}}}""");
+        assertEquals(200, rolled.statusCode(), rolled.body());
+        String resultId = MAPPER.readTree(rolled.body()).requiredAt("/event/resultId").asText();
+        var fromRoll = automationHttp(owner, "actor", """
+                {"request":{"requestId":"roll-offer","expectedRevision":2,"resultId":"%s",
+                 "selections":[{"sourceInstanceId":"s","ruleId":"offer","bindingId":"use"}]}}""".formatted(resultId));
+        assertEquals(200, fromRoll.statusCode(), fromRoll.body());
+        List<JsonNode> offers = store.historyTail(campaignId, 100).stream()
+                .filter(message -> message.path("automationClaim").isObject()).toList();
+        assertEquals(2, offers.size());
+        for (JsonNode offer : offers) {
+            JsonNode described = MAPPER.readTree(claimHttp(mira, offer, "mira", null).body());
+            assertEquals("s", described.at("/actions/0/sourceInstanceId").asText(), described.toString());
+            var accepted = claimHttp(mira, offer, "mira", claimRequest(described, "mira", "mira-" + offer.path("id").asLong()).toString());
+            assertEquals(200, accepted.statusCode(), accepted.body());
+        }
+        assertEquals(3, MAPPER.readTree(store.loadSheet(campaignId, "mira")).at("/hope/on").asInt());
+        var boostOffer = automationHttp(owner, "actor", """
+                {"request":{"requestId":"boost-offer","expectedRevision":5,"resultId":"%s",
+                 "selections":[{"sourceInstanceId":"s","ruleId":"boost-offer","bindingId":"use"}]}}""".formatted(resultId));
+        assertEquals(200, boostOffer.statusCode(), boostOffer.body());
+        JsonNode boost = store.historyTail(campaignId, 100).stream()
+                .filter(message -> "boost".equals(message.at("/automationClaim/group").asText())).findFirst().orElseThrow();
+        long totalBefore = MAPPER.readTree(rolled.body()).at("/event/check/total").asLong();
+        int messagesBefore = store.historyTail(campaignId, 100).size();
+        JsonNode boostChoice = MAPPER.readTree(claimHttp(mira, boost, "mira", null).body());
+        var boosted = claimHttp(mira, boost, "mira", claimRequest(boostChoice, "mira", "mira-boost").toString());
+        assertEquals(200, boosted.statusCode(), boosted.body());
+        assertEquals(totalBefore + 4, MAPPER.readTree(boosted.body()).at("/event/check/total").asLong(), boosted.body());
+        assertTrue(store.historyTail(campaignId, 100).size() > messagesBefore);
+        assertEquals(boosted.body(), claimHttp(mira, boost, "mira", claimRequest(boostChoice, "mira", "mira-boost").toString()).body());
+    }
+
+    @Test
     void targetedFeatureRollsDispatchOwnerReactionsAndCommitBothSheets() throws Exception {
         automationCompendium();
         Path file = compendiumDir.resolve("classes.json");
