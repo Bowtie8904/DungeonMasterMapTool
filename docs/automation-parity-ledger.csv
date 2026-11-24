@@ -190,7 +190,7 @@
 "classes","/entries/37/features/1/automation","blood-hunter-order-of-the-lycan-specialization [Blood Hunter: Order of the Lycan] > Lycan Regeneration","actions","converted-candidate","","not captured","unverified"
 "classes","/entries/38/features/0/automation","blood-hunter-order-of-the-lycan-foundation [Blood Hunter: Order of the Lycan] > Werewolf","rollOptions","converted-candidate","","not captured","unverified"
 "classes","/entries/38/features/1/automation","blood-hunter-order-of-the-lycan-foundation [Blood Hunter: Order of the Lycan] > Control the Beast","rollOptions","converted-candidate","","not captured","unverified"
-"classes","/entries/40/features/0/automation","blood-hunter-order-of-the-mutant-foundation [Blood Hunter: Order of the Mutant] > Mutagens","actions","unconverted","/entries/40/features/0/automation/actions/0/mutagens: Unsupported legacy field: mutagens","not captured","unverified"
+"classes","/entries/40/features/0/automation","blood-hunter-order-of-the-mutant-foundation [Blood Hunter: Order of the Mutant] > Mutagens","actions","converted-candidate","","not captured","unverified"
 "classes","/entries/42/features/0/automation","warlock-pact-of-the-endless-mastery [Warlock: Pact Of The Endless] > Dark Aegis","actions;mitigation;uses","converted-candidate","","not captured","unverified"
 "classes","/entries/42/features/1/automation","warlock-pact-of-the-endless-mastery [Warlock: Pact Of The Endless] > Draining Bane","actions","converted-candidate","","not captured","unverified"
 "classes","/entries/43/features/0/automation","warlock-pact-of-the-endless-specialization [Warlock: Pact Of The Endless] > Harrowing Invocation","actions","converted-candidate","","not captured","unverified"

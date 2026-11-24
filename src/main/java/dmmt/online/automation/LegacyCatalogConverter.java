@@ -73,7 +73,7 @@ public final class LegacyCatalogConverter {
             "excludeSourceActor", "hostOwned", "selectAmount", "resourceRoll", "hopeDice", "layerRoll", "deferSourceUse", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
             "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime", "table",
             "hostRollAction", "bloodAutomation", "castTokens", "patronDice", "witchAction", "requiresCompanion",             "specialAction", "codexSwap", "spendFavor", "menacingReach",
-            "costConditions", "refocus", "chooseEffects", "channelRawPower", "requiresFeature");
+            "costConditions", "refocus", "chooseEffects", "channelRawPower", "requiresFeature", "mutagens");
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
@@ -1431,6 +1431,118 @@ public final class LegacyCatalogConverter {
         starts.forEach(steps::add);
     }
 
+    /**
+     * {@code mutagens}: a downtime brew with a trait to raise, a different trait to lower and 1..N benefits of which
+     * each starts its own effect. Features pick the trait bonus and the benefit limit, gate benefits, and a second
+     * benefit costs extra and leaves a rest-long HP lock.
+     */
+    private static void mutagens(JsonNode spec, String path, Problems p, ObjectNode effects, ObjectNode rule, ArrayNode steps) {
+        p.onlyFields(spec, path, Set.of("traitBonus", "traitBonusByFeature", "maxBenefitsByFeature", "extraBenefitCost", "benefits"));
+        JsonNode benefits = spec.path("benefits");
+        if (!spec.path("traitBonus").isInt() || !benefits.isArray() || benefits.isEmpty() || benefits.size() > 24
+                || (spec.has("traitBonusByFeature") && !spec.path("traitBonusByFeature").isObject())
+                || (spec.has("maxBenefitsByFeature") && !spec.path("maxBenefitsByFeature").isObject())) {
+            p.add(path, "Expected a trait bonus and up to 24 benefits.");
+            return;
+        }
+        if (rule.has("inputs")) { p.add(path, "Brewing mutagens cannot share an action with another input."); return; }
+        int hpCost = 0;
+        if (spec.has("extraBenefitCost")) {
+            p.onlyFields(spec.get("extraBenefitCost"), path + "/extraBenefitCost", Set.of("hp"));
+            hpCost = spec.path("extraBenefitCost").path("hp").asInt(0);
+            if (hpCost < 1) { p.add(path + "/extraBenefitCost", "Expected an HP cost."); return; }
+        }
+        JsonNode byFeature = spec.path("traitBonusByFeature");
+        JsonNode limits = spec.path("maxBenefitsByFeature");
+        JsonNode bonusExpr = RuleJson.JSON.getNodeFactory().numberNode(spec.path("traitBonus").asInt());
+        for (var entry = byFeature.fields(); entry.hasNext(); ) {
+            var next = entry.next();
+            ObjectNode pick = RuleJson.JSON.createObjectNode();
+            pick.putArray("if").add(hasFeature(next.getKey())).add(next.getValue().asInt()).add(bonusExpr);
+            bonusExpr = pick;
+        }
+        JsonNode limitExpr = RuleJson.JSON.getNodeFactory().numberNode(1);
+        int most = 1;
+        for (var entry = limits.fields(); entry.hasNext(); ) {
+            var next = entry.next();
+            ObjectNode pick = RuleJson.JSON.createObjectNode();
+            pick.putArray("if").add(hasFeature(next.getKey())).add(next.getValue().asInt()).add(limitExpr);
+            limitExpr = pick;
+            most = Math.max(most, next.getValue().asInt());
+        }
+        most = Math.min(most, benefits.size());
+        ArrayNode inputs = rule.putArray("inputs");
+        for (String id : List.of("increase", "decrease")) {
+            ObjectNode input = inputs.addObject().put("id", id).put("kind", "choice")
+                    .put("label", "increase".equals(id) ? "Trait to increase" : "Trait to decrease").put("count", 1);
+            ArrayNode list = input.putArray("options");
+            for (String trait : TRAITS) list.addObject().put("id", trait).put("label", trait);
+        }
+        ObjectNode pick = inputs.addObject().put("id", "benefits").put("kind", "choice").put("label", "Benefits").put("count", most);
+        if (most > 1) pick.put("min", 1);
+        ArrayNode options = pick.putArray("options");
+        Set<String> used = new HashSet<>();
+        effects.fieldNames().forEachRemaining(used::add);
+        String brewId = unique("mutagens", used);
+        ObjectNode brew = effects.putObject(brewId);
+        brew.put("label", "Mutagens").put("kind", "buff");
+        RESETS.get("rest").forEach(brew.putArray("until")::add);
+        brew.put("restExpiry", "beforeMoves");
+        brew.put("text", byFeature.isEmpty() ? "+" + spec.path("traitBonus").asInt() + " {input.increase}, -" + spec.path("traitBonus").asInt() + " {input.decrease}."
+                : "{input.increase} is raised and {input.decrease} is lowered by your Mutagens bonus.");
+        ArrayNode modifiers = brew.putArray("modifiers");
+        for (String trait : TRAITS) {
+            ObjectNode raised = RuleJson.JSON.createObjectNode();
+            raised.putArray("if").add(eqNode(read("input.increase"), trait)).add(bonusExpr).add(0);
+            ObjectNode lowered = RuleJson.JSON.createObjectNode();
+            lowered.putArray("if").add(eqNode(read("input.decrease"), trait)).add(RuleJson.JSON.createObjectNode().set("negate", bonusExpr)).add(0);
+            ObjectNode sum = RuleJson.JSON.createObjectNode();
+            sum.putArray("add").add(raised).add(lowered);
+            modifiers.addObject().put("stat", "trait." + trait).set("value", sum);
+        }
+        ArrayNode starts = RuleJson.JSON.createArrayNode();
+        starts.addObject().put("op", "effect.start").put("effect", brewId).put("target", "actor");
+        for (int i = 0; i < benefits.size(); i++) {
+            JsonNode benefit = benefits.get(i);
+            String at = path + "/benefits/" + i;
+            p.onlyFields(benefit, at, Set.of("id", "effect", "requiresFeature"));
+            String id = benefit.path("id").asText("");
+            if (!ID.matcher(id).matches() || !benefit.path("effect").isObject()) { p.add(at, "Expected an id and an effect."); continue; }
+            ObjectNode entry = options.addObject().put("id", id).put("label", escape(benefit.path("effect").path("name").asText(id)));
+            if (benefit.has("requiresFeature")) entry.set("when", hasFeature(benefit.path("requiresFeature").asText()));
+            String declared = declareEffect(benefit.get("effect"), at + "/effect", p, effects);
+            if (declared == null) continue;
+            effects.with(declared).put("restExpiry", "beforeMoves");
+            ObjectNode start = starts.addObject().put("op", "effect.start").put("effect", declared).put("target", "actor");
+            start.putObject("if").putArray("includes").add(read("input.benefits")).add(id);
+        }
+        steps.addObject().put("op", "action.reject").put("reason", "Mutagens: choose two different traits to increase and decrease.")
+                .set("if", eqNode(read("input.increase"), read("input.decrease")));
+        ObjectNode over = steps.addObject().put("op", "action.reject").put("reason", "Mutagens: choose fewer benefits.");
+        over.putObject("if").putArray("gt").add(RuleJson.JSON.createObjectNode().set("size", read("input.benefits"))).add(limitExpr);
+        if (hpCost > 0) {
+            ObjectNode multiple = RuleJson.JSON.createObjectNode();
+            multiple.putArray("gt").add(RuleJson.JSON.createObjectNode().set("size", read("input.benefits"))).add(1);
+            ObjectNode spend = steps.addObject().put("op", "track.mark").put("track", "actor.hp").put("amount", hpCost);
+            spend.set("if", multiple);
+            String lockId = unique("volatile-toxins", used);
+            ObjectNode lock = effects.putObject(lockId);
+            lock.put("label", "Volatile Toxins").put("kind", "debuff").put("restExpiry", "beforeMoves")
+                    .put("text", "This marked HP cannot be cleared until your next rest.");
+            RESETS.get("rest").forEach(lock.putArray("until")::add);
+            lock.putObject("locks").put("hp", hpCost);
+            ObjectNode startLock = starts.addObject().put("op", "effect.start").put("effect", lockId).put("target", "actor");
+            startLock.set("if", multiple.deepCopy());
+        }
+        starts.forEach(steps::add);
+    }
+
+    private static ObjectNode eqNode(JsonNode left, Object right) {
+        ObjectNode eq = RuleJson.JSON.createObjectNode();
+        ArrayNode pair = eq.putArray("eq").add(left);
+        if (right instanceof JsonNode node) pair.add(node); else pair.add(right.toString());
+        return eq;
+    }
     /**
      * {@code channelRawPower}: the player sends a loadout card to the vault and takes either Hope equal to its level
      * or an effect whose value is twice that level, which the effect's roll option adds to a spell's damage.
@@ -4660,6 +4772,7 @@ public final class LegacyCatalogConverter {
         if (action.has("table")) actionTable(action.get("table"), path + "/table", p, steps, effects, pools, operationTarget);
         if (action.has("refocus")) refocus(action, path, p, pools, steps);
         if (action.has("chooseEffects")) chooseEffects(action.get("chooseEffects"), path + "/chooseEffects", p, effects, rule, steps);
+        if (action.has("mutagens")) mutagens(action.get("mutagens"), path + "/mutagens", p, effects, rule, steps);
         if (action.has("channelRawPower")) channelRawPower(action.get("channelRawPower"), path + "/channelRawPower", p, effects, rule, steps);
         String reachReport = action.has("menacingReach") ? menacingReach(action, path, p, effects, steps) : null;
         endEffect(action, steps, operationTarget);

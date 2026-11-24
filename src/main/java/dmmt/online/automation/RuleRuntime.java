@@ -811,8 +811,9 @@ public final class RuleRuntime {
             } else if ("choice".equals(input.path("kind").asText())) {
                 int count = input.path("count").asInt(1);
                 ArrayNode options = descriptor.putArray("options").addAll(options(input, context));
-                if (options.size() < count) throw new Unavailable("selection", "Not enough options are currently available.");
+                if (options.size() < input.path("min").asInt(count)) throw new Unavailable("selection", "Not enough options are currently available.");
                 descriptor.put("count", count);
+                if (input.has("min")) descriptor.put("min", Math.min(count, input.path("min").asInt(count)));
             } else if ("record.select".equals(input.path("kind").asText())) {
                 JsonNode records = eval(input.path("from"), context);
                 if (!records.isArray() || records.size() > 64)
@@ -943,8 +944,10 @@ public final class RuleRuntime {
                 if (count == 1 && value.isTextual()) selected.add(value.asText());
                 else if (count > 1 && value.isArray()) for (JsonNode item : value) if (item.isTextual()) selected.add(item.asText());
                 int supplied1 = value.isArray() ? value.size() : 1;
-                if (selected.size() != count || supplied1 != count || !allowed.containsAll(selected))
-                    throw RuleJson.error("/inputs/" + id, "Choose " + count + " distinct available option(s).");
+                int least = descriptor.path("min").asInt(count);
+                if (selected.size() < least || selected.size() > count || supplied1 != selected.size() || !allowed.containsAll(selected))
+                    throw RuleJson.error("/inputs/" + id, least == count ? "Choose " + count + " distinct available option(s)."
+                            : "Choose " + least + " to " + count + " distinct available options.");
                 Set<String> usedGroups = new HashSet<>();
                 for (String choice : selected)
                     if (groups.containsKey(choice) && !usedGroups.add(groups.get(choice)))

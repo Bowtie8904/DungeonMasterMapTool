@@ -27,7 +27,7 @@ export const CONTROL_TEXT: ControlText = {
   selectDice: (count, min) => min === undefined
     ? `Select exactly ${count} ${count === 1 ? 'die' : 'dice'}.`
     : `Select ${min} to ${count} dice.`,
-  selectOptions: count => `Select exactly ${count} ${count === 1 ? 'option' : 'options'}.`,
+  selectOptions: (count, min) => min === undefined || min === count ? `Select exactly ${count} ${count === 1 ? 'option' : 'options'}.` : `Select ${min} to ${count} options.`,
   allocate: (total, max) => `Distribute exactly ${total}, at most ${max} each.`,
 };
 

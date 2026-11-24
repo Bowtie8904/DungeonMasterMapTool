@@ -5,7 +5,7 @@ export type RuleInput =
   | { id: string; kind: 'integer'; label: string; min: number; max: number; default?: number }
   | { id: string; kind: 'die.select'; label: string; count: number; min?: number; default?: string[];
       choices: Array<{ id: string; label: string; sides: number; face: number }> }
-  | { id: string; kind: 'choice'; label: string; count: number; options: Array<{ id: string; label: string }> }
+  | { id: string; kind: 'choice'; label: string; count: number; min?: number; options: Array<{ id: string; label: string }> }
   | { id: string; kind: 'record.select'; label: string; options: Array<{ label: string; value: RuleRecordValue }> }
   | { id: string; kind: 'allocation'; label: string; total: number; max: number; options: Array<{ id: string; label: string }> };
 
@@ -58,7 +58,7 @@ export interface ControlText {
   recipients: string;
   wholeNumber: (min: number, max: number) => string;
   selectDice: (count: number, min?: number) => string;
-  selectOptions: (count: number) => string;
+  selectOptions: (count: number, min?: number) => string;
   allocate: (total: number, max: number) => string;
 }
 
@@ -252,7 +252,7 @@ export function inputFields(container: HTMLElement, definitions: RuleInput[], fi
         container.append(group);
         reads.push(() => {
           const selected = checks.filter(option => option.field.checked).map(option => option.id);
-          if (selected.length !== input.count) throw new Error(text.selectOptions(input.count));
+          if (selected.length < (input.min ?? input.count) || selected.length > input.count) throw new Error(text.selectOptions(input.count, input.min));
           return [input.id, single ? selected[0] : selected];
         });
       } else if (input.kind === 'record.select') {

@@ -668,7 +668,8 @@ public final class RuleCompiler {
             RuleTemplate.validate(template);
             for (String ref : RuleTemplate.references(template))
                 if (!ref.startsWith("source.") && !ref.startsWith("actor.") && !(ref.startsWith("state.") && state.has(ref.split("\\.")[1]))
-                        && !(ref.startsWith("result.") && "text".equals(text) && !effect.has("while")))
+                        && !(ref.startsWith("result.") && "text".equals(text) && !effect.has("while"))
+                        && !(ref.startsWith("input.") && !effect.has("while")))
                     throw RuleJson.error(path + "/" + text, "Effect text may only read source, actor and declared state: " + ref);
         }
         if (effect.has("kind") && !Set.of("buff", "debuff").contains(effect.path("kind").asText()))
@@ -1385,9 +1386,10 @@ public final class RuleCompiler {
                 RuleTemplate.validate(RuleJson.text(input.path("choiceLabel"), path + "/choiceLabel"));
             }
             case "choice" -> {
-                RuleJson.fields(input, path, "id", "kind", "label", "options", "optionsFrom", "count");
+                RuleJson.fields(input, path, "id", "kind", "label", "options", "optionsFrom", "count", "min");
                 int size = validateOptions(input, path);
                 int count = input.has("count") ? RuleJson.integer(input.get("count"), path + "/count", 1, size) : 1;
+                if (input.has("min")) RuleJson.integer(input.get("min"), path + "/min", 1, count);
                 if (count < 1) throw RuleJson.error(path + "/count", "Expected at least one choice.");
             }
             case "record.select" -> {
