@@ -1050,6 +1050,13 @@ public final class AutomationHost {
                                                                     List<SheetProjection.SourceElement> sources,
                                                                     ObjectNode initialActor, String holderId,
                                                                     boolean projectTrackStats) {
+        return ownerRecoveryProjection(pack, sheet, state, sources, initialActor, holderId, projectTrackStats, false);
+    }
+
+    private RuleDispatcher.OwnerProjection ownerRecoveryProjection(Pack pack, ObjectNode sheet, ObjectNode state,
+                                                                    List<SheetProjection.SourceElement> sources,
+                                                                    ObjectNode initialActor, String holderId,
+                                                                    boolean projectTrackStats, boolean allowPlainConsumption) {
         Map<String, ObjectNode> initialSources = new HashMap<>();
         Map<String, SheetProjection.SourceElement> sourceElements = new HashMap<>();
         boolean hasTrackObservers = false;
@@ -1096,7 +1103,8 @@ public final class AutomationHost {
                 ObjectNode current = contexts.get(entry.getKey());
                 RuleCompiler.Program program = pack.programs().get(sourceElements.get(entry.getKey()).sourceId());
                 if (current == null && (program.hasComputedActorPools() || !program.automatic("track.changed").isEmpty())
-                        || current != null && !entry.getValue().equals(current.path("source")))
+                        || current != null && !entry.getValue().equals(current.path("source"))
+                        && !(allowPlainConsumption && plainConsumption(entry.getValue(), current.path("source"), program)))
                     throw new RuleRuntime.Unavailable("reactionSource",
                             "Changing a source during a track reaction requires source activation settlement.");
             }
@@ -1121,6 +1129,17 @@ public final class AutomationHost {
             throw new RuleRuntime.Unavailable("reactionEffectDependencies",
                     "Effect-bound pools did not stabilize during this reaction.");
         };
+    }
+
+    private static boolean plainConsumption(ObjectNode before, JsonNode after, RuleCompiler.Program program) {
+        if (!after.isObject() || !before.path("quantity").isInt() || !after.path("quantity").isInt()
+                || after.path("quantity").asInt() < 0 || after.path("quantity").asInt() > before.path("quantity").asInt()
+                || program.stateMayAffectProjection() || !program.automatic("track.changed").isEmpty())
+            return false;
+        ObjectNode priorSource = before.deepCopy(), nextSource = ((ObjectNode) after).deepCopy();
+        priorSource.remove("quantity");
+        nextSource.remove("quantity");
+        return priorSource.equals(nextSource);
     }
 
     private static void requireSettledReactionEffects(Pack pack, ObjectNode actor, Map<String, ObjectNode> contexts,
@@ -3334,7 +3353,15 @@ public final class AutomationHost {
 
     private ObjectNode applyEvent(Pack pack, ObjectNode working, ObjectNode state, ObjectNode event,
                                   List<RuleDispatcher.Candidate> candidates, List<RuleRuntime.Intent> intents, RandomGenerator random) {
-        RuleDispatcher.EventResolution resolution = RuleDispatcher.executeEvent(candidates, intents, random, pack.programs());
+        RuleDispatcher.EventResolution resolution;
+        if (candidates.stream().anyMatch(candidate -> !candidate.program().automatic("track.changed").isEmpty())) {
+            ObjectNode actor = RuleJson.object(candidates.getFirst().context().get("actor"), "/actor");
+            var ownerProjection = ownerRecoveryProjection(pack, working, state, sources(pack, working), actor,
+                    RuleJson.id(actor.get("id"), "/actor/id"), false, true);
+            resolution = RuleDispatcher.executeLiveWithOwnerReactions(candidates, intents, random, pack.programs(), ownerProjection);
+        } else {
+            resolution = RuleDispatcher.executeEvent(candidates, intents, random, pack.programs());
+        }
         return applyResolved(pack, working, state, event, resolution.contexts(), resolution.actions(), resolution.outbox());
     }
 

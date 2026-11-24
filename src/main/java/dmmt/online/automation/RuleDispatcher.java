@@ -190,6 +190,7 @@ public final class RuleDispatcher {
         int events;
         boolean allowSelectedInventory;
         boolean inventoryPending;
+        boolean liveRoot;
         final OwnerProjection projection;
         Map<String, ObjectNode> contexts;
 
@@ -294,6 +295,14 @@ public final class RuleDispatcher {
                                                       RandomGenerator random, Map<String, RuleCompiler.Program> programs,
                                                       OwnerProjection projection) {
         return executeEvent(activeSources, selections, random, programs, false, new ReactionBudget(projection));
+    }
+
+    static EventResolution executeLiveWithOwnerReactions(List<Candidate> activeSources, List<RuleRuntime.Intent> selections,
+                                                        RandomGenerator random, Map<String, RuleCompiler.Program> programs,
+                                                        OwnerProjection projection) {
+        ReactionBudget budget = new ReactionBudget(projection);
+        budget.liveRoot = true;
+        return executeEvent(activeSources, selections, random, programs, false, budget);
     }
 
     static EventResolution executeSelectedWithOwnerReactions(List<Candidate> activeSources, RuleRuntime.Intent selection,
@@ -652,6 +661,12 @@ public final class RuleDispatcher {
                 if (budget.inventoryPending)
                     throw new RuleRuntime.Unavailable("inventorySettlement",
                             "A later track reaction requires the inventory grant to be settled first.");
+                if (budget.liveRoot && budget.depth == 0) {
+                    for (JsonNode command : staged.path("outbox"))
+                        requireSettledBeforeTrackReaction(command);
+                    for (JsonNode command : outbox)
+                        requireSettledBeforeTrackReaction(command);
+                }
                 String actorId = staged.path("actor").path("id").asText();
                 if (!actorId.equals(staged.path(holder).path("id").asText()))
                     throw new RuleRuntime.Unavailable("recipientReactions",
@@ -708,9 +723,17 @@ public final class RuleDispatcher {
 
             @Override
             public void mutated(ObjectNode staged, String operation, ObjectNode previousActor, String target) {
+                if (budget.liveRoot && budget.depth == 0) return;
                 reproject(staged, operation, previousActor, target);
             }
         };
+    }
+
+    private static void requireSettledBeforeTrackReaction(JsonNode command) {
+        if (Set.of("inventory.grant", "limits.refresh", "effect.endElsewhere", "damage.deal")
+                .contains(command.path("kind").asText()))
+            throw new RuleRuntime.Unavailable("reactionSettlement",
+                    "A track reaction requires earlier " + command.path("kind").asText() + " settlement.");
     }
 
     private static boolean hasDerivedEffects(JsonNode actor) {

@@ -5406,6 +5406,106 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void selfActionsDispatchTrackReactionsBeforeLaterStepsAndRetryOnce() throws Exception {
+        installRestRules();
+        var converted = dmmt.online.automation.LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"armor","entries":[
+                 {"id":"plate","name":"Overflow Plate","automation":{"overflowHope":1}}]}
+                """);
+        assertEquals(1, converted.converted(), converted.diagnostics().toString());
+        java.nio.file.Files.writeString(compendiumDir.resolve("armor.json"), converted.catalog().toString());
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ArrayNode rules = ruleset.withObject("/automation").withArray("rules");
+        rules.add(MAPPER.readTree("""
+                {"id":"repair-and-spend","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                 "do":[{"op":"track.clear","track":"actor.armorTrack","amount":3},
+                       {"op":"resource.spend","pool":"actor.hope","amount":1}],
+                 "ui":{"label":"Repair and spend","report":"Spent the recovered Hope."}}
+                """));
+        rules.add(MAPPER.readTree("""
+                {"id":"craft","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                 "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
+                        "quantity":1,"label":"Craft"}],
+                 "ui":{"label":"Craft","report":"Crafted a potion."}}
+                """));
+        rules.add(MAPPER.readTree("""
+                {"id":"healing-reward","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"hp"]},{"eq":[{"read":"event.change"},"clear"]}]},
+                 "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"report":"Healing renewed Hope."}}
+                """));
+        rules.add(MAPPER.readTree("""
+                {"id":"failed-cost-reaction","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"stress"]},{"eq":[{"read":"event.change"},"mark"]}]},
+                 "do":[{"op":"resource.spend","pool":"actor.hope","amount":6}],"ui":{}}
+                """));
+        rules.add(MAPPER.readTree("""
+                {"id":"fail-after-cost","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                 "costs":[{"op":"track.mark","track":"actor.stress","amount":1}],
+                 "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"Fail"}}
+                """));
+        rules.add(MAPPER.readTree("""
+                {"id":"craft-before-reaction","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                 "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion","quantity":1,"label":"Craft"},
+                       {"op":"track.clear","track":"actor.hp","amount":1}],"ui":{"label":"Unsettled craft"}}
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        campaign.getActors().add(Campaign.Actor.builder().id("auto").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "auto", """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":2},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":1},"hope":{"slots":6,"on":0},
+                 "activeArmor":{"name":"Overflow Plate","instanceId":"plate","automationSource":"armor:plate"}}
+                """);
+        String owner = cookie();
+        String request = """
+                {"request":{"requestId":"repair-and-spend","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"ruleset:base","ruleId":"repair-and-spend","bindingId":"sheet"}]}}
+                """;
+        var completed = automationHttp(owner, "auto", request);
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode receipt = MAPPER.readTree(completed.body());
+        assertEquals(1, receipt.path("actions").findValuesAsText("ruleId").stream()
+                .filter("overflow-hope"::equals).count());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "auto"));
+        assertEquals(0, saved.at("/armorTrack/on").asInt());
+        assertEquals(0, saved.at("/hope/on").asInt());
+        int history = store.historyTail(campaign.getId(), 100).size();
+        assertEquals(completed.body(), automationHttp(owner, "auto", request).body());
+        assertEquals(saved, MAPPER.readTree(store.loadSheet(campaign.getId(), "auto")));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        String craft = """
+                {"request":{"requestId":"craft","expectedRevision":1,
+                 "selections":[{"sourceInstanceId":"ruleset:base","ruleId":"craft","bindingId":"sheet"}]}}
+                """;
+        var crafted = automationHttp(owner, "auto", craft);
+        assertEquals(200, crafted.statusCode(), crafted.body());
+        JsonNode potion = MAPPER.readTree(store.loadSheet(campaign.getId(), "auto")).at("/inventory/0");
+        assertEquals("Minor Health Potion", potion.path("name").asText());
+        ObjectNode drink = MAPPER.createObjectNode();
+        ObjectNode drinkRequest = drink.putObject("request").put("requestId", "drink").put("expectedRevision", 2);
+        drinkRequest.putArray("selections").addObject().put("sourceInstanceId", potion.path("instanceId").asText())
+                .put("ruleId", "drink").put("bindingId", "sheet");
+        diceSeed(seedForDie(4, 1));
+        var drank = automationHttp(owner, "auto", drink.toString());
+        assertEquals(200, drank.statusCode(), drank.body());
+        JsonNode afterDrink = MAPPER.readTree(store.loadSheet(campaign.getId(), "auto"));
+        assertEquals(1, afterDrink.at("/hp/on").asInt());
+        assertEquals(1, afterDrink.at("/hope/on").asInt());
+        assertTrue(afterDrink.path("inventory").isEmpty());
+        assertEquals(drank.body(), automationHttp(owner, "auto", drink.toString()).body());
+        int afterHistory = store.historyTail(campaign.getId(), 100).size();
+        for (String id : List.of("fail-after-cost", "craft-before-reaction")) {
+            String rejected = """
+                    {"request":{"requestId":"%s","expectedRevision":3,
+                     "selections":[{"sourceInstanceId":"ruleset:base","ruleId":"%s","bindingId":"sheet"}]}}
+                    """.formatted(id, id);
+            assertEquals(409, automationHttp(owner, "auto", rejected).statusCode());
+            assertEquals(afterDrink, MAPPER.readTree(store.loadSheet(campaign.getId(), "auto")));
+            assertEquals(afterHistory, store.historyTail(campaign.getId(), 100).size());
+        }
+    }
+
+    @Test
     void sharedRulesFilesDriveLiveAutomationAndInvalidateTheCompiledPack() throws Exception {
         automationCompendium();
         campaign.getActors().add(Campaign.Actor.builder().id("auto").name("Ada").ownerId(playerId()).build());

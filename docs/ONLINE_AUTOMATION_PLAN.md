@@ -114,6 +114,12 @@ the future live host commit and leaves the original event untouched.
 Numeric pool reset expressions evaluate against initialized declared state and pools from one pre-reset snapshot
 per source, independently of declaration order; unchanged default pools are not persisted by the reset.
 
+Ordinary self-actions dispatch owner `track.changed` reactions within the same private transaction, before later
+steps; source costs, reports and retries remain atomic. Simple consumed items without projection dependencies
+can heal and trigger reactions. A track change following an unsettled inventory, effect-transfer, limit-refresh
+or damage command is rejected until ordered settlement is available. Direct sheet edits and other roll origins
+still need track-event integration.
+
 Started effects have persistent, non-reused instance IDs, separate from their source and effect definition. Ending and recasting the same effect must not make an earlier result refer to the new activation. Existing saved instance IDs need no rewrite.
 
 An owner profile roll with matching result buttons returns `resultActions` and an opaque `event.resultId`. The owner can reopen the buttons with `GET /api/automation/{version}/{actorId}?resultId=…`; the host uses the saved dice, current resources and current revision. A later match supersedes that button only. The owner can use targeted result actions and `roll.finished` claim groups whose scope includes the source actor; other players' claims are not offered here. Claim groups default to source scope; `claimGroupScope: "result"` on a `roll.finished` roll/chat button shares that group across sources for that result, separately from any source-scoped group with the same name. The chosen group stays spent across revisions, including alternatives newly eligible after an edit. The base Hope/critical reward and converted alternative Hope and critical-melee rewards use result-wide `roll-reward`. Results do not carry over to a new session or a changed catalog.
