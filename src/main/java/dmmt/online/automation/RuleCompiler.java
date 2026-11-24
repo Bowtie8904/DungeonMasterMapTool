@@ -70,6 +70,7 @@ public final class RuleCompiler {
             Map.entry("effect.start", List.of("effect", "target")),
             Map.entry("effect.end", List.of("effect", "target")),
             Map.entry("effect.endLabeled", List.of("label", "target")),
+            Map.entry("effect.advance", List.of("effect", "target", "by")),
             Map.entry("limit.reset", List.of("limit")),
             Map.entry("limit.modify", List.of("limit", "by")),
             Map.entry("track.capacity", List.of("track", "by", "counter", "amount", "direction")),
@@ -538,8 +539,21 @@ public final class RuleCompiler {
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(id), "/automation/effects");
         String path = "/automation/effects/" + id;
         RuleJson.fields(effect, path, "label", "text", "kind", "until", "stacking", "modifiers", "profile",
-                "while", "endWhen", "exclusiveGroup", "singleHolder", "locks", "restExpiry", "blocksMovement", "blocksDeathMoves", "onlineCondition");
+                "while", "endWhen", "exclusiveGroup", "singleHolder", "locks", "restExpiry", "blocksMovement", "blocksDeathMoves", "onlineCondition", "value");
         if (effect.has("onlineCondition")) onlineCondition(effect.get("onlineCondition"), path + "/onlineCondition");
+        if (effect.has("value")) {
+            ObjectNode value = RuleJson.object(effect.get("value"), path + "/value");
+            RuleJson.fields(value, path + "/value", "initial", "max");
+            if (!value.has("initial")) throw RuleJson.error(path + "/value/initial", "An effect value needs an initial expression.");
+            for (String part : List.of("initial", "max")) if (value.has(part)) {
+                RuleExpression.validate(value.get(part), path + "/value/" + part);
+                for (String ref : RuleExpression.references(value.get(part))) {
+                    String root = ref.split("\\.")[0];
+                    if (!Set.of("source", "actor", "state").contains(root) || "state".equals(root) && !state.has(ref.split("\\.")[1]))
+                        throw RuleJson.error(path + "/value/" + part, "An effect value may only read source, actor and declared state: " + ref);
+                }
+            }
+        }
         if (effect.has("endWhen")) {
             if (effect.has("while")) throw RuleJson.error(path + "/endWhen", "A derived effect (with while) cannot also declare endWhen.");
             RuleExpression.validate(effect.get("endWhen"), path + "/endWhen");
@@ -551,7 +565,7 @@ public final class RuleCompiler {
         }
         if (effect.has("while")) {
             for (String field : List.of("until", "stacking", "exclusiveGroup", "singleHolder", "locks", "restExpiry",
-                    "blocksMovement", "blocksDeathMoves", "onlineCondition"))
+                    "blocksMovement", "blocksDeathMoves", "onlineCondition", "value"))
                 if (effect.has(field)) throw RuleJson.error(path + "/" + field, "A derived effect (with while) is active exactly while its condition holds; it cannot also declare " + field + ".");
             RuleExpression.validate(effect.get("while"), path + "/while");
             for (String ref : RuleExpression.references(effect.get("while"))) {
@@ -1339,7 +1353,7 @@ public final class RuleCompiler {
                 if (recipientMutation(operation) && !Set.of("resource.spend", "resource.gain", "track.mark",
                         "track.clear", "track.capacity", "pool.spend", "pool.gain", "flag.set",
                         "collection.add", "collection.remove", "inventory.grant",
-                        "effect.start", "effect.end", "effect.endLabeled")
+                        "effect.start", "effect.end", "effect.endLabeled", "effect.advance")
                         .contains(operation.path("op").asText()))
                     return false;
         return true;

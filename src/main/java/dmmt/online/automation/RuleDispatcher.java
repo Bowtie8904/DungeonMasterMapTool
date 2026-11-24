@@ -719,7 +719,7 @@ public final class RuleDispatcher {
                     recipient.grantInventory(staged, budget.contexts);
                     return;
                 }
-                if (Set.of("effect.start", "effect.end", "effect.endLabeled", "pool.spend", "pool.gain",
+                if (Set.of("effect.start", "effect.end", "effect.endLabeled", "effect.advance", "pool.spend", "pool.gain",
                         "flag.set", "collection.add", "collection.remove").contains(operation)) {
                     if (previousActor != null) {
                         recipient.holderChanged(staged, budget.contexts);
@@ -1495,7 +1495,7 @@ public final class RuleDispatcher {
                             recipientReactions.grantInventory(staged, workingContexts);
                             return;
                         }
-                        if (Set.of("effect.start", "effect.end", "effect.endLabeled", "pool.spend", "pool.gain",
+                        if (Set.of("effect.start", "effect.end", "effect.endLabeled", "effect.advance", "pool.spend", "pool.gain",
                                 "flag.set", "collection.add", "collection.remove").contains(operation)) {
                             if (previousActor != null) {
                                 recipientReactions.holderChanged(staged, workingContexts);

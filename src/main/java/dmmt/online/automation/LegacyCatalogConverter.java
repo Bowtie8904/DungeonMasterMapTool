@@ -48,13 +48,13 @@ public final class LegacyCatalogConverter {
             "usesSource", "endEffect", "hostOwned", "consumeItem", "quantity", "proficiency", "hopeDie", "diceResource", "condition", "loadoutDomain",
             "required", "traitValue", "multiplier", "allResourceDice", "steps", "damageDie", "diceByLevel", "diceByFeature", "diceConditions", "magicOnly", "weaponRanges",
             "ignoreDisadvantage", "matchingDice", "resourceMultiplier", "input", "experience", "derivedProficiency", "traitChoices", "chooseTrait", "maximizeDie", "requiresRollOutcome", "combo", "secondaryWeaponDie", "linkedDamageTrait", "advantageDie",
-            "magicDamage", "dieSizes", "fearDie", "resourceEmpty", "requiresResource", "expendOn", "ownWeapon");
+            "magicDamage", "dieSizes", "fearDie", "resourceEmpty", "requiresResource", "expendOn", "ownWeapon", "effectValue");
     private static final Set<String> TRIGGER_FIELDS = Set.of("id", "label", "description", "on", "cost", "reroll", "when", "outcome",
             "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
             "chatBenefits", "allowSourceOwner", "loadoutDomain", "primaryWeapon", "anyWeapon", "advantage", "giveFear", "check", "choices",
             "magicOnly", "weaponRanges", "addDice", "damageDice", "damageDiceBelow", "rerollDualityDie", "spendHopeAmount", "disadvantage", "removeFear", "weaponDamage", "rollSection", "containsDie", "resourceRoll", "selectAmount",
-            "target", "excludeSourceActor", "splendorAction", "hostRollAction", "otherPlayerOnly", "spentTokenDamage", "bloodAutomation", "swapDuality", "repeatable", "weapon", "tokenGain", "matchResource", "magicAction", "damageSource", "spellDomain", "vaultSource", "rerollResourceDice", "rerollAnyDie", "dualityDieBonus", "actionRoll", "spendFavor");
+            "target", "excludeSourceActor", "splendorAction", "hostRollAction", "otherPlayerOnly", "spentTokenDamage", "bloodAutomation", "swapDuality", "repeatable", "weapon", "tokenGain", "matchResource", "magicAction", "damageSource", "spellDomain", "vaultSource", "rerollResourceDice", "rerollAnyDie",             "dualityDieBonus", "actionRoll", "spendFavor", "advanceEffect");
     private static final Set<String> MITIGATION_FIELDS = Set.of("id", "label", "description", "when", "cost", "negate", "halve", "reduce",
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
@@ -78,7 +78,7 @@ public final class LegacyCatalogConverter {
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
             "actions", "rollOptions", "rollTriggers", "mitigation", "rest", "consumeLongRestMove", "group", "endOnDamage", "endOnSourceSevere", "endAfterIncomingDamage", "damage",
             "unique", "exclusiveSource", "endOnMarkedHp", "endOnDealtDamage", "endOnAttack", "endOnAction", "lifeWard", "tokenResource", "maintainOnAction",
-            "blocksMovement", "endOnMarkedHpCount", "resources", "surgeResource", "onlineCondition");
+            "blocksMovement", "endOnMarkedHpCount", "resources", "surgeResource", "onlineCondition", "die", "counter");
     private static final Set<String> REST_FIELDS = Set.of("extraMoves", "longMovesInShort", "passives", "modifiers", "requiresEffect", "expireItem");
     private static final Set<String> PASSIVE_FIELDS = Set.of("id", "label", "defaultOn", "condition", "steps", "extraMoves", "consumeItem",
             "rest", "move", "bonus", "minHope", "cost", "chooseAlly", "hostOwned", "castBeforeRest", "requiresEffect", "excludesEffect", "reroll");
@@ -423,6 +423,15 @@ public final class LegacyCatalogConverter {
         }
         keepEffects(rules, path, p, out);
         for (JsonNode rule : rules) for (JsonNode op : rule.path("do")) {
+            if ("effect.advance".equals(op.path("op").asText())) {
+                String label = op.path("effect").asText();
+                String id = null;
+                for (var effect : (Iterable<java.util.Map.Entry<String, JsonNode>>) effects::fields)
+                    if (escape(label).equals(effect.getValue().path("label").asText())) id = effect.getKey();
+                if (id == null) p.add(path, "Unknown effect to advance: " + label);
+                else ((ObjectNode) op).put("effect", id);
+                continue;
+            }
             if (!"effect.end".equals(op.path("op").asText())) continue;
             String label = escape(op.path("effect").asText());
             String id = null;
@@ -1384,6 +1393,13 @@ public final class LegacyCatalogConverter {
 
     private static ObjectNode read(String path) { return RuleJson.JSON.createObjectNode().put("read", path); }
 
+    /** The value stored on the actor's active effect instance with this label. */
+    private static ObjectNode effectValue(String label) {
+        ObjectNode expression = RuleJson.JSON.createObjectNode();
+        expression.putArray("effectValue").add(read("actor.effects"))        .add(label);
+        return expression;
+    }
+
     /** A damage-roll option on this weapon that marks the roll as dealing magic instead of its listed type. */
     private static ObjectNode damageTypeChoice() {
         ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "magic-damage");
@@ -1958,7 +1974,21 @@ public final class LegacyCatalogConverter {
         }
         if (typed != null)
             parts.add((ObjectNode) contribution(id + "-input", "flat", "damage".equals(roll) ? "damage" : "modifier", label).set("value", typed));
-        if (option.has("dice")) {
+        if (option.has("effectValue")) {
+            if (!option.path("effectValue").isBoolean() || !option.path("requiresEffect").isTextual()) p.add(path + "/effectValue", "Expected true on an option of an effect.");
+            else if (option.path("effectValue").asBoolean())
+                parts.add((ObjectNode) contribution(id + "-effect-value", "flat", "damage".equals(roll) ? "damage" : "modifier", label)
+                        .set("value", effectValue(option.path("requiresEffect").asText())));
+        }
+        if ("@die".equals(option.path("dice").asText())) {
+            if (!option.path("requiresEffect").isTextual()) p.add(path + "/dice", "An effect die needs the effect that carries it.");
+            else {
+                ObjectNode part = contribution(id + "-dice", "dice", role, label);
+                part.put("count", 1);
+                part.set("sides", effectValue(option.path("requiresEffect").asText()));
+                parts.add(times(part, "count", quantity));
+            }
+        } else if (option.has("dice")) {
             JsonNode[] dice = optionDice(option, path, p);
             if (dice != null) {
                 ObjectNode part = contribution(id + "-dice", "dice", role, label);
@@ -2944,6 +2974,10 @@ public final class LegacyCatalogConverter {
                 steps.addObject().put("op", "collection.add").put("target", "actor").put("collection", "vault").set("item", read("result.vaulted"));
             }
         }
+        if (trigger.has("advanceEffect")) {
+            if (!trigger.path("advanceEffect").isTextual() || trigger.path("advanceEffect").asText().isBlank()) p.add(path + "/advanceEffect", "Expected an effect name.");
+            else steps.addObject().put("op", "effect.advance").put("effect", trigger.path("advanceEffect").asText()).put("target", "actor").put("by", 1);
+        }
         endEffect(trigger, steps);
         if (!steps.isEmpty()) rule.set("do", steps);
         ObjectNode ui = labels(trigger, path, p, rule);
@@ -3097,6 +3131,12 @@ public final class LegacyCatalogConverter {
      */
     private static String lunar(JsonNode legacy, String path, Problems p, Pools pools, ObjectNode effects, List<ObjectNode> lifecycle) {
         if (!legacy.has("effectCounters") && !legacy.has("lunarPhases")) return null;
+        if (!legacy.has("lunarPhases") && legacy.path("effectCounters").isArray()) {
+            // Without phases the counter is only a display of an effect's own value, which the effect instance now carries.
+            for (int i = 0; i < legacy.path("effectCounters").size(); i++)
+                p.onlyFields(legacy.path("effectCounters").get(i), path + "/effectCounters/" + i, Set.of("label", "effect", "cardOnly"));
+            return null;
+        }
         JsonNode counters = legacy.path("effectCounters"), phases = legacy.path("lunarPhases");
         if (!counters.isArray() || counters.size() != 1 || !phases.isArray() || phases.isEmpty()) {
             p.add(path + "/" + (legacy.has("effectCounters") ? "effectCounters" : "lunarPhases"), "Unsupported legacy field: " + (legacy.has("effectCounters") ? "effectCounters" : "lunarPhases")); return null;
@@ -4120,6 +4160,7 @@ public final class LegacyCatalogConverter {
         else noChoices(action, path, p);
         JsonNode list = action.has("check") ? RuleJson.JSON.missingNode() : action.path("steps");
         amountStore(action.path("selectAmount"), path + "/selectAmount", p, pools, steps, effects);
+        int firstStep = steps.size();
         for (int i = 0; i < list.size(); i++) {
             JsonNode legacyStep = list.get(i);
             if (action.has("timing"))
@@ -4127,6 +4168,8 @@ public final class LegacyCatalogConverter {
                         operationTarget, escape(label), "event.move.rest");
             else step(legacyStep, path + "/steps/" + i, p, steps, effects, pools, operationTarget);
         }
+        for (int i = firstStep; i < steps.size(); i++)
+            bindDie(steps.get(i), action.path("requiresEffect").asText(null), path + "/steps", p);
         amountHeal(action.path("selectAmount"), path + "/selectAmount", p, steps);
         if (action.has("table")) actionTable(action.get("table"), path + "/table", p, steps, effects, pools, operationTarget);
         endEffect(action, steps, operationTarget);
@@ -5029,6 +5072,27 @@ public final class LegacyCatalogConverter {
         resolve.put("as", "actionRoll");
     }
 
+    private static final String DIE_SENTINEL = "@die";
+
+    /** True when a dice-count expression is always one die, however the level or feature choices fall. */
+    private static boolean singleDie(JsonNode count) {
+        if (count.isInt()) return count.asInt() == 1;
+        JsonNode choice = count.path("if");
+        return choice.isArray() && choice.size() == 3 && singleDie(choice.get(1)) && singleDie(choice.get(2));
+    }
+
+    /** Names the effect whose die a step spends; an action granted by an effect spends that effect's die. */
+    private static void bindDie(JsonNode node, String effect, String path, Problems p) {
+        if (node instanceof com.fasterxml.jackson.databind.node.ArrayNode array) {
+            for (int i = 0; i < array.size(); i++) {
+                if (array.get(i).isTextual() && DIE_SENTINEL.equals(array.get(i).asText())) {
+                    if (effect == null) p.add(path, "An effect die needs the effect that carries it.");
+                    else array.set(i, array.textNode(effect));
+                } else bindDie(array.get(i), effect, path, p);
+            }
+        } else if (node != null) node.elements().forEachRemaining(child -> bindDie(child, effect, path, p));
+    }
+
     private static void step(JsonNode step, String path, Problems p, ArrayNode out, ObjectNode effects, Pools pools) {
         step(step, path, p, out, effects, pools, "actor");
     }
@@ -5072,6 +5136,10 @@ public final class LegacyCatalogConverter {
                 && "scars".equals(resource) && !pools.has(resource);
         JsonNode value = clearAllTrack || clearAllPool || markAllTrack ? null : amount(amount);
         if (clearAllScars) value = read(operationTarget + ".scars");
+        if (value == null && "@die".equals(amount.asText())) {
+            if (!"actor".equals(operationTarget)) { p.add(path + "/amount", "An effect die is spent by its holder."); return; }
+            value = effectValue(DIE_SENTINEL);
+        }
         var rolled = amount.isTextual() ? ACTION_DAMAGE.matcher(amount.asText().trim()) : null;
         if (value == null && rolled != null && rolled.matches() && rolled.group(1).length() <= 2 && rolled.group(2).length() <= 3
                 && (rolled.group(4) == null || rolled.group(4).length() <= 6)) {
@@ -5180,6 +5248,36 @@ public final class LegacyCatalogConverter {
             if (!effect.path("tokenResource").isTextual() || effect.path("tokenResource").asText().isBlank())
                 p.add(path + "/tokenResource", "Expected a resource ID.");
             else declared.put("tokenResource", effect.path("tokenResource").asText());
+        }
+        if (effect.has("die") && effect.has("counter")) p.add(path + "/counter", "An effect carries a die or a counter, not both.");
+        else if (effect.has("die")) {
+            JsonNode die = effect.get("die");
+            p.onlyFields(die, path + "/die", Set.of("dice", "diceByLevel", "diceByFeature", "diceConditions"));
+            JsonNode[] sides = die.path("dice").isTextual() ? optionDice(die, path + "/die", p) : null;
+            if (!die.path("dice").isTextual()) p.add(path + "/die/dice", "Expected dice such as 1d6.");
+            else if (sides != null && !singleDie(sides[0])) p.add(path + "/die/dice", "An effect die is a single die.");
+            else if (sides != null) declared.putObject("value").set("initial", sides[1]);
+        } else if (effect.has("counter")) {
+            JsonNode counter = effect.get("counter");
+            p.onlyFields(counter, path + "/counter", Set.of("value", "max", "maxByLevel"));
+            if (!counter.path("value").isInt() || !counter.path("max").isInt() || counter.path("value").asInt() < 0 || counter.path("max").asInt() < 1)
+                p.add(path + "/counter", "Expected whole number value and max.");
+            else {
+                JsonNode max = counter.get("max");
+                java.util.TreeMap<Integer, JsonNode> levels = new java.util.TreeMap<>();
+                if (counter.has("maxByLevel")) counter.get("maxByLevel").fields().forEachRemaining(entry -> {
+                    if (!entry.getKey().matches("[1-9][0-9]?") || !entry.getValue().isInt()) p.add(path + "/counter/maxByLevel", "Expected level thresholds with whole maximums.");
+                    else levels.put(Integer.parseInt(entry.getKey()), entry.getValue());
+                });
+                for (var level : levels.entrySet()) {
+                    ObjectNode reached = RuleJson.JSON.createObjectNode();
+                    reached.putArray("gte").add(read("actor.stats.level")).add(level.getKey());
+                    max = choose(reached, level.getValue(), max);
+                }
+                ObjectNode value = declared.putObject("value");
+                value.set("initial", counter.get("value"));
+                value.set("max", max);
+            }
         }
         if (effect.has("lifeWard")) {
             if (!effect.path("lifeWard").asBoolean(false)) p.add(path + "/lifeWard", "Expected true.");

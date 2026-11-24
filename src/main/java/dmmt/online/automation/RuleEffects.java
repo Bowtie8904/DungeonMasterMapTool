@@ -200,6 +200,12 @@ public final class RuleEffects {
                     RuleJson.integer(RuleExpression.evaluate(lock.getValue(), context),
                             "/effects/" + effectId + "/locks/" + lock.getKey(), 0, 1000)));
         }
+        if (definition.has("value")) {
+            String at = "/effects/" + effectId + "/value";
+            instance.put("value", RuleJson.integer(RuleExpression.evaluate(definition.path("value").get("initial"), context), at, -1_000_000, 1_000_000));
+            if (definition.path("value").has("max"))
+                instance.put("max", RuleJson.integer(RuleExpression.evaluate(definition.path("value").get("max"), context), at + "/max", -1_000_000, 1_000_000));
+        }
         ArrayNode until = instance.putArray("until");
         definition.path("until").forEach(until::add);
         freeze(definition, context, instance.putArray("modifiers"));
@@ -234,6 +240,30 @@ public final class RuleEffects {
         int removed = remove(effects, key, instanceId, context.path("actor").path("id").textValue());
         refreshCounts(program, context);
         return removed;
+    }
+
+    /**
+     * Adds {@code by} to the stored value of this source's instances of {@code effectId} on {@code target}; an instance whose
+     * value then exceeds its frozen {@code max} ends. Returns the new value of the last advanced instance, or 0 when none
+     * remains.
+     */
+    static int advance(RuleCompiler.Program program, String effectId, String target, int by, ObjectNode context) {
+        program.effect(effectId);
+        ArrayNode effects = owned(context, target);
+        String key = program.sourceId() + "#" + effectId;
+        String instanceId = context.path("source").path("instanceId").asText();
+        String actorId = context.path("actor").path("id").textValue();
+        if (otherRecipient(context, target)) requireSourceOwners(effects, key, instanceId);
+        int result = 0;
+        for (int i = effects.size() - 1; i >= 0; i--) {
+            JsonNode effect = effects.get(i);
+            if (!matches(effect, key, instanceId, actorId) || !effect.path("value").isIntegralNumber()) continue;
+            int next = RuleJson.integer(effect.get("value"), "/effects/value", -1_000_000, 1_000_000) + by;
+            if (effect.has("max") && next > effect.path("max").asInt()) effects.remove(i);
+            else { ((ObjectNode) effect).put("value", next); result = next; }
+        }
+        refreshCounts(program, context);
+        return result;
     }
 
     /** Ends every stored effect instance on {@code target}, whatever source started it, that carries {@code label}. */
@@ -361,6 +391,8 @@ public final class RuleEffects {
             if (effect.has("modifiers") && !effect.get("modifiers").isArray()) throw RuleJson.error(path + "/modifiers", "Expected a list.");
             for (String field : List.of("blocksMovement", "blocksDeathMoves"))
                 if (effect.has(field) && !effect.get(field).isBoolean()) throw RuleJson.error(path + "/" + field, "Expected a boolean.");
+            for (String field : List.of("value", "max"))
+                if (effect.has(field)) RuleJson.integer(effect.get(field), path + "/" + field, -1_000_000, 1_000_000);
             if (effect.has("onlineCondition")) RuleCompiler.onlineCondition(effect.get("onlineCondition"), path + "/onlineCondition");
             if (effect.has("restExpiry")) {
                 if (!"beforeMoves".equals(effect.path("restExpiry").asText()))

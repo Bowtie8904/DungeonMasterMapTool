@@ -97,6 +97,34 @@ class EffectRuntimeTest {
     }
 
     @Test
+    void effectInstancesStoreAValueThatRollsReadAndRulesAdvanceUntilItOverflows() throws Exception {
+        String block = """
+                {"effects":{"die":{"label":"Die","until":["scene.end"],"value":{"initial":{"read":"actor.size"},"max":3}}},
+                 "rules":[{"id":"cast","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                   "do":[{"op":"effect.start","effect":"die","target":"actor"}],"ui":{"label":"Start"}},
+                  {"id":"bump","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                   "do":[{"op":"effect.advance","effect":"die","target":"actor","by":1},
+                         {"op":"value","as":"seen","value":{"effectValue":[{"read":"actor.effects"},"Die"]}}],"ui":{"label":"Bump"}}]}""";
+        RuleCompiler.Program program = RuleCompiler.compile("features:die", RuleJson.parse(block), fixture("rewrite/recipes"));
+        ObjectNode state = context();
+        state.withObject("/source").put("id", "features:die");
+        state.withObject("/actor").put("size", 2);
+        state = run(program, "cast", state, "{}").context();
+        assertEquals(2, state.at("/actor/effects/0/value").asInt());
+        assertEquals(3, state.at("/actor/effects/0/max").asInt());
+        var bumped = run(program, "bump", state, "{}");
+        assertEquals(3, bumped.context().at("/actor/effects/0/value").asInt());
+        assertEquals(3, RuleExpression.evaluate(RuleJson.parse("{\"effectValue\":[{\"read\":\"actor.effects\"},\"Die\"]}"),
+                RuleRuntime.context(program, null, bumped.context())).asInt());
+        var overflowed = run(program, "bump", bumped.context(), "{}");
+        assertEquals(0, overflowed.context().at("/actor/effects").size());
+        assertThrows(RuntimeException.class, () -> RuleCompiler.compile("features:die", RuleJson.parse(
+                block.replace("\"max\":3", "\"max\":3,\"extra\":1")), fixture("rewrite/recipes")));
+        assertThrows(RuntimeException.class, () -> RuleCompiler.compile("features:die", RuleJson.parse(
+                block.replace("{\"initial\":{\"read\":\"actor.size\"},\"max\":3}", "{\"max\":3}")), fixture("rewrite/recipes")));
+    }
+
+    @Test
     void endLabeledRemovesEffectsOfAnySourceByLabelOnly() throws Exception {
         ObjectNode state = context();
         ArrayNode effects = state.withObject("/actor").putArray("effects");

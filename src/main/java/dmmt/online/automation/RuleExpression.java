@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
 public final class RuleExpression {
     private static final Set<String> ROOTS = Set.of("source", "actor", "recipient", "event", "state", "input", "die", "result", "args", "effects", "gear", "sourcePools");
     private static final Set<String> UNARY = Set.of("not", "floor", "ceil", "negate", "size", "flatten");
-    private static final Set<String> BINARY = Set.of("subtract", "divide", "eq", "ne", "gt", "gte", "lt", "lte", "includes", "count", "pluck", "containsText", "at");
+    private static final Set<String> BINARY = Set.of("subtract", "divide", "eq", "ne", "gt", "gte", "lt", "lte", "includes", "count", "pluck", "containsText", "at", "effectValue");
     private static final Set<String> MANY = Set.of("add", "multiply", "min", "max", "and", "or");
     private static final Pattern PATH_PART = Pattern.compile("[a-zA-Z_][a-zA-Z0-9_-]*");
     private static final double MAX_NUMBER = 9_007_199_254_740_991d;
@@ -136,6 +136,13 @@ public final class RuleExpression {
             com.fasterxml.jackson.databind.node.ArrayNode plucked = RuleJson.JSON.createArrayNode();
             for (JsonNode element : values[0]) if (element.has(values[1].asText())) plucked.add(element.get(values[1].asText()));
             return plucked;
+        }
+        if ("effectValue".equals(op)) {
+            if (!values[0].isArray() || !values[1].isTextual()) throw RuleJson.error(path, "effectValue requires an effect collection and a label.");
+            for (JsonNode element : values[0])
+                if (values[1].asText().equals(element.path("label").asText()) && element.path("value").isIntegralNumber())
+                    return numeric(element.path("value").longValue(), path);
+            return numeric(0, path);
         }
         if ("at".equals(op)) {
             if (!values[0].isArray()) throw RuleJson.error(path, "at requires a collection and an index.");

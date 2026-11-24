@@ -4,7 +4,7 @@ export type Context = { [key: string]: Json };
 const roots = new Set(['source', 'actor', 'recipient', 'event', 'state', 'input', 'die', 'result', 'args', 'gear']);
 const reserved = new Set(['__proto__', 'constructor', 'prototype']);
 const unary = new Set(['not', 'floor', 'ceil', 'negate', 'size', 'flatten']);
-const binary = new Set(['subtract', 'divide', 'eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'includes', 'count', 'pluck', 'containsText']);
+const binary = new Set(['subtract', 'divide', 'eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'includes', 'count', 'pluck', 'containsText', 'effectValue']);
 const many = new Set(['add', 'multiply', 'min', 'max', 'and', 'or']);
 
 function fail(path: string, message: string): never { throw new Error(`${path}: ${message}`); }
@@ -135,6 +135,11 @@ export function evaluate(expression: Json, context: Context): Json {
       if (!Array.isArray(values[0]) || typeof values[1] !== 'string') fail('/expression', 'pluck requires a collection and a field name.');
       const field = values[1] as string;
       return (values[0] as Json[]).flatMap(v => v !== null && typeof v === 'object' && !Array.isArray(v) && Object.hasOwn(v, field) ? [structuredClone((v as Record<string, Json>)[field])] : []);
+    }
+    if (op === 'effectValue') {
+      if (!Array.isArray(values[0]) || typeof values[1] !== 'string') fail('/expression', 'effectValue requires an effect collection and a label.');
+      const found = (values[0] as Json[]).find(v => v !== null && typeof v === 'object' && !Array.isArray(v) && (v as Record<string, Json>).label === values[1] && Number.isInteger((v as Record<string, Json>).value));
+      return found ? number((found as Record<string, Json>).value as number) : 0;
     }
     if (op === 'includes') {
       if (!Array.isArray(values[0])) fail('/expression', 'includes requires a collection.');

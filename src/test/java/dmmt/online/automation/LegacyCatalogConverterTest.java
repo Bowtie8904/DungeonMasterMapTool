@@ -292,7 +292,7 @@ class LegacyCatalogConverterTest {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"a","name":"A","automation":{"actions":[{"id":"use","label":"Use","cost":{"favor":1}}]}},
                 {"id":"b","name":"B","automation":{"rollOptions":[{"id":"x","label":"X","roll":"attack","target":"ally"}]}},
-                {"id":"c","name":"C","automation":{"actions":[{"id":"use","label":"Roll","steps":[{"op":"clear","resource":"hp","amount":"@die"}]}]}},
+                {"id":"c","name":"C","automation":{"actions":[{"id":"use","label":"Roll","steps":[{"op":"clear","resource":"hp","amount":"@unknown"}]}]}},
                 {"id":"d","name":"D","automation":{"uses":{"max":1,"per":"rest"}}},
                 {"id":"e","name":"E","automation":{"modifiers":[{"stat":"evasion","value":1,"dice":"1d4"}]}}"""));
         assertEquals(5, result.blocks());
@@ -1136,6 +1136,30 @@ class LegacyCatalogConverterTest {
         assertEquals("pool.gain", mitigation.at("/do/3/op").asText(), mitigation.toString());
         RuleCompiler.Program program = program(result, 0);
         assertNotNull(program);
+    }
+
+    @Test
+    void effectDiceAndCountersConvertToInstanceValuesSpentAndAdvancedByRules() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"t","name":"T","automation":{"effectCounters":[{"label":"Charge","effect":"Charged"}],"actions":[{"id":"go","label":"Go","steps":[
+                  {"op":"effect","effect":{"name":"Charged","kind":"buff","until":"scene","counter":{"value":2,"max":3,"maxByLevel":{"6":5}},
+                    "rollOptions":[{"id":"hit","label":"Hit","roll":"damage","effectValue":true}]}},
+                  {"op":"effect","effect":{"name":"Muse","kind":"buff","until":"session",
+                    "die":{"dice":"1d4","diceByFeature":{"Loud":"1d12"}},
+                    "rollOptions":[{"id":"add","label":"Add","roll":"action","dice":"@die","endEffect":"Muse"}],
+                    "actions":[{"id":"calm","label":"Calm","endEffect":"Muse","steps":[{"op":"clear","resource":"stress","amount":"@die"}]}]}}]}],
+                 "rollTriggers":[{"id":"grow","label":"Grow","on":"damage","requiresEffect":"Charged","advanceEffect":"Charged"}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        JsonNode block = block(result, 0);
+        assertEquals(2, block.at("/effects/charged/value/initial").asInt(), block.toString());
+        assertTrue(block.at("/effects/charged/value/max").toString().contains("actor.stats.level"), block.toString());
+        assertTrue(block.at("/effects/muse/value/initial").toString().contains("Loud"), block.toString());
+        String rules = block.path("rules").toString();
+        assertTrue(rules.contains("{\"effectValue\":[{\"read\":\"actor.effects\"},\"Charged\"]}"), rules);
+        assertTrue(rules.contains("{\"effectValue\":[{\"read\":\"actor.effects\"},\"Muse\"]}"), rules);
+        assertTrue(rules.contains("\"op\":\"effect.advance\",\"effect\":\"charged\""), rules);
+        assertFalse(rules.contains("@die"), rules);
+        assertNotNull(program(result, 0));
     }
 
     @Test
