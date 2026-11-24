@@ -6136,6 +6136,26 @@ public final class OnlineSessionServer {
         }
     }
 
+    private String reactionPromptLabel(JsonNode check) {
+        JsonNode reference = check.path("prompt");
+        long id = claimLong(reference.get("id"), "reaction prompt ID");
+        long timestamp = claimLong(reference.get("ts"), "reaction prompt timestamp");
+        JsonNode message;
+        try {
+            message = store.automationClaimEntry(campaign.getId(), id, timestamp);
+        } catch (IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+        if (message == null || !"chat".equals(message.path("type").asText())
+                || !"dm".equals(message.path("fromId").asText()) || message.has("toId")
+                || !check.path("trait").equals(message.at("/reactionPrompt/trait"))
+                || !message.path("text").isTextual() || message.path("text").asText().isBlank())
+            throw new dmmt.online.automation.RuleRuntime.Unavailable("reactionPrompt",
+                    "This reaction prompt is no longer available or does not match the selected trait.");
+        String label = message.path("text").asText();
+        return label.length() > 80 ? label.substring(0, 80) : label;
+    }
+
     private synchronized void handleAutomationExecute(Context ctx) {
         String playerId = requirePlayer(ctx);
         if (playerId == null || !requireAutomationVersion(ctx)) return;
@@ -6168,7 +6188,7 @@ public final class OnlineSessionServer {
                     ? new AutomationRoster(pack, actor, original, sheet) : null;
             ObjectNode response = automationHost.execute(pack, sheet, event,
                     (ObjectNode) body.get("request"), relation, "dm".equals(relation) ? campaign.getId() : playerId,
-                    diceRandom, roster == null ? null : roster.party);
+                    diceRandom, roster == null ? null : roster.party, this::reactionPromptLabel);
             if (automationHost.revision(sheet) != revisionBefore) {
                 Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
                 changed.put(actor.getId(), sheet);

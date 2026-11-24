@@ -6021,6 +6021,64 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void promptedChecksUsePersistedDmLabelAndReplayAfterPromptDeletion() throws Exception {
+        installRestRules();
+        campaign.getActors().add(Campaign.Actor.builder().id("roller").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "roller", """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":0},"stress":{"slots":6,"on":0},
+                 "hope":{"slots":6,"on":1},"armorTrack":{"slots":3,"on":0},
+                 "traits":[{"name":"Agility","mod":2},{"name":"Finesse","mod":-1}]}
+                """);
+        String owner = cookie(), other = allyCookie("prompt-viewer");
+        server.dmReactionPrompt("Acid Burrower - Agility Reaction", "Agility");
+        JsonNode prompt = store.historyTail(campaign.getId(), 100).getLast();
+        server.dmChat("Not a prompt", null);
+        JsonNode ordinaryChat = store.historyTail(campaign.getId(), 100).getLast();
+        JsonNode offer = MAPPER.readTree(basicCheckHttp(owner, "roller", "reaction", "Agility").body());
+        ObjectNode request = MAPPER.createObjectNode();
+        ObjectNode intent = request.putObject("request").put("requestId", "prompt-reaction")
+                .put("expectedRevision", offer.path("revision").asLong());
+        ObjectNode check = intent.putObject("checkRoll").put("kind", "reaction").put("trait", "Agility");
+        check.putObject("prompt").put("id", prompt.path("id").asLong()).put("ts", prompt.path("ts").asLong());
+        intent.putArray("selections");
+        String before = store.loadSheet(campaign.getId(), "roller");
+        int history = store.historyTail(campaign.getId(), 100).size();
+        assertEquals(403, automationHttp(other, "roller", request.toString()).statusCode());
+        ObjectNode forged = request.deepCopy();
+        ((ObjectNode) forged.at("/request/checkRoll")).put("label", "Forged");
+        assertEquals(400, automationHttp(owner, "roller", forged.toString()).statusCode());
+        ObjectNode wrongTrait = request.deepCopy();
+        ((ObjectNode) wrongTrait.at("/request/checkRoll")).put("trait", "Finesse");
+        assertEquals(409, automationHttp(owner, "roller", wrongTrait.toString()).statusCode());
+        ObjectNode wrongKind = request.deepCopy();
+        ((ObjectNode) wrongKind.at("/request/checkRoll")).put("kind", "action");
+        assertEquals(400, automationHttp(owner, "roller", wrongKind.toString()).statusCode());
+        ObjectNode wrongMessage = request.deepCopy();
+        ((ObjectNode) wrongMessage.at("/request/checkRoll/prompt")).put("id", ordinaryChat.path("id").asLong())
+                .put("ts", ordinaryChat.path("ts").asLong());
+        assertEquals(409, automationHttp(owner, "roller", wrongMessage.toString()).statusCode());
+        ObjectNode invalidIdentity = request.deepCopy();
+        ((ObjectNode) invalidIdentity.at("/request/checkRoll/prompt")).put("id", -1);
+        assertEquals(400, automationHttp(owner, "roller", invalidIdentity.toString()).statusCode());
+        assertEquals(before, store.loadSheet(campaign.getId(), "roller"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+
+        var rolled = automationHttp(owner, "roller", request.toString());
+        assertEquals(200, rolled.statusCode(), rolled.body());
+        assertEquals("Acid Burrower - Agility Reaction", MAPPER.readTree(rolled.body()).at("/event/label").asText());
+        assertEquals("Acid Burrower - Agility Reaction", store.historyTail(campaign.getId(), 100).getLast().path("label").asText());
+        assertNull(server.dmDeleteMessage(prompt.path("id").asLong(), prompt.path("ts").asLong()));
+        int afterDelete = store.historyTail(campaign.getId(), 100).size();
+        assertEquals(rolled.body(), automationHttp(owner, "roller", request.toString()).body());
+        assertEquals(afterDelete, store.historyTail(campaign.getId(), 100).size());
+        ObjectNode deleted = request.deepCopy();
+        ((ObjectNode) deleted.path("request")).put("requestId", "deleted-prompt").put("expectedRevision", 1);
+        var missing = automationHttp(owner, "roller", deleted.toString());
+        assertEquals(409, missing.statusCode(), missing.body());
+        assertTrue(missing.body().contains("reaction prompt"));
+    }
+
+    @Test
     void actionRollProfileCommitsTrustedSpellcastFactsAndRetriesOnce() throws Exception {
         automationCompendium();
         Path file = compendiumDir.resolve("classes.json");

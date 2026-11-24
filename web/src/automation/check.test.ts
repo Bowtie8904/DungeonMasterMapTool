@@ -83,8 +83,9 @@ describe('host-authored ordinary checks', () => {
       if (requests.length === 1) throw new Error('Connection lost.');
       return Response.json({});
     }));
-    await openAutomationCheckDialog('hero', 'reaction', 'Finesse', 'Reaction', async () => {});
+    await openAutomationCheckDialog('hero', 'reaction', 'Finesse', 'Reaction', async () => {}, { id: 45, ts: 2000 });
     const dialog = body.all('dialog')[0], go = dialog.all('button').find(button => button.text === 'Roll')!;
+    expect(dialog.text).not.toContain('Roll type');
     go.click();
     await settle();
     expect(dialog.text).toContain('Connection lost.');
@@ -92,7 +93,48 @@ describe('host-authored ordinary checks', () => {
     go.click();
     await settle();
     expect(requests).toEqual([requests[0], requests[0]]);
-    expect(JSON.parse(requests[0]).request.checkRoll).toEqual({ kind: 'reaction', trait: 'Finesse' });
+    expect(JSON.parse(requests[0]).request.checkRoll).toEqual({ kind: 'reaction', trait: 'Finesse', prompt: { id: 45, ts: 2000 } });
+    expect(dialog.closed).toBe(true);
+  });
+
+  it('reloads host options when switching kind and locks the kind for an uncertain retry', async () => {
+    const calls: string[] = [], requests: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      if (!init.body) {
+        calls.push(url);
+        return Response.json(url.includes('kind=reaction')
+          ? { revision: 4, label: 'Agility Reaction', options: [] } : offer);
+      }
+      requests.push(String(init.body));
+      if (requests.length === 1) throw new Error('Connection lost.');
+      return Response.json({});
+    }));
+    await openAutomationCheckDialog('hero', 'action', 'Agility', 'Agility', async () => {});
+    const dialog = body.all('dialog')[0];
+    const reaction = dialog.all('button').find(button => button.text === 'Reaction')!;
+    reaction.click();
+    expect(reaction.disabled).toBe(true);
+    await settle();
+    expect(calls).toEqual([
+      `/api/automation/${AUTOMATION_COMPATIBILITY_VERSION}/hero/check?kind=action&trait=Agility`,
+      `/api/automation/${AUTOMATION_COMPATIBILITY_VERSION}/hero/check?kind=reaction&trait=Agility`,
+    ]);
+    expect(dialog.text).toContain('Agility Reaction');
+    expect(dialog.text).not.toContain('Focus');
+    const go = dialog.all('button').find(button => button.text === 'Roll')!;
+    go.click();
+    await settle();
+    const action = dialog.all('button').find(button => button.text === 'Action')!;
+    expect(action.disabled).toBe(true);
+    expect(reaction.disabled).toBe(true);
+    action.click();
+    go.click();
+    await settle();
+    expect(requests).toEqual([requests[0], requests[0]]);
+    expect(JSON.parse(requests[0]).request).toMatchObject({
+      expectedRevision: 4, checkRoll: { kind: 'reaction', trait: 'Agility' }, selections: [],
+    });
+    expect(calls).toHaveLength(2);
     expect(dialog.closed).toBe(true);
   });
 
@@ -119,7 +161,7 @@ describe('host-authored ordinary checks', () => {
     const before = new Promise<void>(resolve => { finish = resolve; });
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({ legacy: true })));
     const opening = openAutomationCheckDialog('hero', 'action', 'Agility', 'Agility', () => before);
-    body.all('button')[0].click();
+    body.all('button').find(button => button.text === 'Cancel')!.click();
     finish();
     expect(await opening).toBe(true);
   });

@@ -773,7 +773,7 @@ function reactionPromptButtons(m: ChatMessage, host: RollButtonHost): HTMLElemen
       try {
         const sheet = await host.sheet(actorId);
         if (!sheet?.bus.reactionRoll) throw new Error('Open a Daggerheart character sheet to make this reaction roll.');
-        if (!sheet.bus.reactionRoll(m.text, trait)) throw new Error('The reaction roll could not be opened.');
+        if (!sheet.bus.reactionRoll(m.text, trait, { id: m.id, ts: m.ts })) throw new Error('The reaction roll could not be opened.');
         button.disabled = false;
       } catch (error) {
         host.toast((error as Error).message);

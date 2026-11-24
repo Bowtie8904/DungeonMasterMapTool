@@ -22,10 +22,11 @@ pre-roll offer. This does not negotiate all sheet and gameplay traffic; that rem
 `GET /api/automation/{version}/{actorId}/check?kind=action|reaction&trait=...` offer, then submit
 `request.checkRoll` with the selected host-described options. The host derives the profile and roll facts,
 enforces prepare blocks, runs automatic finished reactions, journals the result and publishes it to chat.
-Pending sheet edits are flushed first; an uncertain submission retries the same intent. Format-1 hosts keep
-the legacy dialog. Core manual advantage, Experience costs and the action/reaction switch still need generic
-ruleset controls; other non-profile roll origins are not yet wired. Prompt text is shown in the dialog but
-the committed reaction currently uses the host's generic label.
+Pending sheet edits are flushed first; trait rolls can switch between action and reaction offers, while prompted
+reactions stay fixed. Prompted checks reference a public, matching DM history entry, from which the host derives
+the committed label; exact retries remain valid after deletion. Format-1 hosts keep the legacy dialog. Core
+manual advantage and Experience costs still need generic ruleset controls; other non-profile roll origins are
+not yet wired.
 
 **Profile rolls (format 2).** The automation endpoint accepts an owner-only `request.profileRoll` with
 `sourceInstanceId`, `profileId` and `kind` (`attack`, `damage`, `action`, `reaction` or `spellcast`);

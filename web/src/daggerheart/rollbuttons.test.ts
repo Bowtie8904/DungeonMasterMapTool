@@ -1271,7 +1271,7 @@ describe('cross-player roll buttons', () => {
     const button = box.queryAll('button')[0];
     expect(button.text).toBe('Roll Agility Reaction');
     await button.click();
-    expect(reactionRoll).toHaveBeenCalledWith(prompt.text, 'Agility');
+    expect(reactionRoll).toHaveBeenCalledWith(prompt.text, 'Agility', { id: 45, ts: 2000 });
     expect(prompt).not.toHaveProperty('difficulty');
   });
 });

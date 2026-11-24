@@ -267,7 +267,7 @@ public final class AutomationHost {
     public ObjectNode describeCheck(Pack pack, ObjectNode sheet, ObjectNode origin, String kind, String trait,
                                     String relation) {
         if (!"self".equals(relation)) throw new SecurityException("Only the character owner may roll a check.");
-        ObjectNode profile = basicCheckProfile(RuleJson.JSON.createObjectNode().put("kind", kind).put("trait", trait));
+        ObjectNode profile = basicCheckProfile(RuleJson.JSON.createObjectNode().put("kind", kind).put("trait", trait), null);
         ObjectNode working = sheet.deepCopy();
         ObjectNode state = projection.state(working);
         var sources = sources(pack, working);
@@ -288,16 +288,25 @@ public final class AutomationHost {
                 .orElseThrow(() -> new NotReady("Ordinary checks require a shared ruleset."));
     }
 
-    private static ObjectNode basicCheckProfile(JsonNode intent) {
-        RuleJson.fields(intent, "/request/checkRoll", "kind", "trait");
+    private static ObjectNode basicCheckProfile(JsonNode intent, java.util.function.Function<JsonNode, String> promptLabel) {
+        RuleJson.fields(intent, "/request/checkRoll", "kind", "trait", "prompt");
         String kind = RuleJson.text(intent.get("kind"), "/request/checkRoll/kind");
         String trait = RuleJson.text(intent.get("trait"), "/request/checkRoll/trait");
         if (!Set.of("action", "reaction").contains(kind))
             throw RuleJson.error("/request/checkRoll/kind", "Expected an action or reaction check.");
         if (!Set.of("Agility", "Strength", "Finesse", "Instinct", "Presence", "Knowledge").contains(trait))
             throw RuleJson.error("/request/checkRoll/trait", "Expected a character trait.");
+        String label = trait + ("reaction".equals(kind) ? " Reaction" : " Action");
+        if (intent.has("prompt")) {
+            RuleJson.fields(intent.get("prompt"), "/request/checkRoll/prompt", "id", "ts");
+            if (!"reaction".equals(kind))
+                throw RuleJson.error("/request/checkRoll/prompt", "Only reaction checks may use a reaction prompt.");
+            if (promptLabel == null)
+                throw new RuleRuntime.Unavailable("reactionPrompt", "The reaction prompt is unavailable.");
+            label = promptLabel.apply(intent);
+        }
         return RuleJson.JSON.createObjectNode().put("id", "basic.check")
-                .put("label", trait + ("reaction".equals(kind) ? " Reaction" : " Action"))
+                .put("label", label)
                 .put("rollKind", kind).put("trait", trait);
     }
 
@@ -317,6 +326,12 @@ public final class AutomationHost {
 
     public ObjectNode execute(Pack pack, ObjectNode sheet, ObjectNode event, ObjectNode request, String relation,
                               String principalId, RandomGenerator random, PartyTargets party) {
+        return execute(pack, sheet, event, request, relation, principalId, random, party, null);
+    }
+
+    public ObjectNode execute(Pack pack, ObjectNode sheet, ObjectNode event, ObjectNode request, String relation,
+                              String principalId, RandomGenerator random, PartyTargets party,
+                              java.util.function.Function<JsonNode, String> promptLabel) {
         relation(relation);
         if (principalId == null || principalId.isBlank()) throw new IllegalArgumentException("Missing automation principal.");
         RuleJson.fields(request, "/request", "requestId", "expectedRevision", "selections", "profileRoll", "checkRoll", "target", "resultId");
@@ -346,7 +361,7 @@ public final class AutomationHost {
 
         ObjectNode response;
         if (request.has("profileRoll") || request.has("checkRoll")) {
-            response = profileRoll(pack, working, state, event, request, random);
+            response = profileRoll(pack, working, state, event, request, random, promptLabel);
             offerResult(pack, working, response, principalId, null, null);
         } else if (request.has("resultId")) {
             response = resultAction(pack, working, state, event, request, principalId, random, party);
@@ -482,10 +497,11 @@ public final class AutomationHost {
     }
 
     private ObjectNode profileRoll(Pack pack, ObjectNode working, ObjectNode state, ObjectNode origin,
-                                   ObjectNode request, RandomGenerator random) {
+                                   ObjectNode request, RandomGenerator random,
+                                   java.util.function.Function<JsonNode, String> promptLabel) {
         boolean check = request.has("checkRoll");
         JsonNode intent = request.get(check ? "checkRoll" : "profileRoll");
-        ObjectNode checkProfile = check ? basicCheckProfile(intent) : null;
+        ObjectNode checkProfile = check ? basicCheckProfile(intent, promptLabel) : null;
         if (!check) RuleJson.fields(intent, "/request/profileRoll", "sourceInstanceId", "profileId", "kind", "effectInstanceId");
         String instance = check ? RULESET_SOURCE : RuleJson.id(intent.get("sourceInstanceId"), "/request/profileRoll/sourceInstanceId");
         String profileId = check ? checkProfile.path("id").asText() : RuleJson.id(intent.get("profileId"), "/request/profileRoll/profileId");

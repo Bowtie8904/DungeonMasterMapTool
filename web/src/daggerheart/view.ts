@@ -36,7 +36,7 @@ import { openCompanionMancer, openLevelUp, openMancer, openTransformation } from
 import { companionAvailable, companionFeatures, companionRules, companionWeapon, hasCompanionTraining, markCompanionDamage, resolveBonded } from './companion';
 import { rich, inline } from './rich';
 import { automationPanel } from '../automation/panel';
-import { openAutomationCheckDialog } from '../automation/check';
+import { openAutomationCheckDialog, type ReactionPromptRef } from '../automation/check';
 import { openAutomationRestDialog } from '../automation/rest';
 import { MAX_LEVEL, replaceAncestry } from './rules';
 import { chooseAncestryFeature } from './ancestry-choice';
@@ -87,7 +87,7 @@ export interface RollRequest {
 export class SheetBus {
   artwork?: string;
   featureAction?: (name: string, id: string) => boolean;
-  reactionRoll?: (label: string, trait: TraitName) => boolean;
+  reactionRoll?: (label: string, trait: TraitName, prompt?: ReactionPromptRef) => boolean;
   private listeners: Array<(save?: boolean) => void> = [];
   /** Recently sent rolls by ref, so chat buttons can repeat them. */
   readonly sent = new Map<string, RollRequest>();
@@ -498,7 +498,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     }
     return sent;
   };
-  const rollDuality = (label: string, trait: TraitName | null, targets: string[], weapon?: Weapon, rollSource?: RollSource, difficulty?: number) => {
+  const rollDuality = (label: string, trait: TraitName | null, targets: string[], weapon?: Weapon, rollSource?: RollSource, difficulty?: number, prompt?: ReactionPromptRef) => {
     const legacy = () => {
       const allTargets = [...targets, 'action', ...(weapon?.profile ? [`weaponProfile:${weapon.profile}`] : [])];
       const bonus = rollBonus(c, allTargets, weapon, false);
@@ -508,11 +508,11 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const basic = !weapon && !rollSource && difficulty === undefined && targets.length === 1
       && (targets[0] === 'reaction' || targets[0] === `trait:${trait}`);
     if (!basic || !trait || !opts.actorId || !opts.beforeAutomationRoll) { legacy(); return; }
-    void openAutomationCheckDialog(opts.actorId, targets[0] === 'reaction' ? 'reaction' : 'action', trait, label, opts.beforeAutomationRoll)
+    void openAutomationCheckDialog(opts.actorId, targets[0] === 'reaction' ? 'reaction' : 'action', trait, label, opts.beforeAutomationRoll, prompt)
       .then(handled => { if (!handled) legacy(); });
   };
-  if (opts.bus) opts.bus.reactionRoll = (label, trait) => {
-    rollDuality(label, trait, ['reaction']);
+  if (opts.bus) opts.bus.reactionRoll = (label, trait, prompt) => {
+    rollDuality(label, trait, ['reaction'], undefined, undefined, undefined, prompt);
     return true;
   };
   const rollDamage = (label: string, expression: string, rollSource?: RollSource) => opts.onRoll({ label, expression, rollSource });
