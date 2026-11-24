@@ -1316,7 +1316,8 @@ public final class AutomationHost {
             if (program == null) continue;
             initialSources.put(element.instanceId(), sourceContext(element));
             sourceElements.put(element.instanceId(), element);
-            hasTrackObservers |= !program.automatic("track.changed").isEmpty();
+            hasTrackObservers |= !program.automatic("track.changed").isEmpty()
+                    || !program.automatic("effect.started").isEmpty() || !program.automatic("effect.ended").isEmpty();
             hasComputedSourcePools |= program.hasComputedSourcePools();
             hasProjectionDependencies |= program.stateMayAffectProjection();
         }
@@ -4003,7 +4004,9 @@ public final class AutomationHost {
                                   List<RuleDispatcher.Candidate> candidates, List<RuleRuntime.Intent> intents, RandomGenerator random) {
         RuleDispatcher.EventResolution resolution;
         if (!candidates.isEmpty() && ("action.request".equals(event.path("type").asText()) && event.path("actorId").isTextual()
-                || candidates.stream().anyMatch(candidate -> !candidate.program().automatic("track.changed").isEmpty()))) {
+                || candidates.stream().anyMatch(candidate -> !candidate.program().automatic("track.changed").isEmpty()
+                || !candidate.program().automatic("effect.started").isEmpty()
+                || !candidate.program().automatic("effect.ended").isEmpty()))) {
             ObjectNode actor = RuleJson.object(candidates.getFirst().context().get("actor"), "/actor");
             var ownerProjection = ownerRecoveryProjection(pack, working, state, sources(pack, working), actor,
                     RuleJson.id(actor.get("id"), "/actor/id"), false, true);

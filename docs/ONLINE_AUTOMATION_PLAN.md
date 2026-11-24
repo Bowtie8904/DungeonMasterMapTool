@@ -97,6 +97,12 @@ original roll's automatic reactions; a nested roll's publication does not revise
 cannot also declare a target selection. Interactive feature prepare choices, downtime rolls and untyped dice
 still need live integration.
 
+Explicit effect starts, replacements and endings in these transactions dispatch `effect.started`/`effect.ended`
+to the affected holder's automatic rules, with `event.effect` containing the instance, `actorId` identifying
+the holder and `before`/`after` containing the instance or null; endings precede starts. Reactions, reports
+and affected sheets commit together. Reset expiry, independent derived-effect changes and effects ended
+on other holders still need lifecycle event dispatch.
+
 A stored effect whose source is active on its holder also offers its frozen attack profile. Its descriptor
 and `request.profileRoll` include `effectInstanceId` and the reserved profile ID `effect.profile`; the host
 resolves and validates the stored instance, not submitted damage facts. The activation must still exist when

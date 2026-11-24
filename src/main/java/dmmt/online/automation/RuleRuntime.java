@@ -975,11 +975,13 @@ public final class RuleRuntime {
                 || (kind.startsWith("track.") && (op.path("track").asText().startsWith("recipient.")
                 || op.path("counter").asText().startsWith("recipient.")))))
             observer.mutated(context, kind, null, "recipient");
+        String previousHolder = kind.startsWith("effect.") && "recipient".equals(op.path("target").asText())
+                ? "recipient" : "actor";
         ObjectNode previousActor = observer != null && (kind.startsWith("effect.")
                 || Set.of("pool.spend", "pool.gain").contains(kind) && "recipient".equals(op.path("owner").asText())
                 || Set.of("collection.add", "collection.remove").contains(kind) && "recipient".equals(op.path("target").asText())
                 || "flag.set".equals(kind) && op.path("flag").asText().startsWith("recipient."))
-                ? ((ObjectNode) context.path("actor")).deepCopy() : null;
+                ? ((ObjectNode) context.path(previousHolder)).deepCopy() : null;
         JsonNode result;
         switch (kind) {
             case "flag.set" -> {

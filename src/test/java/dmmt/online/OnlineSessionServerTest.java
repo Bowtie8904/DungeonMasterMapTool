@@ -7980,6 +7980,157 @@ class OnlineSessionServerTest {
         assertEquals(published, store.historyTail(campaignId, 100).size());
     }
 
+    private void installEffectEventRules() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        automation.putObject("effects").putObject("ward").put("label", "Ward");
+        automation.putObject("state").put("starts", 0).put("ends", 0);
+        automation.set("rules", MAPPER.readTree("""
+                [{"id":"start","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"effect.start","effect":"ward","target":"actor"}],"ui":{"label":"Start"}},
+                 {"id":"end","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"effect.end","effect":"ward","target":"actor"}],"ui":{"label":"End"}},
+                 {"id":"grant","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button",
+                   "targetSelection":{"scope":"activeCharacters","cardinality":"one","excludeSource":true}}],
+                  "costs":[{"op":"resource.spend","pool":"actor.hope","amount":1}],
+                  "do":[{"op":"effect.start","effect":"ward","target":"recipient"}],"ui":{"label":"Grant"}},
+                 {"id":"dismiss","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button",
+                   "targetSelection":{"scope":"activeCharacters","cardinality":"one","excludeSource":true}}],
+                  "do":[{"op":"effect.end","effect":"ward","target":"recipient"}],"ui":{"label":"Dismiss"}},
+                 {"id":"fail","bindings":[{"id":"auto","event":"effect.started","surface":"resource","mode":"automatic"}],
+                  "when":{"lt":[{"read":"actor.hope.value"},2]},
+                  "do":[{"op":"resource.spend","pool":"actor.hope","amount":3}],"ui":{}},
+                 {"id":"started","bindings":[{"id":"auto","event":"effect.started","surface":"resource","mode":"automatic"}],
+                  "do":[{"op":"state.increment","slot":"starts","by":1},
+                        {"op":"resource.gain","pool":"actor.hope","amount":1}],
+                  "ui":{"report":"{actor.name} gained {event.effect.label} at Fear {event.table.fear}."}},
+                 {"id":"ended","bindings":[{"id":"auto","event":"effect.ended","surface":"resource","mode":"automatic"}],
+                  "do":[{"op":"state.increment","slot":"ends","by":1},
+                        {"op":"track.clear","track":"actor.stress","amount":1}],
+                  "ui":{"report":"{actor.name} lost {event.effect.label}."}}]"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+    }
+
+    @Test
+    void effectTransitionsDispatchOwnerReactionsAndReplaceInOrder() throws Exception {
+        installEffectEventRules();
+        String campaignId = campaign.getId(), owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaignId, "caster", """
+                {"name":"Ada","hope":{"slots":6,"on":2},"stress":{"slots":6,"on":2},
+                 "features":[{"name":"Steady","instanceId":"source","automationSource":"classes:tester:features:steady"}]}""");
+        String start = """
+                {"request":{"requestId":"start","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"source","ruleId":"start","bindingId":"use"}]}}""";
+        var first = automationHttp(owner, "caster", start);
+        assertEquals(200, first.statusCode(), first.body());
+        JsonNode sheet = MAPPER.readTree(store.loadSheet(campaignId, "caster"));
+        assertEquals(3, sheet.at("/hope/on").asInt());
+        assertEquals(1, sheet.at("/automationState/sources/source/state/starts").asInt());
+        assertEquals(0, sheet.at("/automationState/sources/source/state/ends").asInt());
+        assertEquals(1, sheet.at("/automationState/effects").size());
+        assertEquals(first.body(), automationHttp(owner, "caster", start).body());
+
+        String replace = """
+                {"request":{"requestId":"replace","expectedRevision":1,
+                 "selections":[{"sourceInstanceId":"source","ruleId":"start","bindingId":"use"}]}}""";
+        var replaced = automationHttp(owner, "caster", replace);
+        assertEquals(200, replaced.statusCode(), replaced.body());
+        List<String> reports = MAPPER.readTree(replaced.body()).path("actions").findValuesAsText("report");
+        assertTrue(reports.indexOf("Ada lost Ward.") < reports.indexOf("Ada gained Ward at Fear " + campaign.getFear() + "."), replaced.body());
+        sheet = MAPPER.readTree(store.loadSheet(campaignId, "caster"));
+        assertEquals(4, sheet.at("/hope/on").asInt());
+        assertEquals(1, sheet.at("/stress/on").asInt());
+        assertEquals(2, sheet.at("/automationState/sources/source/state/starts").asInt());
+        assertEquals(1, sheet.at("/automationState/sources/source/state/ends").asInt());
+        assertEquals(1, sheet.at("/automationState/effects").size());
+
+        String end = """
+                {"request":{"requestId":"end","expectedRevision":2,
+                 "selections":[{"sourceInstanceId":"source","ruleId":"end","bindingId":"use"}]}}""";
+        var ended = automationHttp(owner, "caster", end);
+        assertEquals(200, ended.statusCode(), ended.body());
+        sheet = MAPPER.readTree(store.loadSheet(campaignId, "caster"));
+        assertEquals(0, sheet.at("/stress/on").asInt());
+        assertEquals(2, sheet.at("/automationState/sources/source/state/ends").asInt());
+        assertEquals(0, sheet.at("/automationState/effects").size());
+    }
+
+    @Test
+    void targetedEffectTransitionsReactForTheHolderAndRollBackTogether() throws Exception {
+        installEffectEventRules();
+        String campaignId = campaign.getId(), owner = cookie(), other = allyCookie("other");
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("patient").name("Bea").ownerId(playerId()).build());
+        store.saveSheet(campaignId, "caster", """
+                {"name":"Ada","hope":{"slots":6,"on":5},"stress":{"slots":6,"on":0},
+                 "features":[{"name":"Steady","instanceId":"source","automationSource":"classes:tester:features:steady"}]}""");
+        ObjectNode patient = (ObjectNode) MAPPER.readTree("""
+                {"name":"Bea","hope":{"slots":6,"on":0},"stress":{"slots":6,"on":2},
+                 "features":[{"name":"Steady","instanceId":"watcher","automationSource":"classes:tester:features:steady"}]}""");
+        store.saveSheet(campaignId, "patient", patient.toString());
+        JsonNode offer = MAPPER.readTree(automationHttp(owner, "caster", null).body());
+        JsonNode grant = null;
+        for (JsonNode action : offer.path("actions"))
+            if ("grant".equals(action.path("ruleId").asText())) grant = action;
+        assertNotNull(grant, offer.toString());
+        ObjectNode request = MAPPER.createObjectNode().put("requestId", "grant").put("expectedRevision", 0);
+        request.putArray("selections").addObject().put("sourceInstanceId", "source").put("ruleId", "grant").put("bindingId", "use");
+        request.putObject("target").put("recipientId", "patient")
+                .set("version", grant.requiredAt("/targetSelection/options/0/version"));
+        String body = MAPPER.createObjectNode().set("request", request).toString();
+        String beforeSource = store.loadSheet(campaignId, "caster"), beforePatient = store.loadSheet(campaignId, "patient");
+        int history = store.historyTail(campaignId, 100).size();
+        assertEquals(403, automationHttp(other, "caster", body).statusCode());
+        var failure = automationHttp(owner, "caster", body);
+        assertEquals(409, failure.statusCode(), failure.body());
+        assertEquals(beforeSource, store.loadSheet(campaignId, "caster"));
+        assertEquals(beforePatient, store.loadSheet(campaignId, "patient"));
+        assertEquals(history, store.historyTail(campaignId, 100).size());
+
+        patient.withObject("/hope").put("on", 2);
+        store.saveSheet(campaignId, "patient", patient.toString());
+        offer = MAPPER.readTree(automationHttp(owner, "caster", null).body());
+        for (JsonNode action : offer.path("actions"))
+            if ("grant".equals(action.path("ruleId").asText())) grant = action;
+        ((ObjectNode) request.get("target")).set("version", grant.requiredAt("/targetSelection/options/0/version"));
+        body = MAPPER.createObjectNode().set("request", request).toString();
+        var applied = automationHttp(owner, "caster", body);
+        assertEquals(200, applied.statusCode(), applied.body());
+        assertTrue(MAPPER.readTree(applied.body()).path("actions").findValuesAsText("report")
+                .contains("Bea gained Ward at Fear " + campaign.getFear() + "."), applied.body());
+        JsonNode source = MAPPER.readTree(store.loadSheet(campaignId, "caster"));
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaignId, "patient"));
+        assertEquals(4, source.at("/hope/on").asInt());
+        assertEquals(3, saved.at("/hope/on").asInt());
+        assertEquals(1, saved.at("/automationState/sources/watcher/state/starts").asInt());
+        assertEquals(0, source.at("/automationState/sources/source/state/starts").asInt());
+        assertEquals(1, saved.at("/automationState/effects").size());
+        int published = store.historyTail(campaignId, 100).size();
+        assertEquals(applied.body(), automationHttp(owner, "caster", body).body());
+        assertEquals(published, store.historyTail(campaignId, 100).size());
+
+        offer = MAPPER.readTree(automationHttp(owner, "caster", null).body());
+        JsonNode dismiss = null;
+        for (JsonNode action : offer.path("actions"))
+            if ("dismiss".equals(action.path("ruleId").asText())) dismiss = action;
+        assertNotNull(dismiss, offer.toString());
+        ObjectNode end = MAPPER.createObjectNode().put("requestId", "dismiss").put("expectedRevision", 1);
+        end.putArray("selections").addObject().put("sourceInstanceId", "source").put("ruleId", "dismiss").put("bindingId", "use");
+        end.putObject("target").put("recipientId", "patient")
+                .set("version", dismiss.requiredAt("/targetSelection/options/0/version"));
+        var ended = automationHttp(owner, "caster", MAPPER.createObjectNode().set("request", end).toString());
+        assertEquals(200, ended.statusCode(), ended.body());
+        assertTrue(MAPPER.readTree(ended.body()).path("actions").findValuesAsText("report")
+                .contains("Bea lost Ward."), ended.body());
+        saved = MAPPER.readTree(store.loadSheet(campaignId, "patient"));
+        assertEquals(1, saved.at("/stress/on").asInt());
+        assertEquals(1, saved.at("/automationState/sources/watcher/state/ends").asInt());
+        assertEquals(0, saved.at("/automationState/effects").size());
+    }
+
     @Test
     void nestedGrimoireSpellProfilesRollThroughTheHostAndPersistTheirOwnUsage() throws Exception {
         var converted = dmmt.online.automation.LegacyCatalogConverter.convert("""

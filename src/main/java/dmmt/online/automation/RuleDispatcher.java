@@ -21,7 +21,7 @@ public final class RuleDispatcher {
     private static final Set<String> SURFACES = RuleCompiler.SURFACES;
     private static final int MAX_TRACK_REACTION_DEPTH = 16;
     private static final int MAX_TRACK_EVENTS = 128;
-    private static final Set<String> TRACK_EVENT_FIELDS = Set.of("type", "actorId", "track", "change", "requested", "before", "after");
+    private static final Set<String> TRACK_EVENT_FIELDS = Set.of("type", "actorId", "track", "change", "requested", "before", "after", "effect");
 
     public record Candidate(RuleCompiler.Program program, ObjectNode context) {
         public Candidate {
@@ -725,6 +725,18 @@ public final class RuleDispatcher {
                         recipient.holderChanged(staged, budget.contexts);
                         Candidate source = sources.get(staged.at("/source/instanceId").asText());
                         if (source != null) RuleEffects.refreshCounts(source.program(), staged);
+                        if (operation.startsWith("effect.")) {
+                            List<TargetActionResult> reactions = new ArrayList<>();
+                            for (ObjectNode event : effectEvents(staged, "recipient", previousActor)) {
+                                drainOutbox(staged, outbox);
+                                recipient.changed(staged, event, budget.contexts, reactions, outbox);
+                            }
+                            for (TargetActionResult reaction : reactions) {
+                                ActionResult action = reaction.action();
+                                actions.add(new ActionResult(action.sourceInstanceId(), action.ruleId(), action.bindingId(),
+                                        action.report(), action.publishedRolls(), action.diceRolls(), reaction.actorId()));
+                            }
+                        }
                     }
                     return;
                 }
@@ -878,9 +890,10 @@ public final class RuleDispatcher {
                         mergeReactionSource(budget, currentId, staged);
                     }
                 }
+                String eventType = event.path("type").asText();
                 List<String> relevant = budget.sources.entrySet().stream()
-                        .filter(entry -> entry.getValue().program().hasComputedActorPools()
-                                || !entry.getValue().program().automatic("track.changed").isEmpty())
+                        .filter(entry -> "track.changed".equals(eventType) && entry.getValue().program().hasComputedActorPools()
+                                || !entry.getValue().program().automatic(eventType).isEmpty())
                         .map(Map.Entry::getKey).sorted().toList();
                 if (relevant.isEmpty()) return;
                 drainOutbox(staged, outbox);
@@ -1000,12 +1013,50 @@ public final class RuleDispatcher {
 
             @Override
             public void mutated(ObjectNode staged, String operation, ObjectNode previousActor, String target) {
+                boolean effectChange = operation.startsWith("effect.") && previousActor != null
+                        && budget.sources.values().stream().anyMatch(candidate ->
+                        !candidate.program().automatic("effect.started").isEmpty()
+                                || !candidate.program().automatic("effect.ended").isEmpty());
                 if (budget.liveRoot && budget.depth == 0 && !"limits.refresh".equals(operation)
                         && !("inventory.grant".equals(operation) && budget.projection != null
-                        && budget.projection.settlesInventory())) return;
+                        && budget.projection.settlesInventory()) && !effectChange) return;
                 reproject(staged, operation, previousActor, target);
+                if (effectChange)
+                    for (ObjectNode event : effectEvents(staged, "actor", previousActor))
+                        changed(staged, "actor", event);
             }
         };
+    }
+
+    private static List<ObjectNode> effectEvents(ObjectNode staged, String holder, ObjectNode before) {
+        JsonNode after = staged.path(holder);
+        Map<String, JsonNode> oldEffects = new HashMap<>();
+        Map<String, JsonNode> newEffects = new HashMap<>();
+        before.path("effects").forEach(effect -> oldEffects.put(effect.path("id").asText(), effect));
+        after.path("effects").forEach(effect -> newEffects.put(effect.path("id").asText(), effect));
+        List<ObjectNode> events = new ArrayList<>();
+        for (JsonNode effect : before.path("effects"))
+            if (!newEffects.containsKey(effect.path("id").asText()))
+                events.add(effectEvent(staged, holder, effect, false));
+        for (JsonNode effect : after.path("effects"))
+            if (!oldEffects.containsKey(effect.path("id").asText()))
+                events.add(effectEvent(staged, holder, effect, true));
+        return events;
+    }
+
+    private static ObjectNode effectEvent(ObjectNode staged, String holder, JsonNode effect, boolean started) {
+        ObjectNode event = ((ObjectNode) staged.get("event")).deepCopy();
+        event.put("type", started ? "effect.started" : "effect.ended")
+                .put("actorId", RuleJson.id(staged.path(holder).path("id"), "/" + holder + "/id"));
+        event.set("effect", effect.deepCopy());
+        if (started) {
+            event.putNull("before");
+            event.set("after", effect.deepCopy());
+        } else {
+            event.set("before", effect.deepCopy());
+            event.putNull("after");
+        }
+        return event;
     }
 
     private static void requireSettledBeforeTrackReaction(JsonNode command) {
@@ -1433,13 +1484,23 @@ public final class RuleDispatcher {
                             if (previousActor != null) {
                                 recipientReactions.holderChanged(staged, workingContexts);
                                 RuleEffects.refreshCounts(byInstance.get(intent.sourceInstanceId()).program(), staged);
+                                if (operation.startsWith("effect."))
+                                    for (ObjectNode event : effectEvents(staged, "recipient", previousActor)) {
+                                        drainOutbox(staged, outbox);
+                                        recipientReactions.changed(staged, event, budget.contexts, actionResults, outbox);
+                                    }
                             }
                             return;
                         }
                         if (!operation.startsWith("track.") && !operation.startsWith("resource."))
                             throw new RuleRuntime.Unavailable("recipientReactions",
                                     "This recipient change requires additional lifecycle settlement: " + operation + ".");
-                    } else sourceObserver.mutated(staged, operation, previousActor, target);
+                    } else {
+                        sourceObserver.mutated(staged, operation, previousActor, target);
+                        for (ActionResult reaction : sourceReactions)
+                            actionResults.add(new TargetActionResult(reaction, null, sourceActorId));
+                        sourceReactions.clear();
+                    }
                 }
 
                 @Override
