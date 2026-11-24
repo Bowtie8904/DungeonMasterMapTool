@@ -192,7 +192,8 @@ public final class RuleDispatcher {
     }
 
     interface RecipientTrackReactions {
-        void changed(ObjectNode staged, ObjectNode event, List<TargetActionResult> actions, List<ObjectNode> outbox);
+        void changed(ObjectNode staged, ObjectNode event, Map<String, ObjectNode> contexts,
+                     List<TargetActionResult> actions, List<ObjectNode> outbox);
         void holderChanged(ObjectNode staged, Map<String, ObjectNode> contexts);
         void grantInventory(ObjectNode staged, Map<String, ObjectNode> contexts);
     }
@@ -676,7 +677,7 @@ public final class RuleDispatcher {
                             "A later track reaction requires the inventory grant to be settled first.");
                 drainOutbox(staged, outbox);
                 List<TargetActionResult> reactions = new ArrayList<>();
-                recipient.changed(staged, event, reactions, outbox);
+                recipient.changed(staged, event, budget.contexts, reactions, outbox);
                 for (TargetActionResult reaction : reactions) {
                     ActionResult action = reaction.action();
                     actions.add(new ActionResult(action.sourceInstanceId(), action.ruleId(), action.bindingId(),
@@ -1276,7 +1277,7 @@ public final class RuleDispatcher {
                                 "A later track reaction requires the inventory grant to be settled first.");
                     if ("recipient".equals(holder)) {
                         drainOutbox(staged, outbox);
-                        recipientReactions.changed(staged, event, actionResults, outbox);
+                        recipientReactions.changed(staged, event, budget.contexts, actionResults, outbox);
                     } else {
                         sourceObserver.changed(staged, holder, event);
                         for (ActionResult reaction : sourceReactions)

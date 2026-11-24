@@ -1071,7 +1071,8 @@ public final class AutomationHost {
         ObjectNode actor = actor(pack, working, state, projectionEvent, sources);
         var candidates = candidates(pack, sources, state, actor, parentEvent);
         RuleDispatcher.OwnerProjection ownerProjection = recipients != null && restingSheet != null
-                && recipients.roster.grantInventory() != null && !candidates.isEmpty()
+                && (recipients.roster.grantInventory() != null || recipients.roster.endEffectsElsewhere() != null)
+                && !candidates.isEmpty()
                 ? ownerRestProjection(pack, working, state, candidates, recipients, null, holderId, restingSheet)
                 : ownerRecoveryProjection(pack, working, state, sources, actor, holderId);
         var recovered = RuleDispatcher.clearOwnerTrack(candidates, actor, parentEvent, revision,
@@ -2793,8 +2794,8 @@ public final class AutomationHost {
             }
 
             @Override
-            public void changed(ObjectNode staged, ObjectNode event, List<RuleDispatcher.TargetActionResult> actions,
-                                List<ObjectNode> outbox) {
+            public void changed(ObjectNode staged, ObjectNode event, Map<String, ObjectNode> sourceContexts,
+                                List<RuleDispatcher.TargetActionResult> actions, List<ObjectNode> outbox) {
                 String id = participant.member.id();
                 if (!id.equals(staged.at("/recipient/id").asText()))
                     throw RuleJson.error("/recipient", "The reaction holder does not match the selected character.");
@@ -2804,7 +2805,10 @@ public final class AutomationHost {
                 var sources = sources(pack, working);
                 ObjectNode actor = actor(pack, working, state, event, sources);
                 var candidates = candidates(pack, sources, state, actor, event);
-                var ownerProjection = ownerRecoveryProjection(pack, working, state, sources, actor, id, true);
+                ObjectNode resting = stagedSource(staged, sourceContexts);
+                ObjectNode restingBefore = resting.deepCopy();
+                var ownerProjection = ownerRestProjection(pack, working, state, candidates,
+                        StagedRestRecipients.this, null, id, resting);
                 Map<String, ObjectNode> contexts = new HashMap<>();
                 candidates.forEach(candidate -> contexts.put(candidate.instanceId(), candidate.context()));
                 ObjectNode root = RuleJson.JSON.createObjectNode();
@@ -2824,6 +2828,14 @@ public final class AutomationHost {
                     for (ObjectNode command : reactions.outbox()) outbox.add(command.deepCopy().put("actorId", id));
                     RuleDispatcher.mergeReactionEvent((ObjectNode) staged.get("event"), response.path("event"));
                     projection.state(working).put("revision", participant.member.revision());
+                }
+                if (!resting.equals(restingBefore)) {
+                    ObjectNode originalState = projection.state(source);
+                    replace(source, resting);
+                    ObjectNode updatedState = projection.state(source);
+                    replace(originalState, updatedState);
+                    source.set(projection.stateField(), originalState);
+                    staged.set("actor", actor(pack, source, originalState, (ObjectNode) staged.get("event")));
                 }
                 staged.set("recipient", recipientSnapshot(pack, working, (ObjectNode) staged.get("event"), id));
             }
@@ -3410,21 +3422,76 @@ public final class AutomationHost {
                                                                StagedRestRecipients.StagedRecipientReactions recipient,
                                                                String holderId, ObjectNode restingSheet) {
         RuleDispatcher.OwnerProjection initial = ownerMoveProjection(pack, sheet, state, candidates);
-        if (recipients == null || recipients.roster.grantInventory() == null) return initial;
+        if (recipients == null || recipients.roster.grantInventory() == null
+                && recipients.roster.endEffectsElsewhere() == null) return initial;
         return new RuleDispatcher.OwnerProjection() {
             private RuleDispatcher.OwnerProjection current = initial;
 
             @Override
             public ObjectNode project(ObjectNode staged, Map<String, ObjectNode> contexts, String operation,
                                       ObjectNode previousActor, String target) {
+                if (operation.startsWith("effect.") && recipients.roster.endEffectsElsewhere() != null)
+                    settleEffects(staged, contexts);
                 return current.project(staged, contexts, operation, previousActor, target);
             }
 
             @Override
-            public boolean settlesInventory() { return true; }
+            public boolean settlesInventory() { return recipients.roster.grantInventory() != null; }
+
+            private void settleEffects(ObjectNode staged, Map<String, ObjectNode> contexts) {
+                ArrayNode pending = staged.withArray("/outbox");
+                ArrayNode commands = RuleJson.JSON.createArrayNode();
+                for (JsonNode command : pending) {
+                    if (!"effect.endElsewhere".equals(command.path("kind").asText())) continue;
+                    SingleHolderEffect effect = singleHolderCommand(pack, command);
+                    if (!holderId.equals(effect.sourceActorId()) || !holderId.equals(effect.holder()))
+                        throw new RuleRuntime.Unavailable("restCommand",
+                                "The reaction's single-holder effect must belong to its acting character.");
+                    commands.add(command.deepCopy());
+                }
+                if (commands.isEmpty()) return;
+                ObjectNode next = sheet.deepCopy();
+                ObjectNode nextState = projection.state(next);
+                contexts.forEach((instance, context) -> storeSource(nextState, instance, context));
+                String instance = staged.at("/source/instanceId").asText();
+                if (!instance.isEmpty()) storeSource(nextState, instance, staged);
+                projection.write(next, projection.actor(next), persisted(RuleJson.object(staged.get("actor"), "/actor")));
+                Map<String, ObjectNode> sheets = recipients.currentSheets();
+                sheets.put(recipients.sourceId, restingSheet);
+                sheets.put(holderId, next);
+                if (recipient != null && staged.path("recipient").isObject()) {
+                    projection.write(recipient.working, projection.actor(recipient.working),
+                            persisted((ObjectNode) staged.get("recipient")));
+                    sheets.put(recipient.participant.member.id(), recipient.working);
+                }
+                List<RestEffectSheet> updated = recipients.roster.endEffectsElsewhere().apply(commands, sheets);
+                if (updated == null) throw RuleJson.error("/recipients", "Expected settled effect holders.");
+                for (RestEffectSheet item : updated) {
+                    String id = item.member().id();
+                    if (holderId.equals(id))
+                        throw RuleJson.error("/recipients", "Single-holder cleanup cannot remove the new effect.");
+                    if (recipients.sourceId.equals(id)) {
+                        if (item.sheet() != restingSheet)
+                            throw RuleJson.error("/recipients", "The source effect cleanup changed its staged sheet.");
+                    } else if (recipient != null && id.equals(recipient.participant.member.id())) {
+                        if (item.sheet() != recipient.working)
+                            throw RuleJson.error("/recipients", "The recipient effect cleanup changed its staged sheet.");
+                    } else recipients.applyEffectSheet(item);
+                }
+                for (int i = pending.size() - 1; i >= 0; i--)
+                    if ("effect.endElsewhere".equals(pending.get(i).path("kind").asText())) pending.remove(i);
+                replace(sheet, next);
+                ObjectNode replacedState = projection.state(sheet);
+                replace(state, replacedState);
+                sheet.set(projection.stateField(), state);
+                if (recipient != null && staged.path("recipient").isObject())
+                    staged.set("recipient", recipientSnapshot(pack, recipient.working,
+                            RuleJson.object(staged.get("event"), "/event"), recipient.participant.member.id()));
+            }
 
             @Override
             public List<RuleDispatcher.Candidate> grantInventory(ObjectNode staged, Map<String, ObjectNode> contexts) {
+                if (recipients.roster.grantInventory() == null) return null;
                 ArrayNode pending = staged.withArray("/outbox");
                 int index = pending.size() - 1;
                 if (index < 0 || !"inventory.grant".equals(pending.path(index).path("kind").asText())

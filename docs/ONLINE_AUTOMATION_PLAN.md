@@ -207,7 +207,8 @@ must be reduced before choosing.
 Self-targeted single-holder effects transfer after preparation and between moves. Ally move adjustments,
 selected moves and deferred benefits settle recipient track changes and effect starts and ends immediately,
 including label-based endings of other sources' effects and transfers from offline or disabled holders, so later
-operations and reactions see updated effects and effect-bound pools.
+operations and reactions see updated effects and effect-bound pools. Self, ally and party-recovery track
+reactions also settle single-holder effect transfers before later staged reads, with atomic rollback and retries.
 Adjustments and deferred benefits can also change recipient actor pools, writable collections and boolean facts;
 later reactions use the updated recipient and active sources.
 The host provides target-specific move and adjustment descriptors when availability, labels or inputs depend on
@@ -330,8 +331,8 @@ live self and ally rests cover rollback and retries. Projection uses the staged 
 another host request. Explicit, derived and holder-owned conditional effect endings reconcile
 effect-bound actor pools and reproject until stable before later reaction steps, with a bounded pass limit.
 `limits.refresh` settles other active sources' uses before nested reactions, including sources without observers;
-newly spent uses are not refreshed a second time. Unsupported source-activation changes, cross-holder effect
-cleanup, deferred damage changes, and unresolved conditional-effect sources fail atomically
+newly spent uses are not refreshed a second time. Unsupported source-activation changes, other cross-holder
+effect lifecycles, deferred damage changes, and unresolved conditional-effect sources fail atomically
 instead of reading stale facts. The fixed-source isolated dispatcher also
 rejects projected snapshots when it cannot reproject them. Nested reactions propagate shared event changes back to
 the parent while retaining each event's own type, actor and track-change details.

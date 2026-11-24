@@ -3786,6 +3786,7 @@ class OnlineSessionServerTest {
             diceSeed(seedForDie(4, 1));
             var rejected = restHttp(owner, "resting", null, failed.toString());
             assertEquals(409, rejected.statusCode(), rejected.body());
+            assertEquals("tableResource", MAPPER.readTree(rejected.body()).path("code").asText());
             assertEquals(sourceBefore, store.loadSheet(campaign.getId(), "resting"));
             assertEquals(holderBefore, store.loadSheet(campaign.getId(), holder));
             assertEquals(history, store.historyTail(campaign.getId(), 100).size());
@@ -3831,6 +3832,163 @@ class OnlineSessionServerTest {
         assertEquals(2, saved.at("/hp/on").asInt());
         assertEquals(2, saved.at("/automationState/sources/ruleset:base/sourcePools/tokens/value").asInt());
         assertEquals(2, saved.at("/automationState/sources/ruleset:base/sourcePools/tokens/max").asInt());
+        assertEquals(completed.body(), restHttp(owner, "resting", null, body.toString()).body());
+    }
+
+    private void installRestReactionTransferRules() throws Exception {
+        installRestRules();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = ruleset.withObject("/automation");
+        automation.putObject("effects").putObject("ward").put("label", "Ward").put("singleHolder", true);
+        automation.withArray("rules").addAll((ArrayNode) MAPPER.readTree("""
+                [
+                 {"id":"reaction-ward","bindings":[{"id":"change","event":"track.changed",
+                    "surface":"resource","mode":"automatic"}],
+                  "when":{"and":[{"eq":[{"read":"event.track"},"hp"]},{"eq":[{"read":"event.change"},"clear"]}]},
+                  "do":[{"op":"effect.start","effect":"ward","target":"actor"},
+                        {"op":"resource.gain","pool":"actor.hope","amount":1}],
+                  "ui":{"report":"Ward renewed for {actor.name}."}},
+                 {"id":"ally-reaction-transfer","bindings":[{"id":"move","event":"downtime.move",
+                    "surface":"downtime","mode":"button","restMove":{"id":"ally-reaction-transfer","kind":"short","ally":true},
+                    "targetSelection":{"cardinality":"one","scope":"activeCharacters","excludeSource":true}}],
+                  "do":[{"op":"track.clear","track":"recipient.hp","amount":1},
+                        {"op":"value","value":{"size":{"read":"actor.effects"}},"as":"effects"}],
+                  "ui":{"label":"Transfer ward","report":"Source effects after recovery: {result.effects}."}},
+                 {"id":"transfer-failure","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"option"}],
+                  "after":{"do":[{"op":"table.spend","resource":"fear","amount":12,"label":"Unavailable"}]},
+                  "ui":{"label":"Fail after recovery"}}
+                ]
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+    }
+
+    private void addStoredRestWard(String holder, String source) throws Exception {
+        ObjectNode sheet = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), holder));
+        sheet.withObject("/automationState").withArray("effects").addObject()
+                .put("id", holder + "-ward-" + source).put("effect", "ruleset:base#ward")
+                .put("sourceInstanceId", "ruleset:base").put("sourceActorId", source).put("label", "Ward");
+        store.saveSheet(campaign.getId(), holder, sheet.toString());
+    }
+
+    @Test
+    void selfRestReactionTransfersSingleHolderEffectsAtomically() throws Exception {
+        installRestReactionTransferRules();
+        addRestParty();
+        addStoredRestWard("mira", "resting");
+        addStoredRestWard("retired", "resting");
+        addStoredRestWard("retired", "other");
+        String owner = cookie();
+        JsonNode offer = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode failed = restRequest(offer, "reaction-transfer-failed");
+        ObjectNode failedMove = addRestMove((ObjectNode) failed.path("request"), restDescriptor(offer.path("moves"), "rest-tend"));
+        failedMove.withArray("options").add(restSelection(restDescriptor(
+                restDescriptor(offer.path("moves"), "rest-tend").path("options"), "transfer-failure")));
+        String restingBefore = store.loadSheet(campaign.getId(), "resting");
+        String miraBefore = store.loadSheet(campaign.getId(), "mira");
+        String retiredBefore = store.loadSheet(campaign.getId(), "retired");
+        int history = store.historyTail(campaign.getId(), 100).size(), fear = campaign.getFear();
+        diceSeed(seedForDie(4, 1));
+        var rejected = restHttp(owner, "resting", null, failed.toString());
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertEquals("tableResource", MAPPER.readTree(rejected.body()).path("code").asText());
+        assertEquals(restingBefore, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(miraBefore, store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(retiredBefore, store.loadSheet(campaign.getId(), "retired"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        assertEquals(fear, campaign.getFear());
+
+        ObjectNode body = restRequest(offer, "reaction-transfer");
+        addRestMove((ObjectNode) body.path("request"), restDescriptor(offer.path("moves"), "rest-tend"));
+        diceSeed(seedForDie(4, 1));
+        var completed = restHttp(owner, "resting", null, body.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode resting = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        JsonNode mira = MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        JsonNode retired = MAPPER.readTree(store.loadSheet(campaign.getId(), "retired"));
+        assertEquals(1, resting.at("/automationState/effects").size());
+        assertEquals("resting", resting.at("/automationState/effects/0/sourceActorId").asText());
+        assertTrue(mira.at("/automationState/effects").isEmpty());
+        assertEquals(1, retired.at("/automationState/effects").size());
+        assertEquals("other", retired.at("/automationState/effects/0/sourceActorId").asText());
+        assertEquals(1, resting.at("/hope/on").asInt());
+        assertTrue(completed.body().contains("Ward renewed for resting."), completed.body());
+        assertEquals(completed.body(), restHttp(owner, "resting", null, body.toString()).body());
+    }
+
+    @Test
+    void allyRestReactionTransfersEffectsBeforeTheNextMoveStep() throws Exception {
+        installRestReactionTransferRules();
+        addRestParty();
+        addStoredRestWard("resting", "mira");
+        addStoredRestWard("retired", "mira");
+        String owner = cookie();
+        JsonNode offer = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode failed = restRequest(offer, "ally-reaction-transfer-failed");
+        ObjectNode failedMove = targetRestMove(failed, offer, "ally-reaction-transfer", "mira");
+        failedMove.withArray("options").add(restSelection(restDescriptor(
+                restDescriptor(offer.path("moves"), "ally-reaction-transfer").path("options"), "transfer-failure")));
+        String restingBefore = store.loadSheet(campaign.getId(), "resting");
+        String miraBefore = store.loadSheet(campaign.getId(), "mira");
+        String retiredBefore = store.loadSheet(campaign.getId(), "retired");
+        int history = store.historyTail(campaign.getId(), 100).size(), fear = campaign.getFear();
+        var rejected = restHttp(owner, "resting", null, failed.toString());
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertEquals("tableResource", MAPPER.readTree(rejected.body()).path("code").asText());
+        assertEquals(restingBefore, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(miraBefore, store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(retiredBefore, store.loadSheet(campaign.getId(), "retired"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        assertEquals(fear, campaign.getFear());
+
+        ObjectNode body = restRequest(offer, "ally-reaction-transfer");
+        targetRestMove(body, offer, "ally-reaction-transfer", "mira");
+        var completed = restHttp(owner, "resting", null, body.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        assertTrue(completed.body().contains("Source effects after recovery: 0."), completed.body());
+        JsonNode resting = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        JsonNode mira = MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        JsonNode retired = MAPPER.readTree(store.loadSheet(campaign.getId(), "retired"));
+        assertTrue(resting.at("/automationState/effects").isEmpty());
+        assertEquals(1, mira.at("/automationState/effects").size());
+        assertEquals("mira", mira.at("/automationState/effects/0/sourceActorId").asText());
+        assertEquals(1, mira.at("/hope/on").asInt());
+        assertTrue(retired.at("/automationState/effects").isEmpty());
+        assertEquals(completed.body(), restHttp(owner, "resting", null, body.toString()).body());
+    }
+
+    @Test
+    void partyRestRecoveryReactionsTransferEffectsFromOtherHolders() throws Exception {
+        installPartyRestRules("gain");
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = ruleset.withObject("/automation");
+        automation.putObject("effects").putObject("ward").put("label", "Ward").put("singleHolder", true);
+        automation.withArray("rules").add(MAPPER.readTree("""
+                {"id":"party-reaction-ward","bindings":[{"id":"change","event":"track.changed",
+                   "surface":"resource","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.track"},"armorTrack"]},
+                 "do":[{"op":"effect.start","effect":"ward","target":"actor"}],
+                 "ui":{"report":"Recovery ward for {actor.name}."}}
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        addRestParty();
+        addStoredRestWard("resting", "mira");
+        addStoredRestWard("retired", "mira");
+        String owner = cookie();
+        JsonNode offer = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode body = restRequest(offer, "party-reaction-transfer");
+        addRestMove((ObjectNode) body.path("request"), restDescriptor(offer.path("moves"), "rest-tend"));
+        var completed = restHttp(owner, "resting", null, body.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode resting = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        JsonNode mira = MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        JsonNode retired = MAPPER.readTree(store.loadSheet(campaign.getId(), "retired"));
+        assertTrue(resting.at("/automationState/effects").isEmpty());
+        assertTrue(retired.at("/automationState/effects").isEmpty());
+        assertEquals(1, mira.at("/automationState/effects").size());
+        assertEquals("mira", mira.at("/automationState/effects/0/sourceActorId").asText());
+        assertTrue(completed.body().contains("Recovery ward for mira."), completed.body());
         assertEquals(completed.body(), restHttp(owner, "resting", null, body.toString()).body());
     }
 
