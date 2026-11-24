@@ -153,7 +153,12 @@ public final class LegacyCatalogConverter {
                     && (path.matches("/entries/\\d+") || path.matches("/entries/\\d+/spells/\\d+"))
                     && node.path("name").isTextual() && !node.path("name").asText().isBlank())
                 origin = "card:" + node.path("name").asText();
-            ObjectNode converted = convertBlock(node.get("automation"), path + "/automation", sourceId, problems, shared, origin);
+            String actionOrigin = origin;
+            if (actionOrigin == null && path.matches(".*/features/\\d+")
+                    && node.path("name").isTextual() && !node.path("name").asText().isBlank())
+                actionOrigin = "feat:" + node.path("name").asText();
+            ObjectNode converted = convertBlock(node.get("automation"), path + "/automation", sourceId, problems,
+                    shared, origin, actionOrigin, origin != null && path.matches("/entries/\\d+"));
             boolean empty = node.get("automation").isObject() && node.get("automation").isEmpty();
             if (problems.isEmpty() && !empty) {
                 try { RuleCompiler.compile(sourceId, converted, recipes); }
@@ -234,11 +239,12 @@ public final class LegacyCatalogConverter {
     /** Resources are actor-scoped, so a pool declared by one source (for example a class) can be spent by another. */
     static ObjectNode convertBlock(JsonNode legacy, String path, String sourceId, List<Diagnostic> problems,
                                    Map<String, ObjectNode> shared) {
-        return convertBlock(legacy, path, sourceId, problems, shared, null);
+        return convertBlock(legacy, path, sourceId, problems, shared, null, null, false);
     }
 
     private static ObjectNode convertBlock(JsonNode legacy, String path, String sourceId, List<Diagnostic> problems,
-                                           Map<String, ObjectNode> shared, String cardOrigin) {
+                                           Map<String, ObjectNode> shared, String cardOrigin, String actionOrigin,
+                                           boolean topLevelCard) {
         ObjectNode out = RuleJson.JSON.createObjectNode();
         Problems p = new Problems(sourceId, problems, new ArrayList<>());
         if (!legacy.isObject()) { p.add(path, "Automation must be an object."); return out; }
@@ -349,7 +355,7 @@ public final class LegacyCatalogConverter {
             ObjectNode rule = switch (next.family()) {
                 case "actions" -> legacyRule.has("deathMove")
                         ? deathAction(legacyRule, death, next.path(), p, effects, pools, usesBudget, extra, out)
-                        : action(legacyRule, next.path(), p, effects, pools, usesBudget);
+                        : action(legacyRule, next.path(), p, effects, pools, usesBudget, actionOrigin, topLevelCard);
                 case "rollOptions" -> rollOption(legacyRule, next.path(), p, effects, pools, usesBudget, extra);
                 case "slotModifier" -> {
                     ObjectNode option = rollOption(legacyRule, next.path(), p, effects, pools, false, extra);
@@ -1130,8 +1136,18 @@ public final class LegacyCatalogConverter {
             when.addObject().putArray("eq").add(read("event.check.kind")).add("damage");
             when.addObject().putArray("eq").add(read("event.check.spell")).add(true);
         } else if (roll.matches("(card|feat|featureAction|option):.+"))
-            when.addObject().putArray("eq").add(read("event.check.origin")).add(roll);
+            when.add(originCondition(roll));
         else if (!"any".equals(roll)) p.add(path, "Unsupported roll filter: " + roll);
+    }
+
+    private static ObjectNode originCondition(String origin) {
+        ObjectNode condition = RuleJson.JSON.createObjectNode();
+        ArrayNode any = condition.putArray("or");
+        any.addObject().putArray("eq").add(read("event.check.origin")).add(origin);
+        ArrayNode aliases = any.addObject().putArray("and");
+        aliases.addObject().put("exists", "event.check.origins");
+        aliases.addObject().putArray("includes").add(read("event.check.origins")).add(origin);
+        return condition;
     }
 
     private static ObjectNode actionRollCondition() {
@@ -1206,7 +1222,7 @@ public final class LegacyCatalogConverter {
                     continue;
                 }
                 if (excluded.asText().matches("(card|feat|featureAction|option):.+")) {
-                    when.addObject().putArray("ne").add(read("event.check.origin")).add(excluded.asText());
+                    when.addObject().set("not", originCondition(excluded.asText()));
                     continue;
                 }
                 if (!ROLLS.contains(excluded.asText())) { p.add(path + "/excludeRolls", "Unsupported roll filter: " + excluded.asText()); continue; }
@@ -3312,7 +3328,7 @@ public final class LegacyCatalogConverter {
                 .put("label", "Spellcast Roll (Difficulty " + difficulty.asInt() + ")");
         action.putObject("actionRoll").put("trait", "spellcast").put("difficulty", difficulty.asInt());
         ObjectNode rule = action(action, path + "/spellcastDifficulty", p, RuleJson.JSON.createObjectNode(),
-                new Pools(RuleJson.JSON.createObjectNode(), Map.of()), consumes);
+                new Pools(RuleJson.JSON.createObjectNode(), Map.of()), consumes, null, false);
         if (rule == null) return null;
         ArrayNode steps = (ArrayNode) rule.get("do");
         steps.addObject().put("op", "roll.check").put("as", "check").set("from", read("result.actionRoll"));
@@ -3384,7 +3400,8 @@ public final class LegacyCatalogConverter {
         return copy;
     }
 
-    private static ObjectNode action(JsonNode action, String path, Problems p, ObjectNode effects, Pools pools, boolean limited) {
+    private static ObjectNode action(JsonNode action, String path, Problems p, ObjectNode effects, Pools pools,
+                                     boolean limited, String origin, boolean topLevelCard) {
         p.onlyFields(action, path, ACTION_FIELDS);
         hostRollAction(action, path, p);
         boolean spendsTokens = action.has("castTokens");
@@ -3473,6 +3490,13 @@ public final class LegacyCatalogConverter {
         }
         if (action.has("sendRoll")) sentRoll(action.get("sendRoll"), path + "/sendRoll", action, p, steps);
         if (action.has("resourceRoll")) resourceRoll(action.get("resourceRoll"), path + "/resourceRoll", action, p, pools, rule, steps);
+        if (origin != null) for (JsonNode step : steps) {
+            JsonNode metadata = step.at("/plan/literal/metadata");
+            if ("roll.resolve".equals(step.path("op").asText()) && metadata instanceof ObjectNode object) {
+                object.put("origin", origin);
+                if (topLevelCard) object.put("actionOrigin", "featureAction:" + origin + ":" + id);
+            }
+        }
         String patronReport = action.has("patronDice") ? patronAction(action, path, p, pools, rule, steps) : null;
         if (aura) {
             ObjectNode marker = RuleJson.JSON.createObjectNode().put("name", label).put("kind", "buff").put("until", "rest")

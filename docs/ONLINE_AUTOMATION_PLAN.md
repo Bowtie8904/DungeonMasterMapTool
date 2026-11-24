@@ -66,7 +66,7 @@ edits; an indeterminate outcome rejects the transaction. Exhausted offers are di
 these profiles for top-level cards and nested grimoire spells with written-difficulty casts, preserving automatic
 use policies. Nested spell origins use `card:<spell name>` to match existing triggers. The projection derives
 nested source identities from the active parent instance, child path and catalog ID; newly copied cards receive
-independent parent identities. Existing sheets still require identity migration, and other feature-action roll origins still need conversion.
+independent parent identities. Existing sheets still require identity migration.
 Legacy `action` selectors include attack, reaction and spellcast profiles, and Duality selectors use the
 known pre-roll fact rather than waiting for the dice.
 An equipped weapon's passive roll modifiers apply only to its own profile, while effect modifiers apply to the
@@ -85,8 +85,10 @@ identity migration for existing sheets remains outstanding. The generated profil
 **Feature rolls (format 2).** Typed `roll.resolve` operations in ordinary owner sheet actions dispatch automatic
 prepare, prepared and finished rules, propagate roll and actor edits, and atomically publish ordered chat rolls
 with result controls and retry receipts. Converted sent, resource, action and reaction rolls use this path.
-Interactive prepare choices, targeted actions, downtime rolls, untyped dice and missing legacy origin identities
-still need their respective live integrations.
+Converted top-level card actions expose both `card:<name>` and `featureAction:card:<name>:<action>` in
+`event.check.origins`; class feature actions expose `feat:<name>`, while `event.check.origin` remains the primary
+identity. Converted origin filters and exclusions match either field. Nested card action paths, interactive
+prepare choices, targeted actions, downtime rolls and untyped dice still need live integration.
 
 A stored effect whose source is active on its holder also offers its frozen attack profile. Its descriptor
 and `request.profileRoll` include `effectInstanceId` and the reserved profile ID `effect.profile`; the host

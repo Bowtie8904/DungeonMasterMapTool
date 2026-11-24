@@ -102,6 +102,7 @@ final class ProfileRoll {
         for (String key : List.of("kind", "trait", "weapon", "range", "dominant", "outcome", "critical",
                 "hopeDie", "fearDie", "spell", "origin", "total", "difficulty", "weaponSource", "weaponSourceId",
                 "fixedDice", "damageType", "move", "reroll", "duality")) check.putNull(key);
+        check.putArray("origins");
         return event;
     }
 
@@ -123,6 +124,10 @@ final class ProfileRoll {
         check.put("spell", "spellcast".equals(metadata.path("trait").asText()));
         for (String field : List.of("origin", "fixedDice", "damageType"))
             if (metadata.has(field)) check.set(field, metadata.get(field).deepCopy());
+        ArrayNode origins = (ArrayNode) check.get("origins");
+        for (String field : List.of("origin", "actionOrigin"))
+            if (metadata.path(field).isTextual() && !metadata.path(field).asText().isBlank())
+                origins.add(metadata.path(field).asText());
         if (actor.at("/stats/thresholds").isObject()) event.set("thresholds", actor.at("/stats/thresholds").deepCopy());
         event.put("sourceInstanceId", RuleJson.id(source.get("instanceId"), "/source/instanceId"))
                 .put("label", metadata.path("label").asText(source.path("name").asText("Roll")));
@@ -154,7 +159,10 @@ final class ProfileRoll {
             if ("primary".equals(slot) || "secondary".equals(slot)) check.put("weapon", slot);
         }
         if (profile.has("difficulty")) check.set("difficulty", profile.get("difficulty").deepCopy());
-        if (profile.has("origin")) check.set("origin", profile.get("origin").deepCopy());
+        if (profile.has("origin")) {
+            check.set("origin", profile.get("origin").deepCopy());
+            check.withArray("origins").removeAll().add(profile.path("origin").asText());
+        }
         event.put("type", "roll.prepare").put("sourceInstanceId", source.instanceId())
                 .put("profileId", profile.path("id").asText()).put("label", profile.path("label").asText());
         if (stats.path("thresholds").isObject()) event.set("thresholds", stats.get("thresholds").deepCopy());

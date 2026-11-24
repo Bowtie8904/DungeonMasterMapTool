@@ -2048,7 +2048,7 @@ class LegacyCatalogConverterTest {
                   {"id":"trait","label":"Any trait","on":"trait","when":"always"}]}}"""));
         JsonNode rules = block(result, 0).path("rules");
         assertEquals("roll.finished", rules.at("/0/bindings/0/event").asText());
-        assertEquals("card:Strike", rules.at("/0/when/and/0/eq/1").asText());
+        assertEquals("card:Strike", rules.at("/0/when/and/0/or/0/eq/1").asText());
         assertEquals("failure-payment", rules.at("/2/bindings/0/exclusiveGroup").asText());
         assertEquals("event.check.total", rules.at("/1/when/and/1/and/1/or/1/gte/0/read").asText());
 

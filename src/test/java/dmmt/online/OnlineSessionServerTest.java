@@ -7623,7 +7623,12 @@ class OnlineSessionServerTest {
                  {"id":"signal","name":"Signal","automation":{"actions":[
                   {"id":"send","label":"Signal","sendRoll":{"dice":"1d8","label":"Signal"}},
                   {"id":"resource","label":"Spend","resourceRoll":{"resource":"hope","sides":6,"type":"magic"}},
-                  {"id":"react","label":"React","actionRoll":{"trait":"Agility","reaction":true}}]}}]}""");
+                  {"id":"react","label":"React","actionRoll":{"trait":"Agility","reaction":true}}],
+                  "rollTriggers":[
+                   {"id":"card-match","label":"Card match","on":"card:Signal","when":"always","report":{"text":"Card match."}},
+                   {"id":"action-match","label":"Action match","on":"featureAction:card:Signal:react","when":"always","report":{"text":"Action match."}},
+                   {"id":"except-react","label":"Except react","on":"any","excludeRolls":["featureAction:card:Signal:react"],
+                    "when":"always","report":{"text":"Not a reaction."}}]}}]}""");
         assertEquals(1, converted.converted(), converted.diagnostics().toString());
         automationCompendium();
         ((ArrayNode) converted.catalog().at("/entries/0/automation/rules")).add(MAPPER.readTree("""
@@ -7672,6 +7677,16 @@ class OnlineSessionServerTest {
                 assertTrue(event.at("/check/fixedDice").asBoolean());
             }
             if (i == 2) assertEquals("Agility", event.at("/check/trait").asText());
+            assertEquals("card:Signal", event.at("/check/origin").asText());
+            List<String> origins = new java.util.ArrayList<>();
+            event.at("/check/origins").forEach(value -> origins.add(value.asText()));
+            assertTrue(origins.contains("card:Signal"), origins.toString());
+            assertTrue(origins.contains("featureAction:card:Signal:" + rule), origins.toString());
+            JsonNode actions = MAPPER.readTree(resultHttp(owner, "actor", event.path("resultId").asText()).body()).path("actions");
+            List<String> matches = actions.findValuesAsText("ruleId");
+            assertTrue(matches.contains("card-match"), matches.toString());
+            assertEquals(i == 2, matches.contains("action-match"), matches.toString());
+            assertEquals(i != 2, matches.contains("except-react"), matches.toString());
             assertEquals(i + 1, MAPPER.readTree(store.loadSheet(campaignId, "actor"))
                     .at("/automationState/sources/listener/state/rolls").asInt());
         }
@@ -7699,6 +7714,37 @@ class OnlineSessionServerTest {
                 .map(message -> message.at("/automationEvent/label").asText()).toList());
         assertEquals(applied.body(), automationHttp(owner, "actor", sequence).body());
         assertEquals(history + published.size(), store.historyTail(campaignId, 100).size());
+    }
+
+    @Test
+    void convertedClassFeatureRollsExposeTheirFeatureOrigin() throws Exception {
+        var converted = dmmt.online.automation.LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"classes","label":"Classes","entries":[
+                 {"id":"tester","name":"Tester","features":[{"id":"steady","name":"Steady","automation":{
+                  "actions":[{"id":"use","label":"Use","actionRoll":{"trait":"Agility"}}],
+                  "rollTriggers":[{"id":"reward","label":"Reward","on":"feat:Steady","when":"always",
+                                   "report":{"text":"Feature roll."}}]}}]}]}""");
+        assertEquals(1, converted.converted(), converted.diagnostics().toString());
+        automationCompendium();
+        java.nio.file.Files.writeString(compendiumDir.resolve("classes.json"), converted.catalog().toString());
+        String campaignId = campaign.getId();
+        campaign.getActors().add(Campaign.Actor.builder().id("actor").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaignId, "actor", """
+                {"name":"Ada","traits":[{"name":"Agility","mod":1}],
+                 "features":[{"name":"Steady","instanceId":"steady","automationSource":"classes:tester:features:steady"}]}""");
+        String owner = cookie();
+        var response = automationHttp(owner, "actor", """
+                {"request":{"requestId":"feature-origin","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"steady","ruleId":"use","bindingId":"sheet"}]}}""");
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode event = null;
+        for (JsonNode command : MAPPER.readTree(response.body()).path("outbox"))
+            if ("roll.event".equals(command.path("kind").asText())) event = command.path("event");
+        assertNotNull(event);
+        assertEquals("feat:Steady", event.at("/check/origin").asText());
+        assertEquals("feat:Steady", event.at("/check/origins/0").asText());
+        JsonNode offer = MAPPER.readTree(resultHttp(owner, "actor", event.path("resultId").asText()).body());
+        assertEquals(List.of("reward"), offer.path("actions").findValuesAsText("ruleId"));
     }
 
     @Test

@@ -3847,7 +3847,7 @@ public final class AutomationHost {
     private ObjectNode applyEvent(Pack pack, ObjectNode working, ObjectNode state, ObjectNode event,
                                   List<RuleDispatcher.Candidate> candidates, List<RuleRuntime.Intent> intents, RandomGenerator random) {
         RuleDispatcher.EventResolution resolution;
-        if (!candidates.isEmpty() && ("action.request".equals(event.path("type").asText())
+        if (!candidates.isEmpty() && ("action.request".equals(event.path("type").asText()) && event.path("actorId").isTextual()
                 || candidates.stream().anyMatch(candidate -> !candidate.program().automatic("track.changed").isEmpty()))) {
             ObjectNode actor = RuleJson.object(candidates.getFirst().context().get("actor"), "/actor");
             var ownerProjection = ownerRecoveryProjection(pack, working, state, sources(pack, working), actor,
