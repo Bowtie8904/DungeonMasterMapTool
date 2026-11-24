@@ -299,6 +299,9 @@ class RestTargetTest {
                 {"op":"effect.start","effect":"ward","target":"recipient"}
                 """,
                 """
+                {"op":"effect.endLabeled","label":"Ward","target":"recipient"}
+                """,
+                """
                 {"op":"collection.add","target":"recipient","collection":"features",
                  "item":{"literal":{"id":"foreign","label":"Foreign"}}}
                 """,
@@ -313,7 +316,8 @@ class RestTargetTest {
                 ObjectNode invalid = ruleset.deepCopy();
                 ((ArrayNode) invalid.at(phase)).add(RuleJson.parse(mutation));
                 if (mutation.contains("\"track.clear\"") || mutation.contains("\"resource.gain\"")
-                        || mutation.contains("\"track.capacity\"") || mutation.contains("\"effect.start\""))
+                        || mutation.contains("\"track.capacity\"") || mutation.contains("\"effect.start\"")
+                        || mutation.contains("\"effect.endLabeled\""))
                     assertDoesNotThrow(() -> pack(invalid), phase + mutation);
                 else assertThrows(AutomationHost.NotReady.class, () -> pack(invalid), phase + mutation);
 

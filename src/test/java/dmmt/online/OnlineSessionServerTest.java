@@ -4454,6 +4454,98 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void targetedRestEndsOtherSourcesNamedEffectsBeforeEachReaction() throws Exception {
+        installRestRules();
+        java.nio.file.Files.writeString(compendiumDir.resolve("domain-cards.json"), """
+                {"format":"dmmap-daggerheart","version":2,"category":"domain-cards","entries":[
+                 {"id":"guard","name":"Guard","automation":{
+                  "pools":{"old":{"kind":"number","scope":"actor","max":4,"whileEffect":"old"},
+                           "middle":{"kind":"number","scope":"actor","max":4,"whileEffect":"middle"},
+                           "late":{"kind":"number","scope":"actor","max":4,"whileEffect":"late"}},
+                  "effects":{"old":{"label":"Old ward"},"middle":{"label":"Middle ward"},"late":{"label":"Late ward"}}}}
+                ]}
+                """);
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withArray("rules").addAll((ArrayNode) MAPPER.readTree("""
+                [
+                 {"id":"release-care","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"button",
+                    "restMove":{"id":"release-care","kind":"short","ally":true},
+                    "targetSelection":{"cardinality":"one","scope":"activeCharacters","excludeSource":true}}],
+                  "do":[{"op":"effect.endLabeled","label":"Middle ward","target":"recipient"},
+                        {"op":"track.clear","track":"recipient.stress","amount":1}],"ui":{"label":"Release wards"}},
+                 {"id":"release-before","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.move.id"},"release-care"]},
+                  "do":[{"op":"effect.endLabeled","label":"Old ward","target":"recipient"},
+                        {"op":"track.clear","track":"recipient.hp","amount":1}],
+                  "after":{"do":[{"op":"effect.endLabeled","label":"Late ward","target":"recipient"},
+                                  {"op":"track.clear","track":"recipient.armorTrack","amount":1}]},"ui":{}},
+                 {"id":"release-fail","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"option"}],
+                  "when":{"eq":[{"read":"event.move.id"},"release-care"]},
+                  "after":{"do":[{"op":"resource.spend","pool":"recipient.hope","amount":6}]},
+                  "ui":{"label":"Fail release"}},
+                 {"id":"release-watch","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                  "when":{"or":[
+                    {"and":[{"eq":[{"read":"event.track"},"hp"]},{"eq":[{"read":"actor.pools.old.value"},0]},
+                             {"not":{"includes":[{"pluck":[{"read":"actor.effects"},"label"]},"Old ward"]}}]},
+                    {"and":[{"eq":[{"read":"event.track"},"stress"]},{"eq":[{"read":"actor.pools.middle.value"},0]},
+                             {"not":{"includes":[{"pluck":[{"read":"actor.effects"},"label"]},"Middle ward"]}}]},
+                    {"and":[{"eq":[{"read":"event.track"},"armorTrack"]},{"eq":[{"read":"actor.pools.late.value"},0]},
+                             {"not":{"includes":[{"pluck":[{"read":"actor.effects"},"label"]},"Late ward"]}}]}]},
+                  "do":[{"op":"table.gain","resource":"fear","amount":1,"label":"Release"}],
+                  "ui":{"report":"Released {event.track} for {actor.name}."}}
+                ]
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        addRestParty();
+        ObjectNode mira = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        ObjectNode state = mira.putObject("automationState").put("revision", 0);
+        ArrayNode effects = state.putArray("effects");
+        ObjectNode pools = state.putObject("pools");
+        for (String id : List.of("old", "middle", "late")) {
+            effects.addObject().put("id", id).put("effect", "domain-cards:guard#" + id)
+                    .put("label", switch (id) { case "old" -> "Old ward"; case "middle" -> "Middle ward"; default -> "Late ward"; })
+                    .put("sourceInstanceId", "foreign-guard").put("sourceActorId", "borin");
+            pools.putObject(id).put("value", 2).put("max", 4);
+        }
+        store.saveSheet(campaign.getId(), "mira", mira.toString());
+        String owner = cookie();
+        var described = restHttp(owner, "resting", "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode rest = MAPPER.readTree(described.body());
+        String beforeSource = store.loadSheet(campaign.getId(), "resting");
+        String beforeRecipient = store.loadSheet(campaign.getId(), "mira");
+        int fear = campaign.getFear(), history = store.historyTail(campaign.getId(), 100).size();
+        ObjectNode failure = restRequest(rest, "failed-ward-release");
+        targetRestMove(failure, rest, "release-care", "mira").withArray("options").add(restSelection(
+                restDescriptor(restDescriptor(rest.path("moves"), "release-care").path("options"), "release-fail")));
+        var rejected = restHttp(owner, "resting", null, failure.toString());
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertEquals(beforeSource, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(beforeRecipient, store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(fear, campaign.getFear());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+
+        ObjectNode request = restRequest(rest, "release-wards");
+        targetRestMove(request, rest, "release-care", "mira");
+        var completed = restHttp(owner, "resting", null, request.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode receipt = MAPPER.readTree(completed.body());
+        for (String track : List.of("hp", "stress", "armorTrack"))
+            assertTrue(receipt.path("actions").findValuesAsText("report").contains("Released " + track + " for mira."));
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        assertTrue(saved.at("/automationState/effects").isEmpty());
+        for (String id : List.of("old", "middle", "late"))
+            assertEquals(0, saved.at("/automationState/pools/" + id + "/value").asInt());
+        assertEquals(3, saved.at("/hp/on").asInt());
+        assertEquals(1, saved.at("/stress/on").asInt());
+        assertEquals(0, saved.at("/armorTrack/on").asInt());
+        assertEquals(fear + 3, campaign.getFear());
+        assertEquals(completed.body(), restHttp(owner, "resting", null, request.toString()).body());
+        assertEquals(fear + 3, campaign.getFear());
+    }
+
+    @Test
     void targetedRestTransfersEffectsBeforeSubsequentOperationsAndMoves() throws Exception {
         installTargetRestRules("gain");
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");

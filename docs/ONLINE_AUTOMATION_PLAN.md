@@ -162,7 +162,8 @@ receipt commit atomically. Offers to characters without a player owner are rejec
 must be reduced before choosing.
 Self-targeted single-holder effects transfer after preparation and between moves. Ally move adjustments,
 selected moves and deferred benefits settle recipient track changes and effect starts and ends immediately,
-including transfers from offline or disabled holders, so later operations and reactions see the updated state.
+including label-based endings of other sources' effects and transfers from offline or disabled holders, so later
+operations and reactions see updated effects and effect-bound pools.
 Recipient collection and pool mutations in adjustments or deferred benefits remain unsupported.
 The host provides target-specific adjustment descriptors when option availability or labels depend on an ally;
 the browser switches them with the recipient and the transaction rechecks the chosen option.
