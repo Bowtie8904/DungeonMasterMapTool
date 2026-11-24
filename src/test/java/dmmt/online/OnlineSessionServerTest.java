@@ -2277,6 +2277,88 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void restPreparationMoveAndCompletionPassiveRollsPublishRerollOffersTogether() throws Exception {
+        installRestRerollRules();
+        var converted = dmmt.online.automation.LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"domain-cards","entries":[
+                 {"id":"camp","name":"Camp","automation":{"rest":{"passives":[
+                   {"id":"prepare","label":"Prepare","extraMoves":1,
+                    "steps":[{"op":"gain","resource":"hope","amount":"1d4"}]},
+                   {"id":"soothe","label":"Soothe","move":"prepare",
+                    "steps":[{"op":"clear","resource":"stress","amount":"1d4"}]},
+                   {"id":"finish","label":"Finish","rest":"short",
+                    "steps":[{"op":"clear","resource":"hp","amount":"1d6"}]}]}}}]}
+                """);
+        assertEquals(1, converted.converted(), converted.diagnostics().toString());
+        Path catalogFile = compendiumDir.resolve("domain-cards.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(catalogFile.toFile());
+        catalog.withArray("entries").add(converted.catalog().at("/entries/0").deepCopy());
+        java.nio.file.Files.writeString(catalogFile, catalog.toString());
+        String owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("actor").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "actor", """
+                {"name":"Ada","level":1,"hp":{"slots":8,"on":6},"stress":{"slots":6,"on":6},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},
+                 "loadout":[{"name":"Camp","instanceId":"camp","automationSource":"domain-cards:camp"},
+                            {"name":"Second Chance","instanceId":"chance","automationSource":"domain-cards:reroller"}]}
+                """);
+        var described = restHttp(owner, "actor", "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode rest = MAPPER.readTree(described.body());
+        ObjectNode body = restRequest(rest, "passive-rest");
+        String original = store.loadSheet(campaign.getId(), "actor");
+        int historyBefore = store.historyTail(campaign.getId(), 100).size();
+        ((ObjectNode) body.path("request")).withArray("preparation")
+                .add(restSelection(restDescriptor(rest.path("preparation"), "prepare")));
+        JsonNode prepare = restDescriptor(rest.path("moves"), "rest-prepare");
+        ObjectNode move = addRestMove((ObjectNode) body.path("request"), prepare);
+        move.withArray("options").add(restSelection(restDescriptor(prepare.path("options"), "soothe")));
+        diceSeed(seedForDice(new int[]{4, 4, 6}, new int[]{2, 1, 2}));
+        var beforeResponse = restChoiceHttp(owner, "actor", "choices", body);
+        assertEquals(200, beforeResponse.statusCode(), beforeResponse.body());
+        assertEquals(original, store.loadSheet(campaign.getId(), "actor"));
+        assertEquals(historyBefore, store.historyTail(campaign.getId(), 100).size());
+        JsonNode before = MAPPER.readTree(beforeResponse.body());
+        ObjectNode advance = MAPPER.createObjectNode().put("requestId", "passive-rest")
+                .put("choiceVersion", before.path("choiceVersion").asText());
+        JsonNode finish = restSelection(restDescriptor(before.path("actions"), "finish"));
+        advance.putArray("selections").add(finish);
+        var afterResponse = restChoiceHttp(owner, "actor", "choices", advance);
+        assertEquals(200, afterResponse.statusCode(), afterResponse.body());
+        ObjectNode request = ((ObjectNode) body.path("request")).deepCopy();
+        request.withArray("completion").add(finish.deepCopy());
+        ObjectNode complete = MAPPER.createObjectNode()
+                .put("choiceVersion", MAPPER.readTree(afterResponse.body()).path("choiceVersion").asText());
+        complete.set("request", request);
+        var committed = restChoiceHttp(owner, "actor", "complete", complete);
+        assertEquals(200, committed.statusCode(), committed.body());
+        assertEquals(committed.body(), restChoiceHttp(owner, "actor", "complete", complete).body());
+        var offers = store.historyTail(campaign.getId(), 100).stream()
+                .filter(message -> message.path("automationRecoveryRoll").isObject()).toList();
+        assertEquals(3, offers.size());
+        JsonNode preparation = offers.stream().filter(message -> !message.at("/automationRecoveryRoll/track").isTextual())
+                .findFirst().orElseThrow();
+        JsonNode stress = offers.stream().filter(message -> "stress".equals(message.at("/automationRecoveryRoll/track").asText()))
+                .findFirst().orElseThrow();
+        JsonNode hp = offers.stream().filter(message -> "hp".equals(message.at("/automationRecoveryRoll/track").asText()))
+                .findFirst().orElseThrow();
+        assertEquals(1, stress.at("/automationRecoveryRoll/roll/total").asInt());
+        assertEquals(2, hp.at("/automationRecoveryRoll/roll/total").asInt());
+        assertEquals(2, preparation.at("/automationRecoveryRoll/roll/total").asInt());
+        assertEquals(200, recoveryRollHttp(owner, preparation, "actor", null).statusCode());
+        var choices = recoveryRollHttp(owner, hp, "actor", null);
+        assertEquals(200, choices.statusCode(), choices.body());
+        ObjectNode reroll = recoveryRollRequest(MAPPER.readTree(choices.body()), "passive-reroll");
+        diceSeed(seedForDie(6, 6));
+        var result = recoveryRollHttp(owner, hp, "actor", reroll.toString());
+        assertEquals(200, result.statusCode(), result.body());
+        assertEquals(4, MAPPER.readTree(result.body()).path("cleared").asInt());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "actor"));
+        assertEquals(0, saved.at("/hp/on").asInt());
+        assertEquals(5, saved.at("/stress/on").asInt());
+    }
+
+    @Test
     void selfRecoveryRerollsUseOneRevisionAndKeepHigherResults() throws Exception {
         installRestRerollRules();
         String owner = cookie();

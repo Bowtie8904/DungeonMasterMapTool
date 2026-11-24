@@ -2937,7 +2937,7 @@ class LegacyCatalogConverterTest {
     @Test
     void downtimeReportsOfferTheWholeResolvedExpressionForRerolling() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
-                {"id":"survey","name":"Survey","automation":{"actions":[{"id":"use","label":"Survey","timing":"downtime",
+                {"id":"survey","name":"Survey","automation":{"actions":[{"id":"use","label":"Survey","timing":"rest",
                  "report":{"dice":"2d6-d4+2","text":"Survey {amount}."}}]}}"""));
         assertEquals(1, result.converted(), result.diagnostics().toString());
         RuleCompiler.Program program = program(result, 0);

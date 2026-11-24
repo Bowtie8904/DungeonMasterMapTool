@@ -1081,9 +1081,14 @@ public final class RuleRuntime {
                 } else result = RuleExpression.numeric(total, "/result");
             }
             case "recovery.offerRoll", "downtime.offerRoll" -> {
-                if (!"downtime.move".equals(context.at("/event/type").asText())
-                        || !"short".equals(context.at("/event/move/rest").asText()))
-                    throw new Unavailable("restRoll", "Downtime rolls can only be offered during a short-rest move.");
+                String eventType = context.at("/event/type").asText();
+                boolean shortRest = switch (eventType) {
+                    case "downtime.move" -> "short".equals(context.at("/event/move/rest").asText());
+                    case "rest.prepare", "rest.short" -> "short".equals(context.at("/event/rest/kind").asText());
+                    default -> false;
+                };
+                if (!shortRest)
+                    throw new Unavailable("restRoll", "Downtime rolls can only be offered during a short rest.");
                 if (rolls.isEmpty()) throw RuleJson.error("/roll", "A downtime offer needs a preceding roll.");
                 JsonNode sampled = rolls.getLast();
                 JsonNode value = eval(op.path("roll"), context);

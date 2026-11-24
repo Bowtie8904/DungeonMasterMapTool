@@ -243,4 +243,32 @@ class RestCompletionTest {
             assertEquals(recover ? 0 : 1, result.path("actions").size());
         }
     }
+
+    @Test
+    void convertedCompletionDiceAreOfferedOnlyOnShortRests() throws Exception {
+        var converted = LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"items","entries":[
+                 {"id":"camp","name":"Camp","automation":{"rest":{"passives":[
+                   {"id":"mend","label":"Mend","steps":[{"op":"clear","resource":"hp","amount":"1d4"}]}
+                 ]}}}]}
+                """);
+        assertTrue(converted.diagnostics().isEmpty(), converted.diagnostics().toString());
+        var pack = AutomationHost.compile("converted", Map.of("items", converted.catalog().toString()),
+                LegacyCatalogConverter.coreRecipes(), LegacyCatalogConverter.coreRuleset());
+        for (String kind : List.of("short", "long")) {
+            ObjectNode sheet = sheet();
+            HOST.projection().state(sheet).withObject("/sources").remove("ruleset:base");
+            sheet.putArray("inventory").addObject().put("name", "Camp").put("qty", 1)
+                    .put("instanceId", "camp").put("automationSource", "items:camp");
+            var snapshot = HOST.restEffectSnapshot(sheet);
+            var progress = prepare(pack, sheet, kind);
+            ObjectNode result = HOST.completeRest(pack, sheet, origin(), progress, snapshot,
+                    choices(choice("mend", "rest-" + kind).put("sourceInstanceId", "camp")), StructuredRollTest.faces(2));
+            if ("short".equals(kind)) {
+                assertEquals(1, result.path("outbox").size());
+                assertEquals("recovery.offerRoll", result.at("/outbox/0/kind").asText());
+                assertEquals("hp", result.at("/outbox/0/track").asText());
+            } else assertTrue(result.path("outbox").isEmpty());
+        }
+    }
 }

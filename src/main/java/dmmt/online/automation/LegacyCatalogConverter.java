@@ -3093,7 +3093,7 @@ public final class LegacyCatalogConverter {
                         roll.putObject("plan").set("literal", plan);
                         steps.insert(0, roll);
                         int valueIndex = 1;
-                        if ("downtime".equals(legacy.path("timing").asText())) {
+                        if (Set.of("downtime", "rest").contains(legacy.path("timing").asText())) {
                             ObjectNode offer = RuleJson.JSON.createObjectNode().put("op", "downtime.offerRoll")
                                     .put("label", legacy.path("label").asText("Downtime report"));
                             offer.set("roll", read("result.reportRoll"));
@@ -3405,22 +3405,10 @@ public final class LegacyCatalogConverter {
         amountStore(action.path("selectAmount"), path + "/selectAmount", p, pools, steps, effects);
         for (int i = 0; i < list.size(); i++) {
             JsonNode legacyStep = list.get(i);
-            int first = steps.size();
-            step(legacyStep, path + "/steps/" + i, p, steps, effects, pools, operationTarget);
-            if (action.has("timing") && steps.size() > first + 1
-                    && "dice.roll".equals(steps.get(first).path("op").asText())) {
-                JsonNode sampled = steps.get(first), settled = steps.get(steps.size() - 1);
-                boolean recovery = "track.clear".equals(settled.path("op").asText());
-                ObjectNode offer = steps.addObject().put("op", recovery ? "recovery.offerRoll" : "downtime.offerRoll")
-                        .put("label", escape(label));
-                offer.set("roll", read("result." + sampled.path("as").asText()));
-                if (recovery) offer.put("track", settled.path("track").asText());
-                else offer.put("group", true);
-                var expression = ACTION_DAMAGE.matcher(legacyStep.path("amount").asText().trim());
-                if (expression.matches() && expression.group(3) != null)
-                    offer.put("offset", Integer.parseInt(expression.group(4)) * ("-".equals(expression.group(3)) ? -1 : 1));
-                offer.putObject("if").putArray("eq").add(read("event.move.rest")).add("short");
-            }
+            if (action.has("timing"))
+                restStep(legacyStep, path + "/steps/" + i, p, steps, effects, pools,
+                        operationTarget, escape(label), "event.move.rest");
+            else step(legacyStep, path + "/steps/" + i, p, steps, effects, pools, operationTarget);
         }
         amountHeal(action.path("selectAmount"), path + "/selectAmount", p, steps);
         if (action.has("table")) actionTable(action.get("table"), path + "/table", p, steps, effects, pools, operationTarget);
@@ -4260,6 +4248,24 @@ public final class LegacyCatalogConverter {
         step(step, path, p, out, effects, pools, "actor");
     }
 
+    private static void restStep(JsonNode legacy, String path, Problems p, ArrayNode out, ObjectNode effects, Pools pools,
+                                 String target, String label, String restKind) {
+        int first = out.size();
+        step(legacy, path, p, out, effects, pools, target);
+        if (out.size() <= first + 1 || !"dice.roll".equals(out.get(first).path("op").asText())) return;
+        JsonNode sampled = out.get(first), settled = out.get(out.size() - 1);
+        boolean recovery = "track.clear".equals(settled.path("op").asText());
+        ObjectNode offer = out.addObject().put("op", recovery ? "recovery.offerRoll" : "downtime.offerRoll")
+                .put("label", label);
+        offer.set("roll", read("result." + sampled.path("as").asText()));
+        if (recovery) offer.put("track", settled.path("track").asText());
+        else offer.put("group", true);
+        var expression = ACTION_DAMAGE.matcher(legacy.path("amount").asText().trim());
+        if (expression.matches() && expression.group(3) != null)
+            offer.put("offset", Integer.parseInt(expression.group(4)) * ("-".equals(expression.group(3)) ? -1 : 1));
+        offer.putObject("if").putArray("eq").add(read(restKind)).add("short");
+    }
+
     private static void step(JsonNode step, String path, Problems p, ArrayNode out, ObjectNode effects, Pools pools,
                              String operationTarget) {
         String op = step.path("op").asText();
@@ -4888,7 +4894,9 @@ public final class LegacyCatalogConverter {
             out.add(claim);
             return out;
         }
-        for (int s = 0; s < list.size(); s++) step(list.get(s), path + "/steps/" + s, p, steps, effects, pools);
+        for (int s = 0; s < list.size(); s++)
+            restStep(list.get(s), path + "/steps/" + s, p, steps, effects, pools, "actor", label,
+                    move ? "event.move.rest" : "event.rest.kind");
         if (steps.isEmpty() && !rule.has("costs")) p.add(path, "A rest passive needs an effect.");
         if (move) deferMoveBenefit(rule);
         return out;
@@ -4940,7 +4948,9 @@ public final class LegacyCatalogConverter {
             }
         }
         JsonNode list = modifier.path("steps");
-        for (int s = 0; s < list.size(); s++) step(list.get(s), path + "/steps/" + s, p, steps, effects, pools);
+        for (int s = 0; s < list.size(); s++)
+            restStep(list.get(s), path + "/steps/" + s, p, steps, effects, pools, "actor",
+                    escape(modifier.path("note").asText("Downtime benefit")), "event.move.rest");
         if (modifier.has("note")) ((ObjectNode) rule.get("ui")).put("report", escape(modifier.path("note").asText()));
         if (steps.isEmpty() && !ignoredRepair) p.add(path, "A move modifier needs a bonus, ally count or steps.");
         deferMoveBenefit(rule);
