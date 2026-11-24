@@ -378,7 +378,7 @@ class HolderReactionProjectionTest {
     }
 
     @Test
-    void crossHolderCleanupAndUnsettledComputedSourcePoolsFailAtomically() throws Exception {
+    void crossHolderCleanupWithoutARecipientTransactionFailsAtomically() throws Exception {
         RuleCompiler.Program effect = program("features:effect", """
                 {"effects":{"guard":{"label":"Guard","singleHolder":true}},
                  "rules":[{"id":"start","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
@@ -388,32 +388,80 @@ class HolderReactionProjectionTest {
         var effectPack = new AutomationHost.Pack("effect", Map.of(effect.sourceId(), effect));
         assertEquals("reactionEffect", assertThrows(RuleRuntime.Unavailable.class, () -> recover(effectPack, sheet)).code());
         assertEquals(before, sheet);
-
-        RuleCompiler.Program pool = program("features:pool", """
-                {"pools":{"tokens":{"kind":"number","scope":"source","max":{"read":"actor.stats.armorAvailable"}}}}
-                """);
-        ObjectNode poolSheet = sheet(pool.sourceId()), poolBefore = poolSheet.deepCopy();
-        var poolPack = new AutomationHost.Pack("pool", Map.of(pool.sourceId(), pool));
-        assertEquals("reactionSourcePool", assertThrows(RuleRuntime.Unavailable.class, () -> recover(poolPack, poolSheet)).code());
-        assertEquals(poolBefore, poolSheet);
     }
 
     @Test
-    void computedSourcePoolsCannotUseStaleTrackOrStateDuringAReaction() throws Exception {
-        for (String max : new String[]{"{\"read\":\"actor.hope.value\"}", "{\"read\":\"state.cap\"}"}) {
-            RuleCompiler.Program pool = program("features:pool", """
-                    {"state":{"cap":2},"pools":{"tokens":{"kind":"number","scope":"source","max":%s}},
-                     "rules":[{"id":"armor","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
-                       "do":[{"op":"state.increment","slot":"cap","by":1},
-                             {"op":"resource.gain","pool":"actor.hope","amount":1},
-                             {"op":"value","value":{"read":"sourcePools.tokens.max"},"as":"maximum"}],
-                       "ui":{"report":"Maximum {result.maximum}."}}]}
-                    """.formatted(max));
-            ObjectNode sheet = sheet(pool.sourceId()), before = sheet.deepCopy();
-            var pack = new AutomationHost.Pack("pool", Map.of(pool.sourceId(), pool));
-            assertEquals("reactionSourcePool", assertThrows(RuleRuntime.Unavailable.class, () -> recover(pack, sheet)).code());
-            assertEquals(before, sheet);
-        }
+    void trackRecoveryPersistsComputedSourcePoolsWithoutAnObserver() throws Exception {
+        RuleCompiler.Program pool = program("features:pool", """
+                {"pools":{"tokens":{"kind":"number","scope":"source","initial":2,
+                                    "max":{"read":"actor.stats.armorAvailable"}}}}
+                """);
+        ObjectNode poolSheet = sheet(pool.sourceId());
+        poolSheet.withObject("/automationState/sources/feature/sourcePools/tokens").put("value", 2).put("max", 2);
+        var poolPack = new AutomationHost.Pack("pool", Map.of(pool.sourceId(), pool));
+        recover(poolPack, poolSheet);
+        assertEquals(2, poolSheet.at("/automationState/sources/feature/sourcePools/tokens/value").asInt());
+        assertEquals(3, poolSheet.at("/automationState/sources/feature/sourcePools/tokens/max").asInt());
+    }
+
+    @Test
+    void computedSourcePoolsFollowNestedTrackAndStateChanges() throws Exception {
+        RuleCompiler.Program track = program("features:track-pool", """
+                {"pools":{"tokens":{"kind":"number","scope":"source","initial":3,"max":{"read":"actor.hope.value"}}},
+                 "rules":[{"id":"armor","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                   "when":{"eq":[{"read":"event.track"},"armorTrack"]},
+                   "do":[{"op":"resource.gain","pool":"actor.hope","amount":2},
+                         {"op":"pool.gain","pool":"tokens","amount":2},
+                         {"op":"resource.spend","pool":"actor.hope","amount":1},
+                         {"op":"resource.gain","pool":"actor.hope","amount":1},
+                         {"op":"value","value":{"read":"sourcePools.tokens.value"},"as":"value"},
+                         {"op":"value","value":{"read":"sourcePools.tokens.max"},"as":"maximum"}],
+                   "ui":{"report":"Pool {result.value} of {result.maximum}."}}]}
+                """);
+        ObjectNode trackSheet = sheet(track.sourceId());
+        ObjectNode trackResult = recover(new AutomationHost.Pack("track", Map.of(track.sourceId(), track)), trackSheet);
+        assertEquals("Pool 1 of 2.", trackResult.at("/actions/0/report").asText());
+        assertEquals(1, trackSheet.at("/automationState/sources/feature/sourcePools/tokens/value").asInt());
+        assertEquals(2, trackSheet.at("/automationState/sources/feature/sourcePools/tokens/max").asInt());
+
+        RuleCompiler.Program state = program("features:state-pool", """
+                {"state":{"cap":2},"pools":{"tokens":{"kind":"number","scope":"source","initial":2,"max":{"read":"state.cap"}}},
+                 "rules":[{"id":"armor","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                   "when":{"eq":[{"read":"event.track"},"armorTrack"]},
+                   "do":[{"op":"state.increment","slot":"cap","by":-1},
+                         {"op":"state.increment","slot":"cap","by":2},
+                         {"op":"pool.gain","pool":"tokens","amount":1},
+                         {"op":"value","value":{"read":"sourcePools.tokens.value"},"as":"value"},
+                         {"op":"value","value":{"read":"sourcePools.tokens.max"},"as":"maximum"}],
+                   "ui":{"report":"Pool {result.value} of {result.maximum}."}}]}
+                """);
+        ObjectNode stateSheet = sheet(state.sourceId());
+        ObjectNode stateResult = recover(new AutomationHost.Pack("state", Map.of(state.sourceId(), state)), stateSheet);
+        assertEquals("Pool 2 of 3.", stateResult.at("/actions/0/report").asText());
+        assertEquals(2, stateSheet.at("/automationState/sources/feature/sourcePools/tokens/value").asInt());
+        assertEquals(3, stateSheet.at("/automationState/sources/feature/sourcePools/tokens/max").asInt());
+    }
+
+    @Test
+    void nestedTrackChangesClampAnotherSourcesComputedPool() throws Exception {
+        RuleCompiler.Program reaction = program("features:reaction", """
+                {"rules":[{"id":"armor","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                   "when":{"eq":[{"read":"event.track"},"armorTrack"]},
+                   "do":[{"op":"resource.spend","pool":"actor.hope","amount":2},
+                         {"op":"resource.gain","pool":"actor.hope","amount":2}],"ui":{}}]}
+                """);
+        RuleCompiler.Program pool = program("features:pool", """
+                {"pools":{"tokens":{"kind":"number","scope":"source","initial":2,"max":{"read":"actor.hope.value"}}}}
+                """);
+        ObjectNode sheet = sheet(reaction.sourceId());
+        sheet.withObject("/hope").put("on", 2);
+        sheet.withArray("/features").addObject().put("name", "Pool").put("instanceId", "pool")
+                .put("automationSource", pool.sourceId());
+        sheet.withObject("/automationState/sources/pool/sourcePools/tokens").put("value", 2).put("max", 2);
+        recover(new AutomationHost.Pack("shared", Map.of(reaction.sourceId(), reaction, pool.sourceId(), pool)), sheet);
+        assertEquals(2, sheet.at("/hope/on").asInt());
+        assertEquals(0, sheet.at("/automationState/sources/pool/sourcePools/tokens/value").asInt());
+        assertEquals(2, sheet.at("/automationState/sources/pool/sourcePools/tokens/max").asInt());
     }
 
     @Test

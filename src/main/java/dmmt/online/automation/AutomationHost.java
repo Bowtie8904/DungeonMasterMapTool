@@ -1084,8 +1084,11 @@ public final class AutomationHost {
             response = RuleJson.JSON.createObjectNode();
             response.putArray("actions");
             recovered.outbox().forEach(response.putArray("outbox")::add);
-            if (recovered.revision() != revision)
+            if (recovered.revision() != revision) {
+                for (ObjectNode context : recovered.contexts())
+                    storeSource(state, context.at("/source/instanceId").asText(), context);
                 projection.write(working, projection.actor(working), persisted(recovered.actor()));
+            }
         } else {
             response = applyResolved(pack, working, state, parentEvent, recovered.contexts(),
                     recovered.actions(), recovered.outbox());
@@ -1183,7 +1186,7 @@ public final class AutomationHost {
         }
         boolean needsTrackProjection = projectTrackStats || hasTrackObservers || hasProjectionDependencies
                 || !initialActor.path("effects").isEmpty();
-        boolean needsSourcePoolGuard = hasComputedSourcePools;
+        boolean refreshSourcePools = hasComputedSourcePools;
         return (staged, contexts, operation, previousActor, target) -> {
             if ("recipient".equals(target)
                     && !staged.at("/recipient/id").equals(staged.at("/actor/id")))
@@ -1191,7 +1194,7 @@ public final class AutomationHost {
                         "Changing another character during a track reaction requires a recipient transaction.");
             if ("limits.refresh".equals(operation)) {
                 settleReactionLimitRefresh(pack, staged, contexts, state, sourceElements);
-                return (ObjectNode) staged.get("actor");
+                if (!refreshSourcePools) return (ObjectNode) staged.get("actor");
             }
             if ("track.changed".equals(operation) && !needsTrackProjection)
                 return (ObjectNode) staged.get("actor");
@@ -1224,9 +1227,6 @@ public final class AutomationHost {
             }
             ObjectNode currentState = state.deepCopy();
             contexts.forEach((instance, source) -> storeSource(currentState, instance, source));
-            if (needsSourcePoolGuard)
-                throw new RuleRuntime.Unavailable("reactionSourcePool",
-                        "A computed source pool cannot yet be settled during a track reaction.");
             ObjectNode event = ((ObjectNode) staged.get("event")).deepCopy().put("actorId", holderId);
             ObjectNode prior = (ObjectNode) staged.get("actor");
             for (int pass = 0; pass < MAX_REACTION_PROJECTION_PASSES; pass++) {
@@ -1234,15 +1234,40 @@ public final class AutomationHost {
                         persisted(prior)).actor();
                 JsonNode pools = projected.path("pools").deepCopy();
                 RuleEffects.reconcileHolder(prior, projected, Set.of(), pack.programs(), "/actor");
+                boolean sourcePoolsChanged = refreshSourcePools
+                        && refreshReactionSourcePools(pack, projected, event, staged, contexts, currentState, sourceElements);
                 boolean ended = endConditionalReactionEffects(pack, projected, contexts, currentState, sourceElements, event, holderId);
-                if (!ended && pools.equals(projected.path("pools"))) {
+                if (!ended && !sourcePoolsChanged && pools.equals(projected.path("pools"))) {
                     return projected;
                 }
                 prior = projected;
             }
             throw new RuleRuntime.Unavailable("reactionEffectDependencies",
-                    "Effect-bound pools did not stabilize during this reaction.");
+                    "Computed pools or effect dependencies did not stabilize during this reaction.");
         };
+    }
+
+    private static boolean refreshReactionSourcePools(Pack pack, ObjectNode actor, ObjectNode event, ObjectNode staged,
+                                                      Map<String, ObjectNode> contexts, ObjectNode state,
+                                                      Map<String, SheetProjection.SourceElement> elements) {
+        boolean changed = false;
+        for (String instanceId : elements.keySet().stream().sorted().toList()) {
+            RuleCompiler.Program program = pack.programs().get(elements.get(instanceId).sourceId());
+            ObjectNode current = contexts.get(instanceId);
+            if (program == null || !program.hasComputedSourcePools() || current == null) continue;
+            ObjectNode view = current.deepCopy();
+            view.set("actor", actor.deepCopy());
+            view.set("event", event.deepCopy());
+            JsonNode pools = RuleRuntime.projectionContext(program, view).path("sourcePools");
+            if (!pools.equals(current.path("sourcePools"))) {
+                current.set("sourcePools", pools.deepCopy());
+                storeSource(state, instanceId, current);
+                changed = true;
+            }
+            if (instanceId.equals(staged.at("/source/instanceId").asText()))
+                staged.set("sourcePools", pools.deepCopy());
+        }
+        return changed;
     }
 
     private void settleReactionLimitRefresh(Pack pack, ObjectNode staged, Map<String, ObjectNode> contexts,

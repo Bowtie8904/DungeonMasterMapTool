@@ -806,11 +806,9 @@ public final class RuleDispatcher {
                         && staged.at("/actor/id").equals(staged.at("/recipient/id"));
                 ObjectNode projected = budget.projection.project(staged, budget.contexts, operation, previousActor, target);
                 if (projected == null) throw RuleJson.error("/actor", "The host must return a projected character.");
-                if ("limits.refresh".equals(operation)) {
-                    for (var entry : workingContexts.entrySet()) {
-                        ObjectNode refreshed = budget.contexts.get(entry.getKey());
-                        if (refreshed != null && refreshed != entry.getValue()) mergeSourceState(entry.getValue(), refreshed);
-                    }
+                for (var entry : workingContexts.entrySet()) {
+                    ObjectNode refreshed = budget.contexts.get(entry.getKey());
+                    if (refreshed != null && refreshed != entry.getValue()) mergeSourceState(entry.getValue(), refreshed);
                 }
                 staged.set("actor", projected);
                 if (selfRecipient) staged.set("recipient", projected);

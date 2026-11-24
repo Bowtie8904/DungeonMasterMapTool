@@ -3744,6 +3744,70 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void restReactionsSettleComputedSourcePoolsForSelfAndAllies() throws Exception {
+        installRestRules();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = ruleset.withObject("/automation");
+        automation.putObject("pools").putObject("tokens").put("kind", "number").put("scope", "source")
+                .put("initial", 2).putObject("max").put("read", "actor.hope.value");
+        automation.withArray("rules").addAll((ArrayNode) MAPPER.readTree("""
+                [
+                 {"id":"computed-pool-reaction","bindings":[{"id":"change","event":"track.changed",
+                    "surface":"resource","mode":"automatic"}],
+                  "when":{"and":[{"eq":[{"read":"event.track"},"hp"]},{"eq":[{"read":"event.change"},"clear"]}]},
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":2},
+                        {"op":"pool.gain","pool":"tokens","amount":2},
+                        {"op":"resource.spend","pool":"actor.hope","amount":1},
+                        {"op":"resource.gain","pool":"actor.hope","amount":1},
+                        {"op":"value","value":{"read":"sourcePools.tokens.value"},"as":"value"},
+                        {"op":"value","value":{"read":"sourcePools.tokens.max"},"as":"maximum"}],
+                  "ui":{"report":"Pool for {actor.name}: {result.value} of {result.maximum}."}},
+                 {"id":"pool-failure","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"option"}],
+                  "when":{"eq":[{"read":"event.move.id"},"tend"]},
+                  "after":{"do":[{"op":"table.spend","resource":"fear","amount":12,"label":"Unavailable"}]},
+                  "ui":{"label":"Fail after recovery"}}
+                ]
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        addRestParty();
+        String owner = cookie();
+        for (boolean ally : List.of(false, true)) {
+            JsonNode offer = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+            String rule = ally ? "rest-tend-ally" : "rest-tend", holder = ally ? "mira" : "resting";
+            ObjectNode failed = restRequest(offer, "computed-pool-failure-" + ally);
+            ObjectNode failedMove = ally ? targetRestMove(failed, offer, rule, holder)
+                    : addRestMove((ObjectNode) failed.path("request"), restDescriptor(offer.path("moves"), rule));
+            failedMove.withArray("options").add(restSelection(restDescriptor(
+                    restDescriptor(offer.path("moves"), rule).path("options"), "pool-failure")));
+            String sourceBefore = store.loadSheet(campaign.getId(), "resting");
+            String holderBefore = store.loadSheet(campaign.getId(), holder);
+            int history = store.historyTail(campaign.getId(), 100).size(), fear = campaign.getFear();
+            diceSeed(seedForDie(4, 1));
+            var rejected = restHttp(owner, "resting", null, failed.toString());
+            assertEquals(409, rejected.statusCode(), rejected.body());
+            assertEquals(sourceBefore, store.loadSheet(campaign.getId(), "resting"));
+            assertEquals(holderBefore, store.loadSheet(campaign.getId(), holder));
+            assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+            assertEquals(fear, campaign.getFear());
+
+            ObjectNode body = restRequest(offer, "computed-pool-rest-" + ally);
+            if (ally) targetRestMove(body, offer, rule, holder);
+            else addRestMove((ObjectNode) body.path("request"), restDescriptor(offer.path("moves"), rule));
+            diceSeed(seedForDie(4, 1));
+            var completed = restHttp(owner, "resting", null, body.toString());
+            assertEquals(200, completed.statusCode(), completed.body());
+            assertTrue(completed.body().contains("Pool for " + holder + ": 1 of 2."), completed.body());
+            JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), holder));
+            assertEquals(2, saved.at("/hope/on").asInt());
+            assertEquals(1, saved.at("/automationState/sources/ruleset:base/sourcePools/tokens/value").asInt());
+            assertEquals(2, saved.at("/automationState/sources/ruleset:base/sourcePools/tokens/max").asInt());
+            assertEquals(completed.body(), restHttp(owner, "resting", null, body.toString()).body());
+            assertEquals(saved, MAPPER.readTree(store.loadSheet(campaign.getId(), holder)));
+        }
+    }
+
+    @Test
     void restSettlesPreparationAndCompletionGrantsBeforeLaterReadsAndReactions() throws Exception {
         installRestRules();
         Path consumablesFile = compendiumDir.resolve("consumables.json");

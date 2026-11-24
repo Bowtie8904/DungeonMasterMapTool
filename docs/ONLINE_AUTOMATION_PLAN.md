@@ -324,12 +324,14 @@ after a restart without rolling, reading a roster or staging another recipient w
 principals, DM receipts and older un-fingerprinted receipts cannot be reused as a rest. It shares the ordinary
 bounded request-ID journal. The live self-rest API authenticates its owner before using this offer.
 Sheet-backed owner recovery now reprojects the holder's statistics, derived effects and computed actor pools
-before nested track reactions and after projection-relevant state or pool changes. It uses the staged state of all
-active sources, not another host request. Explicit, derived and holder-owned conditional effect endings reconcile
+before nested track reactions and after projection-relevant state or pool changes. Computed source pools also
+follow staged track and state changes, clamping their saved values immediately even for sources without listeners;
+live self and ally rests cover rollback and retries. Projection uses the staged state of all active sources, not
+another host request. Explicit, derived and holder-owned conditional effect endings reconcile
 effect-bound actor pools and reproject until stable before later reaction steps, with a bounded pass limit.
 `limits.refresh` settles other active sources' uses before nested reactions, including sources without observers;
 newly spent uses are not refreshed a second time. Unsupported source-activation changes, cross-holder effect
-cleanup, computed source pools, deferred inventory or damage changes, and unresolved conditional-effect sources fail atomically
+cleanup, deferred damage changes, and unresolved conditional-effect sources fail atomically
 instead of reading stale facts. The fixed-source isolated dispatcher also
 rejects projected snapshots when it cannot reproject them. Nested reactions propagate shared event changes back to
 the parent while retaining each event's own type, actor and track-change details.
