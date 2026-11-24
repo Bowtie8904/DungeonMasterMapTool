@@ -204,6 +204,7 @@ public final class RuleDispatcher {
         boolean allowSelectedInventory;
         boolean inventoryPending;
         boolean liveRoot;
+        boolean nestedRolls;
         final OwnerProjection projection;
         RecipientTrackReactions recipient;
         Map<String, ObjectNode> contexts;
@@ -346,6 +347,8 @@ public final class RuleDispatcher {
                                                         OwnerProjection projection) {
         ReactionBudget budget = new ReactionBudget(projection);
         budget.liveRoot = true;
+        budget.nestedRolls = !activeSources.isEmpty()
+                && "action.request".equals(activeSources.getFirst().context().at("/event/type").asText());
         return executeEvent(activeSources, selections, random, programs, false, budget);
     }
 
@@ -711,6 +714,11 @@ public final class RuleDispatcher {
                     throw new RuleRuntime.Unavailable("recipientReactions",
                             "This recipient change requires additional lifecycle settlement: " + operation + ".");
             }
+
+            @Override
+            public ObjectNode rolled(ObjectNode staged, ObjectNode roll) {
+                return owner.rolled(staged, roll);
+            }
         };
     }
 
@@ -730,6 +738,15 @@ public final class RuleDispatcher {
             public void mutated(ObjectNode staged, String operation, ObjectNode previousActor, String target) {
                 try {
                     observer.mutated(staged, operation, previousActor, target);
+                } catch (RuleRuntime.Unavailable failure) {
+                    throw new ReactionFailure(failure);
+                }
+            }
+
+            @Override
+            public ObjectNode rolled(ObjectNode staged, ObjectNode roll) {
+                try {
+                    return observer.rolled(staged, roll);
                 } catch (RuleRuntime.Unavailable failure) {
                     throw new ReactionFailure(failure);
                 }
@@ -890,6 +907,74 @@ public final class RuleDispatcher {
                 }
                 results.addAll(reacted.actions());
                 outbox.addAll(reacted.outbox());
+            }
+
+            @Override
+            public ObjectNode rolled(ObjectNode staged, ObjectNode roll) {
+                if (!budget.nestedRolls || !Set.of("action", "reaction", "damage", "roll")
+                        .contains(roll.at("/metadata/kind").asText())) return roll;
+                if (budget.inventoryPending)
+                    throw new RuleRuntime.Unavailable("inventorySettlement",
+                            "A feature roll requires the inventory grant to be settled first.");
+                for (JsonNode command : staged.path("outbox")) requireSettledBeforeTrackReaction(command);
+                for (JsonNode command : outbox) requireSettledBeforeTrackReaction(command);
+                if (++budget.events > MAX_TRACK_EVENTS || budget.depth >= MAX_TRACK_REACTION_DEPTH)
+                    throw new RuleRuntime.Unavailable("reactionLimit", "Roll reactions exceeded the transaction limit.");
+                reproject(staged, "track.changed", null, "actor");
+                drainOutbox(staged, outbox);
+                String currentId = staged.at("/source/instanceId").asText();
+                ObjectNode event = ProfileRoll.nestedEvent((ObjectNode) staged.get("event"),
+                        (ObjectNode) staged.get("actor"), (ObjectNode) staged.get("source"), roll);
+                for (String phase : List.of("roll.prepare", "roll.prepared", "roll.finished")) {
+                    event.put("type", phase);
+                    List<Candidate> candidates = new ArrayList<>();
+                    for (String instanceId : budget.sources.keySet().stream().sorted().toList()) {
+                        Candidate candidate = budget.sources.get(instanceId);
+                        if (candidate.program().automatic(phase).isEmpty()) continue;
+                        ObjectNode saved = workingContexts.get(instanceId);
+                        if (saved == null) {
+                            saved = budget.contexts.get(instanceId).deepCopy();
+                            workingContexts.put(instanceId, saved);
+                            byInstance.put(instanceId, candidate);
+                        }
+                        ObjectNode context = saved.deepCopy();
+                        context.set("actor", staged.get("actor").deepCopy());
+                        context.set("event", event.deepCopy());
+                        context.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
+                        context.remove("recipient");
+                        context.remove("outbox");
+                        candidates.add(new Candidate(candidate.program(), context));
+                    }
+                    if (!candidates.isEmpty()) {
+                        EventResolution reacted;
+                        budget.depth++;
+                        try {
+                            reacted = executeEvent(candidates, List.of(), random, programs, false, budget);
+                        } finally {
+                            budget.depth--;
+                        }
+                        for (ObjectNode context : reacted.contexts()) {
+                            String instanceId = context.at("/source/instanceId").asText();
+                            mergeSourceState(workingContexts.get(instanceId), context);
+                            mergeReactionSource(budget, instanceId, context);
+                        }
+                        if (!currentId.isEmpty()) mergeSourceState(staged, workingContexts.get(currentId));
+                        if (!reacted.contexts().isEmpty()) {
+                            staged.set("actor", reacted.contexts().getFirst().get("actor").deepCopy());
+                            event = (ObjectNode) reacted.contexts().getFirst().get("event").deepCopy();
+                        }
+                        results.addAll(reacted.actions());
+                        outbox.addAll(reacted.outbox());
+                    }
+                    if ("roll.prepare".equals(phase) && !event.path("blocked").isEmpty())
+                        throw new RuleRuntime.Unavailable("blocked", event.at("/blocked/0/reason").asText());
+                    ProfileRoll.updateCheck(event);
+                }
+                ((ObjectNode) staged.get("event")).set("table", event.path("table").deepCopy());
+                ObjectNode command = RuleJson.JSON.createObjectNode().put("kind", "roll.event");
+                command.set("event", event);
+                outbox.add(command);
+                return StructuredRoll.validate(event.path("roll"));
             }
 
             @Override

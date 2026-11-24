@@ -66,8 +66,7 @@ edits; an indeterminate outcome rejects the transaction. Exhausted offers are di
 these profiles for top-level cards and nested grimoire spells with written-difficulty casts, preserving automatic
 use policies. Nested spell origins use `card:<spell name>` to match existing triggers. The projection derives
 nested source identities from the active parent instance, child path and catalog ID; newly copied cards receive
-independent parent identities. Existing sheets still require identity migration, and other feature-action roll
-origins still need conversion.
+independent parent identities. Existing sheets still require identity migration, and other feature-action roll origins still need conversion.
 Legacy `action` selectors include attack, reaction and spellcast profiles, and Duality selectors use the
 known pre-roll fact rather than waiting for the dice.
 An equipped weapon's passive roll modifiers apply only to its own profile, while effect modifiers apply to the
@@ -77,13 +76,17 @@ trait or total Spellcast, the host first projects trait-targeting passive and ac
 evaluates passives against those totals. Trait-targeting passive values and conditions cannot depend on derived
 trait totals. Other derived-stat reads and derived-effect activation still use the unmodified baseline; this
 is not general dependency ordering. The preliminary projection evaluates only trait/Spellcast statistics and
-their ordered prerequisites; if no active source reads derived traits, it is skipped altogether. This covers
-declared source profiles, not every feature action that rolls dice,
-damage application or interactive post-roll claims. Equipped weapons that already
+their ordered prerequisites; if no active source reads derived traits, it is skipped altogether. This covers declared source profiles, not damage application or interactive post-roll claims. Equipped weapons that already
 have stable source and instance IDs also receive a base profile even without an automation program. The
 host reads their saved customized trait, range, damage type, dice and flat bonus. Multiple dice pools each
 scale with Proficiency unless `fixedDice` is set. Unsupported damage expressions reject the damage roll;
 identity migration for existing sheets remains outstanding. The generated profile ID avoids declared IDs.
+
+**Feature rolls (format 2).** Typed `roll.resolve` operations in ordinary owner sheet actions dispatch automatic
+prepare, prepared and finished rules, propagate roll and actor edits, and atomically publish ordered chat rolls
+with result controls and retry receipts. Converted sent, resource, action and reaction rolls use this path.
+Interactive prepare choices, targeted actions, downtime rolls, untyped dice and missing legacy origin identities
+still need their respective live integrations.
 
 A stored effect whose source is active on its holder also offers its frozen attack profile. Its descriptor
 and `request.profileRoll` include `effectInstanceId` and the reserved profile ID `effect.profile`; the host

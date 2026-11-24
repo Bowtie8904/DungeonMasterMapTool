@@ -7384,11 +7384,20 @@ public final class OnlineSessionServer {
         List<Campaign.Countdown> countdowns = null;
         List<String> inventoryParty = null;
         Map<String, ObjectNode> inventorySheets = null;
+        int rollPosition = 0;
         for (JsonNode command : commands) {
             String kind = command.required("kind").asText();
             switch (kind) {
                 case "limits.refresh" -> { /* Already applied by AutomationHost. */ }
                 case "effect.endElsewhere" -> { /* Reconciled across staged sheets above. */ }
+                case "roll.event" -> {
+                    JsonNode event = command.path("event");
+                    Campaign.Actor roller = automationActor(event.path("actorId").asText());
+                    if (!"roll.finished".equals(event.path("type").asText())
+                            || !changed.containsKey(roller.getId()))
+                        throw new IllegalArgumentException("The feature roll's actor is no longer available.");
+                    publishedMessages.add(rollPosition++, profileRollMessage(roller, event));
+                }
                 case "inventory.grant" -> {
                     if (response == null || response.path("actions").size() != 1)
                         throw new dmmt.online.automation.RuleRuntime.Unavailable("inventorySettlement",

@@ -30,6 +30,7 @@ public final class RuleRuntime {
     interface TrackObserver {
         void changed(ObjectNode staged, String holder, ObjectNode event);
         default void mutated(ObjectNode staged, String operation, ObjectNode previousActor, String target) {}
+        default ObjectNode rolled(ObjectNode staged, ObjectNode roll) { return roll; }
     }
 
     public static final class Unavailable extends IllegalStateException {
@@ -1297,6 +1298,7 @@ public final class RuleRuntime {
                         metadata.set(entry.getKey(), value);
                     }
                 }
+                if (observer != null) roll = observer.rolled(context, roll);
                 if (alternate != null) rolls.add(alternate);
                 rolls.add(roll);
                 result = roll;

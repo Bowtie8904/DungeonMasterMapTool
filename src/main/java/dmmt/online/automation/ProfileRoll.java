@@ -3,6 +3,7 @@ package dmmt.online.automation;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import dmmt.online.Campaign;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -101,6 +102,33 @@ final class ProfileRoll {
         for (String key : List.of("kind", "trait", "weapon", "range", "dominant", "outcome", "critical",
                 "hopeDie", "fearDie", "spell", "origin", "total", "difficulty", "weaponSource", "weaponSourceId",
                 "fixedDice", "damageType", "move", "reroll", "duality")) check.putNull(key);
+        return event;
+    }
+
+    static ObjectNode nestedEvent(ObjectNode parent, ObjectNode actor, ObjectNode source, ObjectNode roll) {
+        ObjectNode defaults = event("roll.prepare", RuleJson.id(actor.get("id"), "/actor/id"),
+                RuleJson.integer(parent.at("/table/fear"), "/event/table/fear", 0, Campaign.MAX_FEAR));
+        ObjectNode event = parent.deepCopy();
+        for (String field : List.of("type", "actorId", "thresholds", "damage", "damageType", "roll", "check"))
+            event.set(field, defaults.get(field).deepCopy());
+        event.remove(List.of("blocked", "resultId", "effectInstanceId", "profileId"));
+        JsonNode metadata = roll.path("metadata");
+        String kind = metadata.path("kind").asText();
+        if ("action".equals(kind) && metadata.path("attack").asBoolean()) kind = "attack";
+        ObjectNode check = (ObjectNode) event.get("check");
+        check.put("kind", kind).put("reroll", false);
+        String trait = metadata.path("trait").textValue();
+        if ("spellcast".equals(trait)) trait = actor.path("spellcastTrait").path("name").textValue();
+        if (trait != null) check.put("trait", trait);
+        check.put("spell", "spellcast".equals(metadata.path("trait").asText()));
+        for (String field : List.of("origin", "fixedDice", "damageType"))
+            if (metadata.has(field)) check.set(field, metadata.get(field).deepCopy());
+        if (actor.at("/stats/thresholds").isObject()) event.set("thresholds", actor.at("/stats/thresholds").deepCopy());
+        event.put("sourceInstanceId", RuleJson.id(source.get("instanceId"), "/source/instanceId"))
+                .put("label", metadata.path("label").asText(source.path("name").asText("Roll")));
+        event.set("roll", roll.deepCopy());
+        updateCheck(event);
+        check.put("duality", check.path("hopeDie").isNumber() && check.path("fearDie").isNumber());
         return event;
     }
 

@@ -373,6 +373,15 @@ public final class AutomationHost {
             var intents = selections(request, candidates, revision, relation, "sheet", false);
             response = applyEvent(pack, working, state, event, candidates, intents, random);
         }
+        if ("self".equals(relation)) {
+            for (JsonNode command : response.path("outbox")) {
+                if (!"roll.event".equals(command.path("kind").asText())) continue;
+                ObjectNode nested = RuleJson.JSON.createObjectNode();
+                nested.set("event", command.path("event").deepCopy());
+                offerResult(pack, working, nested, principalId, null, null);
+                ((ObjectNode) command).set("event", nested.get("event"));
+            }
+        }
         pruneResultWindows(pack, working, event);
         response.put("requestId", requestId);
         recordReceipt(projection.state(working), requestId, principalId, "dm".equals(relation), fingerprint, response);
@@ -3838,7 +3847,8 @@ public final class AutomationHost {
     private ObjectNode applyEvent(Pack pack, ObjectNode working, ObjectNode state, ObjectNode event,
                                   List<RuleDispatcher.Candidate> candidates, List<RuleRuntime.Intent> intents, RandomGenerator random) {
         RuleDispatcher.EventResolution resolution;
-        if (candidates.stream().anyMatch(candidate -> !candidate.program().automatic("track.changed").isEmpty())) {
+        if (!candidates.isEmpty() && ("action.request".equals(event.path("type").asText())
+                || candidates.stream().anyMatch(candidate -> !candidate.program().automatic("track.changed").isEmpty()))) {
             ObjectNode actor = RuleJson.object(candidates.getFirst().context().get("actor"), "/actor");
             var ownerProjection = ownerRecoveryProjection(pack, working, state, sources(pack, working), actor,
                     RuleJson.id(actor.get("id"), "/actor/id"), false, true);
