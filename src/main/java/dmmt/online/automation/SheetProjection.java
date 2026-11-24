@@ -19,7 +19,7 @@ import java.util.Set;
  */
 public final class SheetProjection {
     public static final String FORMAT = "dmmap-sheet-projection";
-    private static final Set<String> KINDS = Set.of("value", "object", "map", "first", "collection", "engine");
+    private static final Set<String> KINDS = Set.of("value", "object", "map", "first", "collection", "tally", "engine");
 
     public record SourceElement(String sourceId, String instanceId, String name, ObjectNode element,
                                 String quantityField, String sourcePath) {
@@ -320,8 +320,26 @@ public final class SheetProjection {
                 path(fact.get("key"), at + "/key");
                 path(fact.get("value"), at + "/value");
             }
+            case "tally" -> {
+                RuleJson.fields(fact, at, "kind", "path", "each", "where");
+                path(fact.get("each"), at + "/each");
+                RuleJson.fields(fact.get("where"), at + "/where", "field", "equals");
+                path(fact.path("where").get("field"), at + "/where/field");
+                if (!fact.path("where").path("equals").isValueNode() || fact.path("where").path("equals").isNull())
+                    throw RuleJson.error(at + "/where/equals", "Expected a non-null scalar.");
+            }
             case "first" -> {
-                RuleJson.fields(fact, at, "kind", "path", "where", "fields");
+                RuleJson.fields(fact, at, "kind", "path", "where", "fields", "captures");
+                if (fact.has("captures")) {
+                    fact.get("captures").fields().forEachRemaining(capture -> {
+                        RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(capture.getKey()), at + "/captures");
+                        RuleJson.fields(capture.getValue(), at + "/captures/" + capture.getKey(), "field", "pattern");
+                        path(capture.getValue().get("field"), at + "/captures/" + capture.getKey() + "/field");
+                        String pattern = RuleJson.text(capture.getValue().get("pattern"), at + "/captures/" + capture.getKey() + "/pattern");
+                        if (pattern.length() > 64 || java.util.regex.Pattern.compile(pattern).matcher("").groupCount() != 1)
+                            throw RuleJson.error(at + "/captures/" + capture.getKey() + "/pattern", "Expected a short pattern with exactly one group.");
+                    });
+                }
                 JsonNode where = fact.get("where");
                 RuleJson.fields(where, at + "/where", "field", "equals");
                 path(where.get("field"), at + "/where/field");
@@ -608,8 +626,24 @@ public final class SheetProjection {
                             JsonNode mapped = get((ObjectNode) item, field.getValue().asText());
                             if (!mapped.isMissingNode() && !mapped.isNull()) projected.set(field.getKey(), mapped.deepCopy());
                         });
+                        fact.path("captures").fields().forEachRemaining(capture -> {
+                            JsonNode source = get((ObjectNode) item, capture.getValue().path("field").asText());
+                            if (!source.isTextual()) return;
+                            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(capture.getValue().path("pattern").asText()).matcher(source.asText());
+                            if (matcher.find()) try { projected.put(capture.getKey(), Integer.parseInt(matcher.group(1))); } catch (NumberFormatException ignored) { }
+                        });
                         break;
                     }
+                }
+                case "tally" -> {
+                    if (!value.isArray()) return;
+                    int count = 0;
+                    for (JsonNode item : value) if (item.isObject()) {
+                        JsonNode nested = get((ObjectNode) item, fact.path("each").asText());
+                        if (nested.isArray()) for (JsonNode entryItem : nested) if (entryItem.isObject()
+                                && RuleExpression.equal(get((ObjectNode) entryItem, fact.path("where").path("field").asText()), fact.path("where").path("equals"))) count++;
+                    }
+                    actor.put(entry.getKey(), count);
                 }
                 case "collection" -> {
                     ArrayNode projected = actor.putArray(entry.getKey());

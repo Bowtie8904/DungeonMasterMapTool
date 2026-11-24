@@ -3597,9 +3597,7 @@ class LegacyCatalogConverterTest {
         String[][] cases = {
                 {"{\"ignoreWeaponBurden\":true}", "two-handed Burden"},
                 {"{\"unarmedWeapon\":{\"name\":\"Fists\"}}", "unarmed weapon"},
-                {"{\"conditionalActions\":[{\"id\":\"swap\",\"label\":\"Swap\",\"codexSwap\":true}]}", "vault-to-loadout"},
-                {"{\"rollOptions\":[{\"id\":\"c\",\"label\":\"C\",\"roll\":\"damage\",\"combo\":true}]}", "Combo Die size"},
-                {"{\"rollOptions\":[{\"id\":\"s\",\"label\":\"S\",\"roll\":\"damage\",\"secondaryWeaponDie\":true}]}", "secondary weapon's damage expression"}};
+                {"{\"conditionalActions\":[{\"id\":\"swap\",\"label\":\"Swap\",\"codexSwap\":true}]}", "vault-to-loadout"}};
         for (String[] c : cases) {
             var result = LegacyCatalogConverter.convert(catalog("{\"id\":\"m\",\"name\":\"M\",\"automation\":" + c[0] + "}"));
             assertEquals(0, result.converted(), c[0]);

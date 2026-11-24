@@ -43,14 +43,25 @@ public final class StructuredRoll {
         }
         ArrayNode parts = roll.putArray("contributions");
         int diceCount = 0;
+        Map<String, Integer> chained = new LinkedHashMap<>();
         // Validate the complete plan before consuming any host RNG samples.
         for (int i = 0; i < definitions.size(); i++) {
             JsonNode definition = definitions.get(i);
             String path = "/rollPlan/contributions/" + i;
             ObjectNode part = RuleJson.object(definition, path).deepCopy();
             if ("dice".equals(part.path("kind").asText())) {
-                RuleJson.fields(part, path, "id", "kind", "role", "sourceId", "label", "count", "sides", "keepHighest", "maximize", "sign", "editable");
-                int count = RuleJson.integer(RuleExpression.evaluate(part.path("count"), context), path + "/count", 0, 1024);
+                RuleJson.fields(part, path, "id", "kind", "role", "sourceId", "label", "count", "sides",                 "keepHighest", "maximize", "sign", "editable", "until");
+                                if (part.has("until")) {
+                                    int chain = RuleJson.integer(RuleExpression.evaluate(part.path("sides"), context), path + "/sides", 2, 1000);
+                                    if (!"lower".equals(part.path("until").asText()) || part.has("count") || part.has("keepHighest") || part.has("maximize"))
+                                        throw RuleJson.error(path + "/until", "A chained dice contribution takes only sides and until lower.");
+                                    chained.put(part.path("id").asText(), chain);
+                                    part.remove(List.of("sides", "until"));
+                                    part.putArray("dice");
+                                    parts.add(part);
+                                    continue;
+                                }
+                                int count = RuleJson.integer(RuleExpression.evaluate(part.path("count"), context), path + "/count", 0, 1024);
                 int sides = RuleJson.integer(RuleExpression.evaluate(part.path("sides"), context), path + "/sides", 2, 1000);
                 int keep = part.has("keepHighest") ? RuleJson.integer(RuleExpression.evaluate(part.get("keepHighest"), context), path + "/keepHighest", Math.min(1, count), count) : count;
                 int maximize = part.has("maximize") ? RuleJson.integer(RuleExpression.evaluate(part.get("maximize"), context), path + "/maximize", 0, count) : 0;
@@ -67,6 +78,21 @@ public final class StructuredRoll {
         validate(roll);
         if (random == null && diceCount > 0) throw RuleJson.error("/rollPlan", "Host random generator is required.");
         for (JsonNode part : parts) if ("dice".equals(part.path("kind").asText())) {
+            Integer chain = chained.get(part.path("id").asText());
+            if (chain != null) {
+                int previous = 0;
+                ArrayNode dice = (ArrayNode) part.path("dice");
+                while (true) {
+                    if (diceCount + dice.size() >= budget)
+                        throw RuleJson.error("/rollPlan", "A chained roll exceeded the host's dice limit. No partial result was applied.");
+                    int face = random.nextInt(chain) + 1;
+                    dice.addObject().put("id", part.path("id").asText() + ".d" + (dice.size() + 1))
+                            .put("sides", chain).put("face", face).put("kept", true).put("origin", "rolled");
+                    if (face < previous) break;
+                    previous = face;
+                }
+                continue;
+            }
             List<ObjectNode> faces = new ArrayList<>();
             int keep = 0;
             for (JsonNode die : part.path("dice")) {

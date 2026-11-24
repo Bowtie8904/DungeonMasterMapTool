@@ -2573,10 +2573,34 @@ public final class LegacyCatalogConverter {
                 edited = true;
             }
         }
-        if (option.has("combo"))
-            p.add(path + "/combo", "Manual disposition: the Combo Die size comes from the Brawler's level-advancement choices, which no actor fact exposes, and its repeat-until-lower host roll needs a chained-roll operation that does not exist.");
-        if (option.has("secondaryWeaponDie"))
-            p.add(path + "/secondaryWeaponDie", "Manual disposition: the die comes from the equipped secondary weapon's damage expression, and roll projections do not expose the secondary weapon's dice.");
+        if (option.has("combo")) {
+            if (!option.path("combo").asBoolean(false)) p.add(path + "/combo", "Expected true.");
+            else if (!"damage".equals(roll)) p.add(path + "/combo", "A combo chain extends a damage roll.");
+            else {
+                // The chain keeps rolling the Combo Die until a result is lower than the one before it; the results are not editable.
+                ObjectNode part = contribution(id + "-combo", "dice", role, label);
+                part.set("sides", read("actor.stats.comboDie"));
+                part.put("until", "lower").put("editable", false);
+                from[0] = contributeStep(steps, from[0], part, "combo");
+                edited = true;
+                if (!option.has("exclusive") && !binding.has("exclusiveGroup")) binding.put("exclusiveGroup", "combo-strike");
+            }
+        }
+        if (option.has("secondaryWeaponDie")) {
+            if (!option.path("secondaryWeaponDie").asBoolean(false)) p.add(path + "/secondaryWeaponDie", "Expected true.");
+            else if (!"damage".equals(roll)) p.add(path + "/secondaryWeaponDie", "The secondary weapon's die joins a damage roll.");
+            else {
+                ObjectNode part = contribution(id + "-secondary-die", "dice", role, label).put("count", 1);
+                part.set("sides", read("actor.secondaryWeapon.dieSides"));
+                from[0] = contributeStep(steps, from[0], part, "secondaryDie");
+                edited = true;
+                ArrayNode gate = RuleJson.JSON.createArrayNode();
+                if (rule.has("when")) gate.add(rule.get("when"));
+                gate.add(hasFact("actor.secondaryWeapon.dieSides"));
+                rule.remove("when");
+                applyWhen(rule, gate);
+            }
+        }
         if (option.has("matchingDice")) {
             if (!option.path("matchingDice").asBoolean(false)) p.add(path + "/matchingDice", "Expected true.");
             else if (!"damage".equals(roll)) p.add(path + "/matchingDice", "Matching dice apply to damage rolls.");
@@ -2650,6 +2674,14 @@ public final class LegacyCatalogConverter {
         if (!steps.isEmpty()) rule.set("do", steps);
         labels(option, path, p, rule);
         return rule;
+    }
+
+    private static JsonNode contributeStep(ArrayNode steps, JsonNode from, ObjectNode part, String slot) {
+        ObjectNode step = steps.addObject().put("op", "roll.contribute");
+        step.set("from", from);
+        step.set("contribution", part);
+        step.put("as", slot);
+        return read("result." + slot);
     }
 
     private static ObjectNode adjustedExperienceCost() {

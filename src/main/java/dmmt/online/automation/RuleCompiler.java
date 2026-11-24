@@ -107,7 +107,7 @@ public final class RuleCompiler {
     /** Fields evaluated once per die with the {@code die} context root. */
     private static final Set<String> PER_DIE_FIELDS = Set.of("where", "face", "when");
     private static final Set<String> CONTRIBUTION_FIELDS = Set.of("id", "kind", "role", "label", "count", "sides",
-            "keepHighest", "maximize", "sign", "value", "of", "factor", "editable");
+            "keepHighest", "maximize", "sign", "value", "of", "factor", "editable", "until");
     static final Set<String> RESET_EVENTS = Set.of("rest.short", "rest.long", "scene.end", "session.start");
     private static final java.util.regex.Pattern TRACK_FACT = java.util.regex.Pattern.compile("[A-Za-z][A-Za-z0-9_]{0,63}");
     private static final java.util.regex.Pattern STATS = java.util.regex.Pattern.compile(
@@ -1966,14 +1966,16 @@ public final class RuleCompiler {
         RuleTemplate.validate(RuleJson.text(part.get("label"), path + "/label"));
         if (part.has("editable")) RuleExpression.bool(part.get("editable"), path + "/editable");
         List<String> required = switch (part.path("kind").asText()) {
-            case "dice" -> List.of("count", "sides");
+            case "dice" -> part.has("until") ? List.of("sides") : List.of("count", "sides");
             case "flat" -> List.of("value");
             case "scale" -> List.of("of", "factor");
             default -> throw RuleJson.error(path + "/kind", "Expected dice, flat or scale.");
         };
         Set<String> allowed = new HashSet<>(Set.of("id", "kind", "role", "label", "editable"));
         allowed.addAll(required);
-        if ("dice".equals(part.path("kind").asText())) allowed.addAll(Set.of("keepHighest", "maximize", "sign"));
+        if ("dice".equals(part.path("kind").asText())) allowed.addAll(part.has("until") ? Set.of("sign", "until") : Set.of("keepHighest", "maximize", "sign", "until"));
+        if (part.has("until") && !"lower".equals(part.path("until").asText()))
+            throw RuleJson.error(path + "/until", "Expected lower.");
         part.fieldNames().forEachRemaining(field -> {
             if (!allowed.contains(field)) throw RuleJson.error(path + "/" + field, "Field is not valid for this contribution kind.");
         });

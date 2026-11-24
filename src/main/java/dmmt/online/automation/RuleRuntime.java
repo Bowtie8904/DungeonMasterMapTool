@@ -1490,7 +1490,7 @@ public final class RuleRuntime {
                     throw new Unavailable("randomPreview", "This preview requires a committed roll; no dice were rolled.");
                 part.put("sourceId", program.sourceId()).put("label", RuleTemplate.render(part.path("label").asText(), context));
                 int remaining = 1024 - rolls.stream().mapToInt(RuleRuntime::rolledDice).sum();
-                if ("dice".equals(part.path("kind").asText()) && whole(part.path("count"), context, 0, 1024) > remaining)
+                if ("dice".equals(part.path("kind").asText()) && !part.has("until") && whole(part.path("count"), context, 0, 1024) > remaining)
                     throw RuleJson.error("/dice", "Action exceeds its dice limit.");
                 JsonNode base = eval(op.path("from"), context);
                 ObjectNode contributed = StructuredRoll.contribute(base, part, context, random,
