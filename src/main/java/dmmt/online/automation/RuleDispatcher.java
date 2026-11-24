@@ -619,9 +619,6 @@ public final class RuleDispatcher {
                 if (budget.inventoryPending)
                     throw new RuleRuntime.Unavailable("inventorySettlement",
                             "A later reaction requires the inventory grant to be settled first.");
-                if ("limits.refresh".equals(operation))
-                    throw new RuleRuntime.Unavailable("reactionLimits",
-                            "Refreshing other sources' use budgets requires host settlement before later reactions.");
                 if (Set.of("inventory.grant", "damage.deal").contains(operation))
                     throw new RuleRuntime.Unavailable("reactionCommand",
                             "This host request requires settlement before later reactions: " + operation + ".");
@@ -631,6 +628,9 @@ public final class RuleDispatcher {
                     mergeReactionSource(budget, currentId, staged);
                 }
                 if (budget.projection == null) {
+                    if ("limits.refresh".equals(operation))
+                        throw new RuleRuntime.Unavailable("reactionLimits",
+                                "Refreshing other sources' use budgets requires a host projection.");
                     if (operation.startsWith("effect.") || operation.startsWith("collection.")
                             || "inventory.consume".equals(operation))
                         throw new RuleRuntime.Unavailable("reactionSource",
@@ -650,6 +650,12 @@ public final class RuleDispatcher {
                         && staged.at("/actor/id").equals(staged.at("/recipient/id"));
                 ObjectNode projected = budget.projection.project(staged, budget.contexts, operation, previousActor, target);
                 if (projected == null) throw RuleJson.error("/actor", "The host must return a projected character.");
+                if ("limits.refresh".equals(operation)) {
+                    for (var entry : workingContexts.entrySet()) {
+                        ObjectNode refreshed = budget.contexts.get(entry.getKey());
+                        if (refreshed != null && refreshed != entry.getValue()) mergeSourceState(entry.getValue(), refreshed);
+                    }
+                }
                 staged.set("actor", projected);
                 if (selfRecipient) staged.set("recipient", projected);
                 Candidate current = byInstance.get(currentId);
@@ -723,7 +729,7 @@ public final class RuleDispatcher {
 
             @Override
             public void mutated(ObjectNode staged, String operation, ObjectNode previousActor, String target) {
-                if (budget.liveRoot && budget.depth == 0) return;
+                if (budget.liveRoot && budget.depth == 0 && !"limits.refresh".equals(operation)) return;
                 reproject(staged, operation, previousActor, target);
             }
         };

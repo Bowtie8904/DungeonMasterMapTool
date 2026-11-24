@@ -1079,6 +1079,10 @@ public final class AutomationHost {
                     && !staged.at("/recipient/id").equals(staged.at("/actor/id")))
                 throw new RuleRuntime.Unavailable("recipientReactions",
                         "Changing another character during a track reaction requires a recipient transaction.");
+            if ("limits.refresh".equals(operation)) {
+                settleReactionLimitRefresh(pack, staged, contexts, state, sourceElements);
+                return (ObjectNode) staged.get("actor");
+            }
             if ("track.changed".equals(operation) && !needsTrackProjection)
                 return (ObjectNode) staged.get("actor");
             if (operation.startsWith("state.")) {
@@ -1129,6 +1133,33 @@ public final class AutomationHost {
             throw new RuleRuntime.Unavailable("reactionEffectDependencies",
                     "Effect-bound pools did not stabilize during this reaction.");
         };
+    }
+
+    private void settleReactionLimitRefresh(Pack pack, ObjectNode staged, Map<String, ObjectNode> contexts,
+                                            ObjectNode state, Map<String, SheetProjection.SourceElement> sources) {
+        if (!(staged.get("outbox") instanceof ArrayNode outbox))
+            throw RuleJson.error("/outbox", "The limit refresh request is missing.");
+        int index = outbox.size() - 1;
+        if (index < 0 || !"limits.refresh".equals(outbox.get(index).path("kind").asText()))
+            throw RuleJson.error("/outbox", "The limit refresh request is missing.");
+        JsonNode command = outbox.get(index);
+        String requestingSource = command.path("sourceInstanceId").asText();
+        Set<String> events = new java.util.HashSet<>();
+        command.path("on").forEach(item -> events.add(item.asText()));
+        ObjectNode actor = RuleJson.object(staged.get("actor"), "/actor");
+        ObjectNode event = RuleJson.object(staged.get("event"), "/event");
+        for (var entry : sources.entrySet()) {
+            if (entry.getKey().equals(requestingSource)) continue;
+            RuleCompiler.Program program = pack.programs().get(entry.getValue().sourceId());
+            ObjectNode current = contexts.get(entry.getKey());
+            ObjectNode view = current == null ? context(state, entry.getValue(), actor, event) : current.deepCopy();
+            view.set("actor", actor.deepCopy());
+            view.set("event", event.deepCopy());
+            ObjectNode refreshed = RuleRuntime.refreshLimits(program, view, events);
+            if (current != null) current.set("usage", refreshed.path("usage").deepCopy());
+            storeSource(state, entry.getKey(), refreshed);
+        }
+        outbox.remove(index);
     }
 
     private static boolean plainConsumption(ObjectNode before, JsonNode after, RuleCompiler.Program program) {

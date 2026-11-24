@@ -147,16 +147,51 @@ class HolderReactionProjectionTest {
     }
 
     @Test
-    void deferredLimitRefreshCannotLeaveNestedReactionsWithStaleBudgets() throws Exception {
-        RuleCompiler.Program program = program("features:refresh", """
-                {"rules":[{"id":"armor","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+    void limitRefreshSettlesBeforeNestedReactionsAndRollsBackOnFailure() throws Exception {
+        RuleCompiler.Program refresh = program("features:refresh", """
+                {"limits":{"once":{"max":1,"resetOn":["rest.short"]}},
+                 "rules":[{"id":"armor","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.track"},"armorTrack"]},
                   "do":[{"op":"limits.refresh","on":["rest.short"],"label":"Refresh"},
                         {"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{}}]}
                 """);
-        ObjectNode sheet = sheet(program.sourceId()), before = sheet.deepCopy();
-        var pack = new AutomationHost.Pack("refresh", Map.of(program.sourceId(), program));
-        assertEquals("reactionLimits", assertThrows(RuleRuntime.Unavailable.class, () -> recover(pack, sheet)).code());
-        assertEquals(before, sheet);
+        RuleCompiler.Program passive = program("features:passive", """
+                {"limits":{"once":{"max":1,"resetOn":["rest.short"]}},
+                 "modifiers":[{"stat":"evasion","value":0}]}
+                """);
+        for (boolean fail : new boolean[]{false, true}) {
+            RuleCompiler.Program observer = program("features:observer", """
+                    {"state":{"seen":0},"limits":{"once":{"max":1,"resetOn":["rest.short"]}},
+                     "rules":[{"id":"hope","limitRef":"once",
+                      "bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                      "when":{"eq":[{"read":"event.track"},"hope"]},
+                      "do":[{"op":"state.increment","slot":"seen","by":1}%s],"ui":{"report":"Refreshed."}}]}
+                    """.formatted(fail ? ",{\"op\":\"resource.spend\",\"pool\":\"actor.hope\",\"amount\":2}" : ""));
+            ObjectNode sheet = sheet(refresh.sourceId());
+            sheet.withArray("/features").addObject().put("name", "Observer").put("instanceId", "observer")
+                    .put("automationSource", observer.sourceId());
+            sheet.withArray("/features").addObject().put("name", "Passive").put("instanceId", "passive")
+                    .put("automationSource", passive.sourceId());
+            ObjectNode sources = sheet.withObject("/automationState").putObject("sources");
+            for (String id : new String[]{"feature", "observer", "passive"})
+                sources.putObject(id).putObject("usage").put("once", 1);
+            ObjectNode before = sheet.deepCopy();
+            var pack = new AutomationHost.Pack("refresh", Map.of(refresh.sourceId(), refresh,
+                    observer.sourceId(), observer, passive.sourceId(), passive));
+            if (fail) {
+                assertThrows(RuleRuntime.Unavailable.class, () -> recover(pack, sheet));
+                assertEquals(before, sheet);
+            } else {
+                ObjectNode result = recover(pack, sheet);
+                assertEquals("Refreshed.", result.at("/actions/0/report").asText());
+                assertEquals(1, sheet.at("/automationState/sources/feature/usage/once").asInt());
+                assertEquals(1, sheet.at("/automationState/sources/observer/usage/once").asInt(),
+                        "A nested reaction can spend the freshly restored use.");
+                assertEquals(1, sheet.at("/automationState/sources/observer/state/seen").asInt());
+                assertEquals(0, sheet.at("/automationState/sources/passive/usage/once").asInt());
+                assertTrue(result.path("outbox").isEmpty(), "The already-settled refresh must not be replayed.");
+            }
+        }
     }
 
     @Test

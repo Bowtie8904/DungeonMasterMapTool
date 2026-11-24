@@ -3952,6 +3952,59 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void restTrackReactionsRefreshOtherSourcesBeforeNestedReactions() throws Exception {
+        installRestRules();
+        java.nio.file.Files.writeString(compendiumDir.resolve("domain-cards.json"), """
+                {"format":"dmmap-daggerheart","version":2,"category":"domain-cards","entries":[
+                 {"id":"refresh","name":"Refresh","automation":{
+                  "limits":{"once":{"max":1,"resetOn":["scene.end"]}},
+                  "rules":[{"id":"armor","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                   "when":{"eq":[{"read":"event.track"},"armorTrack"]},
+                   "do":[{"op":"limits.refresh","on":["scene.end"],"label":"Refresh"},
+                         {"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{}}]}},
+                 {"id":"watch","name":"Watch","automation":{
+                  "state":{"seen":0},"limits":{"once":{"max":1,"resetOn":["scene.end"]}},
+                  "rules":[{"id":"hope","limitRef":"once",
+                   "bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                   "when":{"eq":[{"read":"event.track"},"hope"]},
+                   "do":[{"op":"state.increment","slot":"seen","by":1}],"ui":{"report":"Watched."}}]}},
+                 {"id":"passive","name":"Passive","automation":{
+                  "limits":{"once":{"max":1,"resetOn":["scene.end"]}},
+                  "modifiers":[{"stat":"evasion","value":0}]}}
+                ]}
+                """);
+        addRestParty();
+        for (String id : List.of("resting", "mira")) {
+            ObjectNode sheet = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+            ArrayNode loadout = sheet.putArray("loadout");
+            loadout.addObject().put("name", "Refresh").put("instanceId", "refresh").put("automationSource", "domain-cards:refresh");
+            loadout.addObject().put("name", "Watch").put("instanceId", "watch").put("automationSource", "domain-cards:watch");
+            loadout.addObject().put("name", "Passive").put("instanceId", "passive").put("automationSource", "domain-cards:passive");
+            ObjectNode sources = sheet.putObject("automationState").put("revision", 0).putObject("sources");
+            sources.putObject("refresh").putObject("usage").put("once", 1);
+            sources.putObject("watch").putObject("usage").put("once", 1);
+            sources.putObject("passive").putObject("usage").put("once", 1);
+            store.saveSheet(campaign.getId(), id, sheet.toString());
+        }
+        String owner = cookie();
+        for (boolean ally : List.of(false, true)) {
+            JsonNode rest = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+            ObjectNode body = restRequest(rest, "refresh-reaction-" + ally);
+            if (ally) targetRestMove(body, rest, "rest-repair-ally", "mira");
+            else addRestMove((ObjectNode) body.path("request"), restDescriptor(rest.path("moves"), "rest-repair"));
+            diceSeed(seedForDie(4, 4));
+            var completed = restHttp(owner, "resting", null, body.toString());
+            assertEquals(200, completed.statusCode(), completed.body());
+            JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), ally ? "mira" : "resting"));
+            assertEquals(1, saved.at("/automationState/sources/watch/state/seen").asInt());
+            assertEquals(1, saved.at("/automationState/sources/watch/usage/once").asInt());
+            assertEquals(0, saved.at("/automationState/sources/passive/usage/once").asInt());
+            assertEquals(1, saved.at("/automationState/sources/refresh/usage/once").asInt());
+            assertEquals(completed.body(), restHttp(owner, "resting", null, body.toString()).body());
+        }
+    }
+
+    @Test
     void formatTwoRestTransfersSingleHolderEffectsBeforePartyRecovery() throws Exception {
         installPartyRestRules("gain");
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
@@ -5635,6 +5688,47 @@ class OnlineSessionServerTest {
             assertEquals(afterDrink, MAPPER.readTree(store.loadSheet(campaign.getId(), "auto")));
             assertEquals(afterHistory, store.historyTail(campaign.getId(), 100).size());
         }
+    }
+
+    @Test
+    void selfActionsSettleRefreshesBeforeTrackReactions() throws Exception {
+        installRestRules();
+        Path rulesFile = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(rulesFile.toFile());
+        ruleset.withObject("/automation").withArray("rules").add(MAPPER.readTree("""
+                {"id":"refresh-heal","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                 "do":[{"op":"limits.refresh","on":["scene.end"],"label":"Refresh"},
+                       {"op":"track.clear","track":"actor.hp","amount":1}],"ui":{"label":"Refresh and heal"}}
+                """));
+        java.nio.file.Files.writeString(rulesFile, ruleset.toString());
+        java.nio.file.Files.writeString(compendiumDir.resolve("domain-cards.json"), """
+                {"format":"dmmap-daggerheart","version":2,"category":"domain-cards","entries":[
+                 {"id":"watch","name":"Watch","automation":{"limits":{"once":{"max":1,"resetOn":["scene.end"]}},
+                  "rules":[{"id":"hp","limitRef":"once",
+                   "bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                   "when":{"eq":[{"read":"event.track"},"hp"]},
+                   "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"report":"Watched."}}]}}
+                ]}
+                """);
+        campaign.getActors().add(Campaign.Actor.builder().id("auto").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "auto", """
+                {"name":"Ada","hp":{"slots":6,"on":2},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},
+                 "loadout":[{"name":"Watch","instanceId":"watch","automationSource":"domain-cards:watch"}],
+                 "automationState":{"revision":0,"sources":{"watch":{"usage":{"once":1}}}}}
+                """);
+        String owner = cookie();
+        String request = """
+                {"request":{"requestId":"refresh-heal","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"ruleset:base","ruleId":"refresh-heal","bindingId":"sheet"}]}}
+                """;
+        var result = automationHttp(owner, "auto", request);
+        assertEquals(200, result.statusCode(), result.body());
+        JsonNode sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), "auto"));
+        assertEquals(1, sheet.at("/hp/on").asInt());
+        assertEquals(1, sheet.at("/hope/on").asInt());
+        assertEquals(1, sheet.at("/automationState/sources/watch/usage/once").asInt());
+        assertEquals(result.body(), automationHttp(owner, "auto", request).body());
     }
 
     @Test

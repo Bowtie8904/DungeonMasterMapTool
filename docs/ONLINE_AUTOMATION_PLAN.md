@@ -278,8 +278,10 @@ Sheet-backed owner recovery now reprojects the holder's statistics, derived effe
 before nested track reactions and after projection-relevant state or pool changes. It uses the staged state of all
 active sources, not another host request. Explicit, derived and holder-owned conditional effect endings reconcile
 effect-bound actor pools and reproject until stable before later reaction steps, with a bounded pass limit.
-Reactions that change source activation, need cross-holder effect cleanup, involve a computed source pool, request
-deferred inventory, use-budget or damage changes, or cannot resolve a conditional effect's source fail atomically
+`limits.refresh` settles other active sources' uses before nested reactions, including sources without observers;
+newly spent uses are not refreshed a second time. Reactions that change source activation, need cross-holder effect
+cleanup, involve a computed source pool, request deferred inventory or damage changes, or cannot resolve a
+conditional effect's source fail atomically
 instead of reading stale facts. The fixed-source isolated dispatcher also
 rejects projected snapshots when it cannot reproject them. Nested reactions propagate shared event changes back to
 the parent while retaining each event's own type, actor and track-change details.
