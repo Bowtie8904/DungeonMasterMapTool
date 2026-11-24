@@ -1173,6 +1173,37 @@ public final class RuleRuntime {
                 table.put("count", count);
                 result = table;
             }
+            case "dice.sequence" -> {
+                if (preview) throw new Unavailable("randomPreview", "This preview requires a committed roll; no dice were rolled.");
+                int count = whole(op.path("count"), context, 0, 100);
+                int sides = whole(op.path("sides"), context, 2, 1000);
+                int stopAt = whole(op.path("stopAt"), context, 1, sides);
+                int advantaged = op.has("advantaged") ? whole(op.path("advantaged"), context, 0, 100) : 0;
+                int previouslyRolled = rolls.stream().mapToInt(RuleRuntime::rolledDice).sum();
+                if (count * 2 + previouslyRolled > 1024) throw RuleJson.error("/dice", "Action exceeds its dice limit.");
+                if (random == null) throw RuleJson.error("/dice", "Host random generator is required.");
+                ObjectNode roll = RuleJson.JSON.createObjectNode().put("sides", sides);
+                ArrayNode faces = roll.putArray("faces");
+                ObjectNode sequence = RuleJson.JSON.createObjectNode();
+                ArrayNode kept = sequence.putArray("faces"), extra = sequence.putArray("extra");
+                int total = 0, misses = 0;
+                boolean stopped = false;
+                for (int i = 0; i < count && !stopped; i++) {
+                    int face = random.nextInt(sides) + 1;
+                    if (i < advantaged) {
+                        int alternate = random.nextInt(sides) + 1;
+                        extra.add(Math.min(face, alternate));
+                        face = Math.max(face, alternate);
+                    } else extra.addNull();
+                    faces.add(face); kept.add(face); total += face;
+                    if (face >= stopAt) stopped = true;
+                    else misses++;
+                }
+                roll.put("total", total);
+                rolls.add(roll);
+                sequence.put("count", kept.size()).put("misses", misses).put("stopped", stopped);
+                result = sequence;
+            }
             case "dice.roll", "dice.hits", "dice.highest" -> {
                 if (preview) throw new Unavailable("randomPreview", "This preview requires a committed roll; no dice were rolled.");
                 int count = whole(op.path("count"), context, 1, 1024);

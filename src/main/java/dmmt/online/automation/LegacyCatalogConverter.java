@@ -70,7 +70,7 @@ public final class LegacyCatalogConverter {
     private static final Pattern POOL_DICE = Pattern.compile("@([a-z][a-z0-9_]*)(d\\d+(?:[+-]\\d+)?)");
     private static final Set<String> ACTION_FIELDS = Set.of("toggleEffect", "splendorAction", "id", "label", "description", "cost", "steps", "report", "damage",
             "requiresEffect", "excludesEffect", "endEffect", "uses", "usesSource", "actionRoll", "target",
-            "excludeSourceActor", "hostOwned", "selectAmount", "resourceRoll", "hopeDice", "layerRoll", "deferSourceUse", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
+            "excludeSourceActor", "hostOwned", "selectAmount", "resourceRoll", "hopeDice", "layerRoll", "doomsday", "deferSourceUse", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
             "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime", "table",
             "hostRollAction", "bloodAutomation", "castTokens", "patronDice", "witchAction", "requiresCompanion",             "specialAction", "codexSwap", "spendFavor", "menacingReach",
             "costConditions", "refocus", "chooseEffects", "channelRawPower", "requiresFeature", "mutagens");
@@ -4799,6 +4799,7 @@ public final class LegacyCatalogConverter {
         }
         String specialReport = action.has("specialAction") ? specialAction(action, path, p, effects, rule, steps) : reachReport;
         if (action.has("layerRoll")) specialReport = layerRoll(action.get("layerRoll"), path + "/layerRoll", p, pools, steps);
+        if (action.has("doomsday")) specialReport = doomsday(action.get("doomsday"), path + "/doomsday", p, effects, steps);
         if (action.has("timing")) {
             for (int i = 0; i < steps.size(); i++) {
                 JsonNode sampled = steps.get(i);
@@ -4840,6 +4841,27 @@ public final class LegacyCatalogConverter {
      * A layered defence: roll one d6 per layer in a counted pool; any 5 or higher destroys one layer, otherwise every
      * layer is lost. Returns the default report.
      */
+    /**
+     * One roll per Hope slot, stopping at the first stop value: each miss scars a slot, the stop clears Hit Points and
+     * Stress and starts the effect (legacy Doomsday Potion).
+     */
+    private static String doomsday(JsonNode legacy, String path, Problems p, ObjectNode effects, ArrayNode steps) {
+        p.onlyFields(legacy, path, Set.of("effect"));
+        String effect = legacy.path("effect").isObject() ? declareEffect(legacy.get("effect"), path + "/effect", p, effects) : null;
+        if (effect == null) { p.add(path + "/effect", "Expected the effect granted by the final roll."); return null; }
+        ObjectNode roll = steps.addObject().put("op", "dice.sequence").put("sides", 12).put("stopAt", 12).put("as", "doom");
+        roll.set("count", read("actor.hope.max"));
+        roll.set("advantaged", read("actor.hope.value"));
+        scarCapacity(steps, "actor", read("result.doom.misses"), true);
+        for (String track : List.of("hp", "stress")) {
+            ObjectNode clear = steps.addObject().put("op", "track.clear").put("track", TRACKS.get(track));
+            clear.set("amount", read(TRACKS.get(track) + ".marked"));
+            clear.putObject("if").putArray("eq").add(read("result.doom.stopped")).add(true);
+        }
+        steps.addObject().put("op", "effect.start").put("effect", effect).put("target", "actor")
+                .putObject("if").putArray("eq").add(read("result.doom.stopped")).add(true);
+        return "{source.name}: rolled {result.doom.faces|list} ({result.doom.misses} scarred).";
+    }
     private static String layerRoll(JsonNode legacy, String path, Problems p, Pools pools, ArrayNode steps) {
         String pool = legacy.asText("");
         if (!pools.has(pool)) { p.add(path, "Unknown layer pool: " + pool); return null; }

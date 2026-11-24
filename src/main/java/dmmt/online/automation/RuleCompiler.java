@@ -45,6 +45,7 @@ public final class RuleCompiler {
             Map.entry("dice.hits", List.of("count", "sides", "atLeast")),
             Map.entry("dice.highest", List.of("count", "sides")),
             Map.entry("dice.table", List.of("count", "outcomes")),
+            Map.entry("dice.sequence", List.of("count", "sides", "stopAt", "advantaged")),
             Map.entry("recovery.offerRoll", List.of("roll", "track", "label", "offset")),
             Map.entry("downtime.offerRoll", List.of("roll", "label", "offset", "group")),
             Map.entry("inventory.grant", List.of("catalog", "entry", "quantity", "label", "to", "tag", "max", "scope")),
@@ -1888,6 +1889,7 @@ public final class RuleCompiler {
                 && !("roll.resolve".equals(op) && "metadata".equals(field))
                 && !("damage.resolve".equals(op) && "armor".equals(field))
                 && !("track.capacity".equals(op) && Set.of("by", "counter", "amount", "direction").contains(field))
+                && !("dice.sequence".equals(op) && "advantaged".equals(field))
                 && !("claim.offer".equals(op) && "limit".equals(field))
                 && !("plan.adjust".equals(op) && "partyRecovery".equals(field))
                 && !(Set.of("recovery.offerRoll", "downtime.offerRoll").contains(op) && "offset".equals(field))

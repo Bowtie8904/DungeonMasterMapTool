@@ -389,7 +389,7 @@
 "consumables","/entries/75/automation","crystals-from-beyond [Crystals from Beyond]","actions","converted-candidate","","not captured","unverified"
 "consumables","/entries/76/automation","darkstone [Darkstone]","actions","converted-candidate","","not captured","unverified"
 "consumables","/entries/77/automation","demon-toad-bile [Demon Toad Bile]","actions","converted-candidate","","not captured","unverified"
-"consumables","/entries/78/automation","doomsday-potion [Doomsday Potion]","actions","unconverted","/entries/78/automation/actions/0/doomsday: Unsupported legacy field: doomsday","not captured","unverified"
+"consumables","/entries/78/automation","doomsday-potion [Doomsday Potion]","actions","converted-candidate","","not captured","unverified"
 "consumables","/entries/79/automation","dust-of-echoed-silence [Dust of Echoed Silence]","actions","converted-candidate","","not captured","unverified"
 "consumables","/entries/80/automation","ebony-thread [Ebony Thread]","actions","converted-candidate","","not captured","unverified"
 "consumables","/entries/81/automation","echo-orchid-petal [Echo Orchid Petal]","actions","converted-candidate","","not captured","unverified"
