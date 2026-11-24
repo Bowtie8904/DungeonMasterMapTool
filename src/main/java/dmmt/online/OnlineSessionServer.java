@@ -7310,7 +7310,10 @@ public final class OnlineSessionServer {
                     throw new IOException("Invalid stored sheet for " + id + ".");
                 sheet = saved;
             }
-            if (automationHost.endEffectsElsewhere(pack, sheet, automationEvent("action.request", actor), effects, !alreadyChanged)) {
+            ObjectNode beforeEnd = sheet.deepCopy();
+            ObjectNode endEvent = automationEvent("action.request", actor);
+            if (automationHost.endEffectsElsewhere(pack, sheet, endEvent, effects, !alreadyChanged)) {
+                automationHost.automaticEffectTransitions(pack, beforeEnd, sheet, endEvent, diceRandom);
                 affected.add(id);
                 if (!alreadyChanged) {
                     sheet.put("featureRevision", sheet.path("featureRevision").asLong(0) + 1);

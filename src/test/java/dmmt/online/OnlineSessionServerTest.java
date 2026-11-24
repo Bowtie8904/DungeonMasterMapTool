@@ -9216,6 +9216,37 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void singleHolderTransferDispatchesEffectEndedOnTheOtherHolder() throws Exception {
+        installSingleHolderActions();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        automation.putObject("state").put("ends", 0);
+        automation.putArray("rules").add(MAPPER.readTree("""
+                {"id":"ended","bindings":[{"id":"auto","event":"effect.ended","surface":"resource","mode":"automatic"}],
+                 "do":[{"op":"state.increment","slot":"ends","by":1}],"ui":{}}"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String id = campaign.getId();
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("holder").name("Holder").ownerId("other").build());
+        store.saveSheet(id, "caster", """
+                {"name":"Ada","hope":{"slots":6,"on":3},"features":[
+                 {"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"}]}""");
+        store.saveSheet(id, "holder", """
+                {"name":"Holder","features":[
+                 {"name":"Steady","automationSource":"classes:tester:features:steady","instanceId":"h"}],
+                 "automationState":{"revision":0,"effects":[
+                 {"id":"old","effect":"classes:tester:features:rally#ward","sourceInstanceId":"r","sourceActorId":"caster","label":"Ward"}]}}""");
+        var applied = automationHttp(cookie(), "caster", """
+                {"request":{"requestId":"transfer","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"r","ruleId":"cast","bindingId":"sheet"}]}}""");
+        assertEquals(200, applied.statusCode(), applied.body());
+        JsonNode holder = MAPPER.readTree(store.loadSheet(id, "holder"));
+        assertTrue(holder.at("/automationState/effects").isEmpty(), holder.toString());
+        assertEquals(1, holder.at("/automationState/sources/h/state/ends").asInt(), holder.toString());
+    }
+
+    @Test
     void singleHolderFanoutKeepsTheLastTargetAndPrunesThePriorSourcesResult() throws Exception {
         installSingleHolderActions();
         String cookie = cookie(), id = campaign.getId();
