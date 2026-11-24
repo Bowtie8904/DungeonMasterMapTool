@@ -1809,6 +1809,19 @@ public final class RuleRuntime {
                 }
                 result = request.deepCopy();
             }
+            case "card.borrow" -> {
+                ObjectNode actor = RuleJson.object(context.path("actor"), "/actor");
+                String lender = RuleJson.text(eval(op.path("lender"), context), "/lender"),
+                        card = RuleJson.text(eval(op.path("card"), context), "/card");
+                if (lender.isBlank() || lender.length() > 128 || card.isBlank() || card.length() > 128)
+                    throw RuleJson.error("/op", "Choose a card from another character's active loadout.");
+                ArrayNode outbox = context.has("outbox") ? (ArrayNode) context.get("outbox") : context.putArray("outbox");
+                if (outbox.size() >= 32) throw RuleJson.error("/outbox", "Too many host requests.");
+                result = outbox.addObject().put("kind", kind)
+                        .put("sourceInstanceId", context.path("source").path("instanceId").asText())
+                        .put("holderId", RuleJson.id(actor.get("id"), "/actor/id"))
+                        .put("lender", lender).put("card", card).deepCopy();
+            }
             case "heritage.replace" -> {
                 ObjectNode actor = RuleJson.object(context.path("actor"), "/actor");
                 String ancestry = RuleJson.text(eval(op.path("ancestry"), context), "/ancestry"),

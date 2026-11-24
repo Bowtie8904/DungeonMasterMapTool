@@ -75,7 +75,7 @@ public final class LegacyCatalogConverter {
             "excludeSourceActor", "hostOwned", "selectAmount", "resourceRoll", "hopeDice", "layerRoll", "doomsday", "deferSourceUse", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
             "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime", "table",
             "hostRollAction", "bloodAutomation", "castTokens", "patronDice", "witchAction", "requiresCompanion",             "specialAction", "codexSwap", "spendFavor", "menacingReach",
-            "costConditions", "refocus", "chooseEffects", "channelRawPower", "requiresFeature", "mutagens", "rollDicePool", "followUpAction", "chatOnly", "ancestryChoice", "beastform", "evolution", "assumeBeastform");
+            "costConditions", "refocus", "chooseEffects", "channelRawPower", "requiresFeature", "mutagens", "rollDicePool", "followUpAction", "chatOnly", "ancestryChoice", "copycat", "beastform", "evolution", "assumeBeastform");
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
@@ -324,6 +324,9 @@ public final class LegacyCatalogConverter {
             if (!valid) p.add(path + "/beastformFree", "Expected 1-16 Beastform names.");
             else out.putObject("provides").set("beastformFree", names.deepCopy());
         }
+        for (JsonNode action : legacy.path("actions"))
+            if (action.path("copycat").asBoolean(false))
+                out.putObject("borrowCards").put("minLevel", 1).put("maxLevel", 8).putArray("exclude").add("Copycat");
         if (legacy.has("banishDifficulty")) {
             if (!legacy.path("banishDifficulty").asBoolean(false)) p.add(path + "/banishDifficulty", "Expected true.");
             else out.putObject("sourceFields").putObject("banishDifficulty").put("label", "Banish difficulty")
@@ -1608,6 +1611,27 @@ public final class LegacyCatalogConverter {
             replace.set("ancestry", read("actor.ancestry"));
         } else replace.set("ancestry", read("input.pick.ancestry"));
         replace.set("feature", read("input.pick.feature"));
+    }
+    /**
+     * {@code copycat}: the player picks another character's active-loadout domain card (printed levels 1 to 8, kept in
+     * {@code actor.borrowCandidates} by the host), pays (level + 1) / 2 Hope, and {@code card.borrow} copies it onto the
+     * sheet until the next rest or until its owner vaults it. The once-per-long-rest use is the block's ordinary limit.
+     */
+    private static void copycat(JsonNode mode, String path, Problems p, ObjectNode rule, ArrayNode steps) {
+        if (!mode.asBoolean(false)) { p.add(path, "Expected true."); return; }
+        if (rule.has("inputs")) { p.add(path, "Copycat cannot share an action with another input."); return; }
+        if (!rule.has("limitRef")) { p.add(path, "Copycat needs its once-per-long-rest limit."); return; }
+        ObjectNode input = rule.putArray("inputs").addObject().put("id", "pick").put("kind", "record.select")
+                .put("label", "Domain card to copy")
+                .put("choiceLabel", "{input.option.card} (level {input.option.level}, {input.option.actorName})");
+        input.set("from", read("actor.borrowCandidates"));
+        ObjectNode halved = RuleJson.JSON.createObjectNode();
+        halved.putArray("divide").add(RuleJson.JSON.createObjectNode().set("add", RuleJson.JSON.createArrayNode().add(read("input.pick.level")).add(1))).add(2);
+        ArrayNode costs = rule.has("costs") ? (ArrayNode) rule.get("costs") : rule.putArray("costs");
+        costs.addObject().put("op", "resource.spend").put("pool", "actor.hope").set("amount", RuleJson.JSON.createObjectNode().set("floor", halved));
+        ObjectNode borrow = steps.addObject().put("op", "card.borrow");
+        borrow.set("lender", read("input.pick.actorId"));
+        borrow.set("card", read("input.pick.card"));
     }
     private static ObjectNode literalOption(String name, int tier) {
         ObjectNode option = RuleJson.JSON.createObjectNode().put("name", name);
@@ -5220,6 +5244,7 @@ public final class LegacyCatalogConverter {
         if (action.has("refocus")) refocus(action, path, p, pools, steps);
         if (action.has("chooseEffects")) chooseEffects(action.get("chooseEffects"), path + "/chooseEffects", p, effects, rule, steps);
         if (action.has("mutagens")) mutagens(action.get("mutagens"), path + "/mutagens", p, effects, rule, steps);
+        if (action.has("copycat")) copycat(action.get("copycat"), path + "/copycat", p, rule, steps);
         if (action.has("ancestryChoice")) ancestryChoice(action.get("ancestryChoice"), path + "/ancestryChoice", p, rule, steps);
         if (action.has("assumeBeastform")) assumeBeastform(action.get("assumeBeastform"), path + "/assumeBeastform", p, steps);
         if (action.has("channelRawPower")) channelRawPower(action.get("channelRawPower"), path + "/channelRawPower", p, effects, rule, steps);

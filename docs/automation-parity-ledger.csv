@@ -563,7 +563,7 @@
 "domain-cards","/entries/50/spells/0/automation","conjure-swarm [Conjure Swarm] > Tekaira Armored Beetles","actions","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/50/spells/1/automation","conjure-swarm [Conjure Swarm] > Fire Flies","conditionalRollTriggers","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/51/automation","conjured-steeds [Conjured Steeds]","actions","converted-candidate","","not captured","unverified"
-"domain-cards","/entries/52/automation","copycat [Copycat]","actions;uses","unconverted","/entries/52/automation/actions/0/copycat: Unsupported legacy field: copycat","not captured","unverified"
+"domain-cards","/entries/52/automation","copycat [Copycat]","actions;uses","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/53/automation","corrosive-projectile [Corrosive Projectile]","conditionalRollTriggers","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/54/automation","counterspell [Counterspell]","actions;conditionalRollTriggers","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/55/automation","crimson-adamance [Crimson Adamance]","mitigation","converted-candidate","","not captured","unverified"

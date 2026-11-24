@@ -5330,6 +5330,9 @@ public final class OnlineSessionServer {
             Map<String, ObjectNode> inactive = new java.util.LinkedHashMap<>();
             disabledSources.forEach((id, sheet) -> { if (!warriors.containsKey(id)) inactive.put(id, sheet); });
             for (String id : automationHost.synchronizePartyGrants(automationPack(), warriors, inactive)) changes.put(id, warriors.get(id));
+            Map<String, String> actorNames = new java.util.HashMap<>();
+            for (Campaign.Actor actor : campaign.getActors()) actorNames.put(actor.getId(), actor.getName());
+            for (String id : automationHost.synchronizeBorrowedCards(automationPack(), warriors, actorNames)) changes.put(id, warriors.get(id));
             for (var entry : warriors.entrySet())
                 if (automationHost.synchronizeUnarmedWeapon(automationPack(), entry.getValue())) changes.put(entry.getKey(), entry.getValue());
         } catch (IOException | dmmt.online.automation.AutomationHost.NotReady ignored) {
@@ -7515,6 +7518,19 @@ public final class OnlineSessionServer {
                     ObjectNode choice = command.deepCopy();
                     BeastformRules.assume(target, catalogs().document("classes"), choice, command.path("evolution").asBoolean(),
                             command.path("anyTier").asBoolean(), "manual".equals(command.path("until").asText()) ? "" : command.path("until").asText());
+                    affected.add(holder);
+                }
+                case "card.borrow" -> {
+                    String holder = command.path("holderId").asText();
+                    ObjectNode target = changed.get(holder);
+                    if (target == null)
+                        throw new IllegalArgumentException("The borrowing character is not in this transaction.");
+                    Campaign.Actor lender = campaign.actor(command.path("lender").asText());
+                    if (lender == null || lender.isDisabled() || lender.getId().equals(holder))
+                        throw new IllegalArgumentException("Choose a domain card from another actor's active loadout.");
+                    ObjectNode lenderSheet = changed.containsKey(lender.getId()) ? changed.get(lender.getId()) : storedSheet(lender.getId());
+                    automationHost.borrowCard(pack, target, command.path("sourceInstanceId").asText(), lender.getId(),
+                            lender.getName(), lenderSheet, command.path("card").asText());
                     affected.add(holder);
                 }
                 case "heritage.replace" -> {

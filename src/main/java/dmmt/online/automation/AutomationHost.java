@@ -40,7 +40,7 @@ public final class AutomationHost {
     private static final int MAX_REACTION_PROJECTION_PASSES = 16;
     private static final Set<String> STAGED_REST_COMMANDS = Set.of(
             "countdown.start", "limits.refresh", "effect.endElsewhere", "table.gain", "table.spend", "claim.offer", "limit.restore",
-            "recovery.offerRoll", "downtime.offerRoll", "heritage.replace", "beastform.assume");
+            "recovery.offerRoll", "downtime.offerRoll", "heritage.replace", "beastform.assume", "card.borrow");
     private static final Set<String> STAGED_TARGET_REST_COMMANDS = Set.of(
             "countdown.start", "limits.refresh", "table.gain", "table.spend", "claim.offer", "limit.restore",
             "recovery.offerRoll", "downtime.offerRoll");
@@ -1195,6 +1195,117 @@ public final class AutomationHost {
                 if (next.isEmpty()) sheet.remove("partyGrants"); else sheet.set("partyGrants", next);
                 changed.add(entry.getKey());
             }
+        }
+        return changed;
+    }
+    private static final String BORROW_PREFIX = "borrow:";
+
+    private static ObjectNode borrowSpec(Pack pack, List<SheetProjection.SourceElement> sources, String instanceId) {
+        for (var source : sources) {
+            if (instanceId != null && !instanceId.equals(source.instanceId())) continue;
+            RuleCompiler.Program program = pack.programs().get(source.sourceId());
+            if (program != null && program.borrowCards() != null) return program.borrowCards();
+        }
+        return null;
+    }
+
+    private static boolean borrowable(ObjectNode spec, JsonNode card) {
+        if (!card.path("automationSource").isTextual() || !card.path("name").isTextual()) return false;
+        for (JsonNode excluded : spec.path("exclude")) if (excluded.asText().equals(card.path("name").asText())) return false;
+        int level = card.path("level").asInt(0);
+        return level >= spec.path("minLevel").asInt() && level <= spec.path("maxLevel").asInt();
+    }
+
+    private static JsonNode loadoutCard(JsonNode sheet, String name) {
+        for (JsonNode card : sheet.path("loadout")) if (name.equals(card.path("name").asText())) return card;
+        return null;
+    }
+
+    private void dropBorrowed(ObjectNode sheet, JsonNode element) {
+        String instance = element.path(projection.instanceField()).asText();
+        if (sheet.path("borrowedCards") instanceof ArrayNode cards) {
+            for (int i = cards.size() - 1; i >= 0; i--) if (cards.get(i) == element || cards.get(i).equals(element)) cards.remove(i);
+            if (cards.isEmpty()) sheet.remove("borrowedCards");
+        }
+        if (sheet.path(projection.stateField()).path("sources") instanceof ObjectNode states) {
+            List<String> stale = new ArrayList<>();
+            states.fieldNames().forEachRemaining(key -> { if (key.contains(instance)) stale.add(key); });
+            states.remove(stale);
+        }
+        if (sheet.path("effects") instanceof ArrayNode effects)
+            for (int i = effects.size() - 1; i >= 0; i--)
+                if (effects.get(i).path("sourceInstanceId").asText().contains(instance)) effects.remove(i);
+    }
+
+    /**
+     * Borrows another character's loadout card ({@code card.borrow}): the lender's card element is copied into the
+     * borrower's {@code borrowedCards} so its own rules become active sources there, replacing any earlier borrow and
+     * starting with fresh state. The borrower's source must declare {@code borrowCards}; the card must be in the
+     * lender's loadout and within the declared level range. Rest counters are recorded so the borrow can end on any rest.
+     */
+    public void borrowCard(Pack pack, ObjectNode borrower, String borrowerInstanceId, String lenderId,
+                           String lenderName, ObjectNode lenderSheet, String cardName) {
+        ObjectNode spec = borrowSpec(pack, sources(pack, borrower), borrowerInstanceId);
+        if (spec == null) throw new IllegalArgumentException("This source cannot borrow cards.");
+        JsonNode card = lenderSheet == null ? null : loadoutCard(lenderSheet, cardName);
+        if (card == null) throw new IllegalArgumentException("The source has vaulted or removed that card. Choose again.");
+        if (!borrowable(spec, card)) throw new IllegalArgumentException("Choose a domain card from another actor's active loadout.");
+        if (borrower.path("borrowedCards") instanceof ArrayNode old)
+            for (JsonNode element : old.deepCopy()) dropBorrowed(borrower, element);
+        ObjectNode element = card.deepCopy();
+        element.remove(List.of("borrowedCard", "catalog"));
+        element.put(projection.instanceField(), BORROW_PREFIX + lenderId + ":" + card.path(projection.instanceField()).asText(cardName.replaceAll("[^A-Za-z0-9_-]", "")))
+                .put("borrowedFrom", lenderId).put("lenderName", lenderName).put("borrowerInstance", borrowerInstanceId)
+                .put("longRestRevision", borrower.path("longRestRevision").asLong(0))
+                .put("shortRestsInRow", borrower.path("shortRestsInRow").asInt(0));
+        borrower.withArray("borrowedCards").add(element);
+        borrower.put("compendiumRevision", borrower.path("compendiumRevision").asLong(0) + 1);
+    }
+
+    /**
+     * Keeps {@code borrowCandidates} (the other active characters' borrowable loadout cards, de-duplicated by name and
+     * ordered by level) on every sheet holding a {@code borrowCards} source, and ends borrows whose borrower no longer
+     * holds that source, whose lender is gone or no longer has the card in its loadout, or after any rest.
+     * Returns the ids of changed sheets.
+     */
+    public Set<String> synchronizeBorrowedCards(Pack pack, Map<String, ObjectNode> active, Map<String, String> names) {
+        Set<String> changed = new java.util.LinkedHashSet<>();
+        for (var entry : active.entrySet()) {
+            ObjectNode sheet = entry.getValue();
+            ObjectNode before = sheet.deepCopy();
+            ObjectNode spec = borrowSpec(pack, sources(pack, sheet), null);
+            if (sheet.path("borrowedCards") instanceof ArrayNode cards)
+                for (JsonNode element : cards.deepCopy()) {
+                    ObjectNode lender = active.get(element.path("borrowedFrom").asText());
+                    boolean holds = false;
+                    for (var source : sources(pack, sheet))
+                        if (source.instanceId().equals(element.path("borrowerInstance").asText())) holds = true;
+                    String name = element.path("name").asText();
+                    boolean rested = sheet.path("longRestRevision").asLong(0) > element.path("longRestRevision").asLong(0)
+                            || sheet.path("shortRestsInRow").asInt(0) > element.path("shortRestsInRow").asInt(0);
+                    if (!holds || spec == null || lender == null || lender == sheet || loadoutCard(lender, name) == null || rested)
+                        dropBorrowed(sheet, element);
+                }
+            if (spec == null) sheet.remove("borrowCandidates");
+            else {
+                Map<String, ObjectNode> unique = new java.util.TreeMap<>();
+                for (var other : active.entrySet()) {
+                    if (other.getKey().equals(entry.getKey())) continue;
+                    for (JsonNode card : other.getValue().path("loadout"))
+                        if (borrowable(spec, card)) {
+                            ObjectNode candidate = RuleJson.JSON.createObjectNode();
+                            candidate.put("id", other.getKey() + ":" + card.path("name").asText())
+                                    .put("actorId", other.getKey()).put("actorName", names.getOrDefault(other.getKey(), other.getKey()))
+                                    .put("card", card.path("name").asText()).put("level", card.path("level").asInt());
+                            unique.putIfAbsent(card.path("name").asText(), candidate);
+                        }
+                }
+                ArrayNode list = RuleJson.JSON.createArrayNode();
+                unique.values().stream().sorted(java.util.Comparator.comparingInt(candidate -> candidate.path("level").asInt()))
+                        .forEach(list::add);
+                if (list.isEmpty()) sheet.remove("borrowCandidates"); else sheet.set("borrowCandidates", list);
+            }
+            if (!sheet.equals(before)) changed.add(entry.getKey());
         }
         return changed;
     }
