@@ -216,14 +216,39 @@ public final class AutomationHost {
         sources.forEach(source -> active.put(source.instanceId(), source));
         for (JsonNode effect : actor.path("effects")) {
             var source = active.get(effect.path("sourceInstanceId").textValue());
-            if (source == null) continue;
-            ObjectNode profile = effectProfile(pack, source, effect, actor.path("id").textValue());
+            boolean foreign = false;
+            if (source == null) {
+                source = foreignEffectSource(pack, effect, actor.path("id").textValue());
+                if (source == null) continue;
+                foreign = true;
+            }
+            ObjectNode profile = foreign ? foreignEffectProfile(effect)
+                    : effectProfile(pack, source, effect, actor.path("id").textValue());
             if (profile != null)
                 describeProfile(profiles, pack, sources, state, actor, event, source, profile,
                         RuleJson.text(effect.get("id"), "/effects/id"), false, hasRollOptions, relation,
-                        echoWeapon(copy, sources, effect));
+                        foreign ? null : echoWeapon(copy, sources, effect));
         }
         return result;
+    }
+
+    /** The source of a profile effect granted by another character, rebuilt from the effect's own record. */
+    private static SheetProjection.SourceElement foreignEffectSource(Pack pack, JsonNode effect, String actorId) {
+        if (!effect.has("profile") || !RuleEffects.hasSourceActorId(effect)
+                || effect.path("sourceActorId").asText().equals(actorId)) return null;
+        String key = effect.path("effect").asText(""), instance = effect.path("sourceInstanceId").asText(null);
+        int split = key.indexOf('#');
+        if (split < 1 || instance == null) return null;
+        RuleCompiler.Program program = pack.programs().get(key.substring(0, split));
+        if (program == null || !program.hasEffect(key.substring(split + 1))) return null;
+        return new SheetProjection.SourceElement(key.substring(0, split), instance,
+                effect.path("label").asText(key.substring(split + 1)), RuleJson.JSON.createObjectNode(), null);
+    }
+
+    private static ObjectNode foreignEffectProfile(JsonNode effect) {
+        RuleCompiler.validateProfile(effect.get("profile"), "/effects/profile");
+        ObjectNode profile = ((ObjectNode) effect.get("profile")).deepCopy().put("id", EFFECT_PROFILE);
+        return profile.has("limitRef") || profile.path("damage").path("weapon").asBoolean() ? null : profile;
     }
 
     private void describeProfile(ArrayNode profiles, Pack pack, List<SheetProjection.SourceElement> sources,
@@ -829,7 +854,15 @@ public final class AutomationHost {
         String kind = death ? "death" : RuleJson.text(intent.get("kind"), check ? "/request/checkRoll/kind" : "/request/profileRoll/kind");
         var sources = sources(pack, working);
         var source = check || death ? basicCheckSource(sources) : sources.stream().filter(item -> instance.equals(item.instanceId())).findFirst()
-                .orElseThrow(() -> new RuleRuntime.Unavailable("source", "This source is no longer active."));
+                .orElse(null);
+        JsonNode foreignEffect = null;
+        if (source == null && !check && !death && EFFECT_PROFILE.equals(profileId) && intent.has("effectInstanceId"))
+            for (JsonNode effect : working.path("automationState").path("effects"))
+                if (intent.get("effectInstanceId").equals(effect.path("id")) && instance.equals(effect.path("sourceInstanceId").textValue())) {
+                    source = foreignEffectSource(pack, effect, origin.path("actorId").textValue());
+                    foreignEffect = effect;
+                }
+        if (source == null) throw new RuleRuntime.Unavailable("source", "This source is no longer active.");
         var program = pack.programs().get(source.sourceId());
         ObjectNode event = origin.deepCopy();
         String effectId = intent.has("effectInstanceId")
@@ -841,7 +874,8 @@ public final class AutomationHost {
         ArrayNode declared = program == null ? RuleJson.JSON.createArrayNode() : program.profiles();
         SheetProjection.SourceElement echo = null;
         if (!check && !death && effectId != null) {
-            if (EFFECT_PROFILE.equals(profileId))
+            if (foreignEffect != null) profile = foreignEffectProfile(foreignEffect);
+            else if (EFFECT_PROFILE.equals(profileId))
                 for (JsonNode effect : actor.path("effects"))
                     if (effectId.equals(effect.path("id").textValue())
                             && instance.equals(effect.path("sourceInstanceId").textValue())) {

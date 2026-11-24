@@ -9583,6 +9583,26 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void holderRollsAProfileOnAnEffectAnotherCharacterStartedOnThem() throws Exception {
+        installSingleHolderActions();
+        String id = campaign.getId();
+        String allyCookie = allyCookie("other");
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Ally").ownerId("other").build());
+        store.saveSheet(id, "caster", "{\"name\":\"Ada\",\"features\":[{\"name\":\"Rally\","
+                + "\"automationSource\":\"classes:tester:features:rally\",\"instanceId\":\"r\"}]}");
+        store.saveSheet(id, "ally", """
+                {"name":"Ally","automationState":{"revision":0,"effects":[
+                 {"id":"granted","effect":"classes:tester:features:rally#ward","sourceInstanceId":"r","sourceActorId":"caster",
+                  "label":"Ward","profile":{"label":"Claw","trait":"Finesse","range":"melee","damage":{"sides":6}}}]}}""");
+        var rolled = automationHttp(allyCookie, "ally", """
+                {"request":{"requestId":"granted-roll","expectedRevision":0,"selections":[],
+                 "profileRoll":{"sourceInstanceId":"r","profileId":"effect.profile","effectInstanceId":"granted","kind":"damage"}}}""");
+        assertEquals(200, rolled.statusCode(), rolled.body());
+        assertTrue(MAPPER.readTree(rolled.body()).path("event").has("roll"), rolled.body());
+    }
+
+    @Test
     void transferringARolledEffectDoesNotPublishARevokedResultOffer() throws Exception {
         installSingleHolderActions();
         Path file = compendiumDir.resolve("classes.json");
