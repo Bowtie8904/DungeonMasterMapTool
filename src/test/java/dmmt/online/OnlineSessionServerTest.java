@@ -3864,6 +3864,52 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void restTrackReactionsEndOtherSourcesConditionalEffectsForSelfAndAllies() throws Exception {
+        installRestRules();
+        java.nio.file.Files.writeString(compendiumDir.resolve("domain-cards.json"), """
+                {"format":"dmmap-daggerheart","version":2,"category":"domain-cards","entries":[
+                 {"id":"guard","name":"Guard","automation":{
+                  "pools":{"charge":{"kind":"number","scope":"actor","max":4,"whileEffect":"guard"}},
+                  "effects":{"guard":{"label":"Guard","endWhen":{"eq":[{"read":"actor.armorTrack.marked"},0]}}}}},
+                 {"id":"observer","name":"Observer","automation":{"rules":[
+                  {"id":"watch","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                   "when":{"and":[{"eq":[{"read":"event.track"},"armorTrack"]},
+                                   {"eq":[{"size":{"read":"actor.effects"}},0]},
+                                   {"eq":[{"read":"actor.pools.charge.value"},0]}]},
+                   "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"report":"Guard ended."}}]}}
+                ]}
+                """);
+        addRestParty();
+        for (String id : List.of("resting", "mira")) {
+            ObjectNode sheet = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+            ArrayNode loadout = sheet.putArray("loadout");
+            loadout.addObject().put("name", "Guard").put("instanceId", "guard").put("automationSource", "domain-cards:guard");
+            loadout.addObject().put("name", "Observer").put("instanceId", "observer").put("automationSource", "domain-cards:observer");
+            ObjectNode state = sheet.putObject("automationState").put("revision", 0);
+            state.putArray("effects").addObject().put("id", "active-guard").put("effect", "domain-cards:guard#guard")
+                    .put("label", "Guard").put("sourceInstanceId", "guard").put("sourceActorId", id);
+            state.putObject("pools").putObject("charge").put("value", 3).put("max", 4);
+            store.saveSheet(campaign.getId(), id, sheet.toString());
+        }
+        String owner = cookie();
+        for (boolean ally : List.of(false, true)) {
+            JsonNode rest = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+            ObjectNode body = restRequest(rest, "end-guard-" + ally);
+            if (ally) targetRestMove(body, rest, "rest-repair-ally", "mira");
+            else addRestMove((ObjectNode) body.path("request"), restDescriptor(rest.path("moves"), "rest-repair"));
+            diceSeed(seedForDie(4, 4));
+            var completed = restHttp(owner, "resting", null, body.toString());
+            assertEquals(200, completed.statusCode(), completed.body());
+            JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), ally ? "mira" : "resting"));
+            assertEquals(0, saved.at("/armorTrack/on").asInt());
+            assertEquals(1, saved.at("/hope/on").asInt());
+            assertTrue(saved.at("/automationState/effects").isEmpty());
+            assertEquals(0, saved.at("/automationState/pools/charge/value").asInt());
+            assertEquals(completed.body(), restHttp(owner, "resting", null, body.toString()).body());
+        }
+    }
+
+    @Test
     void formatTwoRestTransfersSingleHolderEffectsBeforePartyRecovery() throws Exception {
         installPartyRestRules("gain");
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");

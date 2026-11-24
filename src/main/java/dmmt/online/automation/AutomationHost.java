@@ -1120,8 +1120,8 @@ public final class AutomationHost {
                         persisted(prior)).actor();
                 JsonNode pools = projected.path("pools").deepCopy();
                 RuleEffects.reconcileHolder(prior, projected, Set.of(), pack.programs(), "/actor");
-                if (pools.equals(projected.path("pools"))) {
-                    requireSettledReactionEffects(pack, projected, contexts, currentState, sourceElements, event, holderId);
+                boolean ended = endConditionalReactionEffects(pack, projected, contexts, currentState, sourceElements, event, holderId);
+                if (!ended && pools.equals(projected.path("pools"))) {
                     return projected;
                 }
                 prior = projected;
@@ -1142,12 +1142,16 @@ public final class AutomationHost {
         return priorSource.equals(nextSource);
     }
 
-    private static void requireSettledReactionEffects(Pack pack, ObjectNode actor, Map<String, ObjectNode> contexts,
-                                                       ObjectNode state, Map<String, SheetProjection.SourceElement> sources,
-                                                       ObjectNode event, String holderId) {
+    private static boolean endConditionalReactionEffects(Pack pack, ObjectNode actor, Map<String, ObjectNode> contexts,
+                                                          ObjectNode state, Map<String, SheetProjection.SourceElement> sources,
+                                                          ObjectNode event, String holderId) {
+        ArrayNode kept = RuleJson.JSON.createArrayNode();
+        boolean ended = false;
         for (JsonNode effect : actor.path("effects")) {
-            if (effect.path("derived").asBoolean()
-                    || !effect.has("effect") && !effect.has("sourceInstanceId")) continue;
+            if (effect.path("derived").asBoolean() || !effect.has("effect") && !effect.has("sourceInstanceId")) {
+                kept.add(effect.deepCopy());
+                continue;
+            }
             String key = effect.path("effect").asText("");
             int split = key.lastIndexOf('#');
             RuleCompiler.Program program = split > 0 ? pack.programs().get(key.substring(0, split)) : null;
@@ -1156,7 +1160,10 @@ public final class AutomationHost {
                 throw new RuleRuntime.Unavailable("reactionEffect",
                         "A track reaction cannot resolve an active effect's automation definition.");
             ObjectNode definition = program.effect(effectId);
-            if (!definition.has("endWhen")) continue;
+            if (!definition.has("endWhen")) {
+                kept.add(effect.deepCopy());
+                continue;
+            }
             String instanceId = effect.path("sourceInstanceId").asText();
             ObjectNode source = contexts.get(instanceId);
             SheetProjection.SourceElement element = sources.get(instanceId);
@@ -1170,9 +1177,15 @@ public final class AutomationHost {
             view.set("event", event.deepCopy());
             view = RuleRuntime.projectionContext(program, view);
             if (RuleExpression.bool(RuleExpression.evaluate(definition.get("endWhen"), view), "/effects/" + effectId + "/endWhen"))
-                throw new RuleRuntime.Unavailable("reactionEffect",
-                        "A conditional effect must end during this reaction; lifecycle settlement is not available yet.");
+                ended = true;
+            else kept.add(effect.deepCopy());
         }
+        if (ended) {
+            ObjectNode before = actor.deepCopy();
+            actor.set("effects", kept);
+            RuleEffects.reconcileHolder(before, actor, Set.of(), pack.programs(), "/actor");
+        }
+        return ended;
     }
 
     /** Stages trusted recovery requests for a host-selected scope without persisting or publishing them. */

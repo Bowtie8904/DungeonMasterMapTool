@@ -201,7 +201,7 @@ class RestOwnerReactionsTest {
     }
 
     @Test
-    void passiveSourcesRemainProjectedAndConditionalEffectsRemainGuardedWhenNotDispatched() throws Exception {
+    void passiveSourcesRemainProjectedAndConditionalEffectsEndWhenNotDispatched() throws Exception {
         ObjectNode ruleset = addRules("""
                 {"id":"inspect","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"button",
                   "restMove":{"id":"inspect","kind":"any"}}],
@@ -240,11 +240,12 @@ class RestOwnerReactionsTest {
         ObjectNode invalidState = HOST.projection().state(invalid);
         invalidState.withObject("/sources").putObject("boost").putObject("state").put("bonus", 0);
         invalidState.set("effects", state.path("effects").deepCopy());
-        ObjectNode invalidRest = prepare(pack, invalid, "short"), before = invalid.deepCopy();
-        assertEquals("reactionEffect", assertThrows(RuleRuntime.Unavailable.class, () -> HOST.restMove(pack, invalid,
+        ObjectNode invalidRest = prepare(pack, invalid, "short");
+        var ended = HOST.restMove(pack, invalid,
                 (ObjectNode) invalidRest.get("event"), HOST.restProgress(pack, invalidRest),
-                select("ruleset:base", "inspect"), RuleJson.JSON.createArrayNode(), StructuredRollTest.noRandom())).code());
-        assertEquals(before, invalid);
+                select("ruleset:base", "inspect"), RuleJson.JSON.createArrayNode(), StructuredRollTest.noRandom());
+        assertTrue(invalid.at("/automationState/effects").isEmpty());
+        assertEquals("Evasion 10.", ended.response().at("/actions/1/report").asText());
     }
 
     @Test

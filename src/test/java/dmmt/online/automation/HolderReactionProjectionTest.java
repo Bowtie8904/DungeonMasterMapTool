@@ -194,7 +194,7 @@ class HolderReactionProjectionTest {
     }
 
     @Test
-    void conditionalEndingsAndUnresolvableEffectOwnersFailWithoutChanges() throws Exception {
+    void conditionalEndingsSettleButUnresolvableEffectOwnersFailWithoutChanges() throws Exception {
         RuleCompiler.Program program = program("features:effect", """
                 {"effects":{"guard":{"label":"Guard","endWhen":{"eq":[{"read":"actor.armorTrack.marked"},0]}}},
                  "rules":[{"id":"watch","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
@@ -205,14 +205,15 @@ class HolderReactionProjectionTest {
         sheet.withObject("/automationState").putArray("effects").addObject()
                 .put("id", "guard").put("effect", "features:effect#guard")
                 .put("sourceInstanceId", "feature").put("sourceActorId", "mira");
-        ObjectNode before = sheet.deepCopy();
-        assertEquals("reactionEffect", assertThrows(RuleRuntime.Unavailable.class, () -> recover(pack, sheet)).code());
-        assertEquals(before, sheet);
+        ObjectNode foreign = sheet.deepCopy();
+        recover(pack, sheet);
+        assertEquals(0, sheet.at("/armorTrack/on").asInt());
+        assertTrue(sheet.at("/automationState/effects").isEmpty());
 
-        ((ObjectNode) sheet.at("/automationState/effects/0")).put("sourceActorId", "someone-else");
-        before = sheet.deepCopy();
-        assertEquals("reactionEffect", assertThrows(RuleRuntime.Unavailable.class, () -> recover(pack, sheet)).code());
-        assertEquals(before, sheet);
+        ((ObjectNode) foreign.at("/automationState/effects/0")).put("sourceActorId", "someone-else");
+        ObjectNode before = foreign.deepCopy();
+        assertEquals("reactionEffect", assertThrows(RuleRuntime.Unavailable.class, () -> recover(pack, foreign)).code());
+        assertEquals(before, foreign);
     }
 
     @Test
