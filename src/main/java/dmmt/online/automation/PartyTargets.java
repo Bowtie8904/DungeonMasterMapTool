@@ -28,6 +28,7 @@ public final class PartyTargets {
 
     void stage(List<RuleDispatcher.RecipientUpdate> updates) { this.updates = List.copyOf(updates); }
     public List<RuleDispatcher.RecipientUpdate> updates() { return updates; }
+    void invalidateSnapshots() { actors.clear(); }
 
     public PartyTargets(String packVersion, String sourceVersion, Function<String, List<Member>> loadScope) {
         this.packVersion = packVersion;

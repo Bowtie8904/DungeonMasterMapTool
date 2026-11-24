@@ -160,10 +160,11 @@ Single-action, claim and rest `inventory.grant` commands settle catalog-linked i
 one current spent source limit through the generic chat controls. The claim ledger, sheet, report and exact-retry
 receipt commit atomically. Offers to characters without a player owner are rejected; more than 64 spent limits
 must be reduced before choosing.
-Self-targeted single-holder effects transfer after preparation and between moves. Selected ally moves also
-settle recipient effect starts and ends immediately, including transfers from offline or disabled holders, so
-subsequent operations and recovery reactions see the updated effects. Other reaction phases still reject
-recipient effect mutations that lack ordered lifecycle settlement.
+Self-targeted single-holder effects transfer after preparation and between moves. Ally move adjustments,
+selected moves and deferred benefits settle recipient track changes and effect starts and ends immediately,
+including transfers from offline or disabled holders, so later operations and reactions see the updated state.
+Recipient capacity, collection and pool mutations in adjustments or deferred benefits remain unsupported.
+Recipient-dependent adjustment option previews still require target-specific descriptors.
 Short-rest recovery dice can publish generic chat offers; an owned source may edit one die through
 `rest.roll`. The host commits its use, the holder's bounded recovery and reactions, the updated offer and
 the exact-retry receipt atomically. Converted downtime tables also offer each result die and repeat-count die;

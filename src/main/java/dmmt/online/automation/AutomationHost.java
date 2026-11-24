@@ -2635,6 +2635,13 @@ public final class AutomationHost {
             }
 
             private void commit() { replace(participant.sheet, working); }
+
+            private boolean commitChanges() {
+                if (participant.sheet.equals(working)) return false;
+                commit();
+                markChanged(participant.member.id());
+                return true;
+            }
         }
 
         private Map<String, List<String>> scopeMembership() {
@@ -2873,6 +2880,7 @@ public final class AutomationHost {
         }
         ObjectNode inputs = selection.has("inputs") ? RuleJson.object(selection.get("inputs"), "/selection/inputs")
                 : RuleJson.JSON.createObjectNode();
+        StagedRestRecipients.StagedRecipientReactions adjustmentReactions = null;
         if (target != null) {
             var candidate = byInstance.get(instanceId);
             var selected = new RuleRuntime.Intent(ruleId, bindingId, instanceId, revision(working), inputs);
@@ -2880,6 +2888,8 @@ public final class AutomationHost {
             if (chosen.recipients().size() != 1)
                 throw RuleJson.error("/target", "An ally move requires one other recipient.");
             ObjectNode recipient = chosen.recipients().getFirst().snapshot();
+            if (target.reactions() != null)
+                adjustmentReactions = target.reactions().create(chosen.recipients().getFirst().actorId(), random, working);
             List<RuleDispatcher.Candidate> withRecipient = new ArrayList<>();
             for (var source : candidates) {
                 ObjectNode context = source.context();
@@ -2896,15 +2906,20 @@ public final class AutomationHost {
                 : candidates;
         RuleDispatcher.EventResolution adjustments;
         try {
-            adjustments = observeOwner
-                    ? RuleDispatcher.executeStagedMoveWithOwnerReactions(adjustmentSources, intents, random, pack.programs(),
-                            ownerMoveProjection(pack, working, state, candidates))
-                    : RuleDispatcher.executeStagedMove(candidates, intents, random, pack.programs());
+            if (adjustmentReactions != null)
+                adjustments = RuleDispatcher.executeStagedMoveWithRecipientReactions(adjustmentSources, intents, random,
+                        pack.programs(), ownerMoveProjection(pack, working, state, candidates), adjustmentReactions);
+            else if (observeOwner)
+                adjustments = RuleDispatcher.executeStagedMoveWithOwnerReactions(adjustmentSources, intents, random,
+                        pack.programs(), ownerMoveProjection(pack, working, state, candidates));
+            else adjustments = RuleDispatcher.executeStagedMove(candidates, intents, random, pack.programs());
         } catch (RuleRuntime.Unavailable failure) {
             throw target == null ? failure : targetRestFailure(failure);
         }
         ObjectNode result = applyResolved(pack, working, state, event, adjustments.contexts(),
                 adjustments.actions(), adjustments.outbox());
+        if (adjustmentReactions != null && adjustmentReactions.commitChanges())
+            target.party().invalidateSnapshots();
         if (target != null) validateTargetRestCommands(result);
         ObjectNode adjusted = RuleJson.object(result.get("event"), "/event");
         validateRestMove(adjusted, move, rest, settlePartyRecovery);
@@ -2969,7 +2984,8 @@ public final class AutomationHost {
             recipientUpdates = resolved.recipients();
         }
         boolean recipientApplied = target != null && after.path("outbox").findValuesAsText("kind").contains("inventory.grant")
-                && adjustments.actions().stream().anyMatch(adjustment ->
+                && adjustments.actions().stream().filter(adjustment -> adjustment.actorId() == null
+                        || adjustment.actorId().equals(adjusted.path("actorId").asText())).anyMatch(adjustment ->
                 byInstance.get(adjustment.sourceInstanceId()).program().rule(adjustment.ruleId()).has("after"));
         if (recipientApplied) {
             if (!settleTargetInventory || stagedRecipients == null)
@@ -2988,9 +3004,12 @@ public final class AutomationHost {
             throw new RuleRuntime.Unavailable("restMoves", "No downtime move slots remain.");
         for (String key : List.of("actions", "outbox")) ((ArrayNode) result.get(key)).addAll((ArrayNode) after.get(key));
         JsonNode completedMove = finalEvent.path("move").deepCopy();
-        Map<JsonNode, ObjectNode> recipientViews = new HashMap<>();
         StagedRestRecipients.StagedRecipientReactions stagedReactions = recipientReactions;
+        if (recipientApplied && target.reactions() != null)
+            stagedReactions = target.reactions().create(recipientUpdates.getFirst().actorId(), random, working);
         for (var adjustment : adjustments.actions()) {
+            if (adjustment.actorId() != null && !adjustment.actorId().equals(finalEvent.path("actorId").asText()))
+                continue;
             var original = byInstance.get(adjustment.sourceInstanceId());
             if (!original.program().rule(adjustment.ruleId()).has("after")) continue;
             var activeSources = sources(pack, working);
@@ -3007,10 +3026,9 @@ public final class AutomationHost {
             if (target != null) {
                 var update = recipientUpdates.getFirst();
                 ObjectNode currentEvent = finalEvent.deepCopy();
-                recipient = recipientViews.computeIfAbsent(currentEvent, ignored -> recipientApplied
-                        ? stagedRecipients.snapshot(update.actorId(), currentEvent.deepCopy())
-                        : stagedReactions == null ? target.reproject().apply(update, currentEvent.deepCopy())
-                        : stagedReactions.reproject(update, currentEvent.deepCopy()));
+                recipient = recipientApplied ? stagedRecipients.snapshot(update.actorId(), currentEvent)
+                        : stagedReactions != null ? stagedReactions.reproject(update, currentEvent)
+                        : target.reproject().apply(update, currentEvent);
                 if (recipient == null || !update.actorId().equals(recipient.path("id").asText()))
                     throw RuleJson.error("/recipient", "The host must reproject the updated recipient.");
             }
@@ -3029,14 +3047,24 @@ public final class AutomationHost {
                 }
                 RuleDispatcher.EventResolution completed;
                 try {
-                    completed = RuleDispatcher.executeDeferredWithOwnerReactions(deferredCandidates, deferred, random,
-                            pack.programs(), ownerRecoveryProjection(pack, working, currentState, activeSources,
-                                    currentActor, finalEvent.path("actorId").asText(), true));
+                    var ownerProjection = ownerRecoveryProjection(pack, working, currentState, activeSources,
+                            currentActor, finalEvent.path("actorId").asText(), true);
+                    completed = stagedReactions == null
+                            ? RuleDispatcher.executeDeferredWithOwnerReactions(deferredCandidates, deferred, random,
+                                    pack.programs(), ownerProjection)
+                            : RuleDispatcher.executeDeferredWithRecipientReactions(deferredCandidates, deferred, random,
+                                    pack.programs(), ownerProjection, stagedReactions);
                 } catch (RuleRuntime.Unavailable failure) {
                     throw target == null ? failure : targetRestFailure(failure);
                 }
                 response = applyResolved(pack, working, currentState, finalEvent,
                         completed.contexts(), completed.actions(), completed.outbox());
+                if (stagedReactions != null) {
+                    var update = recipientUpdates.getFirst();
+                    ObjectNode updated = RuleJson.object(completed.contexts().getFirst().get("recipient"), "/recipient");
+                    recipientUpdates = List.of(new RuleDispatcher.RecipientUpdate(update.actorId(), updated, update.revision()));
+                    if (recipientApplied) stagedReactions.commitChanges();
+                }
             } else {
                 ObjectNode deferredContext = context(currentState, active, currentActor, finalEvent);
                 var completed = RuleRuntime.executeAfter(original.program(), deferred,
@@ -3452,6 +3480,7 @@ public final class AutomationHost {
             ObjectNode item = actions.addObject();
             item.put("sourceInstanceId", result.sourceInstanceId()).put("ruleId", result.ruleId())
                     .put("bindingId", result.bindingId()).put("report", result.report());
+            if (result.actorId() != null) item.put("actorId", result.actorId());
             ArrayNode published = item.putArray("publishedRolls");
             result.publishedRolls().forEach(published::add);
             ArrayNode dice = item.putArray("diceRolls");

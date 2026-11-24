@@ -1208,8 +1208,13 @@ public final class RuleCompiler {
                     args, decl, path + "/after", expandedNodes);
         }
         if (hasRecipientMutation(rule)) {
-            for (JsonNode binding : bindings) if (!binding.has("claimGroup") && !binding.has("targetSelection"))
-                throw RuleJson.error(path + "/bindings", "Every recipient mutation binding requires a claim group or target selection.");
+            for (JsonNode binding : bindings)
+                if (!binding.has("claimGroup") && !binding.has("targetSelection")
+                        && !("downtime.move".equals(binding.path("event").asText())
+                        && Set.of("automatic", "option").contains(binding.path("mode").asText())
+                        && supportedRestRecipientMutations(rule)))
+                    throw RuleJson.error(path + "/bindings",
+                            "Recipient mutations require a claim, target selection, or supported targeted downtime phase.");
         }
         if (ruleHasTargetSelection(bindings) && !hasRecipientMutation(rule))
             throw RuleJson.error(path + "/bindings", "Target selection requires a recipient mutation.");
@@ -1280,19 +1285,32 @@ public final class RuleCompiler {
     }
 
     private static boolean hasRecipientMutation(JsonNode rule) {
-        for (String phase : List.of("costs", "do")) for (JsonNode operation : rule.path(phase)) {
-            String kind = operation.path("op").asText();
-            String target = Set.of("resource.spend", "resource.gain").contains(kind)
-                    ? operation.path("pool").asText()
-                    : Set.of("track.mark", "track.clear", "track.capacity").contains(kind) ? operation.path("track").asText()
-                    : "flag.set".equals(kind) ? operation.path("flag").asText()
-                    : (kind.startsWith("effect.") || kind.startsWith("collection."))
-                    && "recipient".equals(operation.path("target").asText()) ? "recipient." : "";
-            if (target.startsWith("recipient.") || "recipient".equals(operation.path("owner").asText())
-                    || Set.of("limit.restore", "inventory.grant").contains(kind)
-                    && "recipient".equals(operation.path("to").asText())) return true;
-        }
+        for (String phase : List.of("costs", "do"))
+            for (JsonNode operation : rule.path(phase))
+                if (recipientMutation(operation)) return true;
         return false;
+    }
+
+    private static boolean supportedRestRecipientMutations(JsonNode rule) {
+        for (String phase : List.of("costs", "do"))
+            for (JsonNode operation : rule.path(phase))
+                if (recipientMutation(operation) && !Set.of("resource.spend", "resource.gain", "track.mark",
+                        "track.clear", "effect.start", "effect.end").contains(operation.path("op").asText()))
+                    return false;
+        return true;
+    }
+
+    private static boolean recipientMutation(JsonNode operation) {
+        String kind = operation.path("op").asText();
+        String target = Set.of("resource.spend", "resource.gain").contains(kind)
+                ? operation.path("pool").asText()
+                : Set.of("track.mark", "track.clear", "track.capacity").contains(kind) ? operation.path("track").asText()
+                : "flag.set".equals(kind) ? operation.path("flag").asText()
+                : (kind.startsWith("effect.") || kind.startsWith("collection."))
+                && "recipient".equals(operation.path("target").asText()) ? "recipient." : "";
+        return target.startsWith("recipient.") || "recipient".equals(operation.path("owner").asText())
+                || Set.of("limit.restore", "inventory.grant").contains(kind)
+                && "recipient".equals(operation.path("to").asText());
     }
 
     private static boolean ruleHasTargetSelection(JsonNode bindings) {

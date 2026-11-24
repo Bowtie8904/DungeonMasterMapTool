@@ -284,7 +284,7 @@ class RestTargetTest {
     }
 
     @Test
-    void targetedAdjustmentAndDeferredPhasesRejectRecipientMutationsEvenWhenTheyDoNothing() throws Exception {
+    void targetedPhasesRequireARecipientCoordinatorAndRejectUnsupportedMutations() throws Exception {
         List<String> mutations = List.of(
                 """
                 {"op":"track.clear","track":"recipient.armorTrack","amount":0}
@@ -309,7 +309,10 @@ class RestTargetTest {
                         .put("kind", "number").put("scope", "actor").put("max", 4);
                 ObjectNode invalid = ruleset.deepCopy();
                 ((ArrayNode) invalid.at(phase)).add(RuleJson.parse(mutation));
-                assertThrows(AutomationHost.NotReady.class, () -> pack(invalid), phase + mutation);
+                if (mutation.contains("\"track.clear\"") || mutation.contains("\"resource.gain\"")
+                        || mutation.contains("\"effect.start\""))
+                    assertDoesNotThrow(() -> pack(invalid), phase + mutation);
+                else assertThrows(AutomationHost.NotReady.class, () -> pack(invalid), phase + mutation);
 
                 Setup setup = setup(ruleset, 4);
                 // Fault-inject an invalid compiled body to exercise the runtime guard as well as the compiler.
@@ -1117,7 +1120,7 @@ class RestTargetTest {
         ObjectNode afterMutation = automation.deepCopy();
         ((ArrayNode) afterMutation.at("/rules/0/after/do")).addObject().put("op", "track.clear")
                 .put("track", "recipient.hp").put("amount", 1);
-        assertThrows(IllegalArgumentException.class, () -> RuleCompiler.compile("ruleset:test", afterMutation,
+        assertDoesNotThrow(() -> RuleCompiler.compile("ruleset:test", afterMutation,
                 RuleJson.parse(LegacyCatalogConverter.coreRecipes())));
 
         ObjectNode recipes = (ObjectNode) RuleJson.parse("""

@@ -132,7 +132,12 @@ public final class RuleDispatcher {
     }
 
     public record ActionResult(String sourceInstanceId, String ruleId, String bindingId, String report,
-                               List<ObjectNode> publishedRolls, List<ObjectNode> diceRolls) {
+                               List<ObjectNode> publishedRolls, List<ObjectNode> diceRolls, String actorId) {
+        public ActionResult(String sourceInstanceId, String ruleId, String bindingId, String report,
+                            List<ObjectNode> publishedRolls, List<ObjectNode> diceRolls) {
+            this(sourceInstanceId, ruleId, bindingId, report, publishedRolls, diceRolls, null);
+        }
+
         public ActionResult {
             publishedRolls = copyNodes(publishedRolls);
             diceRolls = copyNodes(diceRolls);
@@ -192,6 +197,7 @@ public final class RuleDispatcher {
         boolean inventoryPending;
         boolean liveRoot;
         final OwnerProjection projection;
+        RecipientTrackReactions recipient;
         Map<String, ObjectNode> contexts;
 
         ReactionBudget() { this(null); }
@@ -286,6 +292,17 @@ public final class RuleDispatcher {
         return executeEvent(activeSources, selections, random, programs, true, new ReactionBudget(projection));
     }
 
+    static EventResolution executeStagedMoveWithRecipientReactions(List<Candidate> activeSources,
+                                                                   List<RuleRuntime.Intent> selections,
+                                                                   RandomGenerator random,
+                                                                   Map<String, RuleCompiler.Program> programs,
+                                                                   OwnerProjection projection,
+                                                                   RecipientTrackReactions recipient) {
+        ReactionBudget budget = new ReactionBudget(projection);
+        budget.recipient = recipient;
+        return executeEvent(activeSources, selections, random, programs, true, budget);
+    }
+
     static EventResolution executeOwnerTrackReactions(List<Candidate> activeSources, List<RuleRuntime.Intent> selections,
                                                       RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
         return executeOwnerTrackReactions(activeSources, selections, random, programs, null);
@@ -333,6 +350,12 @@ public final class RuleDispatcher {
     static EventResolution executeDeferredWithOwnerReactions(List<Candidate> activeSources, RuleRuntime.Intent intent,
                                                             RandomGenerator random, Map<String, RuleCompiler.Program> programs,
                                                             OwnerProjection projection) {
+        return executeDeferredWithRecipientReactions(activeSources, intent, random, programs, projection, null);
+    }
+
+    static EventResolution executeDeferredWithRecipientReactions(List<Candidate> activeSources, RuleRuntime.Intent intent,
+                                                                  RandomGenerator random, Map<String, RuleCompiler.Program> programs,
+                                                                  OwnerProjection projection, RecipientTrackReactions recipient) {
         if (intent == null) throw RuleJson.error("/selection", "A deferred binding is required.");
         if (programs == null) throw RuleJson.error("/programs", "Expected a compiled program registry.");
         Snapshot snapshot = validateSources(activeSources);
@@ -347,9 +370,12 @@ public final class RuleDispatcher {
         List<ActionResult> actions = new ArrayList<>();
         List<ObjectNode> outbox = new ArrayList<>();
         ReactionBudget budget = new ReactionBudget(projection);
+        budget.recipient = recipient;
         budget.contexts = workingContexts;
         RuleRuntime.TrackObserver observer = ownerTrackObserver(
                 snapshot, byInstance, workingContexts, random, programs, budget, actions, outbox);
+        if (recipient != null)
+            observer = eventRecipientObserver(observer, budget, byInstance, recipient, actions, outbox);
         ObjectNode selectedContext = selected.context();
         selectedContext.set("actor", snapshot.actor().deepCopy());
         RuleRuntime.Resolution resolution = RuleRuntime.executeAfter(selected.program(), intent, selectedContext,
@@ -363,6 +389,7 @@ public final class RuleDispatcher {
         for (String instanceId : workingContexts.keySet().stream().sorted().toList()) {
             ObjectNode context = workingContexts.get(instanceId).deepCopy();
             context.set("actor", completed.get("actor").deepCopy());
+            if (recipient != null) context.set("recipient", completed.get("recipient").deepCopy());
             context.set("event", completed.get("event").deepCopy());
             context.set("revision", RuleExpression.numeric(snapshot.revision() + 1d, "/revision"));
             contexts.add(context);
@@ -517,15 +544,23 @@ public final class RuleDispatcher {
         List<ObjectNode> outbox = new ArrayList<>();
         RuleRuntime.TrackObserver observer = budget == null ? null : ownerTrackObserver(
                 snapshot, byInstance, workingContexts, random, programs, budget, results, outbox);
+        boolean withRecipient = budget != null && budget.recipient != null && budget.depth == 0;
+        if (withRecipient)
+            observer = eventRecipientObserver(observer, budget, byInstance, budget.recipient, results, outbox);
         RuleRuntime.TrackObserver costObserver = reservationObserver(observer);
         List<RuleRuntime.Prepared> prepared = new ArrayList<>();
         ObjectNode sharedActor = snapshot.actor().deepCopy();
         ObjectNode sharedEvent = snapshot.event().deepCopy();
+        JsonNode sharedRecipient = withRecipient && !snapshot.sources().isEmpty()
+                ? snapshot.sources().getFirst().context().path("recipient").deepCopy() : null;
+        if (withRecipient && (sharedRecipient == null || !sharedRecipient.isObject()))
+            throw RuleJson.error("/recipient", "A targeted rest phase requires the recipient snapshot.");
         for (CheckedInvocation item : checked) {
             Invocation invocation = item.invocation();
             String instanceId = invocation.intent().sourceInstanceId();
             ObjectNode context = workingContexts.get(instanceId).deepCopy();
             context.set("actor", sharedActor.deepCopy());
+            if (withRecipient) context.set("recipient", sharedRecipient.deepCopy());
             if (observer != null) context.set("event", sharedEvent.deepCopy());
             context.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             try {
@@ -535,6 +570,7 @@ public final class RuleDispatcher {
                 workingContexts.put(instanceId, next.context().deepCopy());
                 mergeReactionSource(budget, instanceId, next.context());
                 sharedActor = next.context().path("actor").deepCopy();
+                if (withRecipient) sharedRecipient = next.context().path("recipient").deepCopy();
                 if (observer != null) sharedEvent = next.context().path("event").deepCopy();
             } catch (ReactionFailure failure) {
                 throw failure.unavailable;
@@ -548,6 +584,7 @@ public final class RuleDispatcher {
             ObjectNode current = item.context().deepCopy();
             mergeTransactionState(current, workingContexts.get(instanceId));
             current.set("actor", sharedActor.deepCopy());
+            if (withRecipient) current.set("recipient", sharedRecipient.deepCopy());
             current.set("event", sharedEvent.deepCopy());
             current.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             RuleRuntime.Prepared executable = new RuleRuntime.Prepared(item.intent(), current, snapshot.revision());
@@ -558,6 +595,7 @@ public final class RuleDispatcher {
                 for (JsonNode command : nextContext.path("outbox")) outbox.add((ObjectNode) command);
             } else drainOutbox(nextContext, outbox);
             sharedActor = nextContext.path("actor").deepCopy();
+            if (withRecipient) sharedRecipient = nextContext.path("recipient").deepCopy();
             if (nextContext.path("event").isObject()) sharedEvent = nextContext.get("event").deepCopy();
             nextContext.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             workingContexts.put(instanceId, nextContext);
@@ -572,11 +610,57 @@ public final class RuleDispatcher {
         for (String instanceId : instanceIds) {
             ObjectNode context = workingContexts.get(instanceId).deepCopy();
             context.set("actor", sharedActor.deepCopy());
+            if (withRecipient) context.set("recipient", sharedRecipient.deepCopy());
             context.set("event", sharedEvent.deepCopy());
             if (!prepared.isEmpty()) context.set("revision", RuleExpression.numeric(snapshot.revision() + 1d, "/revision"));
             updated.add(context);
         }
         return new EventResolution(updated, results, outbox);
+    }
+
+    private static RuleRuntime.TrackObserver eventRecipientObserver(
+            RuleRuntime.TrackObserver owner, ReactionBudget budget, Map<String, Candidate> sources,
+            RecipientTrackReactions recipient, List<ActionResult> actions, List<ObjectNode> outbox) {
+        return new RuleRuntime.TrackObserver() {
+            @Override
+            public void changed(ObjectNode staged, String holder, ObjectNode event) {
+                if (!"recipient".equals(holder)) {
+                    owner.changed(staged, holder, event);
+                    return;
+                }
+                if (budget.inventoryPending)
+                    throw new RuleRuntime.Unavailable("inventorySettlement",
+                            "A later track reaction requires the inventory grant to be settled first.");
+                drainOutbox(staged, outbox);
+                List<TargetActionResult> reactions = new ArrayList<>();
+                recipient.changed(staged, event, reactions, outbox);
+                for (TargetActionResult reaction : reactions) {
+                    ActionResult action = reaction.action();
+                    actions.add(new ActionResult(action.sourceInstanceId(), action.ruleId(), action.bindingId(),
+                            action.report(), action.publishedRolls(), action.diceRolls(), reaction.actorId()));
+                }
+            }
+
+            @Override
+            public void mutated(ObjectNode staged, String operation, ObjectNode previousActor, String target) {
+                if (!"recipient".equals(target)) {
+                    owner.mutated(staged, operation, previousActor, target);
+                    return;
+                }
+                if ("effect.start".equals(operation) || "effect.end".equals(operation)) {
+                    if (previousActor != null) {
+                        recipient.effectsChanged(staged, budget.contexts);
+                        Candidate source = sources.get(staged.at("/source/instanceId").asText());
+                        if (source != null) RuleEffects.refreshCounts(source.program(), staged);
+                    }
+                    return;
+                }
+                if ("track.capacity".equals(operation)
+                        || !operation.startsWith("track.") && !operation.startsWith("resource."))
+                    throw new RuleRuntime.Unavailable("recipientReactions",
+                            "This recipient change requires additional lifecycle settlement: " + operation + ".");
+            }
+        };
     }
 
     private static RuleRuntime.TrackObserver reservationObserver(RuleRuntime.TrackObserver observer) {
