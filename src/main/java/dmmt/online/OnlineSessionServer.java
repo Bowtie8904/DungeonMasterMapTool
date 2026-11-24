@@ -8613,6 +8613,7 @@ public final class OnlineSessionServer {
                         }
                     }
                 }
+                requireRollNotBlocked(roller, "dice", msg.path("label").asText("Roll"));
             }
             ResolvedDice resolved = resolveDice(msg);
             result = resolved.result();
@@ -8637,6 +8638,24 @@ public final class OnlineSessionServer {
     }
 
     private static final Set<String> CHAT_EXPRESSION_FIELDS = Set.of("type", "expression", "toId", "whisper");
+
+    /** Dispatches roll.prepare for a roll origin that does not use the structured pipeline; automatic event.block rules veto it. */
+    private void requireRollNotBlocked(Campaign.Actor actor, String kind, String label) {
+        try {
+            if (!requiresAuthoritativeRest()) return;
+            ObjectNode event = automationEvent("roll.prepare", actor);
+            event.withObject("/check").put("kind", kind);
+            event.put("label", label);
+            ObjectNode result = automationHost.automatic(automationPack(), storedSheet(actor.getId()), event, diceRandom);
+            JsonNode blocked = result.at("/event/blocked");
+            if (!blocked.isEmpty())
+                throw new IllegalArgumentException(blocked.path(0).path("reason").asText("This roll is blocked."));
+        } catch (IOException | dmmt.online.automation.AutomationHost.NotReady e) {
+            // Legacy rules or an unavailable pack leave this origin unmanaged.
+        } catch (dmmt.online.automation.RuleRuntime.Unavailable e) {
+            throw new IllegalArgumentException(e.getMessage());
+        }
+    }
 
     private ObjectNode rollMessage(Client client, String to, DiceRoller.Result result) {
         ObjectNode out = MAPPER.createObjectNode().put("id", ++chatId).put("type", "roll").put("ts", System.currentTimeMillis());

@@ -8536,6 +8536,29 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void automaticRollPrepareRuleBlocksUntypedSheetDiceRolls() throws Exception {
+        installEffectEventRules();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ((ArrayNode) catalog.at("/entries/0/features/2/automation/rules")).add(MAPPER.readTree("""
+                {"id":"veto","bindings":[{"id":"auto","event":"roll.prepare","surface":"roll","mode":"automatic"}],
+                 "do":[{"op":"event.block","reason":"Dice are vetoed."}],"ui":{}}"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "caster", """
+                {"name":"Ada","hope":{"slots":6,"on":2},"stress":{"slots":6,"on":2},
+                 "features":[{"name":"Steady","instanceId":"source","automationSource":"classes:tester:features:steady"}]}""");
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        try {
+            inbox.next("hello");
+            ws.sendText("""
+                    {"type":"roll","actorId":"caster","source":"action","expression":"1d20"}""", true).join();
+            assertEquals("Dice are vetoed.", inbox.next("error").path("message").asText());
+        } finally { ws.abort(); }
+    }
+
+    @Test
     void effectTransitionsDispatchOwnerReactionsAndReplaceInOrder() throws Exception {
         installEffectEventRules();
         String campaignId = campaign.getId(), owner = cookie();
