@@ -194,6 +194,13 @@ public final class RuleEffects {
         if (!group.isEmpty()) instance.put("group", group);
         if (definition.has("profile")) instance.set("profile", definition.get("profile").deepCopy());
         if (definition.has("restExpiry")) instance.set("restExpiry", definition.get("restExpiry").deepCopy());
+        if (definition.path("captureWeapon").asBoolean()) {
+            JsonNode check = context.path("event").path("check");
+            if (!check.path("weaponSource").isTextual() || !check.path("weaponSourceId").isTextual())
+                throw new RuleRuntime.Unavailable("weapon", "This effect needs a roll made with a weapon.");
+            instance.putObject("weapon").put("instanceId", check.path("weaponSource").asText())
+                    .put("sourceId", check.path("weaponSourceId").asText());
+        }
         if (definition.has("locks")) {
             ObjectNode locks = instance.putObject("locks");
             definition.path("locks").fields().forEachRemaining(lock -> locks.put(lock.getKey(),
@@ -394,6 +401,12 @@ public final class RuleEffects {
             for (String field : List.of("value", "max"))
                 if (effect.has(field)) RuleJson.integer(effect.get(field), path + "/" + field, -1_000_000, 1_000_000);
             if (effect.has("onlineCondition")) RuleCompiler.onlineCondition(effect.get("onlineCondition"), path + "/onlineCondition");
+            if (effect.has("weapon")) {
+                JsonNode weapon = RuleJson.object(effect.get("weapon"), path + "/weapon");
+                RuleJson.fields(weapon, path + "/weapon", "instanceId", "sourceId");
+                RuleJson.id(weapon.get("instanceId"), path + "/weapon/instanceId");
+                RuleJson.id(weapon.get("sourceId"), path + "/weapon/sourceId");
+            }
             if (effect.has("restExpiry")) {
                 if (!"beforeMoves".equals(effect.path("restExpiry").asText()))
                     throw RuleJson.error(path + "/restExpiry", "Expected beforeMoves.");

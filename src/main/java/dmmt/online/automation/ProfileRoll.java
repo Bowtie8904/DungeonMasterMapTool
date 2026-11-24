@@ -24,6 +24,7 @@ final class ProfileRoll {
 
     static List<String> kinds(JsonNode profile) {
         return profile.has("rollKind") ? List.of(profile.path("rollKind").asText())
+                : profile.path("damage").path("weapon").asBoolean() ? List.of("damage")
                 : profile.has("damage") ? List.of("attack", "damage") : List.of("attack");
     }
 
@@ -141,10 +142,20 @@ final class ProfileRoll {
 
     static void facts(ObjectNode event, SheetProjection.SourceElement source, JsonNode profile, String kind,
                       ObjectNode actor, boolean equippedWeapon) {
+        facts(event, source, profile, kind, actor, equippedWeapon, null);
+    }
+
+    /** {@code echo} is the equipped weapon a weapon-echo effect profile rolls instead of its own source. */
+    static void facts(ObjectNode event, SheetProjection.SourceElement source, JsonNode profile, String kind,
+                      ObjectNode actor, boolean equippedWeapon, SheetProjection.SourceElement echo) {
+        if (profile.path("damage").path("weapon").asBoolean() && echo == null)
+            throw new RuleRuntime.Unavailable("weapon", "The attack's weapon is no longer equipped.");
+        if (echo != null) equippedWeapon = true;
         boolean damageRoll = "damage".equals(kind);
         if (!kinds(profile).contains(kind))
             throw RuleJson.error("/request/profileRoll/kind", "This roll kind is not available for the selected profile.");
-        JsonNode gear = source.element();
+        SheetProjection.SourceElement held = echo != null ? echo : source;
+        JsonNode gear = held.element();
         JsonNode damage = profile.path("damage");
         if (damageRoll && !damage.isObject()) throw new RuleRuntime.Unavailable("profile", "This profile has no damage roll.");
         JsonNode stats = actor.path("stats");
@@ -155,7 +166,7 @@ final class ProfileRoll {
         check.put("kind", kind).put("duality", !damageRoll).put("trait", trait).put("range", profile.path("range").asText(null))
                 .put("spell", "spellcast".equals(kind)).put("sourceName", source.name());
         if (!profile.has("rollKind"))
-            check.put("weaponSource", source.instanceId()).put("weaponSourceId", source.sourceId());
+            check.put("weaponSource", held.instanceId()).put("weaponSourceId", held.sourceId());
         if (equippedWeapon && !profile.has("rollKind")) {
             String slot = gear.path("slot").asText("").toLowerCase(Locale.ROOT);
             if ("primary".equals(slot) || "secondary".equals(slot)) check.put("weapon", slot);
@@ -177,7 +188,8 @@ final class ProfileRoll {
             String type = damage.path("type").asText(equippedWeapon ? gear.path("damageType").textValue() : null);
             if ("phys".equals(type)) type = "physical";
             if ("mag".equals(type)) type = "magic";
-            check.put("fixedDice", damage.has("count") || damage.path("fixedDice").asBoolean()).put("damageType", type);
+            check.put("fixedDice", damage.has("count") || damage.path("fixedDice").asBoolean()
+                    || echo != null && gear.path("fixedDice").asBoolean()).put("damageType", type);
             event.put("damageType", type);
         } else if (equippedWeapon && !profile.has("rollKind")) {
             // An attack carries the damage type of the weapon so magic-weapon attacks can be told apart from other actions.
@@ -209,7 +221,14 @@ final class ProfileRoll {
 
     static void prepare(ObjectNode event, SheetProjection.SourceElement source, JsonNode profile, String kind,
                         ObjectNode actor, boolean equippedWeapon, List<Modifier> modifiers, RandomGenerator random) {
-        facts(event, source, profile, kind, actor, equippedWeapon);
+        prepare(event, source, profile, kind, actor, equippedWeapon, modifiers, random, null);
+    }
+
+    static void prepare(ObjectNode event, SheetProjection.SourceElement source, JsonNode profile, String kind,
+                        ObjectNode actor, boolean equippedWeapon, List<Modifier> modifiers, RandomGenerator random,
+                        SheetProjection.SourceElement echo) {
+        facts(event, source, profile, kind, actor, equippedWeapon, echo);
+        SheetProjection.SourceElement held = echo != null ? echo : source;
         JsonNode check = event.path("check"), stats = actor.path("stats"), damage = profile.path("damage");
         ObjectNode plan = RuleJson.JSON.createObjectNode().put("id", java.util.UUID.randomUUID().toString());
         ArrayNode parts = plan.putArray("contributions");
@@ -231,11 +250,16 @@ final class ProfileRoll {
             ObjectNode metadata = plan.putObject("metadata");
             metadata.set("damageType", check.get("damageType"));
             int flat;
-            if (damage.has("formula")) {
-                WeaponDamage base = weaponDamage(damage, stats.path("proficiency").asInt());
+            if (damage.has("formula") || echo != null) {
+                int proficiency = stats.path("proficiency").asInt();
+                if (echo != null && "half".equals(damage.path("scale").asText())) proficiency = Math.max(1, (proficiency + 1) / 2);
+                JsonNode weaponDamage = echo == null ? damage : RuleJson.JSON.createObjectNode()
+                        .put("formula", RuleJson.text(echo.element().get("damage"), "/weapon/damage"))
+                        .put("fixedDice", echo.element().path("fixedDice").asBoolean());
+                WeaponDamage base = weaponDamage(weaponDamage, proficiency);
                 for (int[] pool : base.pools())
                     dice(parts, parts.isEmpty() ? "damage" : "damage." + (parts.size() + 1), "damage",
-                            profile.path("label").asText(), source.sourceId(), pool[0], pool[1]);
+                            profile.path("label").asText(), held.sourceId(), pool[0], pool[1]);
                 flat = base.flat();
             } else {
                 dice(parts, "damage", profile.path("label").asText(), source.sourceId(),
@@ -245,7 +269,7 @@ final class ProfileRoll {
             ArrayNode baseIds = metadata.putArray("weaponBaseContributions");
             for (JsonNode part : parts) baseIds.add(part.path("id").asText());
             if (flat != 0) parts.addObject().put("id", "bonus").put("kind", "flat")
-                    .put("role", "damage").put("sourceId", source.sourceId()).put("label", profile.path("label").asText())
+                    .put("role", "damage").put("sourceId", held.sourceId()).put("label", profile.path("label").asText())
                     .put("value", flat);
         }
         List<String> statsForRoll = switch (kind) {
@@ -257,7 +281,7 @@ final class ProfileRoll {
             default -> throw RuleJson.error("/request/profileRoll/kind", "Unknown profile roll kind.");
         };
         for (String stat : statsForRoll)
-            addModifiers(parts, modifiers, stat, source.instanceId(), kind);
+            addModifiers(parts, modifiers, stat, held.instanceId(), kind);
         event.set("roll", StructuredRoll.resolve(plan, RuleJson.JSON.createObjectNode(), random));
         updateCheck(event);
     }

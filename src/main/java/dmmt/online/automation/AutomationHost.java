@@ -210,7 +210,7 @@ public final class AutomationHost {
             if (equippedWeapon(copy, element)) available.insert(0, ProfileRoll.weaponProfile(element, declared));
             for (JsonNode profile : available)
                 describeProfile(profiles, pack, sources, state, actor, event, element, profile, null,
-                        equippedWeapon(copy, element), hasRollOptions, relation);
+                        equippedWeapon(copy, element), hasRollOptions, relation, null);
         }
         Map<String, SheetProjection.SourceElement> active = new HashMap<>();
         sources.forEach(source -> active.put(source.instanceId(), source));
@@ -220,20 +220,26 @@ public final class AutomationHost {
             ObjectNode profile = effectProfile(pack, source, effect, actor.path("id").textValue());
             if (profile != null)
                 describeProfile(profiles, pack, sources, state, actor, event, source, profile,
-                        RuleJson.text(effect.get("id"), "/effects/id"), false, hasRollOptions, relation);
+                        RuleJson.text(effect.get("id"), "/effects/id"), false, hasRollOptions, relation,
+                        echoWeapon(copy, sources, effect));
         }
         return result;
     }
 
     private void describeProfile(ArrayNode profiles, Pack pack, List<SheetProjection.SourceElement> sources,
                                  ObjectNode state, ObjectNode actor, ObjectNode event, SheetProjection.SourceElement source,
-                                 JsonNode profile, String effectId, boolean weapon, boolean hasRollOptions, String relation) {
+                                 JsonNode profile, String effectId, boolean weapon, boolean hasRollOptions, String relation,
+                                 SheetProjection.SourceElement echo) {
         ObjectNode item = profiles.addObject().put("sourceId", source.sourceId())
                 .put("sourceInstanceId", source.instanceId()).put("sourceName", source.name());
         item.setAll((ObjectNode) profile);
         if (effectId != null) item.put("effectInstanceId", effectId);
         if ("spellcast".equals(profile.path("trait").asText()) && !actor.path("spellcastTrait").path("name").isTextual())
             item.put("available", false).put("reason", "Choose a Spellcast trait before making this roll.");
+        if (profile.path("damage").path("weapon").asBoolean() && echo == null) {
+            item.put("available", false).put("reason", "The attack's weapon is no longer equipped.");
+            return;
+        }
         if (profile.has("limitRef")) {
             RuleCompiler.Program program = pack.programs().get(source.sourceId());
             ObjectNode context = RuleRuntime.context(program, null, context(state, source, actor, event));
@@ -248,10 +254,20 @@ public final class AutomationHost {
         for (String kind : ProfileRoll.kinds(profile)) {
             ObjectNode facts = event.deepCopy();
             if (effectId != null) facts.put("effectInstanceId", effectId);
-            ProfileRoll.facts(facts, source, profile, kind, actor, weapon);
+            ProfileRoll.facts(facts, source, profile, kind, actor, weapon, echo);
             options.set(kind, RuleDispatcher.describeRollOptions(candidates(pack, sources, state, actor, facts),
                     audience -> allowed(audience, relation)));
         }
+    }
+
+    /** The still-equipped weapon a weapon-capturing effect was started by, or null. */
+    private static SheetProjection.SourceElement echoWeapon(ObjectNode sheet, List<SheetProjection.SourceElement> sources,
+                                                            JsonNode effect) {
+        String id = effect.path("weapon").path("instanceId").asText(null);
+        if (id == null) return null;
+        for (var item : sources)
+            if (id.equals(item.instanceId()) && equippedWeapon(sheet, item)) return item;
+        return null;
     }
 
     private static ObjectNode effectProfile(Pack pack, SheetProjection.SourceElement source, JsonNode effect, String actorId) {
@@ -656,12 +672,15 @@ public final class AutomationHost {
         ObjectNode actor = projected.actor();
         JsonNode profile = death ? RuleJson.JSON.createObjectNode() : checkProfile;
         ArrayNode declared = program == null ? RuleJson.JSON.createArrayNode() : program.profiles();
+        SheetProjection.SourceElement echo = null;
         if (!check && !death && effectId != null) {
             if (EFFECT_PROFILE.equals(profileId))
                 for (JsonNode effect : actor.path("effects"))
                     if (effectId.equals(effect.path("id").textValue())
-                            && instance.equals(effect.path("sourceInstanceId").textValue()))
+                            && instance.equals(effect.path("sourceInstanceId").textValue())) {
                         profile = effectProfile(pack, source, effect, actor.path("id").textValue());
+                        echo = echoWeapon(working, sources, effect);
+                    }
         } else if (!check && !death) {
             if (equippedWeapon(working, source)) {
                 JsonNode base = ProfileRoll.weaponProfile(source, declared);
@@ -674,7 +693,7 @@ public final class AutomationHost {
 
         long revision = state.path("revision").longValue();
         if (death) ProfileRoll.deathFacts(event, source, actor, move);
-        else ProfileRoll.facts(event, source, profile, kind, actor, effectId == null && equippedWeapon(working, source));
+        else ProfileRoll.facts(event, source, profile, kind, actor, effectId == null && equippedWeapon(working, source), echo);
         if (profile.has("limitRef")) {
             ObjectNode context = RuleRuntime.context(program, null, context(state, source, actor, event));
             RuleRuntime.reserveUse(program, context, profile.path("limitRef").asText());
@@ -682,7 +701,7 @@ public final class AutomationHost {
         }
         if (death) ProfileRoll.prepareDeath(event, source, actor, move, random);
         else ProfileRoll.prepare(event, source, profile, kind, actor, effectId == null && equippedWeapon(working, source),
-                    projected.rollModifiers(), random);
+                    projected.rollModifiers(), random, echo);
         var candidates = candidates(pack, sources, state, actor, event);
         var intents = selections(request, candidates, revision, "self", "roll", true);
         ObjectNode costEvent = event.deepCopy().put("type", "roll.costs");

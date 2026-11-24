@@ -603,7 +603,7 @@
 "domain-cards","/entries/90/automation","full-surge [Full Surge]","actions;uses","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/91/automation","get-back-up [Get Back Up]","actions;mitigation","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/92/automation","gifted-tracker [Gifted Tracker]","actions","converted-candidate","","not captured","unverified"
-"domain-cards","/entries/93/automation","glancing-blow [Glancing Blow]","conditionalRollTriggers","unconverted","/entries/93/automation/conditionalRollTriggers/0/halfProficiencyDamage: Unsupported legacy field: halfProficiencyDamage","not captured","unverified"
+"domain-cards","/entries/93/automation","glancing-blow [Glancing Blow]","conditionalRollTriggers","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/94/automation","glyph-of-hemorrhaging [Glyph of Hemorrhaging]","conditionalRollTriggers","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/95/automation","glyph-of-nightfall [Glyph of Nightfall]","conditionalRollTriggers","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/96/automation","goad-them-on [Goad Them On]","actions","converted-candidate","","not captured","unverified"

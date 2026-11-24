@@ -618,7 +618,13 @@ public final class RuleCompiler {
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(id), "/automation/effects");
         String path = "/automation/effects/" + id;
         RuleJson.fields(effect, path, "label", "text", "kind", "until", "stacking", "modifiers", "profile",
-                "while", "endWhen", "exclusiveGroup", "singleHolder", "locks", "restExpiry", "blocksMovement", "blocksDeathMoves", "onlineCondition", "value", "endsWithSource", "endsWithSourceElement");
+                "while", "endWhen", "exclusiveGroup", "singleHolder", "locks", "restExpiry", "blocksMovement", "blocksDeathMoves", "onlineCondition", "value", "endsWithSource", "endsWithSourceElement", "captureWeapon");
+        if (effect.has("captureWeapon") && !effect.get("captureWeapon").isBoolean())
+            throw RuleJson.error(path + "/captureWeapon", "Expected a boolean.");
+        if (effect.path("captureWeapon").asBoolean() != effect.path("profile").path("damage").path("weapon").asBoolean())
+            throw RuleJson.error(path + "/captureWeapon", "A weapon-echo profile and the weapon capture require each other.");
+        if (effect.path("captureWeapon").asBoolean() && effect.has("while"))
+            throw RuleJson.error(path + "/captureWeapon", "A derived effect cannot capture a weapon.");
         if (effect.has("endsWithSourceElement")) {
             if (!effect.get("endsWithSourceElement").isBoolean()) throw RuleJson.error(path + "/endsWithSourceElement", "Expected a boolean.");
             if (effect.has("while")) throw RuleJson.error(path + "/endsWithSourceElement", "A derived effect cannot end with its source element.");
@@ -726,7 +732,7 @@ public final class RuleCompiler {
             if (!ids.add(RuleJson.id(list.get(i).path("id"), path + "/id"))) throw RuleJson.error(path + "/id", "Duplicate profile ID.");
             RuleJson.fields(list.get(i), path, "id", "label", "trait", "range", "damage", "rollKind", "difficulty", "origin",
                     "limitRef", "consumeOn");
-            validateProfileBody(list.get(i), path);
+            validateProfileBody(list.get(i), path, false);
             JsonNode profile = list.get(i);
             if (profile.has("limitRef")) {
                 String limit = RuleJson.id(profile.get("limitRef"), path + "/limitRef");
@@ -743,14 +749,14 @@ public final class RuleCompiler {
 
     static void validateProfile(JsonNode profile, String path) {
         RuleJson.fields(profile, path, "label", "trait", "range", "damage");
-        validateProfileBody(profile, path);
+        validateProfileBody(profile, path, true);
     }
 
     /**
      * An effect profile or a source profile without a roll kind describes an attack. A source may instead declare
      * an action, reaction or spellcast roll. Attack damage count defaults to the actor's proficiency.
      */
-    private static void validateProfileBody(JsonNode profile, String path) {
+    private static void validateProfileBody(JsonNode profile, String path, boolean effectProfile) {
         RuleJson.text(profile.get("label"), path + "/label");
         boolean actionRoll = profile.has("rollKind");
         if (actionRoll && !Set.of("action", "reaction", "spellcast").contains(profile.path("rollKind").asText()))
@@ -769,6 +775,14 @@ public final class RuleCompiler {
             throw RuleJson.error(path + "/range", "Unknown range.");
         if (profile.has("damage")) {
             JsonNode damage = profile.get("damage");
+            if (damage.has("weapon")) {
+                if (!effectProfile || !damage.path("weapon").asBoolean(false))
+                    throw RuleJson.error(path + "/damage/weapon", "Only an effect profile can echo a captured weapon (true).");
+                RuleJson.fields(damage, path + "/damage", "weapon", "scale");
+                if (damage.has("scale") && !"half".equals(damage.path("scale").asText()))
+                    throw RuleJson.error(path + "/damage/scale", "Expected half.");
+                return;
+            }
             RuleJson.fields(damage, path + "/damage", "count", "sides", "flat", "type");
             if (damage.has("count")) RuleJson.integer(damage.get("count"), path + "/damage/count", 1, 32);
             RuleJson.integer(damage.get("sides"), path + "/damage/sides", 2, 100);

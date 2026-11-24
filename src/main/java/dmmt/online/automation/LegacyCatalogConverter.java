@@ -51,7 +51,7 @@ public final class LegacyCatalogConverter {
             "magicDamage", "dieSizes", "fearDie", "resourceEmpty", "requiresResource", "expendOn", "ownWeapon", "effectValue", "requiresFeature", "preserveEffect");
     private static final Set<String> TRIGGER_FIELDS = Set.of("id", "label", "description", "on", "cost", "reroll", "when", "outcome",
             "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
-            "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
+            "usesSource", "steps", "criticalOnly", "weaponAttack", "halfProficiencyDamage", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
             "chatBenefits", "allowSourceOwner", "loadoutDomain", "primaryWeapon", "anyWeapon", "advantage", "giveFear", "check", "choices",
             "magicOnly", "weaponRanges", "addDice", "damageDice", "damageDiceBelow", "rerollDualityDie", "spendHopeAmount", "disadvantage", "removeFear", "weaponDamage", "rollSection", "containsDie", "resourceRoll", "selectAmount",
             "target", "excludeSourceActor", "splendorAction", "hostRollAction", "otherPlayerOnly", "spentTokenDamage", "bloodAutomation", "swapDuality", "repeatable", "weapon", "tokenGain", "matchResource", "magicAction", "damageSource", "spellDomain", "vaultSource", "rerollResourceDice", "rerollAnyDie",             "dualityDieBonus", "actionRoll", "spendFavor", "advanceEffect", "banishDifficulty", "automatic");
@@ -3187,6 +3187,27 @@ public final class LegacyCatalogConverter {
         return effect;
     }
 
+    /**
+     * A failed weapon attack may be turned into one damage roll of the same weapon using half Proficiency (rounded up) for
+     * each of its dice: the button starts an effect that remembers the weapon and offers that single roll.
+     */
+    private static void halfProficiencyDamage(JsonNode trigger, String path, Problems p, ObjectNode effects, ArrayNode steps) {
+        if (!trigger.path("halfProficiencyDamage").asBoolean(false) || !trigger.path("failedOnly").asBoolean(false)
+                || !trigger.path("weaponAttack").asBoolean(false)) {
+            p.add(path + "/halfProficiencyDamage", "Expected true on a failed weapon attack trigger.");
+            return;
+        }
+        String label = trigger.path("label").asText("Half Proficiency damage");
+        Set<String> used = new HashSet<>();
+        effects.fieldNames().forEachRemaining(used::add);
+        String effect = unique(slug(trigger.path("id").asText() + "-damage"), used);
+        ObjectNode declared = effects.putObject(effect).put("label", escape(label)).put("kind", "buff").put("captureWeapon", true);
+        declared.putArray("until").add("rest.short").add("rest.long").add("scene.end");
+        declared.putObject("profile").put("label", escape(label)).putObject("damage").put("weapon", true).put("scale", "half");
+        steps.addObject().put("op", "effect.start").put("effect", effect).put("target", "actor");
+        p.nested().add(new Nested("endOnDealtDamage", RuleJson.JSON.createObjectNode().put("effect", label).put("profileOnly", true), path));
+    }
+
     private static void endEffect(JsonNode legacy, ArrayNode steps) {
         endEffect(legacy, steps, "actor");
     }
@@ -3670,6 +3691,7 @@ public final class LegacyCatalogConverter {
             if (!trigger.path("advanceEffect").isTextual() || trigger.path("advanceEffect").asText().isBlank()) p.add(path + "/advanceEffect", "Expected an effect name.");
             else steps.addObject().put("op", "effect.advance").put("effect", trigger.path("advanceEffect").asText()).put("target", "actor").put("by", 1);
         }
+        if (trigger.has("halfProficiencyDamage")) halfProficiencyDamage(trigger, path, p, effects, steps);
         endEffect(trigger, steps);
         if (!steps.isEmpty()) rule.set("do", steps);
         ObjectNode ui = labels(trigger, path, p, rule);
@@ -6888,6 +6910,7 @@ public final class LegacyCatalogConverter {
         ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "end-" + slug(effect) + "-on-" + legacy.path("on").asText("damage"));
         rule.putArray("bindings").addObject().put("id", "use").put("event", "roll.finished").put("surface", "roll").put("mode", "automatic");
         ArrayNode when = RuleJson.JSON.createArrayNode();
+        if (legacy.path("profileOnly").asBoolean(false)) when.addObject().putArray("eq").add(read("event.profileId")).add("effect.profile");
         if (!legacy.has("kinds")) when.addObject().putArray("eq").add(read("event.check.kind")).add("damage");
         else {
             ArrayNode any = when.addObject().putArray("or");
