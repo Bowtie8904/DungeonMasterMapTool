@@ -79,7 +79,7 @@ public final class LegacyCatalogConverter {
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
             "actions", "rollOptions", "rollTriggers", "mitigation", "rest", "consumeLongRestMove", "group", "endOnDamage", "endOnSourceSevere", "endAfterIncomingDamage", "damage",
             "unique", "exclusiveSource", "endOnMarkedHp", "endOnDealtDamage", "endOnAttack", "endOnAction", "lifeWard", "tokenResource", "maintainOnAction",
-            "blocksMovement", "endOnMarkedHpCount", "resources", "surgeResource", "onlineCondition", "die", "counter", "requiresSourceEffect");
+            "blocksMovement", "endOnMarkedHpCount", "resources", "surgeResource", "onlineCondition", "die", "counter", "requiresSourceEffect", "linkedTokenResource");
     private static final Set<String> REST_FIELDS = Set.of("extraMoves", "longMovesInShort", "passives", "modifiers", "requiresEffect", "expireItem");
     private static final Set<String> PASSIVE_FIELDS = Set.of("id", "label", "defaultOn", "condition", "steps", "extraMoves", "consumeItem",
             "rest", "move", "bonus", "minHope", "cost", "chooseAlly", "hostOwned", "castBeforeRest", "requiresEffect", "excludesEffect", "reroll");
@@ -5997,6 +5997,38 @@ public final class LegacyCatalogConverter {
         step(step, path, p, out, effects, pools, "actor");
     }
 
+    /**
+     * {@code linkedTokenResource}: the effect's recipient spends tokens of a pool that belongs to the caster's source. The
+     * pool becomes a source pool set to the caster's Spellcast total (at least 0); a caster-side marker effect ends with the
+     * last token and the recipient effect ends with that marker, and every roll option of the effect costs one token.
+     */
+    private static void linkedTokens(JsonNode effect, String path, Problems p, ArrayNode out, ObjectNode effects, Pools pools,
+                                     String target) {
+        String pool = effect.path("linkedTokenResource").asText("");
+        if (!pools.has(pool) || !effect.path("name").isTextual()) {
+            p.add(path + "/linkedTokenResource", "Expected a declared resource of this source.");
+            return;
+        }
+        ((ObjectNode) pools.local().get(pool)).put("scope", "source");
+        ObjectNode marker = RuleJson.JSON.createObjectNode().put("name", effect.path("name").asText() + " tokens")
+                .put("kind", "buff").put("tokenResource", pool);
+        ObjectNode copy = ((ObjectNode) effect).deepCopy();
+        copy.remove("linkedTokenResource");
+        copy.put("requiresSourceEffect", marker.path("name").asText());
+        for (JsonNode option : copy.path("rollOptions"))
+            if (option instanceof ObjectNode o && !o.has("cost")) o.putObject("cost").put(pool, 1);
+        String markerId = declareEffect(marker, path, p, effects);
+        String id = declareEffect(copy, path, p, effects);
+        if (markerId == null || id == null) return;
+        ObjectNode total = RuleJson.JSON.createObjectNode();
+        total.putArray("max").add(0).add(read("actor.stats.spellcast.total"));
+        ObjectNode value = poolValue(pools, pool);
+        out.addObject().put("op", "pool.spend").put("pool", pool).set("amount", value);
+        out.addObject().put("op", "pool.gain").put("pool", pool).set("amount", total);
+        out.addObject().put("op", "effect.start").put("effect", markerId).put("target", "actor");
+        out.addObject().put("op", "effect.start").put("effect", id).put("target", target);
+    }
+
     private static void restStep(JsonNode legacy, String path, Problems p, ArrayNode out, ObjectNode effects, Pools pools,
                                  String target, String label, String restKind) {
         int first = out.size();
@@ -6020,6 +6052,10 @@ public final class LegacyCatalogConverter {
         String op = step.path("op").asText();
         if ("effect".equals(op)) {
             p.onlyFields(step, path, Set.of("op", "effect"));
+            if (step.path("effect").has("linkedTokenResource")) {
+                linkedTokens(step.path("effect"), path + "/effect", p, out, effects, pools, operationTarget);
+                return;
+            }
             String id = declareEffect(step.path("effect"), path + "/effect", p, effects);
             if (id != null) out.addObject().put("op", "effect.start").put("effect", id).put("target", operationTarget);
             return;

@@ -623,7 +623,7 @@
 "domain-cards","/entries/110/automation","inevitable [Inevitable]","rollTriggers","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/111/automation","inspirational-words [Inspirational Words]","actions;resources","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/112/automation","invigoration [Invigoration]","actions;conditionalRollTriggers","converted-candidate","","not captured","unverified"
-"domain-cards","/entries/113/automation","invisibility [Invisibility]","resources;rollTriggers;spellcastDifficulty","unconverted","/entries/113/automation/rollTriggers/0/steps/0/effect/linkedTokenResource: Unsupported legacy field: linkedTokenResource","not captured","unverified"
+"domain-cards","/entries/113/automation","invisibility [Invisibility]","resources;rollTriggers;spellcastDifficulty","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/114/automation","invoke-torment [Invoke Torment]","actions;rollOptions","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/115/automation","jump-scare [Jump Scare]","rollTriggers","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/116/automation","know-thy-enemy [Know Thy Enemy]","actions;rollTriggers","converted-candidate","","not captured","unverified"
