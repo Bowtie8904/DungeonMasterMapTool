@@ -6247,7 +6247,8 @@ public final class OnlineSessionServer {
             String original = store.loadSheet(campaign.getId(), actor.getId());
             ObjectNode sheet = original == null ? MAPPER.createObjectNode() : hydrateSheet(actor.getId(), original);
             json(ctx, 200, automationHost.describeDamage(automationPack(), sheet,
-                    automationEvent("action.request", actor), relation, amount, type, armor));
+                    automationEvent("action.request", actor), relation, amount, type, armor,
+                    automationSourceSheets(actor, sheet, new java.util.HashMap<>())));
         } catch (NumberFormatException e) {
             json(ctx, 400, errorBody("Damage amount and armor must be whole numbers."));
         } catch (dmmt.online.automation.AutomationHost.NotReady e) {
@@ -6342,12 +6343,15 @@ public final class OnlineSessionServer {
             String relation = automationRelation(ctx, playerId, actor);
             AutomationRoster roster = body.path("request").has("target") && !"dm".equals(relation)
                     ? new AutomationRoster(pack, actor, original, sheet, false, true) : null;
+            Map<String, String> sourceOriginals = new java.util.LinkedHashMap<>();
+            var sourceSheets = body.path("request").has("damage") ? automationSourceSheets(actor, sheet, sourceOriginals) : null;
             ObjectNode response = automationHost.execute(pack, sheet, event,
                     (ObjectNode) body.get("request"), relation, "dm".equals(relation) ? campaign.getId() : playerId,
-                    diceRandom, roster == null ? null : roster.party, this::reactionPromptLabel);
+                    diceRandom, roster == null ? null : roster.party, this::reactionPromptLabel, sourceSheets);
             if (automationHost.revision(sheet) != revisionBefore) {
                 Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
                 changed.put(actor.getId(), sheet);
+                if (sourceSheets != null) changed.putAll(sourceSheets.touched());
                 Map<String, Map<String, JsonNode>> namesByActor = new java.util.HashMap<>();
                 namesByActor.put(actor.getId(), sourceNames);
                 if (roster != null) {
@@ -6376,8 +6380,12 @@ public final class OnlineSessionServer {
                     AutomationHost.requireRestScopeMembership(actor.getId(), roster.party.reactionScopes(), roster.reactions.roster);
                     roster.reactions.requireInventoryParty();
                 };
-                commitAutomationResults(roster == null ? java.util.Collections.singletonMap(actor.getId(), original) : roster.originals,
-                        changed, messages, response.path("outbox"), pack, actor.getId(), response, validateRoster);
+                Map<String, String> originals = new java.util.LinkedHashMap<>();
+                originals.put(actor.getId(), original);
+                if (roster != null) originals.putAll(roster.originals);
+                if (sourceSheets != null) sourceSheets.touched().keySet().forEach(id -> originals.put(id, sourceOriginals.get(id)));
+                commitAutomationResults(originals, changed, messages, response.path("outbox"), pack, actor.getId(), response,
+                        validateRoster);
             }
             json(ctx, 200, response);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
@@ -6395,6 +6403,21 @@ public final class OnlineSessionServer {
         } catch (IOException | java.io.UncheckedIOException e) {
             json(ctx, 500, errorBody("Could not save the automation result."));
         }
+    }
+
+    /** Hydrated copies of the sheets of other characters who started effects on {@code sheet}, for shared source pools. */
+    private dmmt.online.automation.AutomationHost.SourceSheets automationSourceSheets(Campaign.Actor holder, ObjectNode sheet,
+                                                                                      Map<String, String> originals) throws IOException {
+        Map<String, ObjectNode> sheets = new java.util.LinkedHashMap<>();
+        for (JsonNode effect : sheet.path("automationState").path("effects")) {
+            String casterId = effect.path("sourceActorId").asText("");
+            if (casterId.isEmpty() || casterId.equals(holder.getId()) || sheets.containsKey(casterId)) continue;
+            String stored = campaign.actor(casterId) == null ? null : store.loadSheet(campaign.getId(), casterId);
+            if (stored == null) continue;
+            originals.put(casterId, stored);
+            sheets.put(casterId, hydrateSheet(casterId, stored));
+        }
+        return new dmmt.online.automation.AutomationHost.SourceSheets(sheets);
     }
 
     private List<ObjectNode> automationReports(Campaign.Actor actor, Map<String, JsonNode> sourceNames, JsonNode response) {

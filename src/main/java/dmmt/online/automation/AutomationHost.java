@@ -184,12 +184,19 @@ public final class AutomationHost {
     }
 
     public ObjectNode describe(Pack pack, ObjectNode sheet, ObjectNode event, String surface, String relation, PartyTargets party) {
+        return describe(pack, sheet, event, surface, relation, party, null);
+    }
+
+    private ObjectNode describe(Pack pack, ObjectNode sheet, ObjectNode event, String surface, String relation, PartyTargets party,
+                                SourceSheets sourceSheets) {
         relation(relation);
         ObjectNode copy = sheet.deepCopy();
         ObjectNode state = projection.state(copy);
         var sources = sources(pack, copy);
         ObjectNode actor = actor(pack, copy, state, event, sources);
-        ArrayNode visible = RuleDispatcher.describe(candidates(pack, sources, state, actor, event), surface,
+        var listed = candidates(pack, sources, state, actor, event);
+        listed.addAll(foreignCandidates(pack, copy, state, event, new Foreign(sourceSheets, new HashMap<>())));
+        ArrayNode visible = RuleDispatcher.describe(listed, surface,
                 audience -> allowed(audience, relation), "dm".equals(relation) ? null : party);
         ObjectNode result = RuleJson.JSON.createObjectNode();
         result.put("revision", revision(copy));
@@ -415,6 +422,11 @@ public final class AutomationHost {
      */
     public ObjectNode describeDamage(Pack pack, ObjectNode sheet, ObjectNode origin, String relation, int amount,
                                      String type, int armor) {
+        return describeDamage(pack, sheet, origin, relation, amount, type, armor, null);
+    }
+
+    public ObjectNode describeDamage(Pack pack, ObjectNode sheet, ObjectNode origin, String relation, int amount,
+                                     String type, int armor, SourceSheets sourceSheets) {
         RuleJson.integer(RuleJson.JSON.getNodeFactory().numberNode(amount), "/damage/amount", 0, MAX_DAMAGE);
         RuleJson.integer(RuleJson.JSON.getNodeFactory().numberNode(armor), "/damage/armor", 0, 1000);
         ObjectNode working = sheet.deepCopy();
@@ -436,7 +448,7 @@ public final class AutomationHost {
         ObjectNode stages = result.putObject("stages");
         ObjectNode[] events = {prepare, damageMarksFacts(origin, (ObjectNode) prepare.get("damage"), type, plan), applied};
         for (int i = 0; i < events.length; i++) {
-            ObjectNode described = describe(pack, sheet, events[i], "damage", relation);
+            ObjectNode described = describe(pack, sheet, events[i], "damage", relation, null, sourceSheets);
             stages.putObject(DAMAGE_STAGES[i]).set("actions", described.get("actions"));
         }
         return result;
@@ -457,15 +469,17 @@ public final class AutomationHost {
     }
 
     private ObjectNode damageStage(Pack pack, ObjectNode working, ObjectNode facts, ObjectNode request, String relation,
-                                   RandomGenerator random, ArrayNode actions, ArrayNode outbox) {
+                                   RandomGenerator random, ArrayNode actions, ArrayNode outbox, SourceSheets sources) {
         ObjectNode state = projection.state(working);
         var candidates = candidates(pack, working, facts);
+        Foreign foreign = new Foreign(sources, new HashMap<>());
+        candidates.addAll(foreignCandidates(pack, working, state, facts, foreign));
         ObjectNode staged = request.deepCopy();
         ArrayNode kept = staged.putArray("selections");
         for (JsonNode selection : request.path("selections"))
             if (facts.path("type").asText().equals(selectionStage(candidates, selection))) kept.add(selection);
         var intents = selections(staged, candidates, state.path("revision").asLong(), relation, "damage", false);
-        ObjectNode result = applyEvent(pack, working, state, facts, candidates, intents, random);
+        ObjectNode result = applyEvent(pack, working, state, facts, candidates, intents, random, foreign);
         actions.addAll((ArrayNode) result.get("actions"));
         outbox.addAll((ArrayNode) result.get("outbox"));
         return result;
@@ -473,7 +487,7 @@ public final class AutomationHost {
 
     /** Runs the prepare, marks and applied stages of one hit against the working copy. */
     private ObjectNode damage(Pack pack, ObjectNode working, ObjectNode origin, ObjectNode request, String relation,
-                              RandomGenerator random) {
+                              RandomGenerator random, SourceSheets sources) {
         JsonNode intent = request.get("damage");
         RuleJson.fields(intent, "/request/damage", "amount", "type", "armor");
         int amount = RuleJson.integer(intent.get("amount"), "/request/damage/amount", 0, MAX_DAMAGE);
@@ -483,14 +497,14 @@ public final class AutomationHost {
         ArrayNode actions = RuleJson.JSON.createArrayNode(), outbox = RuleJson.JSON.createArrayNode();
 
         ObjectNode prepare = damagePrepareFacts(origin, damageContext(pack, working, origin), amount, type);
-        ObjectNode result = damageStage(pack, working, prepare, request, relation, random, actions, outbox);
+        ObjectNode result = damageStage(pack, working, prepare, request, relation, random, actions, outbox, sources);
         ObjectNode damage = StructuredDamage.validate(result.path("event").path("damage"));
 
         ObjectNode context = damageContext(pack, working, origin);
         ObjectNode plan = StructuredDamage.assess(damage, type == null
                         ? RuleJson.JSON.getNodeFactory().nullNode() : RuleJson.JSON.getNodeFactory().textNode(type),
                 thresholdSpec(), RuleJson.JSON.getNodeFactory().booleanNode(false), armorSpec(armor), hitPointSpec(), context);
-        result = damageStage(pack, working, damageMarksFacts(origin, damage, type, plan), request, relation, random, actions, outbox);
+        result = damageStage(pack, working, damageMarksFacts(origin, damage, type, plan), request, relation, random, actions, outbox, sources);
         plan = StructuredDamage.validatePlan(result.path("event").path("marks"));
 
         context = damageContext(pack, working, origin);
@@ -499,7 +513,7 @@ public final class AutomationHost {
         ObjectNode facts = damageFacts(origin, DAMAGE_STAGES[2], damage, type);
         facts.set("marks", plan.deepCopy());
         facts.set("applied", applied);
-        result = damageStage(pack, working, facts, request, relation, random, actions, outbox);
+        result = damageStage(pack, working, facts, request, relation, random, actions, outbox, sources);
 
         ObjectNode response = RuleJson.JSON.createObjectNode();
         response.put("revision", initial + 1);
@@ -507,6 +521,7 @@ public final class AutomationHost {
         response.set("outbox", outbox);
         response.set("event", result.get("event"));
         projection.state(working).put("revision", initial + 1);
+        if (sources != null) bumpTouched(sources);
         return response;
     }
 
@@ -576,6 +591,12 @@ public final class AutomationHost {
     public ObjectNode execute(Pack pack, ObjectNode sheet, ObjectNode event, ObjectNode request, String relation,
                               String principalId, RandomGenerator random, PartyTargets party,
                               java.util.function.Function<JsonNode, String> promptLabel) {
+        return execute(pack, sheet, event, request, relation, principalId, random, party, promptLabel, null);
+    }
+
+    public ObjectNode execute(Pack pack, ObjectNode sheet, ObjectNode event, ObjectNode request, String relation,
+                              String principalId, RandomGenerator random, PartyTargets party,
+                              java.util.function.Function<JsonNode, String> promptLabel, SourceSheets sourceSheets) {
         relation(relation);
         if (principalId == null || principalId.isBlank()) throw new IllegalArgumentException("Missing automation principal.");
         RuleJson.fields(request, "/request", "requestId", "expectedRevision", "selections", "profileRoll", "checkRoll", "deathRoll",         "deathAction", "target", "resultId", "damage");
@@ -622,7 +643,7 @@ public final class AutomationHost {
         }
         ObjectNode response;
         if (request.has("damage")) {
-            response = damage(pack, working, event, request, relation, random);
+            response = damage(pack, working, event, request, relation, random, sourceSheets);
         } else if (request.has("profileRoll") || request.has("checkRoll") || request.has("deathRoll")) {
             response = profileRoll(pack, working, state, event, request, random, promptLabel);
             offerResult(pack, working, response, principalId, null, null);
@@ -1608,11 +1629,11 @@ public final class AutomationHost {
         ObjectNode state = projection.state(working);
         ObjectNode before = actor(pack, working, state, event);
         ObjectNode after = before.deepCopy();
-        for (JsonNode effect : before.path("effects"))
-            if (effect.path("derived").asBoolean()) effects.add(effect.deepCopy());
         after.set("effects", effects);
-        RuleEffects.reconcileHolder(before, after, Set.of(), pack.programs(), "/actor");
         projection.write(working, projection.actor(working), persisted(after));
+        ObjectNode fresh = actor(pack, working, projection.state(working), event);
+        RuleEffects.reconcileHolder(before, fresh, Set.of(), pack.programs(), "/actor");
+        projection.write(working, projection.actor(working), persisted(fresh));
         replace(sheet, working);
         return true;
     }
@@ -1644,11 +1665,11 @@ public final class AutomationHost {
         ObjectNode state = projection.state(working);
         ObjectNode before = actor(pack, working, state, event);
         ObjectNode after = before.deepCopy();
-        for (JsonNode effect : before.path("effects"))
-            if (effect.path("derived").asBoolean()) effects.add(effect.deepCopy());
         after.set("effects", effects);
-        RuleEffects.reconcileHolder(before, after, Set.of(), pack.programs(), "/actor");
         projection.write(working, projection.actor(working), persisted(after));
+        ObjectNode fresh = actor(pack, working, projection.state(working), event);
+        RuleEffects.reconcileHolder(before, fresh, Set.of(), pack.programs(), "/actor");
+        projection.write(working, projection.actor(working), persisted(fresh));
         if (advanceRevision) state.put("revision", state.path("revision").asLong() + 1);
         replace(sheet, working);
         return true;
@@ -4757,6 +4778,12 @@ public final class AutomationHost {
 
     private ObjectNode applyEvent(Pack pack, ObjectNode working, ObjectNode state, ObjectNode event,
                                   List<RuleDispatcher.Candidate> candidates, List<RuleRuntime.Intent> intents, RandomGenerator random) {
+        return applyEvent(pack, working, state, event, candidates, intents, random, null);
+    }
+
+    private ObjectNode applyEvent(Pack pack, ObjectNode working, ObjectNode state, ObjectNode event,
+                                  List<RuleDispatcher.Candidate> candidates, List<RuleRuntime.Intent> intents, RandomGenerator random,
+                                  Foreign foreign) {
         RuleDispatcher.EventResolution resolution;
         if (!candidates.isEmpty() && ("action.request".equals(event.path("type").asText()) && event.path("actorId").isTextual()
                 || candidates.stream().anyMatch(candidate -> !candidate.program().automatic("track.changed").isEmpty()
@@ -4769,7 +4796,7 @@ public final class AutomationHost {
         } else {
             resolution = RuleDispatcher.executeEvent(candidates, intents, random, pack.programs());
         }
-        return applyResolved(pack, working, state, event, resolution.contexts(), resolution.actions(), resolution.outbox());
+        return applyResolved(pack, working, state, event, resolution.contexts(), resolution.actions(), resolution.outbox(), foreign);
     }
 
     private ObjectNode applyRestEvent(Pack pack, ObjectNode working, ObjectNode state, ObjectNode event,
@@ -4784,6 +4811,12 @@ public final class AutomationHost {
 
     private ObjectNode applyResolved(Pack pack, ObjectNode working, ObjectNode state, ObjectNode event,
                                      List<ObjectNode> contexts, List<RuleDispatcher.ActionResult> results, List<ObjectNode> commands) {
+        return applyResolved(pack, working, state, event, contexts, results, commands, null);
+    }
+
+    private ObjectNode applyResolved(Pack pack, ObjectNode working, ObjectNode state, ObjectNode event,
+                                     List<ObjectNode> contexts, List<RuleDispatcher.ActionResult> results, List<ObjectNode> commands,
+                                     Foreign foreign) {
         long revision = state.path("revision").asLong();
         ObjectNode before = projection.actor(working);
         ArrayNode outbox = RuleJson.JSON.createArrayNode();
@@ -4796,7 +4829,8 @@ public final class AutomationHost {
         for (ObjectNode context : contexts) {
             actor = (ObjectNode) context.path("actor");
             String instanceId = context.path("source").path("instanceId").asText();
-            storeSource(state, instanceId, context);
+            if (foreign != null && foreign.owners().containsKey(instanceId)) foreign.store(instanceId, context);
+            else storeSource(state, instanceId, context);
             SheetProjection.SourceElement element = elements.get(instanceId);
             if (element != null && element.quantityField() != null && context.path("source").has("quantity")) {
                 int quantity = context.path("source").path("quantity").asInt();
@@ -4935,6 +4969,70 @@ public final class AutomationHost {
         state.put("revision", state.path("revision").asLong() + 1);
         replace(sheet, working);
         return true;
+    }
+
+    /** Staged sheets of the characters whose effects sit on a damaged holder; shared source pools are written back to them. */
+    public static final class SourceSheets {
+        private final Map<String, ObjectNode> sheets;
+        private final Set<String> touched = new java.util.LinkedHashSet<>();
+
+        public SourceSheets(Map<String, ObjectNode> sheets) { this.sheets = sheets; }
+
+        public Map<String, ObjectNode> touched() {
+            Map<String, ObjectNode> result = new java.util.LinkedHashMap<>();
+            touched.forEach(id -> result.put(id, sheets.get(id)));
+            return result;
+        }
+
+    }
+
+    /** Source instances that belong to another character's staged sheet, keyed to that character. */
+    private final class Foreign {
+        private final SourceSheets sheets;
+        private final Map<String, String> owners;
+
+        Foreign(SourceSheets sheets, Map<String, String> owners) { this.sheets = sheets; this.owners = owners; }
+
+        Map<String, String> owners() { return owners; }
+
+        void store(String instanceId, ObjectNode context) {
+            String actorId = owners.get(instanceId);
+            sheets.touched.add(actorId);
+            storeSource(projection.state(sheets.sheets.get(actorId)), instanceId, context);
+        }
+    }
+
+    private void bumpTouched(SourceSheets sources) {
+        for (ObjectNode sheet : sources.touched().values()) {
+            ObjectNode state = projection.state(sheet);
+            state.put("revision", state.path("revision").asLong() + 1);
+        }
+    }
+
+    private List<RuleDispatcher.Candidate> foreignCandidates(Pack pack, ObjectNode working, ObjectNode state, ObjectNode event,
+                                                             Foreign foreign) {
+        List<RuleDispatcher.Candidate> result = new ArrayList<>();
+        if (foreign.sheets == null) return result;
+        ObjectNode actor = actor(pack, working, state, event);
+        String self = actor.path("id").asText();
+        for (JsonNode effect : actor.path("effects")) {
+            String casterId = effect.path("sourceActorId").asText(), key = effect.path("effect").asText("");
+            String instance = effect.path("sourceInstanceId").asText(null);
+            ObjectNode caster = foreign.sheets.sheets.get(casterId);
+            int split = key.indexOf('#');
+            if (!RuleEffects.hasSourceActorId(effect) || casterId.equals(self) || caster == null || split < 1
+                    || instance == null || foreign.owners.containsKey(instance)) continue;
+            RuleCompiler.Program program = pack.programs().get(key.substring(0, split));
+            if (program == null || program.pools().properties().stream()
+                    .noneMatch(pool -> "source".equals(pool.getValue().path("scope").asText()))) continue;
+            var element = sources(pack, caster).stream().filter(item -> item.instanceId().equals(instance)).findFirst().orElse(null);
+            if (element == null) continue;
+            ObjectNode context = context(projection.state(caster), element, actor, event);
+            context.put("revision", state.path("revision").asLong());
+            result.add(new RuleDispatcher.Candidate(program, context));
+            foreign.owners.put(instance, casterId);
+        }
+        return result;
     }
 
     private List<RuleDispatcher.Candidate> candidates(Pack pack, ObjectNode sheet, ObjectNode event) {

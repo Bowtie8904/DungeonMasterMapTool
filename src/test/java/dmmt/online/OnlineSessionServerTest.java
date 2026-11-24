@@ -2423,6 +2423,58 @@ class OnlineSessionServerTest {
         assertEquals(409, automationHttp(owner, id, request.replace("\"hit\"", "\"stale\"")).statusCode());
     }
     @Test
+    void zoneOfProtectionMitigatesAnAllyAndWritesTheSharedPoolBackToItsCaster() throws Exception {
+        installRestRules();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/0/automation");
+        automation.removeAll();
+        automation.setAll((ObjectNode) MAPPER.readTree("""
+                {"pools":{"protection":{"kind":"number","scope":"source","initial":0,"max":3}},
+                 "effects":{"zone":{"label":"Zone of Protection"}},
+                 "rules":[
+                  {"id":"zone-prepare","bindings":[{"id":"prepare","event":"damage.prepare","surface":"damage","mode":"option","defaultOn":true}],
+                   "when":{"and":[{"includes":[{"pluck":[{"read":"actor.effects"},"label"]},"Zone of Protection"]},
+                                  {"gt":[{"read":"sourcePools.protection.value"},0]}]},
+                   "do":[{"op":"damage.reduce","from":{"read":"event.damage"},"amount":{"read":"sourcePools.protection.value"},"id":"zone","label":"Zone","as":"zone"},
+                         {"op":"damage.publish","damage":{"read":"result.zone.damage"}},
+                         {"op":"pool.gain","pool":"protection","amount":1}],
+                   "ui":{"label":"Zone of Protection"}}]}"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String id = campaign.getId();
+        campaign.getActors().add(Campaign.Actor.builder().id("zoner").name("Zoe").ownerId("other").build());
+        campaign.getActors().add(Campaign.Actor.builder().id("warded").name("Ward").ownerId(playerId()).build());
+        store.saveSheet(id, "zoner", """
+                {"name":"Zoe","level":1,"hp":{"slots":6,"on":0},"features":[
+                 {"name":"Zone","automationSource":"classes:tester:features:rally","instanceId":"r"}],
+                 "automationState":{"revision":0,"sources":{"r":{"sourcePools":{"protection":{"value":1,"max":3}}}}}}""");
+        store.saveSheet(id, "warded", """
+                {"name":"Ward","level":1,"hp":{"slots":6,"on":0},"stress":{"slots":6,"on":0},"armorTrack":{"slots":3,"on":0},
+                 "hope":{"slots":6,"on":2},
+                 "automationState":{"revision":0,"effects":[
+                  {"id":"z1","effect":"classes:tester:features:rally#zone","sourceInstanceId":"r","sourceActorId":"zoner","label":"Zone of Protection"}]}}""");
+        String cookie = cookie();
+        var described = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/automation/"
+                + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + "/warded/damage?amount=9&armor=0&type=physical"))
+                .header("Cookie", cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, described.statusCode(), described.body());
+        assertTrue(described.body().contains("Zone of Protection"), described.body());
+        String request = """
+                {"request":{"requestId":"zone-hit","expectedRevision":0,"damage":{"amount":9,"armor":0,"type":"physical"},
+                 "selections":[{"sourceInstanceId":"r","ruleId":"zone-prepare","bindingId":"prepare"}]}}""";
+        var applied = automationHttp(cookie, "warded", request);
+        assertEquals(200, applied.statusCode(), applied.body());
+        assertEquals(8, MAPPER.readTree(applied.body()).at("/event/applied/amount").asInt(), applied.body());
+        JsonNode caster = MAPPER.readTree(store.loadSheet(id, "zoner"));
+        assertEquals(2, caster.at("/automationState/sources/r/sourcePools/protection/value").asInt(), caster.toString());
+        assertEquals(1, caster.at("/automationState/revision").asInt(), caster.toString());
+        JsonNode holder = MAPPER.readTree(store.loadSheet(id, "warded"));
+        assertTrue(holder.at("/automationState/sources").isEmpty(), holder.toString());
+        assertEquals(applied.body(), automationHttp(cookie, "warded", request).body(), "A retry replays without advancing the pool");
+        assertEquals(2, MAPPER.readTree(store.loadSheet(id, "zoner")).at("/automationState/sources/r/sourcePools/protection/value").asInt());
+    }
+
+    @Test
     void authoredDeathOptionsUseOwnerStateReactionsAndJournal() throws Exception {
         installRestRules();
         Path file = compendiumDir.resolve("classes.json");
@@ -8832,6 +8884,40 @@ class OnlineSessionServerTest {
                  "selections":[{"sourceInstanceId":"source","ruleId":"mark","bindingId":"use"}]}}""");
         assertEquals(200, applied.statusCode(), applied.body());
         assertEquals(0, MAPPER.readTree(store.loadSheet(campaignId, "ally")).at("/automationState/effects").size());
+    }
+
+    @Test
+    void sourceEndingAnotherHoldersCopyRecomputesDerivedEffectsAndClearsBoundPools() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        automation.set("pools", MAPPER.readTree("""
+                {"charge":{"kind":"number","scope":"actor","max":4,"whileEffect":"fragile"}}"""));
+        automation.set("effects", MAPPER.readTree("""
+                {"fragile":{"label":"Fragile","endWhen":{"gte":[{"read":"actor.stress.marked"},2]}},
+                 "watchful":{"label":"Watchful","while":{"includes":[{"pluck":[{"read":"actor.effects"},"label"]},"Fragile"]}}}"""));
+        automation.set("rules", MAPPER.readTree("""
+                [{"id":"mark","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"track.mark","track":"actor.stress","amount":2}],"ui":{"label":"Mark"}}]"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String campaignId = campaign.getId();
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Ally").ownerId("other").build());
+        store.saveSheet(campaignId, "caster", """
+                {"name":"Ada","stress":{"slots":6,"on":0},
+                 "features":[{"name":"Steady","instanceId":"source","automationSource":"classes:tester:features:steady"}]}""");
+        store.saveSheet(campaignId, "ally", """
+                {"name":"Ally","automationState":{"revision":0,"pools":{"charge":{"value":3,"max":4}},"effects":[
+                 {"id":"copy","effect":"classes:tester:features:steady#fragile","sourceInstanceId":"source","sourceActorId":"caster","label":"Fragile"},
+                 {"id":"derived","effect":"classes:tester:features:steady#watchful","sourceInstanceId":"source","sourceActorId":"caster","label":"Watchful","derived":true}]}}""");
+        var applied = automationHttp(cookie(), "caster", """
+                {"request":{"requestId":"mark","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"source","ruleId":"mark","bindingId":"use"}]}}""");
+        assertEquals(200, applied.statusCode(), applied.body());
+        JsonNode ally = MAPPER.readTree(store.loadSheet(campaignId, "ally"));
+        assertEquals(0, ally.at("/automationState/effects").size(), ally.toString());
+        assertEquals(0, ally.at("/automationState/pools/charge/value").asInt(), ally.toString());
     }
 
     @Test
