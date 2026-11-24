@@ -147,6 +147,31 @@ describe('generic rule controls', () => {
     root.all('button')[0].click();
     expect(body.all('dialog')[0].all('input')[0].value).toBe('2');
   });
+
+  it('submits the selected host record and preserves it on uncertain retry', async () => {
+    const body = dom();
+    const submit = vi.fn(async (_intent: RuleIntent) => {}).mockRejectedValueOnce(new Error('Lost response'));
+    const root = asElement(ruleControl({ ...descriptor, inputs: [{
+      id: 'tool', kind: 'record.select', label: 'Choose a tool',
+      options: [{ label: 'Rope kit: +2', value: { name: 'Rope kit', bonus: 2 } },
+        { label: 'Lock kit: +3', value: { name: 'Lock kit', bonus: 3 } }],
+    }] }, submit, text));
+    root.all('button')[0].click();
+    const dialog = body.all('dialog')[0];
+    expect(dialog.text).toContain('Lock kit: +3');
+    dialog.all('button')[1].click();
+    expect(dialog.text).toContain('Choose 1 option(s).');
+    const [first, second] = dialog.all('input');
+    second.checked = true;
+    dialog.all('button')[1].click();
+    await settle();
+    expect(submit.mock.calls[0][0].inputs).toEqual({ tool: { name: 'Lock kit', bonus: 3 } });
+    expect(second.disabled).toBe(true);
+    first.checked = true;
+    dialog.all('button')[1].click();
+    await settle();
+    expect(submit.mock.calls[1]).toEqual(submit.mock.calls[0]);
+  });
   it('retains the request ID and inputs after an uncertain failure', async () => {
     const body = dom();
     const sent: RuleIntent[] = [];

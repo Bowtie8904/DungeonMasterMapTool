@@ -39,6 +39,8 @@
     "proficiency": { "kind": "object", "path": "proficiency", "fields": { "value": "on" } },
     "armor": { "kind": "object", "path": "activeArmor", "fields": { "score": "score", "major": "major", "severe": "severe" } },
     "traits": { "kind": "map", "path": "traits", "key": "name", "value": "mod" },
+    "experiences": { "kind": "collection", "path": "experiences",
+                     "fields": { "id": "name", "name": "name", "mod": "mod" }, "writable": false },
     "spellcastTrait": { "kind": "first", "path": "traits", "where": { "field": "spellcast", "equals": true },
                         "fields": { "name": "name", "value": "mod" } },
     "inventory": { "kind": "collection", "path": "inventory",

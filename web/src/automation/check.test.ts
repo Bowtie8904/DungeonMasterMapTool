@@ -75,6 +75,35 @@ describe('host-authored ordinary checks', () => {
     expect(dialog.closed).toBe(true);
   });
 
+  it('submits the chosen Experience as a host-described roll option', async () => {
+    let submitted: unknown;
+    const experience: RuleDescriptor = {
+      ...option, sourceId: 'ruleset:base', sourceInstanceId: 'base', ruleId: 'experience',
+      bindingId: 'use', label: 'Use an Experience', defaultOn: false,
+      inputs: [{ id: 'experience', kind: 'record.select', label: 'Choose an Experience', options: [
+        { label: 'Giant talk (+2)', value: { id: 'Giant talk', name: 'Giant talk', mod: 2 } },
+        { label: 'Giant talk (+3)', value: { id: 'Giant talk', name: 'Giant talk', mod: 3 } },
+      ] }],
+    };
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      if (!init.body) return Response.json({ ...offer, options: [experience] });
+      submitted = JSON.parse(String(init.body));
+      return Response.json({});
+    }));
+    await openAutomationCheckDialog('hero', 'action', 'Agility', 'Agility', async () => {});
+    const dialog = body.all('dialog')[0];
+    expect(dialog.text).toContain('Giant talk (+3)');
+    const [toggle, , selected] = dialog.all('input');
+    toggle.checked = true;
+    selected.checked = true;
+    dialog.all('button').find(button => button.text === 'Roll')!.click();
+    await settle();
+    expect(submitted).toMatchObject({ request: { selections: [{
+      sourceInstanceId: 'base', ruleId: 'experience', bindingId: 'use',
+      inputs: { experience: { id: 'Giant talk', name: 'Giant talk', mod: 3 } },
+    }] } });
+  });
+
   it('retains the exact intent after an uncertain submission', async () => {
     const requests: string[] = [];
     vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {

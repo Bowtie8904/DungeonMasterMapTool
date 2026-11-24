@@ -24,9 +24,14 @@ pre-roll offer. This does not negotiate all sheet and gameplay traffic; that rem
 enforces prepare blocks, runs automatic finished reactions, journals the result and publishes it to chat.
 Pending sheet edits are flushed first; trait rolls can switch between action and reaction offers, while prompted
 reactions stay fixed. Prompted checks reference a public, matching DM history entry, from which the host derives
-the committed label; exact retries remain valid after deletion. Format-1 hosts keep the legacy dialog. Core
-manual advantage and Experience costs still need generic ruleset controls; other non-profile roll origins are
-not yet wired.
+the committed label; exact retries remain valid after deletion. A shared ruleset option spends 1 Hope for a
+selected Experience on duality rolls. The host checks the selected name and modifier against the current sheet,
+including after ordinary sheet edits. Cost replacement/refund and manual advantage still need ruleset support;
+other non-profile roll origins are not yet wired. Format-1 hosts keep the legacy dialog.
+
+**Record inputs.** `record.select` takes a projected scalar-record collection in `from` and a `choiceLabel`
+template using `input.option`. The host offers those records, then matches the submitted record against the
+current collection before any cost; duplicate records are one choice and ordering does not affect validity.
 
 **Profile rolls (format 2).** The automation endpoint accepts an owner-only `request.profileRoll` with
 `sourceInstanceId`, `profileId` and `kind` (`attack`, `damage`, `action`, `reaction` or `spellcast`);

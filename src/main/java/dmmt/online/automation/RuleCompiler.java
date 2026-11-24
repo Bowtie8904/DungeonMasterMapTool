@@ -1261,6 +1261,11 @@ public final class RuleCompiler {
                 int count = input.has("count") ? RuleJson.integer(input.get("count"), path + "/count", 1, size) : 1;
                 if (count < 1) throw RuleJson.error(path + "/count", "Expected at least one choice.");
             }
+            case "record.select" -> {
+                RuleJson.fields(input, path, "id", "kind", "label", "from", "choiceLabel");
+                RuleExpression.validate(input.path("from"), path + "/from");
+                RuleTemplate.validate(RuleJson.text(input.path("choiceLabel"), path + "/choiceLabel"));
+            }
             case "allocation" -> {
                 RuleJson.fields(input, path, "id", "kind", "label", "options", "optionsFrom", "total", "max");
                 validateOptions(input, path);
@@ -1351,7 +1356,9 @@ public final class RuleCompiler {
             if (input.has("where"))
                 references(RuleExpression.references(input.get("where")), args, decl, noVariables, noVariables, true, path + "/inputs/where");
             if (input.has("choiceLabel"))
-                references(RuleTemplate.references(input.path("choiceLabel").asText()), args, decl, noVariables, noVariables, true, path + "/inputs/choiceLabel");
+                references(RuleTemplate.references(input.path("choiceLabel").asText()), args, decl,
+                        "record.select".equals(input.path("kind").asText()) ? Set.of("option") : noVariables,
+                        noVariables, "die.select".equals(input.path("kind").asText()), path + "/inputs/choiceLabel");
             for (JsonNode option : input.path("options")) {
                 references(RuleTemplate.references(option.path("label").asText()), args, decl, noVariables, noVariables, false, path + "/inputs/options/label");
                 if (option.has("when"))
@@ -1439,8 +1446,12 @@ public final class RuleCompiler {
             if (substitution(input)) continue;
             for (String field : List.of("from", "eligible", "count", "min", "max", "optionsFrom", "total", "where"))
                 if (input.has(field)) expressionReferences(input.get(field), path + "/inputs/" + field, false, true, before);
-            for (String field : List.of("label", "choiceLabel"))
-                if (input.has(field)) templateReferences(input.get(field), path + "/inputs/" + field, false, true, before);
+            if (input.has("label")) templateReferences(input.get("label"), path + "/inputs/label", false, true, before);
+            if (input.has("choiceLabel")) {
+                ReferenceVisitor choiceLabel = "record.select".equals(input.path("kind").asText())
+                        ? (refs, die, at) -> localReferences(refs, args, Set.of("option"), false, Set.of(), false, at) : before;
+                templateReferences(input.get("choiceLabel"), path + "/inputs/choiceLabel", false, true, choiceLabel);
+            }
             for (JsonNode option : input.path("options")) {
                 if (option.has("label")) templateReferences(option.get("label"), path + "/inputs/options/label", false, true, before);
                 if (option.has("when")) expressionReferences(option.get("when"), path + "/inputs/options/when", false, true, before);

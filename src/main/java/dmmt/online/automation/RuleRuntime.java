@@ -812,6 +812,28 @@ public final class RuleRuntime {
                 ArrayNode options = descriptor.putArray("options").addAll(options(input, context));
                 if (options.size() < count) throw new Unavailable("selection", "Not enough options are currently available.");
                 descriptor.put("count", count);
+            } else if ("record.select".equals(input.path("kind").asText())) {
+                JsonNode records = eval(input.path("from"), context);
+                if (!records.isArray() || records.size() > 64)
+                    throw RuleJson.error("/inputs/from", "Expected up to 64 selectable records.");
+                ArrayNode options = descriptor.putArray("options");
+                Set<JsonNode> distinct = new HashSet<>();
+                for (JsonNode record : records) {
+                    if (!record.isObject() || record.isEmpty() || record.size() > 16)
+                        throw RuleJson.error("/inputs/from", "Selectable records must have 1-16 scalar fields.");
+                    record.fields().forEachRemaining(field -> {
+                        if (!field.getValue().isValueNode())
+                            throw RuleJson.error("/inputs/from", "Selectable record fields must be scalar.");
+                        if (field.getValue().isNumber()) RuleExpression.number(field.getValue(), "/inputs/from");
+                    });
+                    if (!distinct.add(record)) continue;
+                    ObjectNode display = context.deepCopy();
+                    display.withObject("/input").set("option", record);
+                    ObjectNode option = options.addObject()
+                            .put("label", RuleTemplate.render(input.path("choiceLabel").asText(), display));
+                    option.set("value", record.deepCopy());
+                }
+                if (options.isEmpty()) throw new Unavailable("selection", "No options are currently available.");
             } else if ("allocation".equals(input.path("kind").asText())) {
                 ArrayNode options = descriptor.putArray("options").addAll(options(input, context));
                 int total = whole(input.path("total"), context, 0, 1_000);
@@ -916,6 +938,13 @@ public final class RuleRuntime {
                 int supplied1 = value.isArray() ? value.size() : 1;
                 if (selected.size() != count || supplied1 != count || !allowed.containsAll(selected))
                     throw RuleJson.error("/inputs/" + id, "Choose " + count + " distinct available option(s).");
+            } else if ("record.select".equals(descriptor.path("kind").asText())) {
+                JsonNode selected = null;
+                for (JsonNode option : descriptor.path("options"))
+                    if (option.path("value").equals(value)) { selected = option.path("value"); break; }
+                if (selected == null)
+                    throw new Unavailable("selection", "This selection changed. Reopen the action and choose again.");
+                accepted.set(id, selected.deepCopy());
             } else {
                 Set<String> selected = StructuredRoll.ids(value, "/inputs/" + id, true);
                 Set<String> choices = new HashSet<>();

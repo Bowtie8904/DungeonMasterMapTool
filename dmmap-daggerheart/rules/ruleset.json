@@ -11,6 +11,27 @@
   "automation": {
     "rules": [
       {
+        "id": "experience",
+        "bindings": [{ "id": "use", "event": "roll.prepare", "surface": "roll", "mode": "option" }],
+        "when": { "and": [
+          { "eq": [{ "read": "event.check.duality" }, true] },
+          { "gt": [{ "size": { "read": "actor.experiences" } }, 0] }
+        ] },
+        "inputs": [{
+          "id": "experience", "kind": "record.select", "label": "Choose an Experience",
+          "from": { "read": "actor.experiences" },
+          "choiceLabel": "{input.option.name} ({input.option.mod|signed})"
+        }],
+        "costs": [{ "op": "resource.spend", "pool": "actor.hope", "amount": 1 }],
+        "do": [
+          { "op": "roll.contribute", "from": { "read": "event.roll" }, "as": "withExperience",
+            "contribution": { "id": "experience", "kind": "flat", "role": "modifier",
+              "label": "Experience - {input.experience.name}", "value": { "read": "input.experience.mod" } } },
+          { "op": "roll.publish", "roll": { "read": "result.withExperience" } }
+        ],
+        "ui": { "label": "Use an Experience", "description": "Spend 1 Hope to add an Experience." }
+      },
+      {
         "id": "rest-tend",
         "bindings": [{
           "id": "move", "event": "downtime.move", "surface": "downtime", "mode": "button",

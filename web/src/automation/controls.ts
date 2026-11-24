@@ -6,7 +6,10 @@ export type RuleInput =
   | { id: string; kind: 'die.select'; label: string; count: number; min?: number; default?: string[];
       choices: Array<{ id: string; label: string; sides: number; face: number }> }
   | { id: string; kind: 'choice'; label: string; count: number; options: Array<{ id: string; label: string }> }
+  | { id: string; kind: 'record.select'; label: string; options: Array<{ label: string; value: RuleRecordValue }> }
   | { id: string; kind: 'allocation'; label: string; total: number; max: number; options: Array<{ id: string; label: string }> };
+
+export type RuleRecordValue = Record<string, string | number | boolean | null>;
 
 export interface RuleDescriptor {
   sourceId: string;
@@ -42,7 +45,7 @@ export interface RuleIntent {
   ruleId: string;
   bindingId: string;
   expectedRevision: number;
-  inputs: Record<string, number | string | string[] | Record<string, number>>;
+  inputs: Record<string, number | string | string[] | Record<string, number> | RuleRecordValue>;
   target?: { version: string; recipientId?: string };
 }
 
@@ -251,6 +254,21 @@ export function inputFields(container: HTMLElement, definitions: RuleInput[], fi
           const selected = checks.filter(option => option.field.checked).map(option => option.id);
           if (selected.length !== input.count) throw new Error(text.selectOptions(input.count));
           return [input.id, single ? selected[0] : selected];
+        });
+      } else if (input.kind === 'record.select') {
+        const group = el('fieldset', {}, el('legend', {}, input.label));
+        const name = `record-${randomId()}`;
+        const choices = input.options.map(option => {
+          const field = el('input', { type: 'radio', name });
+          fields.push(field);
+          group.append(el('label', {}, field, option.label));
+          return { field, value: option.value };
+        });
+        container.append(group);
+        reads.push(() => {
+          const selected = choices.find(option => option.field.checked);
+          if (!selected) throw new Error(text.selectOptions(1));
+          return [input.id, { ...selected.value }];
         });
       } else if (input.kind === 'allocation') {
         const group = el('fieldset', {}, el('legend', {}, input.label));
