@@ -1023,10 +1023,11 @@ public final class RuleRuntime {
                 if (preview) throw new Unavailable("randomPreview", "This preview requires a committed roll; no dice were rolled.");
                 String id = op.path("pool").asText();
                 ObjectNode pool = poolState(program, context, id, op.has("owner") ? op.path("owner").asText() : null);
-                int count = whole(op.path("count"), context, 1, 1024);
+                int count = whole(op.path("count"), context, 0, 1024);
                 int sides = whole(op.path("sides"), context, 2, 1000);
-                int keep = op.has("keepHighest") ? whole(op.path("keepHighest"), context, 1, count) : count;
-                int available = program.pool(id).path("max").asInt() - pool.path("dice").size();
+                int keep = op.has("keepHighest") ? whole(op.path("keepHighest"), context, 0, count) : count;
+                boolean replace = op.has("replace") && eval(op.path("replace"), context).asBoolean(false);
+                int available = program.pool(id).path("max").asInt() - (replace ? 0 : pool.path("dice").size());
                 if (keep > available) throw new Unavailable("poolCapacity", "Not enough space remains in " + id + ".");
                 int previouslyRolled = rolls.stream().mapToInt(RuleRuntime::rolledDice).sum();
                 if (count + previouslyRolled > 1024) throw RuleJson.error("/dice", "Action exceeds its dice limit.");
@@ -1046,6 +1047,7 @@ public final class RuleRuntime {
                 roll.set("faces", faces);
                 ArrayNode stored = roll.putArray("dice");
                 ArrayNode poolDice = (ArrayNode) pool.path("dice");
+                if (replace) poolDice.removeAll();
                 long nextId = pool.path("nextId").longValue();
                 if (nextId > Integer.MAX_VALUE - keep) throw RuleJson.error("/pool/" + id + "/nextId", "Pool die identity limit reached.");
                 for (int i = 0; i < count; i++) if (kept.contains(i)) {

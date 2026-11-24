@@ -267,7 +267,7 @@
 "classes","/entries/88/features/0/automation","warrior [Warrior] > No Mercy","actions;rollOptions","converted-candidate","","not captured","unverified"
 "classes","/entries/88/features/2/automation","warrior [Warrior] > Combat Training","ignoreWeaponBurden;rollOptions","converted-candidate","","not captured","unverified"
 "classes","/entries/89/features/0/automation","seraph [Seraph] > Life Support","actions","converted-candidate","","not captured","unverified"
-"classes","/entries/89/features/1/automation","seraph [Seraph] > Prayer Dice","actions;dicePool;uses","unconverted","/entries/89/features/1/automation/dicePool: Unsupported legacy field: dicePool | /entries/89/features/1/automation/actions/0/rollDicePool: Unsupported legacy field: rollDicePool","not captured","unverified"
+"classes","/entries/89/features/1/automation","seraph [Seraph] > Prayer Dice","actions;dicePool;uses","converted-candidate","","not captured","unverified"
 "classes","/entries/90/features/0/automation","sorcerer [Sorcerer] > Volatile Magic","actions;rollTriggers","converted-candidate","","not captured","unverified"
 "classes","/entries/90/features/2/automation","sorcerer [Sorcerer] > Minor Illusion","actions","converted-candidate","","not captured","unverified"
 "classes","/entries/90/features/3/automation","sorcerer [Sorcerer] > Channel Raw Power","actions;uses","converted-candidate","","not captured","unverified"

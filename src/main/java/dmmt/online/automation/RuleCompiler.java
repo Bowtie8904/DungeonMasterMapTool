@@ -34,7 +34,7 @@ public final class RuleCompiler {
             Map.entry("resource.gain", List.of("pool", "amount")),
             Map.entry("pool.spend", List.of("pool", "amount", "owner")),
             Map.entry("pool.gain", List.of("pool", "amount", "owner")),
-            Map.entry("pool.roll", List.of("pool", "count", "sides", "keepHighest", "owner")),
+            Map.entry("pool.roll", List.of("pool", "count", "sides", "keepHighest", "replace", "owner")),
             Map.entry("pool.removeDie", List.of("pool", "dieId", "owner")),
             Map.entry("track.mark", List.of("track", "amount")),
             Map.entry("track.clear", List.of("track", "amount")),
@@ -1883,7 +1883,7 @@ public final class RuleCompiler {
         if (operation.has("if") && operation.has("as"))
             throw RuleJson.error(path + "/as", "A conditional step cannot name a result; later steps could read a skipped value.");
         for (String field : fields) if (!operation.has(field)
-                && !("pool.roll".equals(op) && "keepHighest".equals(field))
+                && !("pool.roll".equals(op) && Set.of("keepHighest", "replace").contains(field))
                 && !"owner".equals(field)
                 && !("roll.contribute".equals(op) && "beforeScales".equals(field))
                 && !("roll.resolve".equals(op) && "metadata".equals(field))

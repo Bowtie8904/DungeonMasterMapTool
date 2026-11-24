@@ -33,7 +33,7 @@ public final class LegacyCatalogConverter {
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
             "damage", "alternateProfiles", "damageTypeChoice", "rest", "restReroll", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions",             "conditionalRollOptions", "conditionalMitigation", "elementChoice", "stances",
             "hopeReward", "classResourceOnly", "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "zeroHopeClearArmor",
-            "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases", "hideSpellcast", "companion", "companionTraining", "conditionalDamageRewards", "experienceRefund", "partyDowntime", "requirement", "unarmoredBase", "ignoreWeaponBurden", "unarmedWeapon",             "spellcastSuccessSteps", "banishDifficulty", "equipEffect");
+            "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases", "hideSpellcast", "companion", "companionTraining", "conditionalDamageRewards", "experienceRefund", "partyDowntime", "requirement", "unarmoredBase", "ignoreWeaponBurden", "unarmedWeapon",             "spellcastSuccessSteps", "banishDifficulty", "equipEffect", "dicePool");
     private static final Set<String> DEATH_KINDS = Set.of("hopeBonus", "hopeSpend", "mask", "spectral", "egg", "battleHardened",
             "unbreakable", "undying", "lifeWard");
     /** Legacy gated families that are their base family plus extra conditions, which every family converts the same way. */
@@ -73,7 +73,7 @@ public final class LegacyCatalogConverter {
             "excludeSourceActor", "hostOwned", "selectAmount", "resourceRoll", "hopeDice", "layerRoll", "doomsday", "deferSourceUse", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
             "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime", "table",
             "hostRollAction", "bloodAutomation", "castTokens", "patronDice", "witchAction", "requiresCompanion",             "specialAction", "codexSwap", "spendFavor", "menacingReach",
-            "costConditions", "refocus", "chooseEffects", "channelRawPower", "requiresFeature", "mutagens");
+            "costConditions", "refocus", "chooseEffects", "channelRawPower", "requiresFeature", "mutagens", "rollDicePool");
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
@@ -324,6 +324,7 @@ public final class LegacyCatalogConverter {
         ArrayNode rules = RuleJson.JSON.createArrayNode();
         ObjectNode effects = RuleJson.JSON.createObjectNode();
         Set<String> ruleIds = new HashSet<>();
+        DicePool dicePool = legacy.has("dicePool") ? dicePool(legacy.get("dicePool"), path + "/dicePool", p, pools.local(), rules, ruleIds) : null;
         if (legacy.has("experienceRefund")) {
             ObjectNode refund = experienceRefund(legacy.get("experienceRefund"), path + "/experienceRefund", p);
             refund.put("id", unique(refund.path("id").asText(), ruleIds));
@@ -406,7 +407,9 @@ public final class LegacyCatalogConverter {
                 legacyRule = zone(legacyRule, next.path(), p, effects, pools);
             legacyRule = witch(legacyRule, next.path(), p, pools, grants);
             ObjectNode rule = switch (next.family()) {
-                case "actions" -> legacyRule.has("deathMove")
+                case "actions" -> legacyRule.has("rollDicePool")
+                        ? dicePoolRoll(legacyRule, next.path(), p, dicePool, usesBudget)
+                        : legacyRule.has("deathMove")
                         ? deathAction(legacyRule, death, next.path(), p, effects, pools, usesBudget, extra, out)
                         : action(legacyRule, next.path(), p, effects, pools, usesBudget, actionOrigin, cardKey);
                 case "rollOptions" -> rollOption(legacyRule, next.path(), p, effects, pools, usesBudget, extra);
@@ -2189,6 +2192,121 @@ public final class LegacyCatalogConverter {
         ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", id);
         rule.putArray("bindings").addObject().put("id", "use").put("event", event).put("surface", surface).put("mode", mode);
         rule.putObject("ui");
+        return rule;
+    }
+
+    private record DicePool(String id, int sides, JsonNode count, Map<String, Integer> extraByFeature) {}
+
+    /**
+     * Legacy {@code dicePool}: a session-reset stored dice pool plus one rule per way to spend a stored die (Hope, manual removal,
+     * a flat bonus on any roll, damage reduction). {@code rollDicePool} actions roll into it through {@link #dicePoolRoll}.
+     */
+    private static DicePool dicePool(JsonNode spec, String path, Problems p, ObjectNode pools, ArrayNode rules, Set<String> ruleIds) {
+        p.onlyFields(spec, path, Set.of("id", "label", "count", "sides", "extraByFeature"));
+        String id = spec.path("id").asText();
+        if (!ID.matcher(id).matches() || pools.has(id)) { p.add(path + "/id", "Invalid or duplicate dice pool ID: " + id); return null; }
+        int sides = spec.path("sides").asInt(0);
+        if (!spec.path("sides").isInt() || sides < 2 || sides > 1000) { p.add(path + "/sides", "Expected a die size from 2 to 1000."); return null; }
+        JsonNode count = spec.path("count");
+        if (count.isInt() && count.asInt() >= 0) count = count.deepCopy();
+        else if ("@spellcast".equals(count.asText())) {
+            ObjectNode trait = read("actor.spellcastTrait.value");
+            ObjectNode floor = RuleJson.JSON.createObjectNode();
+            floor.putArray("max").add(0).add(trait);
+            ObjectNode guarded = RuleJson.JSON.createObjectNode();
+            guarded.putArray("if").add(RuleJson.JSON.createObjectNode().put("exists", "actor.spellcastTrait.value")).add(floor).add(0);
+            count = guarded;
+        } else { p.add(path + "/count", "Unsupported dice pool count: " + count); return null; }
+        Map<String, Integer> extras = new java.util.LinkedHashMap<>();
+        JsonNode byFeature = spec.path("extraByFeature");
+        if (spec.has("extraByFeature") && !byFeature.isObject()) p.add(path + "/extraByFeature", "Expected a map of feature names to extra dice.");
+        else byFeature.fields().forEachRemaining(entry -> {
+            if (entry.getValue().isInt() && entry.getValue().asInt() >= 1 && entry.getValue().asInt() <= 100) extras.put(entry.getKey(), entry.getValue().asInt());
+            else p.add(path + "/extraByFeature/" + entry.getKey(), "Expected a positive whole number of extra dice.");
+        });
+        String label = escape(spec.path("label").asText(id));
+        pools.putObject(id).put("kind", "dice").put("scope", "source").put("label", label).put("max", 64)
+                .putArray("resetOn").add("session.start");
+        ObjectNode die = RuleJson.JSON.createObjectNode();
+        die.put("read", "die.face");
+        // Spending a stored die for Hope is capped by the open Hope slots, and offered only while one is open.
+        ObjectNode hope = RuleJson.JSON.createObjectNode().put("id", "spend-for-hope");
+        ObjectNode hopeBinding = hope.putArray("bindings").addObject().put("id", "per-die").put("event", "action.request")
+                .put("surface", "sheet").put("mode", "button").put("forEach", id);
+        hopeBinding.putObject("when").putArray("lt").add(read("actor.hope.value")).add(read("actor.hope.max"));
+        ArrayNode hopeSteps = hope.putArray("do");
+        hopeSteps.addObject().put("op", "resource.gain").put("pool", "actor.hope").put("as", "gained").set("amount", die.deepCopy());
+        hopeSteps.addObject().put("op", "pool.removeDie").put("pool", id).put("as", "spent").set("dieId", read("die.id"));
+        hope.putObject("ui").put("label", "Spend " + label + " for Hope (+{die.face})")
+                .put("report", "{actor.name} spent a " + label + " die for {result.gained} Hope.");
+        ObjectNode remove = RuleJson.JSON.createObjectNode().put("id", "remove-die");
+        remove.putArray("bindings").addObject().put("id", "per-die").put("event", "action.request")
+                .put("surface", "sheet").put("mode", "button").put("forEach", id);
+        remove.putArray("do").addObject().put("op", "pool.removeDie").put("pool", id).put("as", "spent").set("dieId", read("die.id"));
+        remove.putObject("ui").put("label", "Remove " + label + " die ({die.face})")
+                .put("report", "{actor.name} removed a " + label + " die.");
+        ObjectNode aid = RuleJson.JSON.createObjectNode().put("id", "aid-roll");
+        aid.putArray("bindings").addObject().put("id", "roll-result").put("event", "roll.finished").put("surface", "chat")
+                .put("mode", "button").put("forEach", id).put("group", "otherFeatures").put("audience", "any");
+        ArrayNode aidSteps = aid.putArray("do");
+        ObjectNode added = aidSteps.addObject().put("op", "roll.addPoolDie").put("pool", id).put("role", "aid")
+                .put("label", label + " die: +{die.face}").put("as", "aided");
+        added.set("dieId", read("die.id"));
+        added.set("from", read("event.roll"));
+        aidSteps.addObject().put("op", "roll.publish").set("roll", read("result.aided"));
+        aid.putObject("ui").put("label", label + " die: +{die.face}")
+                .put("report", "{actor.name} added a " + label + " die; the roll is now {result.aided.total}.");
+        ObjectNode reduce = RuleJson.JSON.createObjectNode().put("id", "reduce-damage");
+        reduce.putArray("bindings").addObject().put("id", "incoming").put("event", "damage.prepare").put("surface", "damage")
+                .put("mode", "button").put("forEach", id).put("group", "otherFeatures");
+        reduce.putObject("when").putArray("gt").add(read("event.damage.amount")).add(0);
+        ArrayNode reduceSteps = reduce.putArray("do");
+        ObjectNode reduction = reduceSteps.addObject().put("op", "damage.reduce").put("id", id + "-{die.id}")
+                .put("label", label + " die").put("as", "reduction");
+        reduction.set("from", read("event.damage"));
+        reduction.set("amount", die.deepCopy());
+        reduceSteps.addObject().put("op", "damage.publish").set("damage", read("result.reduction.damage"));
+        reduceSteps.addObject().put("op", "pool.removeDie").put("pool", id).put("as", "spent").set("dieId", read("die.id"));
+        reduce.putObject("ui").put("label", label + " die: reduce by {die.face}")
+                .put("report", "{actor.name} reduced the damage by {result.reduction.adjustment.applied}.");
+        for (ObjectNode rule : List.of(hope, remove, aid, reduce)) {
+            rule.put("id", unique(rule.path("id").asText(), ruleIds));
+            rules.add(rule);
+        }
+        return new DicePool(id, sides, count, extras);
+    }
+
+    /** Legacy {@code rollDicePool}: roll the base count plus feature extras, keep the highest base count and replace the stored dice. */
+    private static ObjectNode dicePoolRoll(JsonNode action, String path, Problems p, DicePool pool, boolean limited) {
+        p.onlyFields(action, path, Set.of("id", "label", "description", "rollDicePool"));
+        if (pool == null) { p.add(path + "/rollDicePool", "Rolling a dice pool needs a dicePool declaration."); return null; }
+        if (!action.path("rollDicePool").asBoolean(false)) { p.add(path + "/rollDicePool", "Expected true."); return null; }
+        String id = action.path("id").asText();
+        if (!ID.matcher(id).matches()) { p.add(path + "/id", "Invalid action ID: " + id); return null; }
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", id);
+        rule.putArray("bindings").addObject().put("id", "sheet").put("event", "action.request").put("surface", "sheet").put("mode", "button");
+        if (limited) rule.put("limitRef", "uses");
+        JsonNode total = pool.count();
+        if (!pool.extraByFeature().isEmpty()) {
+            ObjectNode sum = RuleJson.JSON.createObjectNode();
+            ArrayNode terms = sum.putArray("add");
+            terms.add(pool.count().deepCopy());
+            pool.extraByFeature().forEach((feature, extra) -> {
+                ObjectNode pick = RuleJson.JSON.createObjectNode();
+                pick.putArray("if").add(hasFeature(feature)).add(extra).add(0);
+                terms.add(pick);
+            });
+            ObjectNode guarded = RuleJson.JSON.createObjectNode();
+            ObjectNode positive = RuleJson.JSON.createObjectNode();
+            positive.putArray("gt").add(pool.count().deepCopy()).add(0);
+            guarded.putArray("if").add(positive).add(sum).add(0);
+            total = guarded;
+        }
+        ObjectNode roll = rule.putArray("do").addObject().put("op", "pool.roll").put("pool", pool.id()).put("sides", pool.sides())
+                .put("replace", true).put("as", "draw");
+        roll.set("count", total.deepCopy());
+        roll.set("keepHighest", pool.count().deepCopy());
+        labels(action, path, p, rule).put("report", "{actor.name} rolled {source.name}: {result.draw.faces|list}.");
         return rule;
     }
 
