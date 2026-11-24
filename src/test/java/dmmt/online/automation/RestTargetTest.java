@@ -293,6 +293,9 @@ class RestTargetTest {
                 {"op":"resource.gain","pool":"recipient.hope","amount":0}
                 """,
                 """
+                {"op":"track.capacity","track":"recipient.armorTrack","by":1}
+                """,
+                """
                 {"op":"effect.start","effect":"ward","target":"recipient"}
                 """,
                 """
@@ -310,7 +313,7 @@ class RestTargetTest {
                 ObjectNode invalid = ruleset.deepCopy();
                 ((ArrayNode) invalid.at(phase)).add(RuleJson.parse(mutation));
                 if (mutation.contains("\"track.clear\"") || mutation.contains("\"resource.gain\"")
-                        || mutation.contains("\"effect.start\""))
+                        || mutation.contains("\"track.capacity\"") || mutation.contains("\"effect.start\""))
                     assertDoesNotThrow(() -> pack(invalid), phase + mutation);
                 else assertThrows(AutomationHost.NotReady.class, () -> pack(invalid), phase + mutation);
 
@@ -646,7 +649,7 @@ class RestTargetTest {
     }
 
     @Test
-    void targetedCapacityChangesRejectBeforeCommittingEitherHolder() throws Exception {
+    void targetedCapacityChangesRunRecipientReactionsAndPersistWithTheMove() throws Exception {
         ObjectNode ruleset = rulesetWithTargetReactions(
                 "{\"op\":\"resource.gain\",\"pool\":\"actor.hope\",\"amount\":1}");
         ((ArrayNode) ruleset.at("/automation/rules/4/do")).insert(0, RuleJson.parse("""
@@ -656,13 +659,11 @@ class RestTargetTest {
         PartyTargets offers = party(setup, setup.recipient(), new AtomicReference<>());
         ObjectNode request = transaction(setup);
         transactionMove(request, "repair", targetRequest(setup, offers, "repair"));
-        ObjectNode source = setup.source().deepCopy(), recipient = setup.recipient().deepCopy();
-        var failure = assertThrows(RuleRuntime.Unavailable.class,
-                () -> stage(setup, request, roster(setup, new java.util.HashMap<>())));
-        assertEquals("recipientReactions", failure.code());
-        assertTrue(failure.getMessage().contains("track.capacity"));
-        assertEquals(source, setup.source());
-        assertEquals(recipient, setup.recipient());
+        var result = stage(setup, request, roster(setup, new java.util.HashMap<>()));
+        ObjectNode recipient = result.recipients().get("mira");
+        assertEquals(4, recipient.at("/armorTrack/slots").asInt());
+        assertEquals(0, recipient.at("/armorTrack/on").asInt());
+        assertEquals(3, recipient.at("/hope/on").asInt());
     }
 
     @Test

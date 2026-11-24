@@ -4385,6 +4385,75 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void targetedRestSettlesCapacityAndLinkedReservesAcrossAllMovePhases() throws Exception {
+        installRestRules();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withArray("rules").addAll((ArrayNode) MAPPER.readTree("""
+                [
+                 {"id":"reserve-care","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"button",
+                    "restMove":{"id":"reserve-care","kind":"short","ally":true},
+                    "targetSelection":{"cardinality":"one","scope":"activeCharacters","excludeSource":true}}],
+                  "do":[{"op":"track.capacity","track":"recipient.hope","counter":"recipient.scars","direction":"reserve","amount":1}],
+                  "ui":{"label":"Reserve Hope"}},
+                 {"id":"reserve-before","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.move.id"},"reserve-care"]},
+                  "do":[{"op":"track.capacity","track":"recipient.hope","counter":"recipient.scars","direction":"reserve","amount":1}],
+                  "after":{"do":[{"op":"track.capacity","track":"recipient.hope","counter":"recipient.scars","direction":"release","amount":1}],
+                           "report":"Remaining scars: {recipient.scars}."},"ui":{}},
+                 {"id":"reserve-fail","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"option"}],
+                  "when":{"eq":[{"read":"event.move.id"},"reserve-care"]},
+                  "after":{"do":[{"op":"track.capacity","track":"recipient.hp","by":-6}]},
+                  "ui":{"label":"Invalid capacity"}},
+                 {"id":"reserve-watch","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                  "when":{"and":[{"eq":[{"read":"event.track"},"hope"]},
+                                   {"eq":[{"read":"event.change"},"capacity"]},
+                                   {"eq":[{"read":"event.after.max"},{"read":"actor.hope.max"}]}]},
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1},
+                        {"op":"table.gain","resource":"fear","amount":1,"label":"Reserve"}],
+                  "ui":{"report":"Reserve changed for {actor.name}."}}
+                ]
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        addRestParty();
+        ObjectNode mira = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        mira.put("permanentHp", 2);
+        store.saveSheet(campaign.getId(), "mira", mira.toString());
+        String owner = cookie();
+        var described = restHttp(owner, "resting", "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode rest = MAPPER.readTree(described.body());
+        String beforeSource = store.loadSheet(campaign.getId(), "resting");
+        String beforeRecipient = store.loadSheet(campaign.getId(), "mira");
+        int fear = campaign.getFear(), history = store.historyTail(campaign.getId(), 100).size();
+        ObjectNode failure = restRequest(rest, "invalid-ally-capacity");
+        targetRestMove(failure, rest, "reserve-care", "mira").withArray("options").add(restSelection(
+                restDescriptor(restDescriptor(rest.path("moves"), "reserve-care").path("options"), "reserve-fail")));
+        var rejected = restHttp(owner, "resting", null, failure.toString());
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertEquals(beforeSource, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(beforeRecipient, store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(fear, campaign.getFear());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+
+        ObjectNode request = restRequest(rest, "ally-capacity");
+        targetRestMove(request, rest, "reserve-care", "mira");
+        var completed = restHttp(owner, "resting", null, request.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode receipt = MAPPER.readTree(completed.body());
+        assertTrue(receipt.path("actions").findValuesAsText("report").contains("Remaining scars: 1."));
+        assertEquals(3, receipt.path("actions").findValuesAsText("report").stream()
+                .filter("Reserve changed for mira."::equals).count(), receipt.toString());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(5, saved.at("/hope/slots").asInt());
+        assertEquals(3, saved.at("/hope/on").asInt());
+        assertEquals(1, saved.path("scars").asInt());
+        assertEquals(fear + 3, campaign.getFear());
+        assertEquals(completed.body(), restHttp(owner, "resting", null, request.toString()).body());
+        assertEquals(fear + 3, campaign.getFear());
+    }
+
+    @Test
     void targetedRestTransfersEffectsBeforeSubsequentOperationsAndMoves() throws Exception {
         installTargetRestRules("gain");
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");

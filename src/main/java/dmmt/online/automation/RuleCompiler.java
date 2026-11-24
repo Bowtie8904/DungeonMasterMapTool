@@ -1295,7 +1295,7 @@ public final class RuleCompiler {
         for (String phase : List.of("costs", "do"))
             for (JsonNode operation : rule.path(phase))
                 if (recipientMutation(operation) && !Set.of("resource.spend", "resource.gain", "track.mark",
-                        "track.clear", "effect.start", "effect.end").contains(operation.path("op").asText()))
+                        "track.clear", "track.capacity", "effect.start", "effect.end").contains(operation.path("op").asText()))
                     return false;
         return true;
     }

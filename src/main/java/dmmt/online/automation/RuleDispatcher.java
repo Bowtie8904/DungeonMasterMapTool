@@ -668,8 +668,7 @@ public final class RuleDispatcher {
                     }
                     return;
                 }
-                if ("track.capacity".equals(operation)
-                        || !operation.startsWith("track.") && !operation.startsWith("resource."))
+                if (!operation.startsWith("track.") && !operation.startsWith("resource."))
                     throw new RuleRuntime.Unavailable("recipientReactions",
                             "This recipient change requires additional lifecycle settlement: " + operation + ".");
             }
@@ -1221,8 +1220,7 @@ public final class RuleDispatcher {
                             }
                             return;
                         }
-                        if ("track.capacity".equals(operation)
-                                || !operation.startsWith("track.") && !operation.startsWith("resource."))
+                        if (!operation.startsWith("track.") && !operation.startsWith("resource."))
                             throw new RuleRuntime.Unavailable("recipientReactions",
                                     "This recipient change requires additional lifecycle settlement: " + operation + ".");
                     } else sourceObserver.mutated(staged, operation, previousActor, target);

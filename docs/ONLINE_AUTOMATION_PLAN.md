@@ -163,7 +163,7 @@ must be reduced before choosing.
 Self-targeted single-holder effects transfer after preparation and between moves. Ally move adjustments,
 selected moves and deferred benefits settle recipient track changes and effect starts and ends immediately,
 including transfers from offline or disabled holders, so later operations and reactions see the updated state.
-Recipient capacity, collection and pool mutations in adjustments or deferred benefits remain unsupported.
+Recipient collection and pool mutations in adjustments or deferred benefits remain unsupported.
 The host provides target-specific adjustment descriptors when option availability or labels depend on an ally;
 the browser switches them with the recipient and the transaction rechecks the chosen option.
 Short-rest recovery dice can publish generic chat offers; an owned source may edit one die through
@@ -296,7 +296,9 @@ Reusing validation patterns and building diagnostic paths only on failure preser
 temporary allocations. In one opt-in, single-thread 32-idle-source private-rest sample, mean allocation fell
 from 38.78 to 27.30 MiB without reactions and from 38.70 to 25.15 MiB with one Armor reaction; timings varied
 substantially between runs. This is not a live persistence, concurrency or release benchmark.
-Targeted-move adjustments, costs, buttons and deferred benefits settle the relevant holder's track reactions; later operations see recipient state and Fear. Recipient capacity changes, other non-track/resource button mutations, mutations in adjustment/deferred phases, and failed nested reactions abort the rest until their lifecycle settlement is supported.
+Targeted-move adjustments, costs, buttons and deferred benefits settle the relevant holder's track reactions,
+including capacity changes and linked reserves; later operations see recipient state and Fear. Unsupported
+recipient collection or pool mutations and failed nested reactions abort the rest.
 Converted `repairAllies` adjustments use live party recovery and recipient track-change reactions, including
 Armor overflow. Live self and ally recovery also exercise converted Overflowing Armor. `plan.adjust` records
 each requested and applied delta, before/after values, source instance, executing rule and binding, phase and
