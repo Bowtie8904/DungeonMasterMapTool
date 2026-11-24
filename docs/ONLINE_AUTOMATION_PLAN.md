@@ -312,9 +312,9 @@ Reusing validation patterns and building diagnostic paths only on failure preser
 temporary allocations. In one opt-in, single-thread 32-idle-source private-rest sample, mean allocation fell
 from 38.78 to 27.30 MiB without reactions and from 38.70 to 25.15 MiB with one Armor reaction; timings varied
 substantially between runs. This is not a live persistence, concurrency or release benchmark.
-Targeted-move adjustments, costs, buttons and deferred benefits settle the relevant holder's track reactions,
-including capacity changes and linked reserves; later operations see recipient state and Fear. Unsupported
-recipient collection or pool mutations and failed nested reactions abort the rest.
+Targeted-move adjustments, costs, buttons and deferred benefits settle recipient track reactions and actor-scoped
+pool changes; later operations see the reprojected holder and Fear. Unsupported recipient collection mutations
+and failed nested reactions abort the rest.
 Converted `repairAllies` adjustments use live party recovery and recipient track-change reactions, including
 Armor overflow. Live self and ally recovery also exercise converted Overflowing Armor. `plan.adjust` records
 each requested and applied delta, before/after values, source instance, executing rule and binding, phase and

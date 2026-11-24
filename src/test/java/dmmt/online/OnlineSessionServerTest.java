@@ -4238,6 +4238,93 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void targetedRestSettlesRecipientPoolsBeforeLaterReactions() throws Exception {
+        installRestRules();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = ruleset.withObject("/automation");
+        automation.putObject("pools").putObject("charge").put("kind", "number").put("scope", "actor")
+                .put("max", 4).put("initial", 1);
+        automation.withObject("/pools").putObject("warded").put("kind", "number").put("scope", "actor")
+                .put("max", 4).put("whileEffect", "charge-ward");
+        automation.putObject("effects").putObject("charge-ward").put("label", "Charge ward");
+        automation.withArray("rules").addAll((ArrayNode) MAPPER.readTree("""
+                [
+                 {"id":"charge-care","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"button",
+                    "restMove":{"id":"charge-care","kind":"short","ally":true},
+                    "targetSelection":{"cardinality":"one","scope":"activeCharacters","excludeSource":true}}],
+                  "do":[{"op":"track.clear","track":"recipient.hp","amount":1}],
+                  "ui":{"label":"Charge and care",
+                        "report":"Care saw {recipient.pools.charge.value} charge and {recipient.pools.warded.value} ward."}},
+                 {"id":"charge-before","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.move.id"},"charge-care"]},
+                  "do":[{"op":"pool.gain","pool":"charge","owner":"recipient","amount":2},
+                        {"op":"pool.gain","pool":"warded","owner":"recipient","amount":1}],
+                  "after":{"do":[{"op":"pool.spend","pool":"charge","owner":"recipient","amount":1},
+                                  {"op":"track.clear","track":"recipient.stress","amount":1}],
+                           "report":"After care: {recipient.pools.charge.value} charge."},"ui":{}},
+                 {"id":"charge-fail","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"option"}],
+                  "when":{"eq":[{"read":"event.move.id"},"charge-care"]},
+                  "after":{"do":[{"op":"pool.spend","pool":"charge","owner":"recipient","amount":4}]},
+                  "ui":{"label":"Spend too much charge"}},
+                 {"id":"charge-watch","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                  "when":{"and":[{"eq":[{"read":"actor.name"},"mira"]},
+                                   {"or":[{"and":[{"eq":[{"read":"event.track"},"hp"]},
+                                                   {"eq":[{"read":"actor.pools.charge.value"},3]}]},
+                                          {"and":[{"eq":[{"read":"event.track"},"stress"]},
+                                                   {"eq":[{"read":"actor.pools.charge.value"},2]}]}]}]},
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],
+                  "ui":{"report":"Saw {actor.pools.charge.value} charge for {actor.name}."}}
+                ]
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        addRestParty();
+        for (String id : List.of("resting", "mira")) {
+            ObjectNode sheet = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+            sheet.putObject("automationState").put("revision", 0).putObject("pools")
+                    .putObject("charge").put("value", 1).put("max", 4);
+            store.saveSheet(campaign.getId(), id, sheet.toString());
+        }
+
+        String owner = cookie();
+        var described = restHttp(owner, "resting", "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode rest = MAPPER.readTree(described.body());
+        ObjectNode failing = restRequest(rest, "failed-charge-care");
+        ObjectNode failingMove = targetRestMove(failing, rest, "charge-care", "mira");
+        failingMove.withArray("options").add(restSelection(restDescriptor(
+                restDescriptor(rest.path("moves"), "charge-care").path("options"), "charge-fail")));
+        String beforeSource = store.loadSheet(campaign.getId(), "resting");
+        String beforeRecipient = store.loadSheet(campaign.getId(), "mira");
+        int history = store.historyTail(campaign.getId(), 100).size();
+        var rejected = restHttp(owner, "resting", null, failing.toString());
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertEquals(beforeSource, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(beforeRecipient, store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+
+        ObjectNode request = restRequest(rest, "charge-care");
+        targetRestMove(request, rest, "charge-care", "mira");
+        var completed = restHttp(owner, "resting", null, request.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode receipt = MAPPER.readTree(completed.body());
+        List<String> reports = receipt.path("actions").findValuesAsText("report");
+        assertTrue(reports.contains("Care saw 3 charge and 0 ward."), reports.toString());
+        assertTrue(reports.contains("After care: 2 charge."), reports.toString());
+        assertTrue(reports.contains("Saw 3 charge for mira."), reports.toString());
+        assertTrue(reports.contains("Saw 2 charge for mira."), reports.toString());
+        JsonNode savedSource = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        JsonNode savedRecipient = MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(1, savedSource.at("/automationState/pools/charge/value").asInt());
+        assertEquals(2, savedRecipient.at("/automationState/pools/charge/value").asInt());
+        assertEquals(0, savedRecipient.at("/automationState/pools/warded/value").asInt());
+        assertEquals(2, savedRecipient.at("/hope/on").asInt());
+        assertEquals(1, savedRecipient.at("/automationState/revision").asInt());
+        assertEquals(completed.body(), restHttp(owner, "resting", null, request.toString()).body());
+        assertEquals(savedRecipient, MAPPER.readTree(store.loadSheet(campaign.getId(), "mira")));
+    }
+
+    @Test
     void targetedRestSettlesAdjustmentAndDeferredEffectLifecycles() throws Exception {
         installRestRules();
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");

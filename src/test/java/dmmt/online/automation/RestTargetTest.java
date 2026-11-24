@@ -317,7 +317,7 @@ class RestTargetTest {
                 ((ArrayNode) invalid.at(phase)).add(RuleJson.parse(mutation));
                 if (mutation.contains("\"track.clear\"") || mutation.contains("\"resource.gain\"")
                         || mutation.contains("\"track.capacity\"") || mutation.contains("\"effect.start\"")
-                        || mutation.contains("\"effect.endLabeled\""))
+                        || mutation.contains("\"effect.endLabeled\"") || mutation.contains("\"pool.gain\""))
                     assertDoesNotThrow(() -> pack(invalid), phase + mutation);
                 else assertThrows(AutomationHost.NotReady.class, () -> pack(invalid), phase + mutation);
 

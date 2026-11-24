@@ -2618,7 +2618,7 @@ public final class AutomationHost {
             }
 
             @Override
-            public void effectsChanged(ObjectNode staged, Map<String, ObjectNode> contexts) {
+            public void holderChanged(ObjectNode staged, Map<String, ObjectNode> contexts) {
                 String id = participant.member.id();
                 ObjectNode event = RuleJson.object(staged.get("event"), "/event");
                 ObjectNode before = recipientSnapshot(pack, working, event, id);

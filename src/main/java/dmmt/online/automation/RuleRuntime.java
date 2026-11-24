@@ -943,7 +943,8 @@ public final class RuleRuntime {
                 || (kind.startsWith("track.") && (op.path("track").asText().startsWith("recipient.")
                 || op.path("counter").asText().startsWith("recipient.")))))
             observer.mutated(context, kind, null, "recipient");
-        ObjectNode previousActor = observer != null && kind.startsWith("effect.")
+        ObjectNode previousActor = observer != null && (kind.startsWith("effect.")
+                || Set.of("pool.spend", "pool.gain").contains(kind) && "recipient".equals(op.path("owner").asText()))
                 ? ((ObjectNode) context.path("actor")).deepCopy() : null;
         JsonNode result;
         switch (kind) {
