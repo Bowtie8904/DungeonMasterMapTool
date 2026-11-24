@@ -10,8 +10,8 @@
     { "path": "heritage" },
     { "path": "loadout", "children": [{ "path": "spells", "derive": true }] },
     { "path": "inventory", "quantity": "qty" },
-    { "path": "activeWeapons" },
-    { "path": "activeArmor", "single": true }
+    { "path": "activeWeapons", "equipment": "weapons" },
+    { "path": "activeArmor", "single": true, "equipment": "armor" }
   ],
   "actor": {
     "name": { "kind": "value", "path": "name" },

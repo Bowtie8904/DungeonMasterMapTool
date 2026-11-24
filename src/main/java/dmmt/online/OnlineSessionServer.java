@@ -1739,10 +1739,12 @@ public final class OnlineSessionServer {
             Map<String, String> automationOriginals = null;
             ObjectNode trackResult = null;
             Map<String, JsonNode> sourceNames = new java.util.HashMap<>();
-            if (stored != null && automationHost.projection().hasTrackChanges(previous, saved)
-                    && requiresAuthoritativeRest()) {
+            var equipmentChanges = stored == null ? List.<dmmt.online.automation.SheetProjection.EquipmentChange>of()
+                    : automationHost.projection().equipmentChanges(previous, saved);
+            boolean tracksChanged = stored != null && automationHost.projection().hasTrackChanges(previous, saved);
+            if ((tracksChanged || !equipmentChanges.isEmpty()) && requiresAuthoritativeRest()) {
                 if (expected == null) {
-                    json(ctx, 428, errorBody("A track edit requires a current sheet version. Reload the sheet before saving."));
+                    json(ctx, 428, errorBody("A track or equipment edit requires a current sheet version. Reload the sheet before saving."));
                     return;
                 }
                 trackPack = automationPack();
@@ -1754,13 +1756,24 @@ public final class OnlineSessionServer {
                     sourceNames.put(element.instanceId(), element.element().deepCopy());
                 trackResult = MAPPER.createObjectNode();
                 ArrayNode actions = trackResult.putArray("actions"), commands = trackResult.putArray("outbox");
-                int fear = c.getFear();
-                for (var change : automationHost.projection().trackChanges(previous, saved)) {
+                List<ObjectNode> events = new ArrayList<>();
+                for (var change : equipmentChanges) {
+                    ObjectNode event = automationEvent("equipment.changed", actor);
+                    ObjectNode equipment = event.putObject("equipment").put("slot", change.slot());
+                    equipment.set("before", change.before());
+                    equipment.set("after", change.after());
+                    events.add(event);
+                }
+                if (tracksChanged) for (var change : automationHost.projection().trackChanges(previous, saved)) {
                     ObjectNode event = automationEvent("track.changed", actor);
-                    event.withObject("/table").put("fear", fear);
                     event.put("track", change.track()).put("change", change.change()).put("requested", change.requested());
                     event.set("before", change.before());
                     event.set("after", change.after());
+                    events.add(event);
+                }
+                int fear = c.getFear();
+                for (ObjectNode event : events) {
+                    event.withObject("/table").put("fear", fear);
                     ObjectNode result = automationHost.automatic(trackPack, saved, event, diceRandom);
                     actions.addAll((ArrayNode) result.get("actions"));
                     commands.addAll((ArrayNode) result.get("outbox"));

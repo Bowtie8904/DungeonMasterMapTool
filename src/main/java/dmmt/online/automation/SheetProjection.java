@@ -96,9 +96,12 @@ public final class SheetProjection {
         RuleJson.fields(spec, "/", "format", "version", "stateField", "sourceField", "instanceField", "nameField", "sources", "actor", "stats", "poolTracks");
         for (String field : List.of("stateField", "sourceField", "instanceField", "nameField")) path(spec.get(field), "/" + field);
         if (!spec.path("sources").isArray() || spec.path("sources").isEmpty()) throw RuleJson.error("/sources", "Expected source locations.");
+        Set<String> equipment = new HashSet<>();
         for (int i = 0; i < spec.path("sources").size(); i++) {
             JsonNode source = spec.path("sources").get(i);
             validateSource(source, "/sources/" + i, false);
+            if (source.has("equipment") && !equipment.add(source.path("equipment").asText()))
+                throw RuleJson.error("/sources/" + i + "/equipment", "Equipment locations require unique IDs.");
         }
         ObjectNode actor = RuleJson.object(spec.get("actor"), "/actor");
         actor.fields().forEachRemaining(field -> validateFact(field.getKey(), field.getValue()));
@@ -186,10 +189,14 @@ public final class SheetProjection {
     }
 
     private static void validateSource(JsonNode source, String at, boolean child) {
-        RuleJson.fields(source, at, "path", "single", "quantity", "derive", "children");
+        RuleJson.fields(source, at, "path", "single", "quantity", "derive", "children", "equipment");
         path(source.get("path"), at + "/path");
         if (source.has("single")) RuleExpression.bool(source.get("single"), at + "/single");
         if (source.has("quantity")) path(source.get("quantity"), at + "/quantity");
+        if (source.has("equipment")) {
+            RuleJson.id(source.get("equipment"), at + "/equipment");
+            if (child) throw RuleJson.error(at + "/equipment", "Only top-level sources can identify equipment locations.");
+        }
         if (source.has("derive")) {
             RuleExpression.bool(source.get("derive"), at + "/derive");
             if (!child) throw RuleJson.error(at + "/derive", "Only nested sources can derive an identity.");
@@ -367,6 +374,27 @@ public final class SheetProjection {
     public String stateField() { return stateField; }
 
     public record TrackChange(String track, String change, int requested, ObjectNode before, ObjectNode after) {}
+
+    public record EquipmentChange(String slot, JsonNode before, JsonNode after) {}
+
+    /** Compares the equipment locations declared by the projection, in declaration order. */
+    public List<EquipmentChange> equipmentChanges(ObjectNode previous, ObjectNode current) {
+        List<EquipmentChange> changes = new ArrayList<>();
+        for (JsonNode location : spec.path("sources")) {
+            if (!location.has("equipment")) continue;
+            JsonNode before = equipmentValue(previous, location), after = equipmentValue(current, location);
+            if (!before.equals(after))
+                changes.add(new EquipmentChange(location.path("equipment").asText(), before.deepCopy(), after.deepCopy()));
+        }
+        return List.copyOf(changes);
+    }
+
+    private static JsonNode equipmentValue(ObjectNode sheet, JsonNode location) {
+        JsonNode value = get(sheet, location.path("path").asText());
+        if (value.isMissingNode() || value.isNull())
+            return location.path("single").asBoolean() ? RuleJson.JSON.nullNode() : RuleJson.JSON.createArrayNode();
+        return value;
+    }
 
     public boolean hasTrackChanges(ObjectNode previous, ObjectNode current) {
         var entries = spec.path("actor").fields();

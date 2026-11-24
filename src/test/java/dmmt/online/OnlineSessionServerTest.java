@@ -1434,6 +1434,144 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void equipmentEditsDispatchOrderedLifecycleAndTrackReactionsAtomically() throws Exception {
+        installRestRules();
+        java.nio.file.Files.writeString(compendiumDir.resolve("armor.json"), """
+                {"format":"dmmap-daggerheart","version":2,"category":"armor","entries":[
+                 {"id":"harness","name":"Harness","automation":{"rules":[
+                  {"id":"equipped","bindings":[{"id":"change","event":"equipment.changed",
+                    "surface":"effect","mode":"automatic"}],
+                   "when":{"eq":[{"read":"event.equipment.slot"},"armor"]},
+                   "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],
+                   "ui":{"report":"The equipped harness reacted."}}]}}]}
+                """);
+        Path rulesFile = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(rulesFile.toFile());
+        ArrayNode rules = ruleset.withObject("/automation").withArray("rules");
+        rules.add(MAPPER.readTree("""
+                {"id":"weapon-change","bindings":[{"id":"change","event":"equipment.changed",
+                   "surface":"effect","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.equipment.slot"},"weapons"]},
+                 "do":[{"op":"track.mark","track":"actor.stress","amount":1},
+                       {"op":"table.gain","resource":"fear","amount":1,"label":"Equipment"}],
+                 "ui":{"report":"Weapons changed."}}
+                """));
+        rules.add(MAPPER.readTree("""
+                {"id":"armor-change","bindings":[{"id":"change","event":"equipment.changed",
+                   "surface":"effect","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.equipment.slot"},"armor"]},
+                                  {"exists":"event.equipment.after.name"}]},
+                 "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],
+                 "ui":{"report":"Equipped {event.equipment.after.name} with {event.table.fear} Fear."}}
+                """));
+        rules.add(MAPPER.readTree("""
+                {"id":"armor-removed","bindings":[{"id":"change","event":"equipment.changed",
+                   "surface":"effect","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.equipment.slot"},"armor"]},
+                                  {"exists":"event.equipment.before.name"},
+                                  {"not":{"exists":"event.equipment.after.name"}}]},
+                 "ui":{"report":"Removed {event.equipment.before.name}."}}
+                """));
+        rules.add(MAPPER.readTree("""
+                {"id":"equipment-stress","bindings":[{"id":"change","event":"track.changed",
+                   "surface":"resource","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.track"},"stress"]},
+                 "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],
+                 "ui":{"report":"Equipment caused Stress."}}
+                """));
+        rules.add(MAPPER.readTree("""
+                {"id":"equipment-hp","bindings":[{"id":"change","event":"track.changed",
+                   "surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"hp"]},
+                                  {"gte":[{"read":"actor.stress.marked"},1]}]},
+                 "ui":{"report":"HP edit saw the equipment reaction."}}
+                """));
+        java.nio.file.Files.writeString(rulesFile, ruleset.toString());
+        String id = "equipment-events", owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id(id).name("Before").ownerId(playerId()).build());
+        store.save(campaign);
+        store.saveSheet(campaign.getId(), id, """
+                {"name":"Before","hp":{"slots":6,"on":0},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},"activeWeapons":[]}
+                """);
+        JsonNode baseline = MAPPER.readTree(sheetRead(owner, id).body());
+        ObjectNode patch = MAPPER.createObjectNode();
+        ObjectNode fields = patch.putObject("fields");
+        fields.put("name", "After").putArray("activeWeapons").addObject()
+                .put("name", "Blade").put("slot", "Primary").put("damage", "d8").put("trait", "Strength");
+        fields.putObject("activeArmor").put("name", "Harness").put("score", 2)
+                .put("instanceId", "harness").put("automationSource", "armor:harness");
+        fields.putObject("hp").put("slots", 6).put("on", 1);
+        patch.putArray("removed");
+        assertEquals(428, patchSheet(owner, id, patch, null).statusCode());
+        int history = store.historyTail(campaign.getId(), 100).size(), fear = campaign.getFear();
+        var saved = patchSheet(owner, id, patch, baseline.path("version").asText());
+        assertEquals(200, saved.statusCode(), saved.body());
+        JsonNode current = MAPPER.readTree(saved.body());
+        assertEquals("After", campaign.actor(id).getName());
+        assertEquals(1, current.at("/sheet/stress/on").asInt());
+        assertEquals(3, current.at("/sheet/hope/on").asInt());
+        assertEquals(1, current.at("/sheet/hp/on").asInt());
+        assertEquals(fear + 1, campaign.getFear());
+        String reports = store.historyTail(campaign.getId(), 100).toString();
+        assertTrue(reports.contains("Weapons changed."), reports);
+        assertTrue(reports.contains("Equipment caused Stress."), reports);
+        assertTrue(reports.contains("Equipped Harness with " + (fear + 1) + " Fear."), reports);
+        assertTrue(reports.contains("The equipped harness reacted."), reports);
+        assertTrue(reports.contains("HP edit saw the equipment reaction."), reports);
+        assertEquals(history + 5, store.historyTail(campaign.getId(), 100).size());
+        String committed = store.loadSheet(campaign.getId(), id);
+        assertEquals(409, patchSheet(owner, id, patch, baseline.path("version").asText()).statusCode());
+        assertEquals(committed, store.loadSheet(campaign.getId(), id));
+
+        ObjectNode remove = MAPPER.createObjectNode();
+        remove.putObject("fields");
+        remove.putArray("removed").add("activeArmor");
+        var removed = patchSheet(owner, id, remove, current.path("version").asText());
+        assertEquals(200, removed.statusCode(), removed.body());
+        assertTrue(store.historyTail(campaign.getId(), 100).toString().contains("Removed Harness."));
+
+        ObjectNode full = (ObjectNode) MAPPER.readTree(removed.body()).path("sheet").deepCopy();
+        full.putObject("activeArmor").put("name", "Harness").put("score", 2)
+                .put("instanceId", "harness").put("automationSource", "armor:harness");
+        var fullSaved = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/" + id))
+                .header("Cookie", owner).header("Content-Type", "application/json")
+                .header("If-Match", MAPPER.readTree(removed.body()).path("version").asText())
+                .PUT(HttpRequest.BodyPublishers.ofString(full.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, fullSaved.statusCode(), fullSaved.body());
+        assertEquals(5, MAPPER.readTree(fullSaved.body()).at("/sheet/hope/on").asInt());
+        int historyBeforeNotes = store.historyTail(campaign.getId(), 100).size();
+        ObjectNode notes = MAPPER.createObjectNode();
+        notes.putObject("fields").put("notes", "No equipment change");
+        notes.putArray("removed");
+        var noted = patchSheet(owner, id, notes, MAPPER.readTree(fullSaved.body()).path("version").asText());
+        assertEquals(200, noted.statusCode(), noted.body());
+        assertEquals(historyBeforeNotes, store.historyTail(campaign.getId(), 100).size());
+
+        rules.add(MAPPER.readTree("""
+                {"id":"equipment-failure","bindings":[{"id":"change","event":"equipment.changed",
+                   "surface":"effect","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.equipment.slot"},"weapons"]},
+                 "do":[{"op":"table.spend","resource":"fear","amount":12,"label":"Unavailable"}],"ui":{}}
+                """));
+        java.nio.file.Files.writeString(rulesFile, ruleset.toString());
+        ObjectNode failure = MAPPER.createObjectNode();
+        failure.putObject("fields").put("name", "Rejected").putArray("activeWeapons");
+        failure.putArray("removed");
+        committed = store.loadSheet(campaign.getId(), id);
+        int historyBeforeFailure = store.historyTail(campaign.getId(), 100).size();
+        String version = MAPPER.readTree(noted.body()).path("version").asText();
+        var rejected = patchSheet(owner, id, failure, version);
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertTrue(rejected.body().contains("Not enough GM Fear"), rejected.body());
+        assertEquals(committed, store.loadSheet(campaign.getId(), id));
+        assertEquals("After", campaign.actor(id).getName());
+        assertEquals(fear + 1, campaign.getFear());
+        assertEquals(historyBeforeFailure, store.historyTail(campaign.getId(), 100).size());
+        assertEquals(403, patchSheet(allyCookie("equipment-outsider"), id, failure, version).statusCode());
+    }
+
+    @Test
     void featureRepresentationsAreOptionalOwnedCommittedAndVersioned() throws Exception {
         campaign.getActors().add(Campaign.Actor.builder().id("performance").name("Hero").ownerId(playerId()).testingCharacter(true).build());
         campaign.getActors().add(Campaign.Actor.builder().id("other-performance").name("Other").ownerId(playerId()).build());
@@ -9515,7 +9653,15 @@ class OnlineSessionServerTest {
             loaded = MAPPER.readTree(sheetRead(cookie, "roller").body());
             sheet = (ObjectNode) loaded.required("sheet").deepCopy();
             sheet.withObject("/hope").put("on", 0);
+            String original = store.loadSheet(campaign.getId(), "roller");
             var saved = http.send(HttpRequest.newBuilder(URI.create(uri)).header("Cookie", cookie)
+                    .header("Content-Type", "application/json").header("If-Match", loaded.required("version").textValue())
+                    .PUT(HttpRequest.BodyPublishers.ofString(sheet.toString())).build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(409, saved.statusCode(), saved.body());
+            assertEquals(original, store.loadSheet(campaign.getId(), "roller"));
+            sheet = (ObjectNode) loaded.required("sheet").deepCopy();
+            sheet.put("notes", "Unrelated edit");
+            saved = http.send(HttpRequest.newBuilder(URI.create(uri)).header("Cookie", cookie)
                     .header("Content-Type", "application/json").header("If-Match", loaded.required("version").textValue())
                     .PUT(HttpRequest.BodyPublishers.ofString(sheet.toString())).build(), HttpResponse.BodyHandlers.ofString());
             assertEquals(200, saved.statusCode(), saved.body());

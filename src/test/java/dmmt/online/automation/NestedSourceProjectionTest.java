@@ -64,4 +64,37 @@ class NestedSourceProjectionTest {
                  "sourceField":"automationSource","instanceField":"instanceId","nameField":"name",
                  "sources":[{"path":"devices","derive":true}],"actor":{},"stats":[]}"""));
     }
+
+    @Test
+    void declaredEquipmentLocationsProduceOrderedIndependentSnapshots() throws Exception {
+        SheetProjection projection = SheetProjection.parse("""
+                {"format":"dmmap-sheet-projection","version":2,"stateField":"automationState",
+                 "sourceField":"automationSource","instanceField":"instanceId","nameField":"name",
+                 "sources":[{"path":"tools","equipment":"tools"},{"path":"rig","single":true,"equipment":"rig"},
+                            {"path":"devices"}],"actor":{},"stats":[]}""");
+        ObjectNode before = (ObjectNode) RuleJson.parse("{\"tools\":[],\"devices\":[]}");
+        ObjectNode after = (ObjectNode) RuleJson.parse("""
+                {"tools":[{"name":"Lantern"}],"rig":{"name":"Harness"},"devices":[{"name":"Ignored"}]}""");
+        var changes = projection.equipmentChanges(before, after);
+        assertEquals(List.of("tools", "rig"), changes.stream().map(SheetProjection.EquipmentChange::slot).toList());
+        assertTrue(changes.getFirst().before().isArray());
+        assertEquals("Lantern", changes.getFirst().after().at("/0/name").asText());
+        assertTrue(changes.getLast().before().isNull());
+        assertEquals("Harness", changes.getLast().after().path("name").asText());
+        after.withArray("tools").removeAll();
+        assertEquals("Lantern", changes.getFirst().after().at("/0/name").asText());
+        assertTrue(projection.equipmentChanges((ObjectNode) RuleJson.parse("{}"), before).isEmpty());
+    }
+
+    @Test
+    void equipmentLocationIdsAreUniqueAndTopLevel() {
+        String header = """
+                {"format":"dmmap-sheet-projection","version":2,"stateField":"automationState",
+                 "sourceField":"automationSource","instanceField":"instanceId","nameField":"name",
+                 "actor":{},"stats":[],"sources":%s}""";
+        assertThrows(IllegalArgumentException.class, () -> SheetProjection.parse(header.formatted(
+                "[{\"path\":\"tools\",\"equipment\":\"gear\"},{\"path\":\"rig\",\"equipment\":\"gear\"}]")));
+        assertThrows(IllegalArgumentException.class, () -> SheetProjection.parse(header.formatted(
+                "[{\"path\":\"tools\",\"children\":[{\"path\":\"modes\",\"equipment\":\"mode\"}]}]")));
+    }
 }
