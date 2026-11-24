@@ -100,6 +100,8 @@ The live rest workflow authenticates owners and commits targeted moves and party
 are offered after the move outcomes and again after the reset, with no second prompt when no choices are available.
 If automatic preparation needs a roll or cross-holder effect or inventory settlement, it runs before moves are
 offered; retrying a lost response preserves the prepared result.
+Selected rest reroll passives apply before preparation and keep the higher result throughout the rest, including
+automatic track reactions; an unselected passive does not change rolls.
 Format-2 catalogs reject legacy
 client-supplied rests and downtime rerolls.
 Owner and DM sheet saves cannot change host-owned rest counters, and legacy damage snapshots retain those counters

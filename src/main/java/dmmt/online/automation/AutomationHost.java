@@ -2735,11 +2735,20 @@ public final class AutomationHost {
         var intents = selections(request, candidates, revision, "self", "rest", false);
         Map<String, RuleDispatcher.Candidate> byInstance = new HashMap<>();
         candidates.forEach(candidate -> byInstance.put(candidate.instanceId(), candidate));
+        boolean keepHigher = false;
         for (var intent : intents) {
-            JsonNode binding = RuleDispatcher.binding(byInstance.get(intent.sourceInstanceId()).program().rule(intent.ruleId()),
-                    intent.bindingId());
+            RuleDispatcher.Candidate candidate = byInstance.get(intent.sourceInstanceId());
+            JsonNode binding = RuleDispatcher.binding(candidate.program().rule(intent.ruleId()), intent.bindingId());
             if (!"rest.prepare".equals(binding.path("event").asText()) || !"option".equals(binding.path("mode").asText()))
                 throw RuleJson.error("/request/selections", "Choose only rest preparation options.");
+            if ("keepHigher".equals(binding.path("restRollPolicy").asText())) {
+                RuleRuntime.preflight(candidate.program(), intent, candidate.context());
+                keepHigher = true;
+            }
+        }
+        if (keepHigher) {
+            ((ObjectNode) event.path("rest")).put("rollPolicy", "keepHigher");
+            candidates = candidates(pack, working, event);
         }
         ObjectNode response = applyEvent(pack, working, state, event, candidates, intents, random);
         JsonNode result = response.path("event").path("rest");

@@ -1088,15 +1088,23 @@ public final class RuleRuntime {
                 JsonNode outcomes = op.path("outcomes");
                 int sides = outcomes.size();
                 int previouslyRolled = rolls.stream().mapToInt(RuleRuntime::rolledDice).sum();
-                if (count + previouslyRolled > 1024) throw RuleJson.error("/dice", "Action exceeds its dice limit.");
+                boolean keepHigher = keepHigherRestRoll(context);
+                if (count * (keepHigher ? 2 : 1) + previouslyRolled > 1024)
+                    throw RuleJson.error("/dice", "Action exceeds its dice limit.");
                 if (random == null) throw RuleJson.error("/dice", "Host random generator is required.");
                 ObjectNode roll = RuleJson.JSON.createObjectNode().put("sides", sides);
                 ArrayNode faces = roll.putArray("faces");
+                ArrayNode alternatives = keepHigher ? roll.putArray("alternateFaces") : null;
                 ObjectNode table = RuleJson.JSON.createObjectNode();
                 ArrayNode tableFaces = table.putArray("faces"), results = table.putArray("outcomes");
                 int total = 0;
                 for (int i = 0; i < count; i++) {
                     int face = random.nextInt(sides) + 1;
+                    if (keepHigher) {
+                        int alternate = random.nextInt(sides) + 1;
+                        alternatives.add(Math.min(face, alternate));
+                        face = Math.max(face, alternate);
+                    }
                     faces.add(face); tableFaces.add(face); total += face;
                     results.add(RuleTemplate.render(outcomes.get(face - 1).asText(), context));
                 }
@@ -1110,19 +1118,25 @@ public final class RuleRuntime {
                 int count = whole(op.path("count"), context, 1, 1024);
                 int sides = whole(op.path("sides"), context, 2, 1000);
                 int previouslyRolled = rolls.stream().mapToInt(RuleRuntime::rolledDice).sum();
-                if (count + previouslyRolled > 1024) throw RuleJson.error("/dice", "Action exceeds its dice limit.");
+                boolean keepHigher = keepHigherRestRoll(context);
+                if (count * (keepHigher ? 2 : 1) + previouslyRolled > 1024)
+                    throw RuleJson.error("/dice", "Action exceeds its dice limit.");
                 if (random == null) throw RuleJson.error("/dice", "Host random generator is required.");
-                ObjectNode roll = RuleJson.JSON.createObjectNode().put("sides", sides);
-                ArrayNode faces = roll.putArray("faces");
-                int total = 0;
-                for (int i = 0; i < count; i++) {
-                    int face = random.nextInt(sides) + 1;
-                    faces.add(face); total += face;
+                int atLeast = "dice.hits".equals(kind) ? whole(op.path("atLeast"), context, 1, sides) : 0;
+                ObjectNode roll = sampleDice(count, sides, random);
+                if (keepHigher) {
+                    ObjectNode alternate = sampleDice(count, sides, random);
+                    if (diceScore(alternate, kind, atLeast) > diceScore(roll, kind, atLeast)) {
+                        ObjectNode first = roll;
+                        roll = alternate;
+                        alternate = first;
+                    }
+                    roll.set("alternateFaces", alternate.path("faces").deepCopy());
+                    roll.set("alternateTotal", alternate.path("total"));
                 }
-                roll.put("total", total);
+                ArrayNode faces = (ArrayNode) roll.get("faces");
                 rolls.add(roll);
                 if ("dice.hits".equals(kind)) {
-                    int atLeast = whole(op.path("atLeast"), context, 1, sides);
                     int hits = 0;
                     for (JsonNode face : faces) if (face.asInt() >= atLeast) hits++;
                     roll.put("atLeast", atLeast).put("hits", hits);
@@ -1132,7 +1146,7 @@ public final class RuleRuntime {
                     for (JsonNode face : faces) highest = Math.max(highest, face.asInt());
                     roll.put("highest", highest);
                     result = RuleExpression.numeric(highest, "/result");
-                } else result = RuleExpression.numeric(total, "/result");
+                } else result = RuleExpression.numeric(roll.path("total").asInt(), "/result");
             }
             case "recovery.offerRoll", "downtime.offerRoll" -> {
                 String eventType = context.at("/event/type").asText();
@@ -1229,7 +1243,18 @@ public final class RuleRuntime {
             case "roll.resolve" -> {
                 if (preview) throw new Unavailable("randomPreview", "This preview requires a committed roll; no dice were rolled.");
                 int remaining = 1024 - rolls.stream().mapToInt(RuleRuntime::rolledDice).sum();
-                ObjectNode roll = StructuredRoll.resolve(eval(op.path("plan"), context), context, random, remaining);
+                boolean keepHigher = keepHigherRestRoll(context);
+                JsonNode plan = eval(op.path("plan"), context);
+                ObjectNode roll = StructuredRoll.resolve(plan, context, random, keepHigher ? remaining / 2 : remaining);
+                ObjectNode alternate = null;
+                if (keepHigher) {
+                    alternate = StructuredRoll.resolve(plan, context, random, remaining / 2);
+                    if (alternate.path("total").asDouble() > roll.path("total").asDouble()) {
+                        ObjectNode first = roll;
+                        roll = alternate;
+                        alternate = first;
+                    }
+                }
                 if (op.has("metadata")) {
                     ObjectNode metadata = roll.has("metadata") ? (ObjectNode) roll.get("metadata") : roll.putObject("metadata");
                     for (var entry : (Iterable<java.util.Map.Entry<String, JsonNode>>) () -> op.get("metadata").fields()) {
@@ -1238,6 +1263,7 @@ public final class RuleRuntime {
                         metadata.set(entry.getKey(), value);
                     }
                 }
+                if (alternate != null) rolls.add(alternate);
                 rolls.add(roll);
                 result = roll;
             }
@@ -1677,10 +1703,34 @@ public final class RuleRuntime {
         finally { if (previous == null) context.remove("die"); else context.set("die", previous); }
     }
     private static int rolledDice(ObjectNode roll) {
-        if (roll.has("faces")) return roll.path("faces").size();
+        if (roll.has("faces")) return roll.path("faces").size() + roll.path("alternateFaces").size();
         int count = 0;
         for (JsonNode part : roll.path("contributions")) count += part.path("dice").size();
         return count;
+    }
+
+    private static boolean keepHigherRestRoll(ObjectNode context) {
+        return "keepHigher".equals(context.at("/event/rest/rollPolicy").asText());
+    }
+
+    private static ObjectNode sampleDice(int count, int sides, RandomGenerator random) {
+        ObjectNode roll = RuleJson.JSON.createObjectNode().put("sides", sides);
+        ArrayNode faces = roll.putArray("faces");
+        int total = 0;
+        for (int i = 0; i < count; i++) {
+            int face = random.nextInt(sides) + 1;
+            faces.add(face);
+            total += face;
+        }
+        return roll.put("total", total);
+    }
+
+    private static int diceScore(ObjectNode roll, String kind, int atLeast) {
+        if ("dice.roll".equals(kind)) return roll.path("total").asInt();
+        int score = 0;
+        for (JsonNode face : roll.path("faces"))
+            score = "dice.hits".equals(kind) ? score + (face.asInt() >= atLeast ? 1 : 0) : Math.max(score, face.asInt());
+        return score;
     }
     private static int whole(JsonNode expr, ObjectNode context, int min, int max) {
         return RuleJson.integer(eval(expr, context), "/value", min, max);

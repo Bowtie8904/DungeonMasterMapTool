@@ -77,7 +77,7 @@ public final class LegacyCatalogConverter {
             "unique", "exclusiveSource", "endOnMarkedHp", "endOnDealtDamage", "endOnAttack", "endOnAction", "lifeWard", "tokenResource", "maintainOnAction");
     private static final Set<String> REST_FIELDS = Set.of("extraMoves", "longMovesInShort", "passives", "modifiers", "requiresEffect", "expireItem");
     private static final Set<String> PASSIVE_FIELDS = Set.of("id", "label", "defaultOn", "condition", "steps", "extraMoves", "consumeItem",
-            "rest", "move", "bonus", "minHope", "cost", "chooseAlly", "hostOwned", "castBeforeRest", "requiresEffect", "excludesEffect");
+            "rest", "move", "bonus", "minHope", "cost", "chooseAlly", "hostOwned", "castBeforeRest", "requiresEffect", "excludesEffect", "reroll");
     private static final Set<String> MOVE_MODIFIER_FIELDS = Set.of("move", "rest", "target", "bonus", "steps", "note", "repairAllies");
     private static final Set<String> ROLLS = Set.of("attack", "damage", "spellcast", "action", "reaction");
     private static final List<String> TRAITS = List.of("Agility", "Strength", "Finesse", "Instinct", "Presence", "Knowledge");
@@ -4816,8 +4816,15 @@ public final class LegacyCatalogConverter {
         hostOwned(passive, path, p);
         String id = passive.path("id").asText();
         if (!ID.matcher(id).matches()) { p.add(path + "/id", "Invalid passive ID: " + id); return List.of(); }
-        boolean prepare = passive.has("extraMoves"), move = passive.has("move");
+        if (passive.has("reroll") && !passive.path("reroll").isBoolean())
+            p.add(path + "/reroll", "Expected a boolean.");
+        boolean reroll = passive.path("reroll").asBoolean(false);
+        boolean prepare = passive.has("extraMoves") || reroll, move = passive.has("move");
         if (prepare && move) p.add(path, "A passive either adds moves or improves one move.");
+        if (reroll && (move || "noRecovery".equals(passive.path("condition").asText())
+                || !passive.path("steps").isEmpty() && !passive.has("extraMoves")
+                || (passive.has("cost") || passive.path("consumeItem").asBoolean()) && !passive.has("extraMoves")))
+            p.add(path + "/reroll", "A rest reroll must be selected before moves without deferred benefits or costs.");
         ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", id);
         ArrayNode bindings = rule.putArray("bindings");
         String kind = passive.path("rest").asText("");
@@ -4829,6 +4836,7 @@ public final class LegacyCatalogConverter {
         if (bindings.isEmpty()) { p.add(path + "/rest", "Expected short or long."); return List.of(); }
         for (JsonNode binding : bindings) {
             ((ObjectNode) binding).put("mode", "option");
+            if (reroll) ((ObjectNode) binding).put("restRollPolicy", "keepHigher");
             if (!prepare && !move && "noRecovery".equals(passive.path("condition").asText()))
                 ((ObjectNode) binding).put("restPhase", "afterReset");
             if (passive.has("defaultOn")) {
@@ -4878,7 +4886,7 @@ public final class LegacyCatalogConverter {
         }
         ArrayNode steps = rule.putArray("do");
         String label = escape(passive.path("label").asText(id));
-        if (prepare) {
+        if (passive.has("extraMoves")) {
             JsonNode extra = passive.path("extraMoves");
             if (!extra.isInt() || extra.asInt() < 1 || extra.asInt() > 8) p.add(path + "/extraMoves", "Expected 1-8 extra moves.");
             else steps.add(planAdjust("event.rest", "moves", extra.asInt(), label));
@@ -4910,7 +4918,7 @@ public final class LegacyCatalogConverter {
         for (int s = 0; s < list.size(); s++)
             restStep(list.get(s), path + "/steps/" + s, p, steps, effects, pools, "actor", label,
                     move ? "event.move.rest" : "event.rest.kind");
-        if (steps.isEmpty() && !rule.has("costs")) p.add(path, "A rest passive needs an effect.");
+        if (steps.isEmpty() && !rule.has("costs") && !reroll) p.add(path, "A rest passive needs an effect.");
         if (move) deferMoveBenefit(rule);
         return out;
     }

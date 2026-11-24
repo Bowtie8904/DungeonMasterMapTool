@@ -798,7 +798,7 @@ public final class RuleCompiler {
 
     private static void validateBindingBasics(JsonNode binding, String path, boolean allowSubstitutions) {
         RuleJson.fields(binding, path, "id", "event", "surface", "mode", "when", "group",
-                "defaultOn", "forEach", "exclusiveGroup", "priority", "claimGroup", "claimGroupScope", "claimScope", "audience", "targetSelection", "repeatable", "restMove", "restPhase");
+                "defaultOn", "forEach", "exclusiveGroup", "priority", "claimGroup", "claimGroupScope", "claimScope", "audience", "targetSelection", "repeatable", "restMove", "restPhase", "restRollPolicy");
         if (!(allowSubstitutions && substitution(binding.path("id")))) RuleJson.id(binding.path("id"), path + "/id");
         if (!(allowSubstitutions && substitution(binding.path("event"))) && !EVENTS.contains(binding.path("event").asText()))
             throw RuleJson.error(path + "/event", "Unknown event.");
@@ -828,6 +828,19 @@ public final class RuleCompiler {
             if (!(allowSubstitutions && substitution(binding.get("restPhase")))
                     && !Set.of("beforeReset", "afterReset").contains(binding.path("restPhase").asText()))
                 throw RuleJson.error(path + "/restPhase", "Expected beforeReset or afterReset.");
+        }
+        if (binding.has("restRollPolicy")) {
+            boolean eventUnknown = allowSubstitutions && substitution(binding.path("event"));
+            boolean surfaceUnknown = allowSubstitutions && substitution(binding.path("surface"));
+            boolean modeUnknown = allowSubstitutions && substitution(binding.path("mode"));
+            if ((!eventUnknown && !"rest.prepare".equals(binding.path("event").asText()))
+                    || (!surfaceUnknown && !"rest".equals(binding.path("surface").asText()))
+                    || (!modeUnknown && !"option".equals(binding.path("mode").asText()))
+                    || binding.has("forEach"))
+                throw RuleJson.error(path + "/restRollPolicy", "A rest roll policy requires a rest.prepare option without forEach.");
+            if (!(allowSubstitutions && substitution(binding.get("restRollPolicy")))
+                    && !"keepHigher".equals(binding.path("restRollPolicy").asText()))
+                throw RuleJson.error(path + "/restRollPolicy", "Expected keepHigher.");
         }
         if (binding.has("repeatable")) {
             if (!(allowSubstitutions && substitution(binding.get("repeatable"))))

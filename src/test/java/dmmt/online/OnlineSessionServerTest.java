@@ -5135,6 +5135,87 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void selectedRestRerollAppliesBeforePreparationAndPersistsOnce() throws Exception {
+        installRestRules();
+        addAutomaticRestPreparationRoll();
+        var converted = dmmt.online.automation.LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"classes","entries":[
+                 {"id":"bedroll","name":"Bedroll","automation":{"rest":{"passives":[
+                   {"id":"comfort","label":"Comfort","rest":"short","defaultOn":true,"reroll":true}]}}}]}
+                """);
+        assertEquals(1, converted.converted(), converted.diagnostics().toString());
+        java.nio.file.Files.writeString(compendiumDir.resolve("classes.json"), converted.catalog().toString());
+        campaign.getActors().add(Campaign.Actor.builder().id("resting").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "resting", """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":4},"stress":{"slots":6,"on":5},
+                 "armorTrack":{"slots":4,"on":1},"hope":{"slots":6,"on":1},
+                 "features":[{"name":"Bedroll","instanceId":"bedroll","automationSource":"classes:bedroll"}]}
+                """);
+        String owner = cookie(), other = allyCookie("other-rest-owner");
+        var described = restHttp(owner, "resting", "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode offer = MAPPER.readTree(described.body());
+        assertTrue(offer.path("prepareBeforeMoves").asBoolean());
+        JsonNode comfort = restDescriptor(offer.path("preparation"), "comfort");
+        assertTrue(comfort.path("defaultOn").asBoolean());
+        ObjectNode body = restRequest(offer, "selected-reroll");
+        body.withObject("/request").withArray("preparation").add(restSelection(comfort));
+        ObjectNode preparing = body.deepCopy().put("prepare", true);
+        String original = store.loadSheet(campaign.getId(), "resting");
+        int history = store.historyTail(campaign.getId(), 100).size();
+        assertEquals(403, restChoiceHttp(other, "resting", "choices", preparing).statusCode());
+        ObjectNode invalid = preparing.deepCopy();
+        ((ObjectNode) invalid.at("/request/preparation/0")).put("ruleId", "not-offered");
+        assertEquals(400, restChoiceHttp(owner, "resting", "choices", invalid).statusCode());
+        assertEquals(original, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        java.util.Random expected = new java.util.Random(0);
+        int preparation = Math.max(expected.nextInt(4) + 1, expected.nextInt(4) + 1);
+        int recovery = Math.max(expected.nextInt(4) + 1, expected.nextInt(4) + 1) + 1;
+        diceSeed(0);
+        var first = restChoiceHttp(owner, "resting", "choices", preparing);
+        assertEquals(200, first.statusCode(), first.body());
+        JsonNode prepared = MAPPER.readTree(first.body());
+        assertEquals(2 + preparation, prepared.at("/plan/moves").asInt());
+        assertEquals(first.body(), restChoiceHttp(owner, "resting", "choices", preparing).body());
+        assertEquals(original, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+
+        ObjectNode selected = body.deepCopy();
+        addRestMove((ObjectNode) selected.path("request"), restDescriptor(prepared.path("moves"), "rest-stress"));
+        selected.put("preparedVersion", prepared.path("choiceVersion").asText());
+        var moves = restChoiceHttp(owner, "resting", "choices", selected);
+        assertEquals(200, moves.statusCode(), moves.body());
+        ObjectNode beforeChoice = MAPPER.createObjectNode().put("requestId", "selected-reroll")
+                .put("choiceVersion", MAPPER.readTree(moves.body()).path("choiceVersion").asText());
+        beforeChoice.putArray("selections");
+        var after = restChoiceHttp(owner, "resting", "choices", beforeChoice);
+        assertEquals(200, after.statusCode(), after.body());
+        ObjectNode complete = MAPPER.createObjectNode()
+                .put("choiceVersion", MAPPER.readTree(after.body()).path("choiceVersion").asText());
+        complete.set("request", selected.path("request").deepCopy());
+        var completed = restChoiceHttp(owner, "resting", "complete", complete);
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode receipt = MAPPER.readTree(completed.body());
+        assertEquals("keepHigher", receipt.at("/preparationEvent/rest/rollPolicy").asText());
+        assertTrue(receipt.path("actions").findValuesAsText("report").contains("Preparation rolled " + preparation + "."));
+        assertEquals(5 - Math.min(5, recovery), MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"))
+                .at("/stress/on").asInt());
+        assertTrue(receipt.path("actions").findValues("alternateFaces").size() >= 2);
+        assertEquals(completed.body(), restChoiceHttp(owner, "resting", "complete", complete).body());
+        assertEquals(5 - Math.min(5, recovery), MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"))
+                .at("/stress/on").asInt());
+
+        JsonNode nextOffer = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode plain = restRequest(nextOffer, "unselected-reroll").put("prepare", true);
+        diceSeed(0);
+        var plainResponse = restChoiceHttp(owner, "resting", "choices", plain);
+        assertEquals(200, plainResponse.statusCode(), plainResponse.body());
+        assertEquals(2 + new java.util.Random(0).nextInt(4) + 1,
+                MAPPER.readTree(plainResponse.body()).at("/plan/moves").asInt());
+    }
+
+    @Test
     void preparedRestRejectsStaleRecipientWithoutPublishingOrSpending() throws Exception {
         installTargetRestRules("gain");
         addAutomaticRestPreparationRoll();
