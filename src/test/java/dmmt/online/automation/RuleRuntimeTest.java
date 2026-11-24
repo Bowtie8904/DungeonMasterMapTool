@@ -372,4 +372,24 @@ class RuleRuntimeTest {
         assertThrows(RuleRuntime.Unavailable.class,
                 () -> RuleRuntime.execute(program, intent("roll", "move", before, "{}"), before, faces(2, 7)));
     }
+
+    @Test
+    void trackReactionRollOffersRequireAShortRestOrigin() throws Exception {
+        ObjectNode automation = (ObjectNode) RuleJson.parse("""
+                {"rules":[{"id":"reaction","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "do":[{"op":"dice.roll","count":1,"sides":6,"as":"roll"},
+                       {"op":"downtime.offerRoll","roll":{"read":"result.roll"},"label":"Spark"}],"ui":{}}]}
+                """);
+        RuleCompiler.Program program = RuleCompiler.compile("domain-cards:example", automation, fixture("rewrite/recipes"));
+        ObjectNode before = context("example", "Example");
+        before.putObject("event").put("type", "track.changed").putObject("rest").put("kind", "short");
+        var result = RuleRuntime.execute(program, intent("reaction", "change", before, "{}"), before, faces(3));
+        assertEquals(3, result.context().at("/outbox/0/roll/total").asInt());
+        before.withObject("/event/rest").put("kind", "long");
+        assertThrows(RuleRuntime.Unavailable.class,
+                () -> RuleRuntime.execute(program, intent("reaction", "change", before, "{}"), before, faces(3)));
+        before.withObject("/event").remove("rest");
+        assertThrows(RuleRuntime.Unavailable.class,
+                () -> RuleRuntime.execute(program, intent("reaction", "change", before, "{}"), before, faces(3)));
+    }
 }

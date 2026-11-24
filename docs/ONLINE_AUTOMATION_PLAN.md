@@ -165,7 +165,8 @@ converted downtime report expressions offer their complete signed roll and keep 
 updates the saved roll, not already settled table outcomes, counts or report effects. An action offering more
 than 32 dice is rejected. Converted downtime action, sent, damage and resource rolls, checks, outcome tables,
 action-step rolls and rest-passive rolls also offer their full expression, including preparation, move and
-completion passives. Recovery rerolls account for signed offsets, the original remaining allowance and the
+completion passives. Short-rest track-change reactions can publish their own generic roll offers for self and
+ally holders. Recovery rerolls account for signed offsets, the original remaining allowance and the
 holder's current healing floor. Rolls in other reaction phases still need live offers.
 
 The live host rejects legacy client-supplied rests and downtime rerolls when any category declares format 2,

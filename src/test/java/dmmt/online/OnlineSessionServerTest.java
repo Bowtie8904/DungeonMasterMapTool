@@ -2458,6 +2458,53 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void shortRestTrackReactionsOfferDiceForSelfAndAllyRecovery() throws Exception {
+        installRestRerollRules();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withArray("rules").add(MAPPER.readTree("""
+                {"id":"recovery-spark","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"hp"]},{"eq":[{"read":"event.change"},"clear"]},
+                                  {"exists":"event.rest.kind"},
+                                  {"eq":[{"read":"event.rest.kind"},"short"]}]},
+                 "do":[{"op":"dice.roll","count":1,"sides":6,"as":"spark"},
+                       {"op":"downtime.offerRoll","roll":{"read":"result.spark"},"label":"Recovery spark"}],"ui":{}}
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        addRestParty();
+        ObjectNode resting = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        resting.putArray("loadout").addObject().put("name", "Second Chance").put("instanceId", "chance")
+                .put("automationSource", "domain-cards:reroller");
+        store.saveSheet(campaign.getId(), "resting", resting.toString());
+        String owner = cookie();
+        for (boolean ally : List.of(false, true)) {
+            JsonNode rest = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+            ObjectNode body = restRequest(rest, "spark-rest-" + ally);
+            if (ally) targetRestMove(body, rest, "rest-tend-ally", "mira");
+            else addRestMove((ObjectNode) body.path("request"), restDescriptor(rest.path("moves"), "rest-tend"));
+            diceSeed(seedForDice(new int[]{4, 6}, new int[]{1, 2}));
+            var completed = restHttp(owner, "resting", null, body.toString());
+            assertEquals(200, completed.statusCode(), completed.body());
+            String holder = ally ? "mira" : "resting";
+            JsonNode offer = store.historyTail(campaign.getId(), 100).stream()
+                    .filter(message -> "Recovery spark".equals(
+                            message.at("/automationRecoveryRoll/roll/contributions/0/label").asText()))
+                    .filter(message -> holder.equals(message.at("/automationRecoveryRoll/holderId").asText()))
+                    .reduce((first, second) -> second).orElseThrow();
+            assertEquals(holder, offer.at("/automationRecoveryRoll/sourceActorId").asText());
+            assertEquals(2, offer.at("/automationRecoveryRoll/roll/total").asInt());
+            var description = recoveryRollHttp(owner, offer, "resting", null);
+            assertEquals(200, description.statusCode(), description.body());
+            ObjectNode request = recoveryRollRequest(MAPPER.readTree(description.body()), "spark-reroll-" + ally);
+            diceSeed(seedForDie(6, 5));
+            var rerolled = recoveryRollHttp(owner, offer, "resting", request.toString());
+            assertEquals(200, rerolled.statusCode(), rerolled.body());
+            assertEquals(5, MAPPER.readTree(rerolled.body()).path("kept").asInt());
+            assertEquals(rerolled.body(), recoveryRollHttp(owner, offer, "resting", request.toString()).body());
+        }
+    }
+
+    @Test
     void selfRecoveryRerollsUseOneRevisionAndKeepHigherResults() throws Exception {
         installRestRerollRules();
         String owner = cookie();
