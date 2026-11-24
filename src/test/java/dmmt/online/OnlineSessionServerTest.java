@@ -9571,6 +9571,237 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void savedResultRunsNestedRollAndOwnerTrackReactionsWithoutRepeatingRootReactions() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        automation.putObject("state").put("finished", 0).put("watched", 0);
+        automation.set("rules", MAPPER.readTree("""
+                [{"id":"edit","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button"}],
+                  "costs":[{"op":"track.mark","track":"actor.stress","amount":1}],
+                  "do":[{"op":"roll.resolve","plan":{"literal":{"id":"nested",
+                     "contributions":[{"id":"value","kind":"flat","role":"modifier","sourceId":"core","label":"Nested","value":2}],
+                     "metadata":{"kind":"roll","label":"Nested","origin":"result:nested"}}}},
+                    {"op":"roll.contribute","from":{"read":"event.roll"},"as":"edited",
+                     "contribution":{"id":"late","kind":"flat","role":"modifier","label":"Late","value":2}},
+                    {"op":"roll.publish","roll":{"read":"result.edited"}}],"ui":{"label":"Edit"}},
+                 {"id":"watch","bindings":[{"id":"auto","event":"track.changed","surface":"resource","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.track"},"stress"]},
+                  "do":[{"op":"state.increment","slot":"watched","by":1},
+                        {"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"report":"Watched stress."}},
+                 {"id":"block","bindings":[{"id":"auto","event":"roll.prepare","surface":"roll","mode":"automatic"}],
+                  "when":{"and":[{"eq":[{"read":"event.check.origin"},"result:nested"]},
+                                  {"gte":[{"read":"actor.stress.marked"},2]}]},
+                  "do":[{"op":"event.block","reason":"Too stressed for nested roll"}],"ui":{"label":"Block"}},
+                 {"id":"bonus","bindings":[{"id":"auto","event":"roll.prepare","surface":"roll","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.check.origin"},"result:nested"]},
+                  "do":[{"op":"roll.contribute","from":{"read":"event.roll"},"as":"bonus",
+                     "contribution":{"id":"bonus","kind":"flat","role":"modifier","label":"Bonus","value":1}},
+                        {"op":"roll.publish","roll":{"read":"result.bonus"}}],"ui":{"label":"Bonus"}},
+                 {"id":"count","bindings":[{"id":"auto","event":"roll.finished","surface":"roll","mode":"automatic"}],
+                  "do":[{"op":"state.increment","slot":"finished","by":1}],"ui":{"label":"Count"}}]"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String id = campaign.getId(), owner = cookie(), other = allyCookie("other");
+        campaign.getActors().add(Campaign.Actor.builder().id("roller").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(id, "roller", """
+                {"name":"Ada","hope":{"slots":6,"on":1},"stress":{"slots":6,"on":1},
+                 "traits":[{"name":"Finesse","mod":2}],
+                 "features":[{"name":"Steady","instanceId":"s","automationSource":"classes:tester:features:steady"}]}""");
+        String roll = """
+                {"request":{"requestId":"roll","expectedRevision":0,"selections":[],
+                 "profileRoll":{"sourceInstanceId":"s","profileId":"thrown","kind":"attack"}}}""";
+        var rolled = automationHttp(owner, "roller", roll);
+        assertEquals(200, rolled.statusCode(), rolled.body());
+        JsonNode original = MAPPER.readTree(rolled.body()).required("event");
+        String resultId = original.required("resultId").asText();
+        String edit = """
+                {"request":{"requestId":"edit","expectedRevision":1,"resultId":"%s",
+                 "selections":[{"sourceInstanceId":"s","ruleId":"edit","bindingId":"use"}]}}""".formatted(resultId);
+        String before = store.loadSheet(id, "roller");
+        int history = store.historyTail(id, 100).size();
+        assertEquals(403, automationHttp(other, "roller", edit).statusCode());
+        var blocked = automationHttp(owner, "roller", edit);
+        assertEquals(409, blocked.statusCode(), blocked.body());
+        assertTrue(blocked.body().contains("Too stressed for nested roll"), blocked.body());
+        assertEquals(before, store.loadSheet(id, "roller"));
+        assertEquals(history, store.historyTail(id, 100).size());
+
+        ObjectNode sheet = (ObjectNode) MAPPER.readTree(before);
+        sheet.withObject("/stress").put("on", 0);
+        store.saveSheet(id, "roller", sheet.toString());
+        var applied = automationHttp(owner, "roller", edit);
+        assertEquals(200, applied.statusCode(), applied.body());
+        JsonNode response = MAPPER.readTree(applied.body());
+        assertTrue(response.path("resultPublished").asBoolean());
+        assertEquals(original.at("/check/total").asInt() + 2, response.at("/event/check/total").asInt());
+        JsonNode nested = null;
+        for (JsonNode command : response.path("outbox"))
+            if ("roll.event".equals(command.path("kind").asText())) nested = command.path("event");
+        assertNotNull(nested, applied.body());
+        assertEquals(3, nested.at("/roll/total").asInt());
+        assertTrue(response.path("actions").findValuesAsText("report").contains("Watched stress."));
+        JsonNode saved = MAPPER.readTree(store.loadSheet(id, "roller"));
+        assertEquals(1, saved.at("/stress/on").asInt());
+        assertEquals(2, saved.at("/hope/on").asInt());
+        assertEquals(1, saved.at("/automationState/sources/s/state/watched").asInt());
+        assertEquals(2, saved.at("/automationState/sources/s/state/finished").asInt());
+        assertEquals(2, saved.at("/automationState/revision").asInt());
+        int published = store.historyTail(id, 100).size();
+        assertEquals(applied.body(), automationHttp(owner, "roller", edit).body());
+        assertEquals(published, store.historyTail(id, 100).size());
+        assertEquals(saved, MAPPER.readTree(new CampaignStore(temp.resolve("campaigns")).loadSheet(id, "roller")));
+    }
+
+    @Test
+    void selfResultClaimKeepsRecipientAndOwnerTogetherDuringTrackReactions() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        automation.putObject("state").put("watched", 0);
+        automation.set("rules", MAPPER.readTree("""
+                [{"id":"reward","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button",
+                   "claimGroup":"reward","claimGroupScope":"result","claimScope":{"recipients":"sourceActor"}}],
+                  "do":[{"op":"track.clear","track":"recipient.stress","amount":1},
+                        {"op":"value","value":{"read":"actor.stress.marked"},"as":"remaining"}],
+                  "ui":{"label":"Reward","report":"Remaining {result.remaining}."}},
+                 {"id":"alternate","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button",
+                   "claimGroup":"reward","claimGroupScope":"result","claimScope":{"recipients":"sourceActor"}}],
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"Alternate"}},
+                 {"id":"other","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"button"}],
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"label":"Other"}},
+                 {"id":"watch","bindings":[{"id":"auto","event":"track.changed","surface":"resource","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.change"},"clear"]},
+                  "do":[{"op":"state.increment","slot":"watched","by":1},
+                        {"op":"resource.gain","pool":"actor.hope","amount":1}],
+                  "ui":{"report":"Recovered {actor.name}."}}]"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String id = campaign.getId(), owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("roller").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(id, "roller", """
+                {"name":"Ada","hope":{"slots":6,"on":1},"stress":{"slots":6,"on":2},
+                 "traits":[{"name":"Finesse","mod":2}],
+                 "features":[{"name":"Steady","instanceId":"s","automationSource":"classes:tester:features:steady"}]}""");
+        String roll = """
+                {"request":{"requestId":"roll","expectedRevision":0,"selections":[],
+                 "profileRoll":{"sourceInstanceId":"s","profileId":"thrown","kind":"damage"}}}""";
+        var rolled = automationHttp(owner, "roller", roll);
+        assertEquals(200, rolled.statusCode(), rolled.body());
+        String resultId = MAPPER.readTree(rolled.body()).requiredAt("/event/resultId").asText();
+        String claim = """
+                {"request":{"requestId":"claim","expectedRevision":1,"resultId":"%s",
+                 "selections":[{"sourceInstanceId":"s","ruleId":"reward","bindingId":"use"}]}}""".formatted(resultId);
+        var applied = automationHttp(owner, "roller", claim);
+        assertEquals(200, applied.statusCode(), applied.body());
+        var reports = MAPPER.readTree(applied.body()).path("actions").findValuesAsText("report");
+        assertTrue(reports.contains("Remaining 1."), applied.body());
+        assertTrue(reports.contains("Recovered Ada."), applied.body());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(id, "roller"));
+        assertEquals(1, saved.at("/stress/on").asInt());
+        assertEquals(2, saved.at("/hope/on").asInt());
+        assertEquals(1, saved.at("/automationState/sources/s/state/watched").asInt());
+        assertEquals("reward", saved.at("/automationState/resultWindows/results/0/usedClaimGroups/0/claimGroup").asText());
+        assertEquals(applied.body(), automationHttp(owner, "roller", claim).body());
+        assertEquals(409, automationHttp(owner, "roller", claim.replace("\"claim\"", "\"again\"")
+                .replace("\"expectedRevision\":1", "\"expectedRevision\":2")
+                .replace("\"reward\"", "\"alternate\"")).statusCode());
+    }
+
+    @Test
+    void targetedResultRunsEachRecipientsReactionsAndNestedRollsAtomically() throws Exception {
+        installTargetReactionRules("one");
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode feature = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        ((ObjectNode) feature.at("/rules/0/bindings/0")).put("event", "roll.finished").put("surface", "roll");
+        ArrayNode steps = (ArrayNode) feature.at("/rules/0/do");
+        steps.add(MAPPER.readTree("""
+                {"op":"roll.resolve","plan":{"literal":{"id":"nested",
+                 "contributions":[{"id":"value","kind":"flat","role":"modifier","sourceId":"core","label":"Nested","value":2}],
+                 "metadata":{"kind":"roll","label":"Nested","origin":"result:nested"}}}}"""));
+        steps.add(MAPPER.readTree("""
+                {"op":"roll.contribute","from":{"read":"event.roll"},"as":"edited",
+                 "contribution":{"id":"late","kind":"flat","role":"modifier","label":"Late","value":2}}"""));
+        steps.add(MAPPER.readTree("{\"op\":\"roll.publish\",\"roll\":{\"read\":\"result.edited\"}}"));
+        ObjectNode listener = (ObjectNode) catalog.at("/entries/0/features/1/automation");
+        listener.putObject("state").put("finished", 0);
+        listener.set("rules", MAPPER.readTree("""
+                [{"id":"count","bindings":[{"id":"auto","event":"roll.finished","surface":"roll","mode":"automatic"}],
+                  "do":[{"op":"state.increment","slot":"finished","by":1}],"ui":{"label":"Count"}},
+                 {"id":"bonus","bindings":[{"id":"auto","event":"roll.prepare","surface":"roll","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.check.origin"},"result:nested"]},
+                  "do":[{"op":"roll.contribute","from":{"read":"event.roll"},"as":"bonus",
+                   "contribution":{"id":"bonus","kind":"flat","role":"modifier","label":"Bonus","value":1}},
+                   {"op":"roll.publish","roll":{"read":"result.bonus"}}],"ui":{"label":"Bonus"}}]"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String id = campaign.getId(), owner = cookie(), other = allyCookie("other");
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("patient").name("Bea").ownerId(playerId()).build());
+        store.saveSheet(id, "caster", """
+                {"name":"Ada","hope":{"slots":6,"on":5},"stress":{"slots":6,"on":0},
+                 "traits":[{"name":"Finesse","mod":2}],"features":[
+                  {"name":"Steady","instanceId":"source","automationSource":"classes:tester:features:steady"},
+                  {"name":"Forage","instanceId":"listener","automationSource":"classes:tester:features:forage"}]}""");
+        ObjectNode patient = (ObjectNode) MAPPER.readTree("""
+                {"name":"Bea","hope":{"slots":6,"on":0},"stress":{"slots":6,"on":3},
+                 "features":[{"name":"Steady","instanceId":"watcher","automationSource":"classes:tester:features:steady"}]}""");
+        store.saveSheet(id, "patient", patient.toString());
+        String roll = """
+                {"request":{"requestId":"roll","expectedRevision":0,"selections":[],
+                 "profileRoll":{"sourceInstanceId":"source","profileId":"thrown","kind":"attack"}}}""";
+        var rolled = automationHttp(owner, "caster", roll);
+        assertEquals(200, rolled.statusCode(), rolled.body());
+        JsonNode original = MAPPER.readTree(rolled.body()).required("event");
+        String resultId = original.required("resultId").asText();
+        JsonNode option = MAPPER.readTree(resultHttp(owner, "caster", resultId).body())
+                .requiredAt("/actions/0/targetSelection/options/0");
+        ObjectNode request = MAPPER.createObjectNode().put("requestId", "assist").put("expectedRevision", 1).put("resultId", resultId);
+        request.putArray("selections").addObject().put("sourceInstanceId", "source").put("ruleId", "assist").put("bindingId", "use");
+        request.putObject("target").put("recipientId", "patient").set("version", option.required("version"));
+        String body = MAPPER.createObjectNode().set("request", request).toString();
+        String beforeSource = store.loadSheet(id, "caster"), beforePatient = store.loadSheet(id, "patient");
+        int history = store.historyTail(id, 100).size(), fear = campaign.getFear();
+        assertEquals(403, automationHttp(other, "caster", body).statusCode());
+        var failed = automationHttp(owner, "caster", body);
+        assertEquals(409, failed.statusCode(), failed.body());
+        assertEquals(beforeSource, store.loadSheet(id, "caster"));
+        assertEquals(beforePatient, store.loadSheet(id, "patient"));
+        assertEquals(history, store.historyTail(id, 100).size());
+        assertEquals(fear, campaign.getFear());
+
+        patient.withObject("/hope").put("on", 3);
+        store.saveSheet(id, "patient", patient.toString());
+        option = MAPPER.readTree(resultHttp(owner, "caster", resultId).body())
+                .requiredAt("/actions/0/targetSelection/options/0");
+        ((ObjectNode) request.get("target")).set("version", option.required("version"));
+        body = MAPPER.createObjectNode().set("request", request).toString();
+        var applied = automationHttp(owner, "caster", body);
+        assertEquals(200, applied.statusCode(), applied.body());
+        JsonNode response = MAPPER.readTree(applied.body());
+        assertEquals(original.at("/check/total").asInt() + 2, response.at("/event/check/total").asInt());
+        assertTrue(response.path("resultPublished").asBoolean());
+        assertTrue(response.path("actions").findValuesAsText("report").contains("Care for Bea."));
+        JsonNode nested = null;
+        for (JsonNode command : response.path("outbox"))
+            if ("roll.event".equals(command.path("kind").asText())) nested = command.path("event");
+        assertNotNull(nested, applied.body());
+        assertEquals(3, nested.at("/roll/total").asInt());
+        JsonNode source = MAPPER.readTree(store.loadSheet(id, "caster"));
+        JsonNode savedPatient = MAPPER.readTree(store.loadSheet(id, "patient"));
+        assertEquals(4, source.at("/hope/on").asInt());
+        assertEquals(2, source.at("/automationState/sources/listener/state/finished").asInt());
+        assertEquals(2, savedPatient.at("/stress/on").asInt());
+        assertEquals(4, savedPatient.at("/hope/on").asInt());
+        assertEquals(1, savedPatient.at("/automationState/sources/watcher/usage/watch").asInt());
+        assertEquals(fear + 1, campaign.getFear());
+        assertTrue(store.historyTail(id, 100).stream().anyMatch(message -> message.path("text").asText().contains("Care for Bea.")));
+        int published = store.historyTail(id, 100).size();
+        assertEquals(applied.body(), automationHttp(owner, "caster", body).body());
+        assertEquals(published, store.historyTail(id, 100).size());
+    }
+
+    @Test
     void ownerRollClaimsPersistOnceAndRejectOtherPlayers() throws Exception {
         automationCompendium();
         Path file = compendiumDir.resolve("classes.json");

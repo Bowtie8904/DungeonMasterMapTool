@@ -434,6 +434,7 @@ public final class AutomationHost {
     }
 
     private record TargetAction(List<RuleDispatcher.Candidate> candidates, PartyTargets.Selection selection) {}
+    private record StagedTargetResolution(RuleDispatcher.TargetResolution result, StagedRestRecipients recipients) {}
 
     private TargetAction targetAction(Pack pack, ObjectNode sheet, ObjectNode event, ObjectNode request,
                                       String relation, PartyTargets party) {
@@ -460,6 +461,20 @@ public final class AutomationHost {
         }
         var targets = action.selection();
         var candidates = action.candidates();
+        var staged = executeTarget(pack, working, state, event, candidates, targets, random, party);
+        var resolved = staged.result();
+        var targetedActions = resolved.actions().stream().map(RuleDispatcher.TargetActionResult::action).toList();
+        ObjectNode after = applyResolved(pack, working, state, event, resolved.sourceContexts(), targetedActions, resolved.outbox());
+        addTargetActionHolders(after, resolved);
+        for (String key : List.of("actions", "outbox")) ((ArrayNode) result.get(key)).addAll((ArrayNode) after.get(key));
+        result.set("event", after.get("event"));
+        stageTargetUpdates(party, staged);
+        return result.put("revision", revision + 1);
+    }
+
+    private StagedTargetResolution executeTarget(Pack pack, ObjectNode working, ObjectNode state, ObjectNode event,
+                                                 List<RuleDispatcher.Candidate> candidates, PartyTargets.Selection targets,
+                                                 RandomGenerator random, PartyTargets party) {
         StagedRestRecipients stagedRecipients = null;
         RuleDispatcher.TargetResolution resolved;
         if (!candidates.isEmpty() && event.path("actorId").isTextual()) {
@@ -493,22 +508,24 @@ public final class AutomationHost {
         } else {
             resolved = RuleDispatcher.executeTargets(candidates, targets.intent(), targets.recipients(), random, pack.programs());
         }
-        var targetedActions = resolved.actions().stream().map(RuleDispatcher.TargetActionResult::action).toList();
-        ObjectNode after = applyResolved(pack, working, state, event, resolved.sourceContexts(), targetedActions, resolved.outbox());
+        return new StagedTargetResolution(resolved, stagedRecipients);
+    }
+
+    private static void addTargetActionHolders(ObjectNode response, RuleDispatcher.TargetResolution resolved) {
         for (int i = 0; i < resolved.actions().size(); i++) {
             var actionResult = resolved.actions().get(i);
-            ObjectNode item = (ObjectNode) after.path("actions").get(i);
+            ObjectNode item = (ObjectNode) response.path("actions").get(i);
             if (actionResult.recipientId() != null) item.put("recipientId", actionResult.recipientId());
             if (actionResult.actorId() != null) item.put("actorId", actionResult.actorId());
         }
-        for (String key : List.of("actions", "outbox")) ((ArrayNode) result.get(key)).addAll((ArrayNode) after.get(key));
-        result.set("event", after.get("event"));
-        party.stage(resolved.recipients());
-        if (stagedRecipients != null) {
-            stagedRecipients.applyTargetUpdates(resolved.recipients());
-            party.stageSheets(stagedRecipients.changed(), stagedRecipients.scopeMembership());
+    }
+
+    private static void stageTargetUpdates(PartyTargets party, StagedTargetResolution staged) {
+        party.stage(staged.result().recipients());
+        if (staged.recipients() != null) {
+            staged.recipients().applyTargetUpdates(staged.result().recipients());
+            party.stageSheets(staged.recipients().changed(), staged.recipients().scopeMembership());
         }
-        return result.put("revision", revision + 1);
     }
 
     private static List<RuleRuntime.Intent> selections(ObjectNode request, List<RuleDispatcher.Candidate> candidates,
@@ -692,8 +709,9 @@ public final class AutomationHost {
     private ObjectNode resultAction(Pack pack, ObjectNode working, ObjectNode state, ObjectNode origin,
                                     ObjectNode request, String principal, RandomGenerator random, PartyTargets party) {
         var sources = sources(pack, working);
-        ResultWindows.prune(state, ResultWindows.guards(sources, activationEffects(pack, working, state, origin, sources),
-                origin.path("actorId").textValue()));
+        var originalGuards = ResultWindows.guards(sources, activationEffects(pack, working, state, origin, sources),
+                origin.path("actorId").textValue());
+        ResultWindows.prune(state, originalGuards);
         var window = ResultWindows.lookup(state, pack.revision(), principal, RuleJson.id(request.get("resultId"), "/request/resultId"));
         ObjectNode event = savedResultEvent(window, origin);
         ObjectNode actor = actor(pack, working, state, event, sources);
@@ -712,69 +730,71 @@ public final class AutomationHost {
                 binding.path("repeatable").asBoolean(false));
         if (binding.has("targetSelection") != request.has("target"))
             throw RuleJson.error("/request/target", "This result action requires its current target selection.");
+        if (claimGroup != null && request.has("target"))
+            throw RuleJson.error("/request/target", "A result claim cannot also select a target.");
+        var candidates = candidates(pack, sources, state, actor, event);
         if (claimGroup != null) {
             String actorId = RuleJson.id(actor.get("id"), "/actor/id");
-            long revision = state.required("revision").longValue();
-            var candidate = new RuleDispatcher.Candidate(program, context);
-            var recipient = new RuleDispatcher.RecipientCandidate(actorId, actor, revision);
-            var claim = new RuleDispatcher.ClaimIntent(intent, actorId, revision, 0);
-            var resolved = RuleDispatcher.executeClaims(List.of(candidate), List.of(claim), List.of(recipient),
-                    new RuleDispatcher.ClaimLedger(0, Set.of()), random, pack.programs());
-            var actions = resolved.actions().stream().map(RuleDispatcher.ClaimActionResult::action).toList();
-            long published = actions.stream().mapToLong(action -> action.publishedRolls().size()).sum();
-            if (published > 1)
-                throw RuleJson.error("/result", "A result action may publish at most one revision of its roll.");
-            var response = applyResolved(pack, working, state, event, resolved.sourceContexts(), actions, resolved.outbox());
-            if (published == 1) {
-                ObjectNode roll = actions.stream().flatMap(action -> action.publishedRolls().stream()).findFirst().orElseThrow();
-                ((ObjectNode) response.required("event")).set("roll", roll);
-                reviseResult(pack, working, response, principal, window);
-            }
-            return response;
+            if (!claimAllowed(binding, actorId, actorId, "self"))
+                throw RuleJson.error("/claims/recipientId", "This claim is not available to the source actor.");
         }
         if (request.has("target")) {
             if (party == null) throw RuleJson.error("/request/target", "This action requires a host roster.");
-            var candidate = new RuleDispatcher.Candidate(program, context);
             var targets = party.resolve(binding, context, intent, request.get("target"));
-            var resolved = RuleDispatcher.executeTargets(List.of(candidate), targets.intent(), targets.recipients(), random, pack.programs());
+            var staged = executeTarget(pack, working, state, event, candidates, targets, random, party);
+            var resolved = staged.result();
             var actions = resolved.actions().stream().map(RuleDispatcher.TargetActionResult::action).toList();
-            long published = actions.stream().mapToLong(action -> action.publishedRolls().size()).sum();
-            if (published > 1)
-                throw RuleJson.error("/result", "A result action may publish at most one revision of its roll.");
+            ObjectNode published = resultRevision(actions, intent);
             var response = applyResolved(pack, working, state, event, resolved.sourceContexts(), actions, resolved.outbox());
-            for (int i = 0; i < resolved.actions().size(); i++)
-                ((ObjectNode) response.path("actions").get(i)).put("recipientId", resolved.actions().get(i).recipientId());
-            party.stage(resolved.recipients());
-            if (published == 1) {
-                ObjectNode roll = actions.stream().flatMap(action -> action.publishedRolls().stream()).findFirst().orElseThrow();
-                ((ObjectNode) response.required("event")).set("roll", roll);
-                reviseResult(pack, working, response, principal, window);
+            addTargetActionHolders(response, resolved);
+            stageTargetUpdates(party, staged);
+            if (published != null) {
+                ((ObjectNode) response.required("event")).set("roll", published);
+                reviseResult(pack, working, response, principal, window.path("id").asText(), originalGuards);
             }
             return response;
         }
         // Dispatch only the chosen button: automatic roll.finished reactions already ran when the roll was made.
-        var resolution = RuleRuntime.execute(program, intent, context, random);
-        if (resolution.publishedRolls().size() > 1)
-            throw RuleJson.error("/result", "A result button may publish at most one revision of its roll.");
-        var action = new RuleDispatcher.ActionResult(instance, intent.ruleId(), intent.bindingId(), resolution.report(),
-                resolution.publishedRolls(), resolution.diceRolls());
-        List<ObjectNode> commands = new ArrayList<>();
-        resolution.context().path("outbox").forEach(cmd -> commands.add((ObjectNode) cmd));
-        var response = applyResolved(pack, working, state, event, List.of(resolution.context()), List.of(action), commands);
-        if (!resolution.publishedRolls().isEmpty()) reviseResult(pack, working, response, principal, window);
+        String actorId = RuleJson.id(actor.get("id"), "/actor/id");
+        var ownerProjection = ownerRecoveryProjection(pack, working, state, sources, actor, actorId, false, true);
+        var resolved = RuleDispatcher.executeResultWithOwnerReactions(candidates, intent, random, pack.programs(),
+                ownerProjection, claimGroup != null);
+        ObjectNode published = resultRevision(resolved.actions(), intent);
+        var response = applyResolved(pack, working, state, event, resolved.contexts(), resolved.actions(), resolved.outbox());
+        if (published != null) {
+            ((ObjectNode) response.required("event")).set("roll", published);
+            reviseResult(pack, working, response, principal, window.path("id").asText(), originalGuards);
+        }
         return response;
     }
 
-    private void reviseResult(Pack pack, ObjectNode working, ObjectNode response, String principal, ObjectNode window) {
+    private static ObjectNode resultRevision(List<RuleDispatcher.ActionResult> actions, RuleRuntime.Intent intent) {
+        List<ObjectNode> published = actions.stream()
+                .filter(action -> action.sourceInstanceId().equals(intent.sourceInstanceId())
+                        && action.ruleId().equals(intent.ruleId()) && action.bindingId().equals(intent.bindingId()))
+                .flatMap(action -> action.publishedRolls().stream()).toList();
+        if (published.size() > 1)
+            throw RuleJson.error("/result", "A result action may publish at most one revision of its roll.");
+        return published.isEmpty() ? null : published.getFirst();
+    }
+
+    private void reviseResult(Pack pack, ObjectNode working, ObjectNode response, String principal, String resultId,
+                              Map<String, ObjectNode> originalGuards) {
         ProfileRoll.updateCheck((ObjectNode) response.required("event"));
         response.put("resultPublished", true);
+        ObjectNode window = ResultWindows.lookup(projection.state(working), pack.revision(), principal, resultId);
         window.withArray("buttons").removeAll();
         offerResult(pack, working, response, principal, (ArrayNode) window.required("used"),
-                window.path("usedClaimGroups"));
+                window.path("usedClaimGroups"), originalGuards);
     }
 
     private void offerResult(Pack pack, ObjectNode sheet, ObjectNode response, String principal, ArrayNode used,
                              JsonNode usedClaimGroups) {
+        offerResult(pack, sheet, response, principal, used, usedClaimGroups, null);
+    }
+
+    private void offerResult(Pack pack, ObjectNode sheet, ObjectNode response, String principal, ArrayNode used,
+                             JsonNode usedClaimGroups, Map<String, ObjectNode> originalGuards) {
         ObjectNode event = (ObjectNode) response.required("event");
         var sources = sources(pack, sheet);
         if (sources.stream().noneMatch(element -> {
@@ -785,6 +805,9 @@ public final class AutomationHost {
             return; // Consuming the roll's source cannot leave an actionable result behind.
         ObjectNode state = projection.state(sheet);
         ObjectNode actor = actor(pack, sheet, state, event, sources);
+        Map<String, ObjectNode> currentGuards = ResultWindows.guards(sources, actor.path("effects"), actor.path("id").textValue());
+        if (originalGuards != null && !java.util.Objects.equals(originalGuards.get(event.path("sourceInstanceId").asText()),
+                currentGuards.get(event.path("sourceInstanceId").asText()))) return;
         if (event.has("effectInstanceId")) {
             boolean active = false;
             for (JsonNode effect : actor.path("effects"))
@@ -794,6 +817,11 @@ public final class AutomationHost {
             if (!active) return;
         }
         ArrayNode matches = resultButtons(pack, sources, state, actor, event, null, null);
+        if (originalGuards != null)
+            for (int i = matches.size() - 1; i >= 0; i--) {
+                String instance = matches.get(i).path("sourceInstanceId").asText();
+                if (!java.util.Objects.equals(originalGuards.get(instance), currentGuards.get(instance))) matches.remove(i);
+            }
         if (used != null) {
             Set<ResultWindows.Button> spent = new java.util.HashSet<>();
             used.forEach(item -> spent.add(ResultWindows.Button.of(item)));
@@ -811,8 +839,7 @@ public final class AutomationHost {
                         || matches.get(i).has("claimGroup") && spentGroups.contains(ResultWindows.ClaimGroup.of(matches.get(i))))
                     matches.remove(i);
         }
-        String id = ResultWindows.publish(state, pack.revision(), principal, event, matches,
-                ResultWindows.guards(sources, actor.path("effects"), actor.path("id").textValue()));
+        String id = ResultWindows.publish(state, pack.revision(), principal, event, matches, currentGuards);
         if (id != null) {
             if (used != null) ResultWindows.lookup(state, pack.revision(), principal, id).set("used", used.deepCopy());
             if (usedClaimGroups != null && usedClaimGroups.isArray())

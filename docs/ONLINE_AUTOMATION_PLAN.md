@@ -90,8 +90,11 @@ Converted top-level card actions expose both `card:<name>` and `featureAction:ca
 `event.check.origins`; class feature actions expose `feat:<name>`, while `event.check.origin` remains the primary
 identity. Converted origin filters and exclusions match either field. Ordinary single-target and party actions
 also run each changed holder's track reactions, including self-targets, before later steps; the source, recipients,
-reaction commands and reports commit together and exact retries replay the receipt. Nested card action paths,
-targeted result actions, interactive prepare choices, downtime rolls and untyped dice still need live integration.
+reaction commands and reports commit together and exact retries replay the receipt. Saved result buttons, including
+self claims and targeted actions, likewise dispatch track reactions and typed nested rolls without repeating the
+original roll's automatic reactions; a nested roll's publication does not revise the original result. A result claim
+cannot also declare a target selection. Nested card action paths, interactive prepare choices, downtime rolls and
+untyped dice still need live integration.
 
 A stored effect whose source is active on its holder also offers its frozen attack profile. Its descriptor
 and `request.profileRoll` include `effectInstanceId` and the reserved profile ID `effect.profile`; the host

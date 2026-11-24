@@ -206,6 +206,7 @@ public final class RuleDispatcher {
         boolean inventoryPending;
         boolean liveRoot;
         boolean nestedRolls;
+        boolean selfRecipient;
         final OwnerProjection projection;
         RecipientTrackReactions recipient;
         Map<String, ObjectNode> contexts;
@@ -373,6 +374,18 @@ public final class RuleDispatcher {
         return executeEvent(activeSources, List.of(selection), random, programs, false, budget, false);
     }
 
+    static EventResolution executeResultWithOwnerReactions(List<Candidate> activeSources, RuleRuntime.Intent selection,
+                                                           RandomGenerator random, Map<String, RuleCompiler.Program> programs,
+                                                           OwnerProjection projection, boolean selfClaim) {
+        if (selection == null) throw RuleJson.error("/selection", "A selected binding is required.");
+        ReactionBudget budget = new ReactionBudget(projection);
+        budget.allowSelectedInventory = true;
+        budget.liveRoot = true;
+        budget.nestedRolls = true;
+        budget.selfRecipient = selfClaim;
+        return executeEvent(activeSources, List.of(selection), random, programs, false, budget, false);
+    }
+
     static EventResolution executeDeferredWithOwnerReactions(List<Candidate> activeSources, RuleRuntime.Intent intent,
                                                             RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
         return executeDeferredWithOwnerReactions(activeSources, intent, random, programs, null);
@@ -529,7 +542,7 @@ public final class RuleDispatcher {
             String mode = binding.path("mode").asText();
             if (!Set.of("button", "option").contains(mode))
                 throw RuleJson.error("/selections", "Only buttons and options may be selected.");
-            if (binding.has("claimGroup"))
+            if (binding.has("claimGroup") && (budget == null || !budget.selfRecipient))
                 throw RuleJson.error("/selections", "Claim-group actions require executeClaims.");
             if (binding.has("targetSelection"))
                 throw RuleJson.error("/selections", "Targeted actions require executeTargets.");
@@ -577,6 +590,7 @@ public final class RuleDispatcher {
         for (Invocation invocation : invocations) {
             ObjectNode context = invocation.candidate().context();
             context.set("actor", snapshot.actor().deepCopy());
+            if (budget != null && budget.selfRecipient) context.set("recipient", context.get("actor"));
             context.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             try {
                 checked.add(new CheckedInvocation(invocation,
@@ -607,6 +621,7 @@ public final class RuleDispatcher {
             ObjectNode context = workingContexts.get(instanceId).deepCopy();
             context.set("actor", sharedActor.deepCopy());
             if (withRecipient) context.set("recipient", sharedRecipient.deepCopy());
+            else if (budget != null && budget.selfRecipient) context.set("recipient", context.get("actor"));
             if (observer != null) context.set("event", sharedEvent.deepCopy());
             context.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             try {
@@ -633,6 +648,7 @@ public final class RuleDispatcher {
             mergeTransactionState(current, workingContexts.get(instanceId));
             current.set("actor", sharedActor.deepCopy());
             if (withRecipient) current.set("recipient", sharedRecipient.deepCopy());
+            else if (budget != null && budget.selfRecipient) current.set("recipient", current.get("actor"));
             current.set("event", sharedEvent.deepCopy());
             current.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             RuleRuntime.Prepared executable = new RuleRuntime.Prepared(item.intent(), current, snapshot.revision());
@@ -659,6 +675,7 @@ public final class RuleDispatcher {
             ObjectNode context = workingContexts.get(instanceId).deepCopy();
             context.set("actor", sharedActor.deepCopy());
             if (withRecipient) context.set("recipient", sharedRecipient.deepCopy());
+            else if (budget != null && budget.selfRecipient) context.set("recipient", context.get("actor"));
             context.set("event", sharedEvent.deepCopy());
             if (!prepared.isEmpty()) context.set("revision", RuleExpression.numeric(snapshot.revision() + 1d, "/revision"));
             updated.add(context);
@@ -1373,7 +1390,8 @@ public final class RuleDispatcher {
             ReactionBudget budget = new ReactionBudget(sourceProjection);
             budget.allowSelectedInventory = allowInventory;
             budget.liveRoot = live;
-            budget.nestedRolls = live && "action.request".equals(snapshot.eventType());
+            budget.nestedRolls = live && ("action.request".equals(snapshot.eventType())
+                    || "roll.finished".equals(snapshot.eventType()));
             budget.contexts = workingContexts;
             budget.sources = byInstance;
             RuleRuntime.TrackObserver sourceObserver = ownerTrackObserver(
