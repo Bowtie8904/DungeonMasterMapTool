@@ -4858,8 +4858,6 @@ public final class LegacyCatalogConverter {
                 action = converted;
             }
         }
-        if (action.has("codexSwap"))
-            p.add(path + "/codexSwap", "Manual disposition: swapping this card with a chosen vault card needs a vault-to-loadout move that respects slot, domain and permanent-vault rules, and the rules runtime has no such operation.");
         followUp(action, path, p);
         hostRollAction(action, path, p);
         boolean spendsTokens = action.has("castTokens");
@@ -5013,6 +5011,7 @@ public final class LegacyCatalogConverter {
         String specialReport = action.has("specialAction") ? specialAction(action, path, p, effects, rule, steps) : reachReport;
         if (action.has("layerRoll")) specialReport = layerRoll(action.get("layerRoll"), path + "/layerRoll", p, pools, steps);
         if (action.has("doomsday")) specialReport = doomsday(action.get("doomsday"), path + "/doomsday", p, effects, steps);
+        if (action.has("codexSwap")) specialReport = codexSwap(action.get("codexSwap"), path + "/codexSwap", p, rule, steps);
         if (action.has("timing")) {
             for (int i = 0; i < steps.size(); i++) {
                 JsonNode sampled = steps.get(i);
@@ -5048,6 +5047,31 @@ public final class LegacyCatalogConverter {
         sentRollReport(action, ui);
         checkReport(action, ui);
         return rule;
+    }
+
+    /**
+     * {@code codexSwap}: the player chooses a vault card and the source card trades places with it in place, without
+     * the Recall cost. A card sent to the vault for good and a Vitality card whose benefits are in use stay put.
+     */
+    private static String codexSwap(JsonNode legacy, String path, Problems p, ObjectNode rule, ArrayNode steps) {
+        if (!legacy.asBoolean(false)) p.add(path, "Expected true.");
+        if (rule.has("inputs")) { p.add(path, "A vault swap cannot share an action with another input."); return null; }
+        ObjectNode permanent = RuleJson.JSON.createObjectNode();
+        permanent.putArray("and").add(hasFact("input.option.permanent")).add(read("input.option.permanent"));
+        ObjectNode vitality = RuleJson.JSON.createObjectNode();
+        ArrayNode both = vitality.putArray("and");
+        both.addObject().putArray("eq").add(read("input.option.id")).add("Vitality");
+        both.addObject().putArray("gt").add(read("actor.vitalityBenefitCount")).add(0);
+        ObjectNode input = rule.putArray("inputs").addObject().put("id", "card").put("kind", "record.select")
+                .put("label", "Vault card to swap in").put("choiceLabel", "{input.option.id} (level {input.option.level})");
+        input.set("from", read("actor.vault"));
+        ArrayNode where = input.putObject("where").putArray("and");
+        where.addObject().set("not", permanent);
+        where.addObject().set("not", vitality);
+        steps.addObject().put("op", "collection.swap").put("target", "actor").put("collection", "loadout")
+                .put("with", "vault").set("item", read("source.name"));
+        ((ObjectNode) steps.get(steps.size() - 1)).set("withItem", read("input.card.id"));
+        return "Replaced {source.name} with {input.card.id} without Recall cost.";
     }
 
     /**

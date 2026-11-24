@@ -81,6 +81,7 @@ public final class RuleCompiler {
             Map.entry("track.capacity", List.of("track", "by", "counter", "amount", "direction")),
             Map.entry("collection.add", List.of("target", "collection", "item")),
             Map.entry("collection.remove", List.of("target", "collection", "item")),
+        Map.entry("collection.swap", List.of("target", "collection", "item", "with", "withItem")),
             Map.entry("damage.deal", List.of("to", "amount", "label")),
             Map.entry("countdown.start", List.of("label", "value")),
             Map.entry("table.gain", List.of("resource", "amount", "label")),
@@ -1394,8 +1395,9 @@ public final class RuleCompiler {
                 if (count < 1) throw RuleJson.error(path + "/count", "Expected at least one choice.");
             }
             case "record.select" -> {
-                RuleJson.fields(input, path, "id", "kind", "label", "from", "choiceLabel");
+                RuleJson.fields(input, path, "id", "kind", "label", "from", "where", "choiceLabel");
                 RuleExpression.validate(input.path("from"), path + "/from");
+                if (input.has("where")) RuleExpression.validate(input.get("where"), path + "/where");
                 RuleTemplate.validate(RuleJson.text(input.path("choiceLabel"), path + "/choiceLabel"));
             }
             case "allocation" -> {
@@ -1486,7 +1488,9 @@ public final class RuleCompiler {
                 references(RuleExpression.references(input.get(field)), args, decl, noVariables, noVariables, false, path + "/inputs/" + field);
             references(RuleTemplate.references(input.path("label").asText()), args, decl, noVariables, noVariables, false, path + "/inputs/label");
             if (input.has("where"))
-                references(RuleExpression.references(input.get("where")), args, decl, noVariables, noVariables, true, path + "/inputs/where");
+                references(RuleExpression.references(input.get("where")), args, decl,
+                        "record.select".equals(input.path("kind").asText()) ? Set.of("option") : noVariables, noVariables,
+                        !"record.select".equals(input.path("kind").asText()), path + "/inputs/where");
             if (input.has("choiceLabel"))
                 references(RuleTemplate.references(input.path("choiceLabel").asText()), args, decl,
                         "record.select".equals(input.path("kind").asText()) ? Set.of("option") : noVariables,
@@ -1540,7 +1544,7 @@ public final class RuleCompiler {
                 expressionReferences(value, at, true, partial, visitor);
             else if ("plan".equals(field) && "roll.resolve".equals(name)
                     || !Set.of("pool", "track", "slot", "role", "effect", "target", "owner", "limit",
-                    "choose", "maxDice", "collection", "to", "plan", "field", "counter", "direction", "partyRecovery").contains(field))
+                    "choose", "maxDice", "collection", "with", "to", "plan", "field", "counter", "direction", "partyRecovery").contains(field))
                 expressionReferences(value, at, usesDieContext, partial, visitor);
         }
         if (op.has("if")) expressionReferences(op.get("if"), path + "/if", usesDieContext, partial, visitor);
@@ -1577,7 +1581,9 @@ public final class RuleCompiler {
         for (JsonNode input : inputNodes) {
             if (substitution(input)) continue;
             for (String field : List.of("from", "eligible", "count", "min", "max", "optionsFrom", "total", "where"))
-                if (input.has(field)) expressionReferences(input.get(field), path + "/inputs/" + field, false, true, before);
+                if (input.has(field)) expressionReferences(input.get(field), path + "/inputs/" + field, false, true,
+                        "where".equals(field) && "record.select".equals(input.path("kind").asText())
+                                ? (refs, die, at) -> localReferences(refs, args, Set.of("option"), false, Set.of(), false, at) : before);
             if (input.has("label")) templateReferences(input.get("label"), path + "/inputs/label", false, true, before);
             if (input.has("choiceLabel")) {
                 ReferenceVisitor choiceLabel = "record.select".equals(input.path("kind").asText())
@@ -1847,9 +1853,9 @@ public final class RuleCompiler {
                 if (!deferSourceDeclarations && !decl.limits().has(limit))
                     throw RuleJson.error(path + "/limit", "Undeclared use budget: " + limit);
             }
-            else if ("collection".equals(field)) {
-                if (!COLLECTIONS.contains(RuleJson.text(value, path + "/collection")))
-                    throw RuleJson.error(path + "/collection", "Unknown actor collection: " + value.asText());
+            else if ("collection".equals(field) || "with".equals(field) && "collection.swap".equals(op)) {
+                if (!COLLECTIONS.contains(RuleJson.text(value, path + "/" + field)))
+                    throw RuleJson.error(path + "/" + field, "Unknown actor collection: " + value.asText());
             }
             else if ("to".equals(field) && "damage.deal".equals(op)) {
                 if (!Set.of("actor", "recipient", "attacker").contains(value.asText()))

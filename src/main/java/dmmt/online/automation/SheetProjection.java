@@ -19,7 +19,7 @@ import java.util.Set;
  */
 public final class SheetProjection {
     public static final String FORMAT = "dmmap-sheet-projection";
-    private static final Set<String> KINDS = Set.of("value", "object", "map", "first", "collection", "tally", "engine");
+    private static final Set<String> KINDS = Set.of("value", "object", "map", "first", "collection", "tally", "engine", "length");
 
     public record SourceElement(String sourceId, String instanceId, String name, ObjectNode element,
                                 String quantityField, String sourcePath) {
@@ -315,6 +315,7 @@ public final class SheetProjection {
                     }
                 }
             }
+            case "length" -> RuleJson.fields(fact, at, "kind", "path");
             case "map" -> {
                 RuleJson.fields(fact, at, "kind", "path", "key", "value");
                 path(fact.get("key"), at + "/key");
@@ -353,7 +354,8 @@ public final class SheetProjection {
                 });
             }
             case "collection" -> {
-                RuleJson.fields(fact, at, "kind", "path", "fields", "defaults", "writable");
+                RuleJson.fields(fact, at, "kind", "path", "fields", "defaults", "writable", "transfer");
+                if (fact.has("transfer")) RuleJson.id(fact.get("transfer"), at + "/transfer");
                 ObjectNode fields = RuleJson.object(fact.get("fields"), at + "/fields");
                 if (!fields.has("id")) throw RuleJson.error(at + "/fields/id", "Collections need an ID field.");
                 fields.fields().forEachRemaining(field -> path(field.getValue(), at + "/fields/" + field.getKey()));
@@ -649,6 +651,7 @@ public final class SheetProjection {
                     }
                     actor.put(entry.getKey(), count);
                 }
+                case "length" -> actor.put(entry.getKey(), value.isArray() ? value.size() : 0);
                 case "collection" -> {
                     ArrayNode projected = actor.putArray(entry.getKey());
                     for (JsonNode item : value) {
@@ -740,6 +743,7 @@ public final class SheetProjection {
     /** Copies declared writable facts from an executed actor snapshot back into the sheet. */
     public void write(ObjectNode sheet, ObjectNode before, ObjectNode after) {
         validateCapacityReserves(sheet, before, after);
+        Set<String> transfers = new java.util.LinkedHashSet<>();
         spec.path("actor").fields().forEachRemaining(entry -> {
             String key = entry.getKey();
             JsonNode fact = entry.getValue();
@@ -786,6 +790,10 @@ public final class SheetProjection {
                     });
                 }
                 case "collection" -> {
+                    if (fact.has("transfer")) {
+                        transfers.add(fact.path("transfer").asText());
+                        return;
+                    }
                     if (!fact.path("writable").asBoolean(true)) throw RuleJson.error(at, "This collection is read-only.");
                     writeCollection(sheet, fact, next, at);
                 }
@@ -793,6 +801,7 @@ public final class SheetProjection {
                 default -> throw RuleJson.error(at, "This actor fact is read-only.");
             }
         });
+        for (String group : transfers) writeTransfer(sheet, group, after);
         for (JsonNode mapping : spec.path("poolTracks")) {
             String pool = mapping.path("pool").asText(), trackName = mapping.path("track").asText();
             JsonNode previous = before.path("pools").path(pool), next = after.path("pools").path(pool);
@@ -853,6 +862,67 @@ public final class SheetProjection {
             RuleJson.integer(oldTrack.get(filled), at + "/" + filled, 0, oldCapacity);
             RuleJson.integer(newTrack.get(filled), at + "/" + filled, 0, newCapacity);
         });
+    }
+
+    /**
+     * Collections of one transfer group (loadout and vault) may only exchange the sheet's own entries: every entry in
+     * the next lists must be an unchanged existing entry of some group member, and none may be created or dropped.
+     * The stored objects (text, spells, usage) move as they are; the next lists decide membership and order.
+     */
+    private void writeTransfer(ObjectNode sheet, String group, ObjectNode after) {
+        List<JsonNode> facts = new ArrayList<>();
+        List<String> names = new ArrayList<>();
+        spec.path("actor").fields().forEachRemaining(entry -> {
+            if (group.equals(entry.getValue().path("transfer").asText(null))) {
+                facts.add(entry.getValue());
+                names.add(entry.getKey());
+            }
+        });
+        List<ObjectNode> pool = new ArrayList<>();
+        List<JsonNode> kept = new ArrayList<>();
+        for (JsonNode fact : facts) {
+            JsonNode current = get(sheet, fact.path("path").asText());
+            if (!current.isArray()) continue;
+            for (JsonNode item : current) {
+                if (collectionEntry(fact, item) != null) pool.add((ObjectNode) item);
+                else kept.add(item);
+            }
+        }
+        Set<ObjectNode> used = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        List<ArrayNode> results = new ArrayList<>();
+        for (int i = 0; i < facts.size(); i++) {
+            String at = "/actor/" + names.get(i);
+            JsonNode next = after.path(names.get(i));
+            if (!next.isArray()) throw RuleJson.error(at, "Expected a list.");
+            ArrayNode result = RuleJson.JSON.createArrayNode();
+            for (JsonNode entry : next) {
+                ObjectNode match = null;
+                for (JsonNode fact : facts) {
+                    for (ObjectNode raw : pool) {
+                        if (used.contains(raw)) continue;
+                        ObjectNode mapped = collectionEntry(fact, raw);
+                        if (mapped == null || !mapped.path("id").equals(entry.path("id"))) continue;
+                        boolean same = true;
+                        for (var field : (Iterable<Map.Entry<String, JsonNode>>) () -> mapped.fields())
+                            if (entry.has(field.getKey()) && !field.getValue().equals(entry.get(field.getKey()))) same = false;
+                        if (same) { match = raw; break; }
+                    }
+                    if (match != null) break;
+                }
+                if (match == null) throw RuleJson.error(at, "These cards can only move between "
+                        + String.join(" and ", names) + "; they cannot be created or edited.");
+                used.add(match);
+                result.add(match);
+            }
+            results.add(result);
+        }
+        if (used.size() != pool.size())
+            throw RuleJson.error("/actor/" + names.get(0), "Cards cannot be deleted from " + String.join(" and ", names) + ".");
+        for (int i = 0; i < facts.size(); i++) {
+            ArrayNode result = results.get(i);
+            if (i == 0) for (JsonNode item : kept) result.add(item);
+            set(sheet, facts.get(i).path("path").asText(), result);
+        }
     }
 
     private static void writeCollection(ObjectNode sheet, JsonNode fact, JsonNode next, String at) {

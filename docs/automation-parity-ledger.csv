@@ -557,7 +557,7 @@
 "domain-cards","/entries/45/automation","chokehold [Chokehold]","actions","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/46/automation","cinder-grasp [Cinder Grasp]","actions;conditionalRollTriggers","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/47/automation","cloaking-blast [Cloaking Blast]","actions;conditionalRollTriggers;hideSpellcast","converted-candidate","","not captured","unverified"
-"domain-cards","/entries/48/automation","codex-touched [Codex-Touched]","conditionalActions;conditionalRollOptions","unconverted","/entries/48/automation/conditionalActions/0/codexSwap: Manual disposition: swapping this card with a chosen vault card needs a vault-to-loadout move that respects slot, domain and permanent-vault rules, and the rules runtime has no such operation.","not captured","unverified"
+"domain-cards","/entries/48/automation","codex-touched [Codex-Touched]","conditionalActions;conditionalRollOptions","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/49/automation","confusing-aura [Confusing Aura]","actions;conditionalRollTriggers;resources;spellcastDifficulty;uses","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/50/automation","conjure-swarm [Conjure Swarm]","","converted-candidate","","not captured","unverified"
 "domain-cards","/entries/50/spells/0/automation","conjure-swarm [Conjure Swarm] > Tekaira Armored Beetles","actions","converted-candidate","","not captured","unverified"

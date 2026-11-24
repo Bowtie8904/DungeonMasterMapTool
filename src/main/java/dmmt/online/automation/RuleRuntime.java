@@ -828,9 +828,10 @@ public final class RuleRuntime {
                             throw RuleJson.error("/inputs/from", "Selectable record fields must be scalar.");
                         if (field.getValue().isNumber()) RuleExpression.number(field.getValue(), "/inputs/from");
                     });
-                    if (!distinct.add(record)) continue;
                     ObjectNode display = context.deepCopy();
                     display.withObject("/input").set("option", record);
+                    if (input.has("where") && !RuleExpression.bool(eval(input.get("where"), display), "/inputs/where")) continue;
+                    if (!distinct.add(record)) continue;
                     ObjectNode option = options.addObject()
                             .put("label", RuleTemplate.render(input.path("choiceLabel").asText(), display));
                     option.set("value", record.deepCopy());
@@ -971,6 +972,11 @@ public final class RuleRuntime {
         context.set("input", accepted);
     }
 
+    private static ArrayNode swapList(ObjectNode owner, String name) {
+        if (!owner.has(name)) owner.putArray(name);
+        if (!owner.get(name).isArray() || owner.get(name).size() > 256) throw RuleJson.error("/" + name, "Expected a bounded list.");
+        return (ArrayNode) owner.get(name);
+    }
     private static void operation(RuleCompiler.Program program, JsonNode op, ObjectNode context, RandomGenerator random, boolean preview,
                                   List<ObjectNode> published, List<ObjectNode> rolls) {
         operation(program, op, context, random, preview, published, rolls, null);
@@ -1726,6 +1732,20 @@ public final class RuleRuntime {
                     if (index < 0) throw new Unavailable("missing", "This entry is no longer present.");
                     result = list.remove(index);
                 }
+            }
+            case "collection.swap" -> {
+                ObjectNode owner = RuleJson.object(context.path(op.path("target").asText()), "/" + op.path("target").asText());
+                ArrayNode first = swapList(owner, op.path("collection").asText()), second = swapList(owner, op.path("with").asText());
+                String firstId = RuleJson.text(eval(op.path("item"), context), "/item");
+                String secondId = RuleJson.text(eval(op.path("withItem"), context), "/withItem");
+                int a = -1, b = -1;
+                for (int i = 0; i < first.size(); i++) if (firstId.equals(first.path(i).path("id").asText())) a = i;
+                for (int i = 0; i < second.size(); i++) if (secondId.equals(second.path(i).path("id").asText())) b = i;
+                if (a < 0 || b < 0) throw new Unavailable("missing", "The selected entries are no longer present.");
+                JsonNode out = first.get(a), in = second.get(b);
+                first.set(a, in);
+                second.set(b, out);
+                result = in.deepCopy();
             }
             case "damage.deal", "countdown.start", "claim.offer", "table.gain", "table.spend", "limits.refresh", "limit.restore", "inventory.grant" -> {
                 ArrayNode outbox = context.has("outbox") ? (ArrayNode) context.get("outbox") : context.putArray("outbox");

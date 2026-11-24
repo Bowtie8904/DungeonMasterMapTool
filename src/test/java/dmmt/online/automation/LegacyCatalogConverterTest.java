@@ -1480,6 +1480,39 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void codexSwapTradesPlacesWithAChosenVaultCardInPlace() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"t","name":"T","automation":{"conditionalActions":[{"id":"swap","label":"Swap","codexSwap":true,
+                  "uses":{"max":1,"per":"rest"},"loadoutDomain":{"domain":"Codex","min":4}}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        JsonNode rule = result.catalog().at("/entries/0/automation/rules/0");
+        assertEquals("record.select", rule.at("/inputs/0/kind").asText(), rule.toString());
+        assertEquals("collection.swap", rule.at("/do/0/op").asText());
+        assertTrue(rule.at("/do/0/withItem").toString().contains("input.card.id"), rule.toString());
+        assertEquals("Replaced {source.name} with {input.card.id} without Recall cost.", rule.at("/ui/report").asText());
+        RuleCompiler.Program program = program(result, 0);
+        String actor = "{\"id\":\"owner\",\"name\":\"Ari\",\"effects\":[],\"vitalityBenefitCount\":1,"
+                + "\"loadout\":[{\"id\":\"A\",\"domain\":\"Codex\",\"level\":1},{\"id\":\"B\",\"domain\":\"Codex\",\"level\":1},{\"id\":\"C\",\"domain\":\"Codex\",\"level\":1},{\"id\":\"T\",\"domain\":\"Codex\",\"level\":7}],"
+                + "\"vault\":[{\"id\":\"Vitality\",\"level\":1},{\"id\":\"Gone\",\"level\":2,\"permanent\":true},{\"id\":\"Pick\",\"domain\":\"Arcana\",\"level\":3}]}";
+        for (String card : new String[]{"Vitality", "Gone"}) {
+            ObjectNode source = context(program, actor, "{\"type\":\"action.request\"}");
+            source.with("source").put("name", "T");
+            ObjectNode inputs = (ObjectNode) RuleJson.parse("{\"card\":" + (card.equals("Vitality") ? "{\"id\":\"Vitality\",\"level\":1}" : "{\"id\":\"Gone\",\"level\":2,\"permanent\":true}") + "}");
+            assertThrows(RuleRuntime.Unavailable.class, () -> RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, source)),
+                    List.of(new RuleRuntime.Intent("swap", "sheet", "fixture", 0, inputs)), StructuredRollTest.noRandom()), card);
+        }
+        ObjectNode source = context(program, actor, "{\"type\":\"action.request\"}");
+        source.with("source").put("name", "T");
+        RuleDispatcher.EventResolution done = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, source)),
+                List.of(new RuleRuntime.Intent("swap", "sheet", "fixture", 0, (ObjectNode) RuleJson.parse("{\"card\":{\"id\":\"Pick\",\"domain\":\"Arcana\",\"level\":3}}"))),
+                StructuredRollTest.noRandom());
+        JsonNode after = done.contexts().getFirst().path("actor");
+        assertEquals("Pick", after.at("/loadout/3/id").asText(), after.toString());
+        assertEquals("T", after.at("/vault/2/id").asText(), after.toString());
+        assertEquals("A", after.at("/loadout/0/id").asText());
+        assertEquals(3, after.path("vault").size());
+    }
+    @Test
     void transferHopeMovesChosenHopeToOneAlly() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"t","name":"T","automation":{"actions":[{"id":"give","label":"Close-Knit","target":"actor","transferHope":true}]}}"""));
@@ -3640,17 +3673,6 @@ class LegacyCatalogConverterTest {
         assertEquals(1, maximum.converted(), maximum.diagnostics().toString());
         assertTrue(block(maximum, 0).toString().contains("die.position") && block(maximum, 0).toString().contains("roll.setFaces"), block(maximum, 0).toString());
         assertNotNull(program(maximum, 0));
-    }
-
-    @Test
-    void sheetStatManualDispositionsExplainThemselves() throws Exception {
-        String[][] cases = {
-                {"{\"conditionalActions\":[{\"id\":\"swap\",\"label\":\"Swap\",\"codexSwap\":true}]}", "vault-to-loadout"}};
-        for (String[] c : cases) {
-            var result = LegacyCatalogConverter.convert(catalog("{\"id\":\"m\",\"name\":\"M\",\"automation\":" + c[0] + "}"));
-            assertEquals(0, result.converted(), c[0]);
-            assertTrue(result.diagnostics().toString().contains(c[1]), c[0] + " -> " + result.diagnostics());
-        }
     }
 
     @Test
