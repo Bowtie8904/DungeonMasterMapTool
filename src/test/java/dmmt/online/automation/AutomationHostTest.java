@@ -85,20 +85,21 @@ class AutomationHostTest {
             ObjectNode poor = sheet.deepCopy();
             poor.withObject("/hope").put("on", before.path("insufficientHope").asInt());
             ObjectNode poorBefore = poor.deepCopy();
-            assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, poor, action(),
+            ObjectNode actionEvent = AutomationHost.event("action.request", "warden", 0);
+            assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, poor, actionEvent,
                     request("poor", 0, "warden", example.path("action").asText()), "self", StructuredRollTest.noRandom()));
             assertEquals(poorBefore, poor);
 
             ObjectNode use = request("first", 0, "warden", example.path("action").asText());
-            ObjectNode receipt = HOST.execute(pack, sheet, action(), use, "self", StructuredRollTest.faces(sample.path("face").asInt()));
+            ObjectNode receipt = HOST.execute(pack, sheet, actionEvent, use, "self", StructuredRollTest.faces(sample.path("face").asInt()));
             assertEquals(sample.path("report"), receipt.at("/actions/0/report"));
             assertEquals(sample.path("face").asInt(), receipt.at("/actions/0/diceRolls/0/contributions/0/dice/0/face").asInt());
             assertEquals(expected.path("hopeAfter").asInt(), sheet.at("/hope/on").asInt());
             assertEquals(expected.path("hpMarkedAfter").asInt(), sheet.at("/hp/on").asInt());
             assertEquals(expected.path("usesAfter").asInt(), sheet.at("/automationState/sources/warden/usage/uses").asInt());
             ObjectNode spent = sheet.deepCopy();
-            assertEquals(receipt, HOST.execute(pack, sheet, action(), use, "self", StructuredRollTest.noRandom()));
-            assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, sheet, action(),
+            assertEquals(receipt, HOST.execute(pack, sheet, actionEvent, use, "self", StructuredRollTest.noRandom()));
+            assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, sheet, actionEvent,
                     request("spent", 1, "warden", example.path("action").asText()), "self", StructuredRollTest.noRandom()));
             assertEquals(spent, sheet);
             for (String kind : List.of("short", "long")) {
@@ -112,7 +113,7 @@ class AutomationHostTest {
                 assertEquals(expected.path(kind + "RestResets").asBoolean(), reset);
             }
             assertEquals(0, sheet.at("/automationState/sources/warden/usage/uses").asInt());
-            ObjectNode second = HOST.execute(pack, sheet, action(), request("after-rest", HOST.revision(sheet), "warden",
+            ObjectNode second = HOST.execute(pack, sheet, actionEvent, request("after-rest", HOST.revision(sheet), "warden",
                     example.path("action").asText()), "self", StructuredRollTest.faces(sample.path("face").asInt()));
             assertEquals(sample.path("report"), second.at("/actions/0/report"));
             assertEquals(expected.path("hopeAfterSecondUse").asInt(), sheet.at("/hope/on").asInt());
