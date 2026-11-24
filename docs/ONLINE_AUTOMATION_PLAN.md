@@ -285,8 +285,9 @@ from 38.78 to 27.30 MiB without reactions and from 38.70 to 25.15 MiB with one A
 substantially between runs. This is not a live persistence, concurrency or release benchmark.
 Targeted-move adjustments, costs, buttons and deferred benefits settle the relevant holder's track reactions; later operations see recipient state and Fear. Recipient capacity changes, other non-track/resource button mutations, mutations in adjustment/deferred phases, and failed nested reactions abort the rest until their lifecycle settlement is supported.
 Converted `repairAllies` adjustments use live party recovery and recipient track-change reactions, including
-Armor overflow. `plan.adjust` records each requested and applied delta, before/after values, source instance, executing
-rule and binding, phase and expanded step index in order, even when clamped. Nested reactions retain their own
+Armor overflow. Live self and ally recovery also exercise converted Overflowing Armor. `plan.adjust` records
+each requested and applied delta, before/after values, source instance, executing rule and binding, phase and
+expanded step index in order, even when clamped. Nested reactions retain their own
 operation identities. A move adjustment may declare `partyRecovery: {track, scope}`; conversion uses
 `armorTrack` and `activePlayerCharacters` for `repairAllies`. The host copies this validated, authored metadata
 into the adjustment record, rather than deriving recovery mechanics from a client-supplied amount. The ordinary
@@ -314,8 +315,8 @@ additional command settlement remains unfinished.
 The shared Daggerheart ruleset now supplies self-targeted short recovery (1d4 plus tier and move bonus), the two
 mutually exclusive preparation variants, long recovery and work on a project. Reports use the amount actually
 cleared or gained, including permanent and locked HP and capped Hope; a short rest needs a granted allowance for
-a long move. The ally variants update the selected recipient. Recovery, downtime-table, report and action-step
-roll offers use the live reroll flow described above; other rest-phase dice remain unfinished.
+a long move. The ally variants update the selected recipient. Recovery, downtime-table, report, action-step and
+rest-passive roll offers use the live reroll flow described above; other reaction-phase dice remain unfinished.
 The sheet projection supplies permanent and temporary marked-HP floors to generic track clearing. The
 engine recomputes locks held in its effect list as operations run, so ending a lock before healing in the same
 action allows the newly recoverable HP to clear. Recipient healing uses the recipient's floor, and capacity

@@ -3635,6 +3635,45 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void convertedArmorOverflowTriggersForSelfAndAllyRestRecovery() throws Exception {
+        installRestRules();
+        var converted = dmmt.online.automation.LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"armor","entries":[
+                 {"id":"plate","name":"Overflow Plate","automation":{"overflowHope":1}}]}
+                """);
+        assertEquals(1, converted.converted(), converted.diagnostics().toString());
+        java.nio.file.Files.writeString(compendiumDir.resolve("armor.json"), converted.catalog().toString());
+        addRestParty();
+        for (String id : List.of("resting", "mira")) {
+            ObjectNode sheet = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+            sheet.putObject("activeArmor").put("name", "Overflow Plate").put("instanceId", "plate")
+                    .put("automationSource", "armor:plate");
+            store.saveSheet(campaign.getId(), id, sheet.toString());
+        }
+        String owner = cookie();
+        for (boolean ally : List.of(false, true)) {
+            JsonNode rest = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+            ObjectNode body = restRequest(rest, "armor-overflow-" + ally);
+            if (ally) targetRestMove(body, rest, "rest-repair-ally", "mira");
+            else addRestMove((ObjectNode) body.path("request"), restDescriptor(rest.path("moves"), "rest-repair"));
+            diceSeed(seedForDie(4, 4));
+            var completed = restHttp(owner, "resting", null, body.toString());
+            assertEquals(200, completed.statusCode(), completed.body());
+            JsonNode result = MAPPER.readTree(completed.body());
+            assertEquals(1, result.path("actions").findValuesAsText("ruleId").stream()
+                    .filter("overflow-hope"::equals).count());
+            int history = store.historyTail(campaign.getId(), 100).size();
+            assertEquals(completed.body(), restHttp(owner, "resting", null, body.toString()).body());
+            assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        }
+        for (String id : List.of("resting", "mira")) {
+            JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+            assertEquals(0, saved.at("/armorTrack/on").asInt());
+            assertEquals(1, saved.at("/hope/on").asInt());
+        }
+    }
+
+    @Test
     void formatTwoRestTransfersSingleHolderEffectsBeforePartyRecovery() throws Exception {
         installPartyRestRules("gain");
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
