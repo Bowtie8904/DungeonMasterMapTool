@@ -97,9 +97,13 @@ original roll's automatic reactions; a nested roll's publication does not revise
 cannot also declare a target selection. Interactive feature prepare choices, downtime rolls and untyped dice
 still need live integration.
 
-**Death options (format 2).** Owner-only `death.options` buttons use host-described controls and a versioned,
-journaled sheet transaction with track reactions and atomic reports. Core death rolls and recovery are not yet
-integrated; format-1 hosts continue to use their existing death dialog.
+**Death options (format 2).** Owner-only authored alternatives and Risk It All use host-described controls,
+versioned journaled transactions, and atomic reactions/reports. Risk rolls dispatch the roll pipeline with
+death kind/move, paid and automatic modifiers, raw-face criticals and Undying-style result revisions; saved
+result controls enforce one recovery, the adjusted-Hope budget and current HP floors. Manual roll mode and
+Experience do not apply to death rolls. Blaze of Glory, Avoid Death and final-HP Undying remain to integrate;
+final-HP outcome revisions are rejected with an actionable error until then. Format-1 hosts continue to use
+their existing death dialog.
 
 Explicit effect starts, replacements and endings in these transactions dispatch `effect.started`/`effect.ended`
 to the affected holder's automatic rules, with `event.effect` containing the instance, `actorId` identifying

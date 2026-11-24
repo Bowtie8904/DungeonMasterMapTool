@@ -82,6 +82,12 @@ export async function executeDeathOption(actorId: string, intent: RuleIntent): P
     deathAction: true, selections: [selectionFromIntent(intent)] });
 }
 
+export async function executeDeathRoll(actorId: string, move: string, request: {
+  requestId: string; expectedRevision: number; selections: import('./controls').RollSelection[];
+}): Promise<unknown> {
+  return postIntent(actorId, { ...request, deathRoll: { move } });
+}
+
 async function postIntent(actorId: string, request: object): Promise<unknown> {
   const response = await hostFetch(automationUrl(actorId), {
     method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },

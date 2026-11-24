@@ -1,11 +1,12 @@
 import { ApiError, hostFetch } from '../api';
 import { el } from '../login';
-import { ruleControl, type RuleDescriptor } from './controls';
-import { automationUrl, CONTROL_TEXT, errorDetails, executeDeathOption } from './panel';
+import { intentControl, ruleControl, type RuleDescriptor } from './controls';
+import { automationUrl, CONTROL_TEXT, errorDetails, executeDeathOption, executeDeathRoll } from './panel';
 
 interface DeathOffer {
   revision: number;
   actions: RuleDescriptor[];
+  rolls?: Record<string, { label: string; description?: string; options: RuleDescriptor[] }>;
 }
 
 /** Returns false only when the host explicitly uses legacy death moves. */
@@ -36,7 +37,33 @@ export async function openAutomationDeathDialog(actorId: string, before: () => P
       if (!('revision' in result) || !Number.isSafeInteger(result.revision) || !Array.isArray(result.actions))
         throw new Error('The host returned invalid death options.');
       const buttons = result.actions.filter(action => action.mode === 'button');
-      const controls = buttons.map(action => {
+      const controls: HTMLElement[] = [];
+      for (const [move, roll] of Object.entries(result.rolls ?? {})) {
+        const control = intentControl({ revision: result.revision, label: roll.label, description: roll.description,
+          available: true, options: roll.options }, async ({ requestId, expectedRevision, selections = [] }) => {
+          if (retryId && retryId !== requestId) throw new Error('Finish the pending death option first.');
+          retryId = requestId;
+          controls.forEach(other => { other.inert = other !== control; });
+          pending = true;
+          cancel.disabled = true;
+          try {
+            await executeDeathRoll(actorId, move, { requestId, expectedRevision, selections });
+            dialog.close();
+          } catch (failure) {
+            if (failure instanceof ApiError && failure.status === 409) {
+              retryId = undefined;
+              await load(false, failure.message);
+              return;
+            }
+            throw failure;
+          } finally {
+            pending = false;
+            cancel.disabled = false;
+          }
+        }, CONTROL_TEXT);
+        controls.push(control);
+      }
+      for (const action of buttons) {
         const control = ruleControl({ ...action, revision: result.revision }, async intent => {
           if (retryId && retryId !== intent.requestId) throw new Error('Finish the pending death option first.');
           retryId = intent.requestId;
@@ -58,10 +85,10 @@ export async function openAutomationDeathDialog(actorId: string, before: () => P
             cancel.disabled = false;
           }
         }, CONTROL_TEXT);
-        return control;
-      });
+        controls.push(control);
+      }
       content.replaceChildren(
-        el('p', { class: 'muted' }, 'Core death moves are not yet available through this automation host.'),
+        el('p', { class: 'muted' }, 'Death roll results and recovery choices appear in the chat.'),
         ...(controls.length ? controls : [el('p', {}, 'No authored death options are available.')]));
       error.textContent = notice;
     } catch (failure) {

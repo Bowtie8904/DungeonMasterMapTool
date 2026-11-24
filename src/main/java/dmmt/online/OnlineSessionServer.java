@@ -6274,7 +6274,7 @@ public final class OnlineSessionServer {
                 throw new IllegalArgumentException("Invalid automation request.");
             if (!body.at("/request/selections").isArray() ||
                     (body.at("/request/selections").isEmpty() && !body.path("request").has("profileRoll")
-                            && !body.path("request").has("checkRoll")))
+                            && !body.path("request").has("checkRoll") && !body.path("request").has("deathRoll")))
                 throw new IllegalArgumentException("Select an automation action or a roll.");
             Campaign.Actor actor = automationActor(ctx.pathParam("id"));
             String original = store.loadSheet(campaign.getId(), actor.getId());
@@ -6314,7 +6314,7 @@ public final class OnlineSessionServer {
                 }
                 changed.values().forEach(staged -> staged.put("featureRevision", staged.path("featureRevision").asLong(0) + 1));
                 List<ObjectNode> messages = new ArrayList<>();
-                if (body.path("request").has("profileRoll") || body.path("request").has("checkRoll")
+                if (body.path("request").has("profileRoll") || body.path("request").has("checkRoll") || body.path("request").has("deathRoll")
                         || response.path("resultPublished").asBoolean())
                     messages.add(profileRollMessage(actor, response.path("event")));
                 messages.addAll(automationHolderReports(actor, namesByActor, response));

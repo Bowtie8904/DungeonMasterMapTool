@@ -72,7 +72,7 @@ export function ruleControl(descriptor: RuleDescriptor, submit: (intent: RuleInt
   }), text);
 }
 
-type RollSelection = Pick<RuleIntent, 'sourceInstanceId' | 'ruleId' | 'bindingId' | 'eachId' | 'inputs'>;
+export type RollSelection = Pick<RuleIntent, 'sourceInstanceId' | 'ruleId' | 'bindingId' | 'eachId' | 'inputs'>;
 type ButtonPayload = Pick<RuleIntent, 'inputs' | 'target'> & { selections?: RollSelection[] };
 type ButtonIntent = Pick<RuleIntent, 'requestId' | 'expectedRevision'> & ButtonPayload;
 type ButtonDescriptor = Pick<RuleDescriptor, 'revision' | 'label' | 'description' | 'available' | 'reason' | 'inputs' | 'targetSelection'>

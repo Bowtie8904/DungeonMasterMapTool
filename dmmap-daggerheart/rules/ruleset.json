@@ -13,7 +13,10 @@
       {
         "id": "manual-roll-mode",
         "bindings": [{ "id": "use", "event": "roll.prepare", "surface": "roll", "mode": "option" }],
-        "when": { "eq": [{ "read": "event.check.duality" }, true] },
+        "when": { "and": [
+          { "eq": [{ "read": "event.check.duality" }, true] },
+          { "ne": [{ "read": "event.check.kind" }, "death"] }
+        ] },
         "inputs": [{ "id": "mode", "kind": "choice", "label": "Roll mode", "options": [
           { "id": "normal", "label": "Normal" },
           { "id": "advantage", "label": "Advantage (+d6)" },
@@ -30,7 +33,10 @@
         "id": "resolve-roll-mode",
         "bindings": [{ "id": "resolve", "event": "roll.prepared", "surface": "roll",
           "mode": "automatic", "priority": 1000 }],
-        "when": { "eq": [{ "read": "event.check.duality" }, true] },
+        "when": { "and": [
+          { "eq": [{ "read": "event.check.duality" }, true] },
+          { "ne": [{ "read": "event.check.kind" }, "death"] }
+        ] },
         "do": [
           { "op": "value", "as": "advantage", "value": { "or": [
             { "and": [
@@ -77,6 +83,7 @@
         "bindings": [{ "id": "use", "event": "roll.prepare", "surface": "roll", "mode": "option", "exclusiveGroup": "core-experience" }],
         "when": { "and": [
           { "eq": [{ "read": "event.check.duality" }, true] },
+          { "ne": [{ "read": "event.check.kind" }, "death"] },
           { "gt": [{ "size": { "read": "actor.experiences" } }, 0] }
         ] },
         "inputs": [{
@@ -96,6 +103,51 @@
           { "op": "roll.publish", "roll": { "read": "result.withExperience" } }
         ],
         "ui": { "label": "Use an Experience", "description": "Spend 1 Hope to add an Experience." }
+      },
+      {
+        "id": "death-recover",
+        "bindings": [{ "id": "claim", "event": "roll.finished", "surface": "roll", "mode": "button",
+          "audience": "self", "claimGroup": "death-recovery", "claimGroupScope": "result",
+          "claimScope": { "recipients": "sourceActor" } }],
+        "when": { "and": [
+          { "eq": [{ "read": "event.check.kind" }, "death"] },
+          { "eq": [{ "read": "event.check.move" }, "risk"] },
+          { "eq": [{ "read": "event.check.outcome" }, "success"] },
+          { "eq": [{ "read": "event.check.critical" }, false] }
+        ] },
+        "inputs": [
+          { "id": "hp", "kind": "integer", "label": "HP to clear", "min": 0,
+            "max": { "min": [{ "read": "event.check.recoverableHp" }, { "max": [0, { "read": "event.check.adjustedHope" }] }] } },
+          { "id": "stress", "kind": "integer", "label": "Stress to clear", "min": 0,
+            "max": { "min": [{ "read": "actor.stress.marked" }, { "max": [0, { "read": "event.check.adjustedHope" }] }] } }
+        ],
+        "do": [
+          { "op": "event.block", "reason": "The total recovery cannot exceed your adjusted Hope die.",
+            "if": { "gt": [{ "add": [{ "read": "input.hp" }, { "read": "input.stress" }] },
+              { "max": [0, { "read": "event.check.adjustedHope" }] }] } },
+          { "op": "track.clear", "track": "actor.hp", "amount": { "read": "input.hp" }, "as": "hp" },
+          { "op": "track.clear", "track": "actor.stress", "amount": { "read": "input.stress" }, "as": "stress" }
+        ],
+        "ui": { "label": "Recover from Risk It All",
+          "description": "Divide your adjusted Hope die between marked HP and Stress.",
+          "report": "{actor.name} recovered {result.hp} HP and {result.stress} Stress." }
+      },
+      {
+        "id": "death-recover-critical",
+        "bindings": [{ "id": "claim", "event": "roll.finished", "surface": "roll", "mode": "button",
+          "audience": "self", "claimGroup": "death-recovery", "claimGroupScope": "result",
+          "claimScope": { "recipients": "sourceActor" } }],
+        "when": { "and": [
+          { "eq": [{ "read": "event.check.kind" }, "death"] },
+          { "eq": [{ "read": "event.check.move" }, "risk"] },
+          { "eq": [{ "read": "event.check.critical" }, true] }
+        ] },
+        "do": [
+          { "op": "track.clear", "track": "actor.hp", "amount": { "read": "actor.hp.marked" }, "as": "hp" },
+          { "op": "track.clear", "track": "actor.stress", "amount": { "read": "actor.stress.marked" }, "as": "stress" }
+        ],
+        "ui": { "label": "Recover from critical Risk It All",
+          "report": "{actor.name} recovered {result.hp} HP and {result.stress} Stress." }
       },
       {
         "id": "rest-tend",

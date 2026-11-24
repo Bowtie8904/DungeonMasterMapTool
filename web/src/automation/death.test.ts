@@ -9,6 +9,9 @@ class Element {
   private textValue = '';
   className = '';
   disabled = false;
+  checked = false;
+  hidden = false;
+  value = '';
   closed = false;
   inert = false;
   constructor(readonly tagName: string) {}
@@ -87,6 +90,36 @@ describe('host-authored death options', () => {
     dialog.all('button').find(button => button.text === 'Retry')!.click();
     await settle();
     expect(requests).toEqual([requests[0], requests[0]]);
+    expect(dialog.closed).toBe(true);
+  });
+
+  it('submits the host-described risk roll with selected options and retries exactly', async () => {
+    const option: RuleDescriptor = { ...action, surface: 'roll', mode: 'option', defaultOn: true, label: 'Bonus' };
+    const requests: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      if (!init.body) return Response.json({ revision: 3, actions: [], rolls: {
+        risk: { label: 'Risk It All', description: 'Roll Hope and Fear.', options: [option] },
+      } });
+      requests.push(String(init.body));
+      if (requests.length === 1) throw new Error('Connection lost.');
+      return Response.json({});
+    }));
+    await openAutomationDeathDialog('hero', async () => {});
+    const dialog = body.all('dialog')[0];
+    expect(dialog.text).toContain('Risk It All');
+    dialog.all('button').find(button => button.text === 'Risk It All')!.click();
+    const choices = body.all('dialog')[1];
+    expect(choices.text).toContain('Bonus');
+    choices.all('button').find(button => button.text === 'Risk It All')!.click();
+    await settle();
+    expect(choices.text).toContain('Connection lost.');
+    choices.all('button').find(button => button.text === 'Retry')!.click();
+    await settle();
+    expect(requests).toEqual([requests[0], requests[0]]);
+    expect(JSON.parse(requests[0])).toEqual({ request: {
+      requestId: expect.any(String), expectedRevision: 3, deathRoll: { move: 'risk' },
+      selections: [{ sourceInstanceId: 'renewal-1', ruleId: 'renew', bindingId: 'choose', inputs: {} }],
+    } });
     expect(dialog.closed).toBe(true);
   });
 

@@ -101,7 +101,7 @@ final class ProfileRoll {
         ObjectNode check = event.putObject("check");
         for (String key : List.of("kind", "trait", "weapon", "range", "dominant", "outcome", "critical",
                 "hopeDie", "fearDie", "spell", "origin", "total", "difficulty", "weaponSource", "weaponSourceId",
-                "fixedDice", "damageType", "move", "reroll", "duality")) check.putNull(key);
+                "fixedDice", "damageType", "move", "adjustedHope", "recoverableHp", "reroll", "duality")) check.putNull(key);
         check.putArray("origins");
         return event;
     }
@@ -173,6 +173,25 @@ final class ProfileRoll {
             check.put("fixedDice", damage.has("count") || damage.path("fixedDice").asBoolean()).put("damageType", type);
             event.put("damageType", type);
         }
+    }
+
+    static void deathFacts(ObjectNode event, SheetProjection.SourceElement source, ObjectNode actor, String move) {
+        if (!"risk".equals(move)) throw RuleJson.error("/request/deathRoll/move", "Unknown death roll.");
+        event.put("type", "roll.prepare").put("sourceInstanceId", source.instanceId())
+                .put("profileId", "death." + move).put("label", "Risk It All");
+        event.withObject("/check").put("kind", "death").put("move", move).put("duality", true).put("reroll", false);
+        if (actor.at("/stats/thresholds").isObject()) event.set("thresholds", actor.at("/stats/thresholds").deepCopy());
+    }
+
+    static void prepareDeath(ObjectNode event, SheetProjection.SourceElement source, ObjectNode actor, String move,
+                             RandomGenerator random) {
+        deathFacts(event, source, actor, move);
+        ObjectNode plan = RuleJson.JSON.createObjectNode().put("id", java.util.UUID.randomUUID().toString());
+        ArrayNode parts = plan.putArray("contributions");
+        dice(parts, "hope", "Hope die", "core", 1, 12);
+        dice(parts, "fear", "Fear die", "core", 1, 12);
+        event.set("roll", StructuredRoll.resolve(plan, RuleJson.JSON.createObjectNode(), random));
+        updateCheck(event);
     }
 
     static void prepare(ObjectNode event, SheetProjection.SourceElement source, JsonNode profile, String kind,
@@ -282,6 +301,20 @@ final class ProfileRoll {
         JsonNode roll = event.path("roll");
         ObjectNode check = (ObjectNode) event.path("check");
         check.putNull("hopeDie").putNull("fearDie").setAll(StructuredRoll.check(roll));
+        if ("death".equals(check.path("kind").asText())) {
+            ArrayNode hopeDice = StructuredRoll.dice(roll, "hope", true);
+            ArrayNode fearDice = StructuredRoll.dice(roll, "fear", true);
+            if (hopeDice.size() != 1 || fearDice.size() != 1)
+                throw new RuleRuntime.Unavailable("deathDice", "A death roll requires one Hope die and one Fear die.");
+            int hope = hopeDice.get(0).path("face").asInt(), fear = fearDice.get(0).path("face").asInt();
+            int adjusted = RuleJson.integer(RuleExpression.numeric(roll.path("total").asDouble() - fear,
+                    "/event/check/adjustedHope"), "/event/check/adjustedHope", -1_000_000, 1_000_000);
+            boolean critical = hope == fear;
+            boolean succeeds = critical || adjusted >= fear || "hope".equals(roll.at("/metadata/deathOutcome").asText());
+            check.put("hopeDie", hope).put("fearDie", fear).put("adjustedHope", adjusted)
+                    .put("critical", critical).put("dominant", succeeds ? "hope" : "fear")
+                    .put("outcome", succeeds ? "success" : "failure");
+        }
         if ("damage".equals(check.path("kind").asText())) {
             String type = roll.path("metadata").path("damageType").asText(null);
             event.put("damageType", type);

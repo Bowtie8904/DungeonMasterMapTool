@@ -2453,6 +2453,71 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void riskItAllPublishesAndRecoversThroughJournaledAutomation() throws Exception {
+        installRestRules();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/0/automation");
+        automation.removeAll();
+        automation.setAll((ObjectNode) MAPPER.readTree("""
+                {"rules":[{"id":"shock","bindings":[{"id":"auto","event":"track.changed","surface":"effect","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.track"},"hp"]},
+                 "do":[{"op":"track.clear","track":"actor.stress","amount":1}],"ui":{"report":"Recovered from shock."}}]}"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String id = "risk", owner = cookie(), other = allyCookie("other");
+        campaign.getActors().add(Campaign.Actor.builder().id(id).name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), id, """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":6},"permanentHp":1,"stress":{"slots":6,"on":3},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":2},
+                 "features":[{"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"}]}""");
+        var offer = deathOptionsHttp(owner, id);
+        assertEquals(200, offer.statusCode(), offer.body());
+        assertEquals("Risk It All", MAPPER.readTree(offer.body()).at("/rolls/risk/label").asText());
+        String request = """
+                {"request":{"requestId":"risk-roll","expectedRevision":0,"deathRoll":{"move":"risk"},"selections":[]}}""";
+        assertEquals(403, automationHttp(other, id, request).statusCode());
+        long seed = 0;
+        while (true) {
+            var random = new java.util.Random(seed);
+            int hope = random.nextInt(12) + 1, fear = random.nextInt(12) + 1;
+            if (hope > fear && hope >= 2) break;
+            seed++;
+        }
+        diceSeed(seed);
+        int history = store.historyTail(campaign.getId(), 100).size();
+        var rolled = automationHttp(owner, id, request);
+        assertEquals(200, rolled.statusCode(), rolled.body());
+        JsonNode response = MAPPER.readTree(rolled.body());
+        assertEquals("death", response.at("/event/check/kind").asText());
+        assertEquals("success", response.at("/event/check/outcome").asText());
+        String resultId = response.at("/event/resultId").asText();
+        assertFalse(resultId.isBlank());
+        assertEquals(resultId, MAPPER.readTree(store.loadSheet(campaign.getId(), id)).at("/pendingDeathRoll/id").asText());
+        assertTrue(store.historyTail(campaign.getId(), 100).stream()
+                .anyMatch(entry -> "risk".equals(entry.at("/automationEvent/check/move").asText())));
+        assertEquals(rolled.body(), automationHttp(owner, id, request).body());
+        assertEquals(history + 1, store.historyTail(campaign.getId(), 100).size());
+
+        String recovery = """
+                {"request":{"requestId":"risk-recover","expectedRevision":1,"resultId":"%s",
+                 "selections":[{"sourceInstanceId":"ruleset:base","ruleId":"death-recover","bindingId":"claim",
+                   "inputs":{"hp":1,"stress":1}}]}}""".formatted(resultId);
+        assertEquals(403, automationHttp(other, id, recovery).statusCode());
+        var recovered = automationHttp(owner, id, recovery);
+        assertEquals(200, recovered.statusCode(), recovered.body());
+        assertTrue(recovered.body().contains("Recovered from shock."), recovered.body());
+        JsonNode sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+        assertEquals(5, sheet.at("/hp/on").asInt());
+        assertEquals(1, sheet.at("/stress/on").asInt());
+        assertFalse(sheet.has("pendingDeathRoll"));
+        history = store.historyTail(campaign.getId(), 100).size();
+        assertEquals(recovered.body(), automationHttp(owner, id, recovery).body());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        assertEquals(409, automationHttp(owner, id, recovery.replace("risk-recover", "stale")
+                .replace("\"expectedRevision\":1", "\"expectedRevision\":2")).statusCode());
+    }
+
+    @Test
     void earlyRestExpiryReactionsAffectOffersAndCommitBeforeMoves() throws Exception {
         installResetEffectRules();
         String id = "early", owner = cookie();

@@ -286,7 +286,20 @@ public final class AutomationHost {
     public ObjectNode describeDeath(Pack pack, ObjectNode sheet, ObjectNode origin, String relation) {
         if (!"self".equals(relation)) throw new SecurityException("Only the character owner may choose a death move.");
         requireDeathState(sheet);
-        return describe(pack, sheet, origin.deepCopy().put("type", "death.options"), "death", relation);
+        ObjectNode result = describe(pack, sheet, origin.deepCopy().put("type", "death.options"), "death", relation);
+        ObjectNode working = sheet.deepCopy(), state = projection.state(working);
+        var sources = sources(pack, working);
+        var source = basicCheckSource(sources);
+        ObjectNode actor = actor(pack, working, state, origin, sources);
+        ObjectNode event = origin.deepCopy();
+        ProfileRoll.deathFacts(event, source, actor, "risk");
+        ObjectNode risk = result.putObject("rolls").putObject("risk")
+                .put("label", "Risk It All")
+                .put("description", "Roll Hope and Fear. Matching dice clear all recoverable HP and Stress; "
+                        + "otherwise adjusted Hope at least Fear lets you divide recovery between them.");
+        risk.set("options", RuleDispatcher.describeRollOptions(candidates(pack, sources, state, actor, event),
+                audience -> allowed(audience, relation)));
+        return result;
     }
 
     private static void requireDeathState(ObjectNode sheet) {
@@ -354,15 +367,18 @@ public final class AutomationHost {
                               java.util.function.Function<JsonNode, String> promptLabel) {
         relation(relation);
         if (principalId == null || principalId.isBlank()) throw new IllegalArgumentException("Missing automation principal.");
-        RuleJson.fields(request, "/request", "requestId", "expectedRevision", "selections", "profileRoll", "checkRoll", "deathAction", "target", "resultId");
+        RuleJson.fields(request, "/request", "requestId", "expectedRevision", "selections", "profileRoll", "checkRoll", "deathRoll", "deathAction", "target", "resultId");
         RuleJson.checkTree(request, "/request", 0, new int[]{0});
         if (request.has("deathAction")) {
             if (!request.path("deathAction").isBoolean() || !request.path("deathAction").booleanValue()
-                    || request.has("checkRoll") || request.has("profileRoll") || request.has("target")
+                    || request.has("checkRoll") || request.has("profileRoll") || request.has("deathRoll") || request.has("target")
                     || request.has("resultId") || request.path("selections").size() != 1)
                 throw RuleJson.error("/request/deathAction", "Choose one death option without another action.");
             if (!"self".equals(relation)) throw new SecurityException("Only the character owner may choose a death move.");
         }
+        if (request.has("deathRoll") && (request.has("checkRoll") || request.has("profileRoll")
+                || request.has("target") || request.has("resultId")))
+            throw RuleJson.error("/request/deathRoll", "Choose either a death roll or another action.");
         if (request.has("checkRoll") && (request.has("profileRoll") || request.has("resultId") || request.has("target")))
             throw RuleJson.error("/request/checkRoll", "Choose either a check or another action.");
         if (request.has("resultId")) {
@@ -374,7 +390,7 @@ public final class AutomationHost {
             throw new SecurityException("A scoped DM sheet grant cannot target other characters.");
         if (request.has("target") && (request.has("profileRoll") || request.path("selections").size() != 1))
             throw RuleJson.error("/request/target", "Choose a single target action.");
-        if ((request.has("profileRoll") || request.has("checkRoll")) && !"self".equals(relation))
+        if ((request.has("profileRoll") || request.has("checkRoll") || request.has("deathRoll")) && !"self".equals(relation))
             throw new SecurityException("Only the character owner may make this roll.");
         String requestId = RuleJson.id(request.get("requestId"), "/request/requestId");
         String fingerprint = intentFingerprint(request);
@@ -386,14 +402,15 @@ public final class AutomationHost {
         if (!request.path("expectedRevision").isIntegralNumber() || request.path("expectedRevision").asLong() != revision)
             throw new RuleRuntime.Unavailable("stale", "The character changed. Reopen this action.");
 
-        if (request.has("deathAction")) {
+        if (request.has("deathAction") || request.has("deathRoll")) {
             requireDeathState(working);
-            event = event.deepCopy().put("type", "death.options");
+            if (request.has("deathAction")) event = event.deepCopy().put("type", "death.options");
         }
         ObjectNode response;
-        if (request.has("profileRoll") || request.has("checkRoll")) {
+        if (request.has("profileRoll") || request.has("checkRoll") || request.has("deathRoll")) {
             response = profileRoll(pack, working, state, event, request, random, promptLabel);
             offerResult(pack, working, response, principalId, null, null);
+            if (request.has("deathRoll")) updatePendingDeath(working, response);
         } else if (request.has("resultId")) {
             response = resultAction(pack, working, state, event, request, principalId, random, party);
         } else if (request.has("target")) {
@@ -610,14 +627,17 @@ public final class AutomationHost {
                                    ObjectNode request, RandomGenerator random,
                                    java.util.function.Function<JsonNode, String> promptLabel) {
         boolean check = request.has("checkRoll");
-        JsonNode intent = request.get(check ? "checkRoll" : "profileRoll");
+        boolean death = request.has("deathRoll");
+        JsonNode intent = request.get(death ? "deathRoll" : check ? "checkRoll" : "profileRoll");
         ObjectNode checkProfile = check ? basicCheckProfile(intent, promptLabel) : null;
-        if (!check) RuleJson.fields(intent, "/request/profileRoll", "sourceInstanceId", "profileId", "kind", "effectInstanceId");
-        String instance = check ? RULESET_SOURCE : RuleJson.id(intent.get("sourceInstanceId"), "/request/profileRoll/sourceInstanceId");
-        String profileId = check ? checkProfile.path("id").asText() : RuleJson.id(intent.get("profileId"), "/request/profileRoll/profileId");
-        String kind = RuleJson.text(intent.get("kind"), check ? "/request/checkRoll/kind" : "/request/profileRoll/kind");
+        if (death) RuleJson.fields(intent, "/request/deathRoll", "move");
+        else if (!check) RuleJson.fields(intent, "/request/profileRoll", "sourceInstanceId", "profileId", "kind", "effectInstanceId");
+        String move = death ? RuleJson.text(intent.get("move"), "/request/deathRoll/move") : null;
+        String instance = check || death ? RULESET_SOURCE : RuleJson.id(intent.get("sourceInstanceId"), "/request/profileRoll/sourceInstanceId");
+        String profileId = death ? "death." + move : check ? checkProfile.path("id").asText() : RuleJson.id(intent.get("profileId"), "/request/profileRoll/profileId");
+        String kind = death ? "death" : RuleJson.text(intent.get("kind"), check ? "/request/checkRoll/kind" : "/request/profileRoll/kind");
         var sources = sources(pack, working);
-        var source = check ? basicCheckSource(sources) : sources.stream().filter(item -> instance.equals(item.instanceId())).findFirst()
+        var source = check || death ? basicCheckSource(sources) : sources.stream().filter(item -> instance.equals(item.instanceId())).findFirst()
                 .orElseThrow(() -> new RuleRuntime.Unavailable("source", "This source is no longer active."));
         var program = pack.programs().get(source.sourceId());
         ObjectNode event = origin.deepCopy();
@@ -626,15 +646,15 @@ public final class AutomationHost {
         if (effectId != null) event.put("effectInstanceId", effectId);
         ActorProjection projected = projectActor(pack, working, state, event, sources, true);
         ObjectNode actor = projected.actor();
-        JsonNode profile = checkProfile;
+        JsonNode profile = death ? RuleJson.JSON.createObjectNode() : checkProfile;
         ArrayNode declared = program == null ? RuleJson.JSON.createArrayNode() : program.profiles();
-        if (!check && effectId != null) {
+        if (!check && !death && effectId != null) {
             if (EFFECT_PROFILE.equals(profileId))
                 for (JsonNode effect : actor.path("effects"))
                     if (effectId.equals(effect.path("id").textValue())
                             && instance.equals(effect.path("sourceInstanceId").textValue()))
                         profile = effectProfile(pack, source, effect, actor.path("id").textValue());
-        } else if (!check) {
+        } else if (!check && !death) {
             if (equippedWeapon(working, source)) {
                 JsonNode base = ProfileRoll.weaponProfile(source, declared);
                 if (profileId.equals(base.path("id").asText())) profile = base;
@@ -645,14 +665,16 @@ public final class AutomationHost {
         if (profile == null) throw new RuleRuntime.Unavailable("profile", "This profile is no longer available.");
 
         long revision = state.path("revision").longValue();
-        ProfileRoll.facts(event, source, profile, kind, actor, effectId == null && equippedWeapon(working, source));
+        if (death) ProfileRoll.deathFacts(event, source, actor, move);
+        else ProfileRoll.facts(event, source, profile, kind, actor, effectId == null && equippedWeapon(working, source));
         if (profile.has("limitRef")) {
             ObjectNode context = RuleRuntime.context(program, null, context(state, source, actor, event));
             RuleRuntime.reserveUse(program, context, profile.path("limitRef").asText());
             storeSource(state, source.instanceId(), context);
         }
-        ProfileRoll.prepare(event, source, profile, kind, actor, effectId == null && equippedWeapon(working, source),
-                projected.rollModifiers(), random);
+        if (death) ProfileRoll.prepareDeath(event, source, actor, move, random);
+        else ProfileRoll.prepare(event, source, profile, kind, actor, effectId == null && equippedWeapon(working, source),
+                    projected.rollModifiers(), random);
         var candidates = candidates(pack, sources, state, actor, event);
         var intents = selections(request, candidates, revision, "self", "roll", true);
         ObjectNode costEvent = event.deepCopy().put("type", "roll.costs");
@@ -757,7 +779,9 @@ public final class AutomationHost {
         ResultWindows.prune(state, originalGuards);
         var window = ResultWindows.lookup(state, pack.revision(), principal, RuleJson.id(request.get("resultId"), "/request/resultId"));
         ObjectNode event = savedResultEvent(window, origin);
+        requirePendingDeath(working, event, request.path("resultId").asText());
         ObjectNode actor = actor(pack, working, state, event, sources);
+        refreshDeathRecovery(actor, event);
         var selection = request.requiredAt("/selections/0");
         String instance = RuleJson.id(selection.get("sourceInstanceId"), "/request/selections/0/sourceInstanceId");
         var element = sources.stream().filter(e -> instance.equals(e.instanceId())).findFirst().orElseThrow(ResultWindows::stale);
@@ -789,12 +813,16 @@ public final class AutomationHost {
             var actions = resolved.actions().stream().map(RuleDispatcher.TargetActionResult::action).toList();
             ObjectNode published = resultRevision(actions, intent);
             var response = applyResolved(pack, working, state, event, resolved.sourceContexts(), actions, resolved.outbox());
+            if (!response.at("/event/blocked").isEmpty())
+                throw new RuleRuntime.Unavailable("blocked", response.at("/event/blocked/0/reason").asText());
             addTargetActionHolders(response, resolved);
             stageTargetUpdates(party, staged);
             if (published != null) {
+                requireRecoverableDeathRevision(working, event, published);
                 ((ObjectNode) response.required("event")).set("roll", published);
                 reviseResult(pack, working, response, principal, window.path("id").asText(), originalGuards);
-            }
+                updatePendingDeath(working, response);
+            } else finishExhaustedDeathResult(pack, working, state, window, event);
             return response;
         }
         // Dispatch only the chosen button: automatic roll.finished reactions already ran when the roll was made.
@@ -804,11 +832,69 @@ public final class AutomationHost {
                 ownerProjection, claimGroup != null);
         ObjectNode published = resultRevision(resolved.actions(), intent);
         var response = applyResolved(pack, working, state, event, resolved.contexts(), resolved.actions(), resolved.outbox());
+        if (!response.at("/event/blocked").isEmpty())
+            throw new RuleRuntime.Unavailable("blocked", response.at("/event/blocked/0/reason").asText());
         if (published != null) {
+            requireRecoverableDeathRevision(working, event, published);
             ((ObjectNode) response.required("event")).set("roll", published);
             reviseResult(pack, working, response, principal, window.path("id").asText(), originalGuards);
-        }
+            updatePendingDeath(working, response);
+        } else if ("death-recovery".equals(claimGroup)) {
+            working.remove("pendingDeathRoll");
+        } else finishExhaustedDeathResult(pack, working, state, window, event);
         return response;
+    }
+
+    private static void requirePendingDeath(ObjectNode sheet, ObjectNode event, String resultId) {
+        if ("death".equals(event.at("/check/kind").asText()) && "risk".equals(event.at("/check/move").asText())
+                && !resultId.equals(sheet.at("/pendingDeathRoll/id").asText()))
+            throw ResultWindows.stale();
+    }
+
+    private static void requireRecoverableDeathRevision(ObjectNode sheet, ObjectNode event, ObjectNode roll) {
+        if ("death".equals(event.at("/check/kind").asText()) && "risk".equals(event.at("/check/move").asText())
+                && "hope".equals(roll.at("/metadata/deathOutcome").asText())
+                && sheet.at("/hp/slots").asInt() <= sheet.path("permanentHp").asInt())
+            throw new RuleRuntime.Unavailable("deathOutcome",
+                    "This would consume the last recoverable Hit Point; resolve the final outcome with the GM.");
+    }
+
+    private void finishExhaustedDeathResult(Pack pack, ObjectNode sheet, ObjectNode state, ObjectNode window, ObjectNode event) {
+        if (!"death".equals(event.at("/check/kind").asText()) || !"risk".equals(event.at("/check/move").asText())) return;
+        Set<ResultWindows.Button> retained = new java.util.HashSet<>();
+        window.required("buttons").forEach(item -> retained.add(ResultWindows.Button.of(item)));
+        var sources = sources(pack, sheet);
+        ObjectNode actor = actor(pack, sheet, state, event, sources);
+        for (JsonNode action : resultButtons(pack, sources, state, actor, event, retained, null))
+            if (action.path("available").asBoolean()) return;
+        sheet.remove("pendingDeathRoll");
+    }
+
+    private static void updatePendingDeath(ObjectNode sheet, ObjectNode response) {
+        JsonNode event = response.path("event");
+        if (!"death".equals(event.at("/check/kind").asText()) || !"risk".equals(event.at("/check/move").asText())) return;
+        boolean recovery = false, available = false;
+        for (JsonNode action : response.path("resultActions")) {
+            if (!action.path("available").asBoolean()) continue;
+            available = true;
+            if ("death-recovery".equals(action.path("claimGroup").asText())) recovery = true;
+        }
+        if ("success".equals(event.at("/check/outcome").asText()) && !recovery)
+            throw new RuleRuntime.Unavailable("deathRecovery", "The shared ruleset must offer recovery for a successful death roll.");
+        if (available && event.path("resultId").isTextual())
+            sheet.putObject("pendingDeathRoll").set("id", event.get("resultId").deepCopy());
+        else sheet.remove("pendingDeathRoll");
+        if (available && sheet.path("pendingDeathRoll").isObject())
+            ((ObjectNode) sheet.get("pendingDeathRoll")).put("ts", System.currentTimeMillis());
+    }
+
+    private static void refreshDeathRecovery(ObjectNode actor, ObjectNode event) {
+        if (!"death".equals(event.at("/check/kind").asText()) || !"risk".equals(event.at("/check/move").asText())) return;
+        ObjectNode hp = RuleJson.object(actor.path("hp"), "/actor/hp");
+        int capacity = RuleJson.integer(hp.get("capacity"), "/actor/hp/capacity", 0, 1000);
+        int marked = RuleJson.integer(hp.get("marked"), "/actor/hp/marked", 0, capacity);
+        int floor = SheetProjection.markedFloor(actor, hp, capacity, "/actor/hp");
+        event.withObject("/check").put("recoverableHp", Math.max(0, marked - floor));
     }
 
     private static ObjectNode resultRevision(List<RuleDispatcher.ActionResult> actions, RuleRuntime.Intent intent) {
@@ -894,6 +980,7 @@ public final class AutomationHost {
 
     private ArrayNode resultButtons(Pack pack, List<SheetProjection.SourceElement> sources, ObjectNode state,
                                     ObjectNode actor, ObjectNode event, Set<ResultWindows.Button> retained, PartyTargets party) {
+        refreshDeathRecovery(actor, event);
         ArrayNode result = RuleJson.JSON.createArrayNode();
         for (var element : sources) {
             var program = pack.programs().get(element.sourceId());
@@ -930,6 +1017,7 @@ public final class AutomationHost {
         Set<ResultWindows.Button> retained = new java.util.HashSet<>();
         window.required("buttons").forEach(item -> retained.add(ResultWindows.Button.of(item)));
         ObjectNode event = savedResultEvent(window, origin);
+        requirePendingDeath(copy, event, id);
         ObjectNode actor = actor(pack, copy, state, event, sources);
         return RuleJson.JSON.createObjectNode().put("revision", state.path("revision").asLong())
                 .set("actions", resultButtons(pack, sources, state, actor, event, retained, party));
