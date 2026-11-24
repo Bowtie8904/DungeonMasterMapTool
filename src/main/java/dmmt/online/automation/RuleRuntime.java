@@ -111,6 +111,29 @@ public final class RuleRuntime {
         return description;
     }
 
+    static boolean recipientDependentDescription(ObjectNode rule, JsonNode binding) {
+        Set<String> reads = new HashSet<>();
+        for (JsonNode part : List.of(rule.path("when"), binding.path("when"), rule.path("inputs"),
+                rule.path("costs"), rule.path("after").path("costs")))
+            reads.addAll(RuleExpression.references(part));
+        for (String field : List.of("label", "description", "unavailable"))
+            reads.addAll(RuleTemplate.references(rule.path("ui").path(field).asText("")));
+        for (JsonNode input : rule.path("inputs")) {
+            for (String field : List.of("label", "choiceLabel"))
+                reads.addAll(RuleTemplate.references(input.path(field).asText("")));
+            for (JsonNode option : input.path("options"))
+                reads.addAll(RuleTemplate.references(option.path("label").asText("")));
+        }
+        if (reads.stream().anyMatch(read -> read.startsWith("recipient."))) return true;
+        for (JsonNode costs : List.of(rule.path("costs"), rule.path("after").path("costs")))
+            for (JsonNode cost : costs)
+                if (cost.path("pool").asText().startsWith("recipient.")
+                        || cost.path("track").asText().startsWith("recipient.")
+                        || "recipient".equals(cost.path("owner").asText())
+                        || "recipient".equals(cost.path("target").asText())) return true;
+        return false;
+    }
+
     /** Evaluates a target selection's per-recipient {@code where} condition against the recipient snapshot. */
     static boolean recipientEligible(JsonNode selection, ObjectNode context, ObjectNode recipient) {
         if (!selection.has("where")) return true;

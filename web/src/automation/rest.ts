@@ -155,9 +155,24 @@ export async function openAutomationRestDialog(actorId: string, kind: RestKind,
         const selected = select.value === '' ? undefined : offer.moves[Number(select.value)];
         if (!selected) return;
         if (selected.description) detail.append(el('p', {}, selected.description));
-        row.readTarget = targetFields(detail, selected.targetSelection, row.fields, CONTROL_TEXT);
+        const options = el('div');
+        let optionStart = 0;
+        const showOptions = (descriptors: RuleDescriptor[]) => {
+          options.replaceChildren();
+          row.fields.splice(optionStart);
+          row.readOptions = optionFields(options, descriptors, row.fields, CONTROL_TEXT);
+        };
+        row.readTarget = targetFields(detail, selected.targetSelection, row.fields, CONTROL_TEXT, id => {
+          const selection = selected.targetSelection;
+          const target = selection?.cardinality === 'one' ? selection.options.find(option => option.id === id) : undefined;
+          showOptions(target?.downtimeOptions ?? selected.options);
+        });
         row.readInputs = inputFields(detail, selected.inputs ?? [], row.fields, CONTROL_TEXT);
-        row.readOptions = optionFields(detail, selected.options, row.fields, CONTROL_TEXT);
+        optionStart = row.fields.length;
+        const targetSpecific = selected.targetSelection?.cardinality === 'one'
+          && selected.targetSelection.options.some(option => option.downtimeOptions !== undefined);
+        showOptions(targetSpecific ? [] : selected.options);
+        detail.append(options);
       };
       select.addEventListener('change', update);
       rows.push(row);

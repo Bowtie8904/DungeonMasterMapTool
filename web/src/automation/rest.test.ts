@@ -272,6 +272,39 @@ describe('host-authored rest dialog', () => {
     expect(JSON.parse(requests[0]).request.moves[0].target).toEqual({ recipientId: 'mira', version: 'target-version' });
   });
 
+  it('updates ally-specific move options when the selected recipient changes', async () => {
+    const described = offer();
+    Object.assign(described.moves[0], { targetSelection: { cardinality: 'one', options: [
+      { id: 'mira', label: 'Mira', version: 'mira-version',
+        downtimeOptions: [action('help', 'option', 'Help Mira', { surface: 'downtime', defaultOn: true })] },
+      { id: 'borin', label: 'Borin', version: 'borin-version',
+        downtimeOptions: [action('help', 'option', 'Help Borin', { surface: 'downtime', available: false, reason: 'No Hope' })] },
+    ] } });
+    const requests: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      if (!init.body) return Response.json(described);
+      requests.push(String(init.body));
+      return Response.json({ actions: [] });
+    }));
+    await openAutomationRestDialog('hero', 'short', async () => {});
+    const dialog = body.all('dialog')[0], select = dialog.all('select')[0];
+    select.value = '0'; select.change();
+    expect(dialog.text).not.toContain('Help Mira');
+    const recipients = dialog.all('fieldset').find(fieldset => fieldset.text.includes('Mira'))!.all('input');
+    recipients[0].checked = true; recipients[0].change();
+    expect(dialog.text).toContain('Help Mira');
+    recipients[0].checked = false; recipients[1].checked = true; recipients[1].change();
+    expect(dialog.text).not.toContain('Help Mira');
+    expect(dialog.text).toContain('Help Borin');
+    expect(dialog.text).toContain('No Hope');
+    recipients[1].checked = false; recipients[0].checked = true; recipients[0].change();
+    dialog.all('button').find(button => button.text === 'Complete rest')!.click();
+    await settle();
+    const move = JSON.parse(requests[0]).request.moves[0];
+    expect(move.target).toEqual({ recipientId: 'mira', version: 'mira-version' });
+    expect(move.options).toEqual([{ sourceInstanceId: 'ruleset:base', ruleId: 'help', bindingId: 'option', inputs: {} }]);
+  });
+
   it('allows corrections after a rejected request without reusing its ID', async () => {
     const requests: string[] = [];
     vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {

@@ -164,7 +164,8 @@ Self-targeted single-holder effects transfer after preparation and between moves
 selected moves and deferred benefits settle recipient track changes and effect starts and ends immediately,
 including transfers from offline or disabled holders, so later operations and reactions see the updated state.
 Recipient capacity, collection and pool mutations in adjustments or deferred benefits remain unsupported.
-Recipient-dependent adjustment option previews still require target-specific descriptors.
+The host provides target-specific adjustment descriptors when option availability or labels depend on an ally;
+the browser switches them with the recipient and the transaction rechecks the chosen option.
 Short-rest recovery dice can publish generic chat offers; an owned source may edit one die through
 `rest.roll`. The host commits its use, the holder's bounded recovery and reactions, the updated offer and
 the exact-retry receipt atomically. Converted downtime tables also offer each result die and repeat-count die;

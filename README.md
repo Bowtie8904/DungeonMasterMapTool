@@ -86,6 +86,7 @@ request-local roster. The base Tend and Repair ally choices select and update th
 track reactions and protected HP floor. Authored targeted ally moves offer eligible characters in the
 live dialog and save both holders' reactions with the rest. Completion derives signed recovery facts, runs benefits
 around the rest reset and advances rest counters; failures roll back the transaction.
+Move options that depend on an ally update when a recipient is selected; the host checks them again when the rest is submitted.
 Targeted inventory grants are settled before deferred move benefits, so those benefits see the ally's new items.
 An internal coordinator composes these stages on private source and recipient sheets, reprojects each recipient
 after earlier moves, carries Fear through the rest, and advances each changed sheet once. Other commands needing

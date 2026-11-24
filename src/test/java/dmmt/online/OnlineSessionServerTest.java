@@ -4303,6 +4303,88 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void targetedRestDescribesAndChecksOptionsForTheSelectedAlly() throws Exception {
+        installRestRules();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withArray("rules").addAll((ArrayNode) MAPPER.readTree("""
+                [
+                 {"id":"preview-care","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"button",
+                    "restMove":{"id":"preview-care","kind":"short","ally":true},
+                    "targetSelection":{"cardinality":"one","scope":"activeCharacters","excludeSource":true}}],
+                  "do":[{"op":"track.clear","track":"recipient.hp","amount":1}],"ui":{"label":"Care"}},
+                 {"id":"ally-spend","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"option"}],
+                  "when":{"and":[{"eq":[{"read":"event.move.id"},"preview-care"]},
+                                   {"gt":[{"read":"recipient.hope.value"},0]}]},
+                  "costs":[{"op":"resource.spend","pool":"actor.hope","amount":1}],
+                  "do":[{"op":"resource.spend","pool":"recipient.hope","amount":1},
+                        {"op":"track.clear","track":"recipient.stress","amount":1}],
+                  "ui":{"label":"Help {recipient.name}"}},
+                 {"id":"spent-watch","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                  "when":{"and":[{"eq":[{"read":"actor.name"},"mira"]},
+                                   {"eq":[{"read":"event.track"},"hope"]},
+                                   {"eq":[{"read":"event.change"},"spend"]}]},
+                  "do":[{"op":"table.gain","resource":"fear","amount":1,"label":"Help"}],
+                  "ui":{"report":"Spent for {actor.name}."}}
+                ]
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        addRestParty();
+        ObjectNode restingSheet = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        restingSheet.withObject("/hope").put("on", 2);
+        store.saveSheet(campaign.getId(), "resting", restingSheet.toString());
+        ObjectNode miraSheet = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        miraSheet.withObject("/hope").put("on", 2);
+        store.saveSheet(campaign.getId(), "mira", miraSheet.toString());
+        String owner = cookie();
+        var described = restHttp(owner, "resting", "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode rest = MAPPER.readTree(described.body());
+        JsonNode move = restDescriptor(rest.path("moves"), "preview-care");
+        assertFalse(move.path("options").findValuesAsText("ruleId").contains("ally-spend"));
+        JsonNode mira = null, borin = null;
+        for (JsonNode target : move.at("/targetSelection/options")) {
+            if ("mira".equals(target.path("id").asText())) mira = target;
+            if ("borin".equals(target.path("id").asText())) borin = target;
+        }
+        assertNotNull(mira);
+        assertNotNull(borin);
+        JsonNode miraOption = restDescriptor(mira.path("downtimeOptions"), "ally-spend");
+        JsonNode borinOption = restDescriptor(borin.path("downtimeOptions"), "ally-spend");
+        assertTrue(miraOption.path("available").asBoolean());
+        assertEquals("Help mira", miraOption.path("label").asText());
+        assertFalse(borinOption.path("available").asBoolean());
+        assertFalse(mira.has("snapshot"));
+
+        int fear = campaign.getFear(), history = store.historyTail(campaign.getId(), 100).size();
+        String beforeSource = store.loadSheet(campaign.getId(), "resting");
+        String beforeBorin = store.loadSheet(campaign.getId(), "borin");
+        ObjectNode invalid = restRequest(rest, "wrong-ally-option");
+        targetRestMove(invalid, rest, "preview-care", "borin").withArray("options").add(restSelection(miraOption));
+        var rejected = restHttp(owner, "resting", null, invalid.toString());
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertEquals(beforeSource, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(beforeBorin, store.loadSheet(campaign.getId(), "borin"));
+        assertEquals(fear, campaign.getFear());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+
+        ObjectNode request = restRequest(rest, "selected-ally-option");
+        targetRestMove(request, rest, "preview-care", "mira").withArray("options").add(restSelection(miraOption));
+        var completed = restHttp(owner, "resting", null, request.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode receipt = MAPPER.readTree(completed.body());
+        assertTrue(receipt.path("actions").findValuesAsText("report").contains("Spent for mira."));
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "resting")).at("/hope/on").asInt());
+        assertEquals(1, saved.at("/hope/on").asInt());
+        assertEquals(1, saved.at("/stress/on").asInt());
+        assertEquals(3, saved.at("/hp/on").asInt());
+        assertEquals(fear + 1, campaign.getFear());
+        assertEquals(completed.body(), restHttp(owner, "resting", null, request.toString()).body());
+        assertEquals(fear + 1, campaign.getFear());
+    }
+
+    @Test
     void targetedRestTransfersEffectsBeforeSubsequentOperationsAndMoves() throws Exception {
         installTargetRestRules("gain");
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");

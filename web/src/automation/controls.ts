@@ -29,7 +29,7 @@ export interface RuleDescriptor {
   costsRequireInput?: boolean;
   inputs?: RuleInput[];
   targetSelection?:
-    | { cardinality: 'one'; options: Array<{ id: string; label: string; version: string }> }
+    | { cardinality: 'one'; options: Array<{ id: string; label: string; version: string; downtimeOptions?: RuleDescriptor[] }> }
     | { cardinality: 'all'; version: string; options: Array<{ id: string; label: string }> };
 }
 
@@ -176,7 +176,8 @@ export function intentControl(descriptor: ButtonDescriptor, submit: (intent: But
 }
 
 export function targetFields(container: HTMLElement, selection: RuleDescriptor['targetSelection'],
-                             fields: HTMLInputElement[], text: ControlText): () => RuleIntent['target'] {
+                             fields: HTMLInputElement[], text: ControlText,
+                             onSelection?: (recipientId: string) => void): () => RuleIntent['target'] {
   if (!selection) return () => undefined;
   if (selection.cardinality === 'all') {
     container.append(el('span', { class: 'muted' },
@@ -187,6 +188,7 @@ export function targetFields(container: HTMLElement, selection: RuleDescriptor['
   const name = `recipient-${randomId()}`;
   const radios = selection.options.map(option => {
     const field = el('input', { type: 'radio', name });
+    field.addEventListener('change', () => { if (field.checked) onSelection?.(option.id); });
     fields.push(field);
     group.append(el('label', {}, field, option.label));
     return { field, option };

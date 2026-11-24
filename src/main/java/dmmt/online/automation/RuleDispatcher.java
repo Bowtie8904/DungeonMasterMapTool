@@ -235,9 +235,20 @@ public final class RuleDispatcher {
         return describe(sources, surface, binding -> binding.option() && visible.test(binding.audience()), null, false);
     }
 
+    static ArrayNode describeRecipientIndependentOptions(List<Candidate> sources, String surface,
+                                                         java.util.function.Predicate<String> visible) {
+        return describe(sources, surface, binding -> binding.option() && visible.test(binding.audience()), null, false, true);
+    }
+
     private static ArrayNode describe(List<Candidate> activeSources, String surface,
                                       java.util.function.Predicate<RuleCompiler.Program.BindingRef> visible,
                                       PartyTargets party, boolean skipUnmatched) {
+        return describe(activeSources, surface, visible, party, skipUnmatched, false);
+    }
+
+    private static ArrayNode describe(List<Candidate> activeSources, String surface,
+                                      java.util.function.Predicate<RuleCompiler.Program.BindingRef> visible,
+                                      PartyTargets party, boolean skipUnmatched, boolean independentRecipient) {
         if (!SURFACES.contains(surface)) throw RuleJson.error("/surface", "Unknown surface.");
         List<ObjectNode> descriptions = new ArrayList<>();
         Snapshot snapshot = validateSources(activeSources);
@@ -249,6 +260,8 @@ public final class RuleDispatcher {
             String eventType = snapshot.eventType();
             for (RuleCompiler.Program.BindingRef binding : program.bindings(eventType, surface)) {
                 if (!visible.test(binding)) continue;
+                if (independentRecipient && RuleRuntime.recipientDependentDescription(program.rule(binding.ruleId()),
+                        binding(program.rule(binding.ruleId()), binding.bindingId()))) continue;
                 if (binding.forEach())
                     RuleRuntime.describeEach(program, binding.ruleId(), binding.bindingId(), context, party)
                             .forEach(item -> descriptions.add((ObjectNode) item));

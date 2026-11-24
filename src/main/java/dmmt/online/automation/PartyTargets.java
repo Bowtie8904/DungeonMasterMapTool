@@ -51,6 +51,12 @@ public final class PartyTargets {
         return result;
     }
 
+    List<RuleDispatcher.RecipientCandidate> eligibleRecipients(JsonNode binding, ObjectNode context) {
+        return eligible(binding.path("targetSelection"), context).stream()
+                .map(member -> new RuleDispatcher.RecipientCandidate(member.id(), snapshot(member, context), member.revision()))
+                .toList();
+    }
+
     Selection resolve(JsonNode binding, ObjectNode context, RuleRuntime.Intent action, JsonNode request) {
         JsonNode selection = binding.required("targetSelection");
         boolean all = "all".equals(selection.path("cardinality").asText());

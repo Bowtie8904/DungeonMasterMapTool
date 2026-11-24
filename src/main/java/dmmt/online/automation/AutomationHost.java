@@ -1928,8 +1928,25 @@ public final class AutomationHost {
                         .findFirst().orElseThrow();
                 ObjectNode descriptor = RuleRuntime.describe(source.program(), ref.ruleId(), ref.bindingId(), source.context(), party);
                 descriptor.put("sourceName", source.context().path("source").path("name").asText());
-                descriptor.set("options", RuleDispatcher.describeOptions(sources, "downtime",
+                descriptor.set("options", RuleDispatcher.describeRecipientIndependentOptions(sources, "downtime",
                         audience -> allowed(audience, "self")));
+                if (binding.has("targetSelection")) {
+                    Map<String, ObjectNode> recipients = new HashMap<>();
+                    for (var recipient : party.eligibleRecipients(binding, source.context()))
+                        recipients.put(recipient.actorId(), recipient.snapshot());
+                    for (JsonNode item : descriptor.path("targetSelection").path("options")) {
+                        ObjectNode recipient = recipients.get(item.path("id").asText());
+                        if (recipient == null) throw RuleJson.error("/recipient", "An offered target is no longer available.");
+                        List<RuleDispatcher.Candidate> targetedSources = new ArrayList<>();
+                        for (var candidateSource : sources) {
+                            ObjectNode context = candidateSource.context().deepCopy();
+                            context.set("recipient", recipient.deepCopy());
+                            targetedSources.add(new RuleDispatcher.Candidate(candidateSource.program(), context));
+                        }
+                        ((ObjectNode) item).set("downtimeOptions", RuleDispatcher.describeOptions(targetedSources, "downtime",
+                                audience -> allowed(audience, "self")));
+                    }
+                }
                 moves.add(descriptor);
             }
         }
