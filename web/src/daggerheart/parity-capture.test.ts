@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import type { Automation, ActionDef, DiceRoll } from './engine';
 import {
-  actionBlocker, applyRest, derivedStats, runActionDetailed, sheetActions, syncResources, useConsumableUnit, withSelectedAmount,
+  actionBlocker, applyRest,   availableRollOptions, commitRollOptions, configuredRollOption, derivedStats, effectiveAdvantage, experienceModifier,
+  rollBonus, runActionDetailed, selectedRollBonus, selectionBlocker, sheetActions, suggestedAdvantage, syncResources, traitTotal, useConsumableUnit,
+  withSelectedAmount,
 } from './engine';
 import { emptyCharacter } from './data';
 import { armorFrom, cardFrom, weaponFrom } from './compendium';
@@ -208,12 +210,82 @@ function probeRest(row: Row) {
   return result;
 }
 
+const TRAITS = ['Agility', 'Strength', 'Finesse', 'Instinct', 'Presence', 'Knowledge'] as const;
+
+function diceTotal(dice: string[]): number {
+  return dice.reduce((sum, d) => sum + constantRoll(d), 0);
+}
+
+/** The roll scenarios every row is probed with; the Java harness builds the same ones. */
+function rollScenarios(placed: Placed) {
+  const scenarios: Array<{ id: string; targets: string[]; weapon?: CharacterSheet['activeWeapons'][number] }> = [];
+  for (const kind of ['action', 'reaction']) for (const trait of TRAITS) scenarios.push({ id: `check:${kind}:${trait}`, targets: [kind, `trait:${trait}`] });
+  const weapon = placed.sheet.activeWeapons[0];
+  if (weapon) {
+    scenarios.push({ id: 'attack', targets: ['attack', `trait:${weapon.trait}`, 'action'], weapon });
+    scenarios.push({ id: 'damage', targets: ['damage', ...(weapon.damageType === 'magic' ? ['magicdamage'] : [])], weapon });
+  }
+  return scenarios;
+}
+
+/** Weapon rolls need a weapon: rows that are not weapons are probed with a plain Longsword. */
+function placeForRolls(row: Row): Placed | null {
+  const placed = place(row);
+  if (placed && !placed.sheet.activeWeapons.length) placed.sheet.activeWeapons = [weaponFrom(catalog('weapons').entries[1])];
+  if (placed) placed.sheet.experiences = [{ name: 'Parity', mod: 2 }];
+  return placed;
+}
+
+function probeRolls(row: Row) {
+  const placed = placeForRolls(row);
+  if (!placed) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const scenario of rollScenarios(placed)) {
+    const fresh = placeForRolls(row)!;
+    syncResources(fresh.sheet);
+    const weapon = scenario.weapon ? fresh.sheet.activeWeapons[0] : undefined;
+    const always = rollBonus(fresh.sheet, scenario.targets, weapon, false);
+    const options = availableRollOptions(fresh.sheet, scenario.targets, weapon);
+    const offered: Record<string, unknown> = {};
+    options.forEach((option, index) => {
+      const probe = placeForRolls(row)!;
+      syncResources(probe.sheet);
+      const probeWeapon = scenario.weapon ? probe.sheet.activeWeapons[0] : undefined;
+      const mine = availableRollOptions(probe.sheet, scenario.targets, probeWeapon)[index];
+      let selected = mine;
+      let blocker: string | null = null;
+      try { selected = configuredRollOption(probe.sheet, mine); } catch (e) { blocker = (e as Error).message; }
+      blocker ??= selectionBlocker(probe.sheet, [selected], !!selected.option.experience);
+      const entry: Record<string, unknown> = { label: mine.option.label, ...(mine.option.advantage ? { advantage: mine.option.advantage } : {}) };
+      if (blocker) entry.blocker = blocker;
+      else {
+        const base = rollBonus(probe.sheet, scenario.targets, probeWeapon, false);
+        const withOption = selectedRollBonus(probe.sheet, base, [selected]);
+        const before = snapshot(probe.sheet);
+        const experience = !!selected.option.experience;
+        commitRollOptions(probe.sheet, [selected], experience, scenario.targets);
+        const after = snapshot(probe.sheet);
+        const advantage = effectiveAdvantage(suggestedAdvantage([selected]), [selected]);
+        entry.total = withOption.value - base.value + diceTotal(withOption.dice) - diceTotal(base.dice) + advantage * 3
+          + (experience ? experienceModifier(2, [selected]) : 0);
+        entry.advantageSuggested = suggestedAdvantage([selected]);
+        entry.spent = Object.fromEntries((['hope', 'hp', 'stress', 'armor', 'gold'] as const).map(k => [k, after[k] - before[k]]).filter(([, v]) => v !== 0));
+      }
+      offered[`${mine.option.id}`] = entry;
+    });
+    const traitName = scenario.targets.find(t => t.startsWith('trait:'))?.slice(6) as TraitName | undefined;
+    const traitShift = traitName ? traitTotal(fresh.sheet, traitName) - (fresh.sheet.traits.find(t => t.name === traitName)?.mod ?? 0) : 0;
+    out[scenario.id] = { always: always.value + diceTotal(always.dice) + traitShift, offered };
+  }
+  return out;
+}
+
 export function capture(): Record<string, unknown> {
   const rows = csv(readFileSync(new URL('docs/automation-parity-ledger.csv', ROOT), 'utf8'));
   const out: Record<string, unknown> = {};
   for (const row of rows) {
     const key = `${row.category}${row.pointer}`;
-    out[key] = { actions: probeActions(row), stats: probeStats(row), rest: probeRest(row) };
+    out[key] = { actions: probeActions(row), stats: probeStats(row), rest: probeRest(row), rolls: probeRolls(row) };
   }
   return out;
 }

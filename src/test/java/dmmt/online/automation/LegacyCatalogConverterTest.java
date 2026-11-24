@@ -2906,11 +2906,14 @@ class LegacyCatalogConverterTest {
                   {"id":"not-action","label":"Not action","roll":"any","excludeRolls":["action"],"value":1}]}}"""));
         assertEquals(1, result.converted(), result.diagnostics().toString());
         RuleCompiler.Program program = program(result, 0);
-        for (String kind : List.of("action", "attack", "reaction", "spellcast")) {
+        for (String kind : List.of("action", "attack", "spellcast")) {
             ObjectNode context = context(program, "{}", """
                     {"type":"roll.prepare","check":{"kind":"%s","duality":true,"dominant":null}}""".formatted(kind));
             assertEquals(List.of("action", "duality"), available(program, context, "roll"), kind);
         }
+        ObjectNode reaction = context(program, "{}", """
+                {"type":"roll.prepare","check":{"kind":"reaction","duality":true,"dominant":null}}""");
+        assertEquals(List.of("duality", "not-action"), available(program, reaction, "roll"));
         ObjectNode damage = context(program, "{}", """
                 {"type":"roll.prepare","check":{"kind":"damage","duality":false,"dominant":null}}""");
         assertEquals(List.of("not-action"), available(program, damage, "roll"));

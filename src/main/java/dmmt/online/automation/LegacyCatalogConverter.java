@@ -2052,7 +2052,7 @@ public final class LegacyCatalogConverter {
     private static ObjectNode actionRollCondition() {
         ObjectNode condition = RuleJson.JSON.createObjectNode();
         ArrayNode any = condition.putArray("or");
-        for (String kind : List.of("action", "attack", "reaction", "spellcast"))
+        for (String kind : List.of("action", "attack", "spellcast"))
             any.addObject().putArray("eq").add(read("event.check.kind")).add(kind);
         return condition;
     }

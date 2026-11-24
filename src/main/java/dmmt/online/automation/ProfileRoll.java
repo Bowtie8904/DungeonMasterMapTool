@@ -99,7 +99,7 @@ final class ProfileRoll {
         ObjectNode event = RuleJson.JSON.createObjectNode().put("type", type).put("actorId", actorId);
         event.putObject("table").put("fear", fear);
         event.putObject("thresholds").putNull("major").putNull("severe");
-        event.putNull("damage").putNull("damageType").putNull("roll");
+        event.putNull("damage").putNull("damageType").putNull("roll").putNull("role").putNull("weaponId");
         ObjectNode check = event.putObject("check");
         for (String key : List.of("kind", "trait", "weapon", "range", "dominant", "outcome", "critical",
                 "hopeDie", "fearDie", "spell", "origin", "total", "difficulty", "weaponSource", "weaponSourceId",
@@ -165,8 +165,14 @@ final class ProfileRoll {
         ObjectNode check = event.withObject("/check");
         check.put("kind", kind).put("duality", !damageRoll).put("trait", trait).put("range", profile.path("range").asText(null))
                 .put("spell", "spellcast".equals(kind)).put("sourceName", source.name());
-        if (!profile.has("rollKind"))
+        if (!profile.has("rollKind")) {
             check.put("weaponSource", held.instanceId()).put("weaponSourceId", held.sourceId());
+            if (equippedWeapon) {
+                event.put("weaponId", held.instanceId());
+                if ("damage".equals(kind)) event.put("role", "weaponDamage");
+                else if ("attack".equals(kind)) event.put("role", "weaponAttack");
+            }
+        }
         if (equippedWeapon && !profile.has("rollKind")) {
             String slot = gear.path("slot").asText("").toLowerCase(Locale.ROOT);
             if ("primary".equals(slot) || "secondary".equals(slot)) check.put("weapon", slot);

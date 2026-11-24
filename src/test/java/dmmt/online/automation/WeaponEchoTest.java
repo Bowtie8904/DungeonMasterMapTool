@@ -59,6 +59,10 @@ class WeaponEchoTest {
                 LegacyCatalogConverter.coreRecipes(), LegacyCatalogConverter.coreRuleset());
     }
 
+    private static String sourceOf(AutomationHost.Pack pack) {
+        return pack.programs().keySet().stream().filter(key -> !"ruleset:base".equals(key)).findFirst().orElseThrow();
+    }
+
     @Test
     void convertedTriggerStartsAWeaponCapturingEffectAndEndsItWithItsRoll() throws Exception {
         var converted = LegacyCatalogConverter.convert(LEGACY);
@@ -77,7 +81,7 @@ class WeaponEchoTest {
     void halfProficiencyDiceMatchLegacyForMixedAndFixedWeapons() throws Exception {
         var converted = LegacyCatalogConverter.convert(LEGACY);
         var pack = pack(converted);
-        String source = pack.programs().keySet().iterator().next();
+        String source = sourceOf(pack);
         JsonNode definition = converted.catalog().at("/entries/0/automation/effects/use-damage");
         ObjectNode origin = AutomationHost.event("action.request", "actor", 0);
         ObjectNode effect = RuleJson.JSON.createObjectNode().put("key", source + "#use-damage").put("label", "Glancing Blow");
@@ -117,7 +121,7 @@ class WeaponEchoTest {
     void anUnequippedWeaponMakesTheRollUnavailable() throws Exception {
         var converted = LegacyCatalogConverter.convert(LEGACY);
         var pack = pack(converted);
-        String source = pack.programs().keySet().iterator().next();
+        String source = sourceOf(pack);
         ObjectNode effect = RuleJson.JSON.createObjectNode().put("key", source + "#use-damage").put("label", "Glancing Blow");
         effect.set("profile", converted.catalog().at("/entries/0/automation/effects/use-damage/profile"));
         ObjectNode sheet = sheet(source, "d8", false, 3, false);
@@ -139,7 +143,7 @@ class WeaponEchoTest {
         ObjectNode full = (ObjectNode) converted.catalog().deepCopy();
         ((ObjectNode) full.at("/entries/0/automation/effects/use-damage/profile/damage")).remove("scale");
         var pack = pack(LegacyCatalogConverter.convert(LEGACY));
-        String source = pack.programs().keySet().iterator().next();
+        String source = sourceOf(pack);
         var fullPack = AutomationHost.compile("test", Map.of("domain-cards", full.toString()),
                 LegacyCatalogConverter.coreRecipes(), LegacyCatalogConverter.coreRuleset());
         ObjectNode effect = RuleJson.JSON.createObjectNode().put("key", source + "#use-damage").put("label", "Echo");

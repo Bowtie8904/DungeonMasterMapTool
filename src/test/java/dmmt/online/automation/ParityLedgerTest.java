@@ -142,6 +142,8 @@ class ParityLedgerTest {
             if (statProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("stats: " + statProblem);
             String restProblem = restMismatch(pack, placed, expected.path("rest"));
             if (restProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("rest: " + restProblem);
+            String rollProblem = rollMismatch(pack, placed, expected.path("rolls"));
+            if (rollProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("rolls: " + rollProblem);
             for (var action : expected.path("actions").properties()) {
                 String problem = actionMismatch(pack, placed, action.getKey(), action.getValue());
                 if (problem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add(action.getKey() + ": " + problem);
@@ -347,6 +349,91 @@ class ParityLedgerTest {
             int want = after.path(field).asInt() + spend.path(field).asInt();
             if (want != actual.path(field).asInt())
                 return "state " + field + " legacy=" + want + " new=" + actual.path(field).asInt();
+        }
+        return null;
+    }
+
+    private static final List<String> TRAIT_NAMES = List.of("Agility", "Strength", "Finesse", "Instinct", "Presence", "Knowledge");
+
+    private static ObjectNode resourcesOf(ObjectNode sheet) {
+        return RuleJson.JSON.createObjectNode().put("hope", sheet.at("/hope/on").asInt()).put("hp", sheet.at("/hp/on").asInt())
+                .put("stress", sheet.at("/stress/on").asInt()).put("armor", sheet.at("/armorTrack/on").asInt()).put("gold", sheet.path("gold").asInt());
+    }
+
+    private static ObjectNode checkRequest(ObjectNode sheet, String kind, String trait, JsonNode option) {
+        ObjectNode request = RuleJson.JSON.createObjectNode().put("requestId", "r").put("expectedRevision", HOST.revision(sheet));
+        request.putObject("checkRoll").put("kind", kind).put("trait", trait);
+        ArrayNode selections = request.putArray("selections");
+        if (option != null) {
+            ObjectNode selection = selections.addObject().put("sourceInstanceId", option.path("sourceInstanceId").asText())
+                    .put("ruleId", option.path("ruleId").asText()).put("bindingId", option.path("bindingId").asText());
+            ObjectNode inputs = selection.putObject("inputs");
+            for (JsonNode input : option.path("inputs")) {
+                String id = input.path("id").asText();
+                switch (input.path("kind").asText()) {
+                    case "integer" -> inputs.put(id, input.has("default") ? input.path("default").asInt() : input.path("min").asInt());
+                    case "choice" -> inputs.put(id, input.path("options").path(0).path("id").asText());
+                    case "record.select" -> inputs.set(id, input.path("options").path(0).path("value"));
+                    default -> { }
+                }
+            }
+        }
+        return request;
+    }
+
+    private static int rollTotal(JsonNode result) {
+        return result.at("/event/roll/total").asInt();
+    }
+
+    private static boolean ownOption(JsonNode option) {
+        return !option.path("sourceId").asText().startsWith("ruleset:");
+    }
+
+    /** Check rolls: always-on contributions, offered options and each option's effect against the legacy scenario. */
+    private static String rollMismatch(AutomationHost.Pack pack, Placed placed, JsonNode expected) {
+        if (expected.isMissingNode() || expected.isNull()) return null;
+        for (String kind : List.of("action", "reaction")) {
+            for (String trait : TRAIT_NAMES) {
+                JsonNode legacy = expected.path("check:" + kind + ":" + trait);
+                ObjectNode sheet = placed.sheet().deepCopy();
+                sheet.putArray("experiences").addObject().put("name", "Parity").put("mod", 2);
+                ObjectNode event = AutomationHost.event("action.request", "parity", 1);
+                String where = kind + " " + trait + " check: ";
+                try {
+                    int base = rollTotal(HOST.execute(pack, standardSheet(), event, checkRequest(standardSheet(), kind, trait, null), "self", "self", constantDice()));
+                    int always = rollTotal(HOST.execute(pack, sheet.deepCopy(), event, checkRequest(sheet, kind, trait, null), "self", "self", constantDice())) - base;
+                    if (always != legacy.path("always").asInt()) return where + "always-on total legacy=" + legacy.path("always").asInt() + " new=" + always;
+                    JsonNode described = HOST.describeCheck(pack, sheet, event, kind, trait, "self");
+                    Map<String, JsonNode> offered = new TreeMap<>();
+                    for (JsonNode option : described.path("options"))
+                        if (ownOption(option) && option.path("available").asBoolean(true)) offered.put(option.path("ruleId").asText(), option);
+                    var legacyOptions = new TreeMap<String, JsonNode>();
+                    legacy.path("offered").properties().forEach(e -> {
+                        if (!e.getValue().has("blocker") || offered.containsKey(e.getKey())) legacyOptions.put(e.getKey(), e.getValue());
+                    });
+                    if (!offered.keySet().equals(legacyOptions.keySet())) return where + "options legacy=" + legacyOptions.keySet() + " new=" + offered.keySet();
+                    for (var entry : legacyOptions.entrySet()) {
+                        JsonNode want = entry.getValue();
+                        if (want.has("blocker")) continue;
+                        ObjectNode copy = sheet.deepCopy();
+                        ObjectNode before = resourcesOf(copy);
+                        int total = rollTotal(HOST.execute(pack, copy, event, checkRequest(copy, kind, trait, offered.get(entry.getKey())), "self", "self", constantDice()));
+                        int delta = total - base - always;
+                        if (delta != want.path("total").asInt()) return where + "option " + entry.getKey() + " total legacy=" + want.path("total").asInt() + " new=" + delta;
+                        ObjectNode after = resourcesOf(copy);
+                        for (String field : List.of("hope", "hp", "stress", "armor", "gold")) {
+                            int spent = after.path(field).asInt() - before.path(field).asInt();
+                            if (spent != want.path("spent").path(field).asInt())
+                                return where + "option " + entry.getKey() + " " + field + " legacy=" + want.path("spent").path(field).asInt() + " new=" + spent;
+                        }
+                    }
+                } catch (RuntimeException e) {
+                    StringBuilder frames = new StringBuilder();
+                    for (StackTraceElement frame : e.getStackTrace())
+                        if (frames.length() < 300 && frame.getClassName().startsWith("dmmt")) frames.append(frame.getClassName().substring(frame.getClassName().lastIndexOf('.') + 1)).append('.').append(frame.getMethodName()).append(':').append(frame.getLineNumber()).append(' ');
+                    return where + "rejected: " + e.getMessage() + " @ " + frames;
+                }
+            }
         }
         return null;
     }
