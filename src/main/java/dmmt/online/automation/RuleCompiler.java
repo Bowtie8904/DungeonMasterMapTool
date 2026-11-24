@@ -1564,8 +1564,8 @@ public final class RuleCompiler {
             RuleTemplate.validate(RuleJson.text(operation.get("label"), path + "/label"));
             return;
         }
-        if ("roll.reroll".equals(op) && !Set.of("new", "higher").contains(operation.path("choose").asText()))
-            throw RuleJson.error(path + "/choose", "Expected new or higher.");
+        if ("roll.reroll".equals(op) && !Set.of("new", "higher", "higherTotal").contains(operation.path("choose").asText()))
+            throw RuleJson.error(path + "/choose", "Expected new, higher or higherTotal.");
         if ("roll.explode".equals(op)) RuleJson.integer(operation.get("maxDice"), path + "/maxDice", 1, 32);
         if ("track.capacity".equals(op) && operation.has("counter")) {
             String track = RuleJson.text(operation.get("track"), path + "/track");

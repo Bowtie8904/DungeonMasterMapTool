@@ -73,6 +73,36 @@ class RollEditRuntimeTest {
     }
 
     @Test
+    void rerollCanKeepTheHigherWholeSignedRollRatherThanHigherIndividualFaces() throws Exception {
+        ObjectNode automation = (ObjectNode) RuleJson.parse("""
+                {"rules":[{"id":"reroll","bindings":[{"id":"chat","event":"rest.roll","surface":"chat","mode":"button"}],
+                 "do":[{"op":"roll.keptDice","from":{"read":"event.roll"},"role":"downtime","as":"dice"},
+                       {"op":"roll.reroll","from":{"read":"event.roll"},"dice":{"read":"result.dice"},
+                        "choose":"higherTotal","as":"edited"},
+                       {"op":"roll.publish","roll":{"read":"result.edited"}}],"ui":{"label":"Reroll"}}]}
+                """);
+        var program = RuleCompiler.compile("features:roll-edits", automation, fixture("rewrite/recipes"));
+        ObjectNode before = context();
+        before.withObject("/event").put("type", "rest.roll").set("roll", StructuredRoll.validate(RuleJson.parse("""
+                {"id":"mixed","contributions":[
+                 {"id":"positive","kind":"dice","role":"downtime","sourceId":"core","label":"Positive","dice":[
+                  {"id":"p1","sides":6,"face":6,"kept":true,"origin":"rolled"},
+                  {"id":"p2","sides":6,"face":1,"kept":true,"origin":"rolled"}]},
+                 {"id":"negative","kind":"dice","role":"downtime","sourceId":"core","label":"Negative","sign":-1,"dice":[
+                  {"id":"n1","sides":4,"face":4,"kept":true,"origin":"rolled"}]}]}
+                """)));
+        var intent = new RuleRuntime.Intent("reroll", "chat", "inst-1", 0, (ObjectNode) RuleJson.parse("{}"));
+        JsonNode improved = RuleRuntime.execute(program, intent, before, faces(5, 5, 1)).publishedRolls().getFirst();
+        assertEquals(9, improved.path("total").asInt());
+        assertEquals(5, die(improved, "p1").path("face").asInt());
+        assertEquals(1, die(improved, "n1").path("face").asInt());
+        JsonNode lower = RuleRuntime.execute(program, intent, before, faces(1, 1, 4)).publishedRolls().getFirst();
+        assertEquals(3, lower.path("total").asInt());
+        assertEquals(6, die(lower, "p1").path("face").asInt());
+        assertTrue(die(lower, "p1").path("previous").isMissingNode());
+    }
+
+    @Test
     void setFacesMapsOnlyMatchingEditableDiceDeterministically() throws Exception {
         JsonNode roll = run("exacting", context(), noRandom()).publishedRolls().getFirst();
         assertEquals(8, die(roll, "w1").path("face").asInt());

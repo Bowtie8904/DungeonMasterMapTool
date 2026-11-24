@@ -79,7 +79,7 @@ class LegacyCatalogConverterTest {
             JsonNode rule = result.catalog().at("/entries/" + i + "/automation/rules/0");
             assertEquals("rest.roll", rule.at("/bindings/0/event").asText());
             assertEquals("downtime", rule.at("/do/0/role").asText());
-            assertEquals("higher", rule.at("/do/1/choose").asText());
+            assertEquals("higherTotal", rule.at("/do/1/choose").asText());
             assertEquals("roll.publish", rule.at("/do/2/op").asText());
         }
         assertEquals("uses", result.catalog().at("/entries/0/automation/rules/0/limitRef").asText());
@@ -2932,6 +2932,24 @@ class LegacyCatalogConverterTest {
             assertEquals(total, applied.actions().getFirst().diceRolls().getFirst().path("total").asInt());
             assertEquals(1, applied.contexts().getFirst().at("/actor/hope/value").asInt());
         }
+    }
+
+    @Test
+    void downtimeReportsOfferTheWholeResolvedExpressionForRerolling() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"survey","name":"Survey","automation":{"actions":[{"id":"use","label":"Survey","timing":"downtime",
+                 "report":{"dice":"2d6-d4+2","text":"Survey {amount}."}}]}}"""));
+        assertEquals(1, result.converted(), result.diagnostics().toString());
+        RuleCompiler.Program program = program(result, 0);
+        ObjectNode before = context(program, "{\"id\":\"actor\",\"name\":\"Ash\"}", move("use", "short", false, false));
+        var applied = run(program, before, StructuredRollTest.faces(6, 1, 4), "use");
+        assertEquals("Survey 5.", applied.actions().getFirst().report());
+        assertEquals(1, applied.outbox().size());
+        JsonNode roll = applied.outbox().getFirst().path("roll");
+        assertEquals(5, roll.path("total").asInt());
+        assertEquals(3, StructuredRoll.dice(roll, "downtime", true).size());
+        assertTrue(run(program, context(program, "{\"id\":\"actor\"}", move("use", "long", false, false)),
+                StructuredRollTest.faces(6, 1, 4), "use").outbox().isEmpty());
     }
 
     @Test

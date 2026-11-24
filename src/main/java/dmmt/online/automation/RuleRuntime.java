@@ -1086,44 +1086,61 @@ public final class RuleRuntime {
                     throw new Unavailable("restRoll", "Downtime rolls can only be offered during a short-rest move.");
                 if (rolls.isEmpty()) throw RuleJson.error("/roll", "A downtime offer needs a preceding roll.");
                 JsonNode sampled = rolls.getLast();
-                int sides = RuleJson.integer(sampled.get("sides"), "/roll/sides", 2, 1000);
-                JsonNode faces = sampled.path("faces"), value = eval(op.path("roll"), context);
+                JsonNode value = eval(op.path("roll"), context);
                 boolean recovery = "recovery.offerRoll".equals(kind);
-                if (!faces.isArray() || faces.isEmpty()
-                        || !(value.equals(faces) || value.isNumber() && value.asDouble() == sampled.path("total").asDouble())
-                        || recovery && faces.size() != 1)
-                    throw RuleJson.error("/roll", "A downtime offer must reference the last sampled roll.");
                 ObjectNode holder = RuleJson.object(context.get("actor"), "/actor");
-                String trackName = null;
-                int remaining = 0;
-                if (recovery) {
-                    String path = op.path("track").asText();
-                    String[] parts = path.split("\\.", 2);
-                    holder = RuleJson.object(context.get(parts[0]), "/" + parts[0]);
-                    ObjectNode track = RuleJson.object(holder.get(parts[1]), "/" + path);
-                    int capacity = RuleJson.integer(track.get("capacity"), "/" + path + "/capacity", 0, 1000);
-                    int marked = RuleJson.integer(track.get("marked"), "/" + path + "/marked", 0, capacity);
-                    remaining = Math.max(0, marked - SheetProjection.markedFloor(holder, track, capacity, "/" + path));
-                    trackName = parts[1];
-                }
                 String label = RuleTemplate.render(op.path("label").asText(), context);
                 ArrayNode outbox = context.has("outbox") ? (ArrayNode) context.get("outbox") : context.putArray("outbox");
-                if (outbox.size() + faces.size() > 32)
-                    throw new Unavailable("restRoll", "A downtime action can offer at most 32 dice.");
                 ArrayNode offered = RuleJson.JSON.createArrayNode();
-                for (JsonNode face : faces) {
-                    ObjectNode roll = RuleJson.JSON.createObjectNode().put("id", "downtime-" + java.util.UUID.randomUUID());
-                    ObjectNode contribution = roll.putArray("contributions").addObject()
-                            .put("id", "downtime").put("kind", "dice").put("role", "downtime")
-                            .put("sourceId", program.sourceId()).put("label", label);
-                    contribution.putArray("dice").addObject().put("id", "downtime.d1")
-                            .put("sides", sides).put("face", face.asInt()).put("kept", true).put("origin", "rolled");
-                    ObjectNode request = outbox.addObject().put("kind", kind).put("label", label)
-                            .put("sourceActorId", RuleJson.id(context.at("/actor/id"), "/actor/id"))
-                            .put("holderId", RuleJson.id(holder.get("id"), "/holder/id"));
-                    if (recovery) request.put("track", trackName).put("remaining", remaining);
-                    request.set("roll", StructuredRoll.validate(roll));
-                    offered.add(request.deepCopy());
+                if (!recovery && sampled.has("contributions") && value.equals(sampled)) {
+                    ObjectNode roll = StructuredRoll.validate(sampled).put("id", "downtime-" + java.util.UUID.randomUUID());
+                    for (JsonNode part : roll.path("contributions"))
+                        if ("dice".equals(part.path("kind").asText())) ((ObjectNode) part).put("role", "downtime");
+                    int count = StructuredRoll.dice(roll, "downtime", true).size();
+                    if (count > 32 || count > 0 && outbox.size() >= 32)
+                        throw new Unavailable("restRoll", "A downtime action can offer at most 32 dice.");
+                    if (count > 0) {
+                        ObjectNode request = outbox.addObject().put("kind", kind).put("label", label)
+                                .put("sourceActorId", RuleJson.id(context.at("/actor/id"), "/actor/id"))
+                                .put("holderId", RuleJson.id(holder.get("id"), "/actor/id"));
+                        request.set("roll", StructuredRoll.validate(roll));
+                        offered.add(request.deepCopy());
+                    }
+                } else {
+                    int sides = RuleJson.integer(sampled.get("sides"), "/roll/sides", 2, 1000);
+                    JsonNode faces = sampled.path("faces");
+                    if (!faces.isArray() || faces.isEmpty()
+                            || !(value.equals(faces) || value.isNumber() && value.asDouble() == sampled.path("total").asDouble())
+                            || recovery && faces.size() != 1)
+                        throw RuleJson.error("/roll", "A downtime offer must reference the last sampled roll.");
+                    String trackName = null;
+                    int remaining = 0;
+                    if (recovery) {
+                        String path = op.path("track").asText();
+                        String[] parts = path.split("\\.", 2);
+                        holder = RuleJson.object(context.get(parts[0]), "/" + parts[0]);
+                        ObjectNode track = RuleJson.object(holder.get(parts[1]), "/" + path);
+                        int capacity = RuleJson.integer(track.get("capacity"), "/" + path + "/capacity", 0, 1000);
+                        int marked = RuleJson.integer(track.get("marked"), "/" + path + "/marked", 0, capacity);
+                        remaining = Math.max(0, marked - SheetProjection.markedFloor(holder, track, capacity, "/" + path));
+                        trackName = parts[1];
+                    }
+                    if (outbox.size() + faces.size() > 32)
+                        throw new Unavailable("restRoll", "A downtime action can offer at most 32 dice.");
+                    for (JsonNode face : faces) {
+                        ObjectNode roll = RuleJson.JSON.createObjectNode().put("id", "downtime-" + java.util.UUID.randomUUID());
+                        ObjectNode contribution = roll.putArray("contributions").addObject()
+                                .put("id", "downtime").put("kind", "dice").put("role", "downtime")
+                                .put("sourceId", program.sourceId()).put("label", label);
+                        contribution.putArray("dice").addObject().put("id", "downtime.d1")
+                                .put("sides", sides).put("face", face.asInt()).put("kept", true).put("origin", "rolled");
+                        ObjectNode request = outbox.addObject().put("kind", kind).put("label", label)
+                                .put("sourceActorId", RuleJson.id(context.at("/actor/id"), "/actor/id"))
+                                .put("holderId", RuleJson.id(holder.get("id"), "/holder/id"));
+                        if (recovery) request.put("track", trackName).put("remaining", remaining);
+                        request.set("roll", StructuredRoll.validate(roll));
+                        offered.add(request.deepCopy());
+                    }
                 }
                 result = recovery ? offered.get(0) : offered;
             }
@@ -1198,15 +1215,19 @@ public final class RuleRuntime {
                 if (preview) throw new Unavailable("randomPreview", "This preview requires a committed roll; no dice were rolled.");
                 if (random == null) throw RuleJson.error("/dice", "Host random generator is required.");
                 boolean higher = "higher".equals(op.path("choose").asText());
+                boolean higherTotal = "higherTotal".equals(op.path("choose").asText());
                 ArrayNode faces = RuleJson.JSON.createArrayNode();
                 JsonNode selection = eval(op.path("dice"), context);
                 if (selection.size() + rolls.stream().mapToInt(RuleRuntime::rolledDice).sum() > 1024)
                     throw RuleJson.error("/dice", "Action exceeds its dice limit.");
-                ObjectNode edited = StructuredRoll.editFaces(eval(op.path("from"), context), selection, program.sourceId(), "rerolled", die -> {
+                ObjectNode original = StructuredRoll.validate(eval(op.path("from"), context));
+                ObjectNode edited = StructuredRoll.editFaces(original, selection, program.sourceId(), "rerolled", die -> {
                     int face = random.nextInt(die.path("sides").asInt()) + 1;
                     faces.add(face);
                     return higher ? Math.max(face, die.path("face").asInt()) : face;
                 });
+                if (higherTotal && edited.path("total").asDouble() < original.path("total").asDouble())
+                    edited = original;
                 ObjectNode record = RuleJson.JSON.createObjectNode().put("rerollOf", edited.path("id").asText());
                 record.set("faces", faces);
                 rolls.add(record);

@@ -1925,6 +1925,16 @@ class OnlineSessionServerTest {
         throw new AssertionError("No seed found for d" + sides + " = " + face);
     }
 
+    private static long seedForDice(int[] sides, int[] faces) {
+        for (long seed = 0; seed < 100000; seed++) {
+            var random = new java.util.Random(seed);
+            boolean match = true;
+            for (int i = 0; i < sides.length; i++) match &= random.nextInt(sides[i]) + 1 == faces[i];
+            if (match) return seed;
+        }
+        throw new AssertionError("No seed found for the dice.");
+    }
+
     private static ObjectNode claimRequest(JsonNode description, String recipientId, String requestId) {
         ObjectNode body = MAPPER.createObjectNode();
         ObjectNode request = body.putObject("request").put("requestId", requestId).put("recipientId", recipientId)
@@ -2148,6 +2158,56 @@ class OnlineSessionServerTest {
         assertTrue(updated.path("text").asText().contains("Ada kept 6."));
         assertTrue(updated.at("/automationRecoveryRoll/track").isMissingNode());
         assertFalse(offers.get(1).at("/automationRecoveryRoll/used").asBoolean());
+    }
+
+    @Test
+    void downtimeReportRerollsKeepTheHigherSignedExpressionAtomically() throws Exception {
+        installRestRerollRules();
+        var converted = dmmt.online.automation.LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"domain-cards","entries":[
+                 {"id":"survey","name":"Survey","automation":{"actions":[
+                   {"id":"use","label":"Survey","timing":"downtime",
+                    "report":{"dice":"2d6-d4+2","text":"Survey {amount}."}}]}}]}
+                """);
+        assertEquals(1, converted.converted(), converted.diagnostics().toString());
+        Path catalogFile = compendiumDir.resolve("domain-cards.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(catalogFile.toFile());
+        catalog.withArray("entries").add(converted.catalog().at("/entries/0").deepCopy());
+        java.nio.file.Files.writeString(catalogFile, catalog.toString());
+        String owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("actor").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "actor", """
+                {"name":"Ada","level":1,"hp":{"slots":8,"on":2},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},
+                 "loadout":[{"name":"Survey","instanceId":"survey","automationSource":"domain-cards:survey"},
+                            {"name":"Second Chance","instanceId":"chance","automationSource":"domain-cards:reroller"}]}
+                """);
+        var described = restHttp(owner, "actor", "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode rest = MAPPER.readTree(described.body());
+        ObjectNode body = restRequest(rest, "report-rest");
+        addRestMove((ObjectNode) body.path("request"), restDescriptor(rest.path("moves"), "use"));
+        diceSeed(seedForDice(new int[]{6, 6, 4}, new int[]{6, 1, 4}));
+        var completed = restHttp(owner, "actor", null, body.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode offer = store.historyTail(campaign.getId(), 100).stream()
+                .filter(message -> message.path("automationRecoveryRoll").isObject()).findFirst().orElseThrow();
+        assertEquals(5, offer.at("/automationRecoveryRoll/roll/total").asInt());
+        assertEquals(3, dmmt.online.automation.StructuredRoll.dice(offer.at("/automationRecoveryRoll/roll"), "downtime", true).size());
+        var description = recoveryRollHttp(owner, offer, "actor", null);
+        assertEquals(200, description.statusCode(), description.body());
+        ObjectNode request = recoveryRollRequest(MAPPER.readTree(description.body()), "report-reroll");
+        diceSeed(seedForDice(new int[]{6, 6, 4}, new int[]{5, 5, 1}));
+        var accepted = recoveryRollHttp(owner, offer, "actor", request.toString());
+        assertEquals(200, accepted.statusCode(), accepted.body());
+        assertEquals(5, MAPPER.readTree(accepted.body()).path("previous").asInt());
+        assertEquals(11, MAPPER.readTree(accepted.body()).path("kept").asInt());
+        assertEquals(accepted.body(), recoveryRollHttp(owner, offer, "actor", request.toString()).body());
+        JsonNode updated = store.historyTail(campaign.getId(), 100).stream()
+                .filter(message -> message.path("id").asLong() == offer.path("id").asLong()).findFirst().orElseThrow();
+        assertTrue(updated.path("text").asText().contains("Ada kept 11."), updated.toString());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "actor"))
+                .at("/automationState/sources/chance/usage/uses").asInt());
     }
 
     @Test

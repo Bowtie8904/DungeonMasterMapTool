@@ -6435,6 +6435,17 @@ public final class OnlineSessionServer {
         return event;
     }
 
+    private static ObjectNode downtimeRollShape(ObjectNode roll) {
+        ObjectNode shape = roll.deepCopy();
+        shape.remove("total");
+        for (JsonNode part : shape.path("contributions")) {
+            ((ObjectNode) part).remove("total");
+            for (JsonNode die : part.path("dice"))
+                ((ObjectNode) die).remove(List.of("face", "origin", "previous", "editedBy"));
+        }
+        return shape;
+    }
+
     private synchronized void handleRecoveryRollDescribe(Context ctx) {
         String playerId = requirePlayer(ctx);
         if (playerId == null || !requireAutomationVersion(ctx)) return;
@@ -6529,12 +6540,11 @@ public final class OnlineSessionServer {
             ObjectNode after = StructuredRoll.validate(result.at("/event/roll"));
             ArrayNode oldDice = StructuredRoll.dice(before, "downtime", true);
             ArrayNode newDice = StructuredRoll.dice(after, "downtime", true);
-            if (!before.path("id").equals(after.path("id")) || oldDice.size() != 1 || newDice.size() != 1
-                    || !oldDice.get(0).path("id").equals(newDice.get(0).path("id"))
-                    || !oldDice.get(0).path("sides").equals(newDice.get(0).path("sides")))
-                throw new IllegalArgumentException("A recovery-roll action must edit the offered die.");
-            int previous = oldDice.get(0).path("face").asInt(), kept = newDice.get(0).path("face").asInt();
             boolean recoveryOffer = saved.has("track");
+            if (oldDice.isEmpty() || oldDice.size() > 32 || oldDice.size() != newDice.size()
+                    || recoveryOffer && oldDice.size() != 1 || !downtimeRollShape(before).equals(downtimeRollShape(after)))
+                throw new IllegalArgumentException("A downtime-roll action must edit only the offered dice.");
+            int previous = before.path("total").asInt(), kept = after.path("total").asInt();
             int remaining = recoveryOffer ? (int) claimLong(saved.get("remaining"), "remaining recovery") : 0;
             if (remaining > 1000) throw new IllegalArgumentException("Invalid remaining recovery.");
             int requested = Math.min(remaining, Math.max(0, kept - previous));
@@ -7335,16 +7345,19 @@ public final class OnlineSessionServer {
                         throw new ClaimUnavailable("The recovery roll's participants are no longer available.");
                     ObjectNode roll = StructuredRoll.validate(command.path("roll"));
                     ArrayNode dice = StructuredRoll.dice(roll, "downtime", true);
-                    if (dice.size() != 1 || roll.path("contributions").size() != 1)
-                        throw new IllegalArgumentException("A recovery offer requires one downtime die.");
                     boolean recovery = "recovery.offerRoll".equals(kind);
+                    if (dice.isEmpty() || dice.size() > 32 || recovery
+                            && (dice.size() != 1 || roll.path("contributions").size() != 1))
+                        throw new IllegalArgumentException("A downtime offer requires valid offered dice.");
                     int remaining = recovery ? (int) claimLong(command.get("remaining"), "remaining recovery") : 0;
                     if (recovery && (remaining > 1000 || !command.path("track").asText().matches("[a-zA-Z][a-zA-Z0-9_-]*")))
                         throw new IllegalArgumentException("Invalid recovery-roll track or allowance.");
                     ObjectNode message = chatMessage(source.getOwnerId(), campaign.player(source.getOwnerId()).getName(),
                             null, clip(holder.getName() + ": " + command.path("label").asText()
-                                    + " rolled d" + dice.get(0).path("sides").asInt()
-                                    + " = " + dice.get(0).path("face").asInt() + "."));
+                                    + (dice.size() == 1 && roll.path("contributions").size() == 1
+                                    ? " rolled d" + dice.get(0).path("sides").asInt()
+                                    + " = " + dice.get(0).path("face").asInt()
+                                    : " rolled " + roll.path("total").asText()) + "."));
                     message.put("actorId", source.getId());
                     ObjectNode offer = message.putObject("automationRecoveryRoll")
                             .put("sourceActorId", source.getId()).put("holderId", holder.getId())

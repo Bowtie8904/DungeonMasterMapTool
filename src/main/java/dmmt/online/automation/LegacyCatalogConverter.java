@@ -1565,7 +1565,7 @@ public final class LegacyCatalogConverter {
         ArrayNode steps = rule.putArray("do");
         ObjectNode dice = steps.addObject().put("op", "roll.keptDice").put("role", "downtime").put("as", "dice");
         dice.set("from", read("event.roll"));
-        ObjectNode reroll = steps.addObject().put("op", "roll.reroll").put("choose", "higher").put("as", "rerolled");
+        ObjectNode reroll = steps.addObject().put("op", "roll.reroll").put("choose", "higherTotal").put("as", "rerolled");
         reroll.set("from", read("event.roll"));
         reroll.set("dice", read("result.dice"));
         steps.addObject().put("op", "roll.publish").set("roll", read("result.rerolled"));
@@ -3092,9 +3092,17 @@ public final class LegacyCatalogConverter {
                         ObjectNode roll = RuleJson.JSON.createObjectNode().put("op", "roll.resolve").put("as", "reportRoll");
                         roll.putObject("plan").set("literal", plan);
                         steps.insert(0, roll);
+                        int valueIndex = 1;
+                        if ("downtime".equals(legacy.path("timing").asText())) {
+                            ObjectNode offer = RuleJson.JSON.createObjectNode().put("op", "downtime.offerRoll")
+                                    .put("label", legacy.path("label").asText("Downtime report"));
+                            offer.set("roll", read("result.reportRoll"));
+                            offer.putObject("if").putArray("eq").add(read("event.move.rest")).add("short");
+                            steps.insert(valueIndex++, offer);
+                        }
                         ObjectNode value = RuleJson.JSON.createObjectNode();
                         value.putArray("max").add(0).add(read("result.reportRoll.total"));
-                        steps.insertObject(1).put("op", "value").put("as", "reportAmount").set("value", value);
+                        steps.insertObject(valueIndex).put("op", "value").put("as", "reportAmount").set("value", value);
                         text = substituteReportAmount(text, "{result.reportAmount}");
                     }
                 }
