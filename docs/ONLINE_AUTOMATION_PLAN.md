@@ -94,8 +94,7 @@ also run each changed holder's track reactions, including self-targets, before l
 reaction commands and reports commit together and exact retries replay the receipt. Saved result buttons, including
 self claims and targeted actions, likewise dispatch track reactions and typed nested rolls without repeating the
 original roll's automatic reactions; a nested roll's publication does not revise the original result. A result claim
-cannot also declare a target selection. Interactive feature prepare choices, downtime rolls and untyped dice
-still need live integration.
+cannot also declare a target selection. Untyped sheet dice rolls dispatch `roll.prepare` and honour `event.block` (block-only: no persisted rule actions or outbox). Interactive feature prepare choices and downtime rolls are not dispatched through this path and keep their existing validation.
 
 **Death options (format 2).** Owner-only authored alternatives, Blaze of Glory, Avoid Death and Risk It All use
 host-described controls, versioned journaled transactions, and atomic reactions/reports. Avoid applies a
@@ -179,13 +178,12 @@ can heal and trigger reactions. A track change following an unsettled inventory,
 or damage command is rejected until ordered settlement is available. Format-2 full and compact sheet saves
 also dispatch changes to existing projected track values and capacities, including nested reactions, in the
 same atomic sheet, name, Fear and report commit. Such edits require `If-Match`; stale retries are rejected.
-Adding or removing an entire track and changes made by legacy normalization still need lifecycle integration.
-Other roll origins remain incomplete.
+Adding or removing an entire track dispatches `track.changed` with change `add`/`remove`; changes made by legacy normalization are not dispatched. `effect.ended` also reaches holders whose single-holder effect is transferred (their outbox is not collected).
 
 Format-2 sheet saves also dispatch `equipment.changed` for projection-declared equipment locations, in
 declaration order before manually edited track events. `event.equipment` contains `slot`, `before` and
 `after`; newly equipped sources can react. Removed sources do not react, and equipment changes produced by
-automation rather than sheet saves still need lifecycle integration.
+automation cannot change equipment slots, so no automation-produced `equipment.changed` exists. `scene.end` and `session.start` are dispatched on period reset; `creation.apply` is only emitted by the converter (no web builder, not host-dispatched). `EventContextContractTest` asserts the full context key set per event type.
 
 Started effects have persistent, non-reused instance IDs, separate from their source and effect definition. Ending and recasting the same effect must not make an earlier result refer to the new activation. Existing saved instance IDs need no rewrite.
 
@@ -670,9 +668,9 @@ Witch family: `witchGrant` markers for Circle of Power, Moonbeam and Forest Spri
 
 Companions: a companion declaration becomes a generic pool of unmarked companion Stress slots (companion-stress-slots, marking spends it, zero means unavailable), a long-rest rule that returns an unavailable companion and clears 1 Stress, and one counter pool companion-<option id> per plain training option (for example companion-armored). `requiresCompanion` and `companionIntercept` become when gates on the slot pool; an intercept pays one slot as its cost and the Armored variant pays an owner Armor Slot instead (the marks-stage restriction is lifted for it). Stat and choice training options (Resilient, Aware, Vicious, Intelligent, Light in the Dark), companionTraining entitlements, the Bonded rescue and Creature Comfort remain sheet data or unconverted: the level-up sheet must raise the slot pool itself.
 
-Run the focused checks from the repository root with `mvn -q "-Dtest=RuleConformanceTest,StructuredRollTest,StructuredDamageTest,RuleRuntimeTest,RuleCatalogTest,PoolRuntimeTest,RuleDispatcherTest,CrossActorClaimsTest,EffectRuntimeTest,RollEditRuntimeTest,InputRuntimeTest,LifecycleRuntimeTest,TargetActionsTest,LegacyCatalogConverterTest,AutomationHostTest" test`; run `npm test -- --run src\automation` from `web`. `RuleCatalog.main` also accepts `<catalog.json> <recipes.json>` with the project's Java dependency classpath for read-only candidate validation. It does not convert or overwrite files.
+Run the focused checks from the repository root with `mvn -q "-Dtest=RuleConformanceTest,StructuredRollTest,StructuredDamageTest,RuleRuntimeTest,RuleCatalogTest,PoolRuntimeTest,RuleDispatcherTest,CrossActorClaimsTest,EffectRuntimeTest,RollEditRuntimeTest,InputRuntimeTest,LifecycleRuntimeTest,TargetActionsTest,LegacyCatalogConverterTest,AutomationHostTest,OnlineSessionServerTest,EventContextContractTest,NestedSourceProjectionTest" test`; run `npm test -- --run src\automation` from `web`. `RuleCatalog.main` also accepts `<catalog.json> <recipes.json>` with the project's Java dependency classpath for read-only candidate validation. It does not convert or overwrite files.
 
-**Still required:** behavior-level baseline/parity fixtures; all catalog families and shared ruleset; authoritative HTTP intents, multi-actor persistence and protected sheet writes; live roll/lifecycle event wiring, effects, passive rules, general roll calculation/edit phases, shared actor-pool persistence/concurrency and remaining inputs/operations; all UI/editor surfaces; one-time backed-up catalog/saved-game conversion; compatibility negotiation and coordinated removal of old handlers. `docs/automation-parity-ledger.csv` inventories all 1,087 converter-recognized blocks with source pointers, fields and dry-run diagnostics; `docs/automation-parity-baselines.md` maps legacy tests and captured scenarios. The 1,013 `converted-candidate` rows indicate conversion acceptance only. No row has verified replacement parity.
+**Still required:** behavior-level baseline/parity fixtures; all catalog families and shared ruleset; authoritative HTTP intents, multi-actor persistence and protected sheet writes; downtime/feature-choice roll events, creation events, effects, passive rules, general roll calculation/edit phases, shared actor-pool persistence/concurrency and remaining inputs/operations; all UI/editor surfaces; one-time backed-up catalog/saved-game conversion; compatibility negotiation and coordinated removal of old handlers. `docs/automation-parity-ledger.csv` inventories all 1,087 converter-recognized blocks with source pointers, fields and dry-run diagnostics; `docs/automation-parity-baselines.md` maps legacy tests and captured scenarios. The 1,013 `converted-candidate` rows indicate conversion acceptance only. No row has verified replacement parity.
 
 ## What exists today
 
