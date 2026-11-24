@@ -2979,6 +2979,38 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void downtimeActionsOfferStructuredActionSentDamageAndResourceRolls() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"scout","name":"Scout","automation":{"actions":[
+                 {"id":"check","label":"Scout","timing":"rest","actionRoll":{"trait":"Agility"}},
+                 {"id":"send","label":"Signal","timing":"downtime","sendRoll":{"dice":"2d6","label":"Signal"}},
+                 {"id":"damage","label":"Damage","timing":"rest","damage":{"dice":"1d8+2","fixed":true,"type":"magic"}},
+                 {"id":"resource","label":"Resource","timing":"rest","resourceRoll":{"resource":"hope","sides":6}}]}}"""));
+        assertEquals(1, result.converted(), result.diagnostics().toString());
+        RuleCompiler.Program program = program(result, 0);
+        String actor = "{\"id\":\"actor\",\"name\":\"Ash\",\"traits\":{\"Agility\":2},\"hope\":{\"value\":4,\"max\":6}}";
+        var check = run(program, context(program, actor, move("check", "short", false, false)),
+                StructuredRollTest.faces(5, 7), "check");
+        assertEquals(14, check.outbox().getFirst().at("/roll/total").asInt());
+        assertEquals(2, StructuredRoll.dice(check.outbox().getFirst().path("roll"), "downtime", true).size());
+        var sent = run(program, context(program, actor, move("send", "short", false, false)),
+                StructuredRollTest.faces(1, 4), "send");
+        assertEquals(5, sent.outbox().getFirst().at("/roll/total").asInt());
+        var damage = run(program, context(program, actor, move("damage", "short", false, false)),
+                StructuredRollTest.faces(3), "damage");
+        assertEquals(5, damage.outbox().getFirst().at("/roll/total").asInt());
+        ObjectNode resourceContext = context(program, actor, move("resource", "short", false, false));
+        var intent = new RuleRuntime.Intent("resource", "downtime", "fixture", 0,
+                (ObjectNode) RuleJson.parse("{\"amount\":2}"));
+        var resource = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, resourceContext)),
+                List.of(intent), StructuredRollTest.faces(2, 4));
+        assertEquals(6, resource.outbox().getFirst().at("/roll/total").asInt());
+        assertEquals(2, resource.contexts().getFirst().at("/actor/hope/value").asInt());
+        assertTrue(run(program, context(program, actor, move("send", "long", false, false)),
+                StructuredRollTest.faces(1, 4), "send").outbox().isEmpty());
+    }
+
+    @Test
     void reportDicePrecedeStepDiceAndLateFailuresDoNotCommit() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"ordered","name":"Ordered","automation":{"uses":{"max":1,"per":"rest"},"actions":[

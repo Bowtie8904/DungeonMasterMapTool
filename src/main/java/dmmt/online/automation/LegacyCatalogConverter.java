@@ -3435,6 +3435,16 @@ public final class LegacyCatalogConverter {
             }
         }
         String specialReport = action.has("specialAction") ? specialAction(action, path, p, effects, rule, steps) : null;
+        if (action.has("timing")) {
+            for (int i = 0; i < steps.size(); i++) {
+                JsonNode sampled = steps.get(i);
+                if (!"roll.resolve".equals(sampled.path("op").asText()) || !sampled.has("as")) continue;
+                ObjectNode offer = RuleJson.JSON.createObjectNode().put("op", "downtime.offerRoll").put("label", escape(label));
+                offer.set("roll", read("result." + sampled.path("as").asText()));
+                offer.putObject("if").putArray("eq").add(read("event.move.rest")).add("short");
+                steps.insert(++i, offer);
+            }
+        }
         if (!steps.isEmpty()) rule.set("do", steps);
         ObjectNode ui = rule.putObject("ui");
         ui.put("label", escape(label));

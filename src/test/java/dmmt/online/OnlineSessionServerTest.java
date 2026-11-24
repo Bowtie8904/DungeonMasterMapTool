@@ -2359,6 +2359,55 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void downtimeActionAndSentRollsCanBeRerolledFromChat() throws Exception {
+        installRestRerollRules();
+        var converted = dmmt.online.automation.LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"domain-cards","entries":[
+                 {"id":"scout","name":"Scout","automation":{"actions":[
+                   {"id":"check","label":"Scout","timing":"downtime","actionRoll":{},
+                    "sendRoll":{"dice":"1d8","label":"Signal"}}]}}]}
+                """);
+        assertEquals(1, converted.converted(), converted.diagnostics().toString());
+        Path catalogFile = compendiumDir.resolve("domain-cards.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(catalogFile.toFile());
+        catalog.withArray("entries").add(converted.catalog().at("/entries/0").deepCopy());
+        java.nio.file.Files.writeString(catalogFile, catalog.toString());
+        String owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("actor").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "actor", """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":0},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},
+                 "loadout":[{"name":"Scout","instanceId":"scout","automationSource":"domain-cards:scout"},
+                            {"name":"Second Chance","instanceId":"chance","automationSource":"domain-cards:reroller"}]}
+                """);
+        JsonNode rest = MAPPER.readTree(restHttp(owner, "actor", "short", null).body());
+        ObjectNode body = restRequest(rest, "scout-rest");
+        addRestMove((ObjectNode) body.path("request"), restDescriptor(rest.path("moves"), "check"));
+        diceSeed(seedForDice(new int[]{12, 12, 8}, new int[]{2, 3, 4}));
+        var completed = restHttp(owner, "actor", null, body.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        var offers = store.historyTail(campaign.getId(), 100).stream()
+                .filter(message -> message.path("automationRecoveryRoll").isObject()).toList();
+        assertEquals(2, offers.size());
+        JsonNode check = offers.stream().filter(message ->
+                message.at("/automationRecoveryRoll/roll/contributions/0/dice/0/sides").asInt() == 12)
+                .findFirst().orElseThrow();
+        JsonNode sent = offers.stream().filter(message ->
+                message.at("/automationRecoveryRoll/roll/contributions/0/dice/0/sides").asInt() == 8)
+                .findFirst().orElseThrow();
+        assertEquals(5, check.at("/automationRecoveryRoll/roll/total").asInt());
+        assertEquals(4, sent.at("/automationRecoveryRoll/roll/total").asInt());
+        var description = recoveryRollHttp(owner, check, "actor", null);
+        assertEquals(200, description.statusCode(), description.body());
+        ObjectNode request = recoveryRollRequest(MAPPER.readTree(description.body()), "check-reroll");
+        diceSeed(seedForDice(new int[]{12, 12}, new int[]{10, 11}));
+        var accepted = recoveryRollHttp(owner, check, "actor", request.toString());
+        assertEquals(200, accepted.statusCode(), accepted.body());
+        assertEquals(21, MAPPER.readTree(accepted.body()).path("kept").asInt());
+        assertEquals(accepted.body(), recoveryRollHttp(owner, check, "actor", request.toString()).body());
+    }
+
+    @Test
     void selfRecoveryRerollsUseOneRevisionAndKeepHigherResults() throws Exception {
         installRestRerollRules();
         String owner = cookie();
