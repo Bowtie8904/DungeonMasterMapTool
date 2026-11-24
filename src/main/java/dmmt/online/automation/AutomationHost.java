@@ -3010,7 +3010,8 @@ public final class AutomationHost {
             byInstance.clear();
             candidates.forEach(candidateWithRecipient -> byInstance.put(candidateWithRecipient.instanceId(), candidateWithRecipient));
         }
-        boolean observeOwner = target != null || needsOwnerMoveReactions(candidates);
+        boolean observeOwner = target != null || needsOwnerMoveReactions(candidates)
+                || stagedRecipients != null && stagedRecipients.roster.grantInventory() != null;
         var adjustmentSources = observeOwner ? ownerMoveSources(candidates,
                 intents.stream().map(RuleRuntime.Intent::sourceInstanceId).collect(java.util.stream.Collectors.toSet()), true)
                 : candidates;
@@ -3018,10 +3019,11 @@ public final class AutomationHost {
         try {
             if (adjustmentReactions != null)
                 adjustments = RuleDispatcher.executeStagedMoveWithRecipientReactions(adjustmentSources, intents, random,
-                        pack.programs(), ownerMoveProjection(pack, working, state, candidates), adjustmentReactions);
+                        pack.programs(), ownerRestProjection(pack, working, state, candidates, stagedRecipients, adjustmentReactions),
+                        adjustmentReactions);
             else if (observeOwner)
                 adjustments = RuleDispatcher.executeStagedMoveWithOwnerReactions(adjustmentSources, intents, random,
-                        pack.programs(), ownerMoveProjection(pack, working, state, candidates));
+                        pack.programs(), ownerRestProjection(pack, working, state, candidates, stagedRecipients, null));
             else adjustments = RuleDispatcher.executeStagedMove(candidates, intents, random, pack.programs());
         } catch (RuleRuntime.Unavailable failure) {
             throw target == null ? failure : targetRestFailure(failure);
@@ -3052,7 +3054,7 @@ public final class AutomationHost {
                         && candidates.stream().noneMatch(source -> source.program().stateMayAffectProjection())
                         && candidates.getFirst().context().path("actor").path("effects").isEmpty();
                 var resolution = RuleDispatcher.executeSelectedWithOwnerReactions(selectedSources, intent, random, pack.programs(),
-                        ownerMoveProjection(pack, working, currentState, candidates), canSettleInventory);
+                        ownerRestProjection(pack, working, currentState, candidates, stagedRecipients, null), canSettleInventory);
                 after = applyResolved(pack, working, currentState, adjusted,
                         resolution.contexts(), resolution.actions(), resolution.outbox());
             } else {
@@ -3076,7 +3078,8 @@ public final class AutomationHost {
                         && candidates.getFirst().context().path("actor").path("effects").isEmpty()
                         && chosen.recipients().getFirst().snapshot().path("effects").isEmpty();
                 resolved = RuleDispatcher.executeTargetsWithReactions(candidates, chosen.intent(), chosen.recipients(), random,
-                        pack.programs(), ownerMoveProjection(pack, working, projection.state(working), candidates),
+                        pack.programs(), ownerRestProjection(pack, working, projection.state(working), candidates,
+                                stagedRecipients, recipientReactions),
                         recipientReactions, canSettleInventory);
             }
             if (resolved.recipients().size() != 1)
@@ -3121,6 +3124,7 @@ public final class AutomationHost {
             if (adjustment.actorId() != null && !adjustment.actorId().equals(finalEvent.path("actorId").asText()))
                 continue;
             var original = byInstance.get(adjustment.sourceInstanceId());
+            if (original == null) continue;
             if (!original.program().rule(adjustment.ruleId()).has("after")) continue;
             var activeSources = sources(pack, working);
             var active = activeSources.stream()
@@ -3157,8 +3161,8 @@ public final class AutomationHost {
                 }
                 RuleDispatcher.EventResolution completed;
                 try {
-                    var ownerProjection = ownerRecoveryProjection(pack, working, currentState, activeSources,
-                            currentActor, finalEvent.path("actorId").asText(), true);
+                    var ownerProjection = ownerRestProjection(pack, working, currentState, deferredCandidates,
+                            stagedRecipients, stagedReactions);
                     completed = stagedReactions == null
                             ? RuleDispatcher.executeDeferredWithOwnerReactions(deferredCandidates, deferred, random,
                                     pack.programs(), ownerProjection)
@@ -3210,7 +3214,8 @@ public final class AutomationHost {
         if (completedCandidates.stream().anyMatch(source -> !source.program().automatic("downtime.completed").isEmpty())) {
             ObjectNode completedState = projection.state(working);
             var completed = RuleDispatcher.executeOwnerTrackReactions(completedCandidates, List.of(), random,
-                    pack.programs(), ownerMoveProjection(pack, working, completedState, completedCandidates));
+                    pack.programs(), ownerRestProjection(pack, working, completedState, completedCandidates,
+                            stagedRecipients, stagedReactions));
             ObjectNode response = applyResolved(pack, working, completedState, completedEvent,
                     completed.contexts(), completed.actions(), completed.outbox());
             if (target != null) validateTargetRestCommands(response);
@@ -3284,6 +3289,58 @@ public final class AutomationHost {
                                                                 List<RuleDispatcher.Candidate> candidates) {
         ObjectNode actor = RuleJson.object(candidates.getFirst().context().get("actor"), "/actor");
         return ownerRecoveryProjection(pack, sheet, state, sources(pack, sheet), actor, actor.path("id").asText(), true);
+    }
+
+    private RuleDispatcher.OwnerProjection ownerRestProjection(Pack pack, ObjectNode sheet, ObjectNode state,
+                                                               List<RuleDispatcher.Candidate> candidates,
+                                                               StagedRestRecipients recipients,
+                                                               StagedRestRecipients.StagedRecipientReactions recipient) {
+        RuleDispatcher.OwnerProjection initial = ownerMoveProjection(pack, sheet, state, candidates);
+        if (recipients == null || recipients.roster.grantInventory() == null) return initial;
+        return new RuleDispatcher.OwnerProjection() {
+            private RuleDispatcher.OwnerProjection current = initial;
+
+            @Override
+            public ObjectNode project(ObjectNode staged, Map<String, ObjectNode> contexts, String operation,
+                                      ObjectNode previousActor, String target) {
+                return current.project(staged, contexts, operation, previousActor, target);
+            }
+
+            @Override
+            public List<RuleDispatcher.Candidate> grantInventory(ObjectNode staged, Map<String, ObjectNode> contexts) {
+                ArrayNode pending = staged.withArray("/outbox");
+                int index = pending.size() - 1;
+                if (index < 0 || !"inventory.grant".equals(pending.path(index).path("kind").asText())
+                        || !recipients.sourceId.equals(pending.path(index).path("holderId").asText()))
+                    throw RuleJson.error("/outbox", "The inventory grant does not match the resting character.");
+                ObjectNode next = sheet.deepCopy();
+                ObjectNode nextState = projection.state(next);
+                contexts.forEach((instance, context) -> storeSource(nextState, instance, context));
+                storeSource(nextState, staged.at("/source/instanceId").asText(), staged);
+                projection.write(next, projection.actor(next), persisted(RuleJson.object(staged.get("actor"), "/actor")));
+                Map<String, ObjectNode> sheets = recipients.currentSheets();
+                sheets.put(recipients.sourceId, next);
+                if (recipient != null && staged.path("recipient").isObject()) {
+                    projection.write(recipient.working, projection.actor(recipient.working),
+                            persisted((ObjectNode) staged.get("recipient")));
+                    sheets.put(recipient.participant.member.id(), recipient.working);
+                }
+                recipients.roster.grantInventory().accept((ObjectNode) pending.get(index), sheets);
+                pending.remove(index);
+                replace(sheet, next);
+                ObjectNode replacedState = projection.state(sheet);
+                replace(state, replacedState);
+                sheet.set(projection.stateField(), state);
+                ObjectNode event = RuleJson.object(staged.get("event"), "/event");
+                var activeSources = sources(pack, sheet);
+                ObjectNode actor = actor(pack, sheet, state, event, activeSources);
+                staged.set("actor", actor);
+                if (staged.has("recipient") && recipients.sourceId.equals(staged.at("/recipient/id").asText()))
+                    staged.set("recipient", actor);
+                current = ownerRecoveryProjection(pack, sheet, state, activeSources, actor, recipients.sourceId, true);
+                return candidates(pack, activeSources, state, actor, event);
+            }
+        };
     }
 
     private static void validateTargetRestCommands(ObjectNode response) {

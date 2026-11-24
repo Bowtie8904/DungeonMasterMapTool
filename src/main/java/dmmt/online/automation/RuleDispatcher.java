@@ -183,6 +183,10 @@ public final class RuleDispatcher {
     interface OwnerProjection {
         ObjectNode project(ObjectNode staged, Map<String, ObjectNode> contexts, String operation,
                            ObjectNode previousActor, String target);
+
+        default List<Candidate> grantInventory(ObjectNode staged, Map<String, ObjectNode> contexts) {
+            return null;
+        }
     }
 
     interface RecipientTrackReactions {
@@ -200,6 +204,7 @@ public final class RuleDispatcher {
         final OwnerProjection projection;
         RecipientTrackReactions recipient;
         Map<String, ObjectNode> contexts;
+        Map<String, Candidate> sources;
 
         ReactionBudget() { this(null); }
         ReactionBudget(OwnerProjection projection) { this.projection = projection; }
@@ -386,6 +391,7 @@ public final class RuleDispatcher {
         ReactionBudget budget = new ReactionBudget(projection);
         budget.recipient = recipient;
         budget.contexts = workingContexts;
+        budget.sources = byInstance;
         RuleRuntime.TrackObserver observer = ownerTrackObserver(
                 snapshot, byInstance, workingContexts, random, programs, budget, actions, outbox);
         if (recipient != null)
@@ -446,6 +452,7 @@ public final class RuleDispatcher {
         List<ObjectNode> outbox = new ArrayList<>();
         ReactionBudget budget = new ReactionBudget(projection);
         budget.contexts = workingContexts;
+        budget.sources = byInstance;
         RuleRuntime.TrackObserver observer = snapshot.sources().isEmpty() && projection == null ? null : ownerTrackObserver(
                 snapshot, byInstance, workingContexts, random, programs, budget, actions, outbox);
         int cleared = RuleRuntime.clearOwnerTrack(staged, track, requested, observer);
@@ -487,6 +494,7 @@ public final class RuleDispatcher {
             workingContexts.put(instanceId, candidate.context());
         }
         if (budget != null && budget.contexts == null) budget.contexts = workingContexts;
+        if (budget != null && budget.sources == null) budget.sources = byInstance;
         if (selections == null) throw RuleJson.error("/selections", "Expected selected bindings.");
 
         List<Invocation> invocations = new ArrayList<>();
@@ -711,12 +719,34 @@ public final class RuleDispatcher {
             Snapshot snapshot, Map<String, Candidate> byInstance, Map<String, ObjectNode> workingContexts,
             RandomGenerator random, Map<String, RuleCompiler.Program> programs, ReactionBudget budget,
             List<ActionResult> results, List<ObjectNode> outbox) {
-        List<String> relevant = byInstance.entrySet().stream()
-                .filter(entry -> entry.getValue().program().hasComputedActorPools()
-                        || !entry.getValue().program().automatic("track.changed").isEmpty())
-                .map(Map.Entry::getKey).sorted().toList();
         return new RuleRuntime.TrackObserver() {
             private void reproject(ObjectNode staged, String operation, ObjectNode previousActor, String target) {
+                if ("inventory.grant".equals(operation) && budget.projection != null) {
+                    String currentId = staged.path("source").path("instanceId").asText();
+                    if (!currentId.isEmpty()) {
+                        mergeSourceState(workingContexts.get(currentId), staged);
+                        mergeReactionSource(budget, currentId, staged);
+                    }
+                    List<Candidate> refreshed = budget.projection.grantInventory(staged, budget.contexts);
+                    if (refreshed != null) {
+                        Set<String> active = new HashSet<>();
+                        for (Candidate candidate : refreshed) active.add(candidate.instanceId());
+                        if (!active.containsAll(budget.sources.keySet()))
+                            throw new RuleRuntime.Unavailable("reactionSource",
+                                    "An inventory grant removed an active source during this action.");
+                        for (Candidate candidate : refreshed) {
+                            String id = candidate.instanceId();
+                            ObjectNode fresh = candidate.context();
+                            budget.sources.put(id, candidate);
+                            byInstance.put(id, candidate);
+                            updateGrantedSource(budget.contexts, id, fresh);
+                            updateGrantedSource(workingContexts, id, fresh);
+                        }
+                        ObjectNode current = workingContexts.get(currentId);
+                        if (current != null) staged.set("source", current.path("source").deepCopy());
+                        return;
+                    }
+                }
                 if ("inventory.grant".equals(operation) && budget.allowSelectedInventory && budget.depth == 0) {
                     budget.inventoryPending = true;
                     return;
@@ -793,12 +823,22 @@ public final class RuleDispatcher {
                         mergeReactionSource(budget, currentId, staged);
                     }
                 }
+                List<String> relevant = budget.sources.entrySet().stream()
+                        .filter(entry -> entry.getValue().program().hasComputedActorPools()
+                                || !entry.getValue().program().automatic("track.changed").isEmpty())
+                        .map(Map.Entry::getKey).sorted().toList();
                 if (relevant.isEmpty()) return;
                 drainOutbox(staged, outbox);
                 String currentId = staged.path("source").path("instanceId").asText();
                 List<Candidate> candidates = new ArrayList<>();
                 for (String instanceId : relevant) {
-                    ObjectNode context = workingContexts.get(instanceId).deepCopy();
+                    ObjectNode saved = workingContexts.get(instanceId);
+                    if (saved == null) {
+                        saved = budget.contexts.get(instanceId).deepCopy();
+                        workingContexts.put(instanceId, saved);
+                        byInstance.put(instanceId, budget.sources.get(instanceId));
+                    }
+                    ObjectNode context = saved.deepCopy();
                     context.set("actor", staged.get("actor").deepCopy());
                     context.set("event", event.deepCopy());
                     context.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
@@ -865,10 +905,17 @@ public final class RuleDispatcher {
     }
 
     private static void mergeSourceState(ObjectNode target, ObjectNode source) {
+        if (target == null) return;
         for (String field : List.of("source", "state", "usage", "sourcePools")) {
             if (source.has(field)) target.set(field, source.get(field).deepCopy());
             else target.remove(field);
         }
+    }
+
+    private static void updateGrantedSource(Map<String, ObjectNode> contexts, String id, ObjectNode fresh) {
+        ObjectNode current = contexts.get(id);
+        if (current == null) contexts.put(id, fresh.deepCopy());
+        else current.set("source", fresh.path("source").deepCopy());
     }
 
     private static void drainOutbox(ObjectNode context, List<ObjectNode> outbox) {
@@ -1197,6 +1244,7 @@ public final class RuleDispatcher {
             ReactionBudget budget = new ReactionBudget(sourceProjection);
             budget.allowSelectedInventory = allowInventory;
             budget.contexts = workingContexts;
+            budget.sources = byInstance;
             RuleRuntime.TrackObserver sourceObserver = ownerTrackObserver(
                     snapshot, byInstance, workingContexts, random, programs, budget, sourceReactions, outbox);
             observer = new RuleRuntime.TrackObserver() {
@@ -1288,8 +1336,7 @@ public final class RuleDispatcher {
         }
 
         List<ObjectNode> updatedSources = new ArrayList<>();
-        for (Candidate source : snapshot.sources()) {
-            String instanceId = source.context().path("source").path("instanceId").asText();
+        for (String instanceId : workingContexts.keySet().stream().sorted().toList()) {
             ObjectNode context = instanceId.equals(intent.sourceInstanceId()) ? workingSource.deepCopy()
                     : workingContexts.get(instanceId).deepCopy();
             context.set("actor", sharedActor.deepCopy());

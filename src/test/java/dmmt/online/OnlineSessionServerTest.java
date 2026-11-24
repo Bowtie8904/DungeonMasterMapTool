@@ -3520,13 +3520,7 @@ class OnlineSessionServerTest {
                 {"name":"Borin","inventory":[{"name":"Foraged Relic","type":"consumable","qty":4,"foraged":true}]}
                 """);
         JsonNode offer = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
-        ObjectNode unsafe = restRequest(offer, "unsafe-grant");
-        addRestMove((ObjectNode) unsafe.path("request"), restDescriptor(offer.path("moves"), "inventory-then-stress"));
         String original = store.loadSheet(campaign.getId(), "resting");
-        var unsafeResult = restHttp(owner, "resting", null, unsafe.toString());
-        assertEquals(409, unsafeResult.statusCode(), unsafeResult.body());
-        assertTrue(unsafeResult.body().contains("later track reaction"), unsafeResult.body());
-        assertEquals(original, store.loadSheet(campaign.getId(), "resting"));
         ObjectNode body = restRequest(offer, "rest-forage");
         addRestMove((ObjectNode) body.path("request"), restDescriptor(offer.path("moves"), "inventory-craft"));
         addRestMove((ObjectNode) body.path("request"), restDescriptor(offer.path("moves"), "inventory-count"));
@@ -3545,6 +3539,160 @@ class OnlineSessionServerTest {
         assertEquals(2, sheet.at("/hope/on").asInt());
         assertEquals(completed.body(), restHttp(owner, "resting", null, body.toString()).body());
         assertEquals(sheet, MAPPER.readTree(store.loadSheet(campaign.getId(), "resting")));
+    }
+
+    @Test
+    void restSettlesActorGrantsBeforeLaterReadsAndNewSourceReactions() throws Exception {
+        installRestRules();
+        Path consumablesFile = compendiumDir.resolve("consumables.json");
+        ObjectNode consumables = (ObjectNode) MAPPER.readTree(consumablesFile.toFile());
+        ObjectNode potion = (ObjectNode) consumables.at("/entries/0/automation");
+        potion.putObject("state").put("seen", 0);
+        potion.putArray("modifiers").addObject().put("stat", "trait.Agility").put("value", 2);
+        potion.withArray("rules").add(MAPPER.readTree("""
+                {"id":"watch","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.track"},"stress"]},
+                 "do":[{"op":"state.increment","slot":"seen","by":1},
+                       {"op":"resource.gain","pool":"actor.hope","amount":1}],
+                 "ui":{"report":"New supply reacted."}}
+                """));
+        for (String id : List.of("minor-mana-potion", "minor-focus-potion"))
+            consumables.withArray("entries").addObject().put("id", id).put("name", id)
+                    .put("rarity", "Common").put("text", "A test potion.");
+        java.nio.file.Files.writeString(consumablesFile, consumables.toString());
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withArray("rules").addAll((ArrayNode) MAPPER.readTree("""
+                [
+                 {"id":"staged-supplies","bindings":[{"id":"move","event":"downtime.move","surface":"downtime",
+                    "mode":"button","restMove":{"id":"staged-supplies","kind":"short"}}],
+                  "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-mana-potion",
+                         "quantity":1,"label":"Second supply"},
+                        {"op":"track.mark","track":"actor.stress","amount":1},
+                        {"op":"value","value":{"size":{"read":"actor.inventory"}},"as":"count"},
+                        {"op":"value","value":{"read":"actor.stats.trait.Agility"},"as":"agility"}],
+                  "ui":{"label":"Make supplies","report":"The actor has {result.count} supplies and Agility {result.agility}."}},
+                 {"id":"supply-adjustment","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.move.id"},"staged-supplies"]},
+                  "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
+                         "quantity":1,"label":"First supply"},
+                        {"op":"track.mark","track":"actor.stress","amount":1}],
+                  "after":{"do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-focus-potion",
+                                  "quantity":1,"label":"Third supply"},
+                                 {"op":"track.mark","track":"actor.stress","amount":1},
+                                 {"op":"value","value":{"size":{"read":"actor.inventory"}},"as":"count"}],
+                           "report":"Finished with {result.count} supplies."},
+                  "ui":{}},
+                 {"id":"supply-failure","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"option"}],
+                  "when":{"eq":[{"read":"event.move.id"},"staged-supplies"]},
+                  "after":{"costs":[{"op":"resource.spend","pool":"actor.hope","amount":6}]},
+                  "ui":{"label":"Unaffordable supplies"}}
+                ]
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        campaign.getActors().add(Campaign.Actor.builder().id("resting").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "resting", """
+                {"name":"Ada","hp":{"slots":6,"on":2},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},"inventory":[]}
+                """);
+        String owner = cookie();
+        JsonNode offer = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode failed = restRequest(offer, "failed-supplies");
+        ObjectNode failedMove = addRestMove((ObjectNode) failed.path("request"),
+                restDescriptor(offer.path("moves"), "staged-supplies"));
+        failedMove.withArray("options").add(restSelection(restDescriptor(
+                restDescriptor(offer.path("moves"), "staged-supplies").path("options"), "supply-failure")));
+        String original = store.loadSheet(campaign.getId(), "resting");
+        int history = store.historyTail(campaign.getId(), 100).size();
+        var rejected = restHttp(owner, "resting", null, failed.toString());
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertEquals(original, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+
+        ObjectNode request = restRequest(offer, "staged-supplies");
+        addRestMove((ObjectNode) request.path("request"), restDescriptor(offer.path("moves"), "staged-supplies"));
+        var completed = restHttp(owner, "resting", null, request.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        List<String> reports = MAPPER.readTree(completed.body()).path("actions").findValuesAsText("report");
+        assertEquals(3, reports.stream().filter("New supply reacted."::equals).count(), reports.toString());
+        assertTrue(reports.contains("The actor has 2 supplies and Agility 2."), reports.toString());
+        assertTrue(reports.contains("Finished with 3 supplies."), reports.toString());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(3, saved.path("inventory").size());
+        assertEquals(3, saved.at("/stress/on").asInt());
+        assertEquals(3, saved.at("/hope/on").asInt());
+        String supplyInstance = saved.at("/inventory/0/instanceId").asText();
+        assertEquals(3, saved.at("/automationState/sources/" + supplyInstance + "/state/seen").asInt());
+        assertEquals(1, saved.at("/automationState/revision").asInt());
+        assertEquals(completed.body(), restHttp(owner, "resting", null, request.toString()).body());
+        assertEquals(saved, MAPPER.readTree(store.loadSheet(campaign.getId(), "resting")));
+    }
+
+    @Test
+    void actorRestGrantChecksPartyCapsAgainstStagedRecipientInventory() throws Exception {
+        installRestRules();
+        Path consumablesFile = compendiumDir.resolve("consumables.json");
+        ObjectNode consumables = (ObjectNode) MAPPER.readTree(consumablesFile.toFile());
+        ObjectNode potion = (ObjectNode) consumables.at("/entries/0/automation");
+        potion.putObject("state").put("seen", 0);
+        potion.withArray("rules").add(MAPPER.readTree("""
+                {"id":"watch","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.track"},"stress"]},
+                 "do":[{"op":"state.increment","slot":"seen","by":1}],
+                 "ui":{"report":"New supply watched Stress."}}
+                """));
+        java.nio.file.Files.writeString(consumablesFile, consumables.toString());
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withArray("rules").addAll((ArrayNode) MAPPER.readTree("""
+                [
+                {"id":"shared-supply","bindings":[{"id":"move","event":"downtime.move","surface":"downtime",
+                   "mode":"button","restMove":{"id":"shared-supply","kind":"short","ally":true},
+                   "targetSelection":{"cardinality":"one","scope":"activeCharacters","excludeSource":true}}],
+                 "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
+                        "quantity":1,"to":"recipient","tag":"shared","max":1,"scope":"party","label":"Ally supply"},
+                       {"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
+                        "quantity":1,"tag":"shared","max":1,"scope":"party","label":"Actor supply"}],
+                 "ui":{"label":"Share limited supplies"}},
+                {"id":"shared-safe","bindings":[{"id":"move","event":"downtime.move","surface":"downtime",
+                   "mode":"button","restMove":{"id":"shared-safe","kind":"short","ally":true},
+                   "targetSelection":{"cardinality":"one","scope":"activeCharacters","excludeSource":true}}],
+                 "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
+                        "quantity":1,"to":"recipient","tag":"shared","max":2,"scope":"party","label":"Ally supply"},
+                       {"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
+                        "quantity":1,"tag":"shared","max":2,"scope":"party","label":"Actor supply"},
+                       {"op":"track.mark","track":"actor.stress","amount":1},
+                       {"op":"value","value":{"size":{"read":"actor.inventory"}},"as":"actorCount"},
+                       {"op":"value","value":{"size":{"read":"recipient.inventory"}},"as":"recipientCount"}],
+                 "ui":{"label":"Share supplies","report":"Actor {result.actorCount}, ally {result.recipientCount}."}}
+                ]
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        addRestParty();
+        String owner = cookie();
+        JsonNode offer = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode request = restRequest(offer, "shared-supply");
+        targetRestMove(request, offer, "shared-supply", "mira");
+        String source = store.loadSheet(campaign.getId(), "resting");
+        String recipient = store.loadSheet(campaign.getId(), "mira");
+        var rejected = restHttp(owner, "resting", null, request.toString());
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertTrue(rejected.body().contains("limit of 1"), rejected.body());
+        assertEquals(source, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(recipient, store.loadSheet(campaign.getId(), "mira"));
+
+        ObjectNode safe = restRequest(offer, "shared-safe");
+        targetRestMove(safe, offer, "shared-safe", "mira");
+        var completed = restHttp(owner, "resting", null, safe.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        List<String> reports = MAPPER.readTree(completed.body()).path("actions").findValuesAsText("report");
+        assertTrue(reports.contains("New supply watched Stress."), reports.toString());
+        assertTrue(reports.contains("Actor 1, ally 1."), reports.toString());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        String supplyInstance = saved.at("/inventory/0/instanceId").asText();
+        assertEquals(1, saved.at("/automationState/sources/" + supplyInstance + "/state/seen").asInt());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "mira")).at("/inventory/0/qty").asInt());
+        assertEquals(completed.body(), restHttp(owner, "resting", null, safe.toString()).body());
     }
 
     @Test
