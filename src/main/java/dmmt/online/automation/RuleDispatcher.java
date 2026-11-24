@@ -960,7 +960,10 @@ public final class RuleDispatcher {
                         }
                         if (!currentId.isEmpty()) mergeSourceState(staged, workingContexts.get(currentId));
                         if (!reacted.contexts().isEmpty()) {
+                            boolean selfRecipient = staged.has("recipient")
+                                    && staged.at("/actor/id").equals(staged.at("/recipient/id"));
                             staged.set("actor", reacted.contexts().getFirst().get("actor").deepCopy());
+                            if (selfRecipient) staged.set("recipient", staged.get("actor"));
                             event = (ObjectNode) reacted.contexts().getFirst().get("event").deepCopy();
                         }
                         results.addAll(reacted.actions());
@@ -1242,6 +1245,14 @@ public final class RuleDispatcher {
         return executeTargets(activeSources, selection, eligibleRecipients, random, programs, null, null, false);
     }
 
+    static TargetResolution executeTargetsWithOwnerReactions(List<Candidate> activeSources, TargetIntent selection,
+                                                             List<RecipientCandidate> eligibleRecipients,
+                                                             RandomGenerator random, Map<String, RuleCompiler.Program> programs,
+                                                             OwnerProjection sourceProjection) {
+        return executeTargets(activeSources, selection, eligibleRecipients, random, programs,
+                sourceProjection, null, true);
+    }
+
     static TargetResolution executeTargetsWithReactions(List<Candidate> activeSources, TargetIntent selection,
                                                          List<RecipientCandidate> eligibleRecipients,
                                                          RandomGenerator random, Map<String, RuleCompiler.Program> programs,
@@ -1346,10 +1357,12 @@ public final class RuleDispatcher {
             workingContexts.put(source.instanceId(), source.context());
         }
         RuleRuntime.TrackObserver observer = null;
-        if (recipientReactions != null) {
+        if (sourceProjection != null) {
             List<ActionResult> sourceReactions = new ArrayList<>();
             ReactionBudget budget = new ReactionBudget(sourceProjection);
             budget.allowSelectedInventory = allowInventory;
+            budget.liveRoot = recipientReactions == null;
+            budget.nestedRolls = recipientReactions == null && "action.request".equals(snapshot.eventType());
             budget.contexts = workingContexts;
             budget.sources = byInstance;
             RuleRuntime.TrackObserver sourceObserver = ownerTrackObserver(
@@ -1360,7 +1373,8 @@ public final class RuleDispatcher {
                     if (budget.inventoryPending)
                         throw new RuleRuntime.Unavailable("inventorySettlement",
                                 "A later track reaction requires the inventory grant to be settled first.");
-                    if ("recipient".equals(holder)) {
+                    if ("recipient".equals(holder) && !staged.at("/recipient/id").equals(staged.at("/actor/id"))) {
+                        if (recipientReactions == null) return;
                         drainOutbox(staged, outbox);
                         recipientReactions.changed(staged, event, budget.contexts, actionResults, outbox);
                     } else {
@@ -1376,7 +1390,8 @@ public final class RuleDispatcher {
                     if (budget.inventoryPending && !"inventory.grant".equals(operation))
                         throw new RuleRuntime.Unavailable("inventorySettlement",
                                 "A later reaction requires the inventory grant to be settled first.");
-                    if ("recipient".equals(target)) {
+                    if ("recipient".equals(target) && !staged.at("/recipient/id").equals(staged.at("/actor/id"))) {
+                        if (recipientReactions == null) return;
                         if ("inventory.grant".equals(operation)) {
                             if (budget.inventoryPending)
                                 throw new RuleRuntime.Unavailable("inventorySettlement",
@@ -1396,6 +1411,15 @@ public final class RuleDispatcher {
                             throw new RuleRuntime.Unavailable("recipientReactions",
                                     "This recipient change requires additional lifecycle settlement: " + operation + ".");
                     } else sourceObserver.mutated(staged, operation, previousActor, target);
+                }
+
+                @Override
+                public ObjectNode rolled(ObjectNode staged, ObjectNode roll) {
+                    ObjectNode result = sourceObserver.rolled(staged, roll);
+                    for (ActionResult reaction : sourceReactions)
+                        actionResults.add(new TargetActionResult(reaction, null, sourceActorId));
+                    sourceReactions.clear();
+                    return result;
                 }
             };
         }

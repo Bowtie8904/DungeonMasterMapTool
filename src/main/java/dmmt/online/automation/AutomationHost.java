@@ -459,11 +459,25 @@ public final class AutomationHost {
             action = targetAction(pack, working, event, request, relation, party);
         }
         var targets = action.selection();
-        var resolved = RuleDispatcher.executeTargets(action.candidates(), targets.intent(), targets.recipients(), random, pack.programs());
+        var candidates = action.candidates();
+        RuleDispatcher.TargetResolution resolved;
+        if (!candidates.isEmpty() && event.path("actorId").isTextual()) {
+            ObjectNode actor = RuleJson.object(candidates.getFirst().context().get("actor"), "/actor");
+            var ownerProjection = ownerRecoveryProjection(pack, working, state, sources(pack, working), actor,
+                    RuleJson.id(actor.get("id"), "/actor/id"), false, true);
+            resolved = RuleDispatcher.executeTargetsWithOwnerReactions(candidates, targets.intent(), targets.recipients(),
+                    random, pack.programs(), ownerProjection);
+        } else {
+            resolved = RuleDispatcher.executeTargets(candidates, targets.intent(), targets.recipients(), random, pack.programs());
+        }
         var targetedActions = resolved.actions().stream().map(RuleDispatcher.TargetActionResult::action).toList();
         ObjectNode after = applyResolved(pack, working, state, event, resolved.sourceContexts(), targetedActions, resolved.outbox());
-        for (int i = 0; i < resolved.actions().size(); i++)
-            ((ObjectNode) after.path("actions").get(i)).put("recipientId", resolved.actions().get(i).recipientId());
+        for (int i = 0; i < resolved.actions().size(); i++) {
+            var actionResult = resolved.actions().get(i);
+            ObjectNode item = (ObjectNode) after.path("actions").get(i);
+            if (actionResult.recipientId() != null) item.put("recipientId", actionResult.recipientId());
+            if (actionResult.actorId() != null) item.put("actorId", actionResult.actorId());
+        }
         for (String key : List.of("actions", "outbox")) ((ArrayNode) result.get(key)).addAll((ArrayNode) after.get(key));
         result.set("event", after.get("event"));
         party.stage(resolved.recipients());

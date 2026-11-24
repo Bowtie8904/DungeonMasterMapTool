@@ -7748,6 +7748,113 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void targetedFeatureRollsDispatchOwnerReactionsAndCommitBothSheets() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode feature = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        feature.set("rules", MAPPER.readTree("""
+                [{"id":"assist","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button",
+                   "targetSelection":{"scope":"activeCharacters","cardinality":"one","excludeSource":true}}],
+                  "costs":[{"op":"resource.spend","pool":"actor.hope","amount":1}],
+                  "do":[{"op":"roll.resolve","plan":{"literal":{"id":"assist",
+                    "contributions":[{"id":"value","kind":"flat","role":"modifier","sourceId":"core","label":"Aid","value":2}],
+                    "metadata":{"kind":"roll","label":"Aid","origin":"feat:Steady"}}},"as":"roll"},
+                    {"op":"track.clear","track":"recipient.stress","amount":{"read":"result.roll.total"},"as":"cleared"}],
+                  "ui":{"label":"Assist","report":"Cleared {result.cleared} Stress."}},
+                 {"id":"block","bindings":[{"id":"auto","event":"roll.prepare","surface":"roll","mode":"automatic"}],
+                  "when":{"gte":[{"read":"actor.stress.marked"},1]},
+                  "do":[{"op":"event.block","reason":"Too stressed"}],"ui":{"label":"Block"}},
+                 {"id":"finish","bindings":[{"id":"auto","event":"roll.finished","surface":"roll","mode":"automatic"}],
+                  "do":[{"op":"track.mark","track":"actor.stress","amount":1},
+                        {"op":"table.gain","resource":"fear","amount":1,"label":"Fear"}],
+                  "ui":{"label":"Finish"}}]"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String campaignId = campaign.getId();
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("patient").name("Bea").ownerId(playerId()).build());
+        ObjectNode caster = (ObjectNode) MAPPER.readTree("""
+                {"name":"Ada","hope":{"slots":6,"on":2},"stress":{"slots":6,"on":1},
+                 "features":[{"name":"Steady","instanceId":"s","automationSource":"classes:tester:features:steady"}]}""");
+        store.saveSheet(campaignId, "caster", caster.toString());
+        store.saveSheet(campaignId, "patient", "{\"name\":\"Bea\",\"stress\":{\"slots\":6,\"on\":3}}");
+        String owner = cookie(), other = allyCookie("other");
+        ObjectNode request = MAPPER.createObjectNode().put("requestId", "target-roll").put("expectedRevision", 0);
+        request.putArray("selections").addObject().put("sourceInstanceId", "s").put("ruleId", "assist").put("bindingId", "use");
+        JsonNode option = MAPPER.readTree(automationHttp(owner, "caster", null).body())
+                .requiredAt("/actions/0/targetSelection/options/0");
+        request.putObject("target").put("recipientId", "patient").set("version", option.required("version"));
+        String body = MAPPER.createObjectNode().set("request", request).toString();
+        String beforeCaster = store.loadSheet(campaignId, "caster"), beforePatient = store.loadSheet(campaignId, "patient");
+        int history = store.historyTail(campaignId, 100).size();
+        assertEquals(403, automationHttp(other, "caster", body).statusCode());
+        var blocked = automationHttp(owner, "caster", body);
+        assertEquals(409, blocked.statusCode(), blocked.body());
+        assertTrue(blocked.body().contains("Too stressed"), blocked.body());
+        assertEquals(beforeCaster, store.loadSheet(campaignId, "caster"));
+        assertEquals(beforePatient, store.loadSheet(campaignId, "patient"));
+        assertEquals(history, store.historyTail(campaignId, 100).size());
+
+        caster.withObject("/stress").put("on", 0);
+        store.saveSheet(campaignId, "caster", caster.toString());
+        option = MAPPER.readTree(automationHttp(owner, "caster", null).body())
+                .requiredAt("/actions/0/targetSelection/options/0");
+        ((ObjectNode) request.get("target")).set("version", option.required("version"));
+        body = MAPPER.createObjectNode().set("request", request).toString();
+        var accepted = automationHttp(owner, "caster", body);
+        assertEquals(200, accepted.statusCode(), accepted.body());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaignId, "caster")).at("/hope/on").asInt());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaignId, "caster")).at("/stress/on").asInt());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaignId, "patient")).at("/stress/on").asInt());
+        assertEquals(1, campaign.getFear());
+        assertTrue(MAPPER.readTree(accepted.body()).path("outbox").findValuesAsText("kind").contains("roll.event"));
+        int published = store.historyTail(campaignId, 100).size();
+        assertEquals(accepted.body(), automationHttp(owner, "caster", body).body());
+        assertEquals(published, store.historyTail(campaignId, 100).size());
+    }
+
+    @Test
+    void partyFeatureRollsKeepSelfAndRecipientViewsInSync() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ((ObjectNode) catalog.at("/entries/0/features/2/automation")).set("rules", MAPPER.readTree("""
+                [{"id":"assist","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button",
+                   "targetSelection":{"scope":"activeCharacters","cardinality":"all"}}],
+                  "costs":[{"op":"resource.spend","pool":"actor.hope","amount":1}],
+                  "do":[{"op":"roll.resolve","plan":{"literal":{"id":"assist",
+                    "contributions":[{"id":"value","kind":"flat","role":"modifier","sourceId":"core","label":"Aid","value":1}],
+                    "metadata":{"kind":"roll","label":"Aid"}}},"as":"roll"},
+                    {"op":"track.clear","track":"recipient.stress","amount":{"read":"result.roll.total"}}],
+                  "ui":{"label":"Assist"}},
+                 {"id":"finish","bindings":[{"id":"auto","event":"roll.finished","surface":"roll","mode":"automatic"}],
+                  "do":[{"op":"track.mark","track":"actor.stress","amount":1}],"ui":{"label":"Finish"}}]"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String campaignId = campaign.getId();
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("patient").name("Bea").ownerId(playerId()).build());
+        store.saveSheet(campaignId, "caster", """
+                {"name":"Ada","hope":{"slots":6,"on":2},"stress":{"slots":6,"on":1},
+                 "features":[{"name":"Steady","instanceId":"s","automationSource":"classes:tester:features:steady"}]}""");
+        store.saveSheet(campaignId, "patient", "{\"name\":\"Bea\",\"stress\":{\"slots\":6,\"on\":3}}");
+        String owner = cookie();
+        JsonNode target = MAPPER.readTree(automationHttp(owner, "caster", null).body())
+                .requiredAt("/actions/0/targetSelection");
+        ObjectNode request = MAPPER.createObjectNode().put("requestId", "party-roll").put("expectedRevision", 0);
+        request.putArray("selections").addObject().put("sourceInstanceId", "s").put("ruleId", "assist").put("bindingId", "use");
+        request.putObject("target").set("version", target.required("version"));
+        String body = MAPPER.createObjectNode().set("request", request).toString();
+        var response = automationHttp(owner, "caster", body);
+        assertEquals(200, response.statusCode(), response.body());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaignId, "caster")).at("/hope/on").asInt());
+        assertEquals(2, MAPPER.readTree(store.loadSheet(campaignId, "caster")).at("/stress/on").asInt());
+        assertEquals(2, MAPPER.readTree(store.loadSheet(campaignId, "patient")).at("/stress/on").asInt());
+        assertEquals(2, MAPPER.readTree(response.body()).path("outbox").findValuesAsText("kind").stream()
+                .filter("roll.event"::equals).count());
+        assertEquals(response.body(), automationHttp(owner, "caster", body).body());
+    }
+
+    @Test
     void nestedGrimoireSpellProfilesRollThroughTheHostAndPersistTheirOwnUsage() throws Exception {
         var converted = dmmt.online.automation.LegacyCatalogConverter.convert("""
                 {"format":"dmmap-daggerheart","version":1,"category":"domain-cards","label":"Cards","entries":[
