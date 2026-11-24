@@ -4180,12 +4180,10 @@ public final class AutomationHost {
     }
 
     private void remove(ObjectNode sheet, SheetProjection.SourceElement element) {
-        for (String location : projection.sourcePaths()) {
-            JsonNode list = SheetProjection.get(sheet, location);
-            if (!list.isArray()) continue;
-            for (int i = 0; i < list.size(); i++) if (list.get(i) == element.element()) { ((ArrayNode) list).remove(i); break; }
-        }
-        ((ObjectNode) projection.state(sheet).get("sources")).remove(element.instanceId());
+        List<String> removedInstances = projection.sourceInstancesWithin(sheet, element);
+        if (!projection.removeSource(sheet, element))
+            throw RuleJson.error("/source", "The consumed source is no longer on the sheet.");
+        ((ObjectNode) projection.state(sheet).get("sources")).remove(removedInstances);
     }
 
     private static void replace(ObjectNode target, ObjectNode source) {

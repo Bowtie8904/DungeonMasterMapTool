@@ -6327,6 +6327,70 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void nestedGrimoireSpellProfilesRollThroughTheHostAndPersistTheirOwnUsage() throws Exception {
+        var converted = dmmt.online.automation.LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"domain-cards","label":"Cards","entries":[
+                 {"id":"book","name":"Book","spells":[
+                  {"name":"Wall of Flame","automation":{"spellcastDifficulty":15}},
+                  {"name":"Arcane Door","automation":{"spellcastDifficulty":13,
+                   "uses":{"max":1,"per":"rest"},"automaticRestUse":true}}]}]}""");
+        assertEquals(2, converted.converted(), converted.diagnostics().toString());
+        automationCompendium();
+        java.nio.file.Files.writeString(compendiumDir.resolve("domain-cards.json"), converted.catalog().toString());
+        String campaignId = campaign.getId();
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        ObjectNode sheet = (ObjectNode) MAPPER.readTree("""
+                {"name":"Ada","hope":{"slots":6,"on":2},"stress":{"slots":6,"on":0},
+                 "traits":[{"name":"Knowledge","mod":30,"spellcast":true}],
+                 "loadout":[{"name":"Book","instanceId":"book-one","automationSource":"domain-cards:book"}]}""");
+        ((ObjectNode) sheet.at("/loadout/0")).set("spells", converted.catalog().at("/entries/0/spells").deepCopy());
+        store.saveSheet(campaignId, "caster", sheet.toString());
+        String owner = cookie(), other = allyCookie("other");
+        var offered = automationHttp(owner, "caster", null);
+        assertEquals(200, offered.statusCode(), offered.body());
+        JsonNode profiles = MAPPER.readTree(offered.body()).required("profiles");
+        assertEquals(2, profiles.size(), offered.body());
+        JsonNode door = profiles.get(1);
+        assertEquals(13, door.required("difficulty").intValue());
+        String sourceId = door.required("sourceInstanceId").textValue();
+        assertNotEquals("book-one", sourceId);
+        ObjectNode body = MAPPER.createObjectNode();
+        ObjectNode request = body.putObject("request").put("requestId", "door").put("expectedRevision", 0);
+        request.putArray("selections");
+        request.putObject("profileRoll").put("sourceInstanceId", sourceId)
+                .put("profileId", door.required("id").textValue()).put("kind", "spellcast");
+        assertEquals(403, automationHttp(other, "caster", body.toString()).statusCode());
+        diceSeed(0);
+        int history = store.historyTail(campaignId, 100).size();
+        var result = automationHttp(owner, "caster", body.toString());
+        assertEquals(200, result.statusCode(), result.body());
+        assertEquals("card:Arcane Door", MAPPER.readTree(result.body()).requiredAt("/event/check/origin").textValue());
+        assertEquals("success", MAPPER.readTree(result.body()).requiredAt("/event/check/outcome").textValue());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaignId, "caster"));
+        assertEquals(1, saved.path("automationState").path("sources").path(sourceId).path("usage").path("uses").asInt());
+        assertEquals(1, saved.at("/automationState/revision").asInt());
+        assertEquals(history + 1, store.historyTail(campaignId, 100).size());
+        assertEquals(result.body(), automationHttp(owner, "caster", body.toString()).body());
+        assertEquals(history + 1, store.historyTail(campaignId, 100).size());
+        assertEquals(saved, MAPPER.readTree(new CampaignStore(temp.resolve("campaigns")).loadSheet(campaignId, "caster")));
+
+        ObjectNode refreshed = (ObjectNode) saved.deepCopy();
+        ObjectNode card = (ObjectNode) refreshed.at("/loadout/0");
+        CatalogSheets.refreshItem(refreshed, card, converted.catalog());
+        ObjectNode reorderedCatalog = converted.catalog().deepCopy();
+        var spells = ((ObjectNode) reorderedCatalog.at("/entries/0")).withArray("spells");
+        spells.add(spells.remove(0));
+        CatalogSheets.refreshItem(refreshed, card, reorderedCatalog);
+        assertEquals("arcane-door", card.at("/spells/0/id").textValue());
+        java.nio.file.Files.writeString(compendiumDir.resolve("domain-cards.json"), reorderedCatalog.toString());
+        store.saveSheet(campaignId, "caster", refreshed.toString());
+        var afterRefresh = automationHttp(owner, "caster", null);
+        assertEquals(200, afterRefresh.statusCode(), afterRefresh.body());
+        assertTrue(MAPPER.readTree(afterRefresh.body()).required("profiles").findValuesAsText("sourceInstanceId").contains(sourceId));
+        assertEquals(1, refreshed.path("automationState").path("sources").path(sourceId).path("usage").path("uses").asInt());
+    }
+
+    @Test
     void convertedWardenRollReportAndUsePersistAtomicallyAndReplay() throws Exception {
         automationCompendium();
         JsonNode classes = MAPPER.readTree(Path.of("dmmap-daggerheart", "classes.json").toFile());

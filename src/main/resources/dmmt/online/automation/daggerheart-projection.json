@@ -8,7 +8,7 @@
   "sources": [
     { "path": "features" },
     { "path": "heritage" },
-    { "path": "loadout" },
+    { "path": "loadout", "children": [{ "path": "spells", "derive": true }] },
     { "path": "inventory", "quantity": "qty" },
     { "path": "activeWeapons" },
     { "path": "activeArmor", "single": true }

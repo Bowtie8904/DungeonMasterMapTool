@@ -2435,6 +2435,25 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void nestedCardSpellcastsBecomeProfilesWithTheSpellOrigin() throws Exception {
+        var result = LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"domain-cards","label":"Cards","entries":[
+                 {"id":"book","name":"Book","spells":[
+                  {"name":"Wall of Flame","automation":{"spellcastDifficulty":15}},
+                  {"name":"Arcane Door","automation":{"spellcastDifficulty":13,
+                   "uses":{"max":1,"per":"rest"},"automaticRestUse":true}}]}]}""");
+        assertEquals(2, result.converted(), result.diagnostics().toString());
+        assertEquals("wall-of-flame", result.catalog().requiredAt("/entries/0/spells/0/id").textValue());
+        assertEquals("card:Wall of Flame", result.catalog().requiredAt("/entries/0/spells/0/automation/profiles/0/origin").textValue());
+        JsonNode door = result.catalog().requiredAt("/entries/0/spells/1/automation/profiles/0");
+        assertEquals("card:Arcane Door", door.required("origin").textValue());
+        assertEquals("success", door.required("consumeOn").textValue());
+        assertEquals(List.of("domain-cards:book:spells:wall-of-flame", "domain-cards:book:spells:arcane-door"),
+                RuleCatalog.compile(result.catalog().toString(), LegacyCatalogConverter.coreRecipes()).stream()
+                        .map(RuleCatalog.Source::id).toList());
+    }
+
+    @Test
     void actionSelectorsIncludeAllLegacyDualityActionsAndWorkBeforeDiceAreRolled() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"selectors","name":"Selectors","automation":{"rollOptions":[

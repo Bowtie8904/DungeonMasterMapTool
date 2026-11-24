@@ -54,8 +54,11 @@ pre-roll choices without sampling; difficulty and outcome are recomputed from th
 declare `limitRef` and `consumeOn: "attempt" | "success"`. The host checks the same overridden use budget as
 ordinary actions before sampling, refunds failures for success-only casts, and reconciles automatic finished-roll
 edits; an indeterminate outcome rejects the transaction. Exhausted offers are disabled. The converter emits
-these profiles for top-level domain cards with written-difficulty casts and preserves their card origins and
-automatic use policy. Nested grimoire spells and other legacy feature-action roll origins still need conversion.
+these profiles for top-level cards and nested grimoire spells with written-difficulty casts, preserving automatic
+use policies. Nested spell origins use `card:<spell name>` to match existing triggers. The projection derives
+nested source identities from the active parent instance, child path and catalog ID; newly copied cards receive
+independent parent identities. Existing sheets still require identity migration, and other feature-action roll
+origins still need conversion.
 Legacy `action` selectors include attack, reaction and spellcast profiles, and Duality selectors use the
 known pre-roll fact rather than waiting for the dice.
 An equipped weapon's passive roll modifiers apply only to its own profile, while effect modifiers apply to the

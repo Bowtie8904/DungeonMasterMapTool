@@ -98,11 +98,7 @@ public final class SheetProjection {
         if (!spec.path("sources").isArray() || spec.path("sources").isEmpty()) throw RuleJson.error("/sources", "Expected source locations.");
         for (int i = 0; i < spec.path("sources").size(); i++) {
             JsonNode source = spec.path("sources").get(i);
-            String at = "/sources/" + i;
-            RuleJson.fields(source, at, "path", "single", "quantity");
-            path(source.get("path"), at + "/path");
-            if (source.has("single")) RuleExpression.bool(source.get("single"), at + "/single");
-            if (source.has("quantity")) path(source.get("quantity"), at + "/quantity");
+            validateSource(source, "/sources/" + i, false);
         }
         ObjectNode actor = RuleJson.object(spec.get("actor"), "/actor");
         actor.fields().forEachRemaining(field -> validateFact(field.getKey(), field.getValue()));
@@ -187,6 +183,23 @@ public final class SheetProjection {
             }
         }
         return new SheetProjection(spec);
+    }
+
+    private static void validateSource(JsonNode source, String at, boolean child) {
+        RuleJson.fields(source, at, "path", "single", "quantity", "derive", "children");
+        path(source.get("path"), at + "/path");
+        if (source.has("single")) RuleExpression.bool(source.get("single"), at + "/single");
+        if (source.has("quantity")) path(source.get("quantity"), at + "/quantity");
+        if (source.has("derive")) {
+            RuleExpression.bool(source.get("derive"), at + "/derive");
+            if (!child) throw RuleJson.error(at + "/derive", "Only nested sources can derive an identity.");
+        }
+        if (source.has("children")) {
+            JsonNode children = source.get("children");
+            if (!children.isArray()) throw RuleJson.error(at + "/children", "Expected nested source locations.");
+            for (int i = 0; i < children.size(); i++)
+                validateSource(children.get(i), at + "/children/" + i, true);
+        }
     }
 
     /**
@@ -357,8 +370,14 @@ public final class SheetProjection {
 
     public List<String> sourcePaths() {
         List<String> paths = new ArrayList<>();
-        spec.path("sources").forEach(source -> paths.add(source.path("path").asText()));
+        spec.path("sources").forEach(source -> sourcePaths(source, "", paths));
         return paths;
+    }
+
+    private static void sourcePaths(JsonNode location, String parent, List<String> paths) {
+        String path = parent.isEmpty() ? location.path("path").asText() : parent + "." + location.path("path").asText();
+        paths.add(path);
+        location.path("children").forEach(child -> sourcePaths(child, path, paths));
     }
 
     /** Automation state block, created on demand: {revision, sources:{instanceId:{state,usage,sourcePools}}, journal:[]}. */
@@ -374,20 +393,89 @@ public final class SheetProjection {
     public List<SourceElement> sources(ObjectNode sheet) {
         List<SourceElement> result = new ArrayList<>();
         Set<String> instances = new HashSet<>();
-        for (JsonNode location : spec.path("sources")) {
-            JsonNode value = get(sheet, location.path("path").asText());
-            List<JsonNode> elements = new ArrayList<>();
-            if (location.path("single").asBoolean()) { if (value.isObject()) elements.add(value); }
-            else if (value.isArray()) value.forEach(elements::add);
-            for (JsonNode element : elements) {
-                if (!element.isObject() || !element.path(sourceField).isTextual() || !element.path(instanceField).isTextual()) continue;
-                String instanceId = element.path(instanceField).asText();
-                if (!instances.add(instanceId)) throw RuleJson.error("/" + instanceField, "Duplicate source instance on the sheet: " + instanceId);
-                result.add(new SourceElement(element.path(sourceField).asText(), instanceId, element.path(nameField).asText(""),
-                        (ObjectNode) element, location.path("quantity").asText(null), location.path("path").asText()));
+        for (JsonNode location : spec.path("sources")) collectSources(sheet, location, "", null, result, instances);
+        return result;
+    }
+
+    private void collectSources(ObjectNode root, JsonNode location, String parentPath, SourceElement parent,
+                                List<SourceElement> result, Set<String> instances) {
+        String relative = location.path("path").asText();
+        String sourcePath = parentPath.isEmpty() ? relative : parentPath + "." + relative;
+        JsonNode value = get(root, relative);
+        List<JsonNode> elements = new ArrayList<>();
+        if (location.path("single").asBoolean()) { if (value.isObject()) elements.add(value); }
+        else if (value.isArray()) value.forEach(elements::add);
+        for (JsonNode element : elements) {
+            if (!(element instanceof ObjectNode object)) continue;
+            String sourceId = element.path(sourceField).isTextual() ? element.path(sourceField).asText() : null;
+            String instanceId = element.path(instanceField).isTextual() ? element.path(instanceField).asText() : null;
+            if (location.path("derive").asBoolean()) {
+                sourceId = null;
+                instanceId = null;
+                if (parent != null && element.path("id").isTextual()) {
+                    String id = RuleJson.id(element.get("id"), "/" + sourcePath + "/id");
+                    sourceId = parent.sourceId() + ":" + relative.replace('.', ':') + ":" + id;
+                    instanceId = "n" + parent.instanceId().length() + "." + parent.instanceId()
+                            + "." + relative.length() + "." + relative + "." + id;
+                    RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(sourceId), "/" + sourcePath + "/sourceId");
+                    RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(instanceId), "/" + sourcePath + "/instanceId");
+                }
+            }
+            SourceElement source = null;
+            if (sourceId != null && instanceId != null) {
+                if (!instances.add(instanceId))
+                    throw RuleJson.error("/" + instanceField, "Duplicate source instance on the sheet: " + instanceId);
+                source = new SourceElement(sourceId, instanceId, element.path(nameField).asText(""),
+                        object, location.path("quantity").asText(null), sourcePath);
+                result.add(source);
+            }
+            for (JsonNode child : location.path("children"))
+                collectSources(object, child, sourcePath, source, result, instances);
+        }
+    }
+
+    boolean removeSource(ObjectNode sheet, SourceElement source) {
+        for (JsonNode location : spec.path("sources"))
+            if (removeSource(sheet, location, source.element())) return true;
+        return false;
+    }
+
+    List<String> sourceInstancesWithin(ObjectNode sheet, SourceElement source) {
+        return sources(sheet).stream()
+                .filter(candidate -> containsIdentity(source.element(), candidate.element()))
+                .map(SourceElement::instanceId).toList();
+    }
+
+    private static boolean containsIdentity(JsonNode root, JsonNode target) {
+        if (root == target) return true;
+        if (!root.isContainerNode()) return false;
+        for (JsonNode child : root) if (containsIdentity(child, target)) return true;
+        return false;
+    }
+
+    private static boolean removeSource(ObjectNode root, JsonNode location, ObjectNode target) {
+        String path = location.path("path").asText();
+        JsonNode value = get(root, path);
+        if (location.path("single").asBoolean()) {
+            if (value == target) {
+                int separator = path.lastIndexOf('.');
+                JsonNode owner = separator < 0 ? root : get(root, path.substring(0, separator));
+                ((ObjectNode) owner).remove(path.substring(separator + 1));
+                return true;
+            }
+            if (value instanceof ObjectNode object)
+                for (JsonNode child : location.path("children"))
+                    if (removeSource(object, child, target)) return true;
+        } else if (value instanceof ArrayNode elements) {
+            for (int i = 0; i < elements.size(); i++) {
+                JsonNode element = elements.get(i);
+                if (element == target) { elements.remove(i); return true; }
+                if (element instanceof ObjectNode object)
+                    for (JsonNode child : location.path("children"))
+                        if (removeSource(object, child, target)) return true;
             }
         }
-        return result;
+        return false;
     }
 
     public ObjectNode actor(ObjectNode sheet) {

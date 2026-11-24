@@ -3,6 +3,7 @@
 import { Armor, CharacterSheet, DomainCard, InventoryItem, Spell, Weapon } from './data';
 import type { Automation } from './engine';
 import { dmSheetAuthorization, hostFetch } from '../api';
+import { drawingId as newSourceInstanceId } from '../tools';
 
 export interface CompendiumFeature {
   name: string;
@@ -218,6 +219,7 @@ export function cardFrom(e: CompendiumEntry, c: CharacterSheet): DomainCard {
   return {
     level: e.level ?? 1, domain: e.domain ?? '', type: (e.cardType as DomainCard['type']) ?? 'Ability', name: e.name, text: e.text ?? '',
     recall: e.recall ?? 0, spellcast: spell ? c.traits.find((t) => t.spellcast)?.name : undefined, automation: e.automation,
+    automationSource: `domain-cards:${e.id}`, instanceId: newSourceInstanceId(),
     ...(e.spells?.length ? { spells: structuredClone(e.spells) } : {}),
   };
 }

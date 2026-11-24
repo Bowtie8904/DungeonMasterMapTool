@@ -88,6 +88,7 @@ export interface InventoryItem {
 
 /** One spell of a grimoire. It is an independent feature with its own rules and action buttons. */
 export interface Spell {
+  id?: string;
   name: string;
   text: string;
   automation?: Automation;
@@ -95,6 +96,8 @@ export interface Spell {
 
 export interface DomainCard {
   catalog?: CatalogLink;
+  automationSource?: string;
+  instanceId?: string;
   level: number;
   domain: string;
   type: 'Ability' | 'Spell' | 'Grimoire';

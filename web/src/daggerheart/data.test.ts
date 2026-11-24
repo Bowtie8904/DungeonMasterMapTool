@@ -3,7 +3,7 @@ import { dualityExpression, dualityResult, dualitySucceeds, handsUsed, mockChara
 import {
   Automation, addEffect, applyRest, consumeBonus, damageContributions, damageExpression, derivedStats, rollBonus, runAction, syncDerived, traitContributions, traitTotal,
 } from './engine';
-import { addToSheet } from './compendium';
+import { addToSheet, cardFrom, type CompendiumEntry } from './compendium';
 
 describe('daggerheart data', () => {
   it('maps level to tier', () => {
@@ -94,6 +94,20 @@ describe('daggerheart data', () => {
     expect(addToSheet(c, 'armor', { name: 'Test Mail', tier: 1, armor: { score: 3, major: 6, severe: 12 } } as never)).not.toBeNull();
     expect(c.carriedArmor).toHaveLength(before + 1);
     expect(damageExpression('d8', 2, { value: 1, dice: [], applied: [], names: [] } as never)).toContain('2d8');
+  });
+
+  it('gives each copied compendium card a stable independent automation identity', () => {
+    const c = mockCharacter();
+    const entry: CompendiumEntry = { id: 'book', name: 'Book', cardType: 'Grimoire', domain: 'Codex',
+      spells: [{ id: 'wall', name: 'Wall', text: '' }] };
+    const first = cardFrom(entry, c), second = cardFrom(entry, c);
+    expect(first.automationSource).toBe('domain-cards:book');
+    expect(first.instanceId).toMatch(/^[a-f0-9]{32}$/);
+    expect(second.instanceId).not.toBe(first.instanceId);
+    expect(first.spells?.[0].id).toBe('wall');
+    c.vault.push(first);
+    c.loadout.push(c.vault.pop()!);
+    expect(c.loadout.at(-1)?.instanceId).toBe(first.instanceId);
   });
 
   it('counts hands of active weapons', () => {

@@ -149,7 +149,8 @@ public final class LegacyCatalogConverter {
             context.blocks++;
             List<Diagnostic> problems = new ArrayList<>();
             String origin = null;
-            if (sourceId.startsWith("domain-cards:") && path.matches("/entries/\\d+")
+            if (sourceId.startsWith("domain-cards:")
+                    && (path.matches("/entries/\\d+") || path.matches("/entries/\\d+/spells/\\d+"))
                     && node.path("name").isTextual() && !node.path("name").asText().isBlank())
                 origin = "card:" + node.path("name").asText();
             ObjectNode converted = convertBlock(node.get("automation"), path + "/automation", sourceId, problems, shared, origin);
