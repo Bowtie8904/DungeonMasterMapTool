@@ -4326,6 +4326,11 @@ public final class AutomationHost {
 
     /** Captures the stored effects present before any downtime move is executed. */
     Set<String> restEffectSnapshot(ObjectNode sheet) {
+        for (JsonNode effect : sheet.path("effects")) {
+            if (effect.path("lockedHp").asInt() > 0 && "rest".equals(effect.path("until").asText()))
+                throw new RuleRuntime.Unavailable("restExpiry",
+                        "A legacy rest HP lock cannot be converted yet. Ask the GM to resolve it using legacy rest before starting an automation rest.");
+        }
         Set<String> ids = new java.util.HashSet<>();
         for (JsonNode effect : RuleEffects.instances(projection.actorFact(sheet, "effects"), "/actor/effects"))
             ids.add(effect.path("id").asText());

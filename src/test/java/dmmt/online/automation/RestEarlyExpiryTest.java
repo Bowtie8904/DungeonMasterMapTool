@@ -20,7 +20,7 @@ class RestEarlyExpiryTest {
     private static AutomationHost.Pack packWithLock(JsonNode lock, String... rests) throws Exception {
         ObjectNode ruleset = (ObjectNode) RuleJson.parse(LegacyCatalogConverter.coreRuleset());
         ObjectNode automation = ruleset.withObject("/automation");
-        ObjectNode effect = automation.putObject("effects").putObject("locked")
+        ObjectNode effect = automation.withObject("/effects").putObject("locked")
                 .put("label", "Lock").put("stacking", "stack").put("restExpiry", "beforeMoves");
         var until = effect.putArray("until");
         for (String rest : rests) until.add(rest);
@@ -77,6 +77,21 @@ class RestEarlyExpiryTest {
     private static ObjectNode prepare(AutomationHost.Pack pack, ObjectNode sheet, String kind, Set<String> initial) {
         return HOST.prepareRest(pack, sheet, origin(), kind, HOST.revision(sheet),
                 RuleJson.JSON.createArrayNode(), StructuredRollTest.noRandom(), initial);
+    }
+
+    @Test
+    void legacyRestLocksRejectTheOfferWithoutChangingTheSheet() throws Exception {
+        var pack = pack("rest.short", "rest.long");
+        ObjectNode sheet = sheet();
+        sheet.putArray("effects").addObject().put("id", "legacy-lock")
+                .put("lockedHp", 1).put("until", "rest");
+        ObjectNode before = sheet.deepCopy();
+        var failure = assertThrows(RuleRuntime.Unavailable.class,
+                () -> HOST.describeRest(pack, sheet, origin().put("sessionId", "session"),
+                        "short", "owner", "version"));
+        assertEquals("restExpiry", failure.code());
+        assertTrue(failure.getMessage().contains("legacy rest HP lock"));
+        assertEquals(before, sheet);
     }
 
     @Test
