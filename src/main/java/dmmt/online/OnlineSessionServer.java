@@ -6428,6 +6428,7 @@ public final class OnlineSessionServer {
         automationActor(saved.path("sourceActorId").asText());
         automationActor(saved.path("holderId").asText());
         ObjectNode event = automationEvent("rest.roll", actor);
+        event.putObject("rest").put("kind", "short");
         event.set("roll", StructuredRoll.validate(saved.path("roll")));
         ObjectNode recovery = event.putObject("recovery");
         for (String field : List.of("sourceActorId", "holderId", "track", "remaining"))

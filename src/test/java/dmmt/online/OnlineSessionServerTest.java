@@ -2457,9 +2457,7 @@ class OnlineSessionServerTest {
         assertEquals(accepted.body(), recoveryRollHttp(owner, check, "actor", request.toString()).body());
     }
 
-    @Test
-    void shortRestTrackReactionsOfferDiceForSelfAndAllyRecovery() throws Exception {
-        installRestRerollRules();
+    private void installRecoverySparkRule() throws Exception {
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
         ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
         ruleset.withObject("/automation").withArray("rules").add(MAPPER.readTree("""
@@ -2471,6 +2469,12 @@ class OnlineSessionServerTest {
                        {"op":"downtime.offerRoll","roll":{"read":"result.spark"},"label":"Recovery spark"}],"ui":{}}
                 """));
         java.nio.file.Files.writeString(file, ruleset.toString());
+    }
+
+    @Test
+    void shortRestTrackReactionsOfferDiceForSelfAndAllyRecovery() throws Exception {
+        installRestRerollRules();
+        installRecoverySparkRule();
         addRestParty();
         ObjectNode resting = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
         resting.putArray("loadout").addObject().put("name", "Second Chance").put("instanceId", "chance")
@@ -2502,6 +2506,46 @@ class OnlineSessionServerTest {
             assertEquals(5, MAPPER.readTree(rerolled.body()).path("kept").asInt());
             assertEquals(rerolled.body(), recoveryRollHttp(owner, offer, "resting", request.toString()).body());
         }
+    }
+
+    @Test
+    void recoveryRerollsRetainShortRestContextForFurtherReactions() throws Exception {
+        installRestRerollRules();
+        installRecoverySparkRule();
+        String owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("actor").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "actor", """
+                {"name":"Ada","level":1,"hp":{"slots":8,"on":6},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},
+                 "loadout":[{"name":"Second Chance","instanceId":"chance","automationSource":"domain-cards:reroller"}]}
+                """);
+        JsonNode rest = MAPPER.readTree(restHttp(owner, "actor", "short", null).body());
+        ObjectNode body = restRequest(rest, "recovery-spark-rest");
+        addRestMove((ObjectNode) body.path("request"), restDescriptor(rest.path("moves"), "rest-tend"));
+        diceSeed(seedForDice(new int[]{4, 6}, new int[]{1, 2}));
+        var completed = restHttp(owner, "actor", null, body.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode recovery = store.historyTail(campaign.getId(), 100).stream()
+                .filter(message -> "hp".equals(message.at("/automationRecoveryRoll/track").asText()))
+                .findFirst().orElseThrow();
+        var described = recoveryRollHttp(owner, recovery, "actor", null);
+        assertEquals(200, described.statusCode(), described.body());
+        ObjectNode request = recoveryRollRequest(MAPPER.readTree(described.body()), "recovery-with-spark");
+        diceSeed(seedForDice(new int[]{4, 6}, new int[]{4, 3}));
+        var rerolled = recoveryRollHttp(owner, recovery, "actor", request.toString());
+        assertEquals(200, rerolled.statusCode(), rerolled.body());
+        JsonNode result = MAPPER.readTree(rerolled.body());
+        assertEquals(3, result.path("cleared").asInt());
+        assertEquals("short", result.at("/event/rest/kind").asText());
+        var sparks = store.historyTail(campaign.getId(), 100).stream()
+                .filter(message -> "Recovery spark".equals(
+                        message.at("/automationRecoveryRoll/roll/contributions/0/label").asText())).toList();
+        assertEquals(2, sparks.size());
+        assertEquals(3, sparks.getLast().at("/automationRecoveryRoll/roll/total").asInt());
+        assertEquals(rerolled.body(), recoveryRollHttp(owner, recovery, "actor", request.toString()).body());
+        assertEquals(2, store.historyTail(campaign.getId(), 100).stream()
+                .filter(message -> "Recovery spark".equals(
+                        message.at("/automationRecoveryRoll/roll/contributions/0/label").asText())).count());
     }
 
     @Test
