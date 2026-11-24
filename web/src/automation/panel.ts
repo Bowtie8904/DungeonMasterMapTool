@@ -61,15 +61,25 @@ async function fetchDescription(actorId: string, query: URLSearchParams): Promis
   return await response.json() as DescribedActions;
 }
 
-/** Submits one selected binding as a host intent; the host recomputes everything from trusted JSON. */
-export async function executeAutomation(actorId: string, intent: RuleIntent, resultId?: string): Promise<unknown> {
+function selectionFromIntent(intent: RuleIntent): Record<string, unknown> {
   const selection: Record<string, unknown> = {
     sourceInstanceId: intent.sourceInstanceId, ruleId: intent.ruleId, bindingId: intent.bindingId, inputs: intent.inputs,
   };
   if (intent.eachId !== undefined) selection.eachId = intent.eachId;
+  return selection;
+}
+
+/** Submits one selected binding as a host intent; the host recomputes everything from trusted JSON. */
+export async function executeAutomation(actorId: string, intent: RuleIntent, resultId?: string): Promise<unknown> {
+  const selection = selectionFromIntent(intent);
   return postIntent(actorId, { requestId: intent.requestId, expectedRevision: intent.expectedRevision, selections: [selection],
     ...(resultId === undefined ? {} : { resultId }),
     ...(intent.target ? { target: intent.target } : {}) });
+}
+
+export async function executeDeathOption(actorId: string, intent: RuleIntent): Promise<unknown> {
+  return postIntent(actorId, { requestId: intent.requestId, expectedRevision: intent.expectedRevision,
+    deathAction: true, selections: [selectionFromIntent(intent)] });
 }
 
 async function postIntent(actorId: string, request: object): Promise<unknown> {

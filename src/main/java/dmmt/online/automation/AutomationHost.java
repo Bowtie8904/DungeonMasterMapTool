@@ -282,6 +282,26 @@ public final class AutomationHost {
         return result;
     }
 
+    /** Describes authored alternatives to a death move for the affected character. */
+    public ObjectNode describeDeath(Pack pack, ObjectNode sheet, ObjectNode origin, String relation) {
+        if (!"self".equals(relation)) throw new SecurityException("Only the character owner may choose a death move.");
+        requireDeathState(sheet);
+        return describe(pack, sheet, origin.deepCopy().put("type", "death.options"), "death", relation);
+    }
+
+    private static void requireDeathState(ObjectNode sheet) {
+        int capacity = RuleJson.integer(sheet.at("/hp/slots"), "/sheet/hp/slots", 0, 1000);
+        int marked = RuleJson.integer(sheet.at("/hp/on"), "/sheet/hp/on", 0, capacity);
+        int permanent = sheet.has("permanentHp")
+                ? RuleJson.integer(sheet.get("permanentHp"), "/sheet/permanentHp", 0, capacity) : 0;
+        if (capacity == 0 || marked != capacity || permanent >= capacity || sheet.path("pendingDeathRoll").isObject())
+            throw new RuleRuntime.Unavailable("deathState",
+                    "A death move requires all Hit Points marked, recoverable Hit Points, and no pending death roll.");
+        for (JsonNode effect : sheet.path("effects"))
+            if (effect.has("unconsciousHp"))
+                throw new RuleRuntime.Unavailable("deathState", "This character is already unconscious.");
+    }
+
     private static SheetProjection.SourceElement basicCheckSource(List<SheetProjection.SourceElement> sources) {
         return sources.stream().filter(source -> RULESET_SOURCE.equals(source.instanceId())
                         && RULESET_SOURCE.equals(source.sourceId())).findFirst()
@@ -334,8 +354,15 @@ public final class AutomationHost {
                               java.util.function.Function<JsonNode, String> promptLabel) {
         relation(relation);
         if (principalId == null || principalId.isBlank()) throw new IllegalArgumentException("Missing automation principal.");
-        RuleJson.fields(request, "/request", "requestId", "expectedRevision", "selections", "profileRoll", "checkRoll", "target", "resultId");
+        RuleJson.fields(request, "/request", "requestId", "expectedRevision", "selections", "profileRoll", "checkRoll", "deathAction", "target", "resultId");
         RuleJson.checkTree(request, "/request", 0, new int[]{0});
+        if (request.has("deathAction")) {
+            if (!request.path("deathAction").isBoolean() || !request.path("deathAction").booleanValue()
+                    || request.has("checkRoll") || request.has("profileRoll") || request.has("target")
+                    || request.has("resultId") || request.path("selections").size() != 1)
+                throw RuleJson.error("/request/deathAction", "Choose one death option without another action.");
+            if (!"self".equals(relation)) throw new SecurityException("Only the character owner may choose a death move.");
+        }
         if (request.has("checkRoll") && (request.has("profileRoll") || request.has("resultId") || request.has("target")))
             throw RuleJson.error("/request/checkRoll", "Choose either a check or another action.");
         if (request.has("resultId")) {
@@ -359,6 +386,10 @@ public final class AutomationHost {
         if (!request.path("expectedRevision").isIntegralNumber() || request.path("expectedRevision").asLong() != revision)
             throw new RuleRuntime.Unavailable("stale", "The character changed. Reopen this action.");
 
+        if (request.has("deathAction")) {
+            requireDeathState(working);
+            event = event.deepCopy().put("type", "death.options");
+        }
         ObjectNode response;
         if (request.has("profileRoll") || request.has("checkRoll")) {
             response = profileRoll(pack, working, state, event, request, random, promptLabel);
@@ -370,8 +401,20 @@ public final class AutomationHost {
             response = targeted(pack, working, state, event, request, relation, random, party);
         } else {
             var candidates = candidates(pack, working, event);
-            var intents = selections(request, candidates, revision, relation, "sheet", false);
+            var intents = selections(request, candidates, revision, relation, request.has("deathAction") ? "death" : "sheet", false);
+            if (request.has("deathAction")) {
+                var intent = intents.getFirst();
+                var candidate = candidates.stream().filter(item -> item.instanceId().equals(intent.sourceInstanceId()))
+                        .findFirst().orElseThrow();
+                JsonNode binding = RuleDispatcher.binding(candidate.program().rule(intent.ruleId()), intent.bindingId());
+                if (!"death.options".equals(binding.path("event").asText())
+                        || !"button".equals(binding.path("mode").asText())
+                        || binding.has("targetSelection") || binding.has("claimGroup"))
+                    throw RuleJson.error("/request/selections", "Choose one self-scoped death option.");
+            }
             response = applyEvent(pack, working, state, event, candidates, intents, random);
+            if (request.has("deathAction") && !response.at("/event/blocked").isEmpty())
+                throw new RuleRuntime.Unavailable("blocked", response.at("/event/blocked/0/reason").asText());
         }
         if ("self".equals(relation)) {
             for (JsonNode command : response.path("outbox")) {

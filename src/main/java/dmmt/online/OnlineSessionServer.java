@@ -343,6 +343,7 @@ public final class OnlineSessionServer {
         javalin.get("/api/automation/{version}/{id}", ctx -> withSheetOperation(ctx, this::handleAutomationDescribe));
         javalin.post("/api/automation/{version}/{id}", ctx -> withSheetOperation(ctx, this::handleAutomationExecute));
         javalin.get("/api/automation/{version}/{id}/check", ctx -> withSheetOperation(ctx, this::handleAutomationCheckDescribe));
+        javalin.get("/api/automation/{version}/{id}/death", ctx -> withSheetOperation(ctx, this::handleAutomationDeathDescribe));
         javalin.get("/api/automation/{version}/{id}/rest", ctx -> withSheetOperation(ctx, this::handleRestDescribe));
         javalin.post("/api/automation/{version}/{id}/rest", ctx -> withSheetOperation(ctx, this::handleRestExecute));
         javalin.post("/api/automation/{version}/{id}/rest/choices", ctx -> withSheetOperation(ctx, this::handleRestChoices));
@@ -6205,6 +6206,35 @@ public final class OnlineSessionServer {
             json(ctx, 400, errorBody(e.getMessage()));
         } catch (IOException | java.io.UncheckedIOException e) {
             json(ctx, 500, errorBody("Could not read the roll offer or host catalogs."));
+        }
+    }
+
+    private synchronized void handleAutomationDeathDescribe(Context ctx) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null || !requireAutomationVersion(ctx)) return;
+        try {
+            Campaign.Actor actor = automationActor(ctx.pathParam("id"));
+            String relation = automationRelation(ctx, playerId, actor);
+            if (!"self".equals(relation)) throw new SecurityException("Only the character owner may choose a death move.");
+            ctx.header("Cache-Control", "no-store");
+            if (!catalogs().requiresReplacementAutomation()) {
+                json(ctx, 200, MAPPER.createObjectNode().put("legacy", true));
+                return;
+            }
+            String original = store.loadSheet(campaign.getId(), actor.getId());
+            ObjectNode sheet = original == null ? MAPPER.createObjectNode() : hydrateSheet(actor.getId(), original);
+            json(ctx, 200, automationHost.describeDeath(automationPack(), sheet,
+                    automationEvent("action.request", actor), relation));
+        } catch (dmmt.online.automation.AutomationHost.NotReady e) {
+            json(ctx, 409, errorBody("Automation is unavailable: " + e.getMessage()));
+        } catch (dmmt.online.automation.RuleRuntime.Unavailable e) {
+            json(ctx, 409, errorBody(e.getMessage()).put("code", e.code()));
+        } catch (SecurityException e) {
+            json(ctx, 403, errorBody(e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            json(ctx, 400, errorBody(e.getMessage()));
+        } catch (IOException | java.io.UncheckedIOException e) {
+            json(ctx, 500, errorBody("Could not read the death options or host catalogs."));
         }
     }
 

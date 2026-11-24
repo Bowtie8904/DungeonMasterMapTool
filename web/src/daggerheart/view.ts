@@ -37,6 +37,7 @@ import { companionAvailable, companionFeatures, companionRules, companionWeapon,
 import { rich, inline } from './rich';
 import { automationPanel } from '../automation/panel';
 import { openAutomationCheckDialog, type ReactionPromptRef } from '../automation/check';
+import { openAutomationDeathDialog } from '../automation/death';
 import { openAutomationRestDialog } from '../automation/rest';
 import { MAX_LEVEL, replaceAncestry } from './rules';
 import { chooseAncestryFeature } from './ancestry-choice';
@@ -244,10 +245,14 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (opts.readOnly?.()) { event.preventDefault(); event.stopImmediatePropagation(); }
     }, true);
   }
-  const deathDialog = (initial?: string) => openDeathDialog(document.body, c, async (move, extras) => {
-    if (!opts.onDeathMove) throw new Error('This host does not support death moves. Update the host.');
-    await opts.onDeathMove(move, extras);
-  }, opts.onDeathOptions, initial);
+  const deathDialog = (initial?: string) => {
+    const legacy = () => openDeathDialog(document.body, c, async (move, extras) => {
+      if (!opts.onDeathMove) throw new Error('This host does not support death moves. Update the host.');
+      await opts.onDeathMove(move, extras);
+    }, opts.onDeathOptions, initial);
+    if (!opts.actorId || !opts.beforeAutomationRoll) { legacy(); return; }
+    void openAutomationDeathDialog(opts.actorId, opts.beforeAutomationRoll).then(handled => { if (!handled) legacy(); });
+  };
   const openDamage = (host: HTMLElement = root) => openDamageDialog(host, c, (summary, severity, incomingDamage) => {
     opts.onLog?.(summary, undefined, undefined, incomingDamage);
     opts.onChange?.();

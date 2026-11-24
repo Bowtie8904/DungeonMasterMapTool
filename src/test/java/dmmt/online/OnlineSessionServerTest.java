@@ -2200,6 +2200,12 @@ class OnlineSessionServerTest {
                 .header("Cookie", cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    private HttpResponse<String> deathOptionsHttp(String cookie, String actorId) throws Exception {
+        return http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/automation/"
+                + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + "/" + actorId + "/death"))
+                .header("Cookie", cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
+    }
+
     private HttpResponse<String> restHttp(String cookie, String actorId, String kind, String body) throws Exception {
         var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/automation/"
                 + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + "/" + actorId + "/rest"
@@ -2368,6 +2374,82 @@ class OnlineSessionServerTest {
                 {"id":"early-ready","bindings":[{"id":"use","event":"rest.prepare","surface":"rest","mode":"option"}],
                  "when":{"gte":[{"read":"actor.hope.value"},3]},"ui":{"label":"Ready after expiry"}}"""));
         java.nio.file.Files.writeString(file, ruleset.toString());
+    }
+
+    @Test
+    void authoredDeathOptionsUseOwnerStateReactionsAndJournal() throws Exception {
+        installRestRules();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/0/automation");
+        automation.removeAll();
+        automation.setAll((ObjectNode) MAPPER.readTree("""
+                {"rules":[
+                 {"id":"rise","bindings":[{"id":"choose","event":"death.options","surface":"death","mode":"button"}],
+                  "costs":[{"op":"resource.spend","pool":"actor.hope","amount":1}],
+                  "do":[{"op":"track.clear","track":"actor.hp","amount":1},{"op":"table.gain","resource":"fear","amount":1,"label":"Rise"}],
+                  "ui":{"label":"Return to the fight","report":"Returned with {actor.hope.value} Hope."}},
+                 {"id":"renew","bindings":[{"id":"choose","event":"death.options","surface":"death","mode":"button"}],
+                  "do":[{"op":"track.clear","track":"actor.hp","amount":2}],"ui":{"label":"Renew"}},
+                 {"id":"blocked","bindings":[{"id":"choose","event":"death.options","surface":"death","mode":"button"}],
+                  "do":[{"op":"track.clear","track":"actor.hp","amount":1},
+                        {"op":"table.gain","resource":"fear","amount":1,"label":"Blocked"},
+                        {"op":"event.block","reason":"This choice is blocked."}],"ui":{"label":"Blocked"}},
+                 {"id":"react","bindings":[{"id":"auto","event":"track.changed","surface":"effect","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.track"},"hp"]},
+                  "do":[{"op":"track.clear","track":"actor.stress","amount":1}],"ui":{"report":"Recovered from the shock."}}]}"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String id = "dying", owner = cookie(), other = allyCookie("other");
+        campaign.getActors().add(Campaign.Actor.builder().id(id).name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), id, """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":6},"stress":{"slots":6,"on":3},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":2},
+                 "features":[{"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"}]}""");
+        var described = deathOptionsHttp(owner, id);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode offer = MAPPER.readTree(described.body());
+        assertTrue(restDescriptor(offer.path("actions"), "rise").path("available").asBoolean());
+        assertTrue(restDescriptor(offer.path("actions"), "renew").path("available").asBoolean());
+        assertEquals(403, deathOptionsHttp(other, id).statusCode());
+        var wrongVersion = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port
+                + "/api/automation/999/" + id + "/death")).header("Cookie", owner).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(409, wrongVersion.statusCode());
+        assertTrue(wrongVersion.body().contains("client version 999"));
+        assertTrue(wrongVersion.body().contains("host version " + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION));
+        String request = """
+                {"request":{"requestId":"rise","expectedRevision":0,"deathAction":true,
+                 "selections":[{"sourceInstanceId":"r","ruleId":"rise","bindingId":"choose"}]}}""";
+        assertEquals(403, automationHttp(other, id, request).statusCode());
+        String before = store.loadSheet(campaign.getId(), id);
+        assertEquals(400, automationHttp(owner, id, request.replace("\"deathAction\":true,", "")).statusCode());
+        assertEquals(400, automationHttp(owner, id, request.replace("\"deathAction\":true,",
+                "\"deathAction\":true,\"checkRoll\":{\"kind\":\"action\",\"trait\":\"Agility\"},")).statusCode());
+        String blocked = request.replace("\"rise\"", "\"blocked\"");
+        int blockedFear = campaign.getFear(), blockedHistory = store.historyTail(campaign.getId(), 100).size();
+        var rejected = automationHttp(owner, id, blocked);
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertTrue(rejected.body().contains("This choice is blocked."), rejected.body());
+        assertEquals(before, store.loadSheet(campaign.getId(), id));
+        assertEquals(blockedFear, campaign.getFear());
+        assertEquals(blockedHistory, store.historyTail(campaign.getId(), 100).size());
+        ObjectNode notDying = (ObjectNode) MAPPER.readTree(before);
+        notDying.withObject("/hp").put("on", 5);
+        store.saveSheet(campaign.getId(), id, notDying.toString());
+        assertEquals(409, deathOptionsHttp(owner, id).statusCode());
+        assertEquals(409, automationHttp(owner, id, request).statusCode());
+        store.saveSheet(campaign.getId(), id, before);
+        int fear = campaign.getFear(), history = store.historyTail(campaign.getId(), 100).size();
+        var applied = automationHttp(owner, id, request);
+        assertEquals(200, applied.statusCode(), applied.body());
+        assertTrue(applied.body().contains("Recovered from the shock."), applied.body());
+        JsonNode sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+        assertEquals(5, sheet.at("/hp/on").asInt());
+        assertEquals(2, sheet.at("/stress/on").asInt());
+        assertEquals(1, sheet.at("/hope/on").asInt());
+        assertEquals(fear + 1, campaign.getFear());
+        assertEquals(applied.body(), automationHttp(owner, id, request).body());
+        assertEquals(history + 2, store.historyTail(campaign.getId(), 100).size());
     }
 
     @Test

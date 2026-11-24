@@ -18,7 +18,7 @@ export interface RuleDescriptor {
   ruleId: string;
   bindingId: string;
   revision: number;
-  surface: 'sheet' | 'chat' | 'roll' | 'damage' | 'effect' | 'resource' | 'rest' | 'downtime' | 'creation' | 'companion';
+  surface: 'sheet' | 'chat' | 'roll' | 'damage' | 'effect' | 'resource' | 'rest' | 'downtime' | 'death' | 'creation' | 'companion';
   mode: 'button' | 'option' | 'automatic';
   defaultOn?: boolean;
   exclusiveGroup?: string;

@@ -97,6 +97,10 @@ original roll's automatic reactions; a nested roll's publication does not revise
 cannot also declare a target selection. Interactive feature prepare choices, downtime rolls and untyped dice
 still need live integration.
 
+**Death options (format 2).** Owner-only `death.options` buttons use host-described controls and a versioned,
+journaled sheet transaction with track reactions and atomic reports. Core death rolls and recovery are not yet
+integrated; format-1 hosts continue to use their existing death dialog.
+
 Explicit effect starts, replacements and endings in these transactions dispatch `effect.started`/`effect.ended`
 to the affected holder's automatic rules, with `event.effect` containing the instance, `actorId` identifying
 the holder and `before`/`after` containing the instance or null; endings precede starts. Owner track/state
