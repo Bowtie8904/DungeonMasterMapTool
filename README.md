@@ -191,6 +191,12 @@ in format 2.
 For format-2 characters at their last HP, authored death alternatives, Blaze of Glory, Avoid Death and Risk It All
 appear as host-described controls and commit their reactions and costs together. Risk recovery is available in the
 roll's **Result actions** in chat. Avoid Death's host-managed unconscious effect appears on the Effects tab.
+For format-2 characters, **Take damage** opens a host-described dialog: enter the incoming damage, Armor Slots to
+mark and the damage type, press **Preview** for the unmitigated thresholds and severity, and pick any offered
+mitigation or reaction options. **Take damage** then reduces, marks Armor Slots and Hit Points (never beyond
+capacity), settles automatic rewards, effect endings and damage dealt to others in one commit. After a lost reply,
+**Retry** resends the identical request and replays the saved outcome; a changed sheet reloads the preview.
+Format-1 characters keep the existing calculator.
 Choose any offered options and their inputs together before pressing the profile's roll button. If no options are available, the button rolls immediately. Opening the choices does not contact the host; **Retry** resends the same selection if the reply was lost. The converter maps top-level domain-card and nested grimoire spellcasts with a written difficulty to these profiles, including automatic rest-use limits. Newly copied cards have independent identities; existing sheets still require the planned identity migration. Uses are reserved before rolling and refunded on failure when the card consumes only on success; an exhausted profile is disabled. Other feature-action roll origins are not yet converted to these profiles.
 Format-2 authors must put choices based on the new faces or total on a result action, not a pre-roll option. A pre-roll option can use previously stored dice and can change the new dice when it executes.
 

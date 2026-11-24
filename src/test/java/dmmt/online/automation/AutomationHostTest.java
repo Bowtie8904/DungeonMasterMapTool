@@ -1834,6 +1834,38 @@ class AutomationHostTest {
     }
 
     @Test
+    void incomingDamageEndsEffectsAndFloorsHitPointsAtCapacity() throws Exception {
+        ObjectNode catalog = (ObjectNode) RuleJson.parse("""
+                {"format":"dmmap-daggerheart","version":2,"category":"classes","label":"Ward fixture","entries":[
+                 {"id":"tester","name":"Tester","features":[
+                  {"id":"ward","name":"Ward","automation":{
+                   "effects":{"guard":{"label":"Guard","kind":"buff","until":["rest.short","rest.long"],"modifiers":[]}},
+                   "rules":[{"id":"start","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                     "do":[{"op":"effect.start","effect":"guard","target":"actor"}],"ui":{"label":"Start"}},
+                    {"id":"drop","bindings":[{"id":"applied","event":"damage.applied","surface":"damage","mode":"automatic"}],
+                     "when":{"gte":[{"read":"event.applied.severity"},2]},
+                     "do":[{"op":"effect.end","effect":"guard","target":"actor"}],"ui":{"label":"Drop"}}]}}]}]}""");
+        var pack = AutomationHost.compile("ward", Map.of("classes", catalog.toString()), fixture("rewrite/recipes").toString());
+        ObjectNode sheet = sheet().put("level", 5);
+        sheet.putArray("features").addObject().put("name", "ward").put("text", "").put("automationSource", "classes:tester:features:ward")
+                .put("instanceId", "f-ward");
+        sheet.putArray("vault");
+        sheet.putArray("inventory");
+        ObjectNode origin = AutomationHost.event("action.request", "ada", 0);
+        HOST.execute(pack, sheet, origin, request("start", 0, "f-ward", "start"), "self", StructuredRollTest.noRandom());
+        assertEquals(1, sheet.at("/automationState/effects").size());
+
+        HOST.execute(pack, sheet, origin, damageRequest("minor", 1, 1, 0, false), "self", StructuredRollTest.noRandom());
+        assertEquals(1, sheet.at("/automationState/effects").size(), "Severity 1 keeps the effect");
+        HOST.execute(pack, sheet, origin, damageRequest("major", 2, 7, 0, false), "self", StructuredRollTest.noRandom());
+        assertEquals(0, sheet.at("/automationState/effects").size(), "Severity 2 ends the effect");
+
+        for (int i = 0; i < 4; i++)
+            HOST.execute(pack, sheet, origin, damageRequest("big" + i, 3 + i, 1000, 0, false), "self", StructuredRollTest.noRandom());
+        assertEquals(sheet.at("/hp/slots").asInt(), sheet.at("/hp/on").asInt(), "Hit Points never exceed capacity");
+    }
+
+    @Test
     void duplicateInstancesAndLegacyPacksAreRejected() throws Exception {
         ObjectNode sheet = sheet();
         ((ObjectNode) sheet.path("features").get(1)).put("instanceId", "f-rally");
