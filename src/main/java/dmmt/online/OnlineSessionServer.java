@@ -5929,6 +5929,7 @@ public final class OnlineSessionServer {
         final Map<String, ObjectNode> sheets = new java.util.HashMap<>();
         final Map<String, PartyTargets.Member> members = new java.util.HashMap<>();
         final PartyTargets party;
+        final AutomationRestRoster reactions;
 
         AutomationRoster(AutomationHost.Pack pack, Campaign.Actor source, String stored, ObjectNode sheet) {
             this(pack, source, stored, sheet, false);
@@ -5936,8 +5937,14 @@ public final class OnlineSessionServer {
 
         AutomationRoster(AutomationHost.Pack pack, Campaign.Actor source, String stored, ObjectNode sheet,
                          boolean excludeSource) {
+            this(pack, source, stored, sheet, excludeSource, false);
+        }
+
+        AutomationRoster(AutomationHost.Pack pack, Campaign.Actor source, String stored, ObjectNode sheet,
+                         boolean excludeSource, boolean includeReactions) {
             originals.put(source.getId(), stored);
             sheets.put(source.getId(), sheet);
+            reactions = includeReactions ? new AutomationRestRoster(source, stored, originals) : null;
             party = new PartyTargets(pack.revision(), sheetVersion(stored, source), scope -> {
                 List<PartyTargets.Member> eligible = new ArrayList<>();
                 try {
@@ -5974,21 +5981,26 @@ public final class OnlineSessionServer {
                     throw new java.io.UncheckedIOException(ex);
                 }
                 return eligible;
-            });
+            }, reactions == null ? null : reactions.roster);
         }
     }
 
     private static final class StaleAutomationRoster extends RuntimeException {
-        StaleAutomationRoster() { super("A character sheet changed. Reopen this rest."); }
+        StaleAutomationRoster() { super("A character sheet changed. Refresh the available actions."); }
     }
 
     private final class AutomationRestRoster {
-        final Map<String, String> originals = new java.util.LinkedHashMap<>();
+        final Map<String, String> originals;
         final AutomationHost.RestRoster roster;
         List<String> inventoryParty;
         List<String> effectActors;
 
         AutomationRestRoster(Campaign.Actor source, String stored) {
+            this(source, stored, new java.util.LinkedHashMap<>());
+        }
+
+        AutomationRestRoster(Campaign.Actor source, String stored, Map<String, String> originals) {
+            this.originals = originals;
             originals.put(source.getId(), stored);
             roster = new AutomationHost.RestRoster(sheetVersion(stored, source), scope -> {
                 List<AutomationHost.RestMember> members = new ArrayList<>();
@@ -6243,26 +6255,43 @@ public final class OnlineSessionServer {
             ObjectNode event = automationEvent("action.request", actor);
             String relation = automationRelation(ctx, playerId, actor);
             AutomationRoster roster = body.path("request").has("target") && !"dm".equals(relation)
-                    ? new AutomationRoster(pack, actor, original, sheet) : null;
+                    ? new AutomationRoster(pack, actor, original, sheet, false, true) : null;
             ObjectNode response = automationHost.execute(pack, sheet, event,
                     (ObjectNode) body.get("request"), relation, "dm".equals(relation) ? campaign.getId() : playerId,
                     diceRandom, roster == null ? null : roster.party, this::reactionPromptLabel);
             if (automationHost.revision(sheet) != revisionBefore) {
                 Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
                 changed.put(actor.getId(), sheet);
-                if (roster != null) for (var update : roster.party.updates()) {
-                    ObjectNode staged = roster.sheets.get(update.actorId());
-                    automationHost.writeRecipient(staged, update);
-                    changed.put(update.actorId(), staged);
+                Map<String, Map<String, JsonNode>> namesByActor = new java.util.HashMap<>();
+                namesByActor.put(actor.getId(), sourceNames);
+                if (roster != null) {
+                    for (var entry : roster.sheets.entrySet()) {
+                        if (entry.getKey().equals(actor.getId())) continue;
+                        Map<String, JsonNode> names = new java.util.HashMap<>();
+                        for (var element : automationHost.sources(pack, entry.getValue()))
+                            names.put(element.instanceId(), element.element().deepCopy());
+                        namesByActor.put(entry.getKey(), names);
+                    }
+                    if (roster.party.stagedSheets().isEmpty()) {
+                        for (var update : roster.party.updates()) {
+                            ObjectNode staged = roster.sheets.get(update.actorId());
+                            automationHost.writeRecipient(staged, update);
+                            changed.put(update.actorId(), staged);
+                        }
+                    } else changed.putAll(roster.party.stagedSheets());
                 }
                 changed.values().forEach(staged -> staged.put("featureRevision", staged.path("featureRevision").asLong(0) + 1));
                 List<ObjectNode> messages = new ArrayList<>();
                 if (body.path("request").has("profileRoll") || body.path("request").has("checkRoll")
                         || response.path("resultPublished").asBoolean())
                     messages.add(profileRollMessage(actor, response.path("event")));
-                messages.addAll(automationReports(actor, sourceNames, response));
+                messages.addAll(automationHolderReports(actor, namesByActor, response));
+                Runnable validateRoster = roster == null ? null : () -> {
+                    AutomationHost.requireRestScopeMembership(actor.getId(), roster.party.reactionScopes(), roster.reactions.roster);
+                    roster.reactions.requireInventoryParty();
+                };
                 commitAutomationResults(roster == null ? java.util.Collections.singletonMap(actor.getId(), original) : roster.originals,
-                        changed, messages, response.path("outbox"), pack, actor.getId(), response);
+                        changed, messages, response.path("outbox"), pack, actor.getId(), response, validateRoster);
             }
             json(ctx, 200, response);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
@@ -6271,8 +6300,8 @@ public final class OnlineSessionServer {
             json(ctx, 409, errorBody("Automation is unavailable: " + e.getMessage()));
         } catch (dmmt.online.automation.RuleRuntime.Unavailable e) {
             json(ctx, 409, errorBody(e.getMessage()));
-        } catch (CampaignStore.StaleAutomationSheet e) {
-            json(ctx, 409, errorBody(e.getMessage()));
+        } catch (StaleAutomationRoster | CampaignStore.StaleAutomationSheet e) {
+            json(ctx, 409, errorBody(e.getMessage()).put("code", "staleRecipient"));
         } catch (SecurityException e) {
             json(ctx, 403, errorBody(e.getMessage()));
         } catch (IllegalArgumentException e) {

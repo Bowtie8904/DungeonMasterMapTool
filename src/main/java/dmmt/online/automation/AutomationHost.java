@@ -460,13 +460,36 @@ public final class AutomationHost {
         }
         var targets = action.selection();
         var candidates = action.candidates();
+        StagedRestRecipients stagedRecipients = null;
         RuleDispatcher.TargetResolution resolved;
         if (!candidates.isEmpty() && event.path("actorId").isTextual()) {
             ObjectNode actor = RuleJson.object(candidates.getFirst().context().get("actor"), "/actor");
-            var ownerProjection = ownerRecoveryProjection(pack, working, state, sources(pack, working), actor,
-                    RuleJson.id(actor.get("id"), "/actor/id"), false, true);
-            resolved = RuleDispatcher.executeTargetsWithOwnerReactions(candidates, targets.intent(), targets.recipients(),
-                    random, pack.programs(), ownerProjection);
+            String actorId = RuleJson.id(actor.get("id"), "/actor/id");
+            if (party.reactionRoster() != null) {
+                stagedRecipients = new StagedRestRecipients(pack, actorId, party.reactionRoster(), true);
+                var selected = candidates.stream().filter(candidate ->
+                        candidate.instanceId().equals(targets.intent().action().sourceInstanceId())).findFirst().orElseThrow();
+                JsonNode binding = RuleDispatcher.binding(selected.program().rule(targets.intent().action().ruleId()),
+                        targets.intent().action().bindingId());
+                stagedRecipients.scoped(binding.path("targetSelection").path("scope").asText());
+                for (var recipient : targets.recipients()) {
+                    if (actorId.equals(recipient.actorId())) continue;
+                    StagedRecipient participant = stagedRecipients.participants.get(recipient.actorId());
+                    if (participant == null || participant.member.revision() != recipient.revision())
+                        throw new RuleRuntime.Unavailable("staleRecipient", "A target changed. Refresh this action.");
+                    participant.sheet();
+                }
+                var reactions = new StagedTargetReactions(stagedRecipients, random, working);
+                var ownerProjection = ownerRestProjection(pack, working, state, candidates, stagedRecipients,
+                        null, actorId, working, true);
+                resolved = RuleDispatcher.executeTargetsWithLiveReactions(candidates, targets.intent(), targets.recipients(),
+                        random, pack.programs(), ownerProjection, reactions);
+            } else {
+                var ownerProjection = ownerRecoveryProjection(pack, working, state, sources(pack, working), actor,
+                        actorId, false, true);
+                resolved = RuleDispatcher.executeTargetsWithOwnerReactions(candidates, targets.intent(), targets.recipients(),
+                        random, pack.programs(), ownerProjection);
+            }
         } else {
             resolved = RuleDispatcher.executeTargets(candidates, targets.intent(), targets.recipients(), random, pack.programs());
         }
@@ -481,6 +504,10 @@ public final class AutomationHost {
         for (String key : List.of("actions", "outbox")) ((ArrayNode) result.get(key)).addAll((ArrayNode) after.get(key));
         result.set("event", after.get("event"));
         party.stage(resolved.recipients());
+        if (stagedRecipients != null) {
+            stagedRecipients.applyTargetUpdates(resolved.recipients());
+            party.stageSheets(stagedRecipients.changed(), stagedRecipients.scopeMembership());
+        }
         return result.put("revision", revision + 1);
     }
 
@@ -2622,21 +2649,27 @@ public final class AutomationHost {
         private final Pack pack;
         private final String sourceId;
         private final RestRoster roster;
+        private final boolean acceptLegacyRevision;
         private final Map<String, StagedRecipient> participants = new LinkedHashMap<>();
         private final Set<String> changed = new java.util.LinkedHashSet<>();
         private final Map<String, List<String>> scopeMembership = new LinkedHashMap<>();
         private final Map<String, List<String>> scopeOrder = new LinkedHashMap<>();
 
         private StagedRestRecipients(Pack pack, String sourceId, RestRoster roster) {
+            this(pack, sourceId, roster, false);
+        }
+
+        private StagedRestRecipients(Pack pack, String sourceId, RestRoster roster, boolean acceptLegacyRevision) {
             this.pack = pack;
             this.sourceId = sourceId;
             this.roster = roster;
+            this.acceptLegacyRevision = acceptLegacyRevision;
         }
 
         private StagedRestRecipients copy() {
-            StagedRestRecipients result = new StagedRestRecipients(pack, sourceId, roster);
+            StagedRestRecipients result = new StagedRestRecipients(pack, sourceId, roster, acceptLegacyRevision);
             participants.forEach((id, participant) -> {
-                StagedRecipient copy = new StagedRecipient(participant.member);
+                StagedRecipient copy = new StagedRecipient(participant.member, acceptLegacyRevision);
                 copy.sheet = participant.sheet == null ? null : participant.sheet.deepCopy();
                 result.participants.put(id, copy);
             });
@@ -2681,7 +2714,7 @@ public final class AutomationHost {
                 StagedRecipient participant = participants.get(member.id());
                 if (participant == null) {
                     if (participants.size() == 128) throw RuleJson.error("/recipients", "A rest is limited to 128 characters.");
-                    participant = new StagedRecipient(member);
+                    participant = new StagedRecipient(member, acceptLegacyRevision);
                     participants.put(member.id(), participant);
                 } else if (!participant.sameVersion(member)) {
                     throw new RuleRuntime.Unavailable("staleRecipient", "A character changed. Reopen this rest.");
@@ -2693,7 +2726,14 @@ public final class AutomationHost {
 
         private void apply(List<RuleDispatcher.RecipientUpdate> updates) {
             if (updates.size() != 1) throw RuleJson.error("/recipients", "An ally move requires one recipient update.");
-            var update = updates.getFirst();
+            applyTargetUpdates(updates);
+        }
+
+        private void applyTargetUpdates(List<RuleDispatcher.RecipientUpdate> updates) {
+            for (var update : updates) applyTargetUpdate(update);
+        }
+
+        private void applyTargetUpdate(RuleDispatcher.RecipientUpdate update) {
             StagedRecipient participant = participants.get(update.actorId());
             if (participant == null || participant.sheet == null)
                 throw RuleJson.error("/recipients", "The staged recipient was not read from the host roster.");
@@ -2728,13 +2768,15 @@ public final class AutomationHost {
             StagedRecipient participant = participants.get(member.id());
             if (participant == null) {
                 if (participants.size() == 128) throw RuleJson.error("/recipients", "A rest is limited to 128 characters.");
-                participant = new StagedRecipient(member);
+                participant = new StagedRecipient(member, acceptLegacyRevision);
                 participants.put(member.id(), participant);
             } else if (!participant.sameVersion(member)) {
                 throw new RuleRuntime.Unavailable("staleRecipient", "A character changed. Reopen this rest.");
             }
-            if (restRevision(update.sheet()) != member.revision())
+            long revision = acceptLegacyRevision ? revision(update.sheet()) : restRevision(update.sheet());
+            if (revision != member.revision())
                 throw new RuleRuntime.Unavailable("staleRecipient", "A character changed. Reopen this rest.");
+            if (acceptLegacyRevision) projection.state(update.sheet()).put("revision", revision);
             participant.sheet = update.sheet();
             markChanged(member.id());
         }
@@ -2886,6 +2928,10 @@ public final class AutomationHost {
                 var sources = sources(pack, working);
                 ObjectNode actor = actor(pack, working, state, event, sources);
                 var candidates = candidates(pack, sources, state, actor, event);
+                if (candidates.isEmpty()) {
+                    staged.set("recipient", actor);
+                    return;
+                }
                 ObjectNode resting = stagedSource(staged, sourceContexts);
                 ObjectNode restingBefore = resting.deepCopy();
                 var ownerProjection = ownerRestProjection(pack, working, state, candidates,
@@ -2946,11 +2992,65 @@ public final class AutomationHost {
         }
     }
 
+    private final class StagedTargetReactions implements RuleDispatcher.RecipientTrackReactions {
+        private final StagedRestRecipients recipients;
+        private final RandomGenerator random;
+        private final ObjectNode source;
+        private final Map<String, StagedRestRecipients.StagedRecipientReactions> handlers = new HashMap<>();
+
+        private StagedTargetReactions(StagedRestRecipients recipients, RandomGenerator random, ObjectNode source) {
+            this.recipients = recipients;
+            this.random = random;
+            this.source = source;
+        }
+
+        private StagedRestRecipients.StagedRecipientReactions handler(ObjectNode staged) {
+            String id = RuleJson.id(staged.at("/recipient/id"), "/recipient/id");
+            var handler = handlers.computeIfAbsent(id, key -> recipients.reactions(key, random, source));
+            if (!handler.working.equals(handler.participant.sheet))
+                replace(handler.working, handler.participant.sheet);
+            return handler;
+        }
+
+        @Override
+        public void changed(ObjectNode staged, ObjectNode event, Map<String, ObjectNode> contexts,
+                            List<RuleDispatcher.TargetActionResult> actions, List<ObjectNode> outbox) {
+            var handler = handler(staged);
+            handler.changed(staged, event, contexts, actions, outbox);
+            handler.commitChanges();
+        }
+
+        @Override
+        public void holderChanged(ObjectNode staged, Map<String, ObjectNode> contexts) {
+            var handler = handler(staged);
+            handler.holderChanged(staged, contexts);
+            handler.commitChanges();
+        }
+
+        @Override
+        public void grantInventory(ObjectNode staged, Map<String, ObjectNode> contexts) {
+            var handler = handler(staged);
+            handler.grantInventory(staged, contexts);
+            handler.commitChanges();
+        }
+
+        @Override
+        public ObjectNode refresh(String actorId, ObjectNode snapshot, ObjectNode event) {
+            return recipients.snapshot(actorId, event);
+        }
+    }
+
     private final class StagedRecipient {
         private final RestMember member;
+        private final boolean acceptLegacyRevision;
         private ObjectNode sheet;
 
-        private StagedRecipient(RestMember member) { this.member = member; }
+        private StagedRecipient(RestMember member) { this(member, false); }
+
+        private StagedRecipient(RestMember member, boolean acceptLegacyRevision) {
+            this.member = member;
+            this.acceptLegacyRevision = acceptLegacyRevision;
+        }
 
         private boolean sameVersion(RestMember other) {
             return member.name().equals(other.name()) && member.sheetVersion().equals(other.sheetVersion())
@@ -2962,8 +3062,10 @@ public final class AutomationHost {
                 ObjectNode loaded = member.loadSheet().get();
                 if (loaded == null) throw RuleJson.error("/recipients/" + member.id(), "The recipient sheet is missing.");
                 ObjectNode copy = loaded.deepCopy();
-                if (restRevision(copy) != member.revision())
+                long revision = acceptLegacyRevision ? revision(copy) : restRevision(copy);
+                if (revision != member.revision())
                     throw new RuleRuntime.Unavailable("staleRecipient", "A character changed. Reopen this rest.");
+                if (acceptLegacyRevision) projection.state(copy).put("revision", revision);
                 sheet = copy;
             }
             return sheet;
@@ -3502,7 +3604,18 @@ public final class AutomationHost {
                                                                StagedRestRecipients recipients,
                                                                StagedRestRecipients.StagedRecipientReactions recipient,
                                                                String holderId, ObjectNode restingSheet) {
-        RuleDispatcher.OwnerProjection initial = ownerMoveProjection(pack, sheet, state, candidates);
+        return ownerRestProjection(pack, sheet, state, candidates, recipients, recipient, holderId, restingSheet, false);
+    }
+
+    private RuleDispatcher.OwnerProjection ownerRestProjection(Pack pack, ObjectNode sheet, ObjectNode state,
+                                                               List<RuleDispatcher.Candidate> candidates,
+                                                               StagedRestRecipients recipients,
+                                                               StagedRestRecipients.StagedRecipientReactions recipient,
+                                                               String holderId, ObjectNode restingSheet, boolean live) {
+        ObjectNode initialActor = RuleJson.object(candidates.getFirst().context().get("actor"), "/actor");
+        RuleDispatcher.OwnerProjection initial = live
+                ? ownerRecoveryProjection(pack, sheet, state, sources(pack, sheet), initialActor, holderId, false, true)
+                : ownerMoveProjection(pack, sheet, state, candidates);
         if (recipients == null || recipients.roster.grantInventory() == null
                 && recipients.roster.endEffectsElsewhere() == null) return initial;
         return new RuleDispatcher.OwnerProjection() {
@@ -3603,7 +3716,8 @@ public final class AutomationHost {
                 staged.set("actor", actor);
                 if (staged.has("recipient") && holderId.equals(staged.at("/recipient/id").asText()))
                     staged.set("recipient", actor);
-                current = ownerRecoveryProjection(pack, sheet, state, activeSources, actor, holderId, true);
+                current = live ? ownerRecoveryProjection(pack, sheet, state, activeSources, actor, holderId, false, true)
+                        : ownerRecoveryProjection(pack, sheet, state, activeSources, actor, holderId, true);
                 return candidates(pack, activeSources, state, actor, event);
             }
         };

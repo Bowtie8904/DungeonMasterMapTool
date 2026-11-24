@@ -196,6 +196,7 @@ public final class RuleDispatcher {
                      List<TargetActionResult> actions, List<ObjectNode> outbox);
         void holderChanged(ObjectNode staged, Map<String, ObjectNode> contexts);
         void grantInventory(ObjectNode staged, Map<String, ObjectNode> contexts);
+        default ObjectNode refresh(String actorId, ObjectNode snapshot, ObjectNode event) { return snapshot; }
     }
 
     private static final class ReactionBudget {
@@ -1242,7 +1243,7 @@ public final class RuleDispatcher {
     public static TargetResolution executeTargets(List<Candidate> activeSources, TargetIntent selection,
                                                    List<RecipientCandidate> eligibleRecipients,
                                                    RandomGenerator random, Map<String, RuleCompiler.Program> programs) {
-        return executeTargets(activeSources, selection, eligibleRecipients, random, programs, null, null, false);
+        return executeTargets(activeSources, selection, eligibleRecipients, random, programs, null, null, false, false);
     }
 
     static TargetResolution executeTargetsWithOwnerReactions(List<Candidate> activeSources, TargetIntent selection,
@@ -1250,7 +1251,17 @@ public final class RuleDispatcher {
                                                              RandomGenerator random, Map<String, RuleCompiler.Program> programs,
                                                              OwnerProjection sourceProjection) {
         return executeTargets(activeSources, selection, eligibleRecipients, random, programs,
-                sourceProjection, null, true);
+                sourceProjection, null, true, true);
+    }
+
+    static TargetResolution executeTargetsWithLiveReactions(List<Candidate> activeSources, TargetIntent selection,
+                                                             List<RecipientCandidate> eligibleRecipients,
+                                                             RandomGenerator random, Map<String, RuleCompiler.Program> programs,
+                                                             OwnerProjection sourceProjection, RecipientTrackReactions recipientReactions) {
+        if (sourceProjection == null || recipientReactions == null)
+            throw RuleJson.error("/target", "Both character reaction handlers are required.");
+        return executeTargets(activeSources, selection, eligibleRecipients, random, programs,
+                sourceProjection, recipientReactions, true, true);
     }
 
     static TargetResolution executeTargetsWithReactions(List<Candidate> activeSources, TargetIntent selection,
@@ -1269,14 +1280,14 @@ public final class RuleDispatcher {
         if (sourceProjection == null || recipientReactions == null)
             throw RuleJson.error("/target", "Both character reaction handlers are required.");
         return executeTargets(activeSources, selection, eligibleRecipients, random, programs,
-                sourceProjection, recipientReactions, allowInventory);
+                sourceProjection, recipientReactions, allowInventory, false);
     }
 
     private static TargetResolution executeTargets(List<Candidate> activeSources, TargetIntent selection,
                                                     List<RecipientCandidate> eligibleRecipients,
                                                     RandomGenerator random, Map<String, RuleCompiler.Program> programs,
                                                     OwnerProjection sourceProjection, RecipientTrackReactions recipientReactions,
-                                                    boolean allowInventory) {
+                                                    boolean allowInventory, boolean live) {
         Snapshot snapshot = validateSources(activeSources);
         if (selection == null || eligibleRecipients == null)
             throw RuleJson.error("/target", "A selection and eligible recipient set are required.");
@@ -1337,7 +1348,7 @@ public final class RuleDispatcher {
                 throw new RuleRuntime.Unavailable("recipient", "This recipient is no longer eligible.");
         }
         if (targetIds.isEmpty()) throw new RuleRuntime.Unavailable("recipient", "There are no eligible targets for this action.");
-        if (recipientReactions != null && (targetIds.size() != 1 || targetIds.getFirst().equals(sourceActorId)))
+        if (recipientReactions != null && !live && (targetIds.size() != 1 || targetIds.getFirst().equals(sourceActorId)))
             throw RuleJson.error("/target", "A rest move must select exactly one other character.");
 
         List<PreparedTarget> checked = new ArrayList<>();
@@ -1361,8 +1372,8 @@ public final class RuleDispatcher {
             List<ActionResult> sourceReactions = new ArrayList<>();
             ReactionBudget budget = new ReactionBudget(sourceProjection);
             budget.allowSelectedInventory = allowInventory;
-            budget.liveRoot = recipientReactions == null;
-            budget.nestedRolls = recipientReactions == null && "action.request".equals(snapshot.eventType());
+            budget.liveRoot = live;
+            budget.nestedRolls = live && "action.request".equals(snapshot.eventType());
             budget.contexts = workingContexts;
             budget.sources = byInstance;
             RuleRuntime.TrackObserver sourceObserver = ownerTrackObserver(
@@ -1431,6 +1442,9 @@ public final class RuleDispatcher {
         boolean reserveSourceCosts = true;
         for (PreparedTarget item : checked) {
             ObjectNode context = workingSource.deepCopy();
+            if (recipientReactions != null && !item.recipientId().equals(sourceActorId))
+                workingRecipients.put(item.recipientId(), recipientReactions.refresh(item.recipientId(),
+                        workingRecipients.get(item.recipientId()), sharedEvent));
             setParticipants(context, sharedActor, item.recipientId().equals(sourceActorId) ? null : workingRecipients.get(item.recipientId()));
             context.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
             if (observer != null) context.set("event", sharedEvent.deepCopy());
@@ -1448,6 +1462,9 @@ public final class RuleDispatcher {
         for (PreparedTarget item : prepared) {
             ObjectNode current = item.prepared().context().deepCopy();
             mergeTransactionState(current, workingSource);
+            if (recipientReactions != null && !item.recipientId().equals(sourceActorId))
+                workingRecipients.put(item.recipientId(), recipientReactions.refresh(item.recipientId(),
+                        workingRecipients.get(item.recipientId()), sharedEvent));
             setParticipants(current, sharedActor, item.recipientId().equals(sourceActorId) ? null : workingRecipients.get(item.recipientId()));
             current.set("event", sharedEvent.deepCopy());
             current.set("revision", RuleExpression.numeric(snapshot.revision(), "/revision"));
@@ -1479,6 +1496,8 @@ public final class RuleDispatcher {
         List<RecipientUpdate> updates = new ArrayList<>();
         for (String id : targetIds) if (!id.equals(sourceActorId)) {
             RecipientCandidate original = recipientsById.get(id);
+            if (recipientReactions != null)
+                workingRecipients.put(id, recipientReactions.refresh(id, workingRecipients.get(id), sharedEvent));
             updates.add(new RecipientUpdate(id, workingRecipients.get(id), original.revision() + 1));
         }
         return new TargetResolution(updatedSources, updates, actionResults, outbox);

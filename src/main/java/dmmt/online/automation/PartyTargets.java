@@ -22,18 +22,34 @@ public final class PartyTargets {
 
     private final String packVersion, sourceVersion;
     private final Function<String, List<Member>> loadScope;
+    private final AutomationHost.RestRoster reactionRoster;
     private final Map<String, List<Member>> scopes = new HashMap<>();
     private final Map<ProjectionKey, ObjectNode> actors = new HashMap<>();
     private List<RuleDispatcher.RecipientUpdate> updates = List.of();
+    private Map<String, ObjectNode> stagedSheets = Map.of();
+    private Map<String, List<String>> reactionScopes = Map.of();
 
     void stage(List<RuleDispatcher.RecipientUpdate> updates) { this.updates = List.copyOf(updates); }
     public List<RuleDispatcher.RecipientUpdate> updates() { return updates; }
+    AutomationHost.RestRoster reactionRoster() { return reactionRoster; }
+    void stageSheets(Map<String, ObjectNode> sheets, Map<String, List<String>> scopes) {
+        stagedSheets = Map.copyOf(sheets);
+        reactionScopes = Map.copyOf(scopes);
+    }
+    public Map<String, ObjectNode> stagedSheets() { return stagedSheets; }
+    public Map<String, List<String>> reactionScopes() { return reactionScopes; }
     void invalidateSnapshots() { actors.clear(); }
 
     public PartyTargets(String packVersion, String sourceVersion, Function<String, List<Member>> loadScope) {
+        this(packVersion, sourceVersion, loadScope, null);
+    }
+
+    public PartyTargets(String packVersion, String sourceVersion, Function<String, List<Member>> loadScope,
+                        AutomationHost.RestRoster reactionRoster) {
         this.packVersion = packVersion;
         this.sourceVersion = sourceVersion;
         this.loadScope = loadScope;
+        this.reactionRoster = reactionRoster;
     }
 
     ObjectNode describe(JsonNode binding, String ruleId, ObjectNode context) {

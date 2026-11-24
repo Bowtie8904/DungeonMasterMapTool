@@ -88,9 +88,10 @@ prepare, prepared and finished rules, propagate roll and actor edits, and atomic
 with result controls and retry receipts. Converted sent, resource, action and reaction rolls use this path.
 Converted top-level card actions expose both `card:<name>` and `featureAction:card:<name>:<action>` in
 `event.check.origins`; class feature actions expose `feat:<name>`, while `event.check.origin` remains the primary
-identity. Converted origin filters and exclusions match either field. Recipient-side track reactions in ordinary
-targeted actions, nested card action paths, interactive prepare choices, downtime rolls and untyped dice still
-need live integration.
+identity. Converted origin filters and exclusions match either field. Ordinary single-target and party actions
+also run each changed holder's track reactions, including self-targets, before later steps; the source, recipients,
+reaction commands and reports commit together and exact retries replay the receipt. Nested card action paths,
+targeted result actions, interactive prepare choices, downtime rolls and untyped dice still need live integration.
 
 A stored effect whose source is active on its holder also offers its frozen attack profile. Its descriptor
 and `request.profileRoll` include `effectInstanceId` and the reserved profile ID `effect.profile`; the host
