@@ -185,8 +185,9 @@ planned identity migration. Typed chat dice stay separate. Other roll origins ar
 with these modifiers.
 With format-2 catalogs, ordinary trait rolls and prompted reactions use host-described options and host-owned
 results; pending sheet edits are saved before loading the offer. Trait rolls can switch between action and
-reaction, and prompted reactions retain the DM's label. An available Experience can be selected for 1 Hope;
-manual advantage and Experience cost-replacement or refund rules are not yet available in format 2.
+reaction, and prompted reactions retain the DM's label. An available Experience can be selected for 1 Hope,
+and roll mode can be overridden manually. Experience cost-replacement and refund rules are not yet available
+in format 2.
 Choose any offered options and their inputs together before pressing the profile's roll button. If no options are available, the button rolls immediately. Opening the choices does not contact the host; **Retry** resends the same selection if the reply was lost. The converter now maps top-level domain-card spellcasts with a written difficulty to these profiles, including automatic rest-use limits. Uses are reserved before rolling and refunded on failure when the card consumes only on success; an exhausted profile is disabled. Nested spells and other feature-action roll origins are not yet converted to these profiles.
 Format-2 authors must put choices based on the new faces or total on a result action, not a pre-roll option. A pre-roll option can use previously stored dice and can change the new dice when it executes.
 

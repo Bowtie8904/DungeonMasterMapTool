@@ -104,6 +104,34 @@ describe('host-authored ordinary checks', () => {
     }] } });
   });
 
+  it('submits a manual roll mode through the generic choice control', async () => {
+    let submitted: unknown;
+    const manual: RuleDescriptor = {
+      ...option, sourceId: 'ruleset:base', sourceInstanceId: 'base', ruleId: 'manual-roll-mode',
+      bindingId: 'use', label: 'Override roll mode', defaultOn: false,
+      inputs: [{ id: 'mode', kind: 'choice', label: 'Roll mode', count: 1, options: [
+        { id: 'normal', label: 'Normal' }, { id: 'advantage', label: 'Advantage (+d6)' },
+        { id: 'disadvantage', label: 'Disadvantage (-d6)' },
+      ] }],
+    };
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      if (!init.body) return Response.json({ ...offer, options: [manual] });
+      submitted = JSON.parse(String(init.body));
+      return Response.json({});
+    }));
+    await openAutomationCheckDialog('hero', 'action', 'Agility', 'Agility', async () => {});
+    const dialog = body.all('dialog')[0];
+    expect(dialog.text).toContain('Disadvantage (-d6)');
+    const [toggle, , , disadvantage] = dialog.all('input');
+    toggle.checked = true;
+    disadvantage.checked = true;
+    dialog.all('button').find(button => button.text === 'Roll')!.click();
+    await settle();
+    expect(submitted).toMatchObject({ request: { selections: [{
+      sourceInstanceId: 'base', ruleId: 'manual-roll-mode', bindingId: 'use', inputs: { mode: 'disadvantage' },
+    }] } });
+  });
+
   it('retains the exact intent after an uncertain submission', async () => {
     const requests: string[] = [];
     vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {

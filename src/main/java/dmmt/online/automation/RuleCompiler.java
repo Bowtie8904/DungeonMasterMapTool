@@ -15,7 +15,7 @@ import java.util.Set;
 
 public final class RuleCompiler {
     public static final int FORMAT_VERSION = 2;
-    private static final Set<String> EVENTS = Set.of("action.request", "roll.prepare", "roll.finished",
+    private static final Set<String> EVENTS = Set.of("action.request", "roll.prepare", "roll.prepared", "roll.finished",
             "damage.prepare", "damage.marks", "damage.applied", "claim.accept", "rest.prepare", "rest.short", "rest.long", "scene.end", "session.start",
             "downtime.move", "downtime.completed", "rest.roll", "death.options", "track.changed", "pool.changed", "equipment.changed", "effect.started",
             "effect.ended", "creation.apply");
@@ -90,7 +90,7 @@ public final class RuleCompiler {
             Map.entry("roll.dropLowest", List.of("from", "dice", "count")),
             Map.entry("roll.addDicePerPool", List.of("from", "dice", "count")),
             Map.entry("roll.dropLowestPerPool", List.of("from", "dice", "count")),
-            Map.entry("roll.contribute", List.of("from", "contribution")),
+            Map.entry("roll.contribute", List.of("from", "contribution", "beforeScales")),
             Map.entry("roll.annotate", List.of("from", "field", "value")),
             Map.entry("roll.discard", List.of("from", "role")),
             Map.entry("roll.swapRoles", List.of("from", "first", "second")),
@@ -1641,6 +1641,12 @@ public final class RuleCompiler {
         if ("roll.contribute".equals(op)) {
             RuleExpression.validate(operation.get("from"), path + "/from");
             validateContribution(operation.get("contribution"), path + "/contribution");
+            if (operation.has("beforeScales")) {
+                RuleExpression.bool(operation.get("beforeScales"), path + "/beforeScales");
+                if (operation.path("beforeScales").booleanValue()
+                        && "scale".equals(operation.path("contribution").path("kind").asText()))
+                    throw RuleJson.error(path + "/beforeScales", "A scale cannot be inserted before other scales.");
+            }
             return;
         }
         for (String field : fields) {
@@ -1739,6 +1745,7 @@ public final class RuleCompiler {
         for (String field : fields) if (!operation.has(field)
                 && !("pool.roll".equals(op) && "keepHighest".equals(field))
                 && !"owner".equals(field)
+                && !("roll.contribute".equals(op) && "beforeScales".equals(field))
                 && !("roll.resolve".equals(op) && "metadata".equals(field))
                 && !("damage.resolve".equals(op) && "armor".equals(field))
                 && !("track.capacity".equals(op) && Set.of("by", "counter", "amount", "direction").contains(field))

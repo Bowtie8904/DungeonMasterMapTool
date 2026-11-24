@@ -690,10 +690,9 @@ class LegacyCatalogConverterTest {
                   {"id":"hope","kind":"dice","role":"hope","sourceId":"core","label":"Hope","dice":[{"id":"h","sides":12,"face":4,"kept":true,"origin":"rolled"}]},
                   {"id":"dis","kind":"dice","role":"disadvantage","sourceId":"core","label":"Disadvantage","sign":-1,
                    "dice":[{"id":"x","sides":6,"face":5,"kept":true,"origin":"rolled"}]}]}}""");
-        assertEquals(-90, block(result, 0).at("/rules/4/bindings/0/priority").asInt());
         JsonNode neutral = run(program, agility, "sure").contexts().getFirst().at("/event/roll");
-        assertEquals(1, neutral.path("contributions").size(), neutral.toString());
-        assertEquals(4, neutral.path("total").asInt());
+        assertTrue(neutral.at("/metadata/ignoreDisadvantage").asBoolean(), neutral.toString());
+        assertEquals(2, neutral.path("contributions").size(), neutral.toString());
 
         var invalid = LegacyCatalogConverter.convert(catalog("""
                 {"id":"b","name":"B","automation":{"rollOptions":[{"id":"x","label":"X","roll":"damage","diceByLevel":{"5":"2d6"}},
@@ -1835,7 +1834,7 @@ class LegacyCatalogConverterTest {
         assertEquals("Aim {{+2}}", rules.at("/0/ui/label").asText());
         assertEquals("result.roll1", rules.at("/0/do/1/from/read").asText());
         assertEquals("roll.publish", rules.at("/0/do/2/op").asText());
-        assertEquals("advantage", rules.at("/2/do/0/contribution/role").asText());
+        assertEquals("advantageSuggested", rules.at("/2/do/0/field").asText());
 
         RuleCompiler.Program program = program(result, 0);
         String raging = "{\"hope\":{\"value\":2,\"max\":6},\"effects\":[{\"id\":\"other/raging/1\",\"label\":\"Raging\"}]}";
@@ -1845,6 +1844,10 @@ class LegacyCatalogConverterTest {
         ObjectNode secondary = context(program, "{\"effects\":[]}", """
                 {"type":"roll.prepare","check":{"kind":"attack","weapon":"secondary","trait":"Instinct"},"roll":%s}""".formatted(ROLL));
         assertEquals(List.of("calm"), available(program, secondary, "roll"));
+        JsonNode suggested = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, secondary)),
+                List.of(new RuleRuntime.Intent("calm", "use", "fixture", 0, RuleJson.JSON.createObjectNode())),
+                StructuredRollTest.noRandom()).contexts().getFirst().at("/event/roll");
+        assertTrue(suggested.at("/metadata/advantageSuggested").asBoolean());
 
         var resolution = run(program, attack, "aim", "rage");
         JsonNode roll = resolution.contexts().getFirst().at("/event/roll");

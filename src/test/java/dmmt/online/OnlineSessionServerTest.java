@@ -6013,7 +6013,7 @@ class OnlineSessionServerTest {
         assertEquals(afterHistory, store.historyTail(campaign.getId(), 100).size());
         campaign.setFear(1);
         JsonNode reactionOffer = MAPPER.readTree(basicCheckHttp(owner, "roller", "reaction", "Finesse").body());
-        assertTrue(reactionOffer.path("options").isEmpty());
+        assertEquals(List.of("manual-roll-mode"), reactionOffer.path("options").findValuesAsText("ruleId"));
         var resolved = automationHttp(owner, "roller", reaction.toString());
         assertEquals(200, resolved.statusCode(), resolved.body());
         assertEquals("reaction", MAPPER.readTree(resolved.body()).at("/event/check/kind").asText());
@@ -6087,6 +6087,123 @@ class OnlineSessionServerTest {
         saved.putArray("experiences");
         store.saveSheet(campaign.getId(), "roller", saved.toString());
         assertEquals(rolled.body(), automationHttp(owner, "roller", body.toString()).body());
+    }
+
+    @Test
+    void rollModesResolveSuggestionsOverridesAndScaleBeforeFinishedEvents() throws Exception {
+        installRestRules();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ArrayNode rules = ruleset.withObject("/automation").withArray("rules");
+        for (String[] option : List.of(
+                new String[]{"suggest-a", "advantageSuggested"},
+                new String[]{"suggest-b", "advantageSuggested"},
+                new String[]{"suggest-dis", "disadvantageSuggested"},
+                new String[]{"ignore-dis", "ignoreDisadvantage"})) {
+            rules.add(MAPPER.readTree("""
+                    {"id":"%s","bindings":[{"id":"use","event":"roll.prepare","surface":"roll","mode":"option"}],
+                     "do":[{"op":"roll.annotate","from":{"read":"event.roll"},"field":"%s","value":true,"as":"next"},
+                           {"op":"roll.publish","roll":{"read":"result.next"}}],"ui":{"label":"%s"}}
+                    """.formatted(option[0], option[1], option[0])));
+        }
+        rules.add(MAPPER.readTree("""
+                {"id":"suggest-false","bindings":[{"id":"use","event":"roll.prepare","surface":"roll","mode":"option"}],
+                 "do":[{"op":"roll.annotate","from":{"read":"event.roll"},"field":"advantageSuggested","value":false,"as":"next"},
+                       {"op":"roll.publish","roll":{"read":"result.next"}}],"ui":{"label":"No suggestion"}}
+                """));
+        rules.add(MAPPER.readTree("""
+                {"id":"double","bindings":[{"id":"use","event":"roll.prepare","surface":"roll","mode":"option","priority":-100}],
+                 "do":[{"op":"roll.contribute","from":{"read":"event.roll"},"as":"next",
+                        "contribution":{"id":"double","kind":"scale","role":"multiplier","label":"Double","of":"all","factor":2}},
+                       {"op":"roll.publish","roll":{"read":"result.next"}}],"ui":{"label":"Double"}}
+                """));
+        rules.add(MAPPER.readTree("""
+                {"id":"ready-bonus","bindings":[{"id":"use","event":"roll.prepared","surface":"roll","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.check.kind"},"reaction"]},
+                 "do":[{"op":"roll.contribute","from":{"read":"event.roll"},"as":"next","beforeScales":true,
+                        "contribution":{"id":"ready-bonus","kind":"flat","role":"modifier","label":"Ready bonus","value":2}},
+                       {"op":"roll.publish","roll":{"read":"result.next"}}],"ui":{}}
+                """));
+        rules.add(MAPPER.readTree("""
+                {"id":"finished-total","bindings":[{"id":"use","event":"roll.finished","surface":"roll","mode":"automatic"}],
+                 "when":{"gte":[{"read":"event.check.total"},12]},
+                 "do":[{"op":"table.gain","resource":"fear","amount":1,"label":"High roll"}],"ui":{}}
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        campaign.getActors().add(Campaign.Actor.builder().id("roller").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "roller", """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":0},"stress":{"slots":6,"on":0},
+                 "hope":{"slots":6,"on":2},"armorTrack":{"slots":3,"on":0},
+                 "traits":[{"name":"Agility","mod":3}]}
+                """);
+        String owner = cookie();
+        record Scenario(String kind, List<String> options, String manual, String expectedRole, boolean doubled) {}
+        List<Scenario> cases = List.of(
+                new Scenario("action", List.of(), null, "", false),
+                new Scenario("action", List.of("suggest-false"), null, "", false),
+                new Scenario("action", List.of("suggest-a", "suggest-b"), null, "advantage", false),
+                new Scenario("action", List.of("suggest-a", "suggest-dis"), null, "", false),
+                new Scenario("action", List.of("suggest-a", "suggest-dis", "ignore-dis"), null, "", false),
+                new Scenario("action", List.of("suggest-dis", "ignore-dis"), null, "", false),
+                new Scenario("action", List.of("suggest-dis"), "advantage", "advantage", false),
+                new Scenario("action", List.of("suggest-a"), "normal", "", false),
+                new Scenario("action", List.of("suggest-a"), "disadvantage", "disadvantage", false),
+                new Scenario("action", List.of("suggest-a", "ignore-dis"), "disadvantage", "", false),
+                new Scenario("action", List.of("suggest-a", "double"), null, "advantage", true),
+                new Scenario("reaction", List.of("suggest-a"), null, "advantage", false));
+        int index = 0;
+        for (Scenario scenario : cases) {
+            JsonNode offer = MAPPER.readTree(basicCheckHttp(owner, "roller", scenario.kind(), "Agility").body());
+            ObjectNode body = MAPPER.createObjectNode();
+            ObjectNode request = body.putObject("request").put("requestId", "mode-" + index++)
+                    .put("expectedRevision", offer.path("revision").asLong());
+            request.putObject("checkRoll").put("kind", scenario.kind()).put("trait", "Agility");
+            ArrayNode selections = request.putArray("selections");
+            for (String id : scenario.options()) selections.add(restSelection(restDescriptor(offer.path("options"), id)));
+            if (scenario.manual() != null) {
+                ObjectNode manual = restSelection(restDescriptor(offer.path("options"), "manual-roll-mode"));
+                manual.withObject("/inputs").put("mode", scenario.manual());
+                selections.add(manual);
+            }
+            int fear = campaign.getFear();
+            diceSeed(0);
+            var response = automationHttp(owner, "roller", body.toString());
+            assertEquals(200, response.statusCode(), scenario + ": " + response.body());
+            JsonNode receipt = MAPPER.readTree(response.body());
+            JsonNode event = receipt.path("event");
+            List<JsonNode> modeParts = new java.util.ArrayList<>();
+            for (JsonNode part : event.at("/roll/contributions"))
+                if (Set.of("advantage", "disadvantage").contains(part.path("role").asText())) modeParts.add(part);
+            assertEquals(scenario.expectedRole().isEmpty() ? 0 : 1, modeParts.size(), scenario.toString());
+            int bonus = 0;
+            JsonNode sampled = restDescriptor(receipt.path("actions"), "resolve-roll-mode").path("diceRolls");
+            assertEquals(scenario.expectedRole().isEmpty() ? 0 : 1, sampled.size(), scenario.toString());
+            if (!modeParts.isEmpty()) {
+                JsonNode part = modeParts.getFirst();
+                assertEquals(scenario.expectedRole(), part.path("role").asText());
+                assertEquals(1, part.path("dice").size());
+                assertEquals(6, part.at("/dice/0/sides").asInt());
+                assertEquals(part.at("/dice/0/face"), sampled.at("/0/faces/0"));
+                bonus = part.at("/dice/0/face").asInt() * ("disadvantage".equals(scenario.expectedRole()) ? -1 : 1);
+            }
+            int total = event.at("/check/hopeDie").asInt() + event.at("/check/fearDie").asInt() + 3 + bonus
+                    + ("reaction".equals(scenario.kind()) ? 2 : 0);
+            if (scenario.doubled()) total *= 2;
+            assertEquals(total, event.at("/check/total").asInt(), event.toString());
+            assertEquals(fear + (total >= 12 ? 1 : 0), campaign.getFear(), scenario.toString());
+            assertEquals(response.body(), automationHttp(owner, "roller", body.toString()).body());
+        }
+        JsonNode offer = MAPPER.readTree(basicCheckHttp(owner, "roller", "action", "Agility").body());
+        ObjectNode manual = restSelection(restDescriptor(offer.path("options"), "manual-roll-mode"));
+        manual.withObject("/inputs").put("mode", "forged");
+        ObjectNode body = MAPPER.createObjectNode();
+        ObjectNode request = body.putObject("request").put("requestId", "mode-forged")
+                .put("expectedRevision", offer.path("revision").asLong());
+        request.putObject("checkRoll").put("kind", "action").put("trait", "Agility");
+        request.putArray("selections").add(manual);
+        String before = store.loadSheet(campaign.getId(), "roller");
+        assertEquals(400, automationHttp(owner, "roller", body.toString()).statusCode());
+        assertEquals(before, store.loadSheet(campaign.getId(), "roller"));
     }
 
     @Test

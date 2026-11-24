@@ -11,6 +11,68 @@
   "automation": {
     "rules": [
       {
+        "id": "manual-roll-mode",
+        "bindings": [{ "id": "use", "event": "roll.prepare", "surface": "roll", "mode": "option" }],
+        "when": { "eq": [{ "read": "event.check.duality" }, true] },
+        "inputs": [{ "id": "mode", "kind": "choice", "label": "Roll mode", "options": [
+          { "id": "normal", "label": "Normal" },
+          { "id": "advantage", "label": "Advantage (+d6)" },
+          { "id": "disadvantage", "label": "Disadvantage (-d6)" }
+        ] }],
+        "do": [
+          { "op": "roll.annotate", "from": { "read": "event.roll" }, "field": "modeChoice",
+            "value": { "read": "input.mode" }, "as": "chosen" },
+          { "op": "roll.publish", "roll": { "read": "result.chosen" } }
+        ],
+        "ui": { "label": "Override roll mode", "description": "Choose a mode instead of the selected options' suggestions." }
+      },
+      {
+        "id": "resolve-roll-mode",
+        "bindings": [{ "id": "resolve", "event": "roll.prepared", "surface": "roll",
+          "mode": "automatic", "priority": 1000 }],
+        "when": { "eq": [{ "read": "event.check.duality" }, true] },
+        "do": [
+          { "op": "value", "as": "advantage", "value": { "or": [
+            { "and": [
+              { "exists": "event.roll.metadata.advantageSuggested" },
+              { "eq": [{ "read": "event.roll.metadata.advantageSuggested" }, true] }
+            ] },
+            { "includes": [{ "pluck": [{ "read": "event.roll.contributions" }, "role"] }, "advantage"] }
+          ] } },
+          { "op": "value", "as": "disadvantage", "value": { "or": [
+            { "and": [
+              { "exists": "event.roll.metadata.disadvantageSuggested" },
+              { "eq": [{ "read": "event.roll.metadata.disadvantageSuggested" }, true] }
+            ] },
+            { "includes": [{ "pluck": [{ "read": "event.roll.contributions" }, "role"] }, "disadvantage"] }
+          ] } },
+          { "op": "value", "as": "mode", "value": { "if": [
+            { "exists": "event.roll.metadata.modeChoice" }, { "read": "event.roll.metadata.modeChoice" },
+            { "if": [
+              { "eq": [{ "read": "result.advantage" }, { "read": "result.disadvantage" }] }, "normal",
+              { "if": [{ "read": "result.advantage" }, "advantage", "disadvantage"] }
+            ] }
+          ] } },
+          { "op": "value", "as": "ignored", "value": { "and": [
+            { "eq": [{ "read": "result.mode" }, "disadvantage"] },
+            { "exists": "event.roll.metadata.ignoreDisadvantage" },
+            { "eq": [{ "read": "event.roll.metadata.ignoreDisadvantage" }, true] }
+          ] } },
+          { "op": "roll.discard", "from": { "read": "event.roll" }, "role": "advantage", "as": "withoutAdvantage" },
+          { "op": "roll.discard", "from": { "read": "result.withoutAdvantage" }, "role": "disadvantage", "as": "base" },
+          { "op": "roll.contribute", "from": { "read": "result.base" }, "beforeScales": true, "as": "withAdvantage",
+            "contribution": { "id": "core.advantage", "kind": "dice", "role": "advantage",
+              "label": "Advantage", "count": { "if": [{ "eq": [{ "read": "result.mode" }, "advantage"] }, 1, 0] }, "sides": 6 } },
+          { "op": "roll.contribute", "from": { "read": "result.withAdvantage" }, "beforeScales": true, "as": "withDisadvantage",
+            "contribution": { "id": "core.disadvantage", "kind": "dice", "role": "disadvantage",
+              "label": "Disadvantage", "count": { "if": [
+                { "and": [{ "eq": [{ "read": "result.mode" }, "disadvantage"] }, { "not": { "read": "result.ignored" } }] }, 1, 0
+              ] }, "sides": 6, "sign": -1 } },
+          { "op": "roll.publish", "roll": { "read": "result.withDisadvantage" } }
+        ],
+        "ui": {}
+      },
+      {
         "id": "experience",
         "bindings": [{ "id": "use", "event": "roll.prepare", "surface": "roll", "mode": "option" }],
         "when": { "and": [

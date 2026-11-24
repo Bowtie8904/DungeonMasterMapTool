@@ -304,8 +304,14 @@ public final class StructuredRoll {
      * flat value changes nothing and is not recorded.
      */
     public static ObjectNode contribute(JsonNode original, ObjectNode definition, JsonNode context, RandomGenerator random) {
+        return contribute(original, definition, context, random, false);
+    }
+
+    static ObjectNode contribute(JsonNode original, ObjectNode definition, JsonNode context,
+                                 RandomGenerator random, boolean beforeScales) {
         ObjectNode roll = validate(original);
         if ("scale".equals(definition.path("kind").asText())) {
+            if (beforeScales) throw RuleJson.error("/beforeScales", "A scale cannot be inserted before other scales.");
             // Scales roll nothing; they are validated against the earlier contributions they scale.
             ((ArrayNode) roll.path("contributions")).add(definition.deepCopy());
             return calculate(roll, false);
@@ -317,7 +323,13 @@ public final class StructuredRoll {
         JsonNode part = resolve(plan, context, random, Math.max(0, 1024 - used)).path("contributions").get(0);
         boolean empty = "dice".equals(part.path("kind").asText()) && part.path("dice").isEmpty()
                 || "flat".equals(part.path("kind").asText()) && part.path("value").isNumber() && part.path("value").asDouble() == 0;
-        if (!empty) ((ArrayNode) roll.path("contributions")).add(part);
+        if (!empty) {
+            ArrayNode contributions = (ArrayNode) roll.path("contributions");
+            int position = contributions.size();
+            if (beforeScales) for (int i = 0; i < contributions.size(); i++)
+                if ("scale".equals(contributions.get(i).path("kind").asText())) { position = i; break; }
+            contributions.insert(position, part);
+        }
         return calculate(roll, false);
     }
 

@@ -550,6 +550,13 @@ public final class AutomationHost {
         if (finished.path("blocked").size() > 0)
             throw new RuleRuntime.Unavailable("blocked", finished.at("/blocked/0/reason").asText());
         if (!finished.path("roll").equals(event.path("roll"))) ProfileRoll.updateCheck(finished);
+        finished.put("type", "roll.prepared");
+        ObjectNode prepared = automatic(pack, working, finished, random);
+        ObjectNode ready = (ObjectNode) prepared.get("event");
+        if (!ready.path("roll").equals(finished.path("roll"))) ProfileRoll.updateCheck(ready);
+        for (String key : List.of("actions", "outbox"))
+            ((ArrayNode) result.get(key)).addAll((ArrayNode) prepared.get(key));
+        finished = ready;
         finished.put("type", "roll.finished");
         boolean successOnly = "success".equals(profile.path("consumeOn").asText());
         String outcome = successOnly ? limitedOutcome(finished) : null;

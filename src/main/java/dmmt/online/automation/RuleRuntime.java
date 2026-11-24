@@ -1449,10 +1449,14 @@ public final class RuleRuntime {
                 if ("dice".equals(part.path("kind").asText()) && whole(part.path("count"), context, 0, 1024) > remaining)
                     throw RuleJson.error("/dice", "Action exceeds its dice limit.");
                 JsonNode base = eval(op.path("from"), context);
-                ObjectNode contributed = StructuredRoll.contribute(base, part, context, random);
+                ObjectNode contributed = StructuredRoll.contribute(base, part, context, random,
+                        op.path("beforeScales").asBoolean(false));
                 if ("dice".equals(part.path("kind").asText())
                         && contributed.path("contributions").size() > base.path("contributions").size()) {
-                    JsonNode added = contributed.path("contributions").get(contributed.path("contributions").size() - 1);
+                    JsonNode added = null;
+                    for (JsonNode candidate : contributed.path("contributions"))
+                        if (candidate.path("id").equals(part.path("id"))) { added = candidate; break; }
+                    if (added == null) throw RuleJson.error("/contribution/id", "The added contribution is missing.");
                     ObjectNode record = RuleJson.JSON.createObjectNode().put("contributionOf", contributed.path("id").asText());
                     ArrayNode faces = record.putArray("faces");
                     added.path("dice").forEach(die -> faces.add(die.path("face")));

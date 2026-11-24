@@ -1771,8 +1771,6 @@ public final class LegacyCatalogConverter {
         if (option.has("advantage")) {
             String advantage = option.path("advantage").asText();
             if (!Set.of("advantage", "disadvantage").contains(advantage)) p.add(path + "/advantage", "Expected advantage or disadvantage.");
-            else parts.add(contribution(id + "-" + advantage, "dice", advantage, label)
-                    .put("count", 1).put("sides", 6).put("sign", "advantage".equals(advantage) ? 1 : -1));
         }
         if (option.has("traitValue")) {
             String trait = option.path("traitValue").asText();
@@ -1800,6 +1798,13 @@ public final class LegacyCatalogConverter {
             from[0] = read("result." + slot);
         }
         boolean edited = !parts.isEmpty();
+        if (option.has("advantage") && Set.of("advantage", "disadvantage").contains(option.path("advantage").asText())) {
+            ObjectNode suggest = steps.addObject().put("op", "roll.annotate");
+            suggest.set("from", from[0]);
+            suggest.put("field", option.path("advantage").asText() + "Suggested").put("value", true).put("as", "suggested");
+            from[0] = read("result.suggested");
+            edited = true;
+        }
         if (option.has("hopeDie")) {
             JsonNode sides = option.get("hopeDie");
             if (!(sides.isInt() && sides.asInt() >= 2 && sides.asInt() <= 1000)) p.add(path + "/hopeDie", "Expected a die size from 2 to 1000.");
@@ -1825,12 +1830,10 @@ public final class LegacyCatalogConverter {
         if (option.has("ignoreDisadvantage")) {
             if (!option.path("ignoreDisadvantage").asBoolean(false)) p.add(path + "/ignoreDisadvantage", "Expected true.");
             else {
-                // Neutralises disadvantage only; it runs after other options have contributed their dice.
-                ObjectNode discard = steps.addObject().put("op", "roll.discard");
-                discard.set("from", from[0]);
-                discard.put("role", "disadvantage").put("as", "neutral");
+                ObjectNode ignore = steps.addObject().put("op", "roll.annotate");
+                ignore.set("from", from[0]);
+                ignore.put("field", "ignoreDisadvantage").put("value", true).put("as", "neutral");
                 from[0] = read("result.neutral");
-                binding.put("priority", -90);
                 edited = true;
             }
         }

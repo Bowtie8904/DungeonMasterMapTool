@@ -109,6 +109,23 @@ class StructuredRollTest {
     }
 
     @Test
+    void contributionsCanBeInsertedBeforeExistingScales() throws Exception {
+        ObjectNode roll = StructuredRoll.resolve(RuleJson.parse("""
+                {"id":"roll","contributions":[
+                  {"id":"base","kind":"flat","role":"bonus","sourceId":"core","label":"Base","value":4},
+                  {"id":"double","kind":"scale","role":"scale","sourceId":"core","label":"Double","of":"all","factor":2}]}
+                """), RuleJson.JSON.createObjectNode(), noRandom());
+        ObjectNode extra = (ObjectNode) RuleJson.parse("""
+                {"id":"extra","kind":"dice","role":"bonus","sourceId":"feature","label":"Extra","count":1,"sides":6}
+                """);
+        ObjectNode result = StructuredRoll.contribute(roll, extra, RuleJson.JSON.createObjectNode(), faces(3), true);
+        assertEquals(14, result.path("total").asInt());
+        assertEquals("extra", result.at("/contributions/1/id").asText());
+        assertEquals("double", result.at("/contributions/2/id").asText());
+        assertEquals(8, roll.path("total").asInt());
+    }
+
+    @Test
     void resolvesMixedPoolsKeptFacesAndMaximizedDiceFromExpressions() throws Exception {
         ObjectNode plan = (ObjectNode) RuleJson.parse("""
                 {"id":"roll","contributions":[
