@@ -1136,6 +1136,30 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void banishRollsSpellcastD20sKeepsTheHighestAndPersistsItOnTheCard() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"banish","name":"Banish","automation":{"banishDifficulty":true,"conditionalRollTriggers":[
+                  {"id":"difficulty","label":"Banish: roll difficulty","on":"card:Banish","banishDifficulty":true}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        JsonNode block = block(result, 0);
+        assertEquals("Banish difficulty", block.at("/sourceFields/banishDifficulty/label").asText());
+        assertTrue(block.toString().contains("\"source.set\""), block.toString());
+        RuleCompiler.Program program = program(result, 0);
+        String ready = "{\"id\":\"owner\",\"name\":\"Ari\",\"effects\":[],\"stats\":{\"spellcast\":{\"total\":3}}}";
+        String finished = "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"action\",\"origin\":\"card:Banish\",\"total\":15},\"roll\":" + ROLL + "}";
+        ObjectNode context = context(program, ready, finished);
+        String rule = block.at("/rules/0/id").asText();
+        JsonNode done = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context)),
+                List.of(new RuleRuntime.Intent(rule, "use", "fixture", 0, RuleJson.JSON.createObjectNode())),
+                StructuredRollTest.faces(7, 19, 12)).contexts().getFirst();
+        assertEquals(19, done.at("/source/banishDifficulty").asInt(), done.toString());
+
+        ObjectNode none = context(program, ready.replace("\"total\":3", "\"total\":0"), finished);
+        assertThrows(RuntimeException.class, () -> RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, none)),
+                List.of(new RuleRuntime.Intent(rule, "use", "fixture", 0, RuleJson.JSON.createObjectNode())), StructuredRollTest.noRandom()));
+    }
+
+    @Test
     void salvationBeamSpendsChosenStressToHealOneWoundedAlly() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"t","name":"T","automation":{"spellcastDifficulty":16,"conditionalRollTriggers":[
@@ -3288,7 +3312,7 @@ class LegacyCatalogConverterTest {
         JsonNode classes = RuleJson.parse(Files.readString(Path.of("dmmap-daggerheart", "classes.json")));
         JsonNode feature = null;
         for (JsonNode entry : classes.path("entries")) for (JsonNode candidate : entry.path("features"))
-            if ("Warden’s Protection".equals(candidate.path("name").asText())) feature = candidate;
+            if ("WardenÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢s Protection".equals(candidate.path("name").asText())) feature = candidate;
         assertNotNull(feature);
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"warden","name":"Warden","automation":%s}""".formatted(feature.path("automation"))));

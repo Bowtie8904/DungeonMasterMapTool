@@ -40,6 +40,7 @@ public final class RuleCompiler {
             Map.entry("track.clear", List.of("track", "amount")),
             Map.entry("track.markPermanent", List.of("track", "amount")),
             Map.entry("inventory.consume", List.of("amount")),
+            Map.entry("source.set", List.of("field", "value")),
             Map.entry("dice.roll", List.of("count", "sides")),
             Map.entry("dice.hits", List.of("count", "sides", "atLeast")),
             Map.entry("dice.highest", List.of("count", "sides")),
@@ -310,6 +311,10 @@ public final class RuleCompiler {
         /** Limits of other sheet features this source raises while present. */
         public ArrayNode limitOverrides() { return limitOverrides.deepCopy(); }
         private Program withLimitOverrides(ArrayNode list) { limitOverrides = list.deepCopy(); return this; }
+        private ObjectNode sourceFields;
+        /** Named whole-number fields kept on the sheet entry that hosts this source ({@code name -> {label,min,max}}), or {@code null}. */
+        public ObjectNode sourceFields() { return sourceFields == null ? null : sourceFields.deepCopy(); }
+        private Program withSourceFields(ObjectNode declaration) { sourceFields = declaration == null ? null : declaration.deepCopy(); return this; }
         private ObjectNode grants;
         /** Features granted alongside this source ({@code features}, {@code display}), or {@code null}. Sheet metadata only. */
         public ObjectNode grants() { return grants == null ? null : grants.deepCopy(); }
@@ -372,7 +377,8 @@ public final class RuleCompiler {
     static Program compileWithRecipes(String sourceId, JsonNode automation, Map<String, ObjectNode> recipes) {
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(sourceId), "/sourceId");
         RuleJson.checkTree(automation, "/automation", 0, new int[]{0});
-        RuleJson.fields(automation, "/automation", "state", "limits", "pools", "effects", "modifiers", "profiles", "rules",         "attachment", "grants", "entitlements", "limitOverrides");
+        RuleJson.fields(automation, "/automation", "state", "limits", "pools", "effects", "modifiers", "profiles", "rules",         "attachment", "grants", "entitlements", "limitOverrides", "sourceFields");
+        ObjectNode sourceFields = automation.has("sourceFields") ? sourceFields(automation.get("sourceFields")) : null;
         ObjectNode grants = automation.has("grants") ? grants(automation.get("grants")) : null;
                 ObjectNode entitlements = automation.has("entitlements") ? entitlements(automation.get("entitlements")) : null;
         ArrayNode limitOverrides = automation.has("limitOverrides") ? limitOverrides(automation.get("limitOverrides")) : RuleJson.JSON.createArrayNode();
@@ -429,7 +435,7 @@ public final class RuleCompiler {
         boolean derived = false;
         for (JsonNode effect : effects) derived |= effect.has("while");
         if (definitions.isMissingNode() && (!modifiers.isEmpty() || !pools.isEmpty() || !profiles.isEmpty() || attachment != null || grants != null || entitlements != null || derived || !limitOverrides.isEmpty()))
-            return new Program(sourceId, decl, modifiers, Map.of()).withProfiles(profiles).withAttachment(attachment).withGrants(grants).withEntitlements(entitlements).withLimitOverrides(limitOverrides);
+            return new Program(sourceId, decl, modifiers, Map.of()).withProfiles(profiles).withAttachment(attachment).withGrants(grants).            withEntitlements(entitlements).withLimitOverrides(limitOverrides).withSourceFields(sourceFields);
         if (!definitions.isArray() || definitions.isEmpty() || definitions.size() > 256)
             throw RuleJson.error("/automation/rules", "Expected 1-256 rules (or only passive modifiers, pools, profiles, derived effects, grants and an attachment).");
         Map<String, ObjectNode> expanded = new LinkedHashMap<>();
@@ -465,7 +471,34 @@ public final class RuleCompiler {
                 if ("claim.offer".equals(operation.path("op").asText()) && !claimGroups.contains(operation.path("group").asText()))
                     throw RuleJson.error("/automation/rules/" + rule.path("id").asText() + "/do",
                             "A claim offer must name a claim.accept chat group declared by this source: " + operation.path("group").asText());
-        return new Program(sourceId, decl, modifiers, expanded).withProfiles(profiles).withAttachment(attachment).withGrants(grants).withEntitlements(entitlements).withLimitOverrides(limitOverrides);
+        for (ObjectNode rule : expanded.values()) for (JsonNode operations : List.of(rule.path("do"), rule.path("after").path("do")))
+            for (JsonNode operation : operations)
+                if ("source.set".equals(operation.path("op").asText())
+                        && (sourceFields == null || !sourceFields.has(operation.path("field").asText())))
+                    throw RuleJson.error("/automation/rules/" + rule.path("id").asText() + "/do",
+                            "source.set must name a field declared in sourceFields: " + operation.path("field").asText());
+        return new Program(sourceId, decl, modifiers, expanded).withProfiles(profiles).withAttachment(attachment).withGrants(grants).withEntitlements(entitlements).withLimitOverrides(limitOverrides).withSourceFields(sourceFields);
+    }
+
+    private static final Set<String> RESERVED_SOURCE_FIELDS = Set.of("id", "instanceId", "name", "quantity", "qty", "automation",
+            "automationState", "automationSource", "automationItem", "automationGrantedBy", "text", "type", "domain", "level", "recall", "spells");
+
+    static boolean sourceFieldName(String name) {
+        return name.matches("[a-z][A-Za-z0-9]{0,31}") && !RESERVED_SOURCE_FIELDS.contains(name);
+    }
+
+    private static ObjectNode sourceFields(JsonNode declaration) {
+        ObjectNode fields = RuleJson.object(declaration, "/automation/sourceFields");
+        if (fields.isEmpty() || fields.size() > 8) throw RuleJson.error("/automation/sourceFields", "Expected 1-8 source fields.");
+        fields.fields().forEachRemaining(entry -> {
+            String path = "/automation/sourceFields/" + entry.getKey();
+            if (!sourceFieldName(entry.getKey())) throw RuleJson.error(path, "Expected a source field name.");
+            RuleJson.fields(entry.getValue(), path, "label", "min", "max");
+            RuleTemplate.validate(RuleJson.text(entry.getValue().get("label"), path + "/label"));
+            RuleJson.integer(entry.getValue().get("min"), path + "/min", -1_000_000, 1_000_000);
+            RuleJson.integer(entry.getValue().get("max"), path + "/max", -1_000_000, 1_000_000);
+        });
+        return fields;
     }
 
     /** Raises another sheet feature's use limit while this source is present: {@code [{feature, limit, max}]}. */
@@ -1728,6 +1761,11 @@ public final class RuleCompiler {
                     if (!requiredKind.equals(pools.path(pool).path("kind").asText()))
                         throw RuleJson.error(path + "/pool", "Operation requires a " + requiredKind + " pool.");
                 }
+            } else if ("field".equals(field) && "source.set".equals(op)) {
+                if (!sourceFieldName(RuleJson.text(value, path + "/field")))
+                    throw RuleJson.error(path + "/field", "Expected a declared source field name.");
+                RuleExpression.validate(operation.get("value"), path + "/value");
+                continue;
             } else if ("key".equals(field) && Set.of("choice.set", "choice.clear").contains(op)) {
                 if (!RuleJson.text(value, path + "/key").matches("[a-z][a-z0-9-]{0,31}"))
                     throw RuleJson.error(path + "/key", "Expected a lowercase choice key of at most 32 characters.");

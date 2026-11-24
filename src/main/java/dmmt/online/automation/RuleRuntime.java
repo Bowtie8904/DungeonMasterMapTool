@@ -1129,6 +1129,16 @@ public final class RuleRuntime {
                 source.put("quantity", count - amount);
                 result = RuleExpression.numeric(amount, "/result");
             }
+            case "source.set" -> {
+                ObjectNode source = RuleJson.object(context.path("source"), "/source");
+                String field = op.path("field").asText();
+                ObjectNode declared = program.sourceFields() == null ? null : (ObjectNode) program.sourceFields().get(field);
+                if (declared == null) throw RuleJson.error("/field", "Undeclared source field: " + field);
+                JsonNode value = eval(op.path("value"), context);
+                int whole = RuleJson.integer(value, "/value", declared.path("min").asInt(), declared.path("max").asInt());
+                source.put(field, whole);
+                result = RuleExpression.numeric(whole, "/result");
+            }
             case "dice.table" -> {
                 if (preview) throw new Unavailable("randomPreview", "This preview requires a committed roll; no dice were rolled.");
                 int count = whole(op.path("count"), context, 0, 100);

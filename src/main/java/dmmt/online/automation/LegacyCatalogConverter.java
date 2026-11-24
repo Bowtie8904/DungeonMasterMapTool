@@ -33,7 +33,7 @@ public final class LegacyCatalogConverter {
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
             "damage", "alternateProfiles", "damageTypeChoice", "rest", "restReroll", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions",             "conditionalRollOptions", "conditionalMitigation", "elementChoice", "stances",
             "hopeReward", "classResourceOnly", "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "zeroHopeClearArmor",
-            "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases", "hideSpellcast", "companion", "companionTraining", "conditionalDamageRewards", "experienceRefund", "partyDowntime", "requirement", "unarmoredBase", "ignoreWeaponBurden", "unarmedWeapon", "spellcastSuccessSteps");
+            "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases", "hideSpellcast", "companion", "companionTraining", "conditionalDamageRewards", "experienceRefund", "partyDowntime", "requirement", "unarmoredBase", "ignoreWeaponBurden", "unarmedWeapon", "spellcastSuccessSteps", "banishDifficulty");
     private static final Set<String> DEATH_KINDS = Set.of("hopeBonus", "hopeSpend", "mask", "spectral", "egg", "battleHardened",
             "unbreakable", "undying", "lifeWard");
     /** Legacy gated families that are their base family plus extra conditions, which every family converts the same way. */
@@ -54,7 +54,7 @@ public final class LegacyCatalogConverter {
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
             "chatBenefits", "allowSourceOwner", "loadoutDomain", "primaryWeapon", "anyWeapon", "advantage", "giveFear", "check", "choices",
             "magicOnly", "weaponRanges", "addDice", "damageDice", "damageDiceBelow", "rerollDualityDie", "spendHopeAmount", "disadvantage", "removeFear", "weaponDamage", "rollSection", "containsDie", "resourceRoll", "selectAmount",
-            "target", "excludeSourceActor", "splendorAction", "hostRollAction", "otherPlayerOnly", "spentTokenDamage", "bloodAutomation", "swapDuality", "repeatable", "weapon", "tokenGain", "matchResource", "magicAction", "damageSource", "spellDomain", "vaultSource", "rerollResourceDice", "rerollAnyDie",             "dualityDieBonus", "actionRoll", "spendFavor", "advanceEffect");
+            "target", "excludeSourceActor", "splendorAction", "hostRollAction", "otherPlayerOnly", "spentTokenDamage", "bloodAutomation", "swapDuality", "repeatable", "weapon", "tokenGain", "matchResource", "magicAction", "damageSource", "spellDomain", "vaultSource", "rerollResourceDice", "rerollAnyDie",             "dualityDieBonus", "actionRoll", "spendFavor", "advanceEffect", "banishDifficulty");
     private static final Set<String> MITIGATION_FIELDS = Set.of("id", "label", "description", "when", "cost", "negate", "halve", "reduce",
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
@@ -293,6 +293,11 @@ public final class LegacyCatalogConverter {
         if (legacy.has("companionTraining") && (!legacy.path("companionTraining").isInt() || legacy.path("companionTraining").asInt() < 1))
             p.add(path + "/companionTraining", "Expected a positive whole number of training options.");
         else if (legacy.has("companionTraining")) out.putObject("entitlements").put("companionTraining", legacy.get("companionTraining").asInt());
+        if (legacy.has("banishDifficulty")) {
+            if (!legacy.path("banishDifficulty").asBoolean(false)) p.add(path + "/banishDifficulty", "Expected true.");
+            else out.putObject("sourceFields").putObject("banishDifficulty").put("label", "Banish difficulty")
+                    .put("min", -1_000_000).put("max", 1_000_000);
+        }
         ArrayNode passive = RuleJson.JSON.createArrayNode();
         for (String family : List.of("modifiers", "conditionalModifiers")) {
             JsonNode list = legacy.path(family);
@@ -3225,6 +3230,7 @@ public final class LegacyCatalogConverter {
         if (trigger.has("resourceRoll")) resourceRoll(trigger.get("resourceRoll"), path + "/resourceRoll", trigger, p, pools, rule, steps);
         if (trigger.has("check")) check(trigger, path, p, rule, steps, effects, pools, operationTarget);
         else if (trigger.has("choices")) rollChoices(trigger, path, p, rule, steps, effects, pools, operationTarget, from);
+        if (trigger.has("banishDifficulty")) banishDifficulty(trigger, path, p, rule, steps);
         JsonNode extra = trigger.has("check") ? RuleJson.JSON.missingNode() : trigger.path("steps");
         amountStore(trigger.path("selectAmount"), path + "/selectAmount", p, pools, steps, effects);
         for (int i = 0; i < extra.size(); i++) step(extra.get(i), path + "/steps/" + i, p, steps, effects, pools, operationTarget);
@@ -3267,6 +3273,7 @@ public final class LegacyCatalogConverter {
         resourceRollReport(trigger, ui);
         sentRollReport(trigger, ui);
         checkReport(trigger, ui);
+        if (trigger.has("banishDifficulty") && !ui.has("report")) ui.put("report", "Banish difficulty: {result.banish}.");
         return rule;
     }
 
@@ -4254,6 +4261,21 @@ public final class LegacyCatalogConverter {
      * {@code spellcastSuccessSteps} run automatically when this card's spellcast roll meets its written difficulty,
      * including a critical success: an automatic {@code roll.finished} rule on the card's own spellcast origin.
      */
+    /**
+     * {@code banishDifficulty}: rolls one d20 per point of the Spellcast trait total, keeps the highest and stores it on the
+     * hosting card ({@code source.banishDifficulty}); a total below one blocks the roll as in the legacy host.
+     */
+    private static void banishDifficulty(JsonNode trigger, String path, Problems p, ObjectNode rule, ArrayNode steps) {
+        if (!trigger.path("banishDifficulty").asBoolean(false)) { p.add(path + "/banishDifficulty", "Expected true."); return; }
+        ObjectNode block = steps.addObject().put("op", "event.block").put("reason", "Banish requires a positive Spellcast trait to roll d20s.");
+        ObjectNode low = RuleJson.JSON.createObjectNode();
+        low.putArray("lt").add(read("actor.stats.spellcast.total")).add(1);
+        block.set("if", low);
+        ObjectNode roll = steps.addObject().put("op", "dice.highest").put("sides", 20).put("as", "banish");
+        roll.set("count", read("actor.stats.spellcast.total"));
+        steps.addObject().put("op", "source.set").put("field", "banishDifficulty").set("value", read("result.banish"));
+    }
+
     private static ObjectNode spellcastSuccess(JsonNode steps, String path, Problems p, ObjectNode effects, Pools pools, String origin) {
         if (origin == null) {
             p.add(path, "Success steps need a spellcast difficulty on a domain card.");

@@ -4310,6 +4310,11 @@ public final class AutomationHost {
                 if (quantity <= 0) emptied.add(element);
                 else element.element().put(element.quantityField(), quantity);
             }
+            RuleCompiler.Program owner = pack.programs().get(context.path("source").path("id").asText());
+            if (element != null && owner != null && owner.sourceFields() != null)
+                owner.sourceFields().fieldNames().forEachRemaining(field -> {
+                    if (context.path("source").path(field).isInt()) element.element().put(field, context.path("source").path(field).asInt());
+                });
         }
         for (JsonNode refresh : outbox) {
             if (!"limits.refresh".equals(refresh.path("kind").asText())) continue;
