@@ -32,6 +32,25 @@ class EffectRuntimeTest {
     }
 
     @Test
+    void effectsCarryAValidatedOnlineConditionAndMovementBlock() throws Exception {
+        String block = """
+                {"effects":{"veil":{"label":"Veil","blocksMovement":true,"onlineCondition":{"id":"hidden","iconId":"cond_invisible"}}},
+                 "rules":[{"id":"cast","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                   "do":[{"op":"effect.start","effect":"veil","target":"actor"}],"ui":{"label":"Veil"}}]}""";
+        RuleCompiler.Program veil = RuleCompiler.compile("features:veil", RuleJson.parse(block), fixture("rewrite/recipes"));
+        ObjectNode veilContext = context();
+        veilContext.withObject("/source").put("id", "features:veil");
+        JsonNode effect = run(veil, "cast", veilContext, "{}").context().path("actor").path("effects").get(0);
+        assertEquals("hidden", effect.path("onlineCondition").path("id").asText(), effect.toString());
+        assertEquals("cond_invisible", effect.path("onlineCondition").path("iconId").asText());
+        assertTrue(effect.path("blocksMovement").asBoolean());
+        for (String bad : new String[]{"{\"id\":\"Bad Id\"}", "{\"id\":\"hidden\",\"iconId\":\"x\"}", "{\"id\":\"hidden\",\"tokenId\":\"t\"}"}) {
+            assertThrows(RuntimeException.class, () -> RuleCompiler.compile("features:veil",
+                    RuleJson.parse(block.replaceFirst("\\{\"id\":\"hidden\",\"iconId\":\"cond_invisible\"\\}", bad)), fixture("rewrite/recipes")), bad);
+        }
+    }
+
+    @Test
     void startedEffectFreezesRenderedTextAndModifiersAndCountsAreExposed() throws Exception {
         RuleCompiler.Program program = program();
         ObjectNode before = context();

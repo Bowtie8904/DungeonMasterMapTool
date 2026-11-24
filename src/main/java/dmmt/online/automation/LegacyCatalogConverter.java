@@ -75,7 +75,8 @@ public final class LegacyCatalogConverter {
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
             "actions", "rollOptions", "rollTriggers", "mitigation", "rest", "consumeLongRestMove", "group", "endOnDamage", "endOnSourceSevere", "endAfterIncomingDamage", "damage",
-            "unique", "exclusiveSource", "endOnMarkedHp", "endOnDealtDamage", "endOnAttack", "endOnAction", "lifeWard", "tokenResource", "maintainOnAction");
+            "unique", "exclusiveSource", "endOnMarkedHp", "endOnDealtDamage", "endOnAttack", "endOnAction", "lifeWard", "tokenResource", "maintainOnAction",
+            "blocksMovement", "endOnMarkedHpCount", "resources", "surgeResource", "onlineCondition");
     private static final Set<String> REST_FIELDS = Set.of("extraMoves", "longMovesInShort", "passives", "modifiers", "requiresEffect", "expireItem");
     private static final Set<String> PASSIVE_FIELDS = Set.of("id", "label", "defaultOn", "condition", "steps", "extraMoves", "consumeItem",
             "rest", "move", "bonus", "minHope", "cost", "chooseAlly", "hostOwned", "castBeforeRest", "requiresEffect", "excludesEffect", "reroll");
@@ -342,8 +343,10 @@ public final class LegacyCatalogConverter {
         for (int n = 0; n < queue.size() && n < 256; n++) {
             Nested next = queue.get(n);
             JsonNode legacyRule = next.legacy();
-            if (Set.of("rest", "consumeLongRestMove", "endOnDamage", "endOnDealtDamage", "effectDamage", "undying", "lifeWard", "creation", "maintainEnd").contains(next.family())) {
+            if (Set.of("rest", "consumeLongRestMove", "endOnDamage", "endOnDealtDamage", "effectDamage", "undying", "lifeWard",             "creation", "maintainEnd", "effectResources", "surgeEnd").contains(next.family())) {
                 List<ObjectNode> restRules = switch (next.family()) {
+                                case "effectResources" -> { effectResources(legacyRule, next.path(), p, pools); yield List.of(); }
+                                case "surgeEnd" -> surgeEnd(legacyRule, next.path(), p, pools);
                     case "rest" -> rest(legacyRule, next.path(), p, effects, pools, next.path().equals(path + "/rest") ? legacy : null, ruleIds);
                     case "undying" -> List.of(undying());
                     case "creation" -> creation(legacyRule, next.path(), p);
@@ -5063,6 +5066,31 @@ public final class LegacyCatalogConverter {
             if (!effect.path("lifeWard").asBoolean(false)) p.add(path + "/lifeWard", "Expected true.");
             else p.nested().add(new Nested("lifeWard", RuleJson.JSON.createObjectNode().put("effect", name), path + "/lifeWard"));
         }
+        if (effect.has("blocksMovement")) {
+            if (!effect.path("blocksMovement").isBoolean()) p.add(path + "/blocksMovement", "Expected a boolean.");
+            else if (effect.path("blocksMovement").asBoolean()) declared.put("blocksMovement", true);
+        }
+        if (effect.has("onlineCondition")) {
+            JsonNode link = effect.get("onlineCondition");
+            if (!link.isObject() || !link.path("id").isTextual() || link.has("tokenId")) p.add(path + "/onlineCondition", "Expected a condition with an id and optional icon.");
+            else {
+                p.onlyFields(link, path + "/onlineCondition", Set.of("id", "iconId"));
+                declared.set("onlineCondition", link.deepCopy());
+            }
+        }
+        if (effect.has("resources"))
+            p.nested().add(new Nested("effectResources", RuleJson.JSON.createObjectNode().set("resources", effect.get("resources").deepCopy()), path + "/resources"));
+        if (effect.has("surgeResource")) {
+            if (!effect.path("surgeResource").isTextual() || effect.path("surgeResource").asText().isBlank()) p.add(path + "/surgeResource", "Expected a resource ID.");
+            else p.nested().add(new Nested("surgeEnd", RuleJson.JSON.createObjectNode().put("effect", name)
+                    .put("pool", effect.path("surgeResource").asText()), path + "/surgeResource"));
+        }
+        if (effect.has("endOnMarkedHpCount")) {
+            JsonNode count = effect.get("endOnMarkedHpCount");
+            if (!count.isInt() || count.asInt() < 1 || count.asInt() > 12) p.add(path + "/endOnMarkedHpCount", "Expected a whole number of marked Hit Points from 1 to 12.");
+            else p.nested().add(new Nested("endOnDamage", RuleJson.JSON.createObjectNode().put("effect", name).put("field", "hitPoints")
+                    .put("severity", count.asInt()), path + "/endOnMarkedHpCount"));
+        }
         if (effect.has("endOnMarkedHp")) {
             if (!effect.path("endOnMarkedHp").asBoolean(false)) p.add(path + "/endOnMarkedHp", "Expected true.");
             else p.nested().add(new Nested("endOnDamage", RuleJson.JSON.createObjectNode().put("effect", name).put("field", "hitPoints")
@@ -5759,6 +5787,47 @@ public final class LegacyCatalogConverter {
         rule.putArray("do").addObject().put("op", "effect.end").put("effect", effect).put("target", "actor");
         rule.putObject("ui").put("label", escape(effect) + " reverts");
         return rule;
+    }
+
+    /**
+     * An effect-level resource list repeats the pools of its block: each entry must match a declared pool, so the pool
+     * is already available to the effect's token ending and options.
+     */
+    private static void effectResources(JsonNode legacy, String path, Problems p, Pools pools) {
+        JsonNode list = legacy.path("resources");
+        if (!list.isArray()) { p.add(path, "Expected a resource list."); return; }
+        for (int i = 0; i < list.size(); i++) {
+            ObjectNode scratch = RuleJson.JSON.createObjectNode();
+            Problems check = new Problems(p.sourceId(), new ArrayList<>(), new ArrayList<>());
+            resource(list.get(i), path + "/" + i, check, scratch, new ArrayList<>());
+            String id = scratch.fieldNames().hasNext() ? scratch.fieldNames().next() : "";
+            if (!check.list().isEmpty() || id.isEmpty() || !pools.has(id) || !scratch.get(id).equals(pools.local().get(id)))
+                p.add(path + "/" + i, "Manual disposition: an effect-level resource must repeat a pool its block declares with the same definition.");
+        }
+    }
+
+    /**
+     * Surge ending: after an action roll (attack, action or spellcast) that leaves the pool above six tokens, the surge
+     * ends, the pool empties and the holder marks 1 Stress.
+     */
+    private static List<ObjectNode> surgeEnd(JsonNode legacy, String path, Problems p, Pools pools) {
+        String effect = legacy.path("effect").asText();
+        String pool = legacy.path("pool").asText();
+        if (!pools.has(pool)) { p.add(path, "Unknown surge resource: " + pool); return List.of(); }
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "end-" + slug(effect) + "-surge");
+        rule.putArray("bindings").addObject().put("id", "use").put("event", "roll.finished").put("surface", "roll").put("mode", "automatic");
+        ArrayNode when = RuleJson.JSON.createArrayNode();
+        ArrayNode any = when.addObject().putArray("or");
+        for (String kind : List.of("attack", "action", "spellcast")) any.addObject().putArray("eq").add(read("event.check.kind")).add(kind);
+        when.add(labelPresent(effect));
+        when.addObject().putArray("gt").add(poolValue(pools, pool)).add(6);
+        applyWhen(rule, when);
+        ArrayNode steps = rule.putArray("do");
+        steps.addObject().put("op", "effect.end").put("effect", effect).put("target", "actor");
+        steps.addObject().put("op", "pool.spend").put("pool", pool).set("amount", poolValue(pools, pool));
+        steps.addObject().put("op", "track.mark").put("track", "actor.stress").put("amount", 1);
+        rule.putObject("ui").put("label", escape(effect) + " ends");
+        return List.of(rule);
     }
 
     private static ObjectNode endOnDamage(JsonNode legacy) {

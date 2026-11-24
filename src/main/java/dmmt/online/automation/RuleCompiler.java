@@ -524,11 +524,21 @@ public final class RuleCompiler {
         return (ObjectNode) declaration.deepCopy();
     }
 
+    /** A linked token condition: a lowercase condition ID and an optional built-in icon ID the host projects onto the holder's tokens. */
+    static void onlineCondition(JsonNode condition, String path) {
+        RuleJson.fields(condition, path, "id", "iconId");
+        String id = RuleJson.text(condition.get("id"), path + "/id");
+        if (!id.matches("[a-z][a-z0-9_-]{0,31}")) throw RuleJson.error(path + "/id", "Expected a short lowercase condition ID.");
+        if (condition.has("iconId") && !RuleJson.text(condition.get("iconId"), path + "/iconId").matches("cond_[a-z]{1,24}"))
+            throw RuleJson.error(path + "/iconId", "Expected a condition icon ID.");
+    }
+
     private static void validateEffect(String id, JsonNode effect, ObjectNode state, ObjectNode effects) {
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(id), "/automation/effects");
         String path = "/automation/effects/" + id;
         RuleJson.fields(effect, path, "label", "text", "kind", "until", "stacking", "modifiers", "profile",
-                "while", "endWhen", "exclusiveGroup", "singleHolder", "locks", "restExpiry", "blocksMovement", "blocksDeathMoves");
+                "while", "endWhen", "exclusiveGroup", "singleHolder", "locks", "restExpiry", "blocksMovement", "blocksDeathMoves", "onlineCondition");
+        if (effect.has("onlineCondition")) onlineCondition(effect.get("onlineCondition"), path + "/onlineCondition");
         if (effect.has("endWhen")) {
             if (effect.has("while")) throw RuleJson.error(path + "/endWhen", "A derived effect (with while) cannot also declare endWhen.");
             RuleExpression.validate(effect.get("endWhen"), path + "/endWhen");
@@ -540,7 +550,7 @@ public final class RuleCompiler {
         }
         if (effect.has("while")) {
             for (String field : List.of("until", "stacking", "exclusiveGroup", "singleHolder", "locks", "restExpiry",
-                    "blocksMovement", "blocksDeathMoves"))
+                    "blocksMovement", "blocksDeathMoves", "onlineCondition"))
                 if (effect.has(field)) throw RuleJson.error(path + "/" + field, "A derived effect (with while) is active exactly while its condition holds; it cannot also declare " + field + ".");
             RuleExpression.validate(effect.get("while"), path + "/while");
             for (String ref : RuleExpression.references(effect.get("while"))) {

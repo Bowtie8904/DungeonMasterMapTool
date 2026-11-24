@@ -190,6 +190,7 @@ public final class RuleEffects {
         instance.put("kind", definition.path("kind").asText("buff"));
         for (String field : List.of("blocksMovement", "blocksDeathMoves"))
             if (definition.has(field)) instance.set(field, definition.get(field).deepCopy());
+        if (definition.has("onlineCondition")) instance.set("onlineCondition", definition.get("onlineCondition").deepCopy());
         if (!group.isEmpty()) instance.put("group", group);
         if (definition.has("profile")) instance.set("profile", definition.get("profile").deepCopy());
         if (definition.has("restExpiry")) instance.set("restExpiry", definition.get("restExpiry").deepCopy());
@@ -360,6 +361,7 @@ public final class RuleEffects {
             if (effect.has("modifiers") && !effect.get("modifiers").isArray()) throw RuleJson.error(path + "/modifiers", "Expected a list.");
             for (String field : List.of("blocksMovement", "blocksDeathMoves"))
                 if (effect.has(field) && !effect.get(field).isBoolean()) throw RuleJson.error(path + "/" + field, "Expected a boolean.");
+            if (effect.has("onlineCondition")) RuleCompiler.onlineCondition(effect.get("onlineCondition"), path + "/onlineCondition");
             if (effect.has("restExpiry")) {
                 if (!"beforeMoves".equals(effect.path("restExpiry").asText()))
                     throw RuleJson.error(path + "/restExpiry", "Expected beforeMoves.");

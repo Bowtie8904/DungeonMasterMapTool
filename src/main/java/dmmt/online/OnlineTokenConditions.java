@@ -145,12 +145,16 @@ public final class OnlineTokenConditions {
 
     public static java.util.List<DmProject.TokenCondition> actorConditions(com.fasterxml.jackson.databind.JsonNode sheet) {
         var conditions = new java.util.LinkedHashMap<String, DmProject.TokenCondition>();
-        for (var effect : sheet.path("effects")) {
+        var effects = new java.util.ArrayList<com.fasterxml.jackson.databind.JsonNode>();
+        sheet.path("effects").forEach(effects::add);
+        // Rule-engine effects carry their display name as the instance label.
+        sheet.at("/automationState/effects").forEach(effects::add);
+        for (var effect : effects) {
             var link = effect.path("onlineCondition");
             if (!link.isObject()) continue;
             String id = link.path("id").asText();
             String type = builtInName(id) == null ? "custom" : id;
-            String name = effect.path("name").asText();
+            String name = effect.has("name") ? effect.path("name").asText() : effect.path("label").asText();
             if (id.isBlank() || validationProblem(type, name) != null) {
                 throw new IllegalArgumentException("The character sheet contains an invalid linked condition.");
             }

@@ -148,6 +148,16 @@ class OnlineTokenConditionsTest {
     }
 
     @Test
+    void ruleEngineEffectsProjectTheirOnlineCondition() {
+        var sheet = MAPPER.createObjectNode();
+        var effect = sheet.putObject("automationState").putArray("effects").addObject();
+        effect.put("label", "Hidden").putObject("onlineCondition").put("id", "hidden");
+        var conditions = OnlineTokenConditions.actorConditions(sheet);
+        assertEquals(1, conditions.size());
+        assertEquals("hidden", conditions.getFirst().getId());
+    }
+
+    @Test
     void inheritsSavedActorConditionsIndependentlyOfOldTokenIds() {
         var sheet = MAPPER.createObjectNode();
         var effects = sheet.putArray("effects");

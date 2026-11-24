@@ -3005,6 +3005,41 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void effectFieldsPassThroughAndSurgesEnd() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"surge","name":"Surge","automation":{"resources":[{"id":"tokens","label":"Tokens","initial":0,"max":9}],
+                  "actions":[{"id":"use","label":"Surge","steps":[{"op":"gain","resource":"tokens","amount":7},
+                    {"op":"effect","effect":{"name":"Surging","until":"rest","surgeResource":"tokens","blocksMovement":true,
+                      "onlineCondition":{"id":"hidden","iconId":"cond_invisible"},
+                      "resources":[{"id":"tokens","label":"Tokens","initial":0,"max":9}]}}]}]}},
+                {"id":"ward","name":"Ward","automation":{"actions":[{"id":"use","label":"Ward","steps":[{"op":"effect","effect":{
+                  "name":"Ward","endOnMarkedHpCount":2}}]}]}}"""));
+        assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
+        var mismatch = LegacyCatalogConverter.convert(catalog("""
+                {"id":"mismatch","name":"Mismatch","automation":{"resources":[{"id":"tokens","label":"Tokens","initial":0}],
+                  "actions":[{"id":"use","label":"Mismatch","steps":[{"op":"effect","effect":{
+                  "name":"Odd","resources":[{"id":"tokens","label":"Tokens","initial":3}]}}]}]}}"""));
+        assertTrue(mismatch.diagnostics().toString().contains("must repeat a pool"), mismatch.diagnostics().toString());
+        JsonNode surging = block(result, 0).at("/effects/surging");
+        assertTrue(surging.path("blocksMovement").asBoolean(), surging.toString());
+        assertEquals("hidden", surging.at("/onlineCondition/id").asText(), surging.toString());
+        assertEquals(2, block(result, 1).at("/rules/1/when/and/1/gte/1").asInt(), block(result, 1).toString());
+
+        RuleCompiler.Program program = program(result, 0);
+        String actor = "{\"stress\":{\"marked\":0,\"capacity\":6},\"effects\":[]}";
+        ObjectNode started = run(program, context(program, actor, "{\"type\":\"action.request\"}"), "use").contexts().getFirst();
+        assertEquals(7, started.at("/actor/pools/tokens/value").asInt(), started.toString());
+        assertTrue(started.at("/actor/effects/0/blocksMovement").asBoolean(), started.toString());
+        assertEquals("hidden", started.at("/actor/effects/0/onlineCondition/id").asText(), started.toString());
+        ObjectNode finished = context(program, started.get("actor").toString(), "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"action\"}}");
+        ObjectNode after = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, finished)), List.of(),
+                RandomGenerator.getDefault()).contexts().getFirst();
+        assertEquals(0, after.at("/actor/pools/tokens/value").asInt(), after.toString());
+        assertEquals(0, after.at("/actor/effects").size(), after.toString());
+        assertEquals(1, after.at("/actor/stress/marked").asInt(), after.toString());
+    }
+
+    @Test
     void damageRewardsAndMaintainedEffectsConvert() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"blood","name":"Blood","automation":{"conditionalDamageRewards":[
