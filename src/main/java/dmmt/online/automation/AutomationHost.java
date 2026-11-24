@@ -1126,6 +1126,11 @@ public final class AutomationHost {
     /** Executes one authored roll edit on a private owner sheet; the caller settles the recovery and saved offer. */
     public ObjectNode stageRecoveryRoll(Pack pack, ObjectNode sheet, ObjectNode event, ObjectNode selection,
                                         long expectedRevision, RandomGenerator random) {
+        return stageRecoveryRoll(pack, sheet, event, selection, expectedRevision, random, null);
+    }
+
+    private ObjectNode stageRecoveryRoll(Pack pack, ObjectNode sheet, ObjectNode event, ObjectNode selection,
+                                         long expectedRevision, RandomGenerator random, StagedRestRecipients recipients) {
         ObjectNode working = sheet.deepCopy();
         if (revision(working) != expectedRevision)
             throw new RuleRuntime.Unavailable("stale", "The character changed. Reopen this roll.");
@@ -1141,7 +1146,7 @@ public final class AutomationHost {
             throw RuleJson.error("/selection", "Choose an offered recovery-roll action.");
         ObjectNode state = projection.state(working);
         var resolved = RuleDispatcher.executeSelectedWithOwnerReactions(candidates, intent, random, pack.programs(),
-                ownerMoveProjection(pack, working, state, candidates));
+                ownerRestProjection(pack, working, state, candidates, recipients, null));
         long published = resolved.actions().stream().mapToLong(action -> action.publishedRolls().size()).sum();
         if (published != 1) throw RuleJson.error("/selection", "A recovery-roll action must publish one edited roll.");
         ObjectNode result = applyResolved(pack, working, state, event, resolved.contexts(), resolved.actions(), resolved.outbox());
@@ -1153,6 +1158,58 @@ public final class AutomationHost {
                 throw new RuleRuntime.Unavailable("restCommand", "This recovery-roll action requires unsupported ordered settlement.");
         replace(sheet, working);
         return result;
+    }
+
+    /** Stages a roll edit and any additional recovery against the same host roster. */
+    public RestTransaction stageRecoveryRoll(Pack pack, ObjectNode sheet, ObjectNode event, ObjectNode selection,
+                                             long expectedRevision, RestRoster roster, RestMember holder,
+                                             int previous, int remaining, String track, RandomGenerator random) {
+        if (roster == null || holder == null) throw RuleJson.error("/recovery", "A host roster and holder are required.");
+        String sourceId = RuleJson.id(event.get("actorId"), "/event/actorId");
+        ObjectNode working = sheet.deepCopy();
+        long sourceRevision = restRevision(working);
+        if (sourceRevision != expectedRevision)
+            throw new RuleRuntime.Unavailable("stale", "The character changed. Reopen this roll.");
+        if (sourceRevision == MAX_REST_REVISION)
+            throw new RuleRuntime.Unavailable("revision", "The character's recovery revision cannot be advanced.");
+        StagedRestRecipients recipients = new StagedRestRecipients(pack, sourceId, roster);
+        StagedRecipient participant = null;
+        if (!sourceId.equals(holder.id())) {
+            participant = new StagedRecipient(holder);
+            recipients.participants.put(holder.id(), participant);
+            participant.sheet();
+        } else if (holder.revision() != sourceRevision) {
+            throw new RuleRuntime.Unavailable("staleRecipient", "The recovery recipient changed. Reopen this roll.");
+        }
+
+        ObjectNode result = stageRecoveryRoll(pack, working, event, selection, expectedRevision, random, recipients);
+        int kept = StructuredRoll.validate(result.at("/event/roll")).path("total").asInt();
+        int requested = Math.min(remaining, Math.max(0, Math.max(0, kept) - Math.max(0, previous)));
+        int cleared = 0;
+        if (requested > 0) {
+            ObjectNode holderSheet = participant == null ? working : participant.sheet();
+            if (participant == null) projection.state(holderSheet).put("revision", sourceRevision);
+            ObjectNode beforeRecovery = holderSheet.deepCopy();
+            ObjectNode recovery = stageHolderRecovery(pack, holderSheet, (ObjectNode) result.get("event"),
+                    holder.id(), track, requested, random, recipients, working);
+            cleared = recovery.path("cleared").asInt();
+            if (participant != null && !holderSheet.equals(beforeRecovery)) {
+                projection.state(holderSheet).put("revision", holder.revision());
+                recipients.markChanged(holder.id());
+            }
+            for (JsonNode action : recovery.path("actions"))
+                ((ArrayNode) result.get("actions")).add(((ObjectNode) action).deepCopy().put("actorId", holder.id()));
+            ((ArrayNode) result.get("outbox")).addAll((ArrayNode) recovery.get("outbox"));
+            result.set("event", recovery.get("event").deepCopy());
+        }
+        projection.state(working).put("revision", sourceRevision + 1);
+        Map<String, ObjectNode> changed = recipients.changed();
+        long holderRevision = participant == null ? sourceRevision + 1
+                : holder.revision() + (changed.containsKey(holder.id()) ? 1 : 0);
+        result.put("revision", sourceRevision + 1).put("holderRevision", holderRevision)
+                .put("previous", previous).put("kept", kept).put("cleared", cleared);
+        replace(sheet, working);
+        return new RestTransaction(result, changed, recipients.readVersions(), false);
     }
 
     private RuleDispatcher.OwnerProjection ownerRecoveryProjection(Pack pack, ObjectNode sheet, ObjectNode state,

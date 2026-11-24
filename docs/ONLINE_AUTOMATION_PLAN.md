@@ -203,8 +203,9 @@ Single-action, claim and rest `inventory.grant` commands settle catalog-linked i
 or party caps atomically. Actor grants settle immediately during preparation, downtime moves and both completion
 phases; recipient grants settle during move adjustments, actions and deferred benefits. Later reads and track
 reactions see new items and active sources, and party limits include the other staged holder. Grants from
-whole-party recovery reactions settle before subsequent reactions and recipients, with party-wide limits,
-rollback and exact-retry coverage in `OnlineSessionServerTest`. Unsupported dynamic projections still reject.
+whole-party recovery and recovery-reroll reactions settle before subsequent reactions and recipients, with
+party-wide limits, rollback and exact-retry coverage in `OnlineSessionServerTest`. Unsupported dynamic projections
+still reject.
 `limit.restore` creates a saved recipient-specific claim instead of changing a use immediately; its owner selects
 one current spent source limit through the generic chat controls. The claim ledger, sheet, report and exact-retry
 receipt commit atomically. Offers to characters without a player owner are rejected; more than 64 spent limits
@@ -212,8 +213,8 @@ must be reduced before choosing.
 Self-targeted single-holder effects transfer after preparation and between moves. Ally move adjustments,
 selected moves and deferred benefits settle recipient track changes and effect starts and ends immediately,
 including label-based endings of other sources' effects and transfers from offline or disabled holders, so later
-operations and reactions see updated effects and effect-bound pools. Self, ally and party-recovery track
-reactions also settle single-holder effect transfers before later staged reads, with atomic rollback and retries.
+operations and reactions see updated effects and effect-bound pools. Self, ally, party-recovery and recovery-reroll
+track reactions also settle single-holder effect transfers before later staged reads, with atomic rollback and retries.
 Adjustments and deferred benefits can also change recipient actor pools, writable collections and boolean facts;
 later reactions use the updated recipient and active sources.
 The host provides target-specific move and adjustment descriptors when availability, labels or inputs depend on

@@ -3011,6 +3011,110 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void recoveryRerollReactionsSettleInventoryAndTransferEffectsAcrossHolders() throws Exception {
+        installRestRerollRules();
+        Path catalogFile = compendiumDir.resolve("domain-cards.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(catalogFile.toFile());
+        for (JsonNode rule : catalog.at("/entries/0/automation/rules"))
+            if ("rest-reroll".equals(rule.path("id").asText()))
+                ((ObjectNode) rule).putArray("costs").addObject()
+                        .put("op", "resource.spend").put("pool", "actor.hope").put("amount", 1);
+        java.nio.file.Files.writeString(catalogFile, catalog.toString());
+        Path rulesFile = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(rulesFile.toFile());
+        ObjectNode automation = ruleset.withObject("/automation");
+        automation.putObject("effects").putObject("ward").put("label", "Ward").put("singleHolder", true);
+        automation.withArray("rules").addAll((ArrayNode) MAPPER.readTree("""
+                [
+                 {"id":"cost-supply-ward","bindings":[{"id":"change","event":"track.changed",
+                    "surface":"resource","mode":"automatic"}],
+                  "when":{"and":[{"exists":"event.recovery.holderId"},
+                                   {"eq":[{"read":"event.track"},"hope"]},
+                                   {"eq":[{"read":"event.change"},"spend"]}]},
+                  "do":[{"op":"effect.start","effect":"ward","target":"actor"},
+                        {"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
+                         "quantity":1,"label":"Cost supply"},
+                        {"op":"track.clear","track":"actor.stress","amount":1},
+                        {"op":"value","value":{"size":{"read":"actor.inventory"}},"as":"supplies"},
+                        {"op":"table.spend","resource":"fear","amount":1,"label":"Ward"}],
+                  "ui":{"report":"Cost reaction saw {result.supplies} supply."}},
+                 {"id":"recovery-supply-ward","bindings":[{"id":"change","event":"track.changed",
+                    "surface":"resource","mode":"automatic"}],
+                  "when":{"and":[{"exists":"event.recovery.holderId"},
+                                   {"eq":[{"read":"event.track"},"hp"]},
+                                   {"eq":[{"read":"event.change"},"clear"]}]},
+                  "do":[{"op":"effect.start","effect":"ward","target":"actor"},
+                        {"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
+                         "quantity":1,"label":"Recovery supply"}],
+                  "ui":{"report":"Recovery reaction supplied {actor.name}."}}
+                ]
+                """));
+        java.nio.file.Files.writeString(rulesFile, ruleset.toString());
+        String owner = cookie();
+        for (String id : List.of("patient", "helper", "retired")) {
+            campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId())
+                    .disabled("retired".equals(id)).build());
+            store.saveSheet(campaign.getId(), id, """
+                    {"name":"%s","level":1,"hp":{"slots":8,"on":%d},"stress":{"slots":6,"on":2},
+                     "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":2},"inventory":[],
+                     "loadout":[{"name":"Second Chance","instanceId":"chance","automationSource":"domain-cards:reroller"}]}
+                    """.formatted(id, "patient".equals(id) ? 7 : 0));
+        }
+        addStoredRestWard("patient", "helper");
+        addStoredRestWard("retired", "helper");
+        addStoredRestWard("retired", "other");
+        addStoredRestWard("helper", "patient");
+        JsonNode recovery = recoveryOffer(owner, "patient", "rest-tend", "settlement-rest", 1);
+        JsonNode description = MAPPER.readTree(recoveryRollHttp(owner, recovery, "helper", null).body());
+        ObjectNode request = recoveryRollRequest(description, "reroll-settlement");
+        String patientBefore = store.loadSheet(campaign.getId(), "patient");
+        String helperBefore = store.loadSheet(campaign.getId(), "helper");
+        String retiredBefore = store.loadSheet(campaign.getId(), "retired");
+        int history = store.historyTail(campaign.getId(), 100).size();
+        var rejected = recoveryRollHttp(owner, recovery, "helper", request.toString());
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertTrue(rejected.body().contains("Not enough GM Fear"), rejected.body());
+        assertEquals(patientBefore, store.loadSheet(campaign.getId(), "patient"));
+        assertEquals(helperBefore, store.loadSheet(campaign.getId(), "helper"));
+        assertEquals(retiredBefore, store.loadSheet(campaign.getId(), "retired"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+
+        campaign.setFear(1);
+        diceSeed(seedForDie(4, 4));
+        var accepted = recoveryRollHttp(owner, recovery, "helper", request.toString());
+        assertEquals(200, accepted.statusCode(), accepted.body());
+        assertEquals(3, MAPPER.readTree(accepted.body()).path("cleared").asInt());
+        assertTrue(accepted.body().contains("Cost reaction saw 1 supply."), accepted.body());
+        JsonNode patient = MAPPER.readTree(store.loadSheet(campaign.getId(), "patient"));
+        JsonNode helper = MAPPER.readTree(store.loadSheet(campaign.getId(), "helper"));
+        JsonNode retired = MAPPER.readTree(store.loadSheet(campaign.getId(), "retired"));
+        JsonNode response = MAPPER.readTree(accepted.body());
+        assertEquals(MAPPER.readTree(patientBefore).at("/automationState/revision").asLong() + 1,
+                patient.at("/automationState/revision").asLong());
+        assertEquals(MAPPER.readTree(helperBefore).at("/automationState/revision").asLong() + 1,
+                helper.at("/automationState/revision").asLong());
+        assertEquals(MAPPER.readTree(retiredBefore).at("/automationState/revision").asLong() + 1,
+                retired.at("/automationState/revision").asLong());
+        assertEquals(patient.at("/automationState/revision"), response.path("holderRevision"));
+        assertEquals(helper.at("/automationState/revision"), response.path("revision"));
+        assertEquals(2, patient.at("/hp/on").asInt());
+        assertEquals(1, patient.path("inventory").size());
+        assertEquals(1, helper.path("inventory").size());
+        assertEquals(1, helper.at("/stress/on").asInt());
+        assertEquals("patient", patient.at("/automationState/effects/0/sourceActorId").asText());
+        assertEquals("helper", helper.at("/automationState/effects/0/sourceActorId").asText());
+        assertEquals(1, retired.at("/automationState/effects").size());
+        assertEquals("other", retired.at("/automationState/effects/0/sourceActorId").asText());
+        assertEquals(0, campaign.getFear());
+        int published = store.historyTail(campaign.getId(), 100).size();
+        assertEquals(accepted.body(), recoveryRollHttp(owner, recovery, "helper", request.toString()).body());
+        assertEquals(published, store.historyTail(campaign.getId(), 100).size());
+        assertEquals(patient, MAPPER.readTree(store.loadSheet(campaign.getId(), "patient")));
+        assertEquals(helper, MAPPER.readTree(store.loadSheet(campaign.getId(), "helper")));
+        assertEquals(retired, MAPPER.readTree(store.loadSheet(campaign.getId(), "retired")));
+    }
+
+    @Test
     void selfRecoveryRerollsUseOneRevisionAndKeepHigherResults() throws Exception {
         installRestRerollRules();
         String owner = cookie();

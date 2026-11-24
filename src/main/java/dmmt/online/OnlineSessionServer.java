@@ -6630,14 +6630,13 @@ public final class OnlineSessionServer {
             var pack = automationPack();
             ObjectNode event = recoveryRollEvent(offer, actor, pack);
             Campaign.Actor holder = automationActor(saved.path("holderId").asText());
-            Map<String, String> originals = new java.util.LinkedHashMap<>();
             String original = store.loadSheet(campaign.getId(), actor.getId());
             String holderOriginal = actor.getId().equals(holder.getId()) ? original
                     : store.loadSheet(campaign.getId(), holder.getId());
             if (original == null || holderOriginal == null)
                 throw new ClaimUnavailable("A recovery-roll participant no longer has a sheet.");
-            originals.put(actor.getId(), original);
-            originals.put(holder.getId(), holderOriginal);
+            AutomationRestRoster roster = new AutomationRestRoster(actor, original);
+            roster.originals.put(holder.getId(), holderOriginal);
             ObjectNode sheet = hydrateSheet(actor.getId(), original);
             ObjectNode holderSheet = actor.getId().equals(holder.getId()) ? sheet : hydrateSheet(holder.getId(), holderOriginal);
             long revision = claimLong(request.get("expectedRevision"), "source revision");
@@ -6647,34 +6646,24 @@ public final class OnlineSessionServer {
             Map<String, JsonNode> sourceNames = new java.util.HashMap<>();
             for (var element : automationHost.sources(pack, sheet))
                 sourceNames.put(element.instanceId(), element.element().deepCopy());
-            ObjectNode result = automationHost.stageRecoveryRoll(pack, sheet, event, selection, revision, diceRandom);
             ObjectNode before = StructuredRoll.validate(saved.path("roll"));
+            boolean recoveryOffer = saved.has("track");
+            int previous = before.path("total").asInt();
+            int remaining = recoveryOffer ? (int) claimLong(saved.get("remaining"), "remaining recovery") : 0;
+            if (remaining > 1000) throw new IllegalArgumentException("Invalid remaining recovery.");
+            AutomationHost.RestMember member = new AutomationHost.RestMember(holder.getId(), holder.getName(),
+                    sheetVersion(holderOriginal, holder), holderRevision, holderSheet::deepCopy);
+            AutomationHost.RestTransaction transaction = automationHost.stageRecoveryRoll(pack, sheet, event, selection,
+                    revision, roster.roster, member, previous, remaining, saved.path("track").asText(), diceRandom);
+            ObjectNode result = transaction.response();
             ObjectNode after = StructuredRoll.validate(result.at("/event/roll"));
             ArrayNode oldDice = StructuredRoll.dice(before, "downtime", true);
             ArrayNode newDice = StructuredRoll.dice(after, "downtime", true);
-            boolean recoveryOffer = saved.has("track");
             if (oldDice.isEmpty() || oldDice.size() > 32 || oldDice.size() != newDice.size()
                     || !downtimeRollShape(before).equals(downtimeRollShape(after)))
                 throw new IllegalArgumentException("A downtime-roll action must edit only the offered dice.");
-            int previous = before.path("total").asInt(), kept = after.path("total").asInt();
-            int remaining = recoveryOffer ? (int) claimLong(saved.get("remaining"), "remaining recovery") : 0;
-            if (remaining > 1000) throw new IllegalArgumentException("Invalid remaining recovery.");
-            int requested = Math.min(remaining, Math.max(0, Math.max(0, kept) - Math.max(0, previous)));
-            int cleared = 0;
-            ObjectNode recovery = null;
-            if (requested > 0) {
-                recovery = automationHost.stageHolderRecovery(pack, holderSheet, (ObjectNode) result.get("event"),
-                        holder.getId(), saved.path("track").asText(), requested, diceRandom);
-                cleared = recovery.path("cleared").asInt();
-                for (JsonNode action : recovery.path("actions"))
-                    ((ArrayNode) result.get("actions")).add(((ObjectNode) action).deepCopy().put("actorId", holder.getId()));
-                ((ArrayNode) result.get("outbox")).addAll((ArrayNode) recovery.get("outbox"));
-                result.set("event", recovery.get("event").deepCopy());
-            }
-            if (actor.getId().equals(holder.getId()))
-                automationHost.projection().state(sheet).put("revision", revision + 1);
-            result.put("revision", automationHost.revision(sheet)).put("holderRevision", automationHost.revision(holderSheet))
-                    .put("requestId", requestId).put("previous", previous).put("kept", kept).put("cleared", cleared);
+            int kept = result.path("kept").asInt(), cleared = result.path("cleared").asInt();
+            result.put("requestId", requestId);
             ObjectNode replacement = offer.deepCopy();
             ObjectNode updated = (ObjectNode) replacement.path("automationRecoveryRoll");
             updated.put("used", true).put("revision", saved.path("revision").asLong() + 1);
@@ -6688,10 +6677,8 @@ public final class OnlineSessionServer {
             if (recoveryOffer) edited += "; " + holder.getName() + " cleared " + cleared
                     + " additional " + saved.path("track").asText();
             replacement.put("text", offer.path("text").asText() + "\n" + edited + ".");
-            Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
+            Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>(transaction.recipients());
             changed.put(actor.getId(), sheet);
-            if (recovery != null && !holder.getId().equals(actor.getId())
-                    && automationHost.revision(holderSheet) != holderRevision) changed.put(holder.getId(), holderSheet);
             changed.values().forEach(staged -> staged.put("featureRevision", staged.path("featureRevision").asLong(0) + 1));
             Map<String, Map<String, JsonNode>> names = new java.util.HashMap<>();
             names.put(actor.getId(), sourceNames);
@@ -6709,14 +6696,15 @@ public final class OnlineSessionServer {
                         || !java.util.Objects.equals(actorOwner, currentActor.getOwnerId())
                         || !java.util.Objects.equals(holderOwner, currentHolder.getOwnerId()))
                     throw new ClaimUnavailable("The recovery-roll participants changed. Reopen this roll.");
+                roster.requireInventoryParty();
             };
-            commitAutomationResults(originals, changed, messages, result.path("outbox"), pack, actor.getId(),
+            commitAutomationResults(roster.originals, changed, messages, result.path("outbox"), pack, actor.getId(),
                     result, validateRoster, offer, replacement);
             broadcastChatUpdate((ObjectNode) playerView(replacement));
             json(ctx, 200, result);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             json(ctx, 400, errorBody("Invalid recovery-roll request."));
-        } catch (ClaimUnavailable | AutomationHost.NotReady | dmmt.online.automation.RuleRuntime.Unavailable
+        } catch (ClaimUnavailable | StaleAutomationRoster | AutomationHost.NotReady | dmmt.online.automation.RuleRuntime.Unavailable
                  | CampaignStore.StaleAutomationClaim | CampaignStore.StaleAutomationSheet e) {
             json(ctx, 409, errorBody(e.getMessage()));
         } catch (SecurityException e) {
