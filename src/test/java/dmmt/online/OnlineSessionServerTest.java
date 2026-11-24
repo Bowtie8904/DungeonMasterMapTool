@@ -8807,6 +8807,34 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void sourceConditionEndsAnotherHoldersCopyOfTheEffect() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        automation.set("effects", MAPPER.readTree("""
+                {"fragile":{"label":"Fragile","endWhen":{"gte":[{"read":"actor.stress.marked"},2]}}}"""));
+        automation.set("rules", MAPPER.readTree("""
+                [{"id":"mark","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"track.mark","track":"actor.stress","amount":2}],"ui":{"label":"Mark"}}]"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String campaignId = campaign.getId();
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Ally").ownerId("other").build());
+        store.saveSheet(campaignId, "caster", """
+                {"name":"Ada","stress":{"slots":6,"on":0},
+                 "features":[{"name":"Steady","instanceId":"source","automationSource":"classes:tester:features:steady"}]}""");
+        store.saveSheet(campaignId, "ally", """
+                {"name":"Ally","automationState":{"revision":0,"effects":[
+                 {"id":"copy","effect":"classes:tester:features:steady#fragile","sourceInstanceId":"source","sourceActorId":"caster","label":"Fragile"}]}}""");
+        var applied = automationHttp(cookie(), "caster", """
+                {"request":{"requestId":"mark","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"source","ruleId":"mark","bindingId":"use"}]}}""");
+        assertEquals(200, applied.statusCode(), applied.body());
+        assertEquals(0, MAPPER.readTree(store.loadSheet(campaignId, "ally")).at("/automationState/effects").size());
+    }
+
+    @Test
     void trackAndStateChangesDispatchDerivedAndConditionalEffectTransitions() throws Exception {
         automationCompendium();
         Path file = compendiumDir.resolve("classes.json");

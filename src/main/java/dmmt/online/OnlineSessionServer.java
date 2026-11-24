@@ -7357,6 +7357,9 @@ public final class OnlineSessionServer {
             if (original == null) continue;
             JsonNode before = MAPPER.readTree(original);
             if (before instanceof ObjectNode saved) ends.addAll(automationHost.dependentEffectEnds(pack, saved, entry.getValue()));
+            Campaign.Actor holder = campaign.actor(entry.getKey());
+            if (holder != null)
+                ends.addAll(automationHost.conditionalEffectEnds(pack, entry.getValue(), automationEvent("action.request", holder)));
         }
         return ends.isEmpty() ? Set.of() : endSingleHolderEffects(pack, originals, changed, ends);
     }

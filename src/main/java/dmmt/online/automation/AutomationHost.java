@@ -1346,6 +1346,36 @@ public final class AutomationHost {
     }
 
     /**
+     * Lists the requests that end other characters' copies of this character's effects whose {@code endWhen}
+     * condition now holds on the source character's staged sheet. The condition reads the source character, not the holder.
+     */
+    public List<SingleHolderEffect> conditionalEffectEnds(Pack pack, ObjectNode sheet, ObjectNode event) {
+        String actorId = RuleJson.id(event.get("actorId"), "/event/actorId");
+        List<SingleHolderEffect> ends = new ArrayList<>();
+        ObjectNode working = null, state = null, actor = null;
+        for (SheetProjection.SourceElement element : sources(pack, sheet)) {
+            RuleCompiler.Program program = pack.programs().get(element.sourceId());
+            if (program == null) continue;
+            var definitions = program.effects().fields();
+            while (definitions.hasNext()) {
+                var definition = definitions.next();
+                if (!definition.getValue().has("endWhen")) continue;
+                if (working == null) {
+                    working = sheet.deepCopy();
+                    state = projection.state(working);
+                    actor = actor(pack, working, state, event);
+                }
+                ObjectNode view = RuleRuntime.projectionContext(program, context(state, element, actor, event));
+                if (RuleExpression.bool(RuleExpression.evaluate(definition.getValue().get("endWhen"), view),
+                        "/effects/" + definition.getKey() + "/endWhen"))
+                    ends.add(new SingleHolderEffect(actorId, element.instanceId(),
+                            program.sourceId() + "#" + definition.getKey(), actorId));
+            }
+        }
+        return ends;
+    }
+
+    /**
      * Keeps the {@code partyGrants} sheet elements in step with the campaign: the last active sheet holding a source whose
      * program declares {@code partyGrant} shares it with every other active sheet that does not hold it itself. Grants
      * survive while the grantor is only disabled, and a grant that no longer applies is retired (kept without offering
