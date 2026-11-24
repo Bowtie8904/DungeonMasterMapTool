@@ -323,6 +323,168 @@ public final class AutomationHost {
         return result;
     }
 
+    private static final int MAX_DAMAGE = 1_000_000;
+    private static final String[] DAMAGE_STAGES = {"damage.prepare", "damage.marks", "damage.applied"};
+
+    private static ObjectNode armorSpec(int requested) {
+        ObjectNode spec = RuleJson.JSON.createObjectNode().put("track", "actor.armorTrack")
+                .put("marked", "marked").put("capacity", "capacity");
+        spec.put("requested", requested);
+        return spec;
+    }
+
+    private static ObjectNode hitPointSpec() {
+        return RuleJson.JSON.createObjectNode().put("track", "actor.hp").put("marked", "marked").put("capacity", "capacity");
+    }
+
+    private static ObjectNode thresholdSpec() {
+        ObjectNode spec = RuleJson.JSON.createObjectNode();
+        spec.putObject("majorAt").put("read", "actor.stats.thresholds.major");
+        spec.putObject("severeAt").put("read", "actor.stats.thresholds.severe");
+        return spec;
+    }
+
+    private static ObjectNode damageFacts(ObjectNode origin, String stage, ObjectNode damage, String type) {
+        ObjectNode event = origin.deepCopy().put("type", stage);
+        event.set("damage", damage.deepCopy());
+        if (type == null) event.putNull("damageType");
+        else event.put("damageType", type);
+        return event;
+    }
+
+    private ObjectNode damageContext(Pack pack, ObjectNode working, ObjectNode origin) {
+        ObjectNode state = projection.state(working);
+        ObjectNode context = RuleJson.JSON.createObjectNode();
+        context.set("actor", projectActor(pack, working, state, origin, sources(pack, working), false).actor());
+        return context;
+    }
+
+    private ObjectNode damagePrepareFacts(ObjectNode origin, ObjectNode context, int amount, String type) {
+        ObjectNode damage = RuleJson.JSON.createObjectNode().put("id", "damage").put("stage", "preSeverity")
+                .put("baseAmount", amount).put("amount", amount);
+        damage.putArray("adjustments");
+        ObjectNode event = damageFacts(origin, DAMAGE_STAGES[0], damage, type);
+        JsonNode thresholds = context.at("/actor/stats/thresholds");
+        if (!thresholds.path("major").isIntegralNumber() || !thresholds.path("severe").isIntegralNumber())
+            throw new RuleRuntime.Unavailable("thresholds", "This character has no damage thresholds.");
+        event.putObject("thresholds").put("major", thresholds.path("major").asInt()).put("severe", thresholds.path("severe").asInt());
+        return event;
+    }
+
+    private static String damageType(JsonNode intent) {
+        if (!intent.has("type") || intent.get("type").isNull()) return null;
+        String type = RuleJson.text(intent.get("type"), "/request/damage/type");
+        if (type.length() > 32) throw RuleJson.error("/request/damage/type", "Expected a short damage type.");
+        return type;
+    }
+
+    private static ObjectNode damageMarksFacts(ObjectNode origin, ObjectNode damage, String type, ObjectNode plan) {
+        ObjectNode event = damageFacts(origin, DAMAGE_STAGES[1], damage, type);
+        event.set("marks", plan.deepCopy());
+        return event;
+    }
+
+    /**
+     * Describes the incoming-damage dialog for one hit: the actions offered at the prepare, marks and applied stages
+     * plus an unmitigated preview of the marks. Mitigation chosen later changes the real outcome.
+     */
+    public ObjectNode describeDamage(Pack pack, ObjectNode sheet, ObjectNode origin, String relation, int amount,
+                                     String type, int armor) {
+        RuleJson.integer(RuleJson.JSON.getNodeFactory().numberNode(amount), "/damage/amount", 0, MAX_DAMAGE);
+        RuleJson.integer(RuleJson.JSON.getNodeFactory().numberNode(armor), "/damage/armor", 0, 1000);
+        ObjectNode working = sheet.deepCopy();
+        ObjectNode context = damageContext(pack, working, origin);
+        ObjectNode prepare = damagePrepareFacts(origin, context, amount, type);
+        ObjectNode plan = StructuredDamage.assess(prepare.get("damage"), type == null
+                        ? RuleJson.JSON.getNodeFactory().nullNode() : RuleJson.JSON.getNodeFactory().textNode(type),
+                thresholdSpec(), RuleJson.JSON.getNodeFactory().booleanNode(false), armorSpec(armor), hitPointSpec(), context);
+        ObjectNode preview = StructuredDamage.mark(plan, armorSpec(armor), hitPointSpec(), context.deepCopy());
+        ObjectNode result = RuleJson.JSON.createObjectNode().put("revision", revision(sheet));
+        result.putObject("damage").put("amount", amount).put("armor", armor).set("type",
+                type == null ? RuleJson.JSON.getNodeFactory().nullNode() : RuleJson.JSON.getNodeFactory().textNode(type));
+        result.set("thresholds", prepare.get("thresholds")); 
+        result.set("marks", plan);
+        result.set("applied", preview);
+        ObjectNode applied = damageFacts(origin, DAMAGE_STAGES[2], (ObjectNode) prepare.get("damage"), type);
+        applied.set("marks", plan.deepCopy());
+        applied.set("applied", preview.deepCopy());
+        ObjectNode stages = result.putObject("stages");
+        ObjectNode[] events = {prepare, damageMarksFacts(origin, (ObjectNode) prepare.get("damage"), type, plan), applied};
+        for (int i = 0; i < events.length; i++) {
+            ObjectNode described = describe(pack, sheet, events[i], "damage", relation);
+            stages.putObject(DAMAGE_STAGES[i]).set("actions", described.get("actions"));
+        }
+        return result;
+    }
+
+    private String selectionStage(List<RuleDispatcher.Candidate> candidates, JsonNode selection) {
+        for (RuleDispatcher.Candidate candidate : candidates) {
+            if (!candidate.instanceId().equals(selection.path("sourceInstanceId").asText())) continue;
+            try {
+                JsonNode binding = RuleDispatcher.binding(candidate.program().rule(selection.path("ruleId").asText()),
+                        selection.path("bindingId").asText());
+                return binding.path("event").asText(DAMAGE_STAGES[0]);
+            } catch (RuntimeException unknown) {
+                return DAMAGE_STAGES[0];
+            }
+        }
+        return DAMAGE_STAGES[0];
+    }
+
+    private ObjectNode damageStage(Pack pack, ObjectNode working, ObjectNode facts, ObjectNode request, String relation,
+                                   RandomGenerator random, ArrayNode actions, ArrayNode outbox) {
+        ObjectNode state = projection.state(working);
+        var candidates = candidates(pack, working, facts);
+        ObjectNode staged = request.deepCopy();
+        ArrayNode kept = staged.putArray("selections");
+        for (JsonNode selection : request.path("selections"))
+            if (facts.path("type").asText().equals(selectionStage(candidates, selection))) kept.add(selection);
+        var intents = selections(staged, candidates, state.path("revision").asLong(), relation, "damage", false);
+        ObjectNode result = applyEvent(pack, working, state, facts, candidates, intents, random);
+        actions.addAll((ArrayNode) result.get("actions"));
+        outbox.addAll((ArrayNode) result.get("outbox"));
+        return result;
+    }
+
+    /** Runs the prepare, marks and applied stages of one hit against the working copy. */
+    private ObjectNode damage(Pack pack, ObjectNode working, ObjectNode origin, ObjectNode request, String relation,
+                              RandomGenerator random) {
+        JsonNode intent = request.get("damage");
+        RuleJson.fields(intent, "/request/damage", "amount", "type", "armor");
+        int amount = RuleJson.integer(intent.get("amount"), "/request/damage/amount", 0, MAX_DAMAGE);
+        int armor = intent.has("armor") ? RuleJson.integer(intent.get("armor"), "/request/damage/armor", 0, 1000) : 0;
+        String type = damageType(intent);
+        long initial = projection.state(working).path("revision").asLong();
+        ArrayNode actions = RuleJson.JSON.createArrayNode(), outbox = RuleJson.JSON.createArrayNode();
+
+        ObjectNode prepare = damagePrepareFacts(origin, damageContext(pack, working, origin), amount, type);
+        ObjectNode result = damageStage(pack, working, prepare, request, relation, random, actions, outbox);
+        ObjectNode damage = StructuredDamage.validate(result.path("event").path("damage"));
+
+        ObjectNode context = damageContext(pack, working, origin);
+        ObjectNode plan = StructuredDamage.assess(damage, type == null
+                        ? RuleJson.JSON.getNodeFactory().nullNode() : RuleJson.JSON.getNodeFactory().textNode(type),
+                thresholdSpec(), RuleJson.JSON.getNodeFactory().booleanNode(false), armorSpec(armor), hitPointSpec(), context);
+        result = damageStage(pack, working, damageMarksFacts(origin, damage, type, plan), request, relation, random, actions, outbox);
+        plan = StructuredDamage.validatePlan(result.path("event").path("marks"));
+
+        context = damageContext(pack, working, origin);
+        ObjectNode applied = StructuredDamage.mark(plan, armorSpec(armor), hitPointSpec(), context);
+        projection.write(working, projection.actor(working), persisted((ObjectNode) context.get("actor")));
+        ObjectNode facts = damageFacts(origin, DAMAGE_STAGES[2], damage, type);
+        facts.set("marks", plan.deepCopy());
+        facts.set("applied", applied);
+        result = damageStage(pack, working, facts, request, relation, random, actions, outbox);
+
+        ObjectNode response = RuleJson.JSON.createObjectNode();
+        response.put("revision", initial + 1);
+        response.set("actions", actions);
+        response.set("outbox", outbox);
+        response.set("event", result.get("event"));
+        projection.state(working).put("revision", initial + 1);
+        return response;
+    }
+
     private static void requireDeathState(ObjectNode sheet) {
         int capacity = RuleJson.integer(sheet.at("/hp/slots"), "/sheet/hp/slots", 0, 1000);
         int marked = RuleJson.integer(sheet.at("/hp/on"), "/sheet/hp/on", 0, capacity);
@@ -391,8 +553,11 @@ public final class AutomationHost {
                               java.util.function.Function<JsonNode, String> promptLabel) {
         relation(relation);
         if (principalId == null || principalId.isBlank()) throw new IllegalArgumentException("Missing automation principal.");
-        RuleJson.fields(request, "/request", "requestId", "expectedRevision", "selections", "profileRoll", "checkRoll", "deathRoll", "deathAction", "target", "resultId");
+        RuleJson.fields(request, "/request", "requestId", "expectedRevision", "selections", "profileRoll", "checkRoll", "deathRoll",         "deathAction", "target", "resultId", "damage");
         RuleJson.checkTree(request, "/request", 0, new int[]{0});
+                if (request.has("damage") && (request.has("deathAction") || request.has("deathRoll") || request.has("checkRoll")
+                        || request.has("profileRoll") || request.has("target") || request.has("resultId")))
+                    throw RuleJson.error("/request/damage", "Incoming damage cannot be combined with another action.");
         if (request.has("deathAction")) {
             if (!request.path("deathAction").isBoolean() || !request.path("deathAction").booleanValue()
                     || request.has("checkRoll") || request.has("profileRoll") || request.has("deathRoll") || request.has("target")
@@ -431,7 +596,9 @@ public final class AutomationHost {
             if (request.has("deathAction")) event = event.deepCopy().put("type", "death.options");
         }
         ObjectNode response;
-        if (request.has("profileRoll") || request.has("checkRoll") || request.has("deathRoll")) {
+        if (request.has("damage")) {
+            response = damage(pack, working, event, request, relation, random);
+        } else if (request.has("profileRoll") || request.has("checkRoll") || request.has("deathRoll")) {
             response = profileRoll(pack, working, state, event, request, random, promptLabel);
             offerResult(pack, working, response, principalId, null, null);
             if (request.has("deathRoll")) updatePendingDeath(working, response);

@@ -1,6 +1,7 @@
 package dmmt.online.automation;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 
@@ -1749,6 +1750,87 @@ class AutomationHostTest {
         assertTrue(HOST.resetLimits(pack, sheet, AutomationHost.event("scene.end", "ada", 3).put("sessionId", "session")));
         assertEquals(3, sheet.requiredAt("/automationState/sources/f-steady/sourcePools/charge/value").intValue());
         assertFalse(sheet.at("/automationState/effects").isArray(), "Derived effects remain projections.");
+    }
+
+    private static AutomationHost.Pack damagePack() throws Exception {
+        ObjectNode catalog = (ObjectNode) RuleJson.parse("""
+                {"format":"dmmap-daggerheart","version":2,"category":"classes","label":"Damage fixture","entries":[
+                 {"id":"tester","name":"Tester","features":[
+                  {"id":"brace","name":"Brace","automation":{"rules":[{"id":"brace",
+                    "bindings":[{"id":"prepare","event":"damage.prepare","surface":"damage","mode":"button"}],
+                    "do":[{"op":"damage.reduce","from":{"read":"event.damage"},"amount":3,"id":"brace","label":"Brace","as":"reduced"},
+                          {"op":"damage.publish","damage":{"read":"result.reduced.damage"}}],
+                    "ui":{"label":"Brace","report":"Braced."}}]}},
+                  {"id":"boon","name":"Boon","automation":{"rules":[{"id":"boon",
+                    "bindings":[{"id":"applied","event":"damage.applied","surface":"damage","mode":"automatic"}],
+                    "when":{"gt":[{"read":"event.applied.hitPoints"},0]},
+                    "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],
+                    "ui":{"label":"Boon","report":"Boon."}}]}},
+                  {"id":"retaliate","name":"Retaliate","automation":{"rules":[{"id":"retaliate",
+                    "bindings":[{"id":"applied","event":"damage.applied","surface":"damage","mode":"automatic"}],
+                    "do":[{"op":"damage.deal","to":"attacker","amount":3,"label":"Retaliate"}],
+                    "ui":{"label":"Retaliate","report":"Retaliate."}}]}}]}]}""");
+        return AutomationHost.compile("damage", Map.of("classes", catalog.toString()), fixture("rewrite/recipes").toString());
+    }
+
+    private static ObjectNode damageSheet() throws Exception {
+        ObjectNode sheet = sheet().put("level", 5);
+        ArrayNode features = sheet.putArray("features");
+        for (String id : List.of("brace", "boon", "retaliate"))
+            features.addObject().put("name", id).put("text", "").put("automationSource", "classes:tester:features:" + id)
+                    .put("instanceId", "f-" + id);
+        sheet.putArray("vault");
+        sheet.putArray("inventory");
+        return sheet;
+    }
+
+    private static ObjectNode damageRequest(String id, long revision, int amount, int armor, boolean brace) {
+        ObjectNode request = RuleJson.JSON.createObjectNode().put("requestId", id).put("expectedRevision", revision);
+        ArrayNode selections = request.putArray("selections");
+        if (brace) selections.addObject().put("sourceInstanceId", "f-brace").put("ruleId", "brace").put("bindingId", "prepare");
+        request.putObject("damage").put("amount", amount).put("armor", armor);
+        return request;
+    }
+
+    @Test
+    void incomingDamageRunsPrepareMarksAndAppliedStagesAtomically() throws Exception {
+        var pack = damagePack();
+        ObjectNode sheet = damageSheet();
+        ObjectNode origin = AutomationHost.event("action.request", "ada", 0);
+        JsonNode described = HOST.describeDamage(pack, sheet, origin, "self", 7, "physical", 0);
+        assertEquals(5, described.at("/thresholds/major").asInt());
+        assertEquals(2, described.at("/applied/severity").asInt());
+        assertEquals(List.of("Brace"), described.at("/stages/damage.prepare/actions").findValuesAsText("label"));
+
+        ObjectNode before = sheet.deepCopy();
+        assertThrows(RuleRuntime.Unavailable.class, () -> HOST.execute(pack, sheet, origin,
+                damageRequest("stale", 9, 7, 0, false), "self", StructuredRollTest.noRandom()));
+        assertEquals(before, sheet);
+
+        ObjectNode request = damageRequest("hit", 0, 9, 1, true);
+        ObjectNode response = HOST.execute(pack, sheet, origin, request, "self", StructuredRollTest.noRandom());
+        assertEquals(1, response.path("revision").asLong());
+        assertEquals(6, response.at("/event/applied/amount").asInt(), "Brace reduced 9 to 6");
+        assertEquals(1, response.at("/event/applied/severity").asInt());
+        assertEquals(1, response.at("/event/applied/armorMarked").asInt(), response.toString());
+        assertEquals(1, sheet.at("/armorTrack/on").asInt());
+        assertEquals(3, sheet.at("/hp/on").asInt(), "Incoming 2 minus one Armor Slot marks one Hit Point");
+        assertEquals("damage.deal", response.at("/outbox/0/kind").asText());
+        assertEquals("attacker", response.at("/outbox/0/to").asText());
+        assertEquals(3, response.at("/outbox/0/amount").asInt());
+        assertEquals(2, sheet.at("/hope/on").asInt());
+
+        ObjectNode after = sheet.deepCopy();
+        assertEquals(response, HOST.execute(pack, sheet, origin, request, "self", StructuredRollTest.noRandom()));
+        assertEquals(after, sheet, "A retry replays the journaled response");
+
+        ObjectNode second = HOST.execute(pack, sheet, origin, damageRequest("hit2", 1, 7, 0, false), "self",
+                StructuredRollTest.noRandom());
+        assertEquals(5, sheet.at("/hp/on").asInt());
+        assertEquals(3, sheet.at("/hope/on").asInt());
+        assertEquals(2, second.path("revision").asLong());
+        assertThrows(IllegalArgumentException.class, () -> HOST.execute(pack, sheet, origin, damageRequest("bad", 2, 7, 0, false)
+                .put("target", "x"), "self", StructuredRollTest.noRandom()));
     }
 
     @Test
