@@ -102,7 +102,8 @@ public final class RuleCompiler {
             Map.entry("roll.swapRoles", List.of("from", "first", "second")),
             Map.entry("roll.diceTotal", List.of("from", "dice")),
             Map.entry("plan.adjust", List.of("plan", "field", "by", "label", "partyRecovery")),
-            Map.entry("event.block", List.of("reason")));
+            Map.entry("event.block", List.of("reason")),
+            Map.entry("action.reject", List.of("reason")));
     /** Fields evaluated once per die with the {@code die} context root. */
     private static final Set<String> PER_DIE_FIELDS = Set.of("where", "face", "when");
     private static final Set<String> CONTRIBUTION_FIELDS = Set.of("id", "kind", "role", "label", "count", "sides",
@@ -643,7 +644,8 @@ public final class RuleCompiler {
             String template = RuleJson.text(effect.get(text), path + "/" + text);
             RuleTemplate.validate(template);
             for (String ref : RuleTemplate.references(template))
-                if (!ref.startsWith("source.") && !ref.startsWith("actor.") && !(ref.startsWith("state.") && state.has(ref.split("\\.")[1])))
+                if (!ref.startsWith("source.") && !ref.startsWith("actor.") && !(ref.startsWith("state.") && state.has(ref.split("\\.")[1]))
+                        && !(ref.startsWith("result.") && "text".equals(text) && !effect.has("while")))
                     throw RuleJson.error(path + "/" + text, "Effect text may only read source, actor and declared state: " + ref);
         }
         if (effect.has("kind") && !Set.of("buff", "debuff").contains(effect.path("kind").asText()))
@@ -1658,7 +1660,7 @@ public final class RuleCompiler {
             RuleTemplate.validate(RuleJson.text(operation.get("label"), path + "/label"));
             return;
         }
-        if ("event.block".equals(op)) {
+        if ("event.block".equals(op) || "action.reject".equals(op)) {
             RuleTemplate.validate(RuleJson.text(operation.get("reason"), path + "/reason"));
             return;
         }

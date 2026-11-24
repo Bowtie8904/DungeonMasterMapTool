@@ -72,7 +72,7 @@ public final class LegacyCatalogConverter {
             "requiresEffect", "excludesEffect", "endEffect", "uses", "usesSource", "actionRoll", "target",
             "excludeSourceActor", "hostOwned", "selectAmount", "resourceRoll", "hopeDice", "layerRoll", "deferSourceUse", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
             "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime", "table",
-            "hostRollAction", "bloodAutomation", "castTokens", "patronDice", "witchAction", "requiresCompanion", "specialAction", "codexSwap", "spendFavor",
+            "hostRollAction", "bloodAutomation", "castTokens", "patronDice", "witchAction", "requiresCompanion",             "specialAction", "codexSwap", "spendFavor", "menacingReach",
             "costConditions", "refocus", "chooseEffects", "channelRawPower", "requiresFeature");
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
@@ -4288,6 +4288,38 @@ public final class LegacyCatalogConverter {
      * including a critical success: an automatic {@code roll.finished} rule on the card's own spellcast origin.
      */
     /**
+     * {@code menacingReach}: raises the primary weapon's range one step (capped at Very Far) for as long as the effect lasts.
+     * Built only from the {@code actor.primaryWeapon} fact, the {@code indexOf} expression and an ordinary effect whose text is
+     * rendered from the computed range. Returns the legacy report.
+     */
+    private static String menacingReach(JsonNode action, String path, Problems p, ObjectNode effects, ArrayNode steps) {
+        if (!action.path("menacingReach").asBoolean(false)) { p.add(path + "/menacingReach", "Expected true."); return null; }
+        String text = "{actor.primaryWeapon.name} reach: {result.reachRange} (normally {actor.primaryWeapon.range}). Ends after a successful attack with this weapon.";
+        ObjectNode effect = RuleJson.JSON.createObjectNode().put("name", "Menacing Reach").put("kind", "buff").put("until", "manual").put("text", text);
+        String id = declareEffect(effect, path + "/menacingReach", p, effects);
+        if (id == null) return null;
+        ((ObjectNode) effects.get(id)).put("text", text);
+        ObjectNode ranges = RuleJson.JSON.createObjectNode();
+        ArrayNode list = ranges.putArray("literal");
+        for (String range : List.of("Melee", "Very Close", "Close", "Far", "Very Far")) list.add(range);
+        ObjectNode index = RuleJson.JSON.createObjectNode();
+        index.putArray("indexOf").add(ranges.deepCopy()).add(read("actor.primaryWeapon.range"));
+        ObjectNode missing = steps.addObject().put("op", "action.reject").put("reason", "Equip a primary weapon first.");
+        missing.putObject("if").putObject("not").put("exists", "actor.primaryWeapon.name");
+        ObjectNode unsupported = steps.addObject().put("op", "action.reject").put("reason", "The primary weapon has no supported range.");
+        unsupported.putObject("if").putArray("lt").add(index.deepCopy()).add(0);
+        steps.addObject().put("op", "action.reject").put("reason", "Menacing Reach is already active.")
+                .set("if", labelPresent("Menacing Reach"));
+        ObjectNode next = RuleJson.JSON.createObjectNode();
+        ArrayNode capped = next.putArray("min");
+        capped.addObject().putArray("add").add(index).add(1);
+        capped.add(4);
+        steps.addObject().put("op", "value").put("as", "reachRange").putObject("value").putArray("at").add(ranges).add(next);
+        steps.addObject().put("op", "effect.start").put("effect", id).put("target", "actor");
+        return "Spent 1 Favor. " + text;
+    }
+
+    /**
      * {@code banishDifficulty}: rolls one d20 per point of the Spellcast trait total, keeps the highest and stores it on the
      * hosting card ({@code source.banishDifficulty}); a total below one blocks the roll as in the legacy host.
      */
@@ -4541,6 +4573,7 @@ public final class LegacyCatalogConverter {
         if (action.has("refocus")) refocus(action, path, p, pools, steps);
         if (action.has("chooseEffects")) chooseEffects(action.get("chooseEffects"), path + "/chooseEffects", p, effects, rule, steps);
         if (action.has("channelRawPower")) channelRawPower(action.get("channelRawPower"), path + "/channelRawPower", p, effects, rule, steps);
+        String reachReport = action.has("menacingReach") ? menacingReach(action, path, p, effects, steps) : null;
         endEffect(action, steps, operationTarget);
         if (action.has("toggleEffect")) {
             String toggled = declareEffect(action.get("toggleEffect"), path + "/toggleEffect", p, effects);
@@ -4563,7 +4596,7 @@ public final class LegacyCatalogConverter {
                 if ("long".equals(rest)) on.add("rest.long");
             }
         }
-        String specialReport = action.has("specialAction") ? specialAction(action, path, p, effects, rule, steps) : null;
+        String specialReport = action.has("specialAction") ? specialAction(action, path, p, effects, rule, steps) : reachReport;
         if (action.has("layerRoll")) specialReport = layerRoll(action.get("layerRoll"), path + "/layerRoll", p, pools, steps);
         if (action.has("timing")) {
             for (int i = 0; i < steps.size(); i++) {

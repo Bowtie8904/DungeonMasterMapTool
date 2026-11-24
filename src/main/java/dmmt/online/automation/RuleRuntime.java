@@ -1552,6 +1552,7 @@ public final class RuleRuntime {
                         RuleTemplate.render(op.path("label").asText(), context));
                 result = adjusted.get("marks");
             }
+            case "action.reject" -> throw new Unavailable("condition", RuleTemplate.render(op.path("reason").asText(), context));
             case "event.block" -> {
                 if (!(context.path("event") instanceof ObjectNode event)) throw RuleJson.error("/event", "Only events can be blocked.");
                 ArrayNode blocked = event.has("blocked") && event.get("blocked").isArray()

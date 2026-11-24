@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
 public final class RuleExpression {
     private static final Set<String> ROOTS = Set.of("source", "actor", "recipient", "event", "state", "input", "die", "result", "args", "effects", "gear", "sourcePools");
     private static final Set<String> UNARY = Set.of("not", "floor", "ceil", "negate", "size", "flatten");
-    private static final Set<String> BINARY = Set.of("subtract", "divide", "eq", "ne", "gt", "gte", "lt", "lte", "includes", "count", "pluck", "containsText", "at", "effectValue");
+    private static final Set<String> BINARY = Set.of("subtract", "divide", "eq", "ne", "gt", "gte", "lt", "lte", "includes", "count", "pluck", "containsText", "at", "effectValue", "indexOf");
     private static final Set<String> MANY = Set.of("add", "multiply", "min", "max", "and", "or");
     private static final Pattern PATH_PART = Pattern.compile("[a-zA-Z_][a-zA-Z0-9_-]*");
     private static final double MAX_NUMBER = 9_007_199_254_740_991d;
@@ -156,6 +156,15 @@ public final class RuleExpression {
             boolean found = false;
             for (JsonNode element : values[0]) if (equal(element, values[1])) found = true;
             return BooleanNode.valueOf(found);
+        }
+        if ("indexOf".equals(op)) {
+            if (!values[0].isArray()) throw RuleJson.error(path, "indexOf requires a collection.");
+            for (int i = 0; i < values[0].size(); i++) {
+                JsonNode element = values[0].get(i);
+                if (element.isTextual() && values[1].isTextual() ? element.asText().equalsIgnoreCase(values[1].asText()) : equal(element, values[1]))
+                    return numeric(i, path);
+            }
+            return numeric(-1, path);
         }
         if ("count".equals(op)) {
             if (!values[0].isArray()) throw RuleJson.error(path, "count requires a collection.");
