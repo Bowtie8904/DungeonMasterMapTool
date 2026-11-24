@@ -229,9 +229,10 @@ action-step rolls and rest-passive rolls also offer their full expression, inclu
 completion passives. Short-rest track-change reactions can publish their own generic roll offers for self and
 ally holders, including when a later recovery reroll triggers another reaction; completed-move reactions can
 publish them too. Reactions to reroll-action costs can publish further downtime and recovery offers in the same
-atomic transaction. Recovery rerolls account for signed
-offsets, the original remaining allowance and the holder's current healing floor. Rolls in other reaction phases
-still need live offers.
+atomic transaction. Preparation, both completion phases, targeted adjustments and deferred benefits, and
+whole-party recovery also publish authored reaction offers; their staged results and retries are covered by
+HTTP tests. Recovery rerolls account for signed offsets, the original remaining allowance and the holder's
+current healing floor. Conversion of every legacy reaction roll remains to be verified.
 
 The live host rejects legacy client-supplied rests and downtime rerolls when any category declares format 2,
 including an incomplete pack. It cannot classify malformed, unreadable or unknown-version categories as legacy.
@@ -385,8 +386,8 @@ additional command settlement remains unfinished.
 The shared Daggerheart ruleset now supplies self-targeted short recovery (1d4 plus tier and move bonus), the two
 mutually exclusive preparation variants, long recovery and work on a project. Reports use the amount actually
 cleared or gained, including permanent and locked HP and capped Hope; a short rest needs a granted allowance for
-a long move. The ally variants update the selected recipient. Recovery, downtime-table, report, action-step and
-rest-passive roll offers use the live reroll flow described above; other reaction-phase dice remain unfinished.
+a long move. The ally variants update the selected recipient. Recovery, downtime-table, report, action-step, rest-passive and tested reaction roll offers use the live reroll
+flow described above; complete legacy conversion remains unfinished.
 The sheet projection supplies permanent and temporary marked-HP floors to generic track clearing. The
 engine recomputes locks held in its effect list as operations run, so ending a lock before healing in the same
 action allows the newly recoverable HP to clear. Recipient healing uses the recipient's floor, and capacity

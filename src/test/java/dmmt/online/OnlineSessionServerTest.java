@@ -2810,6 +2810,86 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void preparationAndCompletionTrackReactionsPublishRerollableDice() throws Exception {
+        installRestRerollRules();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withArray("rules").addAll((ArrayNode) MAPPER.readTree("""
+                [
+                 {"id":"prepare-mark","bindings":[{"id":"rest","event":"rest.prepare","surface":"rest","mode":"automatic"}],
+                  "do":[{"op":"track.mark","track":"actor.armorTrack","amount":1}],"ui":{}},
+                 {"id":"before-clear","bindings":[{"id":"rest","event":"rest.short","surface":"rest","mode":"automatic"}],
+                  "do":[{"op":"track.clear","track":"actor.stress","amount":1}],"ui":{}},
+                 {"id":"after-gain","bindings":[{"id":"rest","event":"rest.short","surface":"rest","mode":"automatic",
+                   "restPhase":"afterReset"}],"do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{}},
+                 {"id":"prepare-spark","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.track"},"armorTrack"]},
+                  "do":[{"op":"dice.roll","count":1,"sides":6,"as":"roll"},
+                        {"op":"downtime.offerRoll","roll":{"read":"result.roll"},"label":"Preparation reaction"}],"ui":{}},
+                 {"id":"before-spark","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.track"},"stress"]},
+                  "do":[{"op":"dice.roll","count":1,"sides":6,"as":"roll"},
+                        {"op":"downtime.offerRoll","roll":{"read":"result.roll"},"label":"Before-reset reaction"}],"ui":{}},
+                 {"id":"after-spark","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.track"},"hope"]},
+                  "do":[{"op":"dice.roll","count":1,"sides":6,"as":"roll"},
+                        {"op":"downtime.offerRoll","roll":{"read":"result.roll"},"label":"After-reset reaction"}],"ui":{}}
+                ]
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        String owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("actor").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("helper").name("Helper").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "actor", """
+                {"name":"Ada","hp":{"slots":6,"on":0},"stress":{"slots":6,"on":2},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0}}
+                """);
+        store.saveSheet(campaign.getId(), "helper", """
+                {"name":"Helper","hp":{"slots":6,"on":0},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},
+                 "loadout":[{"name":"Second Chance","instanceId":"chance","automationSource":"domain-cards:reroller"}]}
+                """);
+        JsonNode offer = MAPPER.readTree(restHttp(owner, "actor", "short", null).body());
+        assertTrue(offer.path("prepareBeforeMoves").asBoolean(), offer.toString());
+        ObjectNode request = restRequest(offer, "phase-reaction-rolls");
+        String original = store.loadSheet(campaign.getId(), "actor");
+        int history = store.historyTail(campaign.getId(), 100).size();
+        diceSeed(seedForDice(new int[]{6, 6, 6}, new int[]{2, 3, 4}));
+        var prepared = restChoiceHttp(owner, "actor", "choices", request.deepCopy().put("prepare", true));
+        assertEquals(200, prepared.statusCode(), prepared.body());
+        request.put("preparedVersion", MAPPER.readTree(prepared.body()).path("choiceVersion").asText());
+        var before = restChoiceHttp(owner, "actor", "choices", request);
+        assertEquals(200, before.statusCode(), before.body());
+        ObjectNode advance = MAPPER.createObjectNode().put("requestId", "phase-reaction-rolls")
+                .put("choiceVersion", MAPPER.readTree(before.body()).path("choiceVersion").asText());
+        advance.putArray("selections");
+        var after = restChoiceHttp(owner, "actor", "choices", advance);
+        assertEquals(200, after.statusCode(), after.body());
+        assertEquals(original, store.loadSheet(campaign.getId(), "actor"));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        ObjectNode complete = MAPPER.createObjectNode().put("choiceVersion", MAPPER.readTree(after.body()).path("choiceVersion").asText());
+        complete.set("request", request.path("request").deepCopy());
+        var completed = restChoiceHttp(owner, "actor", "complete", complete);
+        assertEquals(200, completed.statusCode(), completed.body());
+        var published = store.historyTail(campaign.getId(), 100).stream()
+                .filter(message -> message.at("/automationRecoveryRoll/roll/contributions/0/label").asText().endsWith("reaction"))
+                .toList();
+        assertEquals(List.of("Preparation reaction", "Before-reset reaction", "After-reset reaction"),
+                published.stream().map(message -> message.at("/automationRecoveryRoll/roll/contributions/0/label").asText()).toList());
+        assertEquals(List.of(2, 3, 4), published.stream().map(message -> message.at("/automationRecoveryRoll/roll/total").asInt()).toList());
+        assertEquals(completed.body(), restChoiceHttp(owner, "actor", "complete", complete).body());
+        assertEquals(history + 3, store.historyTail(campaign.getId(), 100).size());
+
+        JsonNode description = MAPPER.readTree(recoveryRollHttp(owner, published.get(0), "helper", null).body());
+        ObjectNode reroll = recoveryRollRequest(description, "preparation-reaction-reroll");
+        diceSeed(seedForDie(6, 5));
+        var rerolled = recoveryRollHttp(owner, published.get(0), "helper", reroll.toString());
+        assertEquals(200, rerolled.statusCode(), rerolled.body());
+        assertEquals(5, MAPPER.readTree(rerolled.body()).path("kept").asInt());
+        assertEquals(rerolled.body(), recoveryRollHttp(owner, published.get(0), "helper", reroll.toString()).body());
+    }
+
+    @Test
     void recoveryRerollsRetainShortRestContextForFurtherReactions() throws Exception {
         installRestRerollRules();
         installRecoverySparkRule();
@@ -4761,6 +4841,57 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void partyRecoveryReactionsPublishRerollableDiceForEachHolder() throws Exception {
+        installPartyRestRules("gain");
+        var converted = dmmt.online.automation.LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"domain-cards","entries":[
+                 {"id":"reroller","name":"Second Chance","automation":{"restReroll":true,"uses":{"max":1,"per":"rest"}}}]}
+                """);
+        assertEquals(1, converted.converted(), converted.diagnostics().toString());
+        java.nio.file.Files.writeString(compendiumDir.resolve("domain-cards.json"), converted.catalog().toString());
+        Path rulesFile = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(rulesFile.toFile());
+        ruleset.withObject("/automation").withArray("rules").add(MAPPER.readTree("""
+                {"id":"party-spark","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"armorTrack"]},
+                                  {"eq":[{"read":"event.change"},"clear"]},
+                                  {"eq":[{"read":"event.rest.kind"},"short"]}]},
+                 "do":[{"op":"dice.roll","count":1,"sides":6,"as":"roll"},
+                       {"op":"downtime.offerRoll","roll":{"read":"result.roll"},"label":"Party spark"}],"ui":{}}
+                """));
+        java.nio.file.Files.writeString(rulesFile, ruleset.toString());
+        addRestParty();
+        ObjectNode resting = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "resting"));
+        resting.putArray("loadout").addObject().put("name", "Second Chance").put("instanceId", "chance")
+                .put("automationSource", "domain-cards:reroller");
+        store.saveSheet(campaign.getId(), "resting", resting.toString());
+        String owner = cookie();
+        JsonNode rest = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode request = restRequest(rest, "party-spark-rest");
+        addRestMove((ObjectNode) request.path("request"), restDescriptor(rest.path("moves"), "rest-tend"));
+        diceSeed(seedForDice(new int[]{4, 6, 6}, new int[]{1, 2, 3}));
+        var completed = restHttp(owner, "resting", null, request.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        var offers = store.historyTail(campaign.getId(), 100).stream()
+                .filter(message -> "Party spark".equals(message.at("/automationRecoveryRoll/roll/contributions/0/label").asText()))
+                .toList();
+        assertEquals(List.of("mira", "borin"), offers.stream()
+                .map(message -> message.at("/automationRecoveryRoll/holderId").asText()).toList());
+        assertEquals(List.of(2, 3), offers.stream()
+                .map(message -> message.at("/automationRecoveryRoll/roll/total").asInt()).toList());
+        int history = store.historyTail(campaign.getId(), 100).size();
+        assertEquals(completed.body(), restHttp(owner, "resting", null, request.toString()).body());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        JsonNode choices = MAPPER.readTree(recoveryRollHttp(owner, offers.getFirst(), "resting", null).body());
+        ObjectNode reroll = recoveryRollRequest(choices, "party-spark-reroll");
+        diceSeed(seedForDie(6, 5));
+        var accepted = recoveryRollHttp(owner, offers.getFirst(), "resting", reroll.toString());
+        assertEquals(200, accepted.statusCode(), accepted.body());
+        assertEquals(5, MAPPER.readTree(accepted.body()).path("kept").asInt());
+        assertEquals(accepted.body(), recoveryRollHttp(owner, offers.getFirst(), "resting", reroll.toString()).body());
+    }
+
+    @Test
     void partyRecoverySettlesReactionGrantsBeforeLaterReactionsAndRecipients() throws Exception {
         installPartyRestRules("gain");
         Path consumablesFile = compendiumDir.resolve("consumables.json");
@@ -5147,7 +5278,9 @@ class OnlineSessionServerTest {
                                  {"eq":[{"read":"event.track"},"armorTrack"]},
                                  {"eq":[{"read":"event.track"},"hp"]}]},
                   "do":[{"op":"resource.gain","pool":"actor.hope","amount":1},
-                        {"op":"table.gain","resource":"fear","amount":1,"label":"Care"}],
+                        {"op":"table.gain","resource":"fear","amount":1,"label":"Care"},
+                        {"op":"dice.roll","count":1,"sides":6,"as":"roll"},
+                        {"op":"downtime.offerRoll","roll":{"read":"result.roll"},"label":"Care spark"}],
                   "ui":{"report":"Care reaction for {actor.name}."}}
                 ]
                 """));
@@ -5192,9 +5325,16 @@ class OnlineSessionServerTest {
         assertEquals(3, recipient.at("/hp/on").asInt());
         assertEquals(0, recipient.at("/armorTrack/on").asInt());
         assertEquals(fear + 3, campaign.getFear());
+        var offers = store.historyTail(campaign.getId(), 100).stream()
+                .filter(message -> "Care spark".equals(message.at("/automationRecoveryRoll/roll/contributions/0/label").asText()))
+                .toList();
+        assertEquals(3, offers.size());
+        assertTrue(offers.stream().allMatch(message -> "mira".equals(message.at("/automationRecoveryRoll/holderId").asText())));
+        int published = store.historyTail(campaign.getId(), 100).size();
         assertEquals(completed.body(), restHttp(owner, "resting", null, request.toString()).body());
         assertEquals(recipient, MAPPER.readTree(store.loadSheet(campaign.getId(), "mira")));
         assertEquals(fear + 3, campaign.getFear());
+        assertEquals(published, store.historyTail(campaign.getId(), 100).size());
     }
 
     @Test
