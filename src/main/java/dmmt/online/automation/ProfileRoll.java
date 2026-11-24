@@ -102,8 +102,9 @@ final class ProfileRoll {
         ObjectNode check = event.putObject("check");
         for (String key : List.of("kind", "trait", "weapon", "range", "dominant", "outcome", "critical",
                 "hopeDie", "fearDie", "spell", "origin", "total", "difficulty", "weaponSource", "weaponSourceId",
-                "fixedDice", "damageType", "move", "adjustedHope", "recoverableHp", "reroll", "duality", "sourceName")) check.putNull(key);
+                "fixedDice", "damageType", "move", "adjustedHope", "recoverableHp", "reroll", "duality", "sourceName", "sourceDomain")) check.putNull(key);
         check.putArray("origins");
+        check.putObject("facesByRole");
         return event;
     }
 
@@ -159,6 +160,11 @@ final class ProfileRoll {
             String slot = gear.path("slot").asText("").toLowerCase(Locale.ROOT);
             if ("primary".equals(slot) || "secondary".equals(slot)) check.put("weapon", slot);
         }
+        if (!profile.has("rollKind")) {
+            String domain = "Copycat".equals(source.name()) ? gear.path("borrowedCard").path("card").path("domain").asText(null)
+                    : gear.path("domain").asText(null);
+            if (domain != null && !domain.isBlank()) check.put("sourceDomain", domain);
+        }
         if (profile.has("difficulty")) check.set("difficulty", profile.get("difficulty").deepCopy());
         if (profile.has("origin")) {
             check.set("origin", profile.get("origin").deepCopy());
@@ -173,6 +179,12 @@ final class ProfileRoll {
             if ("mag".equals(type)) type = "magic";
             check.put("fixedDice", damage.has("count") || damage.path("fixedDice").asBoolean()).put("damageType", type);
             event.put("damageType", type);
+        } else if (equippedWeapon && !profile.has("rollKind")) {
+            // An attack carries the damage type of the weapon so magic-weapon attacks can be told apart from other actions.
+            String type = gear.path("damageType").asText(null);
+            if ("phys".equals(type)) type = "physical";
+            if ("mag".equals(type)) type = "magic";
+            if (type != null) check.put("damageType", type);
         }
     }
 
@@ -302,6 +314,9 @@ final class ProfileRoll {
         JsonNode roll = event.path("roll");
         ObjectNode check = (ObjectNode) event.path("check");
         check.putNull("hopeDie").putNull("fearDie").setAll(StructuredRoll.check(roll));
+        ObjectNode byRole = check.putObject("facesByRole");
+        if (roll.isObject()) for (JsonNode die : StructuredRoll.dice(roll, null, true))
+            byRole.withArray(die.path("role").asText()).add(die.path("face").asInt());
         if ("death".equals(check.path("kind").asText())) {
             ArrayNode hopeDice = StructuredRoll.dice(roll, "hope", true);
             ArrayNode fearDice = StructuredRoll.dice(roll, "fear", true);

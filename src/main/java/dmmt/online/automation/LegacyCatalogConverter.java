@@ -53,7 +53,7 @@ public final class LegacyCatalogConverter {
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
             "chatBenefits", "allowSourceOwner", "loadoutDomain", "primaryWeapon", "anyWeapon", "advantage", "giveFear", "check", "choices",
             "magicOnly", "weaponRanges", "addDice", "damageDice", "damageDiceBelow", "rerollDualityDie", "spendHopeAmount", "disadvantage", "removeFear", "weaponDamage", "rollSection", "containsDie", "resourceRoll", "selectAmount",
-            "target", "excludeSourceActor", "splendorAction", "hostRollAction", "otherPlayerOnly", "spentTokenDamage", "bloodAutomation", "swapDuality", "repeatable", "weapon", "tokenGain");
+            "target", "excludeSourceActor", "splendorAction", "hostRollAction", "otherPlayerOnly", "spentTokenDamage", "bloodAutomation", "swapDuality", "repeatable", "weapon", "tokenGain", "matchResource", "magicAction", "damageSource", "spellDomain", "vaultSource", "rerollResourceDice", "rerollAnyDie", "dualityDieBonus");
     private static final Set<String> MITIGATION_FIELDS = Set.of("id", "label", "description", "when", "cost", "negate", "halve", "reduce",
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
@@ -2578,7 +2578,36 @@ public final class LegacyCatalogConverter {
                 // No condition is needed for an unconditional trigger.
             } else if ("hopeDie".equals(condition) && trigger.path("die").isInt())
                 when.addObject().putArray("eq").add(read("event.check.hopeDie")).add(trigger.path("die").asInt());
-            else p.add(path + "/when", "Unsupported trigger condition: " + condition);
+            else if ("dieMatches".equals(condition)) {
+                String resource = trigger.path("matchResource").asText("");
+                if (!pools.has(resource)) p.add(path + "/matchResource", "Unknown resource: " + resource);
+                else {
+                    // The chosen number is only active while set (above zero); either Duality Die may match it.
+                    when.addObject().putArray("gt").add(read("actor.pools." + resource + ".value")).add(0);
+                    ArrayNode either = when.addObject().putArray("or");
+                    either.addObject().putArray("eq").add(read("event.check.hopeDie")).add(read("actor.pools." + resource + ".value"));
+                    either.addObject().putArray("eq").add(read("event.check.fearDie")).add(read("actor.pools." + resource + ".value"));
+                }
+            } else p.add(path + "/when", "Unsupported trigger condition: " + condition);
+        }
+        if (trigger.has("magicAction")) {
+            if (!trigger.path("magicAction").isBoolean()) p.add(path + "/magicAction", "Expected a boolean.");
+            else if (trigger.path("magicAction").asBoolean()) {
+                // A spellcast, or an attack made with a weapon that deals magic damage.
+                when.add(actionRollCondition());
+                when.addObject().putArray("or").add(flag("event.check.spell", true)).add(flag("event.check.damageType", "magic"));
+            }
+        }
+        if (trigger.has("damageSource")) {
+            if (!trigger.path("damageSource").isTextual() || trigger.path("damageSource").asText().isBlank()) p.add(path + "/damageSource", "Expected a source name.");
+            else {
+                when.addObject().putArray("eq").add(read("event.check.kind")).add("damage");
+                when.addObject().putArray("eq").add(read("event.check.sourceName")).add(trigger.path("damageSource").asText());
+            }
+        }
+        if (trigger.has("spellDomain")) {
+            if (!trigger.path("spellDomain").isTextual() || trigger.path("spellDomain").asText().isBlank()) p.add(path + "/spellDomain", "Expected a domain name.");
+            else when.addObject().putArray("eq").add(read("event.check.sourceDomain")).add(trigger.path("spellDomain").asText());
         }
         if (trigger.path("successIfKnown").asBoolean(false)) {
             ObjectNode notFailure = RuleJson.JSON.createObjectNode();
@@ -2619,6 +2648,16 @@ public final class LegacyCatalogConverter {
                 p.add(path + "/containsDie", "Expected a positive die face.");
             else when.addObject().set("includes", RuleJson.JSON.createArrayNode().add(rolledFaces()).add(trigger.path("containsDie").asInt()));
         }
+        if (trigger.has("rerollResourceDice")) {
+            String resource = trigger.path("rerollResourceDice").asText("");
+            if (resource.matches("[a-z][a-z0-9-]*")) {
+                ArrayNode kinds = RuleJson.JSON.createArrayNode();
+                kinds.addObject().putArray("eq").add(read("event.check.kind")).add("attack");
+                kinds.addObject().putArray("eq").add(read("event.check.kind")).add("damage");
+                when.addObject().set("or", kinds);
+                when.addObject().putArray("includes").add(read("event.check.facesByRole." + resource)).add(1);
+            }
+        }
         commonConditions(trigger, path, p, when);
         sentRollConditions(trigger, when);
         applyWhen(rule, when);
@@ -2652,6 +2691,24 @@ public final class LegacyCatalogConverter {
         if (trigger.has("tokenGain") && rule.has("inputs"))
             steps.addObject().put("op", "pool.gain").put("pool", trigger.path("tokenGain").path("resource").asText()).put("as", "gained")
                     .set("amount", read("input.amount"));
+        if (trigger.path("rerollAnyDie").asBoolean(false)) {
+            if (trigger.has("reroll") || trigger.has("rerollDualityDie") || !"reroll".equals(trigger.path("damageDice").asText("reroll")))
+                p.add(path + "/rerollAnyDie", "Expected no other reroll.");
+            else if (!"any".equals(trigger.path("on").asText())) p.add(path + "/rerollAnyDie", "Expected a trigger on any roll.");
+            else {
+                ObjectNode any = RuleJson.JSON.createObjectNode();
+                any.putArray("gte").add(read("die.sides")).add(2);
+                rule.withArray("inputs").addObject().put("id", "any").put("kind", "die.select").put("label", "Die to reroll")
+                        .put("choiceLabel", "d{die.sides}: {die.face}").put("count", 1).put("min", 1).set("where", any);
+                ((ObjectNode) rule.withArray("inputs").get(rule.withArray("inputs").size() - 1)).set("from", read("event.roll"));
+                ObjectNode step = steps.addObject().put("op", "roll.reroll");
+                step.set("from", from);
+                step.set("dice", read("input.any"));
+                step.put("choose", "new").put("as", "rerolledAny");
+                from = read("result.rerolledAny");
+                edited = true;
+            }
+        }
         if (trigger.has("rerollDualityDie")) {
             String role = trigger.path("rerollDualityDie").asText();
             if (trigger.has("reroll") || !Set.of("hope", "fear").contains(role)) p.add(path + "/rerollDualityDie", "Expected hope or fear and no other reroll.");
@@ -2679,6 +2736,27 @@ public final class LegacyCatalogConverter {
             step.put("choose", "new").put("as", "rerolled");
             from = read("result.rerolled");
             edited = true;
+        }
+        if (trigger.has("rerollResourceDice")) {
+            String resource = trigger.path("rerollResourceDice").asText("");
+            if (!resource.matches("[a-z][a-z0-9-]*") || trigger.has("reroll") || trigger.has("rerollAnyDie"))
+                p.add(path + "/rerollResourceDice", "Expected a resource ID and no other reroll.");
+            else {
+                ObjectNode where = RuleJson.JSON.createObjectNode();
+                ArrayNode both = where.putArray("and");
+                both.addObject().putArray("eq").add(read("die.role")).add(resource);
+                both.addObject().putArray("eq").add(read("die.face")).add(1);
+                ObjectNode select = steps.addObject().put("op", "roll.selectDice");
+                select.set("from", from);
+                select.set("where", where);
+                select.put("as", "resourceOnes");
+                ObjectNode step = steps.addObject().put("op", "roll.reroll");
+                step.set("from", from);
+                step.set("dice", read("result.resourceOnes"));
+                step.put("choose", "new").put("as", "rerolledOnes");
+                from = read("result.rerolledOnes");
+                edited = true;
+            }
         }
         if (trigger.path("swapDuality").asBoolean(false)) {
             ObjectNode step = steps.addObject().put("op", "roll.swapRoles");
@@ -2724,7 +2802,23 @@ public final class LegacyCatalogConverter {
                 edited = true;
             }
         }
-        if (trigger.has("damageDice")) {
+        if (trigger.has("dualityDieBonus")) {
+            JsonNode bonus = trigger.get("dualityDieBonus");
+            String die = bonus.path("die").asText();
+            if (!"action".equals(trigger.path("on").asText()) || !Set.of("hope", "fear").contains(die)
+                    || !bonus.path("value").isInt() || bonus.path("value").asInt() < 1 || bonus.path("value").asInt() > 100)
+                p.add(path + "/dualityDieBonus", "Expected a hope or fear die and a bonus of 1-100 on an action roll.");
+            else {
+                ObjectNode step = steps.addObject().put("op", "roll.contribute");
+                step.set("from", from);
+                step.set("contribution", contribution(trigger.path("id").asText() + "-" + die + "-bonus", "flat", die,
+                        escape(trigger.path("label").asText(""))).set("value", bonus.get("value")));
+                step.put("as", "dieBonus");
+                from = read("result.dieBonus");
+                edited = true;
+            }
+        }
+        if (trigger.has("damageDice") && !trigger.path("rerollAnyDie").asBoolean(false)) {
             String mode = trigger.path("damageDice").asText();
             if (!"damage".equals(trigger.path("on").asText())) p.add(path + "/damageDice", "Damage dice edits need damage rolls.");
             else if (!Set.of("reroll", "double").contains(mode)) p.add(path + "/damageDice", "Unsupported damage dice edit: " + mode);
@@ -2785,7 +2879,7 @@ public final class LegacyCatalogConverter {
         if (trigger.has("sendRoll")) sentRoll(trigger.get("sendRoll"), path + "/sendRoll", trigger, p, steps);
         if (trigger.has("resourceRoll")) resourceRoll(trigger.get("resourceRoll"), path + "/resourceRoll", trigger, p, pools, rule, steps);
         if (trigger.has("check")) check(trigger, path, p, rule, steps, effects, pools, operationTarget);
-        else noChoices(trigger, path, p);
+        else if (trigger.has("choices")) rollChoices(trigger, path, p, rule, steps, effects, pools, operationTarget, from);
         JsonNode extra = trigger.has("check") ? RuleJson.JSON.missingNode() : trigger.path("steps");
         amountStore(trigger.path("selectAmount"), path + "/selectAmount", p, pools, steps, effects);
         for (int i = 0; i < extra.size(); i++) step(extra.get(i), path + "/steps/" + i, p, steps, effects, pools, operationTarget);
@@ -2799,6 +2893,14 @@ public final class LegacyCatalogConverter {
             JsonNode amount = amount(trigger.get("removeFear"));
             if (amount == null || !amount.isInt()) p.add(path + "/removeFear", "Expected a positive whole amount.");
             else steps.addObject().put("op", "table.spend").put("resource", "fear").put("label", "Remove GM Fear").put("as", "removedFear").set("amount", amount);
+        }
+        if (trigger.has("vaultSource")) {
+            if (!trigger.path("vaultSource").isBoolean()) p.add(path + "/vaultSource", "Expected a boolean.");
+            else if (trigger.path("vaultSource").asBoolean()) {
+                steps.addObject().put("op", "collection.remove").put("target", "actor").put("collection", "loadout").put("as", "vaulted")
+                        .set("item", read("source.instanceId"));
+                steps.addObject().put("op", "collection.add").put("target", "actor").put("collection", "vault").set("item", read("result.vaulted"));
+            }
         }
         endEffect(trigger, steps);
         if (!steps.isEmpty()) rule.set("do", steps);
@@ -4299,6 +4401,53 @@ public final class LegacyCatalogConverter {
         if (legacy.has("choices")) p.add(path + "/choices", "Choices need a check.");
     }
 
+    /**
+     * A trigger without a check that offers one benefit per use. Each choice's steps run only when it is picked; a choice
+     * with {@code addDice} adds that bonus to the roll (at most one choice may, so the roll chain stays unconditional).
+     */
+    private static void rollChoices(JsonNode trigger, String path, Problems p, ObjectNode rule, ArrayNode steps, ObjectNode effects,
+                                    Pools pools, String target, JsonNode from) {
+        JsonNode choices = trigger.path("choices");
+        if (!choices.isArray() || choices.isEmpty()) { p.add(path + "/choices", "Expected choices."); return; }
+        if (rule.has("inputs")) { p.add(path + "/choices", "A trigger cannot take both choices and another input."); return; }
+        ArrayNode options = rule.withArray("inputs").addObject().put("id", "choice").put("kind", "choice")
+                .put("label", "Choose the benefit").putArray("options");
+        boolean bonus = false;
+        for (int c = 0; c < choices.size(); c++) {
+            JsonNode choice = choices.get(c);
+            String at = path + "/choices/" + c;
+            p.onlyFields(choice, at, Set.of("id", "label", "steps", "addDice"));
+            String id = choice.path("id").asText();
+            if (!ID.matcher(id).matches()) { p.add(at + "/id", "Invalid choice ID: " + id); continue; }
+            options.addObject().put("id", id).put("label", escape(choice.path("label").asText(id)));
+            ObjectNode picked = RuleJson.JSON.createObjectNode();
+            picked.putArray("eq").add(read("input.choice")).add(id);
+            if (choice.has("addDice")) {
+                String text = choice.path("addDice").asText("");
+                String role = "damage".equals(trigger.path("on").asText()) ? "damage" : "modifier";
+                if (bonus) { p.add(at + "/addDice", "Only one choice may add dice."); continue; }
+                bonus = true;
+                String label = escape(choice.path("label").asText(""));
+                if (!text.matches("[1-9][0-9]?")) p.add(at + "/addDice", "Expected a flat bonus of 1 to 99.");
+                else {
+                    // Steps that name a result cannot be conditional, so the bonus is zero unless this choice is picked.
+                    ObjectNode value = RuleJson.JSON.createObjectNode();
+                    value.putArray("if").add(picked.deepCopy()).add(Integer.parseInt(text)).add(0);
+                    ObjectNode step = steps.addObject().put("op", "roll.contribute");
+                    step.set("from", from);
+                    step.set("contribution", contribution(trigger.path("id").asText() + "-flat", "flat", role, label).set("value", value));
+                    step.put("as", "chosenBonus");
+                    steps.addObject().put("op", "roll.publish").set("roll", read("result.chosenBonus"));
+                }
+            }
+            ArrayNode chosen = RuleJson.JSON.createArrayNode();
+            for (int i = 0; i < choice.path("steps").size(); i++) step(choice.path("steps").get(i), at + "/steps/" + i, p, chosen, effects, pools, target);
+            chosen.forEach(converted -> guard((ObjectNode) converted, picked));
+            steps.addAll(chosen);
+        }
+    }
+
+
     private static void guard(ObjectNode step, JsonNode condition) {
         if (!step.has("if")) { step.set("if", condition.deepCopy()); return; }
         ObjectNode both = RuleJson.JSON.createObjectNode();
@@ -4610,7 +4759,13 @@ public final class LegacyCatalogConverter {
      * flat contribution, matching the Daggerheart critical damage rule.
      */
     private static void actionDamage(JsonNode legacy, String path, JsonNode action, Problems p, ArrayNode steps, JsonNode critical, String as) {
-        p.onlyFields(legacy, path, Set.of("dice", "type", "fixed", "count", COUNT_READ));
+        p.onlyFields(legacy, path, Set.of("dice", "type", "fixed", "count", "extraDice", COUNT_READ));
+        int extraDice = legacy.path("extraDice").asInt(0);
+        if (legacy.has("extraDice") && (!legacy.path("extraDice").isInt() || extraDice < 1 || extraDice > 32
+                || legacy.path("fixed").asBoolean() || legacy.has("count") || legacy.has(COUNT_READ) || POOL_DICE.matcher(legacy.path("dice").asText("")).matches())) {
+            p.add(path + "/extraDice", "Expected 1-32 extra dice added to a Proficiency-sized damage roll.");
+            return;
+        }
         String countRead = legacy.path(COUNT_READ).asText(null);
         String diceText = legacy.path("dice").asText("");
         String poolCount = null;
@@ -4671,6 +4826,8 @@ public final class LegacyCatalogConverter {
         else if (spellcastCount) dice.set("count", spellcastDiceCount(fixedCount));
         else if (poolCount != null) dice.set("count", read("actor.pools." + poolCount + ".value"));
         else if (fixed) dice.put("count", fixedCount);
+        else if (extraDice > 0) dice.set("count", RuleJson.JSON.createObjectNode().set("add",
+                RuleJson.JSON.createArrayNode().add(read("actor.proficiency.value")).add(extraDice)));
         else dice.set("count", read("actor.proficiency.value"));
         dice.put("sides", sides);
         if (matcher.group(3) != null) {

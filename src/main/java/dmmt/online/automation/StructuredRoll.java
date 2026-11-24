@@ -111,11 +111,17 @@ public final class StructuredRoll {
         ObjectNode check = RuleJson.JSON.createObjectNode();
         double total = resolved.path("total").asDouble();
         check.set("total", resolved.path("total").deepCopy());
-        int hope = 0, fear = 0;
+        int hope = 0, fear = 0, hopeBonus = 0, fearBonus = 0;
         Set<String> excluded = ids(resolved.path("excludedDice"), "/roll/excludedDice", false);
         for (JsonNode part : resolved.path("contributions")) {
             String role = part.path("role").asText();
             if (!"hope".equals(role) && !"fear".equals(role)) continue;
+            if ("flat".equals(part.path("kind").asText())) {
+                // A flat contribution in a Duality role adjusts that die's value without changing its face.
+                if ("hope".equals(role)) hopeBonus += part.path("value").intValue();
+                else fearBonus += part.path("value").intValue();
+                continue;
+            }
             for (JsonNode die : part.path("dice")) {
                 if (!die.path("kept").asBoolean() || excluded.contains(die.path("id").asText())) continue;
                 if ("hope".equals(role)) hope += die.path("face").intValue();
@@ -123,6 +129,10 @@ public final class StructuredRoll {
             }
         }
         boolean duality = hope > 0 && fear > 0;
+        if (duality) {
+            hope += hopeBonus;
+            fear += fearBonus;
+        }
         boolean critical = duality && hope == fear;
         if (duality) {
             check.put("hopeDie", hope).put("fearDie", fear);

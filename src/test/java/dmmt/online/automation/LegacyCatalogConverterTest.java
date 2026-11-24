@@ -732,6 +732,64 @@ class LegacyCatalogConverterTest {
         assertEquals(1, invalid.diagnostics().size(), invalid.diagnostics().toString());
     }
     @Test
+    void dieBonusResourceRerollAnyDieAndEventFactTriggersConvert() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"dice","name":"Dice","automation":{"resources":[{"id":"lucky","label":"Lucky","max":3}],"rollTriggers":[
+                  {"id":"plus","label":"Plus","on":"action","dualityDieBonus":{"die":"hope","value":3}},
+                  {"id":"ones","label":"Ones","on":"any","rerollResourceDice":"lucky"},
+                  {"id":"any","label":"Any","on":"any","rerollAnyDie":true,"damageDice":"reroll"},
+                  {"id":"arcane","label":"Arcane","on":"any","magicAction":true},
+                  {"id":"named","label":"Named","on":"damage","damageSource":"Ember"},
+                  {"id":"domain","label":"Domain","on":"any","spellDomain":"Arcana"}]}}"""));
+        block(result, 0);
+        RuleCompiler.Program program = program(result, 0);
+        String dice = """
+                {"id":"r","contributions":[
+                  {"id":"h","kind":"dice","role":"hope","sourceId":"core","label":"Hope","dice":[{"id":"h1","sides":12,"face":5,"kept":true,"origin":"rolled"}]},
+                  {"id":"f","kind":"dice","role":"fear","sourceId":"core","label":"Fear","dice":[{"id":"f1","sides":12,"face":8,"kept":true,"origin":"rolled"}]},
+                  {"id":"l","kind":"dice","role":"lucky","sourceId":"core","label":"Lucky","dice":[{"id":"l1","sides":6,"face":1,"kept":true,"origin":"rolled"}]}]}""";
+        String event = "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"action\",\"trait\":null,\"spell\":false,\"damageType\":null,\"sourceName\":null,\"sourceDomain\":\"Arcana\","
+                + "\"facesByRole\":{\"lucky\":[1]}},\"roll\":" + dice + "}";
+        ObjectNode context = context(program, "{\"effects\":[]}", event);
+        List<String> offered = available(program, context, "roll");
+        assertTrue(offered.containsAll(List.of("plus", "any", "domain")), offered.toString());
+        assertFalse(offered.contains("arcane") || offered.contains("named") || offered.contains("ones"), offered.toString());
+        ObjectNode attack = context(program, "{\"effects\":[]}", event.replace("\"kind\":\"action\"", "\"kind\":\"attack\""));
+        assertTrue(available(program, attack, "roll").contains("ones"));
+        JsonNode bonus = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context)),
+                List.of(new RuleRuntime.Intent("plus", "use", "fixture", 0, RuleJson.JSON.createObjectNode())), StructuredRollTest.noRandom())
+                .contexts().getFirst();
+        assertEquals(5 + 8 + 1 + 3, bonus.at("/event/roll/total").asInt(), bonus.toString());
+        assertEquals(8, StructuredRoll.check(bonus.at("/event/roll")).path("hopeDie").asInt());
+        assertTrue(StructuredRoll.check(bonus.at("/event/roll")).path("critical").asBoolean());
+        JsonNode ones = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, attack)),
+                List.of(new RuleRuntime.Intent("ones", "use", "fixture", 0, RuleJson.JSON.createObjectNode())), StructuredRollTest.faces(4))
+                .contexts().getFirst();
+        assertEquals(5 + 8 + 4, ones.at("/event/roll/total").asInt(), ones.toString());
+        JsonNode any = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, context)),
+                List.of(new RuleRuntime.Intent("any", "use", "fixture", 0, (ObjectNode) RuleJson.parse("{\"any\":[\"f1\"]}"))), StructuredRollTest.faces(2))
+                .contexts().getFirst();
+        assertEquals(5 + 2 + 1, any.at("/event/roll/total").asInt(), any.toString());
+
+        var other = LegacyCatalogConverter.convert(catalog("""
+                {"id":"o","name":"O","automation":{"resources":[{"id":"gems","label":"Gems","max":2}],"rollTriggers":[
+                  {"id":"gem","label":"Gem","on":"any","rerollResourceDice":"gems"},
+                  {"id":"fear","label":"Fear","on":"action","dualityDieBonus":{"die":"fear","value":1}},
+                  {"id":"bad","label":"Bad","on":"damage","dualityDieBonus":{"die":"fear","value":1}}]}}"""));
+        assertEquals(1, other.diagnostics().size(), other.diagnostics().toString());
+    }
+
+    @Test
+    void matchingDieVaultingAndChoiceOnlyTriggersConvert() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"m","name":"M","automation":{"resources":[{"id":"pattern","label":"Pattern","max":3}],"rollTriggers":[
+                  {"id":"match","label":"Match","on":"action","when":"dieMatches","matchResource":"pattern","steps":[{"op":"gain","resource":"hope","amount":1}]},
+                  {"id":"pick","label":"Pick","on":"any","choices":[{"id":"bonus","label":"Bonus","addDice":"2"},{"id":"hope","label":"Hope","steps":[{"op":"gain","resource":"hope","amount":1}]}]},
+                  {"id":"tap","label":"Tap","on":"damage","damage":{"dice":"d12+2","extraDice":2,"type":"magic"}}]}}"""));
+        assertEquals(result.blocks(), result.converted(), result.diagnostics().toString());
+    }
+
+    @Test
     void triggerDiceAdditionsAndDamageDiceEditsConvert() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"edits","name":"Edits","automation":{"rollTriggers":[
