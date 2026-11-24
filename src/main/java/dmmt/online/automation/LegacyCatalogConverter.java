@@ -3438,9 +3438,12 @@ public final class LegacyCatalogConverter {
         if (action.has("timing")) {
             for (int i = 0; i < steps.size(); i++) {
                 JsonNode sampled = steps.get(i);
-                if (!"roll.resolve".equals(sampled.path("op").asText()) || !sampled.has("as")) continue;
+                String op = sampled.path("op").asText(), slot = sampled.path("as").asText("");
+                if (slot.isEmpty() || !("roll.resolve".equals(op) || "dice.table".equals(op)
+                        || "dice.roll".equals(op) && action.has("check") && "check".equals(slot))) continue;
                 ObjectNode offer = RuleJson.JSON.createObjectNode().put("op", "downtime.offerRoll").put("label", escape(label));
-                offer.set("roll", read("result." + sampled.path("as").asText()));
+                offer.set("roll", read("result." + slot + ("dice.table".equals(op) ? ".faces" : "")));
+                if ("dice.roll".equals(op)) offer.put("group", true);
                 offer.putObject("if").putArray("eq").add(read("event.move.rest")).add("short");
                 steps.insert(++i, offer);
             }

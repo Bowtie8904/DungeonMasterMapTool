@@ -3011,6 +3011,28 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void downtimeChecksAndOutcomeTablesOfferTheirSampledDie() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"explore","name":"Explore","automation":{"actions":[
+                 {"id":"check","label":"Search","timing":"downtime",
+                  "check":{"dice":"1d4","success":4,"gain":"hope"}},
+                 {"id":"table","label":"Discover","timing":"rest","table":{"dice":"1d4","outcomes":[
+                   {"min":1,"max":3,"text":"Nothing"},
+                   {"min":4,"text":"Treasure","steps":[{"op":"gain","resource":"hope","amount":1}]}]}}]}}"""));
+        assertEquals(1, result.converted(), result.diagnostics().toString());
+        RuleCompiler.Program program = program(result, 0);
+        String actor = "{\"id\":\"actor\",\"name\":\"Ash\",\"hope\":{\"value\":0,\"max\":6}}";
+        for (String id : List.of("check", "table")) {
+            var applied = run(program, context(program, actor, move(id, "short", false, false)),
+                    StructuredRollTest.faces(2), id);
+            assertEquals(2, applied.outbox().getFirst().at("/roll/total").asInt());
+            assertEquals(0, applied.contexts().getFirst().at("/actor/hope/value").asInt());
+            assertTrue(run(program, context(program, actor, move(id, "long", false, false)),
+                    StructuredRollTest.faces(2), id).outbox().isEmpty());
+        }
+    }
+
+    @Test
     void reportDicePrecedeStepDiceAndLateFailuresDoNotCommit() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"ordered","name":"Ordered","automation":{"uses":{"max":1,"per":"rest"},"actions":[
