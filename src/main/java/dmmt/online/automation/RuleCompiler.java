@@ -316,6 +316,10 @@ public final class RuleCompiler {
         /** Named whole-number fields kept on the sheet entry that hosts this source ({@code name -> {label,min,max}}), or {@code null}. */
         public ObjectNode sourceFields() { return sourceFields == null ? null : sourceFields.deepCopy(); }
         private Program withSourceFields(ObjectNode declaration) { sourceFields = declaration == null ? null : declaration.deepCopy(); return this; }
+        private boolean partyGrant;
+        /** Whether every other active character is also offered this source (see {@code partyGrants} on the sheet). */
+        public boolean partyGrant() { return partyGrant; }
+        private Program withPartyGrant(boolean value) { partyGrant = value; return this; }
         private ObjectNode grants;
         /** Features granted alongside this source ({@code features}, {@code display}), or {@code null}. Sheet metadata only. */
         public ObjectNode grants() { return grants == null ? null : grants.deepCopy(); }
@@ -378,8 +382,10 @@ public final class RuleCompiler {
     static Program compileWithRecipes(String sourceId, JsonNode automation, Map<String, ObjectNode> recipes) {
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(sourceId), "/sourceId");
         RuleJson.checkTree(automation, "/automation", 0, new int[]{0});
-        RuleJson.fields(automation, "/automation", "state", "limits", "pools", "effects", "modifiers", "profiles", "rules",         "attachment", "grants", "entitlements", "limitOverrides", "sourceFields");
+        RuleJson.fields(automation, "/automation", "state", "limits", "pools", "effects", "modifiers", "profiles", "rules",         "attachment", "grants", "entitlements", "limitOverrides", "sourceFields", "partyGrant");
         ObjectNode sourceFields = automation.has("sourceFields") ? sourceFields(automation.get("sourceFields")) : null;
+        if (automation.has("partyGrant") && !automation.get("partyGrant").isBoolean()) throw RuleJson.error("/automation/partyGrant", "Expected a boolean.");
+        boolean partyGrant = automation.path("partyGrant").asBoolean(false);
         ObjectNode grants = automation.has("grants") ? grants(automation.get("grants")) : null;
                 ObjectNode entitlements = automation.has("entitlements") ? entitlements(automation.get("entitlements")) : null;
         ArrayNode limitOverrides = automation.has("limitOverrides") ? limitOverrides(automation.get("limitOverrides")) : RuleJson.JSON.createArrayNode();
@@ -436,7 +442,7 @@ public final class RuleCompiler {
         boolean derived = false;
         for (JsonNode effect : effects) derived |= effect.has("while");
         if (definitions.isMissingNode() && (!modifiers.isEmpty() || !pools.isEmpty() || !profiles.isEmpty() || attachment != null || grants != null || entitlements != null || derived || !limitOverrides.isEmpty()))
-            return new Program(sourceId, decl, modifiers, Map.of()).withProfiles(profiles).withAttachment(attachment).withGrants(grants).            withEntitlements(entitlements).withLimitOverrides(limitOverrides).withSourceFields(sourceFields);
+            return new Program(sourceId, decl, modifiers, Map.of()).withProfiles(profiles).withAttachment(attachment).withGrants(grants).            withEntitlements(entitlements).withLimitOverrides(limitOverrides).withSourceFields(sourceFields).withPartyGrant(partyGrant);
         if (!definitions.isArray() || definitions.isEmpty() || definitions.size() > 256)
             throw RuleJson.error("/automation/rules", "Expected 1-256 rules (or only passive modifiers, pools, profiles, derived effects, grants and an attachment).");
         Map<String, ObjectNode> expanded = new LinkedHashMap<>();
@@ -478,7 +484,7 @@ public final class RuleCompiler {
                         && (sourceFields == null || !sourceFields.has(operation.path("field").asText())))
                     throw RuleJson.error("/automation/rules/" + rule.path("id").asText() + "/do",
                             "source.set must name a field declared in sourceFields: " + operation.path("field").asText());
-        return new Program(sourceId, decl, modifiers, expanded).withProfiles(profiles).withAttachment(attachment).withGrants(grants).withEntitlements(entitlements).withLimitOverrides(limitOverrides).withSourceFields(sourceFields);
+        return new Program(sourceId, decl, modifiers, expanded).withProfiles(profiles).withAttachment(attachment).withGrants(grants).withEntitlements(entitlements).withLimitOverrides(limitOverrides).withSourceFields(sourceFields).withPartyGrant(partyGrant);
     }
 
     private static final Set<String> RESERVED_SOURCE_FIELDS = Set.of("id", "instanceId", "name", "quantity", "qty", "automation",
@@ -1621,7 +1627,7 @@ public final class RuleCompiler {
                 case "result" -> results.contains(parts[1]);
                 case "die" -> die && Set.of("id", "face", "sides", "kept", "origin", "poolId", "role",
                         "previous", "editedBy", "contributionId", "sourceId", "matches", "position").contains(parts[1]);
-                case "source" -> Set.of("id", "instanceId", "name", "quantity").contains(parts[1])
+                case "source" -> Set.of("id", "instanceId", "name", "quantity", "retired", "granted").contains(parts[1])
                         || "attachedTo".equals(parts[1]) && decl.attachable() && parts.length == 3 && ATTACHED_TO_FACTS.contains(parts[2]);
                 case "gear" -> false;
                 case "pool" -> decl.pools().has(parts[1]);

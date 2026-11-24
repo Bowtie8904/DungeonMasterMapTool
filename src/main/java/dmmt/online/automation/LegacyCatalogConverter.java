@@ -261,8 +261,11 @@ public final class LegacyCatalogConverter {
         if (!legacy.isObject()) { p.add(path, "Automation must be an object."); return out; }
         if (legacy.has("attach")) return attachment(legacy, path, sourceId, problems, shared, p);
         if (isDeathrun(legacy)) return deathrun(legacy, path, p);
-        if (legacy.has("partyDowntime"))
-            p.add(path + "/partyDowntime", "Manual disposition: a campaign-wide downtime move granted to every character has no format-2 equivalent; the rest host offers only the resting actor's own sources.");
+        boolean partyGrant = false;
+        if (legacy.has("partyDowntime")) {
+            if (!legacy.path("partyDowntime").isBoolean()) p.add(path + "/partyDowntime", "Expected a boolean.");
+            else partyGrant = legacy.path("partyDowntime").asBoolean();
+        }
         if (legacy.has("ignoreWeaponBurden"))
             p.add(path + "/ignoreWeaponBurden", "Manual disposition: the two-handed Burden check is creation and equipment-UI logic, and the sheet projection exposes no hands or Burden facts for a rule to change.");
         if (legacy.has("unarmedWeapon"))
@@ -596,6 +599,10 @@ public final class LegacyCatalogConverter {
         }
         if (legacy.has("manual")) manualNotes(legacy.get("manual"), path + "/manual", p, rules);
         tokenEnds(effects, path, p, pools);
+        if (partyGrant) {
+            out.put("partyGrant", true);
+            partyGrantRules(rules);
+        }
         if (!pools.local().isEmpty()) out.set("pools", pools.local());
         if (!effects.isEmpty()) out.set("effects", effects);
         if (!rules.isEmpty()) out.set("rules", rules);
@@ -1660,6 +1667,20 @@ public final class LegacyCatalogConverter {
     private static void hostOwned(JsonNode legacy, String path, Problems p) {
         if (legacy.has("hostOwned") && !legacy.path("hostOwned").isBoolean())
             p.add(path + "/hostOwned", "Expected a boolean.");
+    }
+
+    /** A retired grant (its grantor left while an effect it started is active) no longer offers its downtime moves. */
+    private static void partyGrantRules(ArrayNode rules) {
+        for (JsonNode rule : rules) {
+            if (!rule.path("bindings").path(0).has("restMove")) continue;
+            ObjectNode live = RuleJson.JSON.createObjectNode().put("exists", "source.retired");
+            ObjectNode gate = RuleJson.JSON.createObjectNode();
+            gate.set("not", live);
+            ArrayNode when = RuleJson.JSON.createArrayNode();
+            if (rule.has("when")) when.add(rule.get("when"));
+            when.add(gate);
+            applyWhen((ObjectNode) rule, when);
+        }
     }
 
     private static void applyWhen(ObjectNode rule, ArrayNode when) {
@@ -5592,9 +5613,18 @@ public final class LegacyCatalogConverter {
             if (id != null) out.addObject().put("op", "effect.start").put("effect", id).put("target", operationTarget);
             return;
         }
-        if (step.has("fallbackEffect"))
-            p.add(path + "/fallbackEffect", "Manual disposition: a fallback effect for a pool the holder lacks belongs to a party-granted move, which format 2 does not offer.");
         p.onlyFields(step, path, Set.of("op", "resource", "amount", "fallbackEffect", "minimumAmount"));
+        ObjectNode lacksPool = null; // reads source.granted: a party-granted source stands in for a pool the holder lacks
+        if (step.has("fallbackEffect")) {
+            String pool = step.path("resource").asText();
+            if (!"gain".equals(op) || !pools.has(pool) || !"actor".equals(operationTarget)) {
+                p.add(path + "/fallbackEffect", "A fallback effect stands in for a gain of a pool the acting character lacks.");
+                return;
+            }
+            lacksPool = RuleJson.JSON.createObjectNode().put("exists", "source.granted");
+            String fallback = declareEffect(step.get("fallbackEffect"), path + "/fallbackEffect", p, effects);
+            if (fallback != null) out.addObject().put("op", "effect.start").put("effect", fallback).put("target", operationTarget).set("if", lacksPool);
+        }
         String resource = step.path("resource").asText();
         JsonNode amount = step.path("amount");
         boolean clearAllTrack = "all".equals(amount.asText()) && "clear".equals(op) && TRACKS.containsKey(resource);
@@ -5667,6 +5697,7 @@ public final class LegacyCatalogConverter {
                     ObjectNode converted = out.addObject().put("op", "pool.gain").put("pool", resource);
                     if ("recipient".equals(operationTarget)) converted.put("owner", "recipient");
                     converted.set("amount", value);
+                    if (lacksPool != null) converted.putObject("if").set("not", lacksPool.deepCopy());
                 }
                 else p.add(path + "/resource", "Gaining needs a declared pool: " + resource);
             }

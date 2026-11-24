@@ -5326,6 +5326,13 @@ public final class OnlineSessionServer {
         disabledSources.keySet().removeAll(warriors.keySet());
         WarriorAutomation.synchronizeDowntime(warriors, disabledSources);
         InvisibilityEffects.synchronize(warriors);
+        try {
+            Map<String, ObjectNode> inactive = new java.util.LinkedHashMap<>();
+            disabledSources.forEach((id, sheet) -> { if (!warriors.containsKey(id)) inactive.put(id, sheet); });
+            for (String id : automationHost.synchronizePartyGrants(automationPack(), warriors, inactive)) changes.put(id, warriors.get(id));
+        } catch (IOException | dmmt.online.automation.AutomationHost.NotReady ignored) {
+            // Without a ready pack no format-2 grants exist to maintain.
+        }
         for (var entry : warriors.entrySet()) restoreDisabledSourceEffects(entry.getValue(), before.get(entry.getKey()));
         warriors.forEach((id, sheet) -> {
             if (!sheet.equals(before.get(id))) changes.put(id, sheet);

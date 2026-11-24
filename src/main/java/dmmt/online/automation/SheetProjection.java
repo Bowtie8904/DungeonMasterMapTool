@@ -498,6 +498,10 @@ public final class SheetProjection {
         return state;
     }
 
+    String sourceField() { return sourceField; }
+    String instanceField() { return instanceField; }
+    String nameField() { return nameField; }
+
     public List<SourceElement> sources(ObjectNode sheet) {
         List<SourceElement> result = new ArrayList<>();
         Set<String> instances = new HashSet<>();

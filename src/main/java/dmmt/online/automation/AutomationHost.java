@@ -31,6 +31,7 @@ import java.util.random.RandomGenerator;
  */
 public final class AutomationHost {
     public static final int JOURNAL_LIMIT = 32;
+    private static final String PARTY_GRANT_PREFIX = "grant:";
     private static final Set<String> RELATIONS = Set.of("self", "other", "dm");
     private static final String EFFECT_PROFILE = "effect.profile";
     // Runtime revisions pass through double-valued expressions; reserve room for intermediate stages.
@@ -1124,6 +1125,60 @@ public final class AutomationHost {
         return ends;
     }
 
+    /**
+     * Keeps the {@code partyGrants} sheet elements in step with the campaign: the last active sheet holding a source whose
+     * program declares {@code partyGrant} shares it with every other active sheet that does not hold it itself. Grants
+     * survive while the grantor is only disabled, and a grant that no longer applies is retired (kept without offering
+     * its moves) while an effect it started is still active, otherwise removed. Returns the ids of changed sheets.
+     */
+    public Set<String> synchronizePartyGrants(Pack pack, Map<String, ObjectNode> active, Map<String, ObjectNode> inactive) {
+        record Grantor(String actorId, SheetProjection.SourceElement source) { }
+        Map<String, Grantor> grantors = new java.util.LinkedHashMap<>();
+        boolean disabledGrantor = false;
+        for (var entry : active.entrySet())
+            for (var source : sources(pack, entry.getValue())) {
+                RuleCompiler.Program program = pack.programs().get(source.sourceId());
+                if (program != null && program.partyGrant() && !source.instanceId().startsWith(PARTY_GRANT_PREFIX))
+                    grantors.put(source.sourceId(), new Grantor(entry.getKey(), source));
+            }
+        for (ObjectNode sheet : inactive.values())
+            for (var source : sources(pack, sheet)) {
+                RuleCompiler.Program program = pack.programs().get(source.sourceId());
+                if (program != null && program.partyGrant() && !source.instanceId().startsWith(PARTY_GRANT_PREFIX)) disabledGrantor = true;
+            }
+        Set<String> changed = new java.util.LinkedHashSet<>();
+        for (var entry : active.entrySet()) {
+            ObjectNode sheet = entry.getValue();
+            Set<String> held = new java.util.HashSet<>();
+            for (var source : sources(pack, sheet))
+                if (!source.instanceId().startsWith(PARTY_GRANT_PREFIX)) held.add(source.sourceId());
+            Set<String> effectSources = new java.util.HashSet<>();
+            for (JsonNode effect : RuleEffects.instances(projection.actorFact(sheet, "effects"), "/actor/effects"))
+                effectSources.add(effect.path("sourceInstanceId").asText());
+            ArrayNode before = sheet.path("partyGrants") instanceof ArrayNode existing ? existing.deepCopy() : RuleJson.JSON.createArrayNode();
+            ArrayNode next = RuleJson.JSON.createArrayNode();
+            Set<String> wanted = new java.util.HashSet<>();
+            for (var grantor : grantors.entrySet()) {
+                if (held.contains(grantor.getKey())) continue;
+                String instance = PARTY_GRANT_PREFIX + grantor.getValue().actorId() + ":" + grantor.getValue().source().instanceId();
+                wanted.add(instance);
+                ObjectNode grant = next.addObject();
+                grant.put(projection.sourceField(), grantor.getKey()).put(projection.instanceField(), instance)
+                        .put(projection.nameField(), grantor.getValue().source().name());
+            }
+            for (JsonNode old : before) {
+                String instance = old.path(projection.instanceField()).asText();
+                if (wanted.contains(instance)) continue;
+                if (disabledGrantor && grantors.get(old.path(projection.sourceField()).asText()) == null && !old.path("retired").asBoolean()) next.add(old.deepCopy());
+                else if (effectSources.contains(instance)) next.add(((ObjectNode) old.deepCopy()).put("retired", true));
+            }
+            if (!next.equals(before)) {
+                if (next.isEmpty()) sheet.remove("partyGrants"); else sheet.set("partyGrants", next);
+                changed.add(entry.getKey());
+            }
+        }
+        return changed;
+    }
     /**
      * Ends this character's stored effects declared with {@code endsWithSourceElement} whose source sheet element is no
      * longer an active automation source on {@code sheet} (for example unequipped armor). Returns whether any ended.
@@ -4862,6 +4917,8 @@ public final class AutomationHost {
         ObjectNode source = RuleJson.JSON.createObjectNode();
         source.put("id", element.sourceId()).put("instanceId", element.instanceId()).put("name", element.name());
         if (element.quantityField() != null) source.put("quantity", element.element().path(element.quantityField()).asInt(1));
+        if (element.instanceId().startsWith(PARTY_GRANT_PREFIX)) source.put("granted", true);
+        if (element.element().path("retired").asBoolean(false)) source.put("retired", true);
         return source;
     }
 

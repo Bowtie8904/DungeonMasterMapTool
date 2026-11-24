@@ -204,7 +204,19 @@ The rest-reset primitive expires only effects present in its initial snapshot. S
 (Volatile Toxins) are released before downtime like early-expiry `locks` effects, and the release bumps the sheet
 revision. Shipped use of consumed or inactive sources supplying deferred downtime benefits, and of inter-reaction
 or multi-holder command settlement in rest paths: none. Martial Preparation (`partyDowntime`, step
-`fallbackEffect`) is a documented manual disposition: a campaign-wide downtime move has no format-2 equivalent.
+`fallbackEffect`) converts through `partyGrant` (below).
+
+**Party grants (`partyGrant`).** A program with `"partyGrant": true` shares its source with every other active sheet,
+as legacy `WarriorAutomation.synchronizeDowntime` did: the host (`AutomationHost.synchronizePartyGrants`, run beside the
+legacy sync on each save) picks the LAST active sheet holding the source natively as grantor and writes
+`partyGrants[]` elements `{automationSource, instanceId:"grant:<actor>:<instance>", name}` on every other active sheet
+that does not hold the source itself. The projection lists `partyGrants` as a source collection, so the grant runs the
+same rules. A grant is kept while its grantor is only disabled (legacy kept it), removed when no grantor remains, and
+marked `retired:true` instead when an effect with that `sourceInstanceId` still exists. Rules gain facts `source.granted`
+(instance id starts with `grant:`) and `source.retired`; the converter ANDs `not source.retired` into every rest-move
+rule so retired grants stop offering moves. Step `fallbackEffect` converts to `effect.start if source.granted` plus
+`pool.gain if not source.granted`: a grantee gets the effect, a native holder gains the pool (legacy `engine.ts:1614`
+chose by whether the pool resource existed; the program-declared pool makes granted state the faithful discriminator).
 
 The versioned `/api/automation/{version}/{actorId}/rest` endpoint offers and commits owner-only self rests.
 The host derives descriptors and facts, signs the offer, stages the complete rest, and atomically saves the sheet,

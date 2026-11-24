@@ -8,6 +8,7 @@
   "sources": [
     { "path": "features" },
     { "path": "heritage" },
+    { "path": "partyGrants" },
     { "path": "loadout", "children": [{ "path": "spells", "derive": true }] },
     { "path": "inventory", "quantity": "qty" },
     { "path": "activeWeapons", "equipment": "weapons" },
