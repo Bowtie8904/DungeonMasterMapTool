@@ -406,6 +406,7 @@ public final class SheetProjection {
             if (value == null) continue;
             String capacity = "marked".equals(value) ? "capacity" : "max";
             JsonNode before = get(previous, fact.path("path").asText()), after = get(current, fact.path("path").asText());
+            if (before.isObject() != after.isObject()) return true;
             if (before.isObject() && after.isObject()) {
                 if (!get((ObjectNode) before, fields.path(value).asText())
                         .equals(get((ObjectNode) after, fields.path(value).asText()))) return true;
@@ -429,6 +430,14 @@ public final class SheetProjection {
             String value = marked ? "marked" : "value";
             String capacity = marked ? "capacity" : "max";
             JsonNode oldTrack = before.path(entry.getKey()), newTrack = after.path(entry.getKey());
+            if (oldTrack.isObject() != newTrack.isObject()) {
+                ObjectNode present = (ObjectNode) (newTrack.isObject() ? newTrack : oldTrack);
+                changes.add(new TrackChange(entry.getKey(), newTrack.isObject() ? "add" : "remove",
+                        RuleJson.integer(present.path(capacity), "/actor/" + entry.getKey() + "/" + capacity, 0, 1000),
+                        oldTrack instanceof ObjectNode old ? old.deepCopy() : null,
+                        newTrack instanceof ObjectNode added ? added.deepCopy() : null));
+                return;
+            }
             if (!(oldTrack instanceof ObjectNode oldObject) || !(newTrack instanceof ObjectNode newObject)) return;
             if (contains(writable, capacity) && !oldTrack.path(capacity).equals(newTrack.path(capacity))) {
                 int oldCapacity = RuleJson.integer(oldTrack.get(capacity), "/actor/" + entry.getKey() + "/" + capacity, 0, 1000);

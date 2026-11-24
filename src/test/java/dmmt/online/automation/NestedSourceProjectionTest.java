@@ -87,6 +87,22 @@ class NestedSourceProjectionTest {
     }
 
     @Test
+    void wholeTrackAdditionAndRemovalAreTrackChanges() throws Exception {
+        SheetProjection projection = SheetProjection.parse("""
+                {"format":"dmmap-sheet-projection","version":2,"stateField":"automationState",
+                 "sourceField":"automationSource","instanceField":"instanceId","nameField":"name",
+                 "sources":[{"path":"devices"}],"stats":[],"actor":{"ward":{"kind":"object","path":"ward",
+                 "fields":{"marked":"on","capacity":"slots"},"writable":["marked"],"max":1000}}}""");
+        ObjectNode without = (ObjectNode) RuleJson.parse("{}");
+        ObjectNode with = (ObjectNode) RuleJson.parse("{\"ward\":{\"on\":1,\"slots\":3}}");
+        assertTrue(projection.hasTrackChanges(without, with));
+        assertEquals("add", projection.trackChanges(without, with).getFirst().change());
+        assertEquals(3, projection.trackChanges(without, with).getFirst().requested());
+        assertEquals("remove", projection.trackChanges(with, without).getFirst().change());
+        assertTrue(projection.trackChanges(with, with).isEmpty());
+    }
+
+    @Test
     void equipmentLocationIdsAreUniqueAndTopLevel() {
         String header = """
                 {"format":"dmmap-sheet-projection","version":2,"stateField":"automationState",
