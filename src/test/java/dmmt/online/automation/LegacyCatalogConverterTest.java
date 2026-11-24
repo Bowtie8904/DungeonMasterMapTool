@@ -487,6 +487,68 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void preservedEffectsSurviveTheirMarkedHitPointAndDealtDamageEndingsOnlyWhenMaintained() throws Exception {
+        String effect = """
+                {"name":"Night's Glamour","kind":"buff","until":"manual","endOnMarkedHp":true,"endOnDealtDamage":true,
+                 "rollOptions":[{"id":"maintain","label":"Maintain","roll":"damage","cost":{"stress":1},"preserveEffect":"Night's Glamour"}],
+                 "mitigation":[{"id":"maintain","label":"Maintain","when":{"markingHp":true},"cost":{"stress":1},"preserveEffect":"Night's Glamour"}]}""";
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"g","name":"G","automation":{
+                 "rollTriggers":[{"id":"glamour","label":"Become Glamoured","on":"feat:G","when":"success","difficulty":13,"automatic":true,
+                 "steps":[{"op":"effect","effect":%s}]}]}}""".formatted(effect)));
+        JsonNode automation = block(result, 0);
+        assertEquals("automatic", automation.at("/rules").findParents("event").stream().filter(n -> "roll.finished".equals(n.path("event").asText()))
+                .map(n -> n.path("mode").asText()).filter("automatic"::equals).findFirst().orElse(""), automation.toString());
+        JsonNode trigger = null, mitigation = null, endHp = null, endRoll = null, option = null;
+        for (JsonNode rule : automation.path("rules")) {
+            String id = rule.path("id").asText();
+            if (id.equals("glamour")) trigger = rule;
+            if (id.contains("maintain") && "damage.marks".equals(rule.at("/bindings/0/event").asText())) mitigation = rule;
+            if (id.contains("maintain") && "roll.prepare".equals(rule.at("/bindings/0/event").asText())) option = rule;
+            if (id.startsWith("end-night-s-glamour-on-damage")) endRoll = rule;
+            if ("damage.applied".equals(rule.at("/bindings/0/event").asText()) && "effect.end".equals(rule.at("/do/0/op").asText())) endHp = rule;
+        }
+        assertNotNull(trigger, automation.toString());
+        assertEquals("automatic", trigger.at("/bindings/0/mode").asText());
+        assertNotNull(mitigation, automation.toString());
+        assertNotNull(option, automation.toString());
+        assertNotNull(endHp, automation.toString());
+        assertNotNull(endRoll, automation.toString());
+        assertTrue(mitigation.path("when").toString().contains("wouldMark"), mitigation.toString());
+        assertEquals("state.set", mitigation.at("/do/0/op").asText());
+        assertEquals("state.set", endHp.at("/do/1/op").asText(), endHp.toString());
+        assertEquals("state.set", endRoll.at("/do/1/op").asText(), endRoll.toString());
+        assertNotEquals(mitigation.at("/do/0/slot").asText(), option.at("/do/0/slot").asText());
+        RuleCompiler.Program program = program(result, 0);
+        String actor = "{\"effects\":[{\"id\":\"fixture/glamour/1\",\"effect\":\"" + program.sourceId() + "#night-s-glamour\",\"sourceInstanceId\":\"fixture\",\"label\":\"Night's Glamour\"}]}";
+        String marked = "{\"type\":\"damage.applied\",\"applied\":{\"severity\":1,\"incoming\":1,\"hitPoints\":1,\"amount\":3}}";
+        String dealt = "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"damage\",\"origin\":\"damage\",\"total\":5,\"critical\":false},\"roll\":{}}";
+        for (String event : List.of(marked, dealt)) {
+            JsonNode ender = event == marked ? endHp : endRoll;
+            ObjectNode ended = run(program, context(program, actor, event)).contexts().get(0);
+            assertEquals(0, ended.at("/actor/effects").size(), ended.toString());
+            ObjectNode kept = context(program, actor, event);
+            kept.putObject("state").put((event == marked ? mitigation : option).at("/do/0/slot").asText(), true);
+            ObjectNode after = run(program, kept).contexts().get(0);
+            assertEquals(1, after.at("/actor/effects").size(), after.toString());
+            assertFalse(after.at("/state/" + (event == marked ? mitigation : option).at("/do/0/slot").asText()).asBoolean(true));
+        }
+    }
+    @Test
+    void preservingAnEffectNeedsMarkedHitPointsAndADamageRollOption() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"m","name":"M","automation":{"actions":[{"id":"cast","label":"Cast","steps":[{"op":"effect","effect":{"name":"Mirage","endOnMarkedHp":true,
+                 "mitigation":[{"id":"hold","label":"Hold","cost":{"hope":1},"preserveEffect":"Mirage"}]}}]}]}}"""));
+        JsonNode hold = null;
+        for (JsonNode rule : block(result, 0).path("rules")) if (rule.path("id").asText().contains("hold")) hold = rule;
+        assertNotNull(hold);
+        assertEquals("damage.marks", hold.at("/bindings/0/event").asText());
+        assertTrue(hold.path("when").toString().contains("wouldMark"), hold.toString());
+        var invalid = LegacyCatalogConverter.convert(catalog("""
+                {"id":"b","name":"B","automation":{"rollOptions":[{"id":"x","label":"X","roll":"attack","preserveEffect":"Mirage"}]}}"""));
+        assertTrue(invalid.diagnostics().stream().anyMatch(d -> d.message().contains("Keeping an effect")), invalid.diagnostics().toString());
+    }
+    @Test
     void conditionalModifiersBecomePassiveModifiersWithReadableConditions() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"m","name":"M","automation":{

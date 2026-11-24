@@ -48,19 +48,19 @@ public final class LegacyCatalogConverter {
             "usesSource", "endEffect", "hostOwned", "consumeItem", "quantity", "proficiency", "hopeDie", "diceResource", "condition", "loadoutDomain",
             "required", "traitValue", "multiplier", "allResourceDice", "steps", "damageDie", "diceByLevel", "diceByFeature", "diceConditions", "magicOnly", "weaponRanges",
             "ignoreDisadvantage", "matchingDice", "resourceMultiplier", "input", "experience", "derivedProficiency", "traitChoices", "chooseTrait", "maximizeDie", "requiresRollOutcome", "combo", "secondaryWeaponDie", "linkedDamageTrait", "advantageDie",
-            "magicDamage", "dieSizes", "fearDie", "resourceEmpty", "requiresResource", "expendOn", "ownWeapon", "effectValue", "requiresFeature");
+            "magicDamage", "dieSizes", "fearDie", "resourceEmpty", "requiresResource", "expendOn", "ownWeapon", "effectValue", "requiresFeature", "preserveEffect");
     private static final Set<String> TRIGGER_FIELDS = Set.of("id", "label", "description", "on", "cost", "reroll", "when", "outcome",
             "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
             "chatBenefits", "allowSourceOwner", "loadoutDomain", "primaryWeapon", "anyWeapon", "advantage", "giveFear", "check", "choices",
             "magicOnly", "weaponRanges", "addDice", "damageDice", "damageDiceBelow", "rerollDualityDie", "spendHopeAmount", "disadvantage", "removeFear", "weaponDamage", "rollSection", "containsDie", "resourceRoll", "selectAmount",
-            "target", "excludeSourceActor", "splendorAction", "hostRollAction", "otherPlayerOnly", "spentTokenDamage", "bloodAutomation", "swapDuality", "repeatable", "weapon", "tokenGain", "matchResource", "magicAction", "damageSource", "spellDomain", "vaultSource", "rerollResourceDice", "rerollAnyDie",             "dualityDieBonus", "actionRoll", "spendFavor", "advanceEffect", "banishDifficulty");
+            "target", "excludeSourceActor", "splendorAction", "hostRollAction", "otherPlayerOnly", "spentTokenDamage", "bloodAutomation", "swapDuality", "repeatable", "weapon", "tokenGain", "matchResource", "magicAction", "damageSource", "spellDomain", "vaultSource", "rerollResourceDice", "rerollAnyDie",             "dualityDieBonus", "actionRoll", "spendFavor", "advanceEffect", "banishDifficulty", "automatic");
     private static final Set<String> MITIGATION_FIELDS = Set.of("id", "label", "description", "when", "cost", "negate", "halve", "reduce",
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
             "markedHpOnly", "finalSevere", "markStress", "gainHope", "giveFear", "clearStress", "gainTokens", "armorCost", "followUp", "hiddenRoll", "consumeItem", "preserveAfterIncomingDamage", "loadoutDomain",
             "double", "recoveryChoice", "reflectHp", "quantity", "advancesSourcePool", "patronDice", "destroyResourceOnMax", "reportRoll", "companionIntercept", "companionArmored",
-            "storeRoll", "storeHalvedDamage", "storeDamage", "endEffectIfNoHp");
+            "storeRoll", "storeHalvedDamage", "storeDamage", "endEffectIfNoHp", "preserveEffect");
     private static final List<String> MARKS_FIELDS = List.of("severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor");
     private static final List<String> PREPARE_FIELDS = List.of("negate", "halve", "reduce", "double");
     private static final List<String> SEVERITIES = List.of("minor", "major", "severe", "massive");
@@ -2665,6 +2665,10 @@ public final class LegacyCatalogConverter {
         JsonNode legacySteps = option.path("steps");
         for (int s = 0; s < legacySteps.size(); s++) step(legacySteps.get(s), path + "/steps/" + s, p, steps, effects, pools);
         endEffect(option, steps);
+        if (option.has("preserveEffect")) {
+            if (!"damage".equals(roll) || !option.path("preserveEffect").isTextual()) p.add(path + "/preserveEffect", "Keeping an effect needs its name and a damage roll option.");
+            else steps.addObject().put("op", "state.set").put("slot", keepSlot(option.path("preserveEffect").asText(), "roll.finished")).put("value", true);
+        }
         if ("automatic".equals(binding.path("mode").asText()) && rule.has("costs")) {
             // Automatic rules have no choice to pay for, so a required option pays as its first steps.
             ArrayNode paid = (ArrayNode) rule.remove("costs");
@@ -2885,7 +2889,7 @@ public final class LegacyCatalogConverter {
             p.add(path + "/exclusiveRollGroup", "Expected a nonempty exclusive group name.");
         boolean incomingDamage = "incomingDamage".equals(trigger.path("on").asText());
         ObjectNode rule = incomingDamage ? ruleShell(trigger, path, p, "damage.applied", "damage", "button")
-                : ruleShell(trigger, path, p, "roll.finished", "roll", "button");
+                : ruleShell(trigger, path, p, "roll.finished", "roll", trigger.path("automatic").asBoolean(false) ? "automatic" : "button");
         if (rule == null) return null;
         if (incomingDamage && (!"ally".equals(trigger.path("audience").asText()) || !trigger.has("actionRoll")))
             p.add(path + "/on", "An incomingDamage trigger needs the ally audience and an action roll.");
@@ -3675,6 +3679,17 @@ public final class LegacyCatalogConverter {
         boolean rolled = mitigation.has("roll"), rollHits = rolled && roll.has("success");
         boolean marks = MARKS_FIELDS.stream().anyMatch(mitigation::has);
         boolean preserve = mitigation.has("preserveAfterIncomingDamage");
+        boolean keepsOnHp = mitigation.has("preserveEffect");
+        if (keepsOnHp && (!mitigation.path("preserveEffect").isTextual() || marks || preserve || PREPARE_FIELDS.stream().anyMatch(mitigation::has))) {
+            p.add(path + "/preserveEffect", "Keeping an effect needs its name and cannot change the damage itself."); return null;
+        }
+        if (keepsOnHp) {
+            // The legacy option is only offered while Hit Points will be marked; that is only known once the marks are planned.
+            marks = true;
+            ObjectNode copy = mitigation.deepCopy();
+            (copy.has("when") && copy.get("when").isObject() ? (ObjectNode) copy.get("when") : copy.putObject("when")).put("markingHp", true);
+            mitigation = copy;
+        }
         boolean prepare = PREPARE_FIELDS.stream().anyMatch(mitigation::has) || (rolled && !rollHits);
         if (marks && prepare) { p.add(path, "A damage option cannot change both the damage amount and the marks plan."); return null; }
         if (preserve && (marks || prepare || !mitigation.path("preserveAfterIncomingDamage").isTextual())) {
@@ -3738,7 +3753,10 @@ public final class LegacyCatalogConverter {
                     steps.addObject().put("op", "pool.gain").put("pool", storedPool).set("amount", read("result.reduction"));
                 }
             }
-            case "marks" -> marksSteps(mitigation, path, p, steps, id, label, quantity);
+            case "marks" -> {
+                if (keepsOnHp) steps.addObject().put("op", "state.set").put("slot", keepSlot(mitigation.path("preserveEffect").asText())).put("value", true);
+                else marksSteps(mitigation, path, p, steps, id, label, quantity);
+            }
             default -> {}
         }
         if (mitigation.has("destroyResourceOnMax")) destroyItemOnMax(mitigation, path, p, stage, steps);
@@ -6415,7 +6433,12 @@ public final class LegacyCatalogConverter {
         if (id != null) ((ObjectNode) effects.get(id)).set("while", condition);
     }
 
-    private static String keepSlot(String effect) { String slot = "keep-" + slug(effect); return slot.substring(0, Math.min(64, slot.length())); }
+    private static String keepSlot(String effect) { return keepSlot(effect, "damage.applied"); }
+
+    private static String keepSlot(String effect, String event) {
+        String slot = ("roll.finished".equals(event) ? "keep-roll-" : "keep-") + slug(effect);
+        return slot.substring(0, Math.min(64, slot.length()));
+    }
 
     /** A kept effect survives its next damage ending: the ending skips while the keep slot is set and then clears it. */
     private static void keepEffects(ArrayNode rules, String path, Problems p, ObjectNode out) {
@@ -6425,8 +6448,9 @@ public final class LegacyCatalogConverter {
             ObjectNode ending = null;
             for (JsonNode candidate : rules) {
                 JsonNode first = candidate.path("do").path(0);
-                if ("damage.applied".equals(candidate.path("bindings").path(0).path("event").asText()) && "effect.end".equals(first.path("op").asText())
-                        && slot.equals(keepSlot(first.path("effect").asText()))) ending = (ObjectNode) candidate;
+                String event = candidate.path("bindings").path(0).path("event").asText();
+                if (Set.of("damage.applied", "roll.finished").contains(event) && "effect.end".equals(first.path("op").asText())
+                        && slot.equals(keepSlot(first.path("effect").asText(), event))) ending = (ObjectNode) candidate;
             }
             if (ending == null) { p.add(path, "Keeping an effect needs the same source to end it after damage."); continue; }
             ObjectNode state = out.has("state") ? (ObjectNode) out.get("state") : out.putObject("state");
