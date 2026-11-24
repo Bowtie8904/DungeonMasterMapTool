@@ -132,7 +132,9 @@ public final class LegacyCatalogConverter {
                 if (containsAutomation(entry)) context.diagnostics.add(new Diagnostic(path + "/id", category, "Entry without a valid ID cannot carry automation."));
                 continue;
             }
-            walk((ObjectNode) entry, category + ":" + entry.path("id").asText(), path, recipes, context, sharedPools);
+            String cardKey = "domain-cards".equals(category) && entry.path("name").isTextual()
+                    && !entry.path("name").asText().isBlank() ? "card:" + entry.path("name").asText() : null;
+            walk((ObjectNode) entry, category + ":" + entry.path("id").asText(), path, recipes, context, sharedPools, cardKey);
         }
         return new Result(catalog, context.blocks, context.converted, List.copyOf(context.diagnostics), Map.copyOf(context.assignedIds));
     }
@@ -144,7 +146,7 @@ public final class LegacyCatalogConverter {
     }
 
     private static void walk(ObjectNode node, String sourceId, String path, JsonNode recipes, Context context,
-                             Map<String, ObjectNode> shared) {
+                             Map<String, ObjectNode> shared, String cardKey) {
         if (node.has("automation")) {
             context.blocks++;
             List<Diagnostic> problems = new ArrayList<>();
@@ -158,7 +160,7 @@ public final class LegacyCatalogConverter {
                     && node.path("name").isTextual() && !node.path("name").asText().isBlank())
                 actionOrigin = "feat:" + node.path("name").asText();
             ObjectNode converted = convertBlock(node.get("automation"), path + "/automation", sourceId, problems,
-                    shared, origin, actionOrigin, origin != null && path.matches("/entries/\\d+"));
+                    shared, origin, actionOrigin, origin == null ? null : cardKey);
             boolean empty = node.get("automation").isObject() && node.get("automation").isEmpty();
             if (problems.isEmpty() && !empty) {
                 try { RuleCompiler.compile(sourceId, converted, recipes); }
@@ -188,7 +190,11 @@ public final class LegacyCatalogConverter {
                         ((ObjectNode) member).put("id", id);
                         context.assignedIds.put(at, id);
                     }
-                    walk((ObjectNode) member, scope + ":" + id, at, recipes, context, shared);
+                    String nestedCardKey = cardKey;
+                    if (cardKey != null && "spells".equals(key) && member.path("name").isTextual()
+                            && !member.path("name").asText().isBlank())
+                        nestedCardKey += "/" + member.path("name").asText();
+                    walk((ObjectNode) member, scope + ":" + id, at, recipes, context, shared, nestedCardKey);
                 }
             } else if (child.isObject()) {
                 ObjectNode object = (ObjectNode) child;
@@ -199,7 +205,7 @@ public final class LegacyCatalogConverter {
                     }
                     scope += ":" + object.path("id").asText();
                 }
-                walk(object, scope, childPath, recipes, context, shared);
+                walk(object, scope, childPath, recipes, context, shared, cardKey);
             }
         }
     }
@@ -239,12 +245,12 @@ public final class LegacyCatalogConverter {
     /** Resources are actor-scoped, so a pool declared by one source (for example a class) can be spent by another. */
     static ObjectNode convertBlock(JsonNode legacy, String path, String sourceId, List<Diagnostic> problems,
                                    Map<String, ObjectNode> shared) {
-        return convertBlock(legacy, path, sourceId, problems, shared, null, null, false);
+        return convertBlock(legacy, path, sourceId, problems, shared, null, null, null);
     }
 
     private static ObjectNode convertBlock(JsonNode legacy, String path, String sourceId, List<Diagnostic> problems,
                                            Map<String, ObjectNode> shared, String cardOrigin, String actionOrigin,
-                                           boolean topLevelCard) {
+                                           String cardKey) {
         ObjectNode out = RuleJson.JSON.createObjectNode();
         Problems p = new Problems(sourceId, problems, new ArrayList<>());
         if (!legacy.isObject()) { p.add(path, "Automation must be an object."); return out; }
@@ -355,7 +361,7 @@ public final class LegacyCatalogConverter {
             ObjectNode rule = switch (next.family()) {
                 case "actions" -> legacyRule.has("deathMove")
                         ? deathAction(legacyRule, death, next.path(), p, effects, pools, usesBudget, extra, out)
-                        : action(legacyRule, next.path(), p, effects, pools, usesBudget, actionOrigin, topLevelCard);
+                        : action(legacyRule, next.path(), p, effects, pools, usesBudget, actionOrigin, cardKey);
                 case "rollOptions" -> rollOption(legacyRule, next.path(), p, effects, pools, usesBudget, extra);
                 case "slotModifier" -> {
                     ObjectNode option = rollOption(legacyRule, next.path(), p, effects, pools, false, extra);
@@ -3328,7 +3334,7 @@ public final class LegacyCatalogConverter {
                 .put("label", "Spellcast Roll (Difficulty " + difficulty.asInt() + ")");
         action.putObject("actionRoll").put("trait", "spellcast").put("difficulty", difficulty.asInt());
         ObjectNode rule = action(action, path + "/spellcastDifficulty", p, RuleJson.JSON.createObjectNode(),
-                new Pools(RuleJson.JSON.createObjectNode(), Map.of()), consumes, null, false);
+                new Pools(RuleJson.JSON.createObjectNode(), Map.of()), consumes, null, null);
         if (rule == null) return null;
         ArrayNode steps = (ArrayNode) rule.get("do");
         steps.addObject().put("op", "roll.check").put("as", "check").set("from", read("result.actionRoll"));
@@ -3401,7 +3407,7 @@ public final class LegacyCatalogConverter {
     }
 
     private static ObjectNode action(JsonNode action, String path, Problems p, ObjectNode effects, Pools pools,
-                                     boolean limited, String origin, boolean topLevelCard) {
+                                     boolean limited, String origin, String cardKey) {
         p.onlyFields(action, path, ACTION_FIELDS);
         hostRollAction(action, path, p);
         boolean spendsTokens = action.has("castTokens");
@@ -3494,7 +3500,7 @@ public final class LegacyCatalogConverter {
             JsonNode metadata = step.at("/plan/literal/metadata");
             if ("roll.resolve".equals(step.path("op").asText()) && metadata instanceof ObjectNode object) {
                 object.put("origin", origin);
-                if (topLevelCard) object.put("actionOrigin", "featureAction:" + origin + ":" + id);
+                if (cardKey != null) object.put("actionOrigin", "featureAction:" + cardKey + ":" + id);
             }
         }
         String patronReport = action.has("patronDice") ? patronAction(action, path, p, pools, rule, steps) : null;

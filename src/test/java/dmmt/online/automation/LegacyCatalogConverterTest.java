@@ -2524,6 +2524,29 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void nestedCardActionsKeepTheFullLegacyActionPath() throws Exception {
+        var result = LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"domain-cards","label":"Cards","entries":[
+                 {"id":"book","name":"Book of Echoes","spells":[
+                  {"name":"Deflect","automation":{"actions":[{"id":"react","label":"React",
+                    "actionRoll":{"trait":"Finesse","reaction":true}}],
+                    "rollTriggers":[{"id":"follow","label":"Follow","on":"featureAction:card:Book of Echoes/Deflect:react",
+                     "when":"always","report":{"text":"Deflected."}}]}},
+                  {"name":"Chime","automation":{"actions":[{"id":"ring","label":"Ring","sendRoll":{"dice":"1d8","label":"Chime"}}],
+                    "rollTriggers":[{"id":"heard","label":"Heard","on":"featureAction:card:Book of Echoes/Chime:ring",
+                     "when":"always","report":{"text":"Heard."}}]}}]}]}""");
+        assertEquals(2, result.converted(), result.diagnostics().toString());
+        for (String[] expected : List.of(
+                new String[]{"0", "card:Deflect", "featureAction:card:Book of Echoes/Deflect:react"},
+                new String[]{"1", "card:Chime", "featureAction:card:Book of Echoes/Chime:ring"})) {
+            JsonNode metadata = result.catalog().requiredAt("/entries/0/spells/" + expected[0]
+                    + "/automation/rules/0/do/0/plan/literal/metadata");
+            assertEquals(expected[1], metadata.path("origin").asText());
+            assertEquals(expected[2], metadata.path("actionOrigin").asText());
+        }
+    }
+
+    @Test
     void actionSelectorsIncludeAllLegacyDualityActionsAndWorkBeforeDiceAreRolled() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"selectors","name":"Selectors","automation":{"rollOptions":[

@@ -86,15 +86,16 @@ identity migration for existing sheets remains outstanding. The generated profil
 and party actions, dispatch automatic
 prepare, prepared and finished rules, propagate roll and actor edits, and atomically publish ordered chat rolls
 with result controls and retry receipts. Converted sent, resource, action and reaction rolls use this path.
-Converted top-level card actions expose both `card:<name>` and `featureAction:card:<name>:<action>` in
-`event.check.origins`; class feature actions expose `feat:<name>`, while `event.check.origin` remains the primary
-identity. Converted origin filters and exclusions match either field. Ordinary single-target and party actions
+Converted card actions expose `card:<name>` and their legacy `featureAction:card:<name>:<action>` alias in
+`event.check.origins`; nested spell actions use `featureAction:card:<book>/<spell>:<action>`, and class feature
+actions expose `feat:<name>`. `event.check.origin` remains the primary identity. Converted origin filters and
+exclusions match either field. Ordinary single-target and party actions
 also run each changed holder's track reactions, including self-targets, before later steps; the source, recipients,
 reaction commands and reports commit together and exact retries replay the receipt. Saved result buttons, including
 self claims and targeted actions, likewise dispatch track reactions and typed nested rolls without repeating the
 original roll's automatic reactions; a nested roll's publication does not revise the original result. A result claim
-cannot also declare a target selection. Nested card action paths, interactive prepare choices, downtime rolls and
-untyped dice still need live integration.
+cannot also declare a target selection. Interactive feature prepare choices, downtime rolls and untyped dice
+still need live integration.
 
 A stored effect whose source is active on its holder also offers its frozen attack profile. Its descriptor
 and `request.profileRoll` include `effectInstanceId` and the reserved profile ID `effect.profile`; the host

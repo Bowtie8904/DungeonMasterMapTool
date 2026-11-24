@@ -8045,6 +8045,65 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void nestedGrimoireActionsPublishFullOriginAliasesAndOfferMatchingResults() throws Exception {
+        var converted = dmmt.online.automation.LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"domain-cards","label":"Cards","entries":[
+                 {"id":"book","name":"Book of Echoes","spells":[
+                  {"name":"Deflect","automation":{"actions":[{"id":"react","label":"React",
+                    "actionRoll":{"trait":"Finesse","reaction":true}}],
+                    "rollTriggers":[{"id":"follow","label":"Follow","on":"featureAction:card:Book of Echoes/Deflect:react",
+                     "when":"always","report":{"text":"Deflected."}}]}},
+                  {"name":"Chime","automation":{"actions":[{"id":"ring","label":"Ring","sendRoll":{"dice":"1d8","label":"Chime"}}],
+                    "rollTriggers":[{"id":"heard","label":"Heard","on":"featureAction:card:Book of Echoes/Chime:ring",
+                     "when":"always","report":{"text":"Heard."}}]}}]}]}""");
+        assertEquals(2, converted.converted(), converted.diagnostics().toString());
+        automationCompendium();
+        java.nio.file.Files.writeString(compendiumDir.resolve("domain-cards.json"), converted.catalog().toString());
+        String id = campaign.getId(), owner = cookie(), other = allyCookie("other");
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        ObjectNode sheet = (ObjectNode) MAPPER.readTree("""
+                {"name":"Ada","traits":[{"name":"Finesse","mod":2}],
+                 "loadout":[{"name":"Book of Echoes","instanceId":"book-one","automationSource":"domain-cards:book"}]}""");
+        ((ObjectNode) sheet.at("/loadout/0")).set("spells", converted.catalog().at("/entries/0/spells").deepCopy());
+        store.saveSheet(id, "caster", sheet.toString());
+        for (int i = 0; i < 2; i++) {
+            String rule = i == 0 ? "react" : "ring";
+            String expectedOrigin = i == 0 ? "card:Deflect" : "card:Chime";
+            String expectedAction = i == 0 ? "featureAction:card:Book of Echoes/Deflect:react"
+                    : "featureAction:card:Book of Echoes/Chime:ring";
+            String expectedResult = i == 0 ? "follow" : "heard";
+            JsonNode actions = MAPPER.readTree(automationHttp(owner, "caster", null).body()).required("actions");
+            JsonNode offered = null;
+            for (JsonNode action : actions) if (rule.equals(action.path("ruleId").asText())) offered = action;
+            assertNotNull(offered, actions.toString());
+            ObjectNode request = MAPPER.createObjectNode().put("requestId", "nested-" + rule).put("expectedRevision", i);
+            request.putArray("selections").addObject().put("sourceInstanceId", offered.path("sourceInstanceId").asText())
+                    .put("ruleId", rule).put("bindingId", "sheet");
+            String body = MAPPER.createObjectNode().set("request", request).toString();
+            assertEquals(403, automationHttp(other, "caster", body).statusCode());
+            var applied = automationHttp(owner, "caster", body);
+            assertEquals(200, applied.statusCode(), applied.body());
+            JsonNode event = null;
+            for (JsonNode command : MAPPER.readTree(applied.body()).path("outbox"))
+                if ("roll.event".equals(command.path("kind").asText())) event = command.path("event");
+            assertNotNull(event, applied.body());
+            assertEquals(expectedOrigin, event.at("/check/origin").asText());
+            List<String> origins = new java.util.ArrayList<>();
+            event.at("/check/origins").forEach(value -> origins.add(value.asText()));
+            assertTrue(origins.contains(expectedOrigin), origins.toString());
+            assertTrue(origins.contains(expectedAction), origins.toString());
+            assertEquals(i == 0 ? "reaction" : "roll", event.at("/check/kind").asText());
+            String resultId = event.path("resultId").asText();
+            assertFalse(resultId.isBlank(), applied.body());
+            JsonNode result = MAPPER.readTree(resultHttp(owner, "caster", resultId).body()).path("actions");
+            assertTrue(result.findValuesAsText("ruleId").contains(expectedResult), result.toString());
+            int history = store.historyTail(id, 100).size();
+            assertEquals(applied.body(), automationHttp(owner, "caster", body).body());
+            assertEquals(history, store.historyTail(id, 100).size());
+        }
+    }
+
+    @Test
     void convertedWardenRollReportAndUsePersistAtomicallyAndReplay() throws Exception {
         automationCompendium();
         JsonNode classes = MAPPER.readTree(Path.of("dmmap-daggerheart", "classes.json").toFile());
