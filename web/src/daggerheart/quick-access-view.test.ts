@@ -74,6 +74,19 @@ function setup(readOnly = false, configure?: (c: CharacterSheet) => void, visibl
   return { c, bus, changed, content: () => content, mini: () => mini, view: view as unknown as Element };
 }
 
+it('shows host-managed automation effects without a manual remove button', () => {
+  const test = setup(false, c => {
+    c.automationState = { effects: [{ id: 'e1', label: 'Unconscious', kind: 'debuff',
+      text: 'Wake after healing.', blocksMovement: true }] };
+  }, true);
+  const tab = test.view.all().find(node => node.tag === 'button' && node.text === 'Effects (1)')!;
+  tab.click();
+  expect(test.view.text).toContain('Unconscious');
+  expect(test.view.text).toContain('managed by automation');
+  expect(test.view.text).toContain('Wake after healing.');
+  expect(test.view.all().some(node => node.tag === 'button' && node.text === 'Remove')).toBe(false);
+});
+
 it('shows item artwork on carried equipment and loot with an accessible disclosure', () => {
   const image = (name: string) => `/item-icons/lorc/${name}.svg`;
   const test = setup(false, c => {

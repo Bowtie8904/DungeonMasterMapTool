@@ -9,6 +9,15 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class MoveValidatorTest {
     @Test
+    void automationEffectsBlockMovement() throws Exception {
+        var sheet = new com.fasterxml.jackson.databind.ObjectMapper().readTree("""
+                {"automationState":{"effects":[{"label":"Unconscious","blocksMovement":true}]}}""");
+        assertNotNull(MoveValidator.movementBlockReason(sheet));
+        ((com.fasterxml.jackson.databind.node.ObjectNode) sheet.at("/automationState/effects/0")).put("blocksMovement", false);
+        assertNull(MoveValidator.movementBlockReason(sheet));
+    }
+
+    @Test
     void publishesMovementPolicyUsingTheHostsSheetRules(@org.junit.jupiter.api.io.TempDir java.nio.file.Path temp)
             throws Exception {
         var mapper = new com.fasterxml.jackson.databind.ObjectMapper();

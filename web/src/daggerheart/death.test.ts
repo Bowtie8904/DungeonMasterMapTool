@@ -87,6 +87,21 @@ describe('death moves and scars', () => {
     expect(c.compendiumRevision).toBe(1);
   });
 
+  it('tracks host-owned death-blocking effects and string result IDs across updates', () => {
+    const c = emptyCharacter('Aria');
+    c.hp.on = c.hp.slots = 6;
+    c.automationState = { revision: 4, effects: [] };
+    const unconscious = { id: 'effect-1', label: 'Unconscious', kind: 'debuff' as const, blocksDeathMoves: true };
+    expect(applyFeatureState(c, { actorId: 'a', featureRevision: 1, automationEffects: [unconscious] })).toBe(true);
+    expect(canMakeDeathMove(c)).toBe(false);
+    expect(c.automationState?.revision).toBe(4);
+    expect(applyFeatureState(c, { actorId: 'a', featureRevision: 2, automationEffects: [],
+      pendingDeathRoll: { id: 'result-1', ts: 2 } })).toBe(true);
+    expect(canMakeDeathMove(c)).toBe(false);
+    expect(applyFeatureState(c, { actorId: 'a', featureRevision: 3, pendingDeathRoll: null })).toBe(true);
+    expect(canMakeDeathMove(c)).toBe(true);
+  });
+
   it('keeps manual Life Wards across target rests', () => {
     const c = emptyCharacter('Aria');
     c.effects.push({ id: 'ward', name: 'Life Ward', kind: 'buff', until: 'manual', lifeWard: true, sourceActorId: 'other' });

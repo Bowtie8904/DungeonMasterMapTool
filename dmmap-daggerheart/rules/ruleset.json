@@ -9,7 +9,61 @@
     "long": { "moves": 2, "maxMoves": 32 }
   },
   "automation": {
+    "state": { "deathUnconsciousHp": 0 },
+    "effects": {
+      "death-unconscious": {
+        "label": "Unconscious",
+        "text": "You cannot move or act and cannot be targeted by an attack. Work with the GM to describe how the situation worsens. Wake when an ally clears at least 1 marked HP or the party finishes a long rest. Only movement is enforced by the tool.",
+        "kind": "debuff",
+        "blocksMovement": true,
+        "blocksDeathMoves": true,
+        "until": ["rest.long"],
+        "endWhen": { "lt": [{ "read": "actor.hp.marked" }, { "read": "state.deathUnconsciousHp" }] }
+      }
+    },
     "rules": [
+      {
+        "id": "death-blaze",
+        "bindings": [{ "id": "choose", "event": "death.options", "surface": "death", "mode": "button" }],
+        "ui": { "label": "Blaze of Glory",
+          "report": "{actor.name} takes one final action at the GM's discretion. It critically succeeds, then they cross through the veil of death." }
+      },
+      {
+        "id": "death-avoid",
+        "bindings": [{ "id": "apply", "event": "roll.finished", "surface": "roll", "mode": "automatic" }],
+        "when": { "and": [
+          { "eq": [{ "read": "event.check.kind" }, "death"] },
+          { "eq": [{ "read": "event.check.move" }, "avoid"] }
+        ] },
+        "do": [
+          { "op": "state.set", "slot": "deathUnconsciousHp", "value": { "read": "actor.hp.marked" } },
+          { "op": "effect.start", "effect": "death-unconscious", "target": "actor" }
+        ],
+        "ui": { "report": "{actor.name} falls unconscious. Wake when at least 1 HP is cleared or after a long rest." }
+      },
+      {
+        "id": "death-avoid-wake",
+        "bindings": [{ "id": "apply", "event": "track.changed", "surface": "resource", "mode": "automatic" }],
+        "when": { "and": [
+          { "eq": [{ "read": "event.track" }, "hp"] },
+          { "gt": [{ "read": "effects.death-unconscious" }, 0] },
+          { "lt": [{ "read": "actor.hp.marked" }, { "read": "state.deathUnconsciousHp" }] }
+        ] },
+        "do": [{ "op": "effect.end", "effect": "death-unconscious", "target": "actor" }],
+        "ui": { "label": "Wake from unconsciousness" }
+      },
+      {
+        "id": "death-avoid-scar",
+        "bindings": [{ "id": "apply", "event": "roll.finished", "surface": "roll", "mode": "automatic" }],
+        "when": { "and": [
+          { "eq": [{ "read": "event.check.kind" }, "death"] },
+          { "eq": [{ "read": "event.check.move" }, "avoid"] },
+          { "lte": [{ "read": "event.check.adjustedHope" }, { "read": "actor.stats.level" }] },
+          { "gt": [{ "read": "actor.hope.max" }, 0] }
+        ] },
+        "do": [{ "op": "track.capacity", "track": "actor.hope", "by": -1, "counter": "actor.scars" }],
+        "ui": { "report": "{actor.name} gains a scar and crosses out one Hope slot." }
+      },
       {
         "id": "manual-roll-mode",
         "bindings": [{ "id": "use", "event": "roll.prepare", "surface": "roll", "mode": "option" }],

@@ -123,6 +123,26 @@ describe('host-authored death options', () => {
     expect(dialog.closed).toBe(true);
   });
 
+  it('uses the host-described Avoid Death roll without an extra confirmation', async () => {
+    let submitted: unknown;
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      if (!init.body) return Response.json({ revision: 3, actions: [action], rolls: {
+        avoid: { label: 'Avoid Death', options: [] },
+      } });
+      submitted = JSON.parse(String(init.body));
+      return Response.json({});
+    }));
+    await openAutomationDeathDialog('hero', async () => {});
+    const dialog = body.all('dialog')[0];
+    dialog.all('button').find(button => button.text === 'Avoid Death')!.click();
+    await settle();
+    expect(body.all('dialog')).toHaveLength(1);
+    expect(submitted).toEqual({ request: {
+      requestId: expect.any(String), expectedRevision: 3, deathRoll: { move: 'avoid' }, selections: [],
+    } });
+    expect(dialog.closed).toBe(true);
+  });
+
   it('reloads stale options instead of retrying a rejected revision', async () => {
     let loads = 0;
     vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {

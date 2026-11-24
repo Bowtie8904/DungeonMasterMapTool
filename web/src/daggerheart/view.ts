@@ -1349,7 +1349,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     for (const [id, label] of PAGES) {
       if (id === 'companion' && !companionRules(c)) continue;
       if (id === 'beastform' && !c.effects.some(e => e.beastform)) continue;
-      const effectCount = c.effects.filter(e => !e.dicePool).length;
+      const effectCount = c.effects.filter(e => !e.dicePool).length + (c.automationState?.effects?.length ?? 0);
       const count = id === 'effects' && effectCount ? ` (${effectCount})` : '';
       const b = el('button', { class: 'tab', type: 'button' }, label + count);
       b.setAttribute('role', 'tab');
@@ -1620,6 +1620,13 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
           })))] : []),
       );
     });
+    for (const effect of c.automationState?.effects ?? []) rows.push(el(
+      'div', { class: `feat${effect.kind === 'buff' ? ' hope' : ''}`,
+        style: effect.kind === 'debuff' ? 'border-left:3px solid var(--hp, #c55)' : '' },
+      el('div', { class: 'src' }, `${effect.kind === 'buff' ? 'Buff' : 'Debuff'} - managed by automation`),
+      el('div', { class: 'ft' }, effect.label),
+      rich(effect.text ?? ''),
+    ));
     const name = el('input', { placeholder: 'Condition or effect name' });
     const kind = el('select', {}, el('option', { value: 'debuff' }, 'Debuff'), el('option', { value: 'buff' }, 'Buff'));
     const text = el('input', { placeholder: 'What it does (optional)' });

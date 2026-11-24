@@ -1439,9 +1439,9 @@ class OnlineSessionServerTest {
         Path rulesFile = compendiumDir.resolve("rules").resolve("ruleset.json");
         ObjectNode ruleset = (ObjectNode) MAPPER.readTree(rulesFile.toFile());
         ObjectNode automation = ruleset.withObject("/automation");
-        automation.set("effects", MAPPER.readTree("""
+        automation.withObject("/effects").setAll((ObjectNode) MAPPER.readTree("""
                 {"tense":{"label":"Tense","while":{"gte":[{"read":"actor.stress.marked"},2]}}}"""));
-        automation.putObject("state").put("starts", 0).put("ends", 0);
+        automation.withObject("/state").put("starts", 0).put("ends", 0);
         ArrayNode rules = automation.withArray("rules");
         rules.add(MAPPER.readTree("""
                 {"id":"effect-failure","bindings":[{"id":"change","event":"effect.started","surface":"effect","mode":"automatic"}],
@@ -2341,11 +2341,11 @@ class OnlineSessionServerTest {
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
         ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
         ObjectNode automation = ruleset.withObject("/automation");
-        automation.set("effects", MAPPER.readTree("""
+        automation.withObject("/effects").setAll((ObjectNode) MAPPER.readTree("""
                 {"rest-ward":{"label":"Rest ward","until":["rest.short"]},
                  "scene-ward":{"label":"Scene ward","until":["scene.end"]},
                  "early-ward":{"label":"Early ward","until":["rest.short"],"restExpiry":"beforeMoves"}}"""));
-        automation.putObject("state").put("ended", 0);
+        automation.withObject("/state").put("ended", 0);
         ArrayNode rules = automation.withArray("rules");
         rules.add(MAPPER.readTree("""
                 {"id":"start-rest-ward","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
@@ -2515,6 +2515,90 @@ class OnlineSessionServerTest {
         assertEquals(history, store.historyTail(campaign.getId(), 100).size());
         assertEquals(409, automationHttp(owner, id, recovery.replace("risk-recover", "stale")
                 .replace("\"expectedRevision\":1", "\"expectedRevision\":2")).statusCode());
+    }
+
+    @Test
+    void avoidDeathPublishesAnEffectAndHealingWakesTheCharacter() throws Exception {
+        installRestRules();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/0/automation");
+        automation.removeAll();
+        automation.setAll((ObjectNode) MAPPER.readTree("""
+                {"rules":[{"id":"heal","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                 "do":[{"op":"track.clear","track":"actor.hp","amount":1}],"ui":{"label":"Heal"}}]}"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String id = "avoid", owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id(id).name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), id, """
+                {"name":"Ada","level":12,"hp":{"slots":6,"on":6},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"total":6,"on":2},
+                 "features":[{"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"}]}""");
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(owner, inbox);
+        try {
+            JsonNode offer = MAPPER.readTree(deathOptionsHttp(owner, id).body());
+            assertEquals("Avoid Death", offer.at("/rolls/avoid/label").asText());
+            assertTrue(restDescriptor(offer.path("actions"), "death-blaze").path("available").asBoolean());
+            String avoid = """
+                    {"request":{"requestId":"avoid","expectedRevision":0,"deathRoll":{"move":"avoid"},"selections":[]}}""";
+            var applied = automationHttp(owner, id, avoid);
+            assertEquals(200, applied.statusCode(), applied.body());
+            JsonNode sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+            assertEquals(1, sheet.path("scars").asInt());
+            assertEquals(5, sheet.at("/hope/slots").asInt());
+            assertNotNull(MoveValidator.movementBlockReason(sheet));
+            JsonNode update = inbox.next("sheetFeature");
+            assertTrue(update.at("/automationEffects/0/blocksMovement").asBoolean());
+            assertTrue(update.at("/automationEffects/0/blocksDeathMoves").asBoolean());
+            assertEquals("avoid", inbox.next("roll").at("/automationEvent/check/move").asText());
+            assertEquals(409, deathOptionsHttp(owner, id).statusCode());
+            assertEquals(applied.body(), automationHttp(owner, id, avoid).body());
+            String heal = """
+                    {"request":{"requestId":"heal","expectedRevision":1,
+                     "selections":[{"sourceInstanceId":"r","ruleId":"heal","bindingId":"use"}]}}""";
+            var healed = automationHttp(owner, id, heal);
+            assertEquals(200, healed.statusCode(), healed.body());
+            sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+            assertEquals(5, sheet.at("/hp/on").asInt());
+            assertNull(MoveValidator.movementBlockReason(sheet));
+            assertTrue(inbox.next("sheetFeature").path("automationEffects").isEmpty());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void manualHealingEndsAvoidDeathAndBlazePublishesOnce() throws Exception {
+        installRestRules();
+        String owner = cookie();
+        for (String id : List.of("manual-avoid", "blaze")) {
+            campaign.getActors().add(Campaign.Actor.builder().id(id).name("Ada").ownerId(playerId()).build());
+            store.saveSheet(campaign.getId(), id, """
+                    {"name":"Ada","level":1,"hp":{"slots":6,"on":6},"stress":{"slots":6,"on":0},
+                     "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"total":6,"on":2}}""");
+        }
+        String avoid = """
+                {"request":{"requestId":"manual-avoid","expectedRevision":0,"deathRoll":{"move":"avoid"},"selections":[]}}""";
+        var avoided = automationHttp(owner, "manual-avoid", avoid);
+        assertEquals(200, avoided.statusCode(), avoided.body());
+        JsonNode read = MAPPER.readTree(sheetRead(owner, "manual-avoid").body());
+        ObjectNode patch = MAPPER.createObjectNode();
+        patch.putObject("fields").putObject("hp").put("slots", 6).put("on", 5);
+        patch.putArray("removed");
+        var healed = patchSheet(owner, "manual-avoid", patch, read.path("version").asText());
+        assertEquals(200, healed.statusCode(), healed.body());
+        assertTrue(MAPPER.readTree(healed.body()).at("/sheet/automationState/effects").isEmpty(), healed.body());
+
+        String blaze = """
+                {"request":{"requestId":"blaze","expectedRevision":0,"deathAction":true,
+                 "selections":[{"sourceInstanceId":"ruleset:base","ruleId":"death-blaze","bindingId":"choose"}]}}""";
+        int history = store.historyTail(campaign.getId(), 100).size();
+        var reported = automationHttp(owner, "blaze", blaze);
+        assertEquals(200, reported.statusCode(), reported.body());
+        assertTrue(reported.body().contains("one final action"));
+        assertTrue(store.historyTail(campaign.getId(), 100).stream()
+                .anyMatch(message -> message.path("text").asText().contains("one final action")));
+        assertEquals(reported.body(), automationHttp(owner, "blaze", blaze).body());
+        assertEquals(history + 1, store.historyTail(campaign.getId(), 100).size());
     }
 
     @Test
@@ -3460,7 +3544,7 @@ class OnlineSessionServerTest {
         Path rulesFile = compendiumDir.resolve("rules").resolve("ruleset.json");
         ObjectNode ruleset = (ObjectNode) MAPPER.readTree(rulesFile.toFile());
         ObjectNode automation = ruleset.withObject("/automation");
-        automation.putObject("effects").putObject("ward").put("label", "Ward").put("singleHolder", true);
+        automation.withObject("/effects").putObject("ward").put("label", "Ward").put("singleHolder", true);
         automation.withArray("rules").addAll((ArrayNode) MAPPER.readTree("""
                 [
                  {"id":"cost-supply-ward","bindings":[{"id":"change","event":"track.changed",
@@ -4680,7 +4764,7 @@ class OnlineSessionServerTest {
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
         ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
         ObjectNode automation = ruleset.withObject("/automation");
-        automation.putObject("effects").putObject("ward").put("label", "Ward").put("singleHolder", true);
+        automation.withObject("/effects").putObject("ward").put("label", "Ward").put("singleHolder", true);
         automation.withArray("rules").addAll((ArrayNode) MAPPER.readTree("""
                 [
                  {"id":"reaction-ward","bindings":[{"id":"change","event":"track.changed",
@@ -4803,7 +4887,7 @@ class OnlineSessionServerTest {
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
         ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
         ObjectNode automation = ruleset.withObject("/automation");
-        automation.putObject("effects").putObject("ward").put("label", "Ward").put("singleHolder", true);
+        automation.withObject("/effects").putObject("ward").put("label", "Ward").put("singleHolder", true);
         automation.withArray("rules").add(MAPPER.readTree("""
                 {"id":"party-reaction-ward","bindings":[{"id":"change","event":"track.changed",
                    "surface":"resource","mode":"automatic"}],
@@ -5648,7 +5732,7 @@ class OnlineSessionServerTest {
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
         ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
         ObjectNode automation = ruleset.withObject("/automation");
-        ObjectNode effects = automation.putObject("effects");
+        ObjectNode effects = automation.withObject("/effects");
         effects.putObject("ward").put("label", "Ward").put("singleHolder", true);
         effects.putObject("banner").put("label", "Banner").put("singleHolder", true);
         ArrayNode rules = automation.withArray("rules");
@@ -5888,7 +5972,7 @@ class OnlineSessionServerTest {
                 .put("max", 4).put("initial", 1);
         automation.withObject("/pools").putObject("warded").put("kind", "number").put("scope", "actor")
                 .put("max", 4).put("whileEffect", "charge-ward");
-        automation.putObject("effects").putObject("charge-ward").put("label", "Charge ward");
+        automation.withObject("/effects").putObject("charge-ward").put("label", "Charge ward");
         automation.withArray("rules").addAll((ArrayNode) MAPPER.readTree("""
                 [
                  {"id":"charge-care","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"button",
@@ -6174,7 +6258,7 @@ class OnlineSessionServerTest {
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
         ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
         ObjectNode automation = ruleset.withObject("/automation");
-        automation.putObject("effects").putObject("ward").put("label", "Ward").put("singleHolder", true)
+        automation.withObject("/effects").putObject("ward").put("label", "Ward").put("singleHolder", true)
                 .putObject("locks").put("hp", 2);
         automation.putObject("pools").putObject("charge").put("kind", "number").put("scope", "actor")
                 .put("max", 4).put("whileEffect", "ward");
@@ -6561,7 +6645,7 @@ class OnlineSessionServerTest {
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
         ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
         ObjectNode automation = ruleset.withObject("/automation");
-        automation.putObject("effects").putObject("ward").put("label", "Ward").put("singleHolder", true)
+        automation.withObject("/effects").putObject("ward").put("label", "Ward").put("singleHolder", true)
                 .putObject("locks").put("hp", 2);
         ArrayNode rules = automation.withArray("rules");
         for (String id : List.of("first", "second")) {
@@ -6645,7 +6729,7 @@ class OnlineSessionServerTest {
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
         ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
         ObjectNode automation = ruleset.withObject("/automation");
-        automation.putObject("effects").putObject("barrier").put("label", "Barrier")
+        automation.withObject("/effects").putObject("barrier").put("label", "Barrier")
                 .putObject("locks").put("hp", 3);
         automation.withArray("rules").add(MAPPER.readTree("""
                 {"id":"release","bindings":[{"id":"move","event":"downtime.move","surface":"downtime",
@@ -6680,7 +6764,7 @@ class OnlineSessionServerTest {
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
         ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
         ObjectNode automation = ruleset.withObject("/automation");
-        automation.putObject("effects").putObject("ward").put("label", "Ward").put("singleHolder", true)
+        automation.withObject("/effects").putObject("ward").put("label", "Ward").put("singleHolder", true)
                 .putObject("locks").put("hp", 3);
         ArrayNode rules = automation.withArray("rules");
         rules.add(MAPPER.readTree("""

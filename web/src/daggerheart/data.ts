@@ -198,6 +198,16 @@ export interface LevelUpRecord {
   swap?: { out: string; in: string };
 }
 
+export interface AutomationEffect {
+  id: string;
+  label: string;
+  kind?: 'buff' | 'debuff';
+  text?: string;
+  until?: string[];
+  blocksMovement?: boolean;
+  blocksDeathMoves?: boolean;
+}
+
 export interface CharacterSheet {
   /** Character-local bookmarks; inactive equipment/cards retain their keys. */
   quickAccessFavorites?: string[];
@@ -236,6 +246,8 @@ export interface CharacterSheet {
   shortRestsInRow?: number;
   /** Active buffs and debuffs (Effects tab) */
   effects: ActiveEffect[];
+  /** Host-owned automation state; only effect presentation is interpreted by the browser. */
+  automationState?: { effects?: AutomationEffect[]; [key: string]: unknown };
   /** Limited-use counters keyed by source (features, cards, items) */
   usage: Record<string, { used: number; per: NonNullable<Automation['uses']>['per'] }>;
   /** Current custom spendable pools. Definitions live on active automation sources. */
@@ -250,7 +262,7 @@ export interface CharacterSheet {
   capacityApplied?: { hp: number; stress: number };
   spectralBlocked?: boolean;
   deathNarrative?: string;
-  pendingDeathRoll?: { id: number; ts: number };
+  pendingDeathRoll?: { id: number | string; ts: number };
   longRestRevision?: number;
   proficiency: Track;
   traits: Trait[];

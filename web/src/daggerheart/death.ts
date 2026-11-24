@@ -23,7 +23,9 @@ export function basicDeathOptions(): DeathOptions {
 }
 
 export function canMakeDeathMove(c: CharacterSheet): boolean {
-  return c.hp.slots > 0 && (c.permanentHp ?? 0) < c.hp.slots && c.hp.on === c.hp.slots && !c.pendingDeathRoll && !c.effects.some(e => e.unconsciousHp !== undefined);
+  return c.hp.slots > 0 && (c.permanentHp ?? 0) < c.hp.slots && c.hp.on === c.hp.slots && !c.pendingDeathRoll
+    && !c.effects.some(e => e.unconsciousHp !== undefined)
+    && !c.automationState?.effects?.some(e => e.blocksDeathMoves);
 }
 
 export function syncDeathState(c: CharacterSheet): void {

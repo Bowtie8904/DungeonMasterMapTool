@@ -5430,6 +5430,8 @@ public final class OnlineSessionServer {
             if (sheet.has(field)) message.set(field, sheet.get(field));
         }
         message.set("pendingDeathRoll", sheet.has("pendingDeathRoll") ? sheet.get("pendingDeathRoll") : MAPPER.nullNode());
+        JsonNode automationEffects = sheet.at("/automationState/effects");
+        message.set("automationEffects", automationEffects.isArray() ? automationEffects.deepCopy() : MAPPER.createArrayNode());
         String json = message.toString();
         for (Client client : recipients) sendTo(client.ctx, json);
     }

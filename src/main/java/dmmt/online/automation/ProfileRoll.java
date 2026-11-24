@@ -8,6 +8,7 @@ import dmmt.online.Campaign;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.random.RandomGenerator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -176,10 +177,10 @@ final class ProfileRoll {
     }
 
     static void deathFacts(ObjectNode event, SheetProjection.SourceElement source, ObjectNode actor, String move) {
-        if (!"risk".equals(move)) throw RuleJson.error("/request/deathRoll/move", "Unknown death roll.");
+        if (!Set.of("risk", "avoid").contains(move)) throw RuleJson.error("/request/deathRoll/move", "Unknown death roll.");
         event.put("type", "roll.prepare").put("sourceInstanceId", source.instanceId())
-                .put("profileId", "death." + move).put("label", "Risk It All");
-        event.withObject("/check").put("kind", "death").put("move", move).put("duality", true).put("reroll", false);
+                .put("profileId", "death." + move).put("label", "risk".equals(move) ? "Risk It All" : "Avoid Death");
+        event.withObject("/check").put("kind", "death").put("move", move).put("duality", "risk".equals(move)).put("reroll", false);
         if (actor.at("/stats/thresholds").isObject()) event.set("thresholds", actor.at("/stats/thresholds").deepCopy());
     }
 
@@ -189,7 +190,7 @@ final class ProfileRoll {
         ObjectNode plan = RuleJson.JSON.createObjectNode().put("id", java.util.UUID.randomUUID().toString());
         ArrayNode parts = plan.putArray("contributions");
         dice(parts, "hope", "Hope die", "core", 1, 12);
-        dice(parts, "fear", "Fear die", "core", 1, 12);
+        if ("risk".equals(move)) dice(parts, "fear", "Fear die", "core", 1, 12);
         event.set("roll", StructuredRoll.resolve(plan, RuleJson.JSON.createObjectNode(), random));
         updateCheck(event);
     }
@@ -304,16 +305,20 @@ final class ProfileRoll {
         if ("death".equals(check.path("kind").asText())) {
             ArrayNode hopeDice = StructuredRoll.dice(roll, "hope", true);
             ArrayNode fearDice = StructuredRoll.dice(roll, "fear", true);
-            if (hopeDice.size() != 1 || fearDice.size() != 1)
-                throw new RuleRuntime.Unavailable("deathDice", "A death roll requires one Hope die and one Fear die.");
-            int hope = hopeDice.get(0).path("face").asInt(), fear = fearDice.get(0).path("face").asInt();
+            boolean risk = "risk".equals(check.path("move").asText());
+            if (hopeDice.size() != 1 || fearDice.size() != (risk ? 1 : 0))
+                throw new RuleRuntime.Unavailable("deathDice", risk
+                        ? "Risk It All requires one Hope die and one Fear die." : "Avoid Death requires one Hope die.");
+            int hope = hopeDice.get(0).path("face").asInt(), fear = risk ? fearDice.get(0).path("face").asInt() : 0;
             int adjusted = RuleJson.integer(RuleExpression.numeric(roll.path("total").asDouble() - fear,
                     "/event/check/adjustedHope"), "/event/check/adjustedHope", -1_000_000, 1_000_000);
-            boolean critical = hope == fear;
-            boolean succeeds = critical || adjusted >= fear || "hope".equals(roll.at("/metadata/deathOutcome").asText());
-            check.put("hopeDie", hope).put("fearDie", fear).put("adjustedHope", adjusted)
-                    .put("critical", critical).put("dominant", succeeds ? "hope" : "fear")
-                    .put("outcome", succeeds ? "success" : "failure");
+            check.put("hopeDie", hope).put("adjustedHope", adjusted);
+            if (risk) {
+                boolean critical = hope == fear;
+                boolean succeeds = critical || adjusted >= fear || "hope".equals(roll.at("/metadata/deathOutcome").asText());
+                check.put("fearDie", fear).put("critical", critical).put("dominant", succeeds ? "hope" : "fear")
+                        .put("outcome", succeeds ? "success" : "failure");
+            } else check.put("critical", false).putNull("dominant").putNull("outcome");
         }
         if ("damage".equals(check.path("kind").asText())) {
             String type = roll.path("metadata").path("damageType").asText(null);

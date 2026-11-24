@@ -194,6 +194,7 @@ export interface FeatureSheetState {
   vault?: CharacterSheet['vault'];
   armorTrack?: CharacterSheet['armorTrack'];
   effects?: CharacterSheet['effects'];
+  automationEffects?: NonNullable<CharacterSheet['automationState']>['effects'];
   usage?: CharacterSheet['usage'];
   resources?: CharacterSheet['resources'];
 }
@@ -216,6 +217,7 @@ export function applyFeatureState(c: CharacterSheet, update: FeatureSheetState):
   if (update.pendingDeathRoll !== undefined) c.pendingDeathRoll = update.pendingDeathRoll ?? undefined;
   if (update.armorTrack) c.armorTrack = structuredClone(update.armorTrack);
   if (update.effects) c.effects = structuredClone(update.effects);
+  if (update.automationEffects) c.automationState = { ...c.automationState, effects: structuredClone(update.automationEffects) };
   if (update.usage) c.usage = structuredClone(update.usage);
   if (update.resources) c.resources = structuredClone(update.resources);
   return true;
@@ -259,7 +261,7 @@ function canonical(value: unknown): string {
 }
 
 const hostAuthoritativeFields = new Set([
-  'name', 'testingCharacter', 'gold', 'hp', 'stress', 'hope', 'armorTrack', 'effects', 'usage', 'resources',
+  'name', 'testingCharacter', 'gold', 'hp', 'stress', 'hope', 'armorTrack', 'effects', 'automationState', 'usage', 'resources',
   'companion', 'featureRevision', 'inventoryRevision', 'compendiumRevision', 'longRestRevision',
   'shortRestsInRow', 'permanentHp', 'pendingDeathRoll', 'deathNarrative', 'spectralBlocked', 'scars',
   'vitalityBenefits', 'vitalityEffectRemoved', 'transferClaims',
@@ -493,7 +495,7 @@ export function autosave(actorId: string, c: CharacterSheet, onError: (message: 
               applyInventory(c, e.sheet);
               applyFeatureState(c, { actorId, featureRevision: (e.sheet as { featureRevision?: number }).featureRevision ?? 0,
                 hp: e.sheet.hp, stress: e.sheet.stress, hope: e.sheet.hope, scars: e.sheet.scars, armorTrack: e.sheet.armorTrack,
-                effects: e.sheet.effects, usage: e.sheet.usage, resources: e.sheet.resources,
+                effects: e.sheet.effects, automationEffects: e.sheet.automationState?.effects, usage: e.sheet.usage, resources: e.sheet.resources,
                 permanentHp: e.sheet.permanentHp, longRestRevision: e.sheet.longRestRevision, spectralBlocked: e.sheet.spectralBlocked, deathNarrative: e.sheet.deathNarrative, pendingDeathRoll: e.sheet.pendingDeathRoll ?? null });
               document.dispatchEvent(new CustomEvent('dmmt-inventory-refreshed', { detail: actorId }));
             }

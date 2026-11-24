@@ -188,6 +188,8 @@ public final class RuleEffects {
         if (sourceActorId != null && !sourceActorId.isBlank()) instance.put("sourceActorId", sourceActorId);
         if (definition.has("text")) instance.put("text", RuleTemplate.render(definition.path("text").asText(), context));
         instance.put("kind", definition.path("kind").asText("buff"));
+        for (String field : List.of("blocksMovement", "blocksDeathMoves"))
+            if (definition.has(field)) instance.set(field, definition.get(field).deepCopy());
         if (!group.isEmpty()) instance.put("group", group);
         if (definition.has("profile")) instance.set("profile", definition.get("profile").deepCopy());
         if (definition.has("restExpiry")) instance.set("restExpiry", definition.get("restExpiry").deepCopy());
@@ -356,6 +358,8 @@ public final class RuleEffects {
             RuleJson.object(effect, path);
             if (!ids.add(RuleJson.text(effect.get("id"), path + "/id"))) throw RuleJson.error(path, "Duplicate effect instance ID.");
             if (effect.has("modifiers") && !effect.get("modifiers").isArray()) throw RuleJson.error(path + "/modifiers", "Expected a list.");
+            for (String field : List.of("blocksMovement", "blocksDeathMoves"))
+                if (effect.has(field) && !effect.get(field).isBoolean()) throw RuleJson.error(path + "/" + field, "Expected a boolean.");
             if (effect.has("restExpiry")) {
                 if (!"beforeMoves".equals(effect.path("restExpiry").asText()))
                     throw RuleJson.error(path + "/restExpiry", "Expected beforeMoves.");

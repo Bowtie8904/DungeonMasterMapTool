@@ -14,7 +14,10 @@ class DeathRollTest {
 
     private static AutomationHost.Pack pack(String rules) throws Exception {
         ObjectNode classes = fixture("rewrite/host-classes");
-        ((ObjectNode) classes.at("/entries/0/features/2/automation")).set("rules", RuleJson.parse(rules));
+        ObjectNode automation = (ObjectNode) classes.at("/entries/0/features/2/automation");
+        JsonNode parsed = RuleJson.parse(rules);
+        if (parsed.isEmpty()) automation.remove("rules");
+        else automation.set("rules", parsed);
         return AutomationHost.compile("death-test", Map.of("classes", classes.toString()),
                 fixture("rewrite/recipes").toString(), LegacyCatalogConverter.coreRuleset());
     }
@@ -194,5 +197,72 @@ class DeathRollTest {
                 "self", "owner", StructuredRollTest.faces(2, 8)));
         assertTrue(error.getMessage().contains("Death roll blocked."));
         assertEquals(before, sheet);
+    }
+
+    @Test
+    void avoidDeathScarsBlocksMovementAndEndsOnHealingWithReactions() throws Exception {
+        var pack = pack("""
+                [{"id":"heal","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"track.clear","track":"actor.hp","amount":1}],"ui":{"label":"Heal"}},
+                 {"id":"increase","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"track.capacity","track":"actor.hp","by":1}],"ui":{"label":"Increase HP"}},
+                 {"id":"wake","bindings":[{"id":"auto","event":"effect.ended","surface":"effect","mode":"automatic"}],
+                  "when":{"eq":[{"read":"event.effect.label"},"Unconscious"]},
+                  "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],"ui":{"report":"Awake."}}]""");
+        ObjectNode sheet = sheet();
+        ObjectNode avoid = rollRequest("avoid", 0);
+        avoid.withObject("/deathRoll").put("move", "avoid");
+        ObjectNode result = HOST.execute(pack, sheet, event(), avoid, "self", "owner", StructuredRollTest.faces(1));
+        assertEquals("avoid", result.at("/event/check/move").asText());
+        assertEquals(1, result.at("/event/check/hopeDie").asInt());
+        assertTrue(result.at("/event/check/fearDie").isNull());
+        assertEquals(1, sheet.path("scars").asInt());
+        assertEquals(5, sheet.at("/hope/slots").asInt());
+        JsonNode effect = sheet.at("/automationState/effects/0");
+        assertEquals("Unconscious", effect.path("label").asText());
+        assertTrue(effect.path("blocksMovement").asBoolean());
+        assertTrue(effect.path("blocksDeathMoves").asBoolean());
+        assertEquals(result, HOST.execute(pack, sheet, event(), avoid, "self", "owner", StructuredRollTest.noRandom()));
+        assertThrows(RuleRuntime.Unavailable.class, () -> HOST.describeDeath(pack, sheet, event(), "self"));
+        ObjectNode increase = RuleJson.JSON.createObjectNode().put("requestId", "increase").put("expectedRevision", 1);
+        increase.putArray("selections").addObject().put("sourceInstanceId", "steady").put("ruleId", "increase").put("bindingId", "use");
+        HOST.execute(pack, sheet, event(), increase, "self", "owner", StructuredRollTest.noRandom());
+        assertEquals(7, sheet.at("/hp/slots").asInt());
+        assertEquals(6, sheet.at("/hp/on").asInt());
+        assertEquals(1, sheet.at("/automationState/effects").size());
+        ObjectNode heal = RuleJson.JSON.createObjectNode().put("requestId", "heal").put("expectedRevision", 2);
+        heal.putArray("selections").addObject().put("sourceInstanceId", "steady").put("ruleId", "heal").put("bindingId", "use");
+        JsonNode healed = HOST.execute(pack, sheet, event(), heal, "self", "owner", StructuredRollTest.noRandom());
+        assertEquals(5, sheet.at("/hp/on").asInt());
+        assertEquals(4, sheet.at("/hope/on").asInt());
+        assertTrue(sheet.at("/automationState/effects").isEmpty());
+        assertTrue(healed.path("actions").findValuesAsText("report").contains("Awake."));
+    }
+
+    @Test
+    void avoidDeathWithoutScarExpiresAtLongRestAndBlazeReportsOnce() throws Exception {
+        var pack = pack("[]");
+        ObjectNode sheet = sheet();
+        ObjectNode avoid = rollRequest("avoid", 0);
+        avoid.withObject("/deathRoll").put("move", "avoid");
+        HOST.execute(pack, sheet, event(), avoid, "self", "owner", StructuredRollTest.faces(10));
+        assertEquals(0, sheet.path("scars").asInt());
+        assertEquals(6, sheet.at("/hope/slots").asInt());
+        assertEquals(1, sheet.at("/automationState/effects").size());
+        var snapshot = HOST.restEffectSnapshot(sheet);
+        ObjectNode preparation = HOST.prepareRest(pack, sheet, event(), "long", HOST.revision(sheet),
+                RuleJson.JSON.createArrayNode(), StructuredRollTest.noRandom());
+        HOST.completeRest(pack, sheet, event(), HOST.restProgress(pack, preparation), snapshot,
+                RuleJson.JSON.createArrayNode(), StructuredRollTest.noRandom());
+        assertTrue(sheet.at("/automationState/effects").isEmpty());
+
+        ObjectNode blazeSheet = sheet();
+        ObjectNode blaze = RuleJson.JSON.createObjectNode().put("requestId", "blaze").put("expectedRevision", 0)
+                .put("deathAction", true);
+        blaze.putArray("selections").addObject().put("sourceInstanceId", "ruleset:base")
+                .put("ruleId", "death-blaze").put("bindingId", "choose");
+        ObjectNode report = HOST.execute(pack, blazeSheet, event(), blaze, "self", "owner", StructuredRollTest.noRandom());
+        assertTrue(report.at("/actions/0/report").asText().contains("one final action"));
+        assertEquals(report, HOST.execute(pack, blazeSheet, event(), blaze, "self", "owner", StructuredRollTest.noRandom()));
     }
 }

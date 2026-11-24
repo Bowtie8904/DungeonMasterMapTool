@@ -291,14 +291,18 @@ public final class AutomationHost {
         var sources = sources(pack, working);
         var source = basicCheckSource(sources);
         ObjectNode actor = actor(pack, working, state, origin, sources);
-        ObjectNode event = origin.deepCopy();
-        ProfileRoll.deathFacts(event, source, actor, "risk");
-        ObjectNode risk = result.putObject("rolls").putObject("risk")
-                .put("label", "Risk It All")
-                .put("description", "Roll Hope and Fear. Matching dice clear all recoverable HP and Stress; "
-                        + "otherwise adjusted Hope at least Fear lets you divide recovery between them.");
-        risk.set("options", RuleDispatcher.describeRollOptions(candidates(pack, sources, state, actor, event),
-                audience -> allowed(audience, relation)));
+        ObjectNode rolls = result.putObject("rolls");
+        for (String move : List.of("risk", "avoid")) {
+            ObjectNode event = origin.deepCopy();
+            ProfileRoll.deathFacts(event, source, actor, move);
+            ObjectNode descriptor = rolls.putObject(move).put("label", event.path("label").asText())
+                    .put("description", "risk".equals(move)
+                            ? "Roll Hope and Fear. Matching dice clear all recoverable HP and Stress; "
+                                    + "otherwise adjusted Hope at least Fear lets you divide recovery between them."
+                            : "Roll Hope and fall unconscious. If adjusted Hope is at or below your level, gain a scar.");
+            descriptor.set("options", RuleDispatcher.describeRollOptions(candidates(pack, sources, state, actor, event),
+                    audience -> allowed(audience, relation)));
+        }
         return result;
     }
 
@@ -313,6 +317,9 @@ public final class AutomationHost {
         for (JsonNode effect : sheet.path("effects"))
             if (effect.has("unconsciousHp"))
                 throw new RuleRuntime.Unavailable("deathState", "This character is already unconscious.");
+        for (JsonNode effect : sheet.at("/automationState/effects"))
+            if (effect.path("blocksDeathMoves").asBoolean())
+                throw new RuleRuntime.Unavailable("deathState", "An active effect prevents another death move.");
     }
 
     private static SheetProjection.SourceElement basicCheckSource(List<SheetProjection.SourceElement> sources) {

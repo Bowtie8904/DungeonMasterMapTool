@@ -306,7 +306,7 @@ export interface FeatureSheetMessage {
   vitalityEffectRemoved?: boolean;
   spectralBlocked?: boolean;
   deathNarrative?: string;
-  pendingDeathRoll?: { id: number; ts: number } | null;
+  pendingDeathRoll?: import('./daggerheart/data').CharacterSheet['pendingDeathRoll'] | null;
   inventoryRevision?: number;
   compendiumRevision?: number;
   inventory?: import('./daggerheart/data').CharacterSheet['inventory'];
@@ -314,6 +314,7 @@ export interface FeatureSheetMessage {
   vault?: import('./daggerheart/data').CharacterSheet['vault'];
   armorTrack?: import('./daggerheart/data').Track;
   effects?: import('./daggerheart/engine').ActiveEffect[];
+  automationEffects?: import('./daggerheart/data').AutomationEffect[];
   usage?: import('./daggerheart/data').CharacterSheet['usage'];
   resources?: Record<string, number>;
 }

@@ -17,6 +17,9 @@ public final class MoveValidator {
                 if (effect.path("blocksMovement").asBoolean())
                     return "This character cannot move while a movement-blocking effect is active.";
         }
+        for (JsonNode effect : saved.at("/automationState/effects"))
+            if (effect.path("blocksMovement").asBoolean())
+                return "This character cannot move while a movement-blocking effect is active.";
         return null;
     }
 
