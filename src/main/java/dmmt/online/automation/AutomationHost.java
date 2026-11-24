@@ -2102,6 +2102,13 @@ public final class AutomationHost {
                         && refreshReactionSourcePools(pack, projected, event, staged, contexts, currentState, sourceElements);
                 boolean ended = endConditionalReactionEffects(pack, projected, contexts, currentState, sourceElements, event, holderId);
                 if (!ended && !sourcePoolsChanged && pools.equals(projected.path("pools"))) {
+                    // Pools that were lazily initialized earlier in this action are not in stored state yet.
+                    JsonNode stagedPools = staged.path("actor").path("pools");
+                    if (stagedPools.isObject() && !stagedPools.isEmpty()) {
+                        ObjectNode merged = projected.has("pools") && projected.get("pools").isObject()
+                                ? (ObjectNode) projected.get("pools") : projected.putObject("pools");
+                        stagedPools.fields().forEachRemaining(pool -> { if (!merged.has(pool.getKey())) merged.set(pool.getKey(), pool.getValue().deepCopy()); });
+                    }
                     return projected;
                 }
                 prior = projected;
@@ -2164,7 +2171,7 @@ public final class AutomationHost {
     private static boolean plainConsumption(ObjectNode before, JsonNode after, RuleCompiler.Program program) {
         if (!after.isObject() || !before.path("quantity").isInt() || !after.path("quantity").isInt()
                 || after.path("quantity").asInt() < 0 || after.path("quantity").asInt() > before.path("quantity").asInt()
-                || program.stateMayAffectProjection() || !program.automatic("track.changed").isEmpty())
+                || program.quantityMayAffectProjection() || !program.automatic("track.changed").isEmpty())
             return false;
         ObjectNode priorSource = before.deepCopy(), nextSource = ((ObjectNode) after).deepCopy();
         priorSource.remove("quantity");

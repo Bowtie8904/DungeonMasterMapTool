@@ -610,6 +610,15 @@ public final class RuleDispatcher {
         RuleRuntime.TrackObserver costObserver = reservationObserver(observer);
         List<RuleRuntime.Prepared> prepared = new ArrayList<>();
         ObjectNode sharedActor = snapshot.actor().deepCopy();
+        // Preflight lazily initializes declared actor pools; keep them when the shared actor replaces each context's actor.
+        for (CheckedInvocation item : checked) {
+            if (item.prepared().context().path("source").path("instanceId").asText().startsWith("grant:")) continue;
+            JsonNode initialized = item.prepared().context().path("actor").path("pools");
+            if (!initialized.isObject() || initialized.isEmpty()) continue;
+            ObjectNode pools = sharedActor.has("pools") && sharedActor.get("pools").isObject()
+                    ? (ObjectNode) sharedActor.get("pools") : sharedActor.putObject("pools");
+            initialized.fields().forEachRemaining(pool -> { if (!pools.has(pool.getKey())) pools.set(pool.getKey(), pool.getValue().deepCopy()); });
+        }
         ObjectNode sharedEvent = snapshot.event().deepCopy();
         JsonNode sharedRecipient = withRecipient && !snapshot.sources().isEmpty()
                 ? snapshot.sources().getFirst().context().path("recipient").deepCopy() : null;

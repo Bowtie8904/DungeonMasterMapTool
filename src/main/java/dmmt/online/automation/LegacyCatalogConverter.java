@@ -92,6 +92,10 @@ public final class LegacyCatalogConverter {
     private static final Map<String, List<String>> RESETS = Map.of(
             "rest", List.of("rest.short", "rest.long"), "shortRest", List.of("rest.short"), "longRest", List.of("rest.long"),
             "scene", List.of("scene.end"), "session", List.of("session.start"));
+    /** A rest also ends the scene in the legacy runtime, so per-scene uses come back on every rest. */
+    private static final Map<String, List<String>> USAGE_RESETS = Map.of(
+            "rest", List.of("rest.short", "rest.long"), "shortRest", List.of("rest.short"), "longRest", List.of("rest.long"),
+            "scene", List.of("rest.short", "rest.long", "scene.end"), "session", List.of("session.start"));
     static final String EMPTY_RECIPES = "{\"format\":\"dmmap-daggerheart-rules\",\"version\":2,\"recipes\":[]}";
 
     private LegacyCatalogConverter() {}
@@ -307,7 +311,7 @@ public final class LegacyCatalogConverter {
         if (legacy.has("uses")) {
             JsonNode uses = legacy.get("uses");
             p.onlyFields(uses, path + "/uses", Set.of("max", "per"));
-            List<String> resets = RESETS.get(uses.path("per").asText());
+            List<String> resets = USAGE_RESETS.get(uses.path("per").asText());
             if (!uses.path("max").isInt() || uses.path("max").asInt() < 1) p.add(path + "/uses/max", "Expected a positive whole number.");
             else if (resets == null) p.add(path + "/uses/per", "Unsupported reset: " + uses.path("per").asText());
             else {
@@ -1066,7 +1070,7 @@ public final class LegacyCatalogConverter {
     /** A rule-specific use budget replaces the shared source budget for that rule only. */
     private static void ruleLimit(JsonNode uses, String path, Problems p, ObjectNode out, ObjectNode rule) {
         p.onlyFields(uses, path, Set.of("max", "per"));
-        List<String> resets = RESETS.get(uses.path("per").asText());
+        List<String> resets = USAGE_RESETS.get(uses.path("per").asText());
         if (!uses.path("max").isInt() || uses.path("max").asInt() < 1) { p.add(path + "/max", "Expected a positive whole number."); return; }
         if (resets == null) { p.add(path + "/per", "Unsupported reset: " + uses.path("per").asText()); return; }
         String id = "rule-" + rule.path("id").asText();
@@ -1818,9 +1822,6 @@ public final class LegacyCatalogConverter {
         ArrayNode options = benefit.putArray("options");
         options.addObject().put("id", "hope").put("label", "Gain Hope equal to the card's level");
         options.addObject().put("id", "damage").put("label", "Add twice the card's level to a spell's damage");
-        steps.addObject().put("op", "collection.remove").put("target", "actor").put("collection", "loadout").put("as", "card")
-                .set("item", read("input.card.id"));
-        steps.addObject().put("op", "collection.add").put("target", "actor").put("collection", "vault").set("item", read("result.card"));
         ObjectNode hope = steps.addObject().put("op", "resource.gain").put("pool", "actor.hope");
         hope.set("amount", read("input.card.level"));
         hope.putObject("if").putArray("eq").add(read("input.benefit")).add("hope");
@@ -1830,6 +1831,10 @@ public final class LegacyCatalogConverter {
             ObjectNode start = steps.addObject().put("op", "effect.start").put("effect", declared).put("target", "actor");
             start.putObject("if").putArray("eq").add(read("input.benefit")).add("damage");
         }
+        // Moving the card changes source-bearing collections, so it follows every step that reprojects the character.
+        steps.addObject().put("op", "collection.remove").put("target", "actor").put("collection", "loadout").put("as", "card")
+                .set("item", read("input.card.id"));
+        steps.addObject().put("op", "collection.add").put("target", "actor").put("collection", "vault").set("item", read("result.card"));
     }
 
     /**
@@ -3935,7 +3940,7 @@ public final class LegacyCatalogConverter {
             if (!trigger.path("vaultSource").isBoolean()) p.add(path + "/vaultSource", "Expected a boolean.");
             else if (trigger.path("vaultSource").asBoolean()) {
                 steps.addObject().put("op", "collection.remove").put("target", "actor").put("collection", "loadout").put("as", "vaulted")
-                        .set("item", read("source.instanceId"));
+                        .set("item", read("source.name"));
                 steps.addObject().put("op", "collection.add").put("target", "actor").put("collection", "vault").set("item", read("result.vaulted"));
             }
         }
@@ -4215,7 +4220,7 @@ public final class LegacyCatalogConverter {
         lost.putArray("lte").add(read("result.face")).add(5);
         kept.putArray("gt").add(read("result.face")).add(5);
         steps.addObject().put("op", "collection.remove").put("target", "actor").put("collection", "loadout").put("as", "card")
-                .set("item", read("source.instanceId"));
+                .set("item", read("source.name"));
         ObjectNode vault = steps.addObject().put("op", "collection.add").put("target", "actor").put("collection", "vault");
         vault.set("item", read("result.card")); vault.set("if", lost);
         ObjectNode back = steps.addObject().put("op", "collection.add").put("target", "actor").put("collection", "loadout");
@@ -5427,7 +5432,7 @@ public final class LegacyCatalogConverter {
                     start.putObject("if").putArray("includes").add(read("input.pick")).add("thresholds");
                 }
                 steps.addObject().put("op", "collection.remove").put("target", "actor").put("collection", "loadout").put("as", "card")
-                        .set("item", read("source.instanceId"));
+                        .set("item", read("source.name"));
                 steps.addObject().put("op", "collection.add").put("target", "actor").put("collection", "vault").set("item", read("result.card"));
                 return "{source.name}: gained the chosen permanent benefits and moved the card to the vault.";
             }
@@ -7438,7 +7443,7 @@ public final class LegacyCatalogConverter {
                 steps.addObject().put("op", "dice.roll").put("count", 1).put("sides", 6).put("as", "roll");
                 steps.addObject().put("op", "track.clear").put("track", "actor.hp").put("as", "hp").set("amount", read("result.roll"));
                 steps.addObject().put("op", "collection.remove").put("target", "actor").put("collection", "loadout").put("as", "card")
-                        .set("item", read("source.instanceId"));
+                        .set("item", read("source.name"));
                 steps.addObject().put("op", "collection.add").put("target", "actor").put("collection", "vault").set("item", read("result.card"));
                 ui.put("report", "Rolled {result.roll}: cleared {result.hp} HP instead of a death move and moved {source.name} to the vault.");
             }

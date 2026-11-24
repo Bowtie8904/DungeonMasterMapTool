@@ -1710,7 +1710,8 @@ public final class RuleRuntime {
                 JsonNode item = eval(op.path("item"), context);
                 if ("collection.add".equals(kind)) {
                     ObjectNode entry = RuleJson.object(item, "/item").deepCopy();
-                    String id = RuleJson.id(entry.get("id"), "/item/id");
+                    String id = RuleJson.text(entry.get("id"), "/item/id");
+                    if (id.length() > 128) throw RuleJson.error("/item/id", "Invalid stable ID.");
                     entry.put("grantedBy", context.path("source").path("instanceId").asText());
                     ObjectNode existing = null;
                     for (JsonNode candidate : list) if (id.equals(candidate.path("id").asText())) existing = (ObjectNode) candidate;

@@ -1468,7 +1468,7 @@ class LegacyCatalogConverterTest {
         assertTrue(result.diagnostics().isEmpty(), result.diagnostics().toString());
         RuleCompiler.Program program = program(result, 0);
         String event = "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"action\",\"origin\":\"card:T\",\"critical\":false,\"outcome\":null,\"total\":15,\"difficulty\":13},\"roll\":" + ROLL + "}";
-        String actor = "{\"id\":\"owner\",\"name\":\"Ari\",\"effects\":[],\"loadout\":[{\"id\":\"fixture\"}],\"vault\":[]}";
+        String actor = "{\"id\":\"owner\",\"name\":\"Ari\",\"effects\":[],\"loadout\":[{\"id\":\"Fixture\"}],\"vault\":[]}";
         for (int face : new int[]{5, 6}) {
             ObjectNode source = context(program, actor, event);
             RuleDispatcher.EventResolution done = RuleDispatcher.executeEvent(List.of(new RuleDispatcher.Candidate(program, source)),
@@ -1627,7 +1627,7 @@ class LegacyCatalogConverterTest {
         for (int i = 0; i < 6; i++) program(result, i);
 
         String dying = "{\"id\":\"ari\",\"hope\":{\"value\":2,\"max\":6},\"hp\":{\"marked\":6,\"capacity\":6},\"effects\":[],"
-                + "\"loadout\":[{\"id\":\"fixture\",\"name\":\"Unbreakable\"}],\"vault\":[]}";
+                + "\"loadout\":[{\"id\":\"Fixture\",\"name\":\"Unbreakable\"}],\"vault\":[]}";
         RuleCompiler.Program hardened = program(result, 3);
         JsonNode after = death(hardened, context(hardened, dying, "{\"type\":\"death.options\"}"), "use").contexts().getFirst();
         assertEquals(5, after.at("/actor/hp/marked").asInt(), after.toString());
@@ -1636,7 +1636,7 @@ class LegacyCatalogConverterTest {
         after = death(unbreakable, context(unbreakable, dying, "{\"type\":\"death.options\"}"), "use").contexts().getFirst();
         assertTrue(after.at("/actor/hp/marked").asInt() < 6, after.toString());
         assertEquals(0, after.at("/actor/loadout").size(), after.toString());
-        assertEquals("fixture", after.at("/actor/vault/0/id").asText(), after.toString());
+        assertEquals("Fixture", after.at("/actor/vault/0/id").asText(), after.toString());
         assertTrue(block(result, 5).toString().contains("\"inventory.consume\""), block(result, 5).toString());
     }
 

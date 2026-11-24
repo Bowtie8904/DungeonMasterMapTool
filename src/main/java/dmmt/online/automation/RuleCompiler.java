@@ -299,6 +299,10 @@ public final class RuleCompiler {
         boolean stateMayAffectProjection() {
             return hasComputedActorPools || hasComputedSourcePools || !modifiers.isEmpty() || !effects.isEmpty();
         }
+        /** Effect declarations do not depend on a source's quantity; computed pools and modifiers may. */
+        boolean quantityMayAffectProjection() {
+            return hasComputedActorPools || hasComputedSourcePools || !modifiers.isEmpty();
+        }
         List<String> poolsBoundTo(String effectId) { return poolsByEffect.getOrDefault(effectId, List.of()); }
         Set<String> boundPoolIds() { return boundPoolIds; }
         boolean hasEffect(String effectId) { return effects.has(effectId); }
