@@ -2330,6 +2330,227 @@ class OnlineSessionServerTest {
         java.nio.file.Files.writeString(rules.resolve("ruleset.json"), ruleset.toString());
     }
 
+    private void installResetEffectRules() throws Exception {
+        installRestRules();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = ruleset.withObject("/automation");
+        automation.set("effects", MAPPER.readTree("""
+                {"rest-ward":{"label":"Rest ward","until":["rest.short"]},
+                 "scene-ward":{"label":"Scene ward","until":["scene.end"]},
+                 "early-ward":{"label":"Early ward","until":["rest.short"],"restExpiry":"beforeMoves"}}"""));
+        automation.putObject("state").put("ended", 0);
+        ArrayNode rules = automation.withArray("rules");
+        rules.add(MAPPER.readTree("""
+                {"id":"start-rest-ward","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                 "do":[{"op":"effect.start","effect":"rest-ward","target":"actor"}],"ui":{"label":"Rest ward"}}"""));
+        rules.add(MAPPER.readTree("""
+                {"id":"start-scene-ward","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                 "do":[{"op":"effect.start","effect":"scene-ward","target":"actor"}],"ui":{"label":"Scene ward"}}"""));
+        rules.add(MAPPER.readTree("""
+                {"id":"start-early-ward","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                 "do":[{"op":"effect.start","effect":"early-ward","target":"actor"}],"ui":{"label":"Early ward"}}"""));
+        rules.add(MAPPER.readTree("""
+                {"id":"reset-failure","bindings":[{"id":"auto","event":"effect.ended","surface":"effect","mode":"automatic"}],
+                 "when":{"lt":[{"read":"actor.hope.value"},2]},
+                 "do":[{"op":"resource.spend","pool":"actor.hope","amount":3}],"ui":{}}"""));
+        rules.add(MAPPER.readTree("""
+                {"id":"reset-ended","bindings":[{"id":"auto","event":"effect.ended","surface":"effect","mode":"automatic"}],
+                 "do":[{"op":"state.increment","slot":"ended","by":1},
+                       {"op":"resource.gain","pool":"actor.hope","amount":1},
+                       {"op":"table.gain","resource":"fear","amount":1,"label":"Expired"}],
+                 "ui":{"report":"Expired {event.effect.label} at Fear {event.table.fear}."}}"""));
+        rules.add(MAPPER.readTree("""
+                {"id":"after-reset","bindings":[{"id":"auto","event":"rest.short","surface":"rest","mode":"automatic",
+                   "restPhase":"afterReset"}],
+                 "ui":{"report":"After reset at Fear {event.table.fear} with {actor.hope.value} Hope."}}"""));
+        rules.add(MAPPER.readTree("""
+                {"id":"early-ready","bindings":[{"id":"use","event":"rest.prepare","surface":"rest","mode":"option"}],
+                 "when":{"gte":[{"read":"actor.hope.value"},3]},"ui":{"label":"Ready after expiry"}}"""));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+    }
+
+    @Test
+    void earlyRestExpiryReactionsAffectOffersAndCommitBeforeMoves() throws Exception {
+        installResetEffectRules();
+        String id = "early", owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id(id).name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), id, """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":0},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":2}}""");
+        String start = """
+                {"request":{"requestId":"start-ward","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"ruleset:base","ruleId":"start-early-ward","bindingId":"use"}]}}""";
+        assertEquals(200, automationHttp(owner, id, start).statusCode());
+        String original = store.loadSheet(campaign.getId(), id);
+        int fear = campaign.getFear(), history = store.historyTail(campaign.getId(), 100).size();
+        var described = restHttp(owner, id, "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode offer = MAPPER.readTree(described.body());
+        assertTrue(restDescriptor(offer.path("preparation"), "early-ready").path("available").asBoolean());
+        assertEquals(original, store.loadSheet(campaign.getId(), id));
+        assertEquals(fear, campaign.getFear());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        ObjectNode body = restRequest(offer, "early-rest");
+        ObjectNode request = (ObjectNode) body.path("request");
+        request.withArray("preparation").add(restSelection(restDescriptor(offer.path("preparation"), "early-ready")));
+        addRestMove(request, restDescriptor(offer.path("moves"), "rest-prepare"));
+        var rested = restHttp(owner, id, null, body.toString());
+        assertEquals(200, rested.statusCode(), rested.body());
+        List<String> reports = MAPPER.readTree(rested.body()).path("actions").findValuesAsText("report");
+        assertTrue(reports.contains("Expired Early ward at Fear " + (fear + 1) + "."), rested.body());
+        assertTrue(reports.contains("After reset at Fear " + (fear + 1) + " with 4 Hope."), rested.body());
+        JsonNode sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+        assertEquals(4, sheet.at("/hope/on").asInt());
+        assertEquals(1, sheet.at("/automationState/sources/ruleset:base/state/ended").asInt());
+        assertEquals(0, sheet.at("/automationState/effects").size());
+        assertEquals(fear + 1, campaign.getFear());
+        history = store.historyTail(campaign.getId(), 100).size();
+        assertEquals(rested.body(), restHttp(owner, id, null, body.toString()).body());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+    }
+
+    @Test
+    void earlyRestExpiryRejectsRandomReactionsWithoutSamplingOrSaving() throws Exception {
+        installResetEffectRules();
+        String id = "early-random", owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id(id).name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), id, """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":0},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":2}}""");
+        String start = """
+                {"request":{"requestId":"start-ward","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"ruleset:base","ruleId":"start-early-ward","bindingId":"use"}]}}""";
+        assertEquals(200, automationHttp(owner, id, start).statusCode());
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        for (JsonNode rule : ruleset.at("/automation/rules"))
+            if ("reset-ended".equals(rule.path("id").asText()))
+                ((ArrayNode) rule.path("do")).add(MAPPER.readTree("{\"op\":\"dice.roll\",\"count\":1,\"sides\":6}"));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        String before = store.loadSheet(campaign.getId(), id);
+        int fear = campaign.getFear(), history = store.historyTail(campaign.getId(), 100).size();
+        var offer = restHttp(owner, id, "short", null);
+        assertEquals(409, offer.statusCode(), offer.body());
+        assertEquals("restExpiry", MAPPER.readTree(offer.body()).path("code").asText());
+        assertEquals(before, store.loadSheet(campaign.getId(), id));
+        assertEquals(fear, campaign.getFear());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+    }
+
+    @Test
+    void earlyRestExpiryRejectsBlockedReactionsWithoutSaving() throws Exception {
+        installResetEffectRules();
+        String id = "early-blocked", owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id(id).name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), id, """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":0},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":2}}""");
+        String start = """
+                {"request":{"requestId":"start-ward","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"ruleset:base","ruleId":"start-early-ward","bindingId":"use"}]}}""";
+        assertEquals(200, automationHttp(owner, id, start).statusCode());
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        for (JsonNode rule : ruleset.at("/automation/rules"))
+            if ("reset-ended".equals(rule.path("id").asText()))
+                ((ArrayNode) rule.path("do")).add(MAPPER.readTree("{\"op\":\"event.block\",\"reason\":\"Ward prevents rest.\"}"));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        String before = store.loadSheet(campaign.getId(), id);
+        int fear = campaign.getFear(), history = store.historyTail(campaign.getId(), 100).size();
+        var offer = restHttp(owner, id, "short", null);
+        assertEquals(409, offer.statusCode(), offer.body());
+        assertEquals("blocked", MAPPER.readTree(offer.body()).path("code").asText());
+        assertTrue(offer.body().contains("Ward prevents rest."));
+        assertEquals(before, store.loadSheet(campaign.getId(), id));
+        assertEquals(fear, campaign.getFear());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+    }
+
+    @Test
+    void restExpiryDispatchesEffectReactionsBeforeAfterResetAndReplaysOnce() throws Exception {
+        installResetEffectRules();
+        String id = "resting", owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id(id).name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), id, """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":0},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0}}""");
+        String start = """
+                {"request":{"requestId":"start-ward","expectedRevision":0,
+                 "selections":[{"sourceInstanceId":"ruleset:base","ruleId":"start-rest-ward","bindingId":"use"}]}}""";
+        assertEquals(200, automationHttp(owner, id, start).statusCode());
+        JsonNode offer = MAPPER.readTree(restHttp(owner, id, "short", null).body());
+        ObjectNode body = restRequest(offer, "rest-ward");
+        String before = store.loadSheet(campaign.getId(), id);
+        int fear = campaign.getFear(), history = store.historyTail(campaign.getId(), 100).size();
+        var failed = restHttp(owner, id, null, body.toString());
+        assertEquals(409, failed.statusCode(), failed.body());
+        assertEquals(before, store.loadSheet(campaign.getId(), id));
+        assertEquals(fear, campaign.getFear());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+
+        ObjectNode funded = (ObjectNode) MAPPER.readTree(before);
+        funded.withObject("/hope").put("on", 2);
+        store.saveSheet(campaign.getId(), id, funded.toString());
+        offer = MAPPER.readTree(restHttp(owner, id, "short", null).body());
+        body = restRequest(offer, "rest-ward");
+        var rested = restHttp(owner, id, null, body.toString());
+        assertEquals(200, rested.statusCode(), rested.body());
+        List<String> reports = MAPPER.readTree(rested.body()).path("actions").findValuesAsText("report");
+        String ended = "Expired Rest ward at Fear " + (fear + 1) + ".";
+        String after = "After reset at Fear " + (fear + 1) + " with 3 Hope.";
+        assertTrue(reports.contains(ended), rested.body());
+        assertTrue(reports.contains(after), rested.body());
+        assertTrue(reports.indexOf(ended) < reports.indexOf(after), rested.body());
+        JsonNode sheet = MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+        assertEquals(3, sheet.at("/hope/on").asInt());
+        assertEquals(1, sheet.at("/automationState/sources/ruleset:base/state/ended").asInt());
+        assertEquals(0, sheet.at("/automationState/effects").size());
+        assertEquals(fear + 1, campaign.getFear());
+        history = store.historyTail(campaign.getId(), 100).size();
+        assertEquals(rested.body(), restHttp(owner, id, null, body.toString()).body());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+    }
+
+    @Test
+    void sceneExpiryDispatchesEachHoldersEffectsInOneAtomicReset() throws Exception {
+        installResetEffectRules();
+        String owner = cookie(), campaignId = campaign.getId();
+        for (String id : List.of("first", "second")) {
+            campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId()).build());
+            store.saveSheet(campaignId, id, """
+                    {"name":"%s","hp":{"slots":6,"on":0},"stress":{"slots":6,"on":0},
+                     "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":%d}}"""
+                    .formatted(id, "first".equals(id) ? 2 : 0));
+            String start = """
+                    {"request":{"requestId":"start-ward","expectedRevision":0,
+                     "selections":[{"sourceInstanceId":"ruleset:base","ruleId":"start-scene-ward","bindingId":"use"}]}}""";
+            var started = automationHttp(owner, id, start);
+            assertEquals(200, started.statusCode(), started.body());
+        }
+        String first = store.loadSheet(campaignId, "first"), second = store.loadSheet(campaignId, "second");
+        int fear = campaign.getFear(), history = store.historyTail(campaignId, 100).size();
+        assertNotNull(server.endScene());
+        assertEquals(first, store.loadSheet(campaignId, "first"));
+        assertEquals(second, store.loadSheet(campaignId, "second"));
+        assertEquals(fear, campaign.getFear());
+        assertEquals(history, store.historyTail(campaignId, 100).size());
+        ObjectNode funded = (ObjectNode) MAPPER.readTree(second);
+        funded.withObject("/hope").put("on", 2);
+        store.saveSheet(campaignId, "second", funded.toString());
+        assertNull(server.endScene());
+        for (String id : List.of("first", "second")) {
+            JsonNode sheet = MAPPER.readTree(store.loadSheet(campaignId, id));
+            assertEquals(3, sheet.at("/hope/on").asInt(), id);
+            assertEquals(1, sheet.at("/automationState/sources/ruleset:base/state/ended").asInt(), id);
+            assertEquals(0, sheet.at("/automationState/effects").size(), id);
+        }
+        assertEquals(fear + 2, campaign.getFear());
+        assertTrue(store.historyTail(campaignId, 100).toString().contains("Expired Scene ward"));
+        assertNull(server.endScene());
+        assertEquals(fear + 2, campaign.getFear());
+    }
+
     private void installRestRerollRules() throws Exception {
         installRestRules();
         var converted = dmmt.online.automation.LegacyCatalogConverter.convert("""

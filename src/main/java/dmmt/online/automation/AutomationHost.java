@@ -1030,6 +1030,33 @@ public final class AutomationHost {
         return RuleDispatcher.effectEvents(staged, "actor", previous);
     }
 
+    /** Dispatches projected effect transitions inside an already staged host transaction. */
+    public ObjectNode automaticEffectTransitions(Pack pack, ObjectNode before, ObjectNode working,
+                                                  ObjectNode event, RandomGenerator random) {
+        return automaticEffectTransitions(pack, before, working, event, random, null);
+    }
+
+    private ObjectNode automaticEffectTransitions(Pack pack, ObjectNode before, ObjectNode working,
+                                                   ObjectNode event, RandomGenerator random,
+                                                   StagedRestRecipients recipients) {
+        ObjectNode response = RuleJson.JSON.createObjectNode();
+        ArrayNode actions = response.putArray("actions"), outbox = response.putArray("outbox");
+        ObjectNode parent = event.deepCopy();
+        for (ObjectNode transition : effectTransitions(pack, before, working, parent)) {
+            RuleDispatcher.mergeReactionEvent(transition, parent);
+            var candidates = candidates(pack, working, transition);
+            ObjectNode result = applyRestEvent(pack, working, projection.state(working), transition,
+                    candidates, List.of(), random, recipients);
+            actions.addAll((ArrayNode) result.get("actions"));
+            outbox.addAll((ArrayNode) result.get("outbox"));
+            RuleDispatcher.mergeReactionEvent(parent, result.path("event"));
+            if (!parent.path("blocked").isEmpty())
+                throw new RuleRuntime.Unavailable("blocked", parent.at("/blocked/0/reason").asText());
+        }
+        response.set("event", parent);
+        return response;
+    }
+
     public record RestMember(String id, String name, String sheetVersion, long revision, Supplier<ObjectNode> loadSheet) {
         public RestMember {
             RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(id), "/recipient/id");
@@ -1929,13 +1956,19 @@ public final class AutomationHost {
 
         Set<String> initial = restEffectSnapshot(working);
         ObjectNode restEvent = origin.deepCopy().put("type", "rest." + kind);
+        ObjectNode beforeExpiry = working.deepCopy();
         expireRestBeforeMoves(pack, working, restEvent, initial);
+        ObjectNode early = automaticEffectTransitions(pack, beforeExpiry, working, restEvent, random, recipients);
+        settleRestInventory(working, early, recipients, roster);
+        if (settlePartyRecovery) settleRestEffects(pack, working, recipients, (ArrayNode) early.get("outbox"));
+        ObjectNode preparedOrigin = origin.deepCopy();
+        carryRestTable(preparedOrigin, early.required("event"));
         projection.state(working).put("revision", revision);
-        ObjectNode prepared = prepareRest(pack, working, origin, kind, revision, preparation, random, initial, recipients);
+        ObjectNode prepared = prepareRest(pack, working, preparedOrigin, kind, revision, preparation, random, initial, recipients);
         projection.state(working).put("revision", revision);
         settleRestInventory(working, prepared, recipients, roster);
         RestProgress progress = restProgress(pack, prepared);
-        ObjectNode stagedOrigin = origin.deepCopy();
+        ObjectNode stagedOrigin = preparedOrigin.deepCopy();
         carryRestTable(stagedOrigin, prepared.required("event"));
 
         ObjectNode response = RuleJson.JSON.createObjectNode();
@@ -1945,6 +1978,7 @@ public final class AutomationHost {
         response.set("preparationEvent", prepared.path("event").deepCopy());
         if (settlePartyRecovery)
             settleRestEffects(pack, working, recipients, (ArrayNode) prepared.get("outbox"));
+        appendRestStage(early, actions, outbox, targeted);
         appendRestStage(prepared, actions, outbox, targeted);
         return new StagedRest(pack, sheet.deepCopy(), working, stagedOrigin, progress, initial, recipients,
                 targeted, settlePartyRecovery, response, completedMoves, revision);
@@ -2152,20 +2186,35 @@ public final class AutomationHost {
         long revision = restRevision(working);
         Set<String> initial = restEffectSnapshot(working);
         ObjectNode expiry = origin.deepCopy().put("type", "rest." + kind);
+        ObjectNode beforeExpiry = working.deepCopy();
         expireRestBeforeMoves(pack, working, expiry, initial);
-        projection.state(working).put("revision", revision);
-        ObjectNode initialEvent = restPreparationEvent(pack, working, origin, kind, initial);
-        ArrayNode preparation = RuleDispatcher.describeOptions(candidates(pack, working, initialEvent), "rest",
-                audience -> allowed(audience, "self"));
-
-        ObjectNode preview = working.deepCopy();
         RandomGenerator noSampling = () -> {
             throw new RuleRuntime.Unavailable("randomPreview",
                     "This rest requires an automatic preparation roll before choosing moves.");
         };
+        ObjectNode early;
+        try {
+            early = automaticEffectTransitions(pack, beforeExpiry, working, expiry, noSampling);
+        } catch (RuleRuntime.Unavailable failure) {
+            if (!"randomPreview".equals(failure.code())) throw failure;
+            throw new RuleRuntime.Unavailable("restExpiry",
+                    "An early-expiry effect reaction requires a roll; resolve that effect before starting the rest.");
+        }
+        for (JsonNode command : early.path("outbox"))
+            if (Set.of("inventory.grant", "effect.endElsewhere", "limit.restore").contains(command.path("kind").asText()))
+                throw new RuleRuntime.Unavailable("restExpiry",
+                        "An early-expiry effect reaction requires another character or inventory; resolve it before starting the rest.");
+        ObjectNode preparedOrigin = origin.deepCopy();
+        carryRestTable(preparedOrigin, early.required("event"));
+        projection.state(working).put("revision", revision);
+        ObjectNode initialEvent = restPreparationEvent(pack, working, preparedOrigin, kind, initial);
+        ArrayNode preparation = RuleDispatcher.describeOptions(candidates(pack, working, initialEvent), "rest",
+                audience -> allowed(audience, "self"));
+
+        ObjectNode preview = working.deepCopy();
         ObjectNode prepared;
         try {
-            prepared = prepareRest(pack, preview, origin, kind, revision, RuleJson.JSON.createArrayNode(), noSampling, initial);
+            prepared = prepareRest(pack, preview, preparedOrigin, kind, revision, RuleJson.JSON.createArrayNode(), noSampling, initial);
         } catch (RuleRuntime.Unavailable failure) {
             boolean inventoryNeedsSettlement = "inventorySettlement".equals(failure.code())
                     || Set.of("reactionSettlement", "reactionCommand").contains(failure.code())
@@ -2178,7 +2227,7 @@ public final class AutomationHost {
                 return restPreparationOffer(kind, revision, version, initialEvent, preparation);
         projection.state(preview).put("revision", revision);
         RestProgress progress = restProgress(pack, prepared);
-        ObjectNode stagedOrigin = origin.deepCopy();
+        ObjectNode stagedOrigin = preparedOrigin.deepCopy();
         carryRestTable(stagedOrigin, prepared.required("event"));
         return restPlanOffer(pack, preview, stagedOrigin, progress, prepared.path("event"), revision, version, preparation, party);
     }
@@ -3937,7 +3986,15 @@ public final class AutomationHost {
         if ("long".equals(progress.kind())) working.put("longRestRevision", facts.longRevision() + 1);
         ObjectNode state = projection.state(working);
         state.put("revision", state.path("revision").asLong() + 1);
+        ObjectNode beforeReset = working.deepCopy();
         resetRest(pack, working, settledBeforeEvent, initialEffectIds);
+        ObjectNode transitions = automaticEffectTransitions(pack, beforeReset, working, settledBeforeEvent, random, recipients);
+        if (!settledBeforeEvent.path("rest").equals(transitions.at("/event/rest")))
+            throw RuleJson.error("/event/rest", "An effect-expiry reaction cannot change the prepared rest.");
+        for (String key : List.of("actions", "outbox"))
+            ((ArrayNode) response.get(key)).addAll((ArrayNode) transitions.get(key));
+        if (settleCommands != null) settleCommands.accept(working, response);
+        RuleDispatcher.mergeReactionEvent(settledBeforeEvent, transitions.path("event"));
         ObjectNode afterOrigin = origin.deepCopy();
         carryRestTable(afterOrigin, settledBeforeEvent);
         ObjectNode afterEvent = restCompletionEvent(pack, working, afterOrigin, progress.plan(), "afterReset");

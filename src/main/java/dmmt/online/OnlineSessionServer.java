@@ -7155,7 +7155,19 @@ public final class OnlineSessionServer {
                 for (JsonNode command : result.path("outbox")) commands.add(command);
                 event = (ObjectNode) result.required("event");
                 stagedFear = event.requiredAt("/table/fear").intValue();
-                modified |= automationHost.resetLimits(pack, sheet, event);
+                ObjectNode beforeReset = sheet.deepCopy();
+                boolean reset = automationHost.resetLimits(pack, sheet, event);
+                modified |= reset;
+                if (reset) {
+                    ObjectNode transitions = automationHost.automaticEffectTransitions(pack, beforeReset, sheet, event, diceRandom);
+                    for (JsonNode action : transitions.path("actions")) {
+                        modified = true;
+                        String report = action.path("report").asText();
+                        if (!report.isBlank()) lines.add(actor.getName() + ": " + report);
+                    }
+                    for (JsonNode command : transitions.path("outbox")) commands.add(command);
+                    stagedFear = transitions.requiredAt("/event/table/fear").intValue();
+                }
             }
             if (modified) {
                 sheet.put("featureRevision", sheet.path("featureRevision").asLong() + 1);
