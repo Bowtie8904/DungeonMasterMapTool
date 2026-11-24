@@ -468,8 +468,8 @@ public final class RuleDispatcher {
                 || !RuleExpression.equal(event, staged.get("event"));
         long nextRevision = changed ? RuleExpression.numeric(revision + 1d, "/revision").longValue() : revision;
         List<ObjectNode> updated = new ArrayList<>();
-        for (Candidate candidate : snapshot.sources()) {
-            ObjectNode context = workingContexts.get(candidate.instanceId()).deepCopy();
+        for (String instanceId : workingContexts.keySet().stream().sorted().toList()) {
+            ObjectNode context = workingContexts.get(instanceId).deepCopy();
             context.set("actor", staged.get("actor").deepCopy());
             context.set("event", staged.get("event").deepCopy());
             context.put("revision", nextRevision);

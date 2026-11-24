@@ -4178,6 +4178,78 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void partyRecoverySettlesReactionGrantsBeforeLaterReactionsAndRecipients() throws Exception {
+        installPartyRestRules("gain");
+        Path consumablesFile = compendiumDir.resolve("consumables.json");
+        ObjectNode consumables = (ObjectNode) MAPPER.readTree(consumablesFile.toFile());
+        ObjectNode potion = (ObjectNode) consumables.at("/entries/0/automation");
+        potion.putObject("state").put("seen", 0);
+        potion.withArray("rules").add(MAPPER.readTree("""
+                {"id":"watch-stress","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.track"},"stress"]},
+                 "do":[{"op":"state.increment","slot":"seen","by":1},
+                       {"op":"resource.gain","pool":"actor.hope","amount":1}],
+                 "ui":{"report":"New recovery supply reacted for {actor.name}."}}
+                """));
+        java.nio.file.Files.writeString(consumablesFile, consumables.toString());
+        Path rulesFile = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(rulesFile.toFile());
+        ObjectNode grant = (ObjectNode) MAPPER.readTree("""
+                {"id":"recovery-supply","bindings":[{"id":"changed","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"armorTrack"]},
+                                  {"eq":[{"read":"event.change"},"clear"]}]},
+                 "do":[{"op":"inventory.grant","catalog":"consumables","entry":"minor-health-potion",
+                        "quantity":1,"tag":"recovery","max":1,"scope":"party","label":"Recovery supply"},
+                       {"op":"track.mark","track":"actor.stress","amount":1},
+                       {"op":"value","value":{"size":{"read":"actor.inventory"}},"as":"count"}],
+                 "ui":{"report":"{actor.name} has {result.count} recovery supplies."}}
+                """);
+        ruleset.withObject("/automation").withArray("rules").add(grant);
+        java.nio.file.Files.writeString(rulesFile, ruleset.toString());
+        addRestParty();
+        String owner = cookie();
+        Map<String, String> before = new java.util.LinkedHashMap<>();
+        for (String id : List.of("resting", "mira", "borin"))
+            before.put(id, store.loadSheet(campaign.getId(), id));
+        int history = store.historyTail(campaign.getId(), 100).size(), fear = campaign.getFear();
+        JsonNode offer = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode failed = restRequest(offer, "limited-recovery-supplies");
+        addRestMove((ObjectNode) failed.path("request"), restDescriptor(offer.path("moves"), "rest-tend"));
+        var rejected = restHttp(owner, "resting", null, failed.toString());
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertTrue(rejected.body().contains("exceed the limit"), rejected.body());
+        for (var entry : before.entrySet()) assertEquals(entry.getValue(), store.loadSheet(campaign.getId(), entry.getKey()));
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        assertEquals(fear, campaign.getFear());
+
+        ((ObjectNode) grant.at("/do/0")).put("max", 2);
+        java.nio.file.Files.writeString(rulesFile, ruleset.toString());
+        JsonNode next = MAPPER.readTree(restHttp(owner, "resting", "short", null).body());
+        ObjectNode request = restRequest(next, "recovery-supplies");
+        addRestMove((ObjectNode) request.path("request"), restDescriptor(next.path("moves"), "rest-tend"));
+        var completed = restHttp(owner, "resting", null, request.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode receipt = MAPPER.readTree(completed.body());
+        for (String id : List.of("mira", "borin")) {
+            JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), id));
+            assertEquals(1, saved.at("/inventory/0/qty").asInt());
+            assertEquals(3, saved.at("/stress/on").asInt());
+            assertEquals(2, saved.at("/hope/on").asInt());
+            String instance = saved.at("/inventory/0/instanceId").asText();
+            assertEquals(1, saved.at("/automationState/sources/" + instance + "/state/seen").asInt());
+            assertTrue(receipt.path("actions").findValuesAsText("report").contains(id + " has 1 recovery supplies."));
+            assertTrue(receipt.path("actions").findValuesAsText("report")
+                    .contains("New recovery supply reacted for " + id + "."));
+        }
+        String mira = store.loadSheet(campaign.getId(), "mira"), borin = store.loadSheet(campaign.getId(), "borin");
+        int after = store.historyTail(campaign.getId(), 100).size();
+        assertEquals(completed.body(), restHttp(owner, "resting", null, request.toString()).body());
+        assertEquals(mira, store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(borin, store.loadSheet(campaign.getId(), "borin"));
+        assertEquals(after, store.historyTail(campaign.getId(), 100).size());
+    }
+
+    @Test
     void convertedArmorOverflowTriggersForSelfAndAllyRestRecovery() throws Exception {
         installRestRules();
         var converted = dmmt.online.automation.LegacyCatalogConverter.convert("""

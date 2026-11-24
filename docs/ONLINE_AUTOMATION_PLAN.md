@@ -194,8 +194,9 @@ do not recover during short rests. `CompanionRestRecoveryTest` and the live HTTP
 Single-action, claim and rest `inventory.grant` commands settle catalog-linked item/consumable stacks and actor
 or party caps atomically. Actor grants settle immediately during preparation, downtime moves and both completion
 phases; recipient grants settle during move adjustments, actions and deferred benefits. Later reads and track
-reactions see new items and active sources, and party limits include the other staged holder. Unsupported dynamic
-projections still reject.
+reactions see new items and active sources, and party limits include the other staged holder. Grants from
+whole-party recovery reactions settle before subsequent reactions and recipients, with party-wide limits,
+rollback and exact-retry coverage in `OnlineSessionServerTest`. Unsupported dynamic projections still reject.
 `limit.restore` creates a saved recipient-specific claim instead of changing a use immediately; its owner selects
 one current spent source limit through the generic chat controls. The claim ledger, sheet, report and exact-retry
 receipt commit atomically. Offers to characters without a player owner are rejected; more than 64 spent limits
@@ -324,9 +325,8 @@ before nested track reactions and after projection-relevant state or pool change
 active sources, not another host request. Explicit, derived and holder-owned conditional effect endings reconcile
 effect-bound actor pools and reproject until stable before later reaction steps, with a bounded pass limit.
 `limits.refresh` settles other active sources' uses before nested reactions, including sources without observers;
-newly spent uses are not refreshed a second time. Reactions that change source activation, need cross-holder effect
-cleanup, involve a computed source pool, request deferred inventory or damage changes, or cannot resolve a
-conditional effect's source fail atomically
+newly spent uses are not refreshed a second time. Unsupported source-activation changes, cross-holder effect
+cleanup, computed source pools, deferred inventory or damage changes, and unresolved conditional-effect sources fail atomically
 instead of reading stale facts. The fixed-source isolated dispatcher also
 rejects projected snapshots when it cannot reproject them. Nested reactions propagate shared event changes back to
 the parent while retaining each event's own type, actor and track-change details.

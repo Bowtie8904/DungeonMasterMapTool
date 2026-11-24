@@ -1053,6 +1053,12 @@ public final class AutomationHost {
     /** Stages a host-owned clear against the holder's sheet; the caller must settle commands and commit it. */
     public ObjectNode stageHolderRecovery(Pack pack, ObjectNode sheet, ObjectNode parentEvent, String holderId,
                                           String track, int requested, RandomGenerator random) {
+        return stageHolderRecovery(pack, sheet, parentEvent, holderId, track, requested, random, null, null);
+    }
+
+    private ObjectNode stageHolderRecovery(Pack pack, ObjectNode sheet, ObjectNode parentEvent, String holderId,
+                                          String track, int requested, RandomGenerator random,
+                                          StagedRestRecipients recipients, ObjectNode restingSheet) {
         RuleJson.object(sheet, "/sheet");
         RuleJson.object(parentEvent, "/event");
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(holderId), "/holderId");
@@ -1064,9 +1070,12 @@ public final class AutomationHost {
         ObjectNode projectionEvent = parentEvent.deepCopy().put("actorId", holderId);
         ObjectNode actor = actor(pack, working, state, projectionEvent, sources);
         var candidates = candidates(pack, sources, state, actor, parentEvent);
+        RuleDispatcher.OwnerProjection ownerProjection = recipients != null && restingSheet != null
+                && recipients.roster.grantInventory() != null && !candidates.isEmpty()
+                ? ownerRestProjection(pack, working, state, candidates, recipients, null, holderId, restingSheet)
+                : ownerRecoveryProjection(pack, working, state, sources, actor, holderId);
         var recovered = RuleDispatcher.clearOwnerTrack(candidates, actor, parentEvent, revision,
-                track, requested, random, pack.programs(),
-                ownerRecoveryProjection(pack, working, state, sources, actor, holderId));
+                track, requested, random, pack.programs(), ownerProjection);
         if (recovered.revision() > MAX_REST_REVISION)
             throw new RuleRuntime.Unavailable("revision", "The holder's recovery revision cannot be advanced.");
 
@@ -1549,7 +1558,7 @@ public final class AutomationHost {
             throw RuleJson.error("/recovery/requests", "Expected at most 128 recovery requests.");
         StagedRestRecipients recipients = new StagedRestRecipients(pack, sourceId, roster);
         List<RecoveryTask> tasks = requests.stream().map(request -> new RecoveryTask(request, null, -1, -1)).toList();
-        ObjectNode response = recoverParty(recipients, event, tasks, random, rosterOrder);
+        ObjectNode response = recoverParty(recipients, event, tasks, random, rosterOrder, null);
         return new PartyRecovery(response, recipients.changed(), recipients.readVersions(),
                 recipients.scopeMembership(), recipients.scopeOrder());
     }
@@ -1561,14 +1570,14 @@ public final class AutomationHost {
             throw RuleJson.error("/recovery", "A host roster and random source are required.");
         String actorId = RuleJson.id(RuleJson.object(completedEvent, "/event").get("actorId"), "/event/actorId");
         StagedRestRecipients recipients = new StagedRestRecipients(pack, actorId, roster);
-        ObjectNode response = stageRestPartyRecoveries(pack, initialSheet, completedEvent, moveEvents, recipients, random);
+        ObjectNode response = stageRestPartyRecoveries(pack, initialSheet, completedEvent, moveEvents, recipients, random, null);
         return new PartyRecovery(response, recipients.changed(), recipients.readVersions(),
                 recipients.scopeMembership(), recipients.scopeOrder());
     }
 
     private ObjectNode stageRestPartyRecoveries(Pack pack, ObjectNode initialSheet, ObjectNode completedEvent,
                                                 List<ObjectNode> moveEvents, StagedRestRecipients recipients,
-                                                RandomGenerator random) {
+                                                RandomGenerator random, ObjectNode restingSheet) {
         if (random == null) throw RuleJson.error("/recovery", "A random source is required.");
         RuleJson.object(completedEvent, "/event");
         RuleJson.checkTree(completedEvent, "/event", 0, new int[]{0});
@@ -1589,11 +1598,12 @@ public final class AutomationHost {
         }
         List<RecoveryTask> tasks = ordered.stream().map(item -> new RecoveryTask(item.request(),
                 moveEvents.get(item.moveIndex()), item.moveIndex(), item.adjustmentIndex())).toList();
-        return recoverParty(recipients, completedEvent, tasks, random, true);
+        return recoverParty(recipients, completedEvent, tasks, random, true, restingSheet);
     }
 
     private ObjectNode recoverParty(StagedRestRecipients recipients, ObjectNode parentEvent,
-                                    List<RecoveryTask> requests, RandomGenerator random, boolean rosterOrder) {
+                                    List<RecoveryTask> requests, RandomGenerator random, boolean rosterOrder,
+                                    ObjectNode restingSheet) {
         ObjectNode response = RuleJson.JSON.createObjectNode();
         ArrayNode actions = response.putArray("actions"), outbox = response.putArray("outbox");
         ArrayNode clears = response.putArray("clears");
@@ -1631,8 +1641,7 @@ public final class AutomationHost {
                 for (StagedRecipient member : scopes.get(scoped.scope())) {
                     ObjectNode sheet = member.sheet();
                     ObjectNode recovered = stageHolderRecovery(recipients.pack, sheet, moveEvent == null ? event : moveEvent,
-                            member.member.id(),
-                            request.track(), request.requested(), random);
+                            member.member.id(), request.track(), request.requested(), random, recipients, restingSheet);
                     ObjectNode recoveredEvent = RuleJson.object(recovered.get("event"), "/event");
                     if (moveEvent != null) {
                         if (!recoveredEvent.path("blocked").isEmpty())
@@ -1833,7 +1842,7 @@ public final class AutomationHost {
         if (staged.settlePartyRecovery) {
             settleRestEffects(pack, working, staged.recipients, outbox);
             ObjectNode recovery = stageRestPartyRecoveries(pack, staged.original, finalEvent,
-                    staged.completedMoves, staged.recipients, random);
+                    staged.completedMoves, staged.recipients, random, working);
             appendRestStage(recovery, actions, outbox, true);
             response.set("partyRecoveries", recovery.path("clears").deepCopy());
             finalEvent = RuleJson.object(recovery.get("event"), "/event");
@@ -3365,6 +3374,15 @@ public final class AutomationHost {
                                                                List<RuleDispatcher.Candidate> candidates,
                                                                StagedRestRecipients recipients,
                                                                StagedRestRecipients.StagedRecipientReactions recipient) {
+        return ownerRestProjection(pack, sheet, state, candidates, recipients, recipient,
+                recipients == null ? null : recipients.sourceId, sheet);
+    }
+
+    private RuleDispatcher.OwnerProjection ownerRestProjection(Pack pack, ObjectNode sheet, ObjectNode state,
+                                                               List<RuleDispatcher.Candidate> candidates,
+                                                               StagedRestRecipients recipients,
+                                                               StagedRestRecipients.StagedRecipientReactions recipient,
+                                                               String holderId, ObjectNode restingSheet) {
         RuleDispatcher.OwnerProjection initial = ownerMoveProjection(pack, sheet, state, candidates);
         if (recipients == null || recipients.roster.grantInventory() == null) return initial;
         return new RuleDispatcher.OwnerProjection() {
@@ -3384,15 +3402,16 @@ public final class AutomationHost {
                 ArrayNode pending = staged.withArray("/outbox");
                 int index = pending.size() - 1;
                 if (index < 0 || !"inventory.grant".equals(pending.path(index).path("kind").asText())
-                        || !recipients.sourceId.equals(pending.path(index).path("holderId").asText()))
-                    throw RuleJson.error("/outbox", "The inventory grant does not match the resting character.");
+                        || !holderId.equals(pending.path(index).path("holderId").asText()))
+                    throw RuleJson.error("/outbox", "The inventory grant does not match the acting character.");
                 ObjectNode next = sheet.deepCopy();
                 ObjectNode nextState = projection.state(next);
                 contexts.forEach((instance, context) -> storeSource(nextState, instance, context));
                 storeSource(nextState, staged.at("/source/instanceId").asText(), staged);
                 projection.write(next, projection.actor(next), persisted(RuleJson.object(staged.get("actor"), "/actor")));
                 Map<String, ObjectNode> sheets = recipients.currentSheets();
-                sheets.put(recipients.sourceId, next);
+                sheets.put(recipients.sourceId, restingSheet);
+                sheets.put(holderId, next);
                 if (recipient != null && staged.path("recipient").isObject()) {
                     projection.write(recipient.working, projection.actor(recipient.working),
                             persisted((ObjectNode) staged.get("recipient")));
@@ -3408,9 +3427,9 @@ public final class AutomationHost {
                 var activeSources = sources(pack, sheet);
                 ObjectNode actor = actor(pack, sheet, state, event, activeSources);
                 staged.set("actor", actor);
-                if (staged.has("recipient") && recipients.sourceId.equals(staged.at("/recipient/id").asText()))
+                if (staged.has("recipient") && holderId.equals(staged.at("/recipient/id").asText()))
                     staged.set("recipient", actor);
-                current = ownerRecoveryProjection(pack, sheet, state, activeSources, actor, recipients.sourceId, true);
+                current = ownerRecoveryProjection(pack, sheet, state, activeSources, actor, holderId, true);
                 return candidates(pack, activeSources, state, actor, event);
             }
         };
