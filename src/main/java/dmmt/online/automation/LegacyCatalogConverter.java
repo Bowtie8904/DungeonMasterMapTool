@@ -119,6 +119,17 @@ public final class LegacyCatalogConverter {
         return convert(legacyJson, Map.of());
     }
 
+    /** Conversion where {@code actionBenefits} may also name features of the other catalogs that ship alongside. */
+    public static Result convert(String legacyJson, List<String> otherCatalogs) throws IOException {
+        Map<String, Set<String>> external = new java.util.HashMap<>();
+        for (String other : otherCatalogs)
+            featureEffects(RuleJson.parse(other, RuleJson.MAX_DOCUMENT_CHARACTERS, RuleJson.MAX_DOCUMENT_NODES).path("entries"))
+                    .forEach((name, labels) -> external.computeIfAbsent(name, k -> new java.util.LinkedHashSet<>()).addAll(labels));
+        EXTERNAL_FEATURE_EFFECTS.set(external);
+        try { return convert(legacyJson, Map.of()); }
+        finally { EXTERNAL_FEATURE_EFFECTS.remove(); }
+    }
+
     /** Conversion of a catalog whose actions list ancestries (Shapeshifter) needs the ancestry catalog the options are taken from. */
     public static Result convert(String legacyJson, Map<String, ObjectNode> sharedPools, String ancestriesJson) throws IOException {
         ANCESTRY_CATALOG.set(RuleJson.parse(ancestriesJson, RuleJson.MAX_DOCUMENT_CHARACTERS, RuleJson.MAX_DOCUMENT_NODES));
@@ -1829,6 +1840,7 @@ public final class LegacyCatalogConverter {
     private static final ThreadLocal<JsonNode> ANCESTRY_CATALOG = new ThreadLocal<>();
     private static final ThreadLocal<List<JsonNode>> BEASTFORMS = new ThreadLocal<>();
     private static final ThreadLocal<Map<String, Set<String>>> FEATURE_EFFECTS = new ThreadLocal<>();
+    private static final ThreadLocal<Map<String, Set<String>>> EXTERNAL_FEATURE_EFFECTS = new ThreadLocal<>();
 
     /** Effect names started by each named feature of the catalog, so another feature can react to them. */
     private static Map<String, Set<String>> featureEffects(JsonNode entries) {
@@ -1864,7 +1876,9 @@ public final class LegacyCatalogConverter {
         if (!legacy.has("actionBenefits")) return;
         JsonNode map = legacy.get("actionBenefits");
         if (!map.isObject() || map.isEmpty()) { p.add(path + "/actionBenefits", "Expected a map of benefit lists."); return; }
-        Map<String, Set<String>> known = FEATURE_EFFECTS.get() == null ? Map.of() : FEATURE_EFFECTS.get();
+        Map<String, Set<String>> known = new java.util.HashMap<>();
+        if (EXTERNAL_FEATURE_EFFECTS.get() != null) known.putAll(EXTERNAL_FEATURE_EFFECTS.get());
+        if (FEATURE_EFFECTS.get() != null) known.putAll(FEATURE_EFFECTS.get());
         map.fields().forEachRemaining(entry -> {
             String at = path + "/actionBenefits/" + entry.getKey();
             if (!entry.getKey().startsWith("feat:") || entry.getKey().length() == 5) { p.add(at, "Expected a key of the form feat:<feature name>."); return; }
@@ -7627,6 +7641,11 @@ public final class LegacyCatalogConverter {
                 texts.put(file, text);
         }
         Map<String, ObjectNode> shared = sharedPools(List.copyOf(texts.values()));
+        Map<String, Set<String>> externalFeatures = new java.util.HashMap<>();
+        for (String text : texts.values())
+            featureEffects(RuleJson.parse(text, RuleJson.MAX_DOCUMENT_CHARACTERS, RuleJson.MAX_DOCUMENT_NODES).path("entries"))
+                    .forEach((name, labels) -> externalFeatures.computeIfAbsent(name, k -> new java.util.LinkedHashSet<>()).addAll(labels));
+        EXTERNAL_FEATURE_EFFECTS.set(externalFeatures);
         for (String text : texts.values()) {
             JsonNode parsedCatalog = RuleJson.parse(text, RuleJson.MAX_DOCUMENT_CHARACTERS, RuleJson.MAX_DOCUMENT_NODES);
             if ("ancestries".equals(parsedCatalog.path("category").asText())) ANCESTRY_CATALOG.set(parsedCatalog);
@@ -7649,6 +7668,7 @@ public final class LegacyCatalogConverter {
             ObjectNode ids = entry.putObject("assignedIds");
             result.assignedIds().forEach(ids::put);
         }
+        EXTERNAL_FEATURE_EFFECTS.remove();
         AutomationHost.compile("conversion-pack", outputs, recipesText, rulesetText);
         Path stagedRules = Files.createDirectories(staging.resolve("rules"));
         Files.writeString(stagedRules.resolve("recipes.json"), recipesText);

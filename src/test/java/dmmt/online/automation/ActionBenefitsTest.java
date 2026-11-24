@@ -110,6 +110,20 @@ class ActionBenefitsTest {
     }
 
     @Test
+    void benefitsMayNameAFeatureOfAnotherCatalog() throws Exception {
+        String leader = """
+                {"format":"dmmap-daggerheart","version":1,"category":"subclasses","label":"Other","entries":[
+                 {"id":"lead","name":"Lead","features":[
+                  {"name":"Leader","automation":{"actionBenefits":{"feat:Rally":%s}}}]}]}""".formatted(RALLY);
+        String home = catalog("Rally", "Rally Die", RALLY);
+        var alone = LegacyCatalogConverter.convert(leader);
+        assertTrue(alone.diagnostics().stream().anyMatch(d -> d.message().contains("No feature 'Rally'")));
+        var joined = LegacyCatalogConverter.convert(leader, List.of(home));
+        assertEquals(joined.blocks(), joined.converted(), joined.diagnostics().toString());
+        assertEquals("Rally Die", joined.catalog().at("/entries/0/features/0/automation/rules/0/when/and/0/eq/1").asText());
+    }
+
+    @Test
     void anotherFeaturePairAttachesItsBenefitToItsOwnEffect() throws Exception {
         String armor = """
                 [{"id":"armor","label":"Rouse: clear 1 Armor","steps":[{"op":"clear","resource":"armor","amount":1}]}]""";
