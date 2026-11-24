@@ -366,6 +366,59 @@ public final class SheetProjection {
 
     public String stateField() { return stateField; }
 
+    public record TrackChange(String track, String change, int requested, ObjectNode before, ObjectNode after) {}
+
+    public boolean hasTrackChanges(ObjectNode previous, ObjectNode current) {
+        var entries = spec.path("actor").fields();
+        while (entries.hasNext()) {
+            JsonNode fact = entries.next().getValue(), fields = fact.path("fields"), writable = fact.path("writable");
+            if (!"object".equals(fact.path("kind").asText())) continue;
+            String value = fields.has("marked") && fields.has("capacity") && contains(writable, "marked")
+                    ? "marked" : fields.has("value") && fields.has("max") && contains(writable, "value") ? "value" : null;
+            if (value == null) continue;
+            String capacity = "marked".equals(value) ? "capacity" : "max";
+            JsonNode before = get(previous, fact.path("path").asText()), after = get(current, fact.path("path").asText());
+            if (before.isObject() && after.isObject()) {
+                if (!get((ObjectNode) before, fields.path(value).asText())
+                        .equals(get((ObjectNode) after, fields.path(value).asText()))) return true;
+                if (contains(writable, capacity) && !get((ObjectNode) before, fields.path(capacity).asText())
+                        .equals(get((ObjectNode) after, fields.path(capacity).asText()))) return true;
+            }
+        }
+        return false;
+    }
+
+    /** Finds changes to projected writable tracks and resources in two complete sheet snapshots. */
+    public List<TrackChange> trackChanges(ObjectNode previous, ObjectNode current) {
+        ObjectNode before = actor(previous), after = actor(current);
+        List<TrackChange> changes = new ArrayList<>();
+        spec.path("actor").fields().forEachRemaining(entry -> {
+            JsonNode fact = entry.getValue(), fields = fact.path("fields"), writable = fact.path("writable");
+            if (!"object".equals(fact.path("kind").asText())) return;
+            boolean marked = fields.has("marked") && fields.has("capacity") && contains(writable, "marked");
+            boolean resource = fields.has("value") && fields.has("max") && contains(writable, "value");
+            if (!marked && !resource) return;
+            String value = marked ? "marked" : "value";
+            String capacity = marked ? "capacity" : "max";
+            JsonNode oldTrack = before.path(entry.getKey()), newTrack = after.path(entry.getKey());
+            if (!(oldTrack instanceof ObjectNode oldObject) || !(newTrack instanceof ObjectNode newObject)) return;
+            if (contains(writable, capacity) && !oldTrack.path(capacity).equals(newTrack.path(capacity))) {
+                int oldCapacity = RuleJson.integer(oldTrack.get(capacity), "/actor/" + entry.getKey() + "/" + capacity, 0, 1000);
+                int newCapacity = RuleJson.integer(newTrack.get(capacity), "/actor/" + entry.getKey() + "/" + capacity, 0, 1000);
+                changes.add(new TrackChange(entry.getKey(), "capacity", newCapacity - oldCapacity,
+                        oldObject.deepCopy(), newObject.deepCopy()));
+            }
+            if (!oldTrack.path(value).equals(newTrack.path(value))) {
+                int oldValue = RuleJson.integer(oldTrack.get(value), "/actor/" + entry.getKey() + "/" + value, 0, 1000);
+                int newValue = RuleJson.integer(newTrack.get(value), "/actor/" + entry.getKey() + "/" + value, 0, 1000);
+                String change = marked ? newValue > oldValue ? "mark" : "clear" : newValue > oldValue ? "gain" : "spend";
+                changes.add(new TrackChange(entry.getKey(), change, Math.abs(newValue - oldValue),
+                        oldObject.deepCopy(), newObject.deepCopy()));
+            }
+        });
+        return List.copyOf(changes);
+    }
+
     Set<String> sourceFacts() { return sourceFacts; }
 
     public List<String> sourcePaths() {

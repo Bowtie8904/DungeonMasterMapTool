@@ -1319,6 +1319,121 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void manualTrackEditsDispatchAndCommitNestedReactionsAtomically() throws Exception {
+        installRestRules();
+        Path rulesFile = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(rulesFile.toFile());
+        ArrayNode rules = ruleset.withObject("/automation").withArray("rules");
+        rules.add(MAPPER.readTree("""
+                {"id":"manual-hp","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"hp"]},{"eq":[{"read":"event.change"},"mark"]}]},
+                 "do":[{"op":"track.mark","track":"actor.stress","amount":1},
+                       {"op":"table.gain","resource":"fear","amount":1,"label":"Marked HP"}],
+                 "ui":{"report":"HP {event.before.marked} to {event.after.marked}, requested {event.requested}."}}
+                """));
+        rules.add(MAPPER.readTree("""
+                {"id":"manual-stress","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"stress"]},{"eq":[{"read":"event.change"},"mark"]}]},
+                 "do":[{"op":"resource.gain","pool":"actor.hope","amount":1}],
+                 "ui":{"report":"Stress {event.before.marked} to {event.after.marked}."}}
+                """));
+        rules.add(MAPPER.readTree("""
+                {"id":"manual-hope","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"hope"]},{"eq":[{"read":"event.change"},"spend"]}]},
+                 "do":[{"op":"track.clear","track":"actor.hp","amount":1}],
+                 "ui":{"report":"Hope {event.before.value} to {event.after.value}."}}
+                """));
+        rules.add(MAPPER.readTree("""
+                {"id":"manual-capacity","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"hp"]},{"eq":[{"read":"event.change"},"capacity"]}]},
+                 "ui":{"report":"HP capacity {event.before.capacity} to {event.after.capacity}, change {event.requested}."}}
+                """));
+        java.nio.file.Files.writeString(rulesFile, ruleset.toString());
+        String id = "manual-tracks", owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id(id).name("Before").ownerId(playerId()).build());
+        store.save(campaign);
+        store.saveSheet(campaign.getId(), id, """
+                {"name":"Before","hp":{"slots":6,"on":0},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0}}
+                """);
+        JsonNode baseline = MAPPER.readTree(sheetRead(owner, id).body());
+        String version = baseline.path("version").asText();
+        int history = store.historyTail(campaign.getId(), 100).size(), fear = campaign.getFear();
+        ObjectNode patch = MAPPER.createObjectNode();
+        patch.putObject("fields").put("name", "After").putObject("hp").put("slots", 6).put("on", 2);
+        patch.putArray("removed");
+        var saved = patchSheet(owner, id, patch, version);
+        assertEquals(200, saved.statusCode(), saved.body());
+        JsonNode current = MAPPER.readTree(saved.body());
+        assertEquals("After", campaign.actor(id).getName());
+        assertEquals(2, current.at("/sheet/hp/on").asInt());
+        assertEquals(1, current.at("/sheet/stress/on").asInt());
+        assertEquals(1, current.at("/sheet/hope/on").asInt());
+        assertEquals(fear + 1, campaign.getFear());
+        var reports = store.historyTail(campaign.getId(), 100);
+        assertEquals(history + 2, reports.size());
+        assertTrue(reports.toString().contains("HP 0 to 2, requested 2."));
+        assertTrue(reports.toString().contains("Stress 0 to 1."));
+        String committed = store.loadSheet(campaign.getId(), id);
+        assertEquals(409, patchSheet(owner, id, patch, version).statusCode());
+        assertEquals(committed, store.loadSheet(campaign.getId(), id));
+        assertEquals(history + 2, store.historyTail(campaign.getId(), 100).size());
+
+        ObjectNode full = (ObjectNode) current.path("sheet").deepCopy();
+        full.withObject("/hope").put("on", 0);
+        full.withObject("/hp").put("slots", 7);
+        var request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/" + id))
+                .header("Cookie", owner).header("Content-Type", "application/json")
+                .header("If-Match", current.path("version").asText());
+        var spent = http.send(request.PUT(HttpRequest.BodyPublishers.ofString(full.toString())).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, spent.statusCode(), spent.body());
+        assertEquals(1, MAPPER.readTree(spent.body()).at("/sheet/hp/on").asInt());
+        assertTrue(store.historyTail(campaign.getId(), 100).toString().contains("Hope 1 to 0."));
+        assertTrue(store.historyTail(campaign.getId(), 100).toString()
+                .contains("HP capacity 6 to 7, change 1."));
+        ObjectNode unversioned = (ObjectNode) MAPPER.readTree(spent.body()).path("sheet").deepCopy();
+        unversioned.withObject("/hp").put("on", 2);
+        assertEquals(428, http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sheet/" + id))
+                .header("Cookie", owner).PUT(HttpRequest.BodyPublishers.ofString(unversioned.toString())).build(),
+                HttpResponse.BodyHandlers.ofString()).statusCode());
+
+        ObjectNode simultaneous = MAPPER.createObjectNode();
+        ObjectNode fields = simultaneous.putObject("fields");
+        fields.putObject("hp").put("slots", 7).put("on", 2);
+        fields.putObject("stress").put("slots", 6).put("on", 2);
+        simultaneous.putArray("removed");
+        var combined = patchSheet(owner, id, simultaneous, MAPPER.readTree(spent.body()).path("version").asText());
+        assertEquals(200, combined.statusCode(), combined.body());
+        assertEquals(3, MAPPER.readTree(combined.body()).at("/sheet/stress/on").asInt());
+        assertEquals(2, MAPPER.readTree(combined.body()).at("/sheet/hope/on").asInt());
+        String combinedReports = store.historyTail(campaign.getId(), 100).toString();
+        assertTrue(combinedReports.contains("Stress 2 to 3."));
+        assertTrue(combinedReports.contains("Stress 1 to 2."));
+
+        rules.add(MAPPER.readTree("""
+                {"id":"failure","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"and":[{"eq":[{"read":"event.track"},"hp"]},{"eq":[{"read":"event.change"},"mark"]}]},
+                 "do":[{"op":"table.spend","resource":"fear","amount":12,"label":"Unavailable"}],"ui":{}}
+                """));
+        java.nio.file.Files.writeString(rulesFile, ruleset.toString());
+        JsonNode latest = MAPPER.readTree(sheetRead(owner, id).body());
+        committed = store.loadSheet(campaign.getId(), id);
+        history = store.historyTail(campaign.getId(), 100).size();
+        ObjectNode failure = MAPPER.createObjectNode();
+        failure.putObject("fields").put("name", "Rejected").putObject("hp").put("slots", 6).put("on", 3);
+        failure.putArray("removed");
+        var rejected = patchSheet(owner, id, failure, latest.path("version").asText());
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertEquals(committed, store.loadSheet(campaign.getId(), id));
+        assertEquals("After", campaign.actor(id).getName());
+        assertEquals(fear + 2, campaign.getFear());
+        assertEquals(history, store.historyTail(campaign.getId(), 100).size());
+        assertEquals(403, patchSheet(allyCookie("manual-track-outsider"), id, failure,
+                latest.path("version").asText()).statusCode());
+    }
+
+    @Test
     void featureRepresentationsAreOptionalOwnedCommittedAndVersioned() throws Exception {
         campaign.getActors().add(Campaign.Actor.builder().id("performance").name("Hero").ownerId(playerId()).testingCharacter(true).build());
         campaign.getActors().add(Campaign.Actor.builder().id("other-performance").name("Other").ownerId(playerId()).build());

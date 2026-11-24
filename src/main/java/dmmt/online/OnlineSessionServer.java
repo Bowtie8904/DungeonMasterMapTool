@@ -1735,11 +1735,51 @@ public final class OnlineSessionServer {
             saved.remove("transferClaims");
             if (previous.has("transferClaims"))
                 saved.set("transferClaims", previous.get("transferClaims"));
+            dmmt.online.automation.AutomationHost.Pack trackPack = null;
+            Map<String, String> automationOriginals = null;
+            ObjectNode trackResult = null;
+            Map<String, JsonNode> sourceNames = new java.util.HashMap<>();
+            if (stored != null && automationHost.projection().hasTrackChanges(previous, saved)
+                    && requiresAuthoritativeRest()) {
+                if (expected == null) {
+                    json(ctx, 428, errorBody("A track edit requires a current sheet version. Reload the sheet before saving."));
+                    return;
+                }
+                trackPack = automationPack();
+                automationOriginals = new java.util.LinkedHashMap<>();
+                for (Campaign.Actor member : c.getActors())
+                    automationOriginals.put(member.getId(), member.getId().equals(actor.getId())
+                            ? stored : store.loadSheet(c.getId(), member.getId()));
+                for (var element : automationHost.sources(trackPack, saved))
+                    sourceNames.put(element.instanceId(), element.element().deepCopy());
+                trackResult = MAPPER.createObjectNode();
+                ArrayNode actions = trackResult.putArray("actions"), commands = trackResult.putArray("outbox");
+                int fear = c.getFear();
+                for (var change : automationHost.projection().trackChanges(previous, saved)) {
+                    ObjectNode event = automationEvent("track.changed", actor);
+                    event.withObject("/table").put("fear", fear);
+                    event.put("track", change.track()).put("change", change.change()).put("requested", change.requested());
+                    event.set("before", change.before());
+                    event.set("after", change.after());
+                    ObjectNode result = automationHost.automatic(trackPack, saved, event, diceRandom);
+                    actions.addAll((ArrayNode) result.get("actions"));
+                    commands.addAll((ArrayNode) result.get("outbox"));
+                    fear = result.at("/event/table/fear").intValue();
+                    trackResult.set("event", result.get("event").deepCopy());
+                }
+                if (!actions.isEmpty()) saved.put("featureRevision", saved.path("featureRevision").asLong(0) + 1);
+            }
             ObjectNode beforeNormalization = saved.deepCopy();
             Map<String, ObjectNode> changes = new java.util.LinkedHashMap<>();
             changes.put(actor.getId(), saved);
             List<String> deathReports = normalizeDeathChanges(changes);
-            if (!saved.equals(beforeNormalization) || changes.size() > 1
+            if (trackResult != null) {
+                List<ObjectNode> messages = automationReports(actor, sourceNames, trackResult);
+                if (!deathReports.isEmpty()) messages.add(deathStateMessage(playerId, campaign.player(playerId).getName(),
+                        actor.getName(), deathReports));
+                commitAutomationResults(automationOriginals, changes, messages, trackResult.path("outbox"),
+                        trackPack, actor.getId(), trackResult, null, null, null, renamed ? actor : null, name);
+            } else if (!saved.equals(beforeNormalization) || changes.size() > 1
                     || saved.path("longRestRevision").asLong() != previous.path("longRestRevision").asLong()
                     || !saved.path("pendingDeathRoll").equals(previous.path("pendingDeathRoll"))) {
                 ObjectNode report = deathReports.isEmpty() ? null : deathStateMessage(playerId, campaign.player(playerId).getName(),
@@ -1765,11 +1805,16 @@ public final class OnlineSessionServer {
             json(ctx, 200, sheetState(actor));
         } catch (RestPolicyException e) {
             json(ctx, 503, errorBody(e.getMessage()));
+        } catch (dmmt.online.automation.AutomationHost.NotReady e) {
+            json(ctx, 409, errorBody("Automation is unavailable: " + e.getMessage()));
+        } catch (dmmt.online.automation.RuleRuntime.Unavailable | CampaignStore.StaleAutomationSheet e) {
+            json(ctx, 409, errorBody(e.getMessage()));
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             json(ctx, 400, errorBody("Invalid sheet"));
         } catch (IllegalArgumentException e) {
             json(ctx, 400, errorBody(e.getMessage()));
         } catch (IOException e) {
+            LOG.log(java.util.logging.Level.WARNING, "Could not read or save the character sheet", e);
             json(ctx, 500, errorBody("Could not read or save the character sheet."));
         }
     }
@@ -7321,6 +7366,16 @@ public final class OnlineSessionServer {
                                          dmmt.online.automation.AutomationHost.Pack pack,
                                          String responseActorId, ObjectNode response, Runnable validateRoster,
                                          ObjectNode expectedOffer, ObjectNode replacementOffer) throws IOException {
+        commitAutomationResults(originals, changed, messages, commands, pack, responseActorId, response,
+                validateRoster, expectedOffer, replacementOffer, null, null);
+    }
+
+    private void commitAutomationResults(Map<String, String> originals, Map<String, ObjectNode> changed,
+                                         List<ObjectNode> messages, JsonNode commands,
+                                         dmmt.online.automation.AutomationHost.Pack pack,
+                                         String responseActorId, ObjectNode response, Runnable validateRoster,
+                                         ObjectNode expectedOffer, ObjectNode replacementOffer,
+                                         Campaign.Actor renamedActor, String name) throws IOException {
         Map<String, String> expected = new java.util.LinkedHashMap<>(originals);
         Set<String> affected = new java.util.HashSet<>(settleSingleHolderEffects(pack, expected, changed, commands));
         List<ObjectNode> publishedMessages = new ArrayList<>(messages);
@@ -7477,7 +7532,7 @@ public final class OnlineSessionServer {
         };
         if (expectedOffer == null)
             store.saveAutomationResults(campaign.getId(), expected, changed, publishedMessages, fearChanged ? fear : null, countdowns,
-                    finalValidation);
+                    finalValidation, renamedActor, name);
         else
             store.saveAutomationClaimResults(campaign.getId(), expected, changed, expectedOffer, replacementOffer,
                     publishedMessages, fearChanged ? fear : null, countdowns, finalValidation);

@@ -148,8 +148,11 @@ per source, independently of declaration order; unchanged default pools are not 
 Ordinary self-actions dispatch owner `track.changed` reactions within the same private transaction, before later
 steps; source costs, reports and retries remain atomic. Simple consumed items without projection dependencies
 can heal and trigger reactions. A track change following an unsettled inventory, effect-transfer, limit-refresh
-or damage command is rejected until ordered settlement is available. Direct sheet edits and other roll origins
-still need track-event integration.
+or damage command is rejected until ordered settlement is available. Format-2 full and compact sheet saves
+also dispatch changes to existing projected track values and capacities, including nested reactions, in the
+same atomic sheet, name, Fear and report commit. Such edits require `If-Match`; stale retries are rejected.
+Adding or removing an entire track and changes made by legacy normalization still need lifecycle integration.
+Other roll origins remain incomplete.
 
 Started effects have persistent, non-reused instance IDs, separate from their source and effect definition. Ending and recasting the same effect must not make an earlier result refer to the new activation. Existing saved instance IDs need no rewrite.
 
