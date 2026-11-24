@@ -12,7 +12,7 @@ class EventContextContractTest {
     private static final List<String> EVENTS = List.of("action.request", "roll.costs", "roll.prepare", "roll.prepared",
             "roll.finished", "damage.prepare", "damage.marks", "damage.applied", "claim.accept", "rest.prepare", "rest.short",
             "rest.long", "scene.end", "session.start", "downtime.move", "downtime.completed", "rest.roll", "death.options",
-            "track.changed", "pool.changed", "equipment.changed", "effect.started", "effect.ended", "creation.apply");
+            "track.changed", "pool.changed", "equipment.changed", "effect.started", "effect.ended", "creation.apply", "equipment.plan");
     private static final List<String> CHECK_KEYS = List.of("kind", "trait", "weapon", "range", "dominant", "outcome",
             "critical", "hopeDie", "fearDie", "spell", "origin", "total", "difficulty", "weaponSource", "weaponSourceId",
             "fixedDice", "damageType", "move", "adjustedHope", "recoverableHp", "reroll", "duality", "origins", "sourceName", "sourceDomain", "facesByRole");

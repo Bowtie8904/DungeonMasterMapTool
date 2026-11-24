@@ -266,11 +266,17 @@ public final class LegacyCatalogConverter {
             if (!legacy.path("partyDowntime").isBoolean()) p.add(path + "/partyDowntime", "Expected a boolean.");
             else partyGrant = legacy.path("partyDowntime").asBoolean();
         }
-        if (legacy.has("ignoreWeaponBurden"))
-            p.add(path + "/ignoreWeaponBurden", "Manual disposition: the two-handed Burden check is creation and equipment-UI logic, and the sheet projection exposes no hands or Burden facts for a rule to change.");
-        if (legacy.has("unarmedWeapon"))
-            p.add(path + "/unarmedWeapon", "Manual disposition: the unarmed weapon is generated into the active weapon slot only while no real weapon is equipped, and rules cannot inject or retire equipment.");
-        p.onlyFields(legacy, path, BLOCK_FIELDS);
+        boolean ignoreBurden = false;
+        if (legacy.has("ignoreWeaponBurden")) {
+            if (!legacy.path("ignoreWeaponBurden").isBoolean()) p.add(path + "/ignoreWeaponBurden", "Expected a boolean.");
+            else ignoreBurden = legacy.path("ignoreWeaponBurden").asBoolean();
+        }
+        ObjectNode unarmed = null;
+        if (legacy.has("unarmedWeapon")) {
+            unarmed = legacy.path("unarmedWeapon").isObject() ? (ObjectNode) legacy.get("unarmedWeapon").deepCopy() : null;
+            if (unarmed == null) p.add(path + "/unarmedWeapon", "Expected a weapon object.");
+            else p.onlyFields(unarmed, path + "/unarmedWeapon", Set.of("name", "slot", "damage", "damageType", "range", "hands", "tier"));
+        }        p.onlyFields(legacy, path, BLOCK_FIELDS);
         boolean limited = false;
         if (legacy.has("uses")) {
             JsonNode uses = legacy.get("uses");
@@ -305,6 +311,10 @@ public final class LegacyCatalogConverter {
         for (String family : List.of("modifiers", "conditionalModifiers")) {
             JsonNode list = legacy.path(family);
             for (int i = 0; i < list.size(); i++) modifier(list.get(i), path + "/" + family + "/" + i, p, passive, true);
+        }
+        if (unarmed != null) {
+            ObjectNode evasion = passive.addObject().put("stat", "evasion").put("label", "I Am The Weapon").put("value", 1);
+            evasion.set("when", RuleJson.JSON.createObjectNode().put("exists", "actor.generatedWeapon.name"));
         }
         if (legacy.has("unarmoredBase")) unarmoredBase(legacy.get("unarmoredBase"), path + "/unarmoredBase", p, passive);
         if (!passive.isEmpty()) out.set("modifiers", passive);
@@ -599,6 +609,13 @@ public final class LegacyCatalogConverter {
         }
         if (legacy.has("manual")) manualNotes(legacy.get("manual"), path + "/manual", p, rules);
         tokenEnds(effects, path, p, pools);
+        if (ignoreBurden) {
+            ObjectNode rule = restRule("weapon-burden", "equipment.plan", "equipment", "equipment", "automatic");
+            rule.putArray("do").add(planAdjust("event.equipment", "ignoreBurden", 1, "Ignore weapon Burden"));
+            rule.put("id", unique("weapon-burden", ruleIds));
+            rules.add(rule);
+        }
+        if (unarmed != null) out.set("unarmedWeapon", unarmed);
         if (partyGrant) {
             out.put("partyGrant", true);
             partyGrantRules(rules);

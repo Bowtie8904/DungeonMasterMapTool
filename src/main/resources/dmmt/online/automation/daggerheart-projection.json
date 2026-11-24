@@ -41,6 +41,8 @@
     "armor": { "kind": "object", "path": "activeArmor", "fields": { "score": "score", "major": "major", "severe": "severe" } },
     "primaryWeapon": { "kind": "first", "path": "activeWeapons", "where": { "field": "slot", "equals": "Primary" },
                        "fields": { "name": "name", "range": "range", "trait": "trait", "damage": "damage", "hands": "hands" } },
+    "generatedWeapon": { "kind": "first", "path": "activeWeapons", "where": { "field": "generated", "equals": "brawler" },
+                         "fields": { "name": "name", "trait": "trait" } },
     "comboAdvancements": { "kind": "tally", "path": "levelUps", "each": "advancements", "where": { "field": "type", "equals": "combo" } },
     "secondaryWeapon": { "kind": "first", "path": "activeWeapons", "where": { "field": "slot", "equals": "Secondary" },
                          "fields": { "name": "name", "damage": "damage" },

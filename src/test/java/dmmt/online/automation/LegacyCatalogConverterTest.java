@@ -3645,8 +3645,6 @@ class LegacyCatalogConverterTest {
     @Test
     void sheetStatManualDispositionsExplainThemselves() throws Exception {
         String[][] cases = {
-                {"{\"ignoreWeaponBurden\":true}", "two-handed Burden"},
-                {"{\"unarmedWeapon\":{\"name\":\"Fists\"}}", "unarmed weapon"},
                 {"{\"conditionalActions\":[{\"id\":\"swap\",\"label\":\"Swap\",\"codexSwap\":true}]}", "vault-to-loadout"}};
         for (String[] c : cases) {
             var result = LegacyCatalogConverter.convert(catalog("{\"id\":\"m\",\"name\":\"M\",\"automation\":" + c[0] + "}"));

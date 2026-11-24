@@ -1180,6 +1180,47 @@ public final class AutomationHost {
         return changed;
     }
     /**
+     * Generates (or retires) the unarmed weapon declared by an active source's {@code unarmedWeapon}: it fills the active
+     * weapon list only while no real weapon is equipped, never stays in the carried list, and keeps the trait chosen
+     * first (the stored {@code brawlerTrait}, else the generated weapon's, else the highest base trait). Idempotent.
+     * Returns whether the sheet changed.
+     */
+    public boolean synchronizeUnarmedWeapon(Pack pack, ObjectNode sheet) {
+        ObjectNode spec = null;
+        for (var source : sources(pack, sheet)) {
+            RuleCompiler.Program program = pack.programs().get(source.sourceId());
+            if (program != null && program.unarmedWeapon() != null) { spec = program.unarmedWeapon(); break; }
+        }
+        ObjectNode before = sheet.deepCopy();
+        ArrayNode carried = RuleJson.JSON.createArrayNode();
+        for (JsonNode weapon : sheet.path("carriedWeapons")) if (!weapon.has("generated")) carried.add(weapon);
+        if (sheet.has("carriedWeapons")) sheet.set("carriedWeapons", carried);
+        ArrayNode real = RuleJson.JSON.createArrayNode();
+        String generatedTrait = null;
+        for (JsonNode weapon : sheet.path("activeWeapons")) {
+            if (weapon.has("generated")) { if (generatedTrait == null) generatedTrait = weapon.path("trait").asText(null); }
+            else real.add(weapon);
+        }
+        if (spec == null || !real.isEmpty()) sheet.set("activeWeapons", real);
+        else {
+            String trait = sheet.path("brawlerTrait").asText(null);
+            if (trait == null) trait = generatedTrait;
+            if (trait == null) {
+                int best = Integer.MIN_VALUE;
+                for (String name : List.of("Agility", "Strength", "Finesse", "Instinct", "Presence", "Knowledge")) {
+                    int mod = 0;
+                    for (JsonNode entry : sheet.path("traits")) if (name.equals(entry.path("name").asText())) mod = entry.path("mod").asInt(0);
+                    if (mod > best) { best = mod; trait = name; }
+                }
+            }
+            sheet.put("brawlerTrait", trait);
+            ArrayNode active = RuleJson.JSON.createArrayNode();
+            active.add(spec.deepCopy().put("trait", trait).put("generated", "brawler"));
+            sheet.set("activeWeapons", active);
+        }
+        return !sheet.equals(before);
+    }
+    /**
      * Ends this character's stored effects declared with {@code endsWithSourceElement} whose source sheet element is no
      * longer an active automation source on {@code sheet} (for example unequipped armor). Returns whether any ended.
      */

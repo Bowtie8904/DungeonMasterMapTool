@@ -18,9 +18,9 @@ public final class RuleCompiler {
     private static final Set<String> EVENTS = Set.of("action.request", "roll.costs", "roll.prepare", "roll.prepared", "roll.finished",
             "damage.prepare", "damage.marks", "damage.applied", "claim.accept", "rest.prepare", "rest.short", "rest.long", "scene.end", "session.start",
             "downtime.move", "downtime.completed", "rest.roll", "death.options", "track.changed", "pool.changed", "equipment.changed", "effect.started",
-            "effect.ended", "creation.apply");
+            "effect.ended", "creation.apply", "equipment.plan");
     static final Set<String> SURFACES = Set.of("sheet", "chat", "roll", "damage", "effect", "resource", "rest",
-            "death", "downtime", "creation", "companion");
+            "death", "downtime", "creation", "companion", "equipment");
     static final Set<String> AUDIENCES = Set.of("self", "others", "party", "any");
     static final Set<String> CLAIM_RECIPIENTS = Set.of("otherPlayersCharacters", "playerCharacters", "sourceActor");
     static final Set<String> TARGET_SCOPES = Set.of("connectedPlayerCharacters", "activeCharacters", "activePlayerCharacters");
@@ -320,6 +320,22 @@ public final class RuleCompiler {
         /** Whether every other active character is also offered this source (see {@code partyGrants} on the sheet). */
         public boolean partyGrant() { return partyGrant; }
         private Program withPartyGrant(boolean value) { partyGrant = value; return this; }
+    private ObjectNode unarmedWeapon;
+    /** The weapon generated into the active slot while no real weapon is equipped, or null. */
+    public ObjectNode unarmedWeapon() { return unarmedWeapon; }
+    static ObjectNode unarmedWeapon(JsonNode spec) {
+        if (spec == null) return null;
+        RuleJson.fields(spec, "/automation/unarmedWeapon", "name", "slot", "damage", "damageType", "range", "hands", "tier");
+        for (String field : List.of("name", "slot", "damage", "damageType", "range"))
+            RuleJson.text(spec.get(field), "/automation/unarmedWeapon/" + field);
+        if (!List.of("Primary", "Secondary").contains(spec.path("slot").asText()))
+            throw RuleJson.error("/automation/unarmedWeapon/slot", "Expected Primary or Secondary.");
+        for (String field : List.of("hands", "tier"))
+            if (!spec.path(field).isInt() || spec.path(field).asInt() < 1 || spec.path(field).asInt() > 4)
+                throw RuleJson.error("/automation/unarmedWeapon/" + field, "Expected a whole number from 1 to 4.");
+        return (ObjectNode) spec.deepCopy();
+    }
+    private Program withUnarmedWeapon(ObjectNode value) { unarmedWeapon = value; return this; }
         private ObjectNode grants;
         /** Features granted alongside this source ({@code features}, {@code display}), or {@code null}. Sheet metadata only. */
         public ObjectNode grants() { return grants == null ? null : grants.deepCopy(); }
@@ -382,10 +398,11 @@ public final class RuleCompiler {
     static Program compileWithRecipes(String sourceId, JsonNode automation, Map<String, ObjectNode> recipes) {
         RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(sourceId), "/sourceId");
         RuleJson.checkTree(automation, "/automation", 0, new int[]{0});
-        RuleJson.fields(automation, "/automation", "state", "limits", "pools", "effects", "modifiers", "profiles", "rules",         "attachment", "grants", "entitlements", "limitOverrides", "sourceFields", "partyGrant");
+        RuleJson.fields(automation, "/automation", "state", "limits", "pools", "effects", "modifiers", "profiles", "rules",         "attachment", "grants", "entitlements", "limitOverrides", "sourceFields", "partyGrant", "unarmedWeapon");
         ObjectNode sourceFields = automation.has("sourceFields") ? sourceFields(automation.get("sourceFields")) : null;
         if (automation.has("partyGrant") && !automation.get("partyGrant").isBoolean()) throw RuleJson.error("/automation/partyGrant", "Expected a boolean.");
         boolean partyGrant = automation.path("partyGrant").asBoolean(false);
+        ObjectNode unarmedWeapon = Program.unarmedWeapon(automation.get("unarmedWeapon"));
         ObjectNode grants = automation.has("grants") ? grants(automation.get("grants")) : null;
                 ObjectNode entitlements = automation.has("entitlements") ? entitlements(automation.get("entitlements")) : null;
         ArrayNode limitOverrides = automation.has("limitOverrides") ? limitOverrides(automation.get("limitOverrides")) : RuleJson.JSON.createArrayNode();
@@ -442,7 +459,7 @@ public final class RuleCompiler {
         boolean derived = false;
         for (JsonNode effect : effects) derived |= effect.has("while");
         if (definitions.isMissingNode() && (!modifiers.isEmpty() || !pools.isEmpty() || !profiles.isEmpty() || attachment != null || grants != null || entitlements != null || derived || !limitOverrides.isEmpty()))
-            return new Program(sourceId, decl, modifiers, Map.of()).withProfiles(profiles).withAttachment(attachment).withGrants(grants).            withEntitlements(entitlements).withLimitOverrides(limitOverrides).withSourceFields(sourceFields).withPartyGrant(partyGrant);
+            return new Program(sourceId, decl, modifiers, Map.of()).withProfiles(profiles).withAttachment(attachment).withGrants(grants).            withEntitlements(entitlements).withLimitOverrides(limitOverrides).withSourceFields(sourceFields).withPartyGrant(partyGrant).withUnarmedWeapon(unarmedWeapon);
         if (!definitions.isArray() || definitions.isEmpty() || definitions.size() > 256)
             throw RuleJson.error("/automation/rules", "Expected 1-256 rules (or only passive modifiers, pools, profiles, derived effects, grants and an attachment).");
         Map<String, ObjectNode> expanded = new LinkedHashMap<>();
@@ -484,7 +501,7 @@ public final class RuleCompiler {
                         && (sourceFields == null || !sourceFields.has(operation.path("field").asText())))
                     throw RuleJson.error("/automation/rules/" + rule.path("id").asText() + "/do",
                             "source.set must name a field declared in sourceFields: " + operation.path("field").asText());
-        return new Program(sourceId, decl, modifiers, expanded).withProfiles(profiles).withAttachment(attachment).withGrants(grants).withEntitlements(entitlements).withLimitOverrides(limitOverrides).withSourceFields(sourceFields).withPartyGrant(partyGrant);
+        return new Program(sourceId, decl, modifiers, expanded).withProfiles(profiles).withAttachment(attachment).withGrants(grants).withEntitlements(entitlements).withLimitOverrides(limitOverrides).withSourceFields(sourceFields).withPartyGrant(partyGrant).withUnarmedWeapon(unarmedWeapon);
     }
 
     private static final Set<String> RESERVED_SOURCE_FIELDS = Set.of("id", "instanceId", "name", "quantity", "qty", "automation",

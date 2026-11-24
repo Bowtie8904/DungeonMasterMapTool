@@ -5330,6 +5330,8 @@ public final class OnlineSessionServer {
             Map<String, ObjectNode> inactive = new java.util.LinkedHashMap<>();
             disabledSources.forEach((id, sheet) -> { if (!warriors.containsKey(id)) inactive.put(id, sheet); });
             for (String id : automationHost.synchronizePartyGrants(automationPack(), warriors, inactive)) changes.put(id, warriors.get(id));
+            for (var entry : warriors.entrySet())
+                if (automationHost.synchronizeUnarmedWeapon(automationPack(), entry.getValue())) changes.put(entry.getKey(), entry.getValue());
         } catch (IOException | dmmt.online.automation.AutomationHost.NotReady ignored) {
             // Without a ready pack no format-2 grants exist to maintain.
         }
