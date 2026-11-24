@@ -99,4 +99,17 @@ describe('saved downtime rolls', () => {
     expect(gets).toBe(2);
     expect(fake(card).text).toContain('Roll changed.');
   });
+
+  it('offers the same descriptor controls for a non-recovery downtime die', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(description)));
+    const tableRoll: ChatMessage = {
+      ...offer, text: 'Table roll', automationRecoveryRoll: { sourceActorId: 'mira', holderId: 'mira', used: false },
+    };
+    const card = historyRecoveryRollControls(tableRoll, [{ id: 'ada', name: 'Ada' }])!;
+    fake(card).open = true;
+    fake(card).listeners.get('toggle')!.forEach(listener => listener());
+    await settle();
+    expect(fake(card).text).toContain('Downtime roll actions');
+    expect(fake(card).text).toContain('Reroll');
+  });
 });

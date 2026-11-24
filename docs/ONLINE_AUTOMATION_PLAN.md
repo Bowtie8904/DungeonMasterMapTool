@@ -160,7 +160,9 @@ subsequent operations and recovery reactions see the updated effects. Other reac
 recipient effect mutations that lack ordered lifecycle settlement.
 Short-rest recovery dice can publish generic chat offers; an owned source may edit one die through
 `rest.roll`. The host commits its use, the holder's bounded recovery and reactions, the updated offer and
-the exact-retry receipt atomically. Non-recovery downtime dice are not yet offered.
+the exact-retry receipt atomically. Converted downtime tables also offer each result die and repeat-count die;
+rerolling updates the saved die, not already settled table outcomes or counts. An action offering more than
+32 dice is rejected; structured report-roll dice still need live offers.
 
 The live host rejects legacy client-supplied rests and downtime rerolls when any category declares format 2,
 including an incomplete pack. It cannot classify malformed, unreadable or unknown-version categories as legacy.
@@ -308,7 +310,8 @@ additional command settlement remains unfinished.
 The shared Daggerheart ruleset now supplies self-targeted short recovery (1d4 plus tier and move bonus), the two
 mutually exclusive preparation variants, long recovery and work on a project. Reports use the amount actually
 cleared or gained, including permanent and locked HP and capped Hope; a short rest needs a granted allowance for
-a long move. The ally variants update the selected recipient; rest rerolls remain unfinished.
+a long move. The ally variants update the selected recipient. Recovery and downtime-table die offers use the
+live reroll flow described above; structured report-roll offers remain unfinished.
 The sheet projection supplies permanent and temporary marked-HP floors to generic track clearing. The
 engine recomputes locks held in its effect list as operations run, so ending a lock before healing in the same
 action allows the newly recoverable HP to clear. Recipient healing uses the recipient's floor, and capacity
@@ -324,8 +327,8 @@ Converted scar gains, marks and healing, including conditional outcomes and reci
 operation. The shipped catalogs remain format 1.
 
 Ordinary and targeted sheet requests accept only `sheet` bindings, even when another surface uses the same event.
-Roll options and saved-result actions use their own validated surfaces. The planned authoritative rest flow has not
-yet been connected to the separate downtime descriptors; a sheet request is not a rest or downtime transaction.
+Roll options and saved-result actions use their own validated surfaces; authoritative rests use separate
+rest and downtime descriptors rather than sheet requests.
 
 **Started, not cut over.** With a format-2 pack, the sheet panel and host endpoint support versioned single-target and whole-party sheet and owner result actions, plus owner-initiated profile rolls with optional selections. Claims, catalog editing and migration remain incomplete. All nine shipped catalogs still use format 1; the replacement endpoint returns 409 for them. There is no live second-engine selector or legacy adapter.
 

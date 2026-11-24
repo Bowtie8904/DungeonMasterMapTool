@@ -1080,39 +1080,52 @@ public final class RuleRuntime {
                     result = RuleExpression.numeric(highest, "/result");
                 } else result = RuleExpression.numeric(total, "/result");
             }
-            case "recovery.offerRoll" -> {
+            case "recovery.offerRoll", "downtime.offerRoll" -> {
                 if (!"downtime.move".equals(context.at("/event/type").asText())
                         || !"short".equals(context.at("/event/move/rest").asText()))
-                    throw new Unavailable("restRoll", "Recovery rolls can only be offered during a short-rest move.");
-                int value = whole(op.path("roll"), context, 1, 1000);
-                if (rolls.isEmpty()) throw RuleJson.error("/roll", "A recovery offer needs a preceding single-die roll.");
+                    throw new Unavailable("restRoll", "Downtime rolls can only be offered during a short-rest move.");
+                if (rolls.isEmpty()) throw RuleJson.error("/roll", "A downtime offer needs a preceding roll.");
                 JsonNode sampled = rolls.getLast();
                 int sides = RuleJson.integer(sampled.get("sides"), "/roll/sides", 2, 1000);
-                if (sampled.path("faces").size() != 1 || sampled.path("faces").get(0).asInt() != value
-                        || sampled.path("total").asInt() != value)
-                    throw RuleJson.error("/roll", "A recovery offer needs the last sampled single-die result.");
-                String path = op.path("track").asText();
-                String[] parts = path.split("\\.", 2);
-                ObjectNode holder = RuleJson.object(context.get(parts[0]), "/" + parts[0]);
-                ObjectNode track = RuleJson.object(holder.get(parts[1]), "/" + path);
-                int capacity = RuleJson.integer(track.get("capacity"), "/" + path + "/capacity", 0, 1000);
-                int marked = RuleJson.integer(track.get("marked"), "/" + path + "/marked", 0, capacity);
-                int remaining = Math.max(0, marked - SheetProjection.markedFloor(holder, track, capacity, "/" + path));
+                JsonNode faces = sampled.path("faces"), value = eval(op.path("roll"), context);
+                boolean recovery = "recovery.offerRoll".equals(kind);
+                if (!faces.isArray() || faces.isEmpty()
+                        || !(value.equals(faces) || value.isNumber() && value.asDouble() == sampled.path("total").asDouble())
+                        || recovery && faces.size() != 1)
+                    throw RuleJson.error("/roll", "A downtime offer must reference the last sampled roll.");
+                ObjectNode holder = RuleJson.object(context.get("actor"), "/actor");
+                String trackName = null;
+                int remaining = 0;
+                if (recovery) {
+                    String path = op.path("track").asText();
+                    String[] parts = path.split("\\.", 2);
+                    holder = RuleJson.object(context.get(parts[0]), "/" + parts[0]);
+                    ObjectNode track = RuleJson.object(holder.get(parts[1]), "/" + path);
+                    int capacity = RuleJson.integer(track.get("capacity"), "/" + path + "/capacity", 0, 1000);
+                    int marked = RuleJson.integer(track.get("marked"), "/" + path + "/marked", 0, capacity);
+                    remaining = Math.max(0, marked - SheetProjection.markedFloor(holder, track, capacity, "/" + path));
+                    trackName = parts[1];
+                }
                 String label = RuleTemplate.render(op.path("label").asText(), context);
-                ObjectNode roll = RuleJson.JSON.createObjectNode().put("id", "recovery-" + java.util.UUID.randomUUID());
-                ObjectNode contribution = roll.putArray("contributions").addObject()
-                        .put("id", "recovery").put("kind", "dice").put("role", "downtime")
-                        .put("sourceId", program.sourceId()).put("label", label);
-                contribution.putArray("dice").addObject().put("id", "recovery.d1")
-                        .put("sides", sides).put("face", value).put("kept", true).put("origin", "rolled");
                 ArrayNode outbox = context.has("outbox") ? (ArrayNode) context.get("outbox") : context.putArray("outbox");
-                if (outbox.size() >= 32) throw RuleJson.error("/outbox", "Too many host requests.");
-                ObjectNode request = outbox.addObject().put("kind", kind).put("label", label)
-                        .put("sourceActorId", RuleJson.id(context.at("/actor/id"), "/actor/id"))
-                        .put("holderId", RuleJson.id(holder.get("id"), "/" + parts[0] + "/id"))
-                        .put("track", parts[1]).put("remaining", remaining);
-                request.set("roll", StructuredRoll.validate(roll));
-                result = request.deepCopy();
+                if (outbox.size() + faces.size() > 32)
+                    throw new Unavailable("restRoll", "A downtime action can offer at most 32 dice.");
+                ArrayNode offered = RuleJson.JSON.createArrayNode();
+                for (JsonNode face : faces) {
+                    ObjectNode roll = RuleJson.JSON.createObjectNode().put("id", "downtime-" + java.util.UUID.randomUUID());
+                    ObjectNode contribution = roll.putArray("contributions").addObject()
+                            .put("id", "downtime").put("kind", "dice").put("role", "downtime")
+                            .put("sourceId", program.sourceId()).put("label", label);
+                    contribution.putArray("dice").addObject().put("id", "downtime.d1")
+                            .put("sides", sides).put("face", face.asInt()).put("kept", true).put("origin", "rolled");
+                    ObjectNode request = outbox.addObject().put("kind", kind).put("label", label)
+                            .put("sourceActorId", RuleJson.id(context.at("/actor/id"), "/actor/id"))
+                            .put("holderId", RuleJson.id(holder.get("id"), "/holder/id"));
+                    if (recovery) request.put("track", trackName).put("remaining", remaining);
+                    request.set("roll", StructuredRoll.validate(roll));
+                    offered.add(request.deepCopy());
+                }
+                result = recovery ? offered.get(0) : offered;
             }
             case "state.set", "state.increment" -> {
                 ObjectNode state = (ObjectNode) context.get("state");

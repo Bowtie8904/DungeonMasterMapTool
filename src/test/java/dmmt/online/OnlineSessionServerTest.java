@@ -2088,6 +2088,69 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void convertedDowntimeTableOffersEveryDieForCrossPlayerRerolls() throws Exception {
+        installRestRerollRules();
+        var converted = dmmt.online.automation.LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"domain-cards","entries":[
+                 {"id":"kit","name":"Travel Kit","automation":{"actions":[
+                   {"id":"mix","label":"Mix","timing":"downtime","downtime":{"table":{
+                     "expression":"1d6","repeat":"2","outcomes":["A","B","C","D","E","F"]}}}]}}]}
+                """);
+        assertEquals(1, converted.converted(), converted.diagnostics().toString());
+        Path catalogFile = compendiumDir.resolve("domain-cards.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(catalogFile.toFile());
+        catalog.withArray("entries").add(converted.catalog().at("/entries/0").deepCopy());
+        java.nio.file.Files.writeString(catalogFile, catalog.toString());
+        String owner = cookie(), other = allyCookie("dice-owner");
+        campaign.getActors().add(Campaign.Actor.builder().id("mixer").name("Mira").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("reroller").name("Ada").ownerId("dice-owner").build());
+        store.saveSheet(campaign.getId(), "mixer", """
+                {"name":"Mira","level":1,"hp":{"slots":8,"on":2},"stress":{"slots":6,"on":1},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},
+                 "loadout":[{"name":"Travel Kit","instanceId":"kit","automationSource":"domain-cards:kit"}]}
+                """);
+        store.saveSheet(campaign.getId(), "reroller", """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":0},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0},
+                 "loadout":[{"name":"Second Chance","instanceId":"chance","automationSource":"domain-cards:reroller"}]}
+                """);
+        var described = restHttp(owner, "mixer", "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode rest = MAPPER.readTree(described.body());
+        ObjectNode body = restRequest(rest, "table-rest");
+        addRestMove((ObjectNode) body.path("request"), restDescriptor(rest.path("moves"), "mix"));
+        diceSeed(seedForDie(6, 1));
+        var completed = restHttp(owner, "mixer", null, body.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        var offers = store.historyTail(campaign.getId(), 100).stream()
+                .filter(message -> message.path("automationRecoveryRoll").isObject()).toList();
+        assertEquals(2, offers.size());
+        JsonNode offer = offers.getFirst();
+        assertEquals(1, offer.at("/automationRecoveryRoll/roll/contributions/0/dice/0/face").asInt());
+        assertTrue(offer.at("/automationRecoveryRoll/track").isMissingNode());
+        assertEquals(403, recoveryRollHttp(owner, offer, "reroller", null).statusCode());
+        var choicesResponse = recoveryRollHttp(other, offer, "reroller", null);
+        assertEquals(200, choicesResponse.statusCode(), choicesResponse.body());
+        ObjectNode request = recoveryRollRequest(MAPPER.readTree(choicesResponse.body()), "table-reroll");
+        String beforeMixer = store.loadSheet(campaign.getId(), "mixer");
+        diceSeed(seedForDie(6, 6));
+        var accepted = recoveryRollHttp(other, offer, "reroller", request.toString());
+        assertEquals(200, accepted.statusCode(), accepted.body());
+        JsonNode result = MAPPER.readTree(accepted.body());
+        assertEquals(6, result.path("kept").asInt());
+        assertEquals(0, result.path("cleared").asInt());
+        assertEquals(beforeMixer, store.loadSheet(campaign.getId(), "mixer"));
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "reroller"))
+                .at("/automationState/sources/chance/usage/uses").asInt());
+        assertEquals(accepted.body(), recoveryRollHttp(other, offer, "reroller", request.toString()).body());
+        JsonNode updated = store.historyTail(campaign.getId(), 100).stream()
+                .filter(message -> message.path("id").asLong() == offer.path("id").asLong()).findFirst().orElseThrow();
+        assertTrue(updated.path("text").asText().contains("Ada kept 6."));
+        assertTrue(updated.at("/automationRecoveryRoll/track").isMissingNode());
+        assertFalse(offers.get(1).at("/automationRecoveryRoll/used").asBoolean());
+    }
+
+    @Test
     void selfRecoveryRerollsUseOneRevisionAndKeepHigherResults() throws Exception {
         installRestRerollRules();
         String owner = cookie();
@@ -2294,6 +2357,32 @@ class OnlineSessionServerTest {
         assertEquals(200, accepted.statusCode(), accepted.body());
         assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "target")).at("/hp/on").asInt());
         assertEquals(healer, store.loadSheet(campaign.getId(), "healer"));
+    }
+
+    @Test
+    void allyRestCanOfferARecoveryDieWhenTheTargetHasNothingMarked() throws Exception {
+        installRestRerollRules();
+        String owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("healer").name("Healer").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("target").name("Target").ownerId(playerId()).build());
+        for (String id : List.of("healer", "target"))
+            store.saveSheet(campaign.getId(), id, """
+                    {"name":"%s","level":1,"hp":{"slots":8,"on":0},"stress":{"slots":6,"on":0},
+                     "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":0}}
+                    """.formatted(id));
+        var described = restHttp(owner, "healer", "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode rest = MAPPER.readTree(described.body());
+        JsonNode move = restDescriptor(rest.path("moves"), "rest-tend-ally");
+        JsonNode target = move.at("/targetSelection/options/0");
+        ObjectNode body = restRequest(rest, "nothing-marked");
+        addRestMove((ObjectNode) body.path("request"), move).putObject("target")
+                .put("recipientId", target.path("id").asText()).put("version", target.path("version").asText());
+        var completed = restHttp(owner, "healer", null, body.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        assertTrue(store.historyTail(campaign.getId(), 100).stream().anyMatch(message ->
+                message.at("/automationRecoveryRoll/holderId").asText().equals("target")
+                        && message.at("/automationRecoveryRoll/remaining").asInt(-1) == 0));
     }
 
     @Test

@@ -39,9 +39,10 @@ public final class AutomationHost {
     private static final int MAX_REACTION_PROJECTION_PASSES = 16;
     private static final Set<String> STAGED_REST_COMMANDS = Set.of(
             "countdown.start", "limits.refresh", "effect.endElsewhere", "table.gain", "table.spend", "claim.offer", "limit.restore",
-            "recovery.offerRoll");
+            "recovery.offerRoll", "downtime.offerRoll");
     private static final Set<String> STAGED_TARGET_REST_COMMANDS = Set.of(
-            "countdown.start", "limits.refresh", "table.gain", "table.spend", "claim.offer", "limit.restore", "recovery.offerRoll");
+            "countdown.start", "limits.refresh", "table.gain", "table.spend", "claim.offer", "limit.restore",
+            "recovery.offerRoll", "downtime.offerRoll");
     static final String RULESET_SOURCE = "ruleset:base";
 
     /** Compiled automation keyed by fully qualified source ID. */

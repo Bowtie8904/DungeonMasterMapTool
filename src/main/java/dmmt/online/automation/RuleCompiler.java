@@ -44,6 +44,7 @@ public final class RuleCompiler {
             Map.entry("dice.highest", List.of("count", "sides")),
             Map.entry("dice.table", List.of("count", "outcomes")),
             Map.entry("recovery.offerRoll", List.of("roll", "track", "label")),
+            Map.entry("downtime.offerRoll", List.of("roll", "label")),
             Map.entry("inventory.grant", List.of("catalog", "entry", "quantity", "label", "to", "tag", "max", "scope")),
             Map.entry("state.set", List.of("slot", "value")),
             Map.entry("state.increment", List.of("slot", "by")),
@@ -1555,9 +1556,10 @@ public final class RuleCompiler {
                 throw RuleJson.error(path + "/scope", "Expected actor or party.");
             return;
         }
-        if ("recovery.offerRoll".equals(op)) {
+        if ("recovery.offerRoll".equals(op) || "downtime.offerRoll".equals(op)) {
             RuleExpression.validate(operation.get("roll"), path + "/roll");
-            if (!RuleJson.text(operation.get("track"), path + "/track").matches("(actor|recipient)\\.[a-zA-Z][a-zA-Z0-9_-]*"))
+            if ("recovery.offerRoll".equals(op) && !RuleJson.text(operation.get("track"), path + "/track")
+                    .matches("(actor|recipient)\\.[a-zA-Z][a-zA-Z0-9_-]*"))
                 throw RuleJson.error(path + "/track", "Expected an actor or recipient recovery track.");
             RuleTemplate.validate(RuleJson.text(operation.get("label"), path + "/label"));
             return;

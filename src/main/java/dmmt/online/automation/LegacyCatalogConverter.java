@@ -3623,6 +3623,10 @@ public final class LegacyCatalogConverter {
                     String slot = "repeat" + i;
                     steps.addObject().put("op", "dice.roll").put("count", Integer.parseInt(dice.group(1)))
                             .put("sides", Integer.parseInt(dice.group(2))).put("as", slot);
+                    ObjectNode offer = steps.addObject().put("op", "downtime.offerRoll")
+                            .put("label", ui.path("label").asText("Downtime table") + " count");
+                    offer.set("roll", read("result." + slot));
+                    offer.putObject("if").putArray("eq").add(read("event.move.rest")).add("short");
                     add.add(read("result." + slot));
                 } else if (term.matches("-?\\d{1,2}")) add.add(Integer.parseInt(term));
                 else {
@@ -3642,6 +3646,14 @@ public final class LegacyCatalogConverter {
         roll.set("count", count);
         roll.set("outcomes", labels);
         roll.put("as", "table");
+        if (!forage) {
+            ObjectNode offer = steps.addObject().put("op", "downtime.offerRoll")
+                    .put("label", ui.path("label").asText("Downtime table"));
+            offer.set("roll", read("result.table.faces"));
+            ArrayNode conditions = offer.putObject("if").putArray("and");
+            conditions.addObject().putArray("eq").add(read("event.move.rest")).add("short");
+            conditions.addObject().putArray("gt").add(read("result.table.count")).add(0);
+        }
         if (!reported) ui.put("report", "{source.name}: rolled {result.table.faces|list}: {result.table.outcomes|list}.");
         if (!forage) return;
         if (sides != FORAGED.size() + 1) { p.add(at + "/outcomes", "A forage table lists the five foraged consumables and a choice."); return; }

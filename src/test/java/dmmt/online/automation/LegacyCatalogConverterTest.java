@@ -1640,6 +1640,15 @@ class LegacyCatalogConverterTest {
         int faces = parts.group(1).split(", ").length;
         assertTrue(faces >= 3 && faces <= 6, report);
         assertEquals(faces, parts.group(2).split(", ").length, report);
+        assertEquals(faces + 1, mixed.outbox().size());
+        assertEquals(4, mixed.outbox().getFirst().at("/roll/contributions/0/dice/0/sides").asInt());
+        for (JsonNode offer : mixed.outbox().subList(1, mixed.outbox().size())) {
+            assertEquals("downtime.offerRoll", offer.path("kind").asText());
+            assertEquals("me", offer.path("holderId").asText());
+            assertTrue(offer.path("track").isMissingNode());
+            assertEquals(6, offer.at("/roll/contributions/0/dice/0/sides").asInt());
+        }
+        assertTrue(run(kit, context(kit, actor, move("mix", "long", false, false)), "mix").outbox().isEmpty());
 
         RuleCompiler.Program forager = program(result, 2);
         JsonNode rules = block(result, 2).path("rules");

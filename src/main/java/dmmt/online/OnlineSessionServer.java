@@ -6431,7 +6431,7 @@ public final class OnlineSessionServer {
         event.set("roll", StructuredRoll.validate(saved.path("roll")));
         ObjectNode recovery = event.putObject("recovery");
         for (String field : List.of("sourceActorId", "holderId", "track", "remaining"))
-            recovery.set(field, saved.path(field).deepCopy());
+            recovery.set(field, saved.has(field) ? saved.get(field).deepCopy() : MAPPER.nullNode());
         return event;
     }
 
@@ -6534,7 +6534,8 @@ public final class OnlineSessionServer {
                     || !oldDice.get(0).path("sides").equals(newDice.get(0).path("sides")))
                 throw new IllegalArgumentException("A recovery-roll action must edit the offered die.");
             int previous = oldDice.get(0).path("face").asInt(), kept = newDice.get(0).path("face").asInt();
-            int remaining = (int) claimLong(saved.get("remaining"), "remaining recovery");
+            boolean recoveryOffer = saved.has("track");
+            int remaining = recoveryOffer ? (int) claimLong(saved.get("remaining"), "remaining recovery") : 0;
             if (remaining > 1000) throw new IllegalArgumentException("Invalid remaining recovery.");
             int requested = Math.min(remaining, Math.max(0, kept - previous));
             int cleared = 0;
@@ -6554,16 +6555,17 @@ public final class OnlineSessionServer {
                     .put("requestId", requestId).put("previous", previous).put("kept", kept).put("cleared", cleared);
             ObjectNode replacement = offer.deepCopy();
             ObjectNode updated = (ObjectNode) replacement.path("automationRecoveryRoll");
-            updated.put("used", true).put("revision", saved.path("revision").asLong() + 1)
-                    .put("remaining", remaining - cleared);
+            updated.put("used", true).put("revision", saved.path("revision").asLong() + 1);
+            if (recoveryOffer) updated.put("remaining", remaining - cleared);
             updated.set("roll", after);
             ObjectNode receipt = updated.withArray("receipts").addObject()
                     .put("requestId", requestId).put("principalId", playerId).put("actorId", actor.getId());
             receipt.set("request", request.deepCopy());
             receipt.set("response", result.deepCopy());
-            replacement.put("text", offer.path("text").asText() + "\n" + actor.getName()
-                    + " kept " + kept + "; " + holder.getName() + " cleared " + cleared + " additional "
-                    + saved.path("track").asText() + ".");
+            String edited = actor.getName() + " kept " + kept;
+            if (recoveryOffer) edited += "; " + holder.getName() + " cleared " + cleared
+                    + " additional " + saved.path("track").asText();
+            replacement.put("text", offer.path("text").asText() + "\n" + edited + ".");
             Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
             changed.put(actor.getId(), sheet);
             if (recovery != null && !holder.getId().equals(actor.getId())
@@ -7325,7 +7327,7 @@ public final class OnlineSessionServer {
                         throw new IllegalArgumentException("The automation table state is inconsistent. Retry the action.");
                     fear = next;
                 }
-                case "recovery.offerRoll" -> {
+                case "recovery.offerRoll", "downtime.offerRoll" -> {
                     Campaign.Actor source = automationActor(command.path("sourceActorId").asText());
                     Campaign.Actor holder = automationActor(command.path("holderId").asText());
                     if (!changed.containsKey(source.getId()) || !changed.containsKey(holder.getId())
@@ -7335,8 +7337,9 @@ public final class OnlineSessionServer {
                     ArrayNode dice = StructuredRoll.dice(roll, "downtime", true);
                     if (dice.size() != 1 || roll.path("contributions").size() != 1)
                         throw new IllegalArgumentException("A recovery offer requires one downtime die.");
-                    int remaining = (int) claimLong(command.get("remaining"), "remaining recovery");
-                    if (remaining > 1000 || !command.path("track").asText().matches("[a-zA-Z][a-zA-Z0-9_-]*"))
+                    boolean recovery = "recovery.offerRoll".equals(kind);
+                    int remaining = recovery ? (int) claimLong(command.get("remaining"), "remaining recovery") : 0;
+                    if (recovery && (remaining > 1000 || !command.path("track").asText().matches("[a-zA-Z][a-zA-Z0-9_-]*")))
                         throw new IllegalArgumentException("Invalid recovery-roll track or allowance.");
                     ObjectNode message = chatMessage(source.getOwnerId(), campaign.player(source.getOwnerId()).getName(),
                             null, clip(holder.getName() + ": " + command.path("label").asText()
@@ -7345,9 +7348,9 @@ public final class OnlineSessionServer {
                     message.put("actorId", source.getId());
                     ObjectNode offer = message.putObject("automationRecoveryRoll")
                             .put("sourceActorId", source.getId()).put("holderId", holder.getId())
-                            .put("track", command.path("track").asText()).put("remaining", remaining)
                             .put("packRevision", pack.revision()).put("sessionId", sessionId)
                             .put("revision", 0).put("used", false);
+                    if (recovery) offer.put("track", command.path("track").asText()).put("remaining", remaining);
                     offer.set("roll", roll);
                     offer.putArray("receipts");
                     publishedMessages.add(message);

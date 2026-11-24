@@ -346,4 +346,30 @@ class RuleRuntimeTest {
         RuleCompiler.Program bad = RuleCompiler.compile("domain-cards:example", outOfRange, fixture("rewrite/recipes"));
         assertThrows(IllegalArgumentException.class, () -> RuleRuntime.execute(bad, intent("x", "sheet", before, "{}"), before, noRandom()));
     }
+
+    @Test
+    void downtimeRollOffersKeepEachSampledFaceAndRejectUnrelatedValues() throws Exception {
+        ObjectNode automation = (ObjectNode) RuleJson.parse("""
+                {"rules":[{"id":"roll","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"button"}],
+                 "do":[{"op":"dice.roll","count":2,"sides":8,"as":"roll"},
+                       {"op":"downtime.offerRoll","roll":{"read":"result.roll"},"label":"Survey"}],
+                 "ui":{"label":"Survey"}}]}
+                """);
+        RuleCompiler.Program program = RuleCompiler.compile("domain-cards:example", automation, fixture("rewrite/recipes"));
+        ObjectNode before = context("example", "Example");
+        before.putObject("event").put("type", "downtime.move").putObject("move").put("rest", "short");
+        var result = RuleRuntime.execute(program, intent("roll", "move", before, "{}"), before, faces(2, 7));
+        assertEquals(2, result.context().path("outbox").size());
+        assertEquals(2, result.context().at("/outbox/0/roll/contributions/0/dice/0/face").asInt());
+        assertEquals(7, result.context().at("/outbox/1/roll/contributions/0/dice/0/face").asInt());
+        assertEquals("actor", result.context().at("/outbox/1/holderId").asText());
+        assertTrue(result.context().at("/outbox/1/track").isMissingNode());
+        ((ObjectNode) automation.at("/rules/0/do/1")).put("roll", 1);
+        RuleCompiler.Program forged = RuleCompiler.compile("domain-cards:example", automation, fixture("rewrite/recipes"));
+        assertThrows(IllegalArgumentException.class,
+                () -> RuleRuntime.execute(forged, intent("roll", "move", before, "{}"), before, faces(2, 7)));
+        before.withObject("/event/move").put("rest", "long");
+        assertThrows(RuleRuntime.Unavailable.class,
+                () -> RuleRuntime.execute(program, intent("roll", "move", before, "{}"), before, faces(2, 7)));
+    }
 }
