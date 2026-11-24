@@ -33,7 +33,7 @@ public final class LegacyCatalogConverter {
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
             "damage", "alternateProfiles", "damageTypeChoice", "rest", "restReroll", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions",             "conditionalRollOptions", "conditionalMitigation", "elementChoice", "stances",
             "hopeReward", "classResourceOnly", "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "zeroHopeClearArmor",
-            "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases", "hideSpellcast", "companion", "companionTraining", "conditionalDamageRewards", "experienceRefund", "partyDowntime", "requirement", "unarmoredBase", "ignoreWeaponBurden", "unarmedWeapon", "spellcastSuccessSteps", "banishDifficulty");
+            "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases", "hideSpellcast", "companion", "companionTraining", "conditionalDamageRewards", "experienceRefund", "partyDowntime", "requirement", "unarmoredBase", "ignoreWeaponBurden", "unarmedWeapon",             "spellcastSuccessSteps", "banishDifficulty", "equipEffect");
     private static final Set<String> DEATH_KINDS = Set.of("hopeBonus", "hopeSpend", "mask", "spectral", "egg", "battleHardened",
             "unbreakable", "undying", "lifeWard");
     /** Legacy gated families that are their base family plus extra conditions, which every family converts the same way. */
@@ -556,6 +556,13 @@ public final class LegacyCatalogConverter {
         for (ObjectNode rule : armorStates(legacy, path, p, effects)) {
             rule.put("id", unique(rule.path("id").asText(), ruleIds));
             rules.add(rule);
+        }
+        if (legacy.has("equipEffect")) {
+            ObjectNode rule = equipEffect(legacy.get("equipEffect"), path + "/equipEffect", p, effects);
+            if (rule != null) {
+                rule.put("id", unique(rule.path("id").asText(), ruleIds));
+                rules.add(rule);
+            }
         }
         if (legacy.has("criticalMelee"))
             for (ObjectNode rule : criticalMelee(legacy.get("criticalMelee"), path + "/criticalMelee", p, effects)) {
@@ -1934,6 +1941,25 @@ public final class LegacyCatalogConverter {
             }
         }
         return rules;
+    }
+
+    /**
+     * An effect started when this equipment is newly equipped and that ends when the equipment leaves its slot; it is not
+     * restored by anything else (ending it manually keeps it gone until the next equip).
+     */
+    private static ObjectNode equipEffect(JsonNode effect, String path, Problems p, ObjectNode effects) {
+        if (!effect.isObject()) { p.add(path, "Expected an effect."); return null; }
+        String id = declareEffect(effect, path, p, effects);
+        if (id == null) return null;
+        ((ObjectNode) effects.get(id)).put("endsWithSourceElement", true);
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "equip-" + id);
+        rule.putArray("bindings").addObject().put("id", "equipped").put("event", "equipment.changed")
+                .put("surface", "effect").put("mode", "automatic");
+        rule.putObject("when").putArray("eq").add(read("effects." + id)).add(0);
+        rule.putArray("do").addObject().put("op", "effect.start").put("effect", id).put("target", "actor");
+        String name = escape(effect.path("name").asText());
+        rule.putObject("ui").put("label", name).put("report", name + " started.");
+        return rule;
     }
 
     private static void derivedArmorEffect(JsonNode effect, String path, Problems p, ObjectNode effects, ObjectNode condition) {

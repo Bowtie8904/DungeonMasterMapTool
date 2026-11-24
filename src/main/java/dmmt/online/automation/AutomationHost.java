@@ -1124,6 +1124,42 @@ public final class AutomationHost {
         return ends;
     }
 
+    /**
+     * Ends this character's stored effects declared with {@code endsWithSourceElement} whose source sheet element is no
+     * longer an active automation source on {@code sheet} (for example unequipped armor). Returns whether any ended.
+     */
+    public boolean endEffectsOfRemovedSources(Pack pack, ObjectNode sheet, ObjectNode event) {
+        String holder = RuleJson.id(event.get("actorId"), "/event/actorId");
+        Set<String> present = new java.util.HashSet<>();
+        for (SheetProjection.SourceElement source : sources(pack, sheet)) present.add(source.instanceId());
+        ArrayNode original = RuleEffects.instances(projection.actorFact(sheet, "effects"), "/actor/effects");
+        ArrayNode effects = null;
+        for (int i = original.size() - 1; i >= 0; i--) {
+            JsonNode effect = original.get(i);
+            String key = effect.path("effect").asText("");
+            int split = key.lastIndexOf('#');
+            RuleCompiler.Program program = split > 0 ? pack.programs().get(key.substring(0, split)) : null;
+            if (effect.path("derived").asBoolean() || program == null || !program.hasEffect(key.substring(split + 1))
+                    || !program.effect(key.substring(split + 1)).path("endsWithSourceElement").asBoolean()
+                    || present.contains(effect.path("sourceInstanceId").asText())
+                    || !holder.equals(effect.path("sourceActorId").asText())) continue;
+            if (effects == null) effects = original.deepCopy();
+            effects.remove(i);
+        }
+        if (effects == null) return false;
+        ObjectNode working = sheet.deepCopy();
+        ObjectNode state = projection.state(working);
+        ObjectNode before = actor(pack, working, state, event);
+        ObjectNode after = before.deepCopy();
+        for (JsonNode effect : before.path("effects"))
+            if (effect.path("derived").asBoolean()) effects.add(effect.deepCopy());
+        after.set("effects", effects);
+        RuleEffects.reconcileHolder(before, after, Set.of(), pack.programs(), "/actor");
+        projection.write(working, projection.actor(working), persisted(after));
+        replace(sheet, working);
+        return true;
+    }
+
     /** Removes other holders' matching stored effects, preserving supporting pools and the original sheet on failure. */
     public boolean endEffectsElsewhere(Pack pack, ObjectNode sheet, ObjectNode event,
                                        List<SingleHolderEffect> commands, boolean advanceRevision) {

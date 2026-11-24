@@ -88,7 +88,7 @@
 "armor","/entries/51/automation","dreadclatter-harness [Dreadclatter Harness]","rollOptions","converted-candidate","","not captured","unverified"
 "armor","/entries/52/automation","dormant-sigil-armor [Dormant Sigil Armor]","rest","converted-candidate","","not captured","unverified"
 "armor","/entries/53/automation","voracious-wardplate [Voracious Wardplate]","mitigation","converted-candidate","","not captured","unverified"
-"armor","/entries/54/automation","vowkeepers-panoply [Vowkeeper’s Panoply]","actions;equipEffect","unconverted","/entries/54/automation/equipEffect: Unsupported legacy field: equipEffect","not captured","unverified"
+"armor","/entries/54/automation","vowkeepers-panoply [Vowkeeper’s Panoply]","actions;equipEffect","converted-candidate","","not captured","unverified"
 "armor","/entries/56/automation","prismhide-armor [Prismhide Armor]","mitigation","converted-candidate","","not captured","unverified"
 "armor","/entries/57/automation","failsafe-brigandine [Failsafe Brigandine]","rollTriggers","converted-candidate","","not captured","unverified"
 "armor","/entries/58/automation","patchwork-bastion [Patchwork Bastion]","rest","converted-candidate","","not captured","unverified"

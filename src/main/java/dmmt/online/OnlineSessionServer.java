@@ -1758,6 +1758,8 @@ public final class OnlineSessionServer {
                 trackResult = MAPPER.createObjectNode();
                 ArrayNode actions = trackResult.putArray("actions"), commands = trackResult.putArray("outbox");
                 List<ObjectNode> events = new ArrayList<>();
+                if (!equipmentChanges.isEmpty())
+                    automationHost.endEffectsOfRemovedSources(trackPack, saved, automationEvent("action.request", actor));
                 events.addAll(automationHost.effectTransitions(trackPack, previous, saved,
                         automationEvent("action.request", actor)));
                 for (var change : equipmentChanges) {
