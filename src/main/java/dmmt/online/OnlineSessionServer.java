@@ -344,6 +344,7 @@ public final class OnlineSessionServer {
         javalin.post("/api/automation/{version}/{id}", ctx -> withSheetOperation(ctx, this::handleAutomationExecute));
         javalin.get("/api/automation/{version}/{id}/check", ctx -> withSheetOperation(ctx, this::handleAutomationCheckDescribe));
         javalin.get("/api/automation/{version}/{id}/death", ctx -> withSheetOperation(ctx, this::handleAutomationDeathDescribe));
+        javalin.get("/api/automation/{version}/{id}/damage", ctx -> withSheetOperation(ctx, this::handleAutomationDamageDescribe));
         javalin.get("/api/automation/{version}/{id}/rest", ctx -> withSheetOperation(ctx, this::handleRestDescribe));
         javalin.post("/api/automation/{version}/{id}/rest", ctx -> withSheetOperation(ctx, this::handleRestExecute));
         javalin.post("/api/automation/{version}/{id}/rest/choices", ctx -> withSheetOperation(ctx, this::handleRestChoices));
@@ -6226,6 +6227,41 @@ public final class OnlineSessionServer {
         }
     }
 
+    private synchronized void handleAutomationDamageDescribe(Context ctx) {
+        String playerId = requirePlayer(ctx);
+        if (playerId == null || !requireAutomationVersion(ctx)) return;
+        try {
+            Campaign.Actor actor = automationActor(ctx.pathParam("id"));
+            String relation = automationRelation(ctx, playerId, actor);
+            if (!"self".equals(relation) && !"dm".equals(relation))
+                throw new SecurityException("Only the character owner or the GM may apply incoming damage.");
+            ctx.header("Cache-Control", "no-store");
+            if (!catalogs().requiresReplacementAutomation()) {
+                json(ctx, 200, MAPPER.createObjectNode().put("legacy", true));
+                return;
+            }
+            int amount = Integer.parseInt(ctx.queryParam("amount") == null ? "0" : ctx.queryParam("amount"));
+            int armor = Integer.parseInt(ctx.queryParam("armor") == null ? "0" : ctx.queryParam("armor"));
+            String type = ctx.queryParam("type");
+            if (type != null && type.isBlank()) type = null;
+            String original = store.loadSheet(campaign.getId(), actor.getId());
+            ObjectNode sheet = original == null ? MAPPER.createObjectNode() : hydrateSheet(actor.getId(), original);
+            json(ctx, 200, automationHost.describeDamage(automationPack(), sheet,
+                    automationEvent("action.request", actor), relation, amount, type, armor));
+        } catch (NumberFormatException e) {
+            json(ctx, 400, errorBody("Damage amount and armor must be whole numbers."));
+        } catch (dmmt.online.automation.AutomationHost.NotReady e) {
+            json(ctx, 409, errorBody("Automation is unavailable: " + e.getMessage()));
+        } catch (dmmt.online.automation.RuleRuntime.Unavailable e) {
+            json(ctx, 409, errorBody(e.getMessage()).put("code", e.code()));
+        } catch (SecurityException e) {
+            json(ctx, 403, errorBody(e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            json(ctx, 400, errorBody(e.getMessage()));
+        } catch (IOException | java.io.UncheckedIOException e) {
+            json(ctx, 500, errorBody("Could not read the damage options or host catalogs."));
+        }
+    }
     private synchronized void handleAutomationDeathDescribe(Context ctx) {
         String playerId = requirePlayer(ctx);
         if (playerId == null || !requireAutomationVersion(ctx)) return;
@@ -6291,7 +6327,8 @@ public final class OnlineSessionServer {
                 throw new IllegalArgumentException("Invalid automation request.");
             if (!body.at("/request/selections").isArray() ||
                     (body.at("/request/selections").isEmpty() && !body.path("request").has("profileRoll")
-                            && !body.path("request").has("checkRoll") && !body.path("request").has("deathRoll")))
+                            && !body.path("request").has("checkRoll") && !body.path("request").has("deathRoll")
+                            && !body.path("request").has("damage")))
                 throw new IllegalArgumentException("Select an automation action or a roll.");
             Campaign.Actor actor = automationActor(ctx.pathParam("id"));
             String original = store.loadSheet(campaign.getId(), actor.getId());
@@ -7660,6 +7697,18 @@ public final class OnlineSessionServer {
                     claim.putArray("claims");
                     claim.putArray("receipts");
                     claimLedger(claim);
+                    publishedMessages.add(message);
+                }
+                case "damage.deal" -> {
+                    Campaign.Actor source = automationActor(responseActorId);
+                    String to = command.path("to").asText();
+                    if (!Set.of("actor", "recipient", "attacker").contains(to) || !command.path("amount").isInt())
+                        throw new IllegalArgumentException("Invalid automation damage request.");
+                    String who = "actor".equals(to) ? source.getName() : "the " + to;
+                    ObjectNode message = chatMessage(source.getOwnerId() == null ? "dm" : source.getOwnerId(), source.getName(),
+                            null, clip(source.getName() + ": " + command.path("label").asText("Damage") + " deals "
+                                    + command.path("amount").asInt() + " damage to " + who + "."));
+                    message.put("actorId", source.getId());
                     publishedMessages.add(message);
                 }
                 default -> throw new IllegalArgumentException("The host cannot apply this automation operation yet: " + kind);

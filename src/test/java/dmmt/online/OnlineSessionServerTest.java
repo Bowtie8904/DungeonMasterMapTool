@@ -2377,6 +2377,52 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void incomingDamageIsDescribedAppliedAtomicallyAndRetriesReplay() throws Exception {
+        installRestRules();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/0/automation");
+        automation.removeAll();
+        automation.setAll((ObjectNode) MAPPER.readTree("""
+                {"rules":[
+                 {"id":"brace","bindings":[{"id":"prepare","event":"damage.prepare","surface":"damage","mode":"button"}],
+                  "do":[{"op":"damage.reduce","from":{"read":"event.damage"},"amount":2,"id":"brace","label":"Brace","as":"brace"},
+                        {"op":"damage.publish","damage":{"read":"result.brace.damage"}}],"ui":{"label":"Brace"}},
+                 {"id":"boon","bindings":[{"id":"auto","event":"damage.applied","surface":"damage","mode":"automatic"}],
+                  "when":{"gt":[{"read":"event.applied.hitPoints"},0]},
+                  "do":[{"op":"damage.deal","to":"attacker","amount":1,"label":"Thorns"}],"ui":{"report":"Thorns lash out."}}]}"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String id = "target", owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id(id).name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), id, """
+                {"name":"Ada","level":1,"hp":{"slots":6,"on":0},"stress":{"slots":6,"on":0},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":2},
+                 "features":[{"name":"Rally","automationSource":"classes:tester:features:rally","instanceId":"r"}]}""");
+        var described = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/automation/"
+                + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + "/" + id + "/damage?amount=9&armor=0&type=physical"))
+                .header("Cookie", owner).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, described.statusCode(), described.body());
+        assertTrue(described.body().contains("Brace"), described.body());
+        assertEquals(403, http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/automation/"
+                + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + "/" + id + "/damage?amount=9"))
+                .header("Cookie", allyCookie("other")).GET().build(), HttpResponse.BodyHandlers.ofString()).statusCode());
+        String request = """
+                {"request":{"requestId":"hit","expectedRevision":0,"damage":{"amount":9,"armor":0,"type":"physical"},
+                 "selections":[{"sourceInstanceId":"r","ruleId":"brace","bindingId":"prepare"}]}}""";
+        var applied = automationHttp(owner, id, request);
+        assertEquals(200, applied.statusCode(), applied.body());
+        JsonNode response = MAPPER.readTree(applied.body());
+        assertEquals(7, response.at("/event/applied/amount").asInt(), applied.body());
+        int hp = MAPPER.readTree(store.loadSheet(campaign.getId(), id)).at("/hp/on").asInt();
+        assertTrue(hp > 0, "Hit Points were marked");
+        assertEquals("damage.deal", response.at("/outbox/0/kind").asText());
+        assertTrue(store.historyTail(campaign.getId(), 100).toString().contains("Thorns"), "damage.deal was published");
+        String saved = store.loadSheet(campaign.getId(), id);
+        assertEquals(applied.body(), automationHttp(owner, id, request).body(), "A retry replays the response");
+        assertEquals(saved, store.loadSheet(campaign.getId(), id));
+        assertEquals(409, automationHttp(owner, id, request.replace("\"hit\"", "\"stale\"")).statusCode());
+    }
+    @Test
     void authoredDeathOptionsUseOwnerStateReactionsAndJournal() throws Exception {
         installRestRules();
         Path file = compendiumDir.resolve("classes.json");
