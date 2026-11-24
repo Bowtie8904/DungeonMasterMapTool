@@ -3263,6 +3263,61 @@ class LegacyCatalogConverterTest {
         assertTrue(block(blink, 0).toString().contains("Hope to spend"), block(blink, 0).toString());
     }
     @Test
+    void sheetStatPassivesAndGearRulesConvert() throws Exception {
+        for (String fixture : new String[]{
+                "{\"score\":3,\"trait\":\"Strength\",\"thresholdsByTier\":{\"1\":[9,19],\"2\":[11,24],\"3\":[13,31],\"4\":[15,38]}}",
+                "{\"score\":1,\"trait\":\"Knowledge\",\"thresholdsByTier\":{\"1\":[7,14],\"2\":[8,17],\"3\":[9,20],\"4\":[10,23]}}"}) {
+            var base = LegacyCatalogConverter.convert(catalog("{\"id\":\"bare\",\"name\":\"Bare\",\"automation\":{\"unarmoredBase\":" + fixture + "}}"));
+            assertEquals(1, base.converted(), base.diagnostics().toString());
+            String text = block(base, 0).toString();
+            assertTrue(text.contains("actor.armor.score"), text);
+            assertTrue(text.contains("armorScore") && text.contains("thresholds.major") && text.contains("thresholds.severe"), text);
+            assertNotNull(program(base, 0));
+        }
+        var weapon = LegacyCatalogConverter.convert("""
+                {"format":"dmmap-daggerheart","version":1,"category":"weapons","label":"Fixture","entries":[
+                  {"id":"ego","name":"Ego","automation":{"requirement":{"trait":"Presence","max":0}}},
+                  {"id":"heavy","name":"Heavy","automation":{"requirement":{"trait":"Strength","min":2}}}]}""");
+        assertEquals(2, weapon.converted(), weapon.diagnostics().toString());
+        assertTrue(block(weapon, 0).toString().contains("event.block"), block(weapon, 0).toString());
+        assertNotNull(program(weapon, 0));
+        assertNotNull(program(weapon, 1));
+        var proficiency = LegacyCatalogConverter.convert(catalog("""
+                {"id":"codex","name":"Codex","automation":{"rollOptions":[{"id":"proficiency","label":"Proficiency","roll":"spellcast","derivedProficiency":true,"cost":{"stress":1}}]}}"""));
+        assertEquals(1, proficiency.converted(), proficiency.diagnostics().toString());
+        assertTrue(block(proficiency, 0).toString().contains("actor.stats.proficiency"), block(proficiency, 0).toString());
+        assertNotNull(program(proficiency, 0));
+        for (String choices : new String[]{"[\"Finesse\",\"Agility\"]", "[\"Strength\",\"Finesse\",\"Presence\"]"}) {
+            var picked = LegacyCatalogConverter.convert(catalog("""
+                    {"id":"cruel","name":"Cruel","automation":{"rollOptions":[{"id":"precision","label":"Precision","roll":"damage","traitChoices":%s}]}}""".formatted(choices)));
+            assertEquals(1, picked.converted(), picked.diagnostics().toString());
+            assertTrue(block(picked, 0).toString().contains("\"choice\""), block(picked, 0).toString());
+            assertNotNull(program(picked, 0));
+        }
+        var maximum = LegacyCatalogConverter.convert(catalog("""
+                {"id":"vf","name":"VF","automation":{"rollOptions":[{"id":"maximum","label":"Maximize","roll":"damage","maximizeDie":true,"cost":{"stress":1}}]}}"""));
+        assertEquals(0, maximum.converted());
+        assertTrue(maximum.diagnostics().toString().contains("Manual disposition"), maximum.diagnostics().toString());
+    }
+
+    @Test
+    void sheetStatManualDispositionsExplainThemselves() throws Exception {
+        String[][] cases = {
+                {"{\"ignoreWeaponBurden\":true}", "two-handed Burden"},
+                {"{\"unarmedWeapon\":{\"name\":\"Fists\"}}", "unarmed weapon"},
+                {"{\"actions\":[{\"id\":\"s\",\"label\":\"S\",\"steps\":[{\"op\":\"mark\",\"resource\":\"permanentHp\",\"amount\":1}]}]}", "permanently marked HP"},
+                {"{\"conditionalActions\":[{\"id\":\"swap\",\"label\":\"Swap\",\"codexSwap\":true}]}", "vault-to-loadout"},
+                {"{\"rollOptions\":[{\"id\":\"c\",\"label\":\"C\",\"roll\":\"attack\",\"chooseTrait\":true}]}", "replaces the weapon's own trait"},
+                {"{\"rollOptions\":[{\"id\":\"r\",\"label\":\"R\",\"roll\":\"attack\",\"linkedDamageTrait\":true}]}", "cannot hold the chosen quantity"},
+                {"{\"conditionalRollOptions\":[{\"id\":\"a\",\"label\":\"A\",\"roll\":\"attack\",\"advantageDie\":8}]}", "advantage die size"}};
+        for (String[] c : cases) {
+            var result = LegacyCatalogConverter.convert(catalog("{\"id\":\"m\",\"name\":\"M\",\"automation\":" + c[0] + "}"));
+            assertEquals(0, result.converted(), c[0]);
+            assertTrue(result.diagnostics().toString().contains(c[1]), c[0] + " -> " + result.diagnostics());
+        }
+    }
+
+    @Test
     void conditionalStepsSkipWhenFalseAndCannotNameResults() throws Exception {
         String base = """
                 {"rules":[{"id":"r","bindings":[{"id":"b","event":"action.request","surface":"sheet","mode":"button"}],
