@@ -225,7 +225,7 @@
 "classes","/entries/63/features/0/automation","rogue-syndicate-mastery [Rogue: Syndicate] > Reliable Backup","mitigation;rollOptions;usesOverrides","converted-candidate","","not captured","unverified"
 "classes","/entries/64/features/0/automation","rogue-syndicate-specialization [Rogue: Syndicate] > Contacts Everywhere","actions;uses","converted-candidate","","not captured","unverified"
 "classes","/entries/66/features/0/automation","bard-troubadour-mastery [Bard: Troubadour] > Virtuoso","usesOverrides","converted-candidate","","not captured","unverified"
-"classes","/entries/67/features/0/automation","bard-troubadour-specialization [Bard: Troubadour] > Maestro","actionBenefits","unconverted","/entries/67/features/0/automation/actionBenefits: Unsupported legacy field: actionBenefits","not captured","unverified"
+"classes","/entries/67/features/0/automation","bard-troubadour-specialization [Bard: Troubadour] > Maestro","actionBenefits","converted-candidate","","not captured","unverified"
 "classes","/entries/68/features/0/automation","bard-troubadour-foundation [Bard: Troubadour] > Gifted Performer","grantsFeatures;groupGrantedFeatures","converted-candidate","","not captured","unverified"
 "classes","/entries/68/features/1/automation","bard-troubadour-foundation [Bard: Troubadour] > Relaxing Song","actions;uses","converted-candidate","","not captured","unverified"
 "classes","/entries/68/features/2/automation","bard-troubadour-foundation [Bard: Troubadour] > Epic Song","actions;manual;uses","converted-candidate","","not captured","unverified"

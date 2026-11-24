@@ -29,7 +29,7 @@ public final class LegacyCatalogConverter {
 
     private static final Pattern ID = Pattern.compile("[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}");
     private static final List<String> FAMILIES = List.of("actions", "rollOptions", "rollTriggers", "conditionalRollTriggers", "mitigation");
-    private static final Set<String> BLOCK_FIELDS = Set.of("actions", "reloading", "uses", "modifiers", "resources", "rollOptions", "rollTriggers",
+    private static final Set<String> BLOCK_FIELDS = Set.of("actionBenefits", "actions", "reloading", "uses", "modifiers", "resources", "rollOptions", "rollTriggers",
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
             "damage", "alternateProfiles", "damageTypeChoice", "rest", "restReroll", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions",             "conditionalRollOptions", "conditionalMitigation", "elementChoice", "stances",
             "hopeReward", "classResourceOnly", "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "zeroHopeClearArmor",
@@ -130,6 +130,8 @@ public final class LegacyCatalogConverter {
         String category = catalog.path("category").asText();
         Context context = new Context();
         JsonNode entries = catalog.path("entries");
+        FEATURE_EFFECTS.set(featureEffects(entries));
+        try {
         for (int i = 0; i < entries.size(); i++) {
             JsonNode entry = entries.get(i);
             String path = "/entries/" + i;
@@ -141,6 +143,7 @@ public final class LegacyCatalogConverter {
                     && !entry.path("name").asText().isBlank() ? "card:" + entry.path("name").asText() : null;
             walk((ObjectNode) entry, category + ":" + entry.path("id").asText(), path, recipes, context, sharedPools, cardKey);
         }
+        } finally { FEATURE_EFFECTS.remove(); }
         return new Result(catalog, context.blocks, context.converted, List.copyOf(context.diagnostics), Map.copyOf(context.assignedIds));
     }
 
@@ -457,6 +460,7 @@ public final class LegacyCatalogConverter {
             queue.addAll(p.nested());
             p.nested().clear();
         }
+        actionBenefits(legacy, path, p, effects, pools, rules, ruleIds);
         keepEffects(rules, path, p, out);
         List<String> declaredIds = new ArrayList<>();
         effects.fieldNames().forEachRemaining(declaredIds::add);
@@ -1586,6 +1590,64 @@ public final class LegacyCatalogConverter {
      * is scoped to the offering source instance; each recipient may claim once per offer, and exclusive benefits or
      * per-amount offers publish a claim limit.
      */
+    private static final ThreadLocal<Map<String, Set<String>>> FEATURE_EFFECTS = new ThreadLocal<>();
+
+    /** Effect names started by each named feature of the catalog, so another feature can react to them. */
+    private static Map<String, Set<String>> featureEffects(JsonNode entries) {
+        Map<String, Set<String>> out = new java.util.HashMap<>();
+        java.util.ArrayDeque<JsonNode> queue = new java.util.ArrayDeque<>();
+        queue.add(entries);
+        while (!queue.isEmpty()) {
+            JsonNode node = queue.poll();
+            if (node.isObject() && node.path("name").isTextual() && node.has("automation")) {
+                Set<String> names = new java.util.LinkedHashSet<>();
+                java.util.ArrayDeque<JsonNode> inner = new java.util.ArrayDeque<>();
+                inner.add(node.get("automation"));
+                while (!inner.isEmpty()) {
+                    JsonNode n = inner.poll();
+                    if (n.isObject() && "effect".equals(n.path("op").asText()) && n.path("effect").path("name").isTextual())
+                        names.add(n.path("effect").path("name").asText());
+                    n.forEach(inner::add);
+                }
+                if (!names.isEmpty()) out.computeIfAbsent(node.get("name").asText(), k -> new java.util.LinkedHashSet<>()).addAll(names);
+            }
+            node.forEach(queue::add);
+        }
+        return out;
+    }
+
+    /**
+     * {@code actionBenefits} keys name another feature ({@code feat:<name>}) whose effects, when the Rally-style action lands
+     * them on this sheet's owner, open claimable benefits for the other players: an automatic {@code effect.started}
+     * rule offers the claims exactly like {@code chatBenefits}.
+     */
+    private static void actionBenefits(JsonNode legacy, String path, Problems p, ObjectNode effects, Pools pools,
+                                       ArrayNode rules, Set<String> ruleIds) {
+        if (!legacy.has("actionBenefits")) return;
+        JsonNode map = legacy.get("actionBenefits");
+        if (!map.isObject() || map.isEmpty()) { p.add(path + "/actionBenefits", "Expected a map of benefit lists."); return; }
+        Map<String, Set<String>> known = FEATURE_EFFECTS.get() == null ? Map.of() : FEATURE_EFFECTS.get();
+        map.fields().forEachRemaining(entry -> {
+            String at = path + "/actionBenefits/" + entry.getKey();
+            if (!entry.getKey().startsWith("feat:") || entry.getKey().length() == 5) { p.add(at, "Expected a key of the form feat:<feature name>."); return; }
+            String feature = entry.getKey().substring(5);
+            Set<String> labels = known.get(feature);
+            if (labels == null) { p.add(at, "No feature '" + feature + "' starting an effect exists in this catalog."); return; }
+            ObjectNode parent = RuleJson.JSON.createObjectNode().put("id", unique("offer-" + feature.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", ""), ruleIds));
+            parent.putArray("bindings").addObject().put("id", "seen").put("event", "effect.started").put("surface", "effect").put("mode", "automatic");
+            ArrayNode any = RuleJson.JSON.createArrayNode();
+            for (String label : labels) any.add(RuleJson.JSON.createObjectNode().set("eq", RuleJson.JSON.createArrayNode().add(read("event.effect.label")).add(escape(label))));
+            ObjectNode own = RuleJson.JSON.createObjectNode();
+            own.putArray("eq").add(read("event.effect.sourceActorId")).add(read("actor.id"));
+            ArrayNode all = parent.putObject("when").putArray("and");
+            all.add(any.size() == 1 ? any.get(0) : RuleJson.JSON.createObjectNode().set("or", any)).add(own);
+            parent.putObject("ui").put("label", escape(feature)).put("report", "{actor.name}'s " + escape(feature) + " benefits are available.");
+            ObjectNode wrapper = RuleJson.JSON.createObjectNode();
+            wrapper.set("chatBenefits", entry.getValue());
+            rules.add(parent);
+            for (ObjectNode benefit : chatBenefits(wrapper, at.substring(0, at.lastIndexOf("/actionBenefits")), p, effects, pools, parent, ruleIds)) rules.add(benefit);
+        });
+    }
     private static List<ObjectNode> chatBenefits(JsonNode legacy, String path, Problems p, ObjectNode effects, Pools pools,
                                                  ObjectNode parent, Set<String> ruleIds) {
         for (String flag : List.of("allowSourceOwner", "benefitsPerAmount", "excludeSourceActor"))
@@ -1652,6 +1714,7 @@ public final class LegacyCatalogConverter {
             JsonNode legacySteps = benefit.path("steps");
             for (int s = 0; s < legacySteps.size(); s++)
                 step(legacySteps.get(s), at + "/steps/" + s, p, steps, effects, pools, "recipient");
+            if (!benefit.has("cost") && !benefit.path("transferStress").asBoolean(false)) benefitAvailable(legacySteps, rule);
             if (steps.isEmpty()) p.add(at + "/steps", "Benefits need at least one effect.");
             ObjectNode ui = rule.putObject("ui").put("label", escape(label));
             ObjectNode extra = RuleJson.JSON.createObjectNode();
@@ -1675,6 +1738,26 @@ public final class LegacyCatalogConverter {
         return out;
     }
 
+    /**
+     * Legacy rejects a claim that changes nothing ("No benefit available"). Benefits made only of Hope gains and
+     * Hope/Stress/HP/Armor clears get the same check as a claim condition so the claim is not consumed.
+     */
+    private static void benefitAvailable(JsonNode legacySteps, ObjectNode rule) {
+        if (!legacySteps.isArray() || legacySteps.isEmpty()) return;
+        ArrayNode any = RuleJson.JSON.createArrayNode();
+        for (JsonNode step : legacySteps) {
+            String op = step.path("op").asText(), resource = step.path("resource").asText();
+            if ("gain".equals(op) && "hope".equals(resource))
+                any.addObject().putArray("lt").add(read("recipient.hope.value")).add(read("recipient.hope.max"));
+            else if ("clear".equals(op) && TRACKS.containsKey(resource))
+                any.addObject().putArray("gt").add(read(TRACKS.get(resource).replaceFirst("^actor\\.", "recipient.") + ".marked")).add(0);
+            else return;
+        }
+        ArrayNode when = RuleJson.JSON.createArrayNode();
+        if (any.size() == 1) when.add(any.get(0));
+        else when.addObject().set("or", any);
+        applyWhen(rule, when);
+    }
     private static void rollCondition(String roll, String path, Problems p, ArrayNode when) {
         if ("action".equals(roll)) when.add(actionRollCondition());
         else if (ROLLS.contains(roll)) when.addObject().putArray("eq").add(read("event.check.kind")).add(roll);
