@@ -87,6 +87,25 @@ class InputRuntimeTest {
     }
 
     @Test
+    void optionGroupsAllowAtMostOneSelectionAndEffectValuesMayReadInputs() throws Exception {
+        RuleCompiler.Program program = RuleCompiler.compile("features:groups", RuleJson.parse("""
+                {"effects":{"boost":{"label":"Boost","until":["rest.long"],"value":{"initial":{"read":"input.amount"}}}},
+                 "rules":[{"id":"pick","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                 "inputs":[{"id":"amount","kind":"choice","label":"Amount","count":1,"options":[{"id":"1","label":"One"},{"id":"2","label":"Two"}]},
+                   {"id":"pick","kind":"choice","label":"Pick","count":2,"options":[
+                   {"id":"a-x","label":"A x","group":"a"},{"id":"a-y","label":"A y","group":"a"},{"id":"b","label":"B"}]}],
+                 "do":[{"op":"value","value":1,"as":"v"}],"ui":{"label":"Pick"}}]}
+                """), fixture("rewrite/recipes"));
+        ObjectNode facts = (ObjectNode) RuleJson.parse("""
+                {"source":{"id":"features:groups","instanceId":"g","name":"G"},"actor":{},"revision":0,"event":{"type":"action.request"}}""");
+        assertEquals("a", RuleRuntime.describe(program, "pick", "use", facts).at("/inputs/1/options/0/group").asText());
+        assertThrows(IllegalArgumentException.class, () -> RuleRuntime.execute(program, new RuleRuntime.Intent("pick", "use", "g", 0,
+                (ObjectNode) RuleJson.parse("{\"amount\":\"1\",\"pick\":[\"a-x\",\"a-y\"]}")), facts, noRandom()));
+        RuleRuntime.execute(program, new RuleRuntime.Intent("pick", "use", "g", 0,
+                (ObjectNode) RuleJson.parse("{\"amount\":\"2\",\"pick\":[\"a-y\",\"b\"]}")), facts, noRandom());
+    }
+
+    @Test
     void compilerRequiresExactlyOneOptionSource() throws Exception {
         String base = """
                 {"rules":[{"id":"x","bindings":[{"id":"b","event":"action.request","surface":"sheet","mode":"button"}],

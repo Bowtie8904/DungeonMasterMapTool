@@ -573,8 +573,8 @@ public final class RuleCompiler {
                 RuleExpression.validate(value.get(part), path + "/value/" + part);
                 for (String ref : RuleExpression.references(value.get(part))) {
                     String root = ref.split("\\.")[0];
-                    if (!Set.of("source", "actor", "state").contains(root) || "state".equals(root) && !state.has(ref.split("\\.")[1]))
-                        throw RuleJson.error(path + "/value/" + part, "An effect value may only read source, actor and declared state: " + ref);
+                    if (!Set.of("source", "actor", "state", "input").contains(root) || "state".equals(root) && !state.has(ref.split("\\.")[1]))
+                        throw RuleJson.error(path + "/value/" + part, "An effect value may only read source, actor, the starting action's inputs and declared state: " + ref);
                 }
             }
         }
@@ -1897,7 +1897,8 @@ public final class RuleCompiler {
             throw RuleJson.error(path + "/options", "Expected 1-64 options.");
         Set<String> optionIds = new HashSet<>();
         for (JsonNode option : options) {
-            RuleJson.fields(option, path + "/options", "id", "label", "when");
+            RuleJson.fields(option, path + "/options", "id", "label", "when", "group");
+            if (option.has("group")) RuleJson.id(option.get("group"), path + "/options/group");
             if (!optionIds.add(RuleJson.id(option.path("id"), path + "/options/id")))
                 throw RuleJson.error(path + "/options", "Duplicate option ID.");
             RuleTemplate.validate(RuleJson.text(option.path("label"), path + "/options/label"));

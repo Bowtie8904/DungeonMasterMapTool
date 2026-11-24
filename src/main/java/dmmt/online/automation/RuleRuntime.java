@@ -891,10 +891,12 @@ public final class RuleRuntime {
             }
             return out;
         }
-        for (JsonNode option : input.path("options"))
-            if (!option.has("when") || RuleExpression.bool(eval(option.get("when"), context), "/inputs/options/when"))
-                out.addObject().put("id", option.path("id").asText())
-                        .put("label", RuleTemplate.render(option.path("label").asText(), context));
+        for (JsonNode option : input.path("options")) {
+            if (option.has("when") && !RuleExpression.bool(eval(option.get("when"), context), "/inputs/options/when")) continue;
+            ObjectNode entry = out.addObject().put("id", option.path("id").asText())
+                    .put("label", RuleTemplate.render(option.path("label").asText(), context));
+            if (option.has("group")) entry.put("group", option.get("group").asText());
+        }
         return out;
     }
 
@@ -932,13 +934,21 @@ public final class RuleRuntime {
             } else if ("choice".equals(descriptor.path("kind").asText())) {
                 int count = descriptor.path("count").asInt();
                 Set<String> allowed = new HashSet<>();
-                descriptor.path("options").forEach(option -> allowed.add(option.path("id").asText()));
+                Map<String, String> groups = new java.util.HashMap<>();
+                descriptor.path("options").forEach(option -> {
+                    allowed.add(option.path("id").asText());
+                    if (option.has("group")) groups.put(option.path("id").asText(), option.path("group").asText());
+                });
                 Set<String> selected = new HashSet<>();
                 if (count == 1 && value.isTextual()) selected.add(value.asText());
                 else if (count > 1 && value.isArray()) for (JsonNode item : value) if (item.isTextual()) selected.add(item.asText());
                 int supplied1 = value.isArray() ? value.size() : 1;
                 if (selected.size() != count || supplied1 != count || !allowed.containsAll(selected))
                     throw RuleJson.error("/inputs/" + id, "Choose " + count + " distinct available option(s).");
+                Set<String> usedGroups = new HashSet<>();
+                for (String choice : selected)
+                    if (groups.containsKey(choice) && !usedGroups.add(groups.get(choice)))
+                        throw RuleJson.error("/inputs/" + id, "Choose at most one option from each group.");
             } else if ("record.select".equals(descriptor.path("kind").asText())) {
                 JsonNode selected = null;
                 for (JsonNode option : descriptor.path("options"))

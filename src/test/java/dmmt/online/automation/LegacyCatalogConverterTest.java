@@ -60,6 +60,24 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void convertsChoiceRefocusChannelAndConditionalCostMechanics() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"mix","name":"Mix","features":[
+                  {"name":"Pick","automation":{"uses":{"max":1,"per":"longRest"},"actions":[{"id":"use","label":"Pick","chooseEffects":{"count":2,"options":[
+                    {"id":"evasion","label":"+2 Evasion","effect":{"name":"Pick: Evasion","kind":"buff","until":"rest","modifiers":[{"stat":"evasion","value":2}]}},
+                    {"id":"trait","label":"+1 trait","chooseTrait":true,"effect":{"name":"Pick: Trait","kind":"buff","until":"rest","modifiers":[{"stat":"trait.@choice","value":1}]}}]}}]}},
+                  {"name":"Focus","automation":{"resources":[{"id":"focus","label":"Focus","initial":0,"max":6}],"actions":[{"id":"refocus","label":"Refocus","refocus":true,"uses":{"max":1,"per":"rest"}}]}},
+                  {"name":"Channel","automation":{"uses":{"max":1,"per":"longRest"},"actions":[{"id":"use","label":"Channel","channelRawPower":{"name":"Channel","kind":"buff","until":"manual","rollOptions":[{"id":"damage","label":"Channel","roll":"damage","magicOnly":true,"value":"@cardLevel","endEffect":"Channel"}]}}]}},
+                  {"name":"Rite","automation":{"actions":[{"id":"use","label":"Rite","costConditions":[{"feature":"Chasing Death","unmarkedHp":{"min":1,"max":3},"cost":{"hp":0}}],"steps":[{"op":"gain","resource":"hope","amount":1}],"cost":{"hp":1}}]}}
+                ]}"""));
+        assertEquals(4, result.converted(), result.diagnostics().toString());
+        JsonNode pick = result.catalog().at("/entries/0/features/0/automation");
+        assertTrue(pick.toString().contains("\"group\":\"trait\""), pick.toString());
+        assertTrue(result.catalog().at("/entries/0/features/2/automation").toString().contains("input.card.level"));
+        RuleCatalog.compile(result.catalog().toString(), LegacyCatalogConverter.coreRecipes());
+    }
+
+    @Test
     void announceOnlyActionsBecomeButtonRulesWithoutOperations() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"bard","name":"Bard","automation":{"uses":{"max":1,"per":"longRest"},"actions":[{"id":"use","label":"Inspire"}]}}"""));

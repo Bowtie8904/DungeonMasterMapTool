@@ -72,7 +72,8 @@ public final class LegacyCatalogConverter {
             "requiresEffect", "excludesEffect", "endEffect", "uses", "usesSource", "actionRoll", "target",
             "excludeSourceActor", "hostOwned", "selectAmount", "resourceRoll", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
             "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime", "table",
-            "hostRollAction", "bloodAutomation", "castTokens", "patronDice", "witchAction", "requiresCompanion", "specialAction", "codexSwap", "spendFavor");
+            "hostRollAction", "bloodAutomation", "castTokens", "patronDice", "witchAction", "requiresCompanion", "specialAction", "codexSwap", "spendFavor",
+            "costConditions", "refocus", "chooseEffects", "channelRawPower");
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
@@ -1174,6 +1175,181 @@ public final class LegacyCatalogConverter {
             else p.add(at, "Custom resource cost needs a declared pool: " + entry.getKey());
         });
         if (!costs.isEmpty()) rule.set("costs", costs);
+    }
+
+    /** One legacy sheet condition (feature, unmarked or marked Hit Points, full Stress) as a rule expression, or {@code null} after a problem. */
+    private static ObjectNode sheetCondition(JsonNode condition, String path, Problems p) {
+        p.onlyFields(condition, path, Set.of("feature", "unmarkedHp", "markedHp", "stressFull", "cost"));
+        ArrayNode all = RuleJson.JSON.createArrayNode();
+        if (condition.has("feature")) {
+            if (!condition.path("feature").isTextual() || condition.path("feature").asText().isBlank()) p.add(path + "/feature", "Expected a feature name.");
+            else all.add(hasFeature(condition.path("feature").asText()));
+        }
+        if (condition.has("markedHp")) {
+            if (!condition.path("markedHp").isInt() || condition.path("markedHp").asInt() < 1) p.add(path + "/markedHp", "Expected a positive whole number.");
+            else all.addObject().putArray("gte").add(read("actor.hp.marked")).add(condition.path("markedHp").asInt());
+        }
+        if (condition.has("stressFull")) {
+            if (!condition.path("stressFull").asBoolean(false)) p.add(path + "/stressFull", "Expected true.");
+            else {
+                all.addObject().putArray("gt").add(read("actor.stress.capacity")).add(0);
+                all.addObject().putArray("gte").add(read("actor.stress.marked")).add(read("actor.stress.capacity"));
+            }
+        }
+        JsonNode range = condition.has("unmarkedHp") ? condition.get("unmarkedHp") : RuleJson.JSON.createObjectNode();
+        p.onlyFields(range, path + "/unmarkedHp", Set.of("min", "max"));
+        for (String bound : List.of("min", "max")) {
+            if (!range.has(bound)) continue;
+            if (!range.path(bound).isInt() || range.path(bound).asInt() < 0) { p.add(path + "/unmarkedHp/" + bound, "Expected a nonnegative whole number."); continue; }
+            ObjectNode unmarked = RuleJson.JSON.createObjectNode();
+            unmarked.putArray("subtract").add(read("actor.hp.capacity")).add(read("actor.hp.marked"));
+            all.addObject().putArray("min".equals(bound) ? "gte" : "lte").add(unmarked).add(range.path(bound).asInt());
+        }
+        if (all.isEmpty()) { p.add(path, "A condition needs a feature or a Hit Point or Stress requirement."); return null; }
+        if (all.size() == 1) return (ObjectNode) all.get(0);
+        ObjectNode both = RuleJson.JSON.createObjectNode();
+        both.set("and", all);
+        return both;
+    }
+
+    /**
+     * {@code costConditions}: each matching condition replaces the base amount of the resources it lists, later
+     * conditions winning, exactly as the legacy merge did. Each priced resource keeps one cost operation whose amount
+     * is a conditional expression over the sheet.
+     */
+    private static void costConditions(JsonNode action, String path, Problems p, Pools pools, ObjectNode rule) {
+        JsonNode conditions = action.path("costConditions");
+        if (!conditions.isArray() || conditions.isEmpty()) { p.add(path + "/costConditions", "Expected a list of cost conditions."); return; }
+        ObjectNode base = action.path("cost").isObject() ? (ObjectNode) action.get("cost") : RuleJson.JSON.createObjectNode();
+        List<ObjectNode> met = new ArrayList<>();
+        Set<String> keys = new java.util.LinkedHashSet<>();
+        base.fieldNames().forEachRemaining(keys::add);
+        for (int i = 0; i < conditions.size(); i++) {
+            String at = path + "/costConditions/" + i;
+            JsonNode condition = conditions.get(i);
+            met.add(sheetCondition(condition, at, p));
+            if (!condition.path("cost").isObject()) { p.add(at + "/cost", "Expected a cost object."); met.set(i, null); continue; }
+            condition.get("cost").fieldNames().forEachRemaining(keys::add);
+        }
+        ArrayNode out = RuleJson.JSON.createArrayNode();
+        for (String key : keys) {
+            JsonNode template = null;
+            JsonNode amount = base.has(key) ? base.get(key) : RuleJson.JSON.getNodeFactory().numberNode(0);
+            boolean valid = amount.isInt() && amount.asInt() >= 0;
+            if (valid && amount.asInt() > 0) template = amount;
+            for (int i = 0; i < conditions.size(); i++) {
+                JsonNode value = conditions.get(i).path("cost").get(key);
+                if (value == null || met.get(i) == null) continue;
+                if (!value.isInt() || value.asInt() < 0) { valid = false; continue; }
+                if (template == null && value.asInt() > 0) template = value;
+                amount = choose(met.get(i), value, amount);
+            }
+            if (!valid) { p.add(path + "/costConditions", "Conditional costs must be whole numbers: " + key); continue; }
+            if (template == null) continue;
+            ObjectNode single = RuleJson.JSON.createObjectNode();
+            single.set(key, template);
+            ObjectNode priced = RuleJson.JSON.createObjectNode();
+            costs(single, path + "/cost/" + key, p, pools, priced);
+            for (JsonNode op : priced.path("costs")) {
+                ((ObjectNode) op).set("amount", amount.deepCopy());
+                out.add(op);
+            }
+        }
+        if (!out.isEmpty()) rule.set("costs", out);
+    }
+
+    /**
+     * {@code refocus}: the Focus pool is replaced, not topped up, by the highest of as many d6 as the actor's Instinct
+     * (none when it is not positive, which leaves the pool empty).
+     */
+    private static void refocus(JsonNode action, String path, Problems p, Pools pools, ArrayNode steps) {
+        if (!action.path("refocus").asBoolean(false)) { p.add(path + "/refocus", "Expected true."); return; }
+        if (!pools.has("focus")) { p.add(path + "/refocus", "Refocusing needs a Focus resource."); return; }
+        ObjectNode dice = RuleJson.JSON.createObjectNode();
+        dice.putArray("gte").add(read("actor.stats.trait.Instinct")).add(1);
+        steps.addObject().put("op", "pool.spend").put("pool", "focus").set("amount", read("actor.pools.focus.value"));
+        ObjectNode roll = steps.addObject().put("op", "dice.highest").put("sides", 6).put("as", "refocus");
+        roll.set("count", RuleJson.JSON.createObjectNode().set("max", RuleJson.JSON.createArrayNode().add(1).add(read("actor.stats.trait.Instinct"))));
+        steps.addObject().put("op", "pool.gain").put("pool", "focus").set("amount", choose(dice, read("result.refocus"), RuleJson.JSON.getNodeFactory().numberNode(0)));
+    }
+
+    /**
+     * {@code chooseEffects}: the player picks {@code count} distinct options and each starts its own declared effect.
+     * A {@code chooseTrait} option is expanded to one option per trait that share a choice group, so one trait is
+     * never picked twice, and its effect modifies that trait.
+     */
+    private static void chooseEffects(JsonNode choose, String path, Problems p, ObjectNode effects, ObjectNode rule, ArrayNode steps) {
+        JsonNode list = choose.path("options");
+        if (!choose.path("count").isInt() || choose.path("count").asInt() < 1 || !list.isArray() || list.isEmpty() || list.size() > 8) {
+            p.add(path, "Expected a count and up to 8 options.");
+            return;
+        }
+        if (rule.has("inputs")) { p.add(path, "Choosing effects cannot share an action with another input."); return; }
+        p.onlyFields(choose, path, Set.of("count", "options"));
+        ObjectNode pick = rule.putArray("inputs").addObject().put("id", "pick").put("kind", "choice")
+                .put("label", "Choose " + choose.path("count").asInt() + " effects").put("count", choose.path("count").asInt());
+        ArrayNode options = pick.putArray("options");
+        List<ObjectNode> starts = new ArrayList<>();
+        for (int i = 0; i < list.size(); i++) {
+            JsonNode option = list.get(i);
+            String at = path + "/options/" + i;
+            p.onlyFields(option, at, Set.of("id", "label", "effect", "chooseTrait"));
+            String id = option.path("id").asText("");
+            if (!ID.matcher(id).matches() || !option.path("effect").isObject() || !option.path("label").isTextual()) { p.add(at, "Expected an id, label and effect."); continue; }
+            boolean perTrait = option.path("chooseTrait").asBoolean(false);
+            for (String trait : perTrait ? TRAITS : List.of("")) {
+                String optionId = perTrait ? id + "-" + trait.toLowerCase(java.util.Locale.ROOT) : id;
+                ObjectNode effect = (ObjectNode) option.get("effect").deepCopy();
+                if (perTrait) {
+                    effect.put("name", effect.path("name").asText() + " (" + trait + ")");
+                    for (JsonNode modifier : effect.path("modifiers"))
+                        if (modifier instanceof ObjectNode object && "trait.@choice".equals(object.path("stat").asText())) object.put("stat", "trait." + trait);
+                }
+                ObjectNode entry = options.addObject().put("id", optionId).put("label", escape(option.path("label").asText() + (perTrait ? ": " + trait : "")));
+                if (perTrait) entry.put("group", id);
+                String declared = declareEffect(effect, at + "/effect", p, effects);
+                if (declared == null) continue;
+                ObjectNode start = RuleJson.JSON.createObjectNode().put("op", "effect.start").put("effect", declared).put("target", "actor");
+                start.putObject("if").putArray("includes").add(read("input.pick")).add(optionId);
+                starts.add(start);
+            }
+        }
+        starts.forEach(steps::add);
+    }
+
+    /**
+     * {@code channelRawPower}: the player sends a loadout card to the vault and takes either Hope equal to its level
+     * or an effect whose value is twice that level, which the effect's roll option adds to a spell's damage.
+     */
+    private static void channelRawPower(JsonNode channel, String path, Problems p, ObjectNode effects, ObjectNode rule, ArrayNode steps) {
+        if (rule.has("inputs")) { p.add(path, "Channeling cannot share an action with another input."); return; }
+        ObjectNode effect = (ObjectNode) channel.deepCopy();
+        for (JsonNode option : effect.path("rollOptions"))
+            if (option instanceof ObjectNode object && "@cardLevel".equals(object.path("value").asText())) {
+                object.remove("value");
+                object.put("effectValue", true);
+            }
+        String declared = declareEffect(effect, path, p, effects);
+        ArrayNode inputs = rule.putArray("inputs");
+        inputs.addObject().put("id", "card").put("kind", "record.select").put("label", "Domain card to send to the vault")
+                .put("choiceLabel", "{input.option.id} (level {input.option.level})")
+                .set("from", read("actor.loadout"));
+        ObjectNode benefit = inputs.addObject().put("id", "benefit").put("kind", "choice").put("label", "Benefit").put("count", 1);
+        ArrayNode options = benefit.putArray("options");
+        options.addObject().put("id", "hope").put("label", "Gain Hope equal to the card's level");
+        options.addObject().put("id", "damage").put("label", "Add twice the card's level to a spell's damage");
+        steps.addObject().put("op", "collection.remove").put("target", "actor").put("collection", "loadout").put("as", "card")
+                .set("item", read("input.card.id"));
+        steps.addObject().put("op", "collection.add").put("target", "actor").put("collection", "vault").set("item", read("result.card"));
+        ObjectNode hope = steps.addObject().put("op", "resource.gain").put("pool", "actor.hope");
+        hope.set("amount", read("input.card.level"));
+        hope.putObject("if").putArray("eq").add(read("input.benefit")).add("hope");
+        if (declared != null) {
+            effects.with(declared).putObject("value").set("initial", RuleJson.JSON.createObjectNode().set("multiply",
+                    RuleJson.JSON.createArrayNode().add(read("input.card.level")).add(2)));
+            ObjectNode start = steps.addObject().put("op", "effect.start").put("effect", declared).put("target", "actor");
+            start.putObject("if").putArray("eq").add(read("input.benefit")).add("damage");
+        }
     }
 
     /**
@@ -4123,7 +4299,8 @@ public final class LegacyCatalogConverter {
             when.addObject().putArray("gt").add(read("event.table.fear")).add(0);
         }
         applyWhen(rule, when);
-        if (action.has("cost")) costs(action.get("cost"), path + "/cost", p, pools, rule);
+        if (action.has("costConditions")) costConditions(action, path, p, pools, rule);
+        else if (action.has("cost")) costs(action.get("cost"), path + "/cost", p, pools, rule);
         if (action.has("selectAmount")) {
             selectAmount(action.get("selectAmount"), path + "/selectAmount", p, pools, rule);
             amountCost(action, path + "/selectAmount", p, pools, rule);
@@ -4186,6 +4363,9 @@ public final class LegacyCatalogConverter {
             bindDie(steps.get(i), action.path("requiresEffect").asText(null), path + "/steps", p);
         amountHeal(action.path("selectAmount"), path + "/selectAmount", p, steps);
         if (action.has("table")) actionTable(action.get("table"), path + "/table", p, steps, effects, pools, operationTarget);
+        if (action.has("refocus")) refocus(action, path, p, pools, steps);
+        if (action.has("chooseEffects")) chooseEffects(action.get("chooseEffects"), path + "/chooseEffects", p, effects, rule, steps);
+        if (action.has("channelRawPower")) channelRawPower(action.get("channelRawPower"), path + "/channelRawPower", p, effects, rule, steps);
         endEffect(action, steps, operationTarget);
         if (action.has("toggleEffect")) {
             String toggled = declareEffect(action.get("toggleEffect"), path + "/toggleEffect", p, effects);
