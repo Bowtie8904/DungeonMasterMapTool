@@ -41,18 +41,19 @@ public final class LegacyCatalogConverter {
     private static final Map<String, String> RANGES = Map.of("melee", "melee", "very close", "veryClose", "veryclose", "veryClose",
             "close", "close", "far", "far", "very far", "veryFar", "veryfar", "veryFar");
     private static final Set<String> RESOURCE_FIELDS = Set.of("id", "label", "initial", "max", "resetOn", "resetValue", "minimumReset",
-            "session", "sessionHope", "sessionReset", "cardOnly", "whileEffect");
+            "session", "sessionHope", "sessionReset", "cardOnly", "whileEffect", "longRestLoss");
     private static final Set<String> OPTION_FIELDS = Set.of("id", "label", "description", "roll", "value", "dice", "advantage", "cost",
             "defaultOn", "exclusive", "requiresEffect", "excludesEffect", "weapon", "weaponRange", "excludeRolls", "effect", "uses",
             "usesSource", "endEffect", "hostOwned", "consumeItem", "quantity", "proficiency", "hopeDie", "diceResource", "condition", "loadoutDomain",
             "required", "traitValue", "multiplier", "allResourceDice", "steps", "damageDie", "diceByLevel", "diceByFeature", "diceConditions", "magicOnly", "weaponRanges",
-            "ignoreDisadvantage", "matchingDice", "resourceMultiplier", "input", "experience", "derivedProficiency", "traitChoices", "chooseTrait", "maximizeDie", "linkedDamageTrait", "advantageDie");
+            "ignoreDisadvantage", "matchingDice", "resourceMultiplier", "input", "experience", "derivedProficiency", "traitChoices", "chooseTrait", "maximizeDie", "requiresRollOutcome", "combo", "secondaryWeaponDie", "linkedDamageTrait", "advantageDie",
+            "magicDamage", "dieSizes", "fearDie", "resourceEmpty", "requiresResource", "expendOn");
     private static final Set<String> TRIGGER_FIELDS = Set.of("id", "label", "description", "on", "cost", "reroll", "when", "outcome",
             "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
             "chatBenefits", "allowSourceOwner", "loadoutDomain", "primaryWeapon", "anyWeapon", "advantage", "giveFear", "check", "choices",
             "magicOnly", "weaponRanges", "addDice", "damageDice", "damageDiceBelow", "rerollDualityDie", "spendHopeAmount", "disadvantage", "removeFear", "weaponDamage", "rollSection", "containsDie", "resourceRoll", "selectAmount",
-            "target", "excludeSourceActor", "splendorAction", "hostRollAction", "otherPlayerOnly", "spentTokenDamage", "bloodAutomation", "swapDuality", "repeatable");
+            "target", "excludeSourceActor", "splendorAction", "hostRollAction", "otherPlayerOnly", "spentTokenDamage", "bloodAutomation", "swapDuality", "repeatable", "weapon", "tokenGain");
     private static final Set<String> MITIGATION_FIELDS = Set.of("id", "label", "description", "when", "cost", "negate", "halve", "reduce",
             "passive", "report", "requiresEffect", "excludesEffect", "defaultOn", "effect", "uses", "usesSource", "endEffect", "hostOwned",
             "roll", "severity", "hp", "replaceHp", "armorSlots", "armorSeverity", "armorBlocked", "saveArmor", "insteadOfArmor",
@@ -1045,6 +1046,22 @@ public final class LegacyCatalogConverter {
         if (resource.has("initial")) {            if (!resource.path("initial").isInt()) p.add(path + "/initial", "Expected a whole initial value.");
             pool.put("initial", resource.path("initial").asInt());
         }
+        if (resource.has("longRestLoss")) {
+            JsonNode loss = resource.get("longRestLoss");
+            if (!(loss.isInt() && loss.asInt() >= 1 && loss.asInt() <= 1000)) p.add(path + "/longRestLoss", "Expected a positive whole loss.");
+            else {
+                // A long rest removes up to this many units, never going below zero.
+                ObjectNode rule = restRule("long-rest-loss-" + id, "rest.long", "use", "resource", "automatic");
+                ObjectNode value = read("actor.pools." + id + ".value");
+                rule.putObject("when").putArray("gt").add(value).add(0);
+                ObjectNode lost = RuleJson.JSON.createObjectNode();
+                lost.putArray("min").add(value.deepCopy()).add(loss.asInt());
+                rule.putArray("do").addObject().put("op", "pool.spend").put("pool", id).put("as", "lost").set("amount", lost);
+                String label = resource.has("label") ? escape(resource.path("label").asText()) : id;
+                ((ObjectNode) rule.get("ui")).put("label", label).put("report", "Lost {result.lost} " + label + " during the long rest.");
+                lifecycle.add(rule);
+            }
+        }
         boolean session = resource.path("session").asBoolean(false);
         if (resource.has("session") && !resource.path("session").isBoolean()) p.add(path + "/session", "Expected a boolean.");
         if (!session && (resource.has("sessionHope") || resource.has("sessionReset"))) {
@@ -1409,6 +1426,18 @@ public final class LegacyCatalogConverter {
         JsonNode count = "@fear".equals(matcher.group(1)) ? read("event.table.fear") : "@tier".equals(matcher.group(1)) ? read("actor.stats.tier")
                 : RuleJson.JSON.getNodeFactory().numberNode(Integer.parseInt(matcher.group(1)));
         return new JsonNode[]{ count, RuleJson.JSON.getNodeFactory().numberNode(Integer.parseInt(matcher.group(2))) };
+    }
+
+    /** A value per trait name selected by comparing {@code key} with each trait (lowercased in the comparison when asked). */
+    private static JsonNode traitSwitch(JsonNode key, boolean lower, java.util.function.Function<String, JsonNode> valueOf) {
+        JsonNode result = valueOf.apply(TRAITS.get(TRAITS.size() - 1));
+        for (int i = TRAITS.size() - 2; i >= 0; i--) {
+            String name = TRAITS.get(i);
+            ObjectNode same = RuleJson.JSON.createObjectNode();
+            same.putArray("eq").add(key.deepCopy()).add(lower ? name.toLowerCase(Locale.ROOT) : name);
+            result = choose(same, valueOf.apply(name), result);
+        }
+        return result;
     }
 
     private static JsonNode choose(JsonNode condition, JsonNode then, JsonNode otherwise) {
@@ -1837,6 +1866,55 @@ public final class LegacyCatalogConverter {
             else proficiency = option.path("proficiency").asInt();
         }
         if (proficiency > 0 && "damage".equals(roll)) weaponDiceConditions(when);
+        for (String gateField : List.of("requiresResource", "resourceEmpty")) if (option.has(gateField)) {
+            String resource = option.path(gateField).asText();
+            if (!option.path(gateField).isTextual() || !pools.has(resource)) p.add(path + "/" + gateField, "Unknown resource: " + option.path(gateField));
+            else when.addObject().putArray("requiresResource".equals(gateField) ? "gte" : "eq").add(read("actor.pools." + resource + ".value"))
+                    .add("requiresResource".equals(gateField) ? 1 : 0);
+        }
+        String outcomeEnd = null;
+        if (option.has("requiresRollOutcome")) {
+            // The attack's outcome is remembered as a pending effect that the offered damage option reads and consumes.
+            if (!"hopeOrCritical".equals(option.path("requiresRollOutcome").asText()) || !"damage".equals(roll))
+                p.add(path + "/requiresRollOutcome", "Expected hopeOrCritical on a damage roll option.");
+            else {
+                Set<String> used = new HashSet<>();
+                effects.fieldNames().forEachRemaining(used::add);
+                String effect = unique(slug(option.path("id").asText() + "-outcome"), used);
+                String pendingLabel = option.path("label").asText("") + " (hope or critical attack)";
+                effects.putObject(effect).put("label", escape(pendingLabel)).put("kind", "buff").putArray("until").add("scene.end");
+                ObjectNode active = RuleJson.JSON.createObjectNode();
+                active.putArray("gt").add(read("effects." + effect)).add(0);
+                when.add(active.deepCopy());
+                ArrayNode success = RuleJson.JSON.createArrayNode();
+                success.addObject().putArray("ne").add(read("event.check.outcome")).add("failure");
+                ArrayNode hopeful = success.addObject().putArray("or");
+                hopeful.addObject().putArray("eq").add(read("event.check.dominant")).add("hope");
+                hopeful.addObject().putArray("eq").add(read("event.check.critical")).add(true);
+                ObjectNode good = RuleJson.JSON.createObjectNode();
+                good.set("and", success);
+                for (boolean remember : new boolean[]{ true, false }) {
+                    ObjectNode mark = RuleJson.JSON.createObjectNode().put("id", id + (remember ? "-outcome-mark" : "-outcome-clear"));
+                    mark.putArray("bindings").addObject().put("id", "use").put("event", "roll.finished").put("surface", "roll").put("mode", "automatic");
+                    ArrayNode markWhen = RuleJson.JSON.createArrayNode();
+                    markWhen.addObject().putArray("eq").add(read("event.check.kind")).add("attack");
+                    markWhen.add(hasFact("event.check.weapon"));
+                    if (remember) {
+                        markWhen.add(good.deepCopy());
+                        markWhen.addObject().set("not", active.deepCopy());
+                    } else {
+                        markWhen.addObject().set("not", good.deepCopy());
+                        markWhen.add(active.deepCopy());
+                    }
+                    applyWhen(mark, markWhen);
+                    mark.putArray("do").addObject().put("op", remember ? "effect.start" : "effect.end")
+                            .put("effect", remember ? effect : pendingLabel).put("target", "actor");
+                    mark.putObject("ui").put("label", label);
+                    extra.add(mark);
+                }
+                outcomeEnd = pendingLabel;
+            }
+        }
         applyWhen(rule, when);
         if (option.has("cost")) costs(option.get("cost"), path + "/cost", p, pools, rule);
         if (quantity != null) for (JsonNode cost : rule.path("costs")) times((ObjectNode) cost, "amount", quantity);
@@ -1849,6 +1927,7 @@ public final class LegacyCatalogConverter {
         }
         if (limited) rule.put("limitRef", "uses");
         ArrayNode steps = RuleJson.JSON.createArrayNode();
+        if (outcomeEnd != null) steps.addObject().put("op", "effect.end").put("effect", outcomeEnd).put("target", "actor");
         String role = option.has("diceResource") ? option.path("diceResource").asText() : "damage".equals(roll) ? "damage" : "modifier";
         if (option.has("diceResource") && (!ID.matcher(role).matches() || Set.of("hope", "fear").contains(role)))
             p.add(path + "/diceResource", "Expected a resource ID to tag the option's dice with.");
@@ -1887,6 +1966,30 @@ public final class LegacyCatalogConverter {
             }
         } else for (String scaled : List.of("diceByLevel", "diceByFeature", "diceConditions"))
             if (option.has(scaled)) p.add(path + "/" + scaled, "Scaled dice need base dice.");
+        if (option.has("dieSizes")) {
+            // The player picks the size of the single die when the option is chosen.
+            JsonNode sizes = option.get("dieSizes");
+            Set<Integer> seen = new java.util.LinkedHashSet<>();
+            if (sizes.isArray()) for (JsonNode size : sizes) if (size.isInt() && size.asInt() >= 2 && size.asInt() <= 1000) seen.add(size.asInt());
+            if (!sizes.isArray() || sizes.size() < 2 || seen.size() != sizes.size()) p.add(path + "/dieSizes", "Expected two or more different die sizes.");
+            else if (option.has("dice")) p.add(path + "/dieSizes", "Die sizes replace the option's dice.");
+            else if (rule.has("inputs")) p.add(path + "/dieSizes", "An option cannot take both a die size and another input.");
+            else {
+                ObjectNode input = rule.putArray("inputs").addObject().put("id", "size").put("kind", "choice").put("label", "Die size");
+                ArrayNode choices = input.putArray("options");
+                List<Integer> list = new ArrayList<>(seen);
+                JsonNode sides = RuleJson.JSON.getNodeFactory().numberNode(list.get(list.size() - 1));
+                for (int i = list.size() - 2; i >= 0; i--) {
+                    ObjectNode chosen = RuleJson.JSON.createObjectNode();
+                    chosen.putArray("eq").add(read("input.size")).add("d" + list.get(i));
+                    sides = choose(chosen, RuleJson.JSON.getNodeFactory().numberNode(list.get(i)), sides);
+                }
+                for (int size : list) choices.addObject().put("id", "d" + size).put("label", "d" + size);
+                ObjectNode part = contribution(id + "-dice", "dice", role, label).put("count", 1);
+                part.set("sides", sides);
+                parts.add(part);
+            }
+        }
         if (option.has("allResourceDice")) {
             // Rolls one die per unit currently in the pool, so the option is offered only while the pool holds any.
             JsonNode all = option.get("allResourceDice");
@@ -1940,6 +2043,7 @@ public final class LegacyCatalogConverter {
             else parts.add((ObjectNode) contribution(id + "-proficiency", "flat", "damage".equals(roll) ? "damage" : "modifier", label)
                     .set("value", read("actor.stats.proficiency")));
         }
+        JsonNode retrait = null;
         if (option.has("traitChoices")) {
             JsonNode choices = option.get("traitChoices");
             Set<String> seen = new java.util.LinkedHashSet<>();
@@ -1966,12 +2070,44 @@ public final class LegacyCatalogConverter {
                 parts.add((ObjectNode) contribution(id + "-trait-choice", "flat", "damage".equals(roll) ? "damage" : "modifier", label).set("value", value));
             }
         }
-        if (option.has("chooseTrait"))
-            p.add(path + "/chooseTrait", "Manual disposition: the chosen trait replaces the weapon's own trait on the attack roll, and attack facts do not expose which trait the weapon attack uses to swap out.");
-        if (option.has("linkedDamageTrait"))
-            p.add(path + "/linkedDamageTrait", "Manual disposition: the bonus scales with the Rage Up uses chosen on the attack roll and lands on its damage roll, and a carried effect cannot hold the chosen quantity.");
-        if (option.has("advantageDie"))
-            p.add(path + "/advantageDie", "Manual disposition: the advantage die size is part of the roll's dice set before rule options apply, so a rule cannot resize it without rerolling it.");
+        if (option.has("chooseTrait")) {
+            // The chosen trait replaces the weapon's own: the roll gains the difference between the two trait values.
+            if (!option.path("chooseTrait").asBoolean(false)) p.add(path + "/chooseTrait", "Expected true.");
+            else if (!"attack".equals(roll)) p.add(path + "/chooseTrait", "A weapon trait is chosen on the attack roll.");
+            else if (rule.has("inputs")) p.add(path + "/chooseTrait", "An option cannot take both a trait choice and another input.");
+            else {
+                ObjectNode input = rule.putArray("inputs").addObject().put("id", "trait").put("kind", "choice").put("label", "Weapon trait");
+                for (String name : TRAITS) input.withArray("options").addObject().put("id", name.toLowerCase(Locale.ROOT)).put("label", name);
+                ArrayNode gate = RuleJson.JSON.createArrayNode();
+                if (rule.has("when")) gate.add(rule.get("when"));
+                gate.add(hasFact("event.check.trait"));
+                rule.remove("when");
+                applyWhen(rule, gate);
+                ObjectNode delta = RuleJson.JSON.createObjectNode();
+                delta.putArray("subtract")
+                        .add(traitSwitch(read("input.trait"), true, name -> read("actor.stats.trait." + name)))
+                        .add(traitSwitch(read("event.check.trait"), false, name -> read("actor.stats.trait." + name)));
+                parts.add((ObjectNode) contribution(id + "-trait", "flat", "modifier", label).set("value", delta));
+                retrait = traitSwitch(read("input.trait"), true, name -> RuleJson.JSON.getNodeFactory().textNode(name));
+            }
+        }
+        if (option.has("linkedDamageTrait")) {
+            // The bonus is frozen into the pending effect when the attack option is chosen, so it keeps the chosen quantity.
+            String trait = option.path("linkedDamageTrait").asText();
+            int factor = option.path("linkedDamageMultiplier").asInt(2);
+            if (!TRAITS.contains(trait)) p.add(path + "/linkedDamageTrait", "Unknown trait: " + trait);
+            else if (!"attack".equals(roll)) p.add(path + "/linkedDamageTrait", "Linked damage is chosen on the attack roll.");
+            else if (factor < 1 || factor > 10) p.add(path + "/linkedDamageMultiplier", "Expected a whole multiplier from 1 to 10.");
+            else {
+                String effect = carried(option, "linked-damage", label, effects, steps, extra, false, (damageSteps, from) -> from);
+                ObjectNode bonus = RuleJson.JSON.createObjectNode();
+                bonus.putArray("multiply").add(factor).add(read("actor.stats.trait." + trait));
+                JsonNode amount = quantity == null ? bonus : times(RuleJson.JSON.createObjectNode().set("v", bonus), "v", quantity).get("v");
+                ObjectNode modifier = effects.withObject("/" + effect).withArray("modifiers").addObject()
+                        .put("stat", "roll.damage").put("op", "add").put("label", label);
+                modifier.set("value", amount);
+            }
+        }
         if (option.has("traitValue")) {
             String trait = option.path("traitValue").asText();
             if (!TRAITS.contains(trait)) p.add(path + "/traitValue", "Unknown trait: " + trait);
@@ -1998,6 +2134,13 @@ public final class LegacyCatalogConverter {
             from[0] = read("result." + slot);
         }
         boolean edited = !parts.isEmpty();
+        if (retrait != null) {
+            ObjectNode annotate = steps.addObject().put("op", "roll.annotate");
+            annotate.set("from", from[0]);
+            annotate.put("field", "trait").put("as", "retrait").set("value", retrait);
+            from[0] = read("result.retrait");
+            edited = true;
+        }
         if (option.has("advantage") && Set.of("advantage", "disadvantage").contains(option.path("advantage").asText())) {
             ObjectNode suggest = steps.addObject().put("op", "roll.annotate");
             suggest.set("from", from[0]);
@@ -2005,21 +2148,45 @@ public final class LegacyCatalogConverter {
             from[0] = read("result.suggested");
             edited = true;
         }
-        if (option.has("hopeDie")) {
-            JsonNode sides = option.get("hopeDie");
-            if (!(sides.isInt() && sides.asInt() >= 2 && sides.asInt() <= 1000)) p.add(path + "/hopeDie", "Expected a die size from 2 to 1000.");
+        if (option.has("advantageDie")) {
+            // The host rolls no advantage die itself; like the advantage suggestion, the size is published as roll metadata.
+            JsonNode sides = option.get("advantageDie");
+            if (!(sides.isInt() && sides.asInt() >= 2 && sides.asInt() <= 1000)) p.add(path + "/advantageDie", "Expected a die size from 2 to 1000.");
+            else {
+                ObjectNode size = steps.addObject().put("op", "roll.annotate");
+                size.set("from", from[0]);
+                size.put("field", "advantageDie").put("value", sides.asInt()).put("as", "advantageSized");
+                from[0] = read("result.advantageSized");
+                edited = true;
+            }
+        }
+        for (String dieField : List.of("hopeDie", "fearDie")) if (option.has(dieField)) {
+            JsonNode sides = option.get(dieField);
+            String dieRole = dieField.substring(0, dieField.length() - 3);
+            if (!(sides.isInt() && sides.asInt() >= 2 && sides.asInt() <= 1000)) p.add(path + "/" + dieField, "Expected a die size from 2 to 1000.");
             else {
                 ObjectNode where = RuleJson.JSON.createObjectNode();
-                where.putArray("eq").add(read("die.role")).add("hope");
+                where.putArray("eq").add(read("die.role")).add(dieRole);
                 ObjectNode select = steps.addObject().put("op", "roll.selectDice");
                 select.set("from", from[0]);
                 select.set("where", where);
-                select.put("as", "hopeDice");
+                select.put("as", dieRole + "Dice");
                 ObjectNode resize = steps.addObject().put("op", "roll.resize");
                 resize.set("from", from[0]);
-                resize.set("dice", read("result.hopeDice"));
-                resize.put("sides", sides.asInt()).put("as", "resized");
-                from[0] = read("result.resized");
+                resize.set("dice", read("result." + dieRole + "Dice"));
+                resize.put("sides", sides.asInt()).put("as", dieRole + "Resized");
+                from[0] = read("result." + dieRole + "Resized");
+                edited = true;
+            }
+        }
+        if (option.has("magicDamage")) {
+            if (!option.path("magicDamage").asBoolean(false)) p.add(path + "/magicDamage", "Expected true.");
+            else if (!"damage".equals(roll)) p.add(path + "/magicDamage", "Magic damage applies to damage rolls.");
+            else {
+                ObjectNode annotate = steps.addObject().put("op", "roll.annotate");
+                annotate.set("from", from[0]);
+                annotate.put("field", "damageType").put("value", "magic").put("as", "magic");
+                from[0] = read("result.magic");
                 edited = true;
             }
         }
@@ -2040,8 +2207,31 @@ public final class LegacyCatalogConverter {
         if (option.has("maximizeDie")) {
             if (!option.path("maximizeDie").asBoolean(false)) p.add(path + "/maximizeDie", "Expected true.");
             else if (!"damage".equals(roll)) p.add(path + "/maximizeDie", "Maximizing a die applies to damage rolls.");
-            else p.add(path + "/maximizeDie", "Manual disposition: the die to maximize is chosen from the rolled damage dice, and a pre-roll option input cannot depend on the roll that does not exist yet.");
+            else if (rule.has("inputs")) p.add(path + "/maximizeDie", "An option cannot take both a maximized die and another input.");
+            else {
+                rule.putArray("inputs").addObject().put("id", "die").put("kind", "integer").put("label", "Damage die to maximize (position in roll order)")
+                        .put("min", 1).put("max", 32);
+                ObjectNode where = RuleJson.JSON.createObjectNode();
+                ArrayNode all = where.putArray("and");
+                all.addObject().putArray("eq").add(read("die.role")).add("damage");
+                all.addObject().putArray("eq").add(read("die.position")).add(read("input.die"));
+                ObjectNode select = steps.addObject().put("op", "roll.selectDice");
+                select.set("from", from[0]);
+                select.set("where", where);
+                select.put("as", "pickedDie");
+                ObjectNode maximize = steps.addObject().put("op", "roll.setFaces");
+                maximize.set("from", from[0]);
+                maximize.set("dice", read("result.pickedDie"));
+                maximize.set("face", read("die.sides"));
+                maximize.put("as", "maximizedDie");
+                from[0] = read("result.maximizedDie");
+                edited = true;
+            }
         }
+        if (option.has("combo"))
+            p.add(path + "/combo", "Manual disposition: the Combo Die size comes from the Brawler's level-advancement choices, which no actor fact exposes, and its repeat-until-lower host roll needs a chained-roll operation that does not exist.");
+        if (option.has("secondaryWeaponDie"))
+            p.add(path + "/secondaryWeaponDie", "Manual disposition: the die comes from the equipped secondary weapon's damage expression, and roll projections do not expose the secondary weapon's dice.");
         if (option.has("matchingDice")) {
             if (!option.path("matchingDice").asBoolean(false)) p.add(path + "/matchingDice", "Expected true.");
             else if (!"damage".equals(roll)) p.add(path + "/matchingDice", "Matching dice apply to damage rolls.");
@@ -2069,6 +2259,29 @@ public final class LegacyCatalogConverter {
             }
         }
         if (edited) steps.addObject().put("op", "roll.publish").set("roll", from[0]);
+        if (option.has("expendOn")) {
+            // The pool empties when one of the option's own dice shows the listed face.
+            JsonNode face = option.get("expendOn");
+            String resource = option.path("requiresResource").asText("");
+            if (!(face.isInt() && face.asInt() >= 1) || !option.has("dice") || !pools.has(resource))
+                p.add(path + "/expendOn", "Expending needs a die face, option dice and a requiresResource pool.");
+            else {
+                ObjectNode where = RuleJson.JSON.createObjectNode();
+                ArrayNode all = where.putArray("and");
+                all.addObject().putArray("eq").add(read("die.contributionId")).add(id + "-dice");
+                all.addObject().putArray("eq").add(read("die.face")).add(face.asInt());
+                ObjectNode select = steps.addObject().put("op", "roll.selectDice");
+                select.set("from", from[0]);
+                select.set("where", where);
+                select.put("as", "expendDice");
+                steps.addObject().put("op", "roll.diceTotal").put("as", "expendTotal").set("from", from[0]);
+                ((ObjectNode) steps.get(steps.size() - 1)).set("dice", read("result.expendDice"));
+                ObjectNode triggered = RuleJson.JSON.createObjectNode();
+                triggered.putArray("gt").add(read("result.expendTotal")).add(0);
+                steps.addObject().put("op", "pool.spend").put("pool", resource).set("amount",
+                        choose(triggered, read("actor.pools." + resource + ".value"), RuleJson.JSON.getNodeFactory().numberNode(0)));
+            }
+        }
         if (option.has("effect")) {
             String effect = declareEffect(option.get("effect"), path + "/effect", p, effects);
             if (effect != null) steps.addObject().put("op", "effect.start").put("effect", effect).put("target", "actor");
@@ -2201,7 +2414,7 @@ public final class LegacyCatalogConverter {
      * An attack-roll option whose benefit lands on the following damage roll: choosing it starts a pending effect that
      * the next weapon damage roll consumes, and a failed attack discards.
      */
-    private static void carried(JsonNode option, String suffix, String label, ObjectNode effects, ArrayNode steps,
+    private static String carried(JsonNode option, String suffix, String label, ObjectNode effects, ArrayNode steps,
                                 List<ObjectNode> extra, boolean proficiencyDice,
                                 java.util.function.BiFunction<ArrayNode, JsonNode, JsonNode> edit) {
         Set<String> used = new HashSet<>();
@@ -2239,6 +2452,7 @@ public final class LegacyCatalogConverter {
         miss.putArray("do").addObject().put("op", "effect.end").put("effect", pending).put("target", "actor");
         miss.putObject("ui").put("label", label);
         extra.add(miss);
+        return effect;
     }
 
     private static void endEffect(JsonNode legacy, ArrayNode steps) {
@@ -2384,6 +2598,11 @@ public final class LegacyCatalogConverter {
         if (trigger.has("repeatable") && !trigger.path("repeatable").isBoolean()) p.add(path + "/repeatable", "Expected a boolean.");
         else if (trigger.path("repeatable").asBoolean(false))
             ((ObjectNode) rule.path("bindings").get(0)).put("repeatable", true);
+        if (trigger.has("weapon")) {
+            // Matches the name of the weapon or feature that made the roll.
+            if (!trigger.path("weapon").isTextual() || trigger.path("weapon").asText().isBlank()) p.add(path + "/weapon", "Expected a weapon name.");
+            else when.addObject().putArray("eq").add(read("event.check.sourceName")).add(trigger.path("weapon").asText());
+        }
         if (trigger.path("weaponAttack").asBoolean(false)) when.add(hasFact("event.check.weapon"));
         if (trigger.path("primaryWeapon").asBoolean(false)) when.addObject().putArray("eq").add(read("event.check.weapon")).add("primary");
         if (trigger.has("weaponDamage")) {
@@ -2412,10 +2631,27 @@ public final class LegacyCatalogConverter {
             selectAmount(trigger.get("selectAmount"), path + "/selectAmount", p, pools, rule);
             amountCost(trigger, path + "/selectAmount", p, pools, rule);
         }
+        if (trigger.has("tokenGain")) {
+            // The player enters how many tokens to place; the pool keeps them up to its capacity.
+            JsonNode gain = trigger.get("tokenGain");
+            p.onlyFields(gain, path + "/tokenGain", Set.of("resource", "max"));
+            String resource = gain.path("resource").asText();
+            if (!pools.has(resource)) p.add(path + "/tokenGain/resource", "Unknown resource: " + resource);
+            else if (!(gain.path("max").isInt() && gain.path("max").asInt() >= 1 && gain.path("max").asInt() <= 1000))
+                p.add(path + "/tokenGain/max", "Expected a positive whole maximum.");
+            else if (rule.has("inputs")) p.add(path + "/tokenGain", "A trigger cannot take both a token gain and another input.");
+            else {
+                rule.putArray("inputs").addObject().put("id", "amount").put("kind", "integer").put("label", "HP marked by the target")
+                        .put("min", 1).put("max", gain.path("max").asInt());
+            }
+        }
         if (limited) rule.put("limitRef", "uses");
         ArrayNode steps = RuleJson.JSON.createArrayNode();
         JsonNode from = read("event.roll");
         boolean edited = false;
+        if (trigger.has("tokenGain") && rule.has("inputs"))
+            steps.addObject().put("op", "pool.gain").put("pool", trigger.path("tokenGain").path("resource").asText()).put("as", "gained")
+                    .set("amount", read("input.amount"));
         if (trigger.has("rerollDualityDie")) {
             String role = trigger.path("rerollDualityDie").asText();
             if (trigger.has("reroll") || !Set.of("hope", "fear").contains(role)) p.add(path + "/rerollDualityDie", "Expected hope or fear and no other reroll.");

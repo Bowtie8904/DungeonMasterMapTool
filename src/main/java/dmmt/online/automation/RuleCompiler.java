@@ -412,7 +412,7 @@ public final class RuleCompiler {
         ObjectNode effects = automation.has("effects") ? RuleJson.object(automation.get("effects"), "/automation/effects") : RuleJson.JSON.createObjectNode();
         if (effects.size() > 64) throw RuleJson.error("/automation/effects", "Expected at most 64 effects.");
         effects.fields().forEachRemaining(field -> validateEffect(field.getKey(), field.getValue(), state, effects));
-        ArrayNode modifiers = automation.has("modifiers") ? modifierList(automation.get("modifiers"), "/automation/modifiers", state, true) : RuleJson.JSON.createArrayNode();
+        ArrayNode modifiers = automation.has("modifiers") ? modifierList(automation.get("modifiers"), "/automation/modifiers", state, true, false) : RuleJson.JSON.createArrayNode();
         Decl decl = new Decl(state, limits, pools, effects, attachment != null);
         ArrayNode profiles = automation.has("profiles") ? profileList(automation.get("profiles"), limits) : RuleJson.JSON.createArrayNode();
         JsonNode definitions = automation.path("rules");
@@ -590,7 +590,7 @@ public final class RuleCompiler {
         }
         if (effect.has("profile")) validateProfile(effect.get("profile"), path + "/profile");
         if (effect.has("modifiers")) {
-            ArrayNode list = modifierList(effect.get("modifiers"), path + "/modifiers", state, false);
+            ArrayNode list = modifierList(effect.get("modifiers"), path + "/modifiers", state, false, !effect.has("while"));
             for (JsonNode modifier : list) if (modifier.has("when"))
                 throw RuleJson.error(path + "/modifiers", "Effect modifiers are resolved when the effect starts; use separate effects instead of conditions.");
         }
@@ -686,7 +686,7 @@ public final class RuleCompiler {
         return false;
     }
 
-    private static ArrayNode modifierList(JsonNode list, String path, ObjectNode state, boolean passive) {
+    private static ArrayNode modifierList(JsonNode list, String path, ObjectNode state, boolean passive, boolean inputs) {
         if (!list.isArray() || list.size() > 64) throw RuleJson.error(path, "Expected up to 64 modifiers.");
         for (int i = 0; i < list.size(); i++) {
             JsonNode modifier = list.get(i);
@@ -703,7 +703,8 @@ public final class RuleCompiler {
             for (String field : List.of("value", "when")) if (modifier.has(field))
                 for (String ref : RuleExpression.references(modifier.get(field))) {
                     String root = ref.split("\\.")[0];
-                    if (!Set.of("source", "actor", "state", "effects").contains(root) || "state".equals(root) && !state.has(ref.split("\\.")[1]))
+                    if (!Set.of("source", "actor", "state", "effects").contains(root) && !(inputs && "input".equals(root))
+                            || "state".equals(root) && !state.has(ref.split("\\.")[1]))
                         throw RuleJson.error(at + "/" + field, "Passive modifiers may only read source, actor, effects and declared state: " + ref);
                     if (passive && stat.startsWith("trait.") && readsDerivedTrait(ref))
                         throw RuleJson.error(at + "/" + field, "A passive trait modifier cannot depend on derived trait totals: " + ref);
@@ -1526,7 +1527,7 @@ public final class RuleCompiler {
                 case "input" -> inputs.contains(parts[1]);
                 case "result" -> results.contains(parts[1]);
                 case "die" -> die && Set.of("id", "face", "sides", "kept", "origin", "poolId", "role",
-                        "previous", "editedBy", "contributionId", "sourceId", "matches").contains(parts[1]);
+                        "previous", "editedBy", "contributionId", "sourceId", "matches", "position").contains(parts[1]);
                 case "source" -> Set.of("id", "instanceId", "name", "quantity").contains(parts[1])
                         || "attachedTo".equals(parts[1]) && decl.attachable() && parts.length == 3 && ATTACHED_TO_FACTS.contains(parts[2]);
                 case "gear" -> false;

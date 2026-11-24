@@ -15,7 +15,7 @@ class EventContextContractTest {
             "track.changed", "pool.changed", "equipment.changed", "effect.started", "effect.ended", "creation.apply");
     private static final List<String> CHECK_KEYS = List.of("kind", "trait", "weapon", "range", "dominant", "outcome",
             "critical", "hopeDie", "fearDie", "spell", "origin", "total", "difficulty", "weaponSource", "weaponSourceId",
-            "fixedDice", "damageType", "move", "adjustedHope", "recoverableHp", "reroll", "duality", "origins");
+            "fixedDice", "damageType", "move", "adjustedHope", "recoverableHp", "reroll", "duality", "origins", "sourceName");
 
     private static void assertContract(String type, ObjectNode event) {
         for (String key : List.of("table", "thresholds", "damage", "damageType", "roll", "check"))

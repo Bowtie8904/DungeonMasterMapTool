@@ -3296,8 +3296,9 @@ class LegacyCatalogConverterTest {
         }
         var maximum = LegacyCatalogConverter.convert(catalog("""
                 {"id":"vf","name":"VF","automation":{"rollOptions":[{"id":"maximum","label":"Maximize","roll":"damage","maximizeDie":true,"cost":{"stress":1}}]}}"""));
-        assertEquals(0, maximum.converted());
-        assertTrue(maximum.diagnostics().toString().contains("Manual disposition"), maximum.diagnostics().toString());
+        assertEquals(1, maximum.converted(), maximum.diagnostics().toString());
+        assertTrue(block(maximum, 0).toString().contains("die.position") && block(maximum, 0).toString().contains("roll.setFaces"), block(maximum, 0).toString());
+        assertNotNull(program(maximum, 0));
     }
 
     @Test
@@ -3307,14 +3308,33 @@ class LegacyCatalogConverterTest {
                 {"{\"unarmedWeapon\":{\"name\":\"Fists\"}}", "unarmed weapon"},
                 {"{\"actions\":[{\"id\":\"s\",\"label\":\"S\",\"steps\":[{\"op\":\"mark\",\"resource\":\"permanentHp\",\"amount\":1}]}]}", "permanently marked HP"},
                 {"{\"conditionalActions\":[{\"id\":\"swap\",\"label\":\"Swap\",\"codexSwap\":true}]}", "vault-to-loadout"},
-                {"{\"rollOptions\":[{\"id\":\"c\",\"label\":\"C\",\"roll\":\"attack\",\"chooseTrait\":true}]}", "replaces the weapon's own trait"},
-                {"{\"rollOptions\":[{\"id\":\"r\",\"label\":\"R\",\"roll\":\"attack\",\"linkedDamageTrait\":true}]}", "cannot hold the chosen quantity"},
-                {"{\"conditionalRollOptions\":[{\"id\":\"a\",\"label\":\"A\",\"roll\":\"attack\",\"advantageDie\":8}]}", "advantage die size"}};
+                {"{\"rollOptions\":[{\"id\":\"c\",\"label\":\"C\",\"roll\":\"damage\",\"combo\":true}]}", "Combo Die size"},
+                {"{\"rollOptions\":[{\"id\":\"s\",\"label\":\"S\",\"roll\":\"damage\",\"secondaryWeaponDie\":true}]}", "secondary weapon's damage expression"}};
         for (String[] c : cases) {
             var result = LegacyCatalogConverter.convert(catalog("{\"id\":\"m\",\"name\":\"M\",\"automation\":" + c[0] + "}"));
             assertEquals(0, result.converted(), c[0]);
             assertTrue(result.diagnostics().toString().contains(c[1]), c[0] + " -> " + result.diagnostics());
         }
+    }
+
+    @Test
+    void rollOptionGatesAndPostRollEditsConvert() throws Exception {
+        String[] options = {
+                "{\"id\":\"t\",\"label\":\"T\",\"roll\":\"attack\",\"weapon\":\"any\",\"chooseTrait\":true}",
+                "{\"id\":\"l\",\"label\":\"L\",\"roll\":\"attack\",\"linkedDamageTrait\":\"Strength\",\"quantity\":{\"resource\":\"stress\",\"label\":\"Uses\",\"max\":2},\"cost\":{\"stress\":1}}",
+                "{\"id\":\"a\",\"label\":\"A\",\"roll\":\"attack\",\"advantageDie\":8}",
+                "{\"id\":\"f\",\"label\":\"F\",\"roll\":\"damage\",\"dice\":\"1d6\",\"requiresRollOutcome\":\"hopeOrCritical\"}",
+                "{\"id\":\"m\",\"label\":\"M\",\"roll\":\"damage\",\"magicDamage\":true}",
+                "{\"id\":\"z\",\"label\":\"Z\",\"roll\":\"attack\",\"fearDie\":10}"};
+        for (String option : options) {
+            var result = LegacyCatalogConverter.convert(catalog("{\"id\":\"x\",\"name\":\"X\",\"automation\":{\"rollOptions\":[" + option + "]}}"));
+            assertEquals(1, result.converted(), option + " -> " + result.diagnostics());
+            assertNotNull(program(result, 0));
+        }
+        var outcome = LegacyCatalogConverter.convert(catalog("{\"id\":\"x\",\"name\":\"X\",\"automation\":{\"rollOptions\":[" + options[3] + "]}}"));
+        assertTrue(block(outcome, 0).toString().contains("effects.f-outcome") && block(outcome, 0).toString().contains("effect.end"), block(outcome, 0).toString());
+        var trait = LegacyCatalogConverter.convert(catalog("{\"id\":\"x\",\"name\":\"X\",\"automation\":{\"rollOptions\":[" + options[0] + "]}}"));
+        assertTrue(block(trait, 0).toString().contains("event.check.trait") && block(trait, 0).toString().contains("input.trait"), block(trait, 0).toString());
     }
 
     @Test

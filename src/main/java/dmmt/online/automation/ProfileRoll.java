@@ -102,7 +102,7 @@ final class ProfileRoll {
         ObjectNode check = event.putObject("check");
         for (String key : List.of("kind", "trait", "weapon", "range", "dominant", "outcome", "critical",
                 "hopeDie", "fearDie", "spell", "origin", "total", "difficulty", "weaponSource", "weaponSourceId",
-                "fixedDice", "damageType", "move", "adjustedHope", "recoverableHp", "reroll", "duality")) check.putNull(key);
+                "fixedDice", "damageType", "move", "adjustedHope", "recoverableHp", "reroll", "duality", "sourceName")) check.putNull(key);
         check.putArray("origins");
         return event;
     }
@@ -122,7 +122,7 @@ final class ProfileRoll {
         String trait = metadata.path("trait").textValue();
         if ("spellcast".equals(trait)) trait = actor.path("spellcastTrait").path("name").textValue();
         if (trait != null) check.put("trait", trait);
-        check.put("spell", "spellcast".equals(metadata.path("trait").asText()));
+        check.put("spell", "spellcast".equals(metadata.path("trait").asText())).put("sourceName", source.path("name").asText(null));
         for (String field : List.of("origin", "fixedDice", "damageType"))
             if (metadata.has(field)) check.set(field, metadata.get(field).deepCopy());
         ArrayNode origins = (ArrayNode) check.get("origins");
@@ -152,7 +152,7 @@ final class ProfileRoll {
         String trait = "spellcast".equals(declaredTrait) ? actor.path("spellcastTrait").path("name").textValue() : declaredTrait;
         ObjectNode check = event.withObject("/check");
         check.put("kind", kind).put("duality", !damageRoll).put("trait", trait).put("range", profile.path("range").asText(null))
-                .put("spell", "spellcast".equals(kind));
+                .put("spell", "spellcast".equals(kind)).put("sourceName", source.name());
         if (!profile.has("rollKind"))
             check.put("weaponSource", source.instanceId()).put("weaponSourceId", source.sourceId());
         if (equippedWeapon && !profile.has("rollKind")) {

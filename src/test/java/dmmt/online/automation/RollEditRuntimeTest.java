@@ -103,6 +103,29 @@ class RollEditRuntimeTest {
     }
 
     @Test
+    void roleScopedDiePositionPicksTheChosenDieAndEffectModifiersReadStartInputs() throws Exception {
+        ObjectNode automation = (ObjectNode) RuleJson.parse("""
+                {"effects":{"surge":{"label":"Surge","kind":"buff","until":["scene.end"],
+                   "modifiers":[{"stat":"roll.damage","op":"add","value":{"multiply":[2,{"read":"input.n"}]}}]}},
+                 "rules":[{"id":"max","bindings":[{"id":"b","event":"roll.finished","surface":"roll","mode":"button"}],
+                 "inputs":[{"id":"n","kind":"integer","label":"Die","min":1,"max":9}],
+                 "do":[{"op":"roll.selectDice","from":{"read":"event.roll"},
+                         "where":{"and":[{"eq":[{"read":"die.role"},"damage"]},{"eq":[{"read":"die.position"},{"read":"input.n"}]}]},"as":"picked"},
+                       {"op":"roll.setFaces","from":{"read":"event.roll"},"dice":{"read":"result.picked"},"face":{"read":"die.sides"},"as":"maxed"},
+                       {"op":"roll.publish","roll":{"read":"result.maxed"}},
+                       {"op":"effect.start","effect":"surge","target":"actor"}],"ui":{"label":"Max"}}]}
+                """);
+        var program = RuleCompiler.compile("features:roll-edits", automation, fixture("rewrite/recipes"));
+        var intent = new RuleRuntime.Intent("max", "b", "inst-1", 0, (ObjectNode) RuleJson.parse("{\"n\":2}"));
+        var result = RuleRuntime.execute(program, intent, context(), noRandom());
+        JsonNode roll = result.publishedRolls().getFirst();
+        assertEquals(1, die(roll, "w1").path("face").asInt(), "Only the second damage die is maximized.");
+        assertEquals(8, die(roll, "w2").path("face").asInt());
+        assertEquals(1, die(roll, "c1").path("face").asInt(), "Locked dice are not positions.");
+        assertEquals(4, result.context().path("actor").path("effects").get(0).path("modifiers").get(0).path("value").asInt());
+    }
+
+    @Test
     void setFacesMapsOnlyMatchingEditableDiceDeterministically() throws Exception {
         JsonNode roll = run("exacting", context(), noRandom()).publishedRolls().getFirst();
         assertEquals(8, die(roll, "w1").path("face").asInt());

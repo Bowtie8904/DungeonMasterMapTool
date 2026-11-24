@@ -205,9 +205,11 @@ public final class StructuredRoll {
         List<ObjectNode[]> dice = editableDice(roll);
         Map<String, Integer> faces = new HashMap<>();
         for (ObjectNode[] entry : dice) faces.merge(entry[0].path("role").asText() + ":" + entry[1].path("face").asInt(), 1, Integer::sum);
+        Map<String, Integer> seen = new HashMap<>();
         for (ObjectNode[] entry : dice) {
             ObjectNode view = dieView(entry[0], entry[1]);
             view.put("matches", faces.get(entry[0].path("role").asText() + ":" + entry[1].path("face").asInt()) - 1);
+            view.put("position", seen.merge(entry[0].path("role").asText(), 1, Integer::sum));
             if (where.test(view)) ids.add(entry[1].path("id").asText());
         }
         return ids;
