@@ -1014,6 +1014,22 @@ public final class AutomationHost {
         return applyEvent(pack, working, projection.state(working), event, candidates(pack, working, event), List.of(), random);
     }
 
+    /** Finds projected effect transitions caused by an authoritative sheet edit. */
+    public List<ObjectNode> effectTransitions(Pack pack, ObjectNode before, ObjectNode after, ObjectNode event) {
+        ObjectNode oldSheet = before.deepCopy(), newSheet = after.deepCopy();
+        if (sources(pack, newSheet).stream().noneMatch(source -> {
+            RuleCompiler.Program program = pack.programs().get(source.sourceId());
+            return program != null && (!program.automatic("effect.started").isEmpty()
+                    || !program.automatic("effect.ended").isEmpty());
+        })) return List.of();
+        ObjectNode previous = actor(pack, oldSheet, projection.state(oldSheet), event);
+        ObjectNode current = actor(pack, newSheet, projection.state(newSheet), event);
+        ObjectNode staged = RuleJson.JSON.createObjectNode();
+        staged.set("actor", current);
+        staged.set("event", event.deepCopy());
+        return RuleDispatcher.effectEvents(staged, "actor", previous);
+    }
+
     public record RestMember(String id, String name, String sheetVersion, long revision, Supplier<ObjectNode> loadSheet) {
         public RestMember {
             RuleJson.id(RuleJson.JSON.getNodeFactory().textNode(id), "/recipient/id");
@@ -2951,6 +2967,7 @@ public final class AutomationHost {
                 if (!id.equals(staged.at("/recipient/id").asText()))
                     throw RuleJson.error("/recipient", "The reaction holder does not match the selected character.");
                 ObjectNode recipient = RuleJson.object(staged.get("recipient"), "/recipient");
+                ObjectNode beforeProjection = recipient.deepCopy();
                 projection.write(working, projection.actor(working), persisted(recipient));
                 ObjectNode state = projection.state(working);
                 var sources = sources(pack, working);
@@ -2970,8 +2987,30 @@ public final class AutomationHost {
                 root.set("actor", actor);
                 root.set("event", event.deepCopy());
                 ObjectNode projected = ownerProjection.project(root, contexts, "track.changed", null, "actor");
-                contexts.forEach((instance, context) -> storeSource(state, instance, context));
+                for (var entry : contexts.entrySet()) storeSource(state, entry.getKey(), entry.getValue());
                 projection.write(working, projection.actor(working), persisted(projected));
+                staged.set("recipient", projected);
+                var transitions = candidates.stream().anyMatch(candidate ->
+                        !candidate.program().automatic("effect.started").isEmpty()
+                                || !candidate.program().automatic("effect.ended").isEmpty())
+                        ? RuleDispatcher.effectEvents(staged, "recipient", beforeProjection) : List.<ObjectNode>of();
+                for (ObjectNode transition : transitions) {
+                    RuleDispatcher.mergeReactionEvent(transition, staged.path("event"));
+                    changed(staged, transition, sourceContexts, actions, outbox);
+                }
+                if (!transitions.isEmpty()) {
+                    event = event.deepCopy();
+                    RuleDispatcher.mergeReactionEvent(event, staged.path("event"));
+                    state = projection.state(working);
+                    sources = sources(pack, working);
+                    projected = actor(pack, working, state, event, sources);
+                    resting = stagedSource(staged, sourceContexts);
+                    restingBefore = resting.deepCopy();
+                    candidates = candidates(pack, sources, state, projected, event);
+                    if (!candidates.isEmpty())
+                        ownerProjection = ownerRestProjection(pack, working, state, candidates,
+                                StagedRestRecipients.this, null, id, resting);
+                }
                 candidates = candidates(pack, sources, state, projected, event);
                 if (!candidates.isEmpty()) {
                     var reactions = RuleDispatcher.executeOwnerTrackReactions(candidates, List.of(), random,
@@ -3592,7 +3631,8 @@ public final class AutomationHost {
             return true;
         for (var candidate : candidates) {
             RuleCompiler.Program program = candidate.program();
-            if (!program.automatic("track.changed").isEmpty() || program.stateMayAffectProjection()
+            if (!program.automatic("track.changed").isEmpty() || !program.automatic("effect.started").isEmpty()
+                    || !program.automatic("effect.ended").isEmpty() || program.stateMayAffectProjection()
                     || program.downtimeMayAddSource() || projection.readsMutableStats(program.downtimeStatReads()))
                 return true;
         }
@@ -3606,6 +3646,7 @@ public final class AutomationHost {
             RuleCompiler.Program program = candidate.program();
             if (selected.contains(candidate.instanceId()) || program.hasComputedActorPools()
                     || !program.automatic("track.changed").isEmpty()
+                    || !program.automatic("effect.started").isEmpty() || !program.automatic("effect.ended").isEmpty()
                     || automatic && !program.automatic("downtime.move").isEmpty())
                 included.add(candidate);
         }

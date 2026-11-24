@@ -1434,6 +1434,75 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void manualTrackEditsDispatchDerivedEffectTransitionsAtomically() throws Exception {
+        installRestRules();
+        Path rulesFile = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(rulesFile.toFile());
+        ObjectNode automation = ruleset.withObject("/automation");
+        automation.set("effects", MAPPER.readTree("""
+                {"tense":{"label":"Tense","while":{"gte":[{"read":"actor.stress.marked"},2]}}}"""));
+        automation.putObject("state").put("starts", 0).put("ends", 0);
+        ArrayNode rules = automation.withArray("rules");
+        rules.add(MAPPER.readTree("""
+                {"id":"effect-failure","bindings":[{"id":"change","event":"effect.started","surface":"effect","mode":"automatic"}],
+                 "when":{"lt":[{"read":"actor.hope.value"},2]},
+                 "do":[{"op":"resource.spend","pool":"actor.hope","amount":3}],"ui":{}}"""));
+        rules.add(MAPPER.readTree("""
+                {"id":"effect-started","bindings":[{"id":"change","event":"effect.started","surface":"effect","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.effect.label"},"Tense"]},
+                 "do":[{"op":"state.increment","slot":"starts","by":1},
+                       {"op":"resource.gain","pool":"actor.hope","amount":1},
+                       {"op":"table.gain","resource":"fear","amount":1,"label":"Tense"}],
+                 "ui":{"report":"Started {event.effect.label}."}}"""));
+        rules.add(MAPPER.readTree("""
+                {"id":"effect-ended","bindings":[{"id":"change","event":"effect.ended","surface":"effect","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.effect.label"},"Tense"]},
+                 "do":[{"op":"state.increment","slot":"ends","by":1}],"ui":{"report":"Ended {event.effect.label}."}}"""));
+        rules.add(MAPPER.readTree("""
+                {"id":"manual-track","bindings":[{"id":"change","event":"track.changed","surface":"resource","mode":"automatic"}],
+                 "when":{"eq":[{"read":"event.track"},"stress"]},
+                 "ui":{"report":"Track at Fear {event.table.fear}."}}"""));
+        java.nio.file.Files.writeString(rulesFile, ruleset.toString());
+        String id = "manual-effects", owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id(id).name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), id, """
+                {"name":"Ada","hp":{"slots":6,"on":0},"stress":{"slots":6,"on":1},
+                 "armorTrack":{"slots":3,"on":0},"hope":{"slots":6,"on":1}}""");
+        JsonNode baseline = MAPPER.readTree(sheetRead(owner, id).body());
+        ObjectNode patch = MAPPER.createObjectNode();
+        patch.putObject("fields").putObject("stress").put("slots", 6).put("on", 2);
+        patch.putArray("removed");
+        int fear = campaign.getFear();
+        int historyCount = store.historyTail(campaign.getId(), 100).size();
+        String original = store.loadSheet(campaign.getId(), id);
+        var rejected = patchSheet(owner, id, patch, baseline.path("version").asText());
+        assertEquals(409, rejected.statusCode(), rejected.body());
+        assertEquals(original, store.loadSheet(campaign.getId(), id));
+        assertEquals(fear, campaign.getFear());
+        assertEquals(historyCount, store.historyTail(campaign.getId(), 100).size());
+        ObjectNode funded = (ObjectNode) MAPPER.readTree(original);
+        funded.withObject("/hope").put("on", 2);
+        store.saveSheet(campaign.getId(), id, funded.toString());
+        baseline = MAPPER.readTree(sheetRead(owner, id).body());
+        var marked = patchSheet(owner, id, patch, baseline.path("version").asText());
+        assertEquals(200, marked.statusCode(), marked.body());
+        JsonNode sheet = MAPPER.readTree(marked.body());
+        assertEquals(3, sheet.at("/sheet/hope/on").asInt());
+        assertEquals(1, sheet.at("/sheet/automationState/sources/ruleset:base/state/starts").asInt());
+        assertEquals(fear + 1, campaign.getFear());
+        String history = store.historyTail(campaign.getId(), 100).toString();
+        assertTrue(history.contains("Started Tense."), history);
+        assertTrue(history.contains("Track at Fear " + (fear + 1) + "."), history);
+
+        ((ObjectNode) patch.at("/fields/stress")).put("on", 1);
+        var cleared = patchSheet(owner, id, patch, sheet.path("version").asText());
+        assertEquals(200, cleared.statusCode(), cleared.body());
+        sheet = MAPPER.readTree(cleared.body());
+        assertEquals(1, sheet.at("/sheet/automationState/sources/ruleset:base/state/ends").asInt());
+        assertTrue(store.historyTail(campaign.getId(), 100).toString().contains("Ended Tense."));
+    }
+
+    @Test
     void equipmentEditsDispatchOrderedLifecycleAndTrackReactionsAtomically() throws Exception {
         installRestRules();
         java.nio.file.Files.writeString(compendiumDir.resolve("armor.json"), """
@@ -8008,7 +8077,8 @@ class OnlineSessionServerTest {
                   "ui":{"report":"{actor.name} gained {event.effect.label} at Fear {event.table.fear}."}},
                  {"id":"ended","bindings":[{"id":"auto","event":"effect.ended","surface":"resource","mode":"automatic"}],
                   "do":[{"op":"state.increment","slot":"ends","by":1},
-                        {"op":"track.clear","track":"actor.stress","amount":1}],
+                        {"op":"track.clear","track":"actor.stress","amount":1},
+                        {"op":"table.gain","resource":"fear","amount":1,"label":"Ward ended"}],
                   "ui":{"report":"{actor.name} lost {event.effect.label}."}}]"""));
         java.nio.file.Files.writeString(file, catalog.toString());
     }
@@ -8129,6 +8199,126 @@ class OnlineSessionServerTest {
         assertEquals(1, saved.at("/stress/on").asInt());
         assertEquals(1, saved.at("/automationState/sources/watcher/state/ends").asInt());
         assertEquals(0, saved.at("/automationState/effects").size());
+    }
+
+    @Test
+    void trackAndStateChangesDispatchDerivedAndConditionalEffectTransitions() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        automation.set("effects", MAPPER.readTree("""
+                {"fragile":{"label":"Fragile","endWhen":{"gte":[{"read":"actor.stress.marked"},2]}},
+                 "tense":{"label":"Tense","while":{"gte":[{"read":"actor.stress.marked"},2]}},
+                 "armed":{"label":"Armed","while":{"read":"state.armed"}}}"""));
+        automation.putObject("state").put("armed", false).put("starts", 0).put("ends", 0);
+        automation.set("rules", MAPPER.readTree("""
+                [{"id":"start","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"effect.start","effect":"fragile","target":"actor"}],"ui":{"label":"Start"}},
+                 {"id":"mark","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"track.mark","track":"actor.stress","amount":2}],"ui":{"label":"Mark"}},
+                 {"id":"clear","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"track.clear","track":"actor.stress","amount":1}],"ui":{"label":"Clear"}},
+                 {"id":"arm","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"state.set","slot":"armed","value":true}],"ui":{"label":"Arm"}},
+                 {"id":"disarm","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button"}],
+                  "do":[{"op":"state.set","slot":"armed","value":false}],"ui":{"label":"Disarm"}},
+                 {"id":"started","bindings":[{"id":"auto","event":"effect.started","surface":"resource","mode":"automatic"}],
+                  "do":[{"op":"state.increment","slot":"starts","by":1}],
+                  "ui":{"report":"Started {event.effect.label} at Fear {event.table.fear}."}},
+                 {"id":"ended","bindings":[{"id":"auto","event":"effect.ended","surface":"resource","mode":"automatic"}],
+                  "do":[{"op":"state.increment","slot":"ends","by":1},
+                        {"op":"table.gain","resource":"fear","amount":1,"label":"Ended"}],
+                  "ui":{"report":"Ended {event.effect.label}."}},
+                 {"id":"track","bindings":[{"id":"auto","event":"track.changed","surface":"resource","mode":"automatic"}],
+                  "ui":{"report":"Track at Fear {event.table.fear}."}}]"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String campaignId = campaign.getId(), owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        store.saveSheet(campaignId, "caster", """
+                {"name":"Ada","hope":{"slots":6,"on":2},"stress":{"slots":6,"on":0},
+                 "features":[{"name":"Steady","instanceId":"source","automationSource":"classes:tester:features:steady"}]}""");
+        int fear = campaign.getFear();
+        String[] moves = {"start", "mark", "clear", "arm", "disarm"};
+        String[][] expected = {{"Started Fragile at Fear " + fear + "."},
+                {"Ended Fragile.", "Started Tense at Fear " + (fear + 1) + ".", "Track at Fear " + (fear + 1) + "."},
+                {"Ended Tense.", "Track at Fear " + (fear + 2) + "."},
+                {"Started Armed at Fear " + (fear + 2) + "."}, {"Ended Armed."}};
+        for (int i = 0; i < moves.length; i++) {
+            String body = """
+                    {"request":{"requestId":"%s","expectedRevision":%d,
+                     "selections":[{"sourceInstanceId":"source","ruleId":"%s","bindingId":"use"}]}}"""
+                    .formatted(moves[i], i, moves[i]);
+            var applied = automationHttp(owner, "caster", body);
+            assertEquals(200, applied.statusCode(), applied.body());
+            List<String> reports = MAPPER.readTree(applied.body()).path("actions").findValuesAsText("report");
+            for (String report : expected[i]) assertTrue(reports.contains(report), applied.body());
+            if (expected[i].length > 1) assertTrue(reports.indexOf(expected[i][0]) < reports.indexOf(expected[i][1]));
+        }
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaignId, "caster"));
+        assertEquals(3, saved.at("/automationState/sources/source/state/starts").asInt());
+        assertEquals(3, saved.at("/automationState/sources/source/state/ends").asInt());
+        assertEquals(0, saved.at("/automationState/effects").size());
+        assertEquals(1, saved.at("/stress/on").asInt());
+        assertEquals(fear + 3, campaign.getFear());
+    }
+
+    @Test
+    void targetedTrackChangesDispatchTheRecipientsDerivedEffectEvents() throws Exception {
+        automationCompendium();
+        Path file = compendiumDir.resolve("classes.json");
+        ObjectNode catalog = (ObjectNode) MAPPER.readTree(file.toFile());
+        ObjectNode automation = (ObjectNode) catalog.at("/entries/0/features/2/automation");
+        automation.set("effects", MAPPER.readTree("""
+                {"tense":{"label":"Tense","while":{"gte":[{"read":"actor.stress.marked"},2]}}}"""));
+        automation.putObject("state").put("starts", 0).put("ends", 0);
+        automation.set("rules", MAPPER.readTree("""
+                [{"id":"mark","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button",
+                   "targetSelection":{"scope":"activeCharacters","cardinality":"one","excludeSource":true}}],
+                  "do":[{"op":"track.mark","track":"recipient.stress","amount":1}],"ui":{"label":"Mark"}},
+                 {"id":"clear","bindings":[{"id":"use","event":"action.request","surface":"sheet","mode":"button",
+                   "targetSelection":{"scope":"activeCharacters","cardinality":"one","excludeSource":true}}],
+                  "do":[{"op":"track.clear","track":"recipient.stress","amount":1}],"ui":{"label":"Clear"}},
+                 {"id":"started","bindings":[{"id":"auto","event":"effect.started","surface":"resource","mode":"automatic"}],
+                  "do":[{"op":"state.increment","slot":"starts","by":1},
+                        {"op":"table.gain","resource":"fear","amount":1,"label":"Tense"}],
+                  "ui":{"report":"{actor.name} started {event.effect.label}."}},
+                 {"id":"ended","bindings":[{"id":"auto","event":"effect.ended","surface":"resource","mode":"automatic"}],
+                  "do":[{"op":"state.increment","slot":"ends","by":1}],"ui":{"report":"{actor.name} ended {event.effect.label}."}},
+                 {"id":"track","bindings":[{"id":"auto","event":"track.changed","surface":"resource","mode":"automatic"}],
+                  "ui":{"report":"{actor.name} changed at Fear {event.table.fear}."}}]"""));
+        java.nio.file.Files.writeString(file, catalog.toString());
+        String campaignId = campaign.getId(), owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("caster").name("Ada").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("patient").name("Bea").ownerId(playerId()).build());
+        for (String id : List.of("caster", "patient"))
+            store.saveSheet(campaignId, id, """
+                    {"name":"%s","hope":{"slots":6,"on":2},"stress":{"slots":6,"on":%d},
+                     "features":[{"name":"Steady","instanceId":"%s","automationSource":"classes:tester:features:steady"}]}"""
+                    .formatted("caster".equals(id) ? "Ada" : "Bea", "caster".equals(id) ? 0 : 1, id + "-feature"));
+        int fear = campaign.getFear();
+        for (int i = 0; i < 2; i++) {
+            String move = i == 0 ? "mark" : "clear";
+            JsonNode offer = MAPPER.readTree(automationHttp(owner, "caster", null).body());
+            JsonNode descriptor = null;
+            for (JsonNode action : offer.path("actions"))
+                if (move.equals(action.path("ruleId").asText())) descriptor = action;
+            assertNotNull(descriptor, offer.toString());
+            ObjectNode request = MAPPER.createObjectNode().put("requestId", move).put("expectedRevision", i);
+            request.putArray("selections").addObject().put("sourceInstanceId", "caster-feature").put("ruleId", move).put("bindingId", "use");
+            request.putObject("target").put("recipientId", "patient")
+                    .set("version", descriptor.requiredAt("/targetSelection/options/0/version"));
+            var applied = automationHttp(owner, "caster", MAPPER.createObjectNode().set("request", request).toString());
+            assertEquals(200, applied.statusCode(), applied.body());
+            List<String> reports = MAPPER.readTree(applied.body()).path("actions").findValuesAsText("report");
+            assertTrue(reports.contains(i == 0 ? "Bea started Tense." : "Bea ended Tense."), applied.body());
+            assertTrue(reports.contains("Bea changed at Fear " + (fear + 1) + "."), applied.body());
+        }
+        JsonNode patient = MAPPER.readTree(store.loadSheet(campaignId, "patient"));
+        assertEquals(1, patient.at("/stress/on").asInt());
+        assertEquals(1, patient.at("/automationState/sources/patient-feature/state/starts").asInt());
+        assertEquals(1, patient.at("/automationState/sources/patient-feature/state/ends").asInt());
+        assertEquals(fear + 1, campaign.getFear());
     }
 
     @Test

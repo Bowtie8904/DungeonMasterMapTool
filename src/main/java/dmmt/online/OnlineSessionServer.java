@@ -1757,6 +1757,8 @@ public final class OnlineSessionServer {
                 trackResult = MAPPER.createObjectNode();
                 ArrayNode actions = trackResult.putArray("actions"), commands = trackResult.putArray("outbox");
                 List<ObjectNode> events = new ArrayList<>();
+                events.addAll(automationHost.effectTransitions(trackPack, previous, saved,
+                        automationEvent("action.request", actor)));
                 for (var change : equipmentChanges) {
                     ObjectNode event = automationEvent("equipment.changed", actor);
                     ObjectNode equipment = event.putObject("equipment").put("slot", change.slot());
