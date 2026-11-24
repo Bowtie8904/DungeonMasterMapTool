@@ -29,7 +29,8 @@ export interface RuleDescriptor {
   costsRequireInput?: boolean;
   inputs?: RuleInput[];
   targetSelection?:
-    | { cardinality: 'one'; options: Array<{ id: string; label: string; version: string; downtimeOptions?: RuleDescriptor[] }> }
+    | { cardinality: 'one'; options: Array<{ id: string; label: string; version: string;
+        downtimeOptions?: RuleDescriptor[]; moveDescriptor?: RuleDescriptor }> }
     | { cardinality: 'all'; version: string; options: Array<{ id: string; label: string }> };
 }
 

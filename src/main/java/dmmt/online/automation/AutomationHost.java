@@ -1926,7 +1926,11 @@ public final class AutomationHost {
                 var sources = candidates(pack, preview, event);
                 var source = sources.stream().filter(item -> item.instanceId().equals(candidate.instanceId()))
                         .findFirst().orElseThrow();
-                ObjectNode descriptor = RuleRuntime.describe(source.program(), ref.ruleId(), ref.bindingId(), source.context(), party);
+                boolean recipientDependent = binding.has("targetSelection")
+                        && RuleRuntime.recipientDependentDescription(source.program().rule(ref.ruleId()), binding);
+                ObjectNode descriptor = recipientDependent
+                        ? RuleRuntime.describeAwaitingRecipient(source.program(), ref.ruleId(), ref.bindingId(), source.context(), party)
+                        : RuleRuntime.describe(source.program(), ref.ruleId(), ref.bindingId(), source.context(), party);
                 descriptor.put("sourceName", source.context().path("source").path("name").asText());
                 descriptor.set("options", RuleDispatcher.describeRecipientIndependentOptions(sources, "downtime",
                         audience -> allowed(audience, "self")));
@@ -1934,6 +1938,7 @@ public final class AutomationHost {
                     Map<String, ObjectNode> recipients = new HashMap<>();
                     for (var recipient : party.eligibleRecipients(binding, source.context()))
                         recipients.put(recipient.actorId(), recipient.snapshot());
+                    boolean anyAvailable = false;
                     for (JsonNode item : descriptor.path("targetSelection").path("options")) {
                         ObjectNode recipient = recipients.get(item.path("id").asText());
                         if (recipient == null) throw RuleJson.error("/recipient", "An offered target is no longer available.");
@@ -1945,6 +1950,18 @@ public final class AutomationHost {
                         }
                         ((ObjectNode) item).set("downtimeOptions", RuleDispatcher.describeOptions(targetedSources, "downtime",
                                 audience -> allowed(audience, "self")));
+                        if (recipientDependent) {
+                            ObjectNode context = source.context().deepCopy();
+                            context.set("recipient", recipient.deepCopy());
+                            ObjectNode targetDescriptor = RuleRuntime.describeForRecipient(source.program(), ref.ruleId(),
+                                    ref.bindingId(), context, (ObjectNode) descriptor.path("targetSelection"));
+                            ((ObjectNode) item).set("moveDescriptor", targetDescriptor);
+                            anyAvailable |= targetDescriptor.path("available").asBoolean();
+                        }
+                    }
+                    if (recipientDependent && !anyAvailable && !recipients.isEmpty()) {
+                        descriptor.put("available", false).put("reasonCode", "recipient")
+                                .put("reason", "No eligible target can use this move.");
                     }
                 }
                 moves.add(descriptor);

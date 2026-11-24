@@ -49,7 +49,26 @@ public final class RuleRuntime {
         ObjectNode context = context(program, rule, hostContext);
         JsonNode binding = binding(rule, bindingId);
         if (binding.has("forEach")) throw RuleJson.error("/bindingId", "Use describeEach for a per-die binding.");
-        return describe(program, ruleId, bindingId, rule, binding, context, null, party);
+        return describe(program, ruleId, bindingId, rule, binding, context, null, party, null, false);
+    }
+
+    static ObjectNode describeAwaitingRecipient(RuleCompiler.Program program, String ruleId, String bindingId,
+                                                 ObjectNode hostContext, PartyTargets party) {
+        ObjectNode rule = program.rule(ruleId);
+        ObjectNode context = context(program, rule, hostContext);
+        JsonNode binding = binding(rule, bindingId);
+        return describe(program, ruleId, bindingId, rule, binding, context, null, party, null, true);
+    }
+
+    static ObjectNode describeForRecipient(RuleCompiler.Program program, String ruleId, String bindingId,
+                                           ObjectNode hostContext, ObjectNode targetSelection) {
+        ObjectNode rule = program.rule(ruleId);
+        ObjectNode context = context(program, rule, hostContext);
+        JsonNode binding = binding(rule, bindingId);
+        ObjectNode description = describe(program, ruleId, bindingId, rule, binding, context, null, null,
+                targetSelection, false);
+        description.remove("targetSelection");
+        return description;
     }
 
     public static ArrayNode describeEach(RuleCompiler.Program program, String ruleId, String bindingId, ObjectNode hostContext) {
@@ -66,14 +85,16 @@ public final class RuleRuntime {
         for (JsonNode die : pool.path("dice")) {
             ObjectNode itemContext = context.deepCopy();
             itemContext.set("die", die.deepCopy());
-            ObjectNode description = describe(program, ruleId, bindingId, rule, binding, itemContext, die.path("id").asText(), party);
+            ObjectNode description = describe(program, ruleId, bindingId, rule, binding, itemContext,
+                    die.path("id").asText(), party, null, false);
             descriptions.add(description);
         }
         return descriptions;
     }
 
     private static ObjectNode describe(RuleCompiler.Program program, String ruleId, String bindingId, ObjectNode rule,
-                                       JsonNode binding, ObjectNode context, String eachId, PartyTargets party) {
+                                       JsonNode binding, ObjectNode context, String eachId, PartyTargets party,
+                                       ObjectNode targetSelection, boolean awaitingRecipient) {
         ObjectNode description = RuleJson.JSON.createObjectNode();
         description.put("ruleId", ruleId).put("bindingId", bindingId).put("sourceId", program.sourceId())
                 .put("sourceInstanceId", context.path("source").path("instanceId").asText())
@@ -90,12 +111,22 @@ public final class RuleRuntime {
         if (binding.has("claimGroup")) description.set("claimGroup", binding.get("claimGroup"));
         if (binding.has("claimGroupScope")) description.set("claimGroupScope", binding.get("claimGroupScope"));
         if (binding.has("claimScope")) description.set("claimScope", binding.get("claimScope"));
-        if (binding.has("targetSelection")) description.set("targetSelection", party == null
+        if (binding.has("targetSelection")) description.set("targetSelection", targetSelection != null
+                ? targetSelection : party == null
                 ? describeTargets(binding, context) : party.describe(binding, ruleId, context));
         description.put("audience", binding.path("audience").asText("self"));
         description.put("priority", binding.path("priority").asInt());
         for (String text : List.of("label", "description")) if (rule.path("ui").has(text))
-            description.put(text, RuleTemplate.render(rule.path("ui").path(text).asText(), context));
+            description.put(text, awaitingRecipient
+                    ? RuleTemplate.renderAwaitingRecipient(rule.path("ui").path(text).asText(), context)
+                    : RuleTemplate.render(rule.path("ui").path(text).asText(), context));
+        if (awaitingRecipient) {
+            boolean available = !description.path("targetSelection").path("options").isEmpty();
+            description.put("available", available);
+            if (!available) description.put("reasonCode", "recipient")
+                    .put("reason", "There are no eligible targets for this action.");
+            return description;
+        }
         try {
             available(program, rule, binding, context);
             if (binding.has("targetSelection") && description.path("targetSelection").path("options").isEmpty())

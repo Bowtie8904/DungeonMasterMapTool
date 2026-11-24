@@ -22,9 +22,18 @@ public final class RuleTemplate {
     }
 
     public static String render(String text, JsonNode context) {
+        return render(text, context, false);
+    }
+
+    static String renderAwaitingRecipient(String text, JsonNode context) {
+        return render(text, context, true);
+    }
+
+    private static String render(String text, JsonNode context, boolean awaitingRecipient) {
         StringBuilder out = new StringBuilder();
         for (Part part : parse(text)) {
             if (part.path() == null) out.append(part.text());
+            else if (awaitingRecipient && part.path().startsWith("recipient.")) out.append("...");
             else {
                 JsonNode value = RuleExpression.read(context, part.path());
                 String format = part.format();

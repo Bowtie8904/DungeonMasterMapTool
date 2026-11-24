@@ -154,25 +154,36 @@ export async function openAutomationRestDialog(actorId: string, kind: RestKind,
         detail.replaceChildren();
         const selected = select.value === '' ? undefined : offer.moves[Number(select.value)];
         if (!selected) return;
-        if (selected.description) detail.append(el('p', {}, selected.description));
+        const selection = selected.targetSelection;
+        const targetSpecificMove = selection?.cardinality === 'one'
+          && selection.options.some(option => option.moveDescriptor !== undefined);
+        const targetSpecificOptions = selection?.cardinality === 'one'
+          && selection.options.some(option => option.downtimeOptions !== undefined);
+        if (!targetSpecificMove && selected.description) detail.append(el('p', {}, selected.description));
+        const moveDetails = el('div');
         const options = el('div');
-        let optionStart = 0;
-        const showOptions = (descriptors: RuleDescriptor[]) => {
-          options.replaceChildren();
-          row.fields.splice(optionStart);
-          row.readOptions = optionFields(options, descriptors, row.fields, CONTROL_TEXT);
-        };
-        row.readTarget = targetFields(detail, selected.targetSelection, row.fields, CONTROL_TEXT, id => {
-          const selection = selected.targetSelection;
+        let dynamicStart = 0;
+        const showTarget = (id?: string) => {
           const target = selection?.cardinality === 'one' ? selection.options.find(option => option.id === id) : undefined;
-          showOptions(target?.downtimeOptions ?? selected.options);
-        });
-        row.readInputs = inputFields(detail, selected.inputs ?? [], row.fields, CONTROL_TEXT);
-        optionStart = row.fields.length;
-        const targetSpecific = selected.targetSelection?.cardinality === 'one'
-          && selected.targetSelection.options.some(option => option.downtimeOptions !== undefined);
-        showOptions(targetSpecific ? [] : selected.options);
-        detail.append(options);
+          const move = target?.moveDescriptor ?? selected;
+          row.fields.splice(dynamicStart);
+          moveDetails.replaceChildren();
+          options.replaceChildren();
+          if (targetSpecificMove && target) {
+            moveDetails.append(el('p', {}, move.label));
+            if (move.description) moveDetails.append(el('p', {}, move.description));
+            if (!move.available) moveDetails.append(el('p', { class: 'muted' }, move.reason ?? 'This move is unavailable.'));
+          }
+          if (targetSpecificMove && !target) row.readInputs = () => ({});
+          else if (!move.available) row.readInputs = () => { throw new Error(move.reason ?? 'This move is unavailable.'); };
+          else row.readInputs = inputFields(moveDetails, move.inputs ?? [], row.fields, CONTROL_TEXT);
+          row.readOptions = optionFields(options, target?.downtimeOptions
+            ?? (targetSpecificOptions ? [] : selected.options), row.fields, CONTROL_TEXT);
+        };
+        row.readTarget = targetFields(detail, selection, row.fields, CONTROL_TEXT, showTarget);
+        dynamicStart = row.fields.length;
+        showTarget();
+        detail.append(moveDetails, options);
       };
       select.addEventListener('change', update);
       rows.push(row);

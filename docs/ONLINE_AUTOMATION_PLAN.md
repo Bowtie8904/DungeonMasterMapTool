@@ -165,8 +165,9 @@ selected moves and deferred benefits settle recipient track changes and effect s
 including label-based endings of other sources' effects and transfers from offline or disabled holders, so later
 operations and reactions see updated effects and effect-bound pools.
 Recipient collection and pool mutations in adjustments or deferred benefits remain unsupported.
-The host provides target-specific adjustment descriptors when option availability or labels depend on an ally;
-the browser switches them with the recipient and the transaction rechecks the chosen option.
+The host provides target-specific move and adjustment descriptors when availability, labels or inputs depend on
+an ally; the browser switches them with the recipient and the transaction rechecks the choices. Before selection,
+recipient-dependent text uses `...`, and a move is enabled when at least one offered recipient can use it.
 Short-rest recovery dice can publish generic chat offers; an owned source may edit one die through
 `rest.roll`. The host commits its use, the holder's bounded recovery and reactions, the updated offer and
 the exact-retry receipt atomically. Converted downtime tables also offer each result die and repeat-count die;

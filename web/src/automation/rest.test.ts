@@ -305,6 +305,50 @@ describe('host-authored rest dialog', () => {
     expect(move.options).toEqual([{ sourceInstanceId: 'ruleset:base', ruleId: 'help', bindingId: 'option', inputs: {} }]);
   });
 
+  it('updates ally-specific move labels, availability and inputs', async () => {
+    const described = offer();
+    Object.assign(described.moves[0], { label: 'Guide ...', description: 'Awaiting a recipient', inputs: [],
+      targetSelection: { cardinality: 'one', options: [
+        { id: 'mira', label: 'Mira', version: 'mira-version',
+          moveDescriptor: action('heal', 'button', 'Guide Mira', { description: 'Spend up to 2 Hope.',
+            inputs: [{ id: 'amount', kind: 'integer', label: 'Hope from Mira', min: 1, max: 2, default: 1 }] }),
+          downtimeOptions: [] },
+        { id: 'borin', label: 'Borin', version: 'borin-version',
+          moveDescriptor: action('heal', 'button', 'Guide Borin', { available: false, reason: 'Borin has no Hope.' }),
+          downtimeOptions: [] },
+      ] } });
+    const requests: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      if (!init.body) return Response.json(described);
+      requests.push(String(init.body));
+      return Response.json({ actions: [] });
+    }));
+    await openAutomationRestDialog('hero', 'short', async () => {});
+    const dialog = body.all('dialog')[0], select = dialog.all('select')[0];
+    select.value = '0'; select.change();
+    expect(dialog.text).not.toContain('Awaiting a recipient');
+    const recipients = dialog.all('fieldset').find(fieldset => fieldset.text.includes('Mira'))!.all('input');
+    recipients[0].checked = true; recipients[0].change();
+    expect(dialog.text).toContain('Guide Mira');
+    expect(dialog.text).toContain('Spend up to 2 Hope.');
+    expect(dialog.text).toContain('Hope from Mira');
+    recipients[0].checked = false; recipients[1].checked = true; recipients[1].change();
+    expect(dialog.text).not.toContain('Hope from Mira');
+    expect(dialog.text).toContain('Borin has no Hope.');
+    const go = dialog.all('button').find(button => button.text === 'Complete rest')!;
+    go.click();
+    expect(requests).toHaveLength(0);
+    expect(dialog.text).toContain('Borin has no Hope.');
+    recipients[1].checked = false; recipients[0].checked = true; recipients[0].change();
+    const amount = dialog.all('input').find(input => input.value === '1')!;
+    amount.value = '2';
+    go.click();
+    await settle();
+    const move = JSON.parse(requests[0]).request.moves[0];
+    expect(move.target).toEqual({ recipientId: 'mira', version: 'mira-version' });
+    expect(move.selection.inputs).toEqual({ amount: 2 });
+  });
+
   it('allows corrections after a rejected request without reusing its ID', async () => {
     const requests: string[] = [];
     vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {

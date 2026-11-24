@@ -4385,6 +4385,79 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void targetedRestDescribesMoveForEachRecipientAndChecksItsInputs() throws Exception {
+        installRestRules();
+        Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
+        ObjectNode ruleset = (ObjectNode) MAPPER.readTree(file.toFile());
+        ruleset.withObject("/automation").withArray("rules").add(MAPPER.readTree("""
+                {"id":"ally-guidance","bindings":[{"id":"move","event":"downtime.move","surface":"downtime","mode":"button",
+                   "restMove":{"id":"ally-guidance","kind":"short","ally":true},
+                   "targetSelection":{"cardinality":"one","scope":"activeCharacters","excludeSource":true}}],
+                 "when":{"gt":[{"read":"recipient.hope.value"},0]},
+                 "inputs":[{"id":"amount","kind":"integer","min":1,"max":{"read":"recipient.hope.value"},
+                            "label":"Hope from {recipient.name}","default":1}],
+                 "do":[{"op":"resource.spend","pool":"recipient.hope","amount":{"read":"input.amount"}},
+                       {"op":"track.clear","track":"recipient.hp","amount":{"read":"input.amount"}}],
+                 "ui":{"label":"Guide {recipient.name}","description":"Spend up to {recipient.hope.value} Hope.",
+                       "unavailable":"{recipient.name} has no Hope."}}
+                """));
+        java.nio.file.Files.writeString(file, ruleset.toString());
+        addRestParty();
+        ObjectNode miraSheet = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        miraSheet.withObject("/hope").put("on", 2);
+        store.saveSheet(campaign.getId(), "mira", miraSheet.toString());
+        String owner = cookie();
+        var described = restHttp(owner, "resting", "short", null);
+        assertEquals(200, described.statusCode(), described.body());
+        JsonNode rest = MAPPER.readTree(described.body());
+        JsonNode move = restDescriptor(rest.path("moves"), "ally-guidance");
+        assertTrue(move.path("available").asBoolean());
+        assertEquals("Guide ...", move.path("label").asText());
+        JsonNode mira = null, borin = null;
+        for (JsonNode target : move.at("/targetSelection/options")) {
+            if ("mira".equals(target.path("id").asText())) mira = target;
+            if ("borin".equals(target.path("id").asText())) borin = target;
+        }
+        assertNotNull(mira);
+        assertNotNull(borin);
+        assertEquals("Guide mira", mira.at("/moveDescriptor/label").asText());
+        assertEquals("Spend up to 2 Hope.", mira.at("/moveDescriptor/description").asText());
+        assertEquals("Hope from mira", mira.at("/moveDescriptor/inputs/0/label").asText());
+        assertEquals(2, mira.at("/moveDescriptor/inputs/0/max").asInt());
+        assertTrue(mira.at("/moveDescriptor/available").asBoolean());
+        assertFalse(borin.at("/moveDescriptor/available").asBoolean());
+        assertEquals("borin has no Hope.", borin.at("/moveDescriptor/reason").asText());
+        assertFalse(mira.path("moveDescriptor").has("targetSelection"));
+
+        String beforeSource = store.loadSheet(campaign.getId(), "resting");
+        String beforeMira = store.loadSheet(campaign.getId(), "mira");
+        ObjectNode invalid = restRequest(rest, "invalid-ally-guidance");
+        targetRestMove(invalid, rest, "ally-guidance", "mira")
+                .withObject("/selection").putObject("inputs").put("amount", 3);
+        var rejected = restHttp(owner, "resting", null, invalid.toString());
+        assertEquals(400, rejected.statusCode(), rejected.body());
+        assertEquals(beforeSource, store.loadSheet(campaign.getId(), "resting"));
+        assertEquals(beforeMira, store.loadSheet(campaign.getId(), "mira"));
+
+        ObjectNode request = restRequest(rest, "ally-guidance");
+        targetRestMove(request, rest, "ally-guidance", "mira")
+                .withObject("/selection").putObject("inputs").put("amount", 2);
+        var completed = restHttp(owner, "resting", null, request.toString());
+        assertEquals(200, completed.statusCode(), completed.body());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "mira"));
+        assertEquals(0, saved.at("/hope/on").asInt());
+        assertEquals(2, saved.at("/hp/on").asInt());
+        assertEquals(completed.body(), restHttp(owner, "resting", null, request.toString()).body());
+
+        campaign.getActors().removeIf(actor -> List.of("mira", "borin").contains(actor.getId()));
+        var empty = restHttp(owner, "resting", "short", null);
+        assertEquals(200, empty.statusCode(), empty.body());
+        JsonNode emptyMove = restDescriptor(MAPPER.readTree(empty.body()).path("moves"), "ally-guidance");
+        assertFalse(emptyMove.path("available").asBoolean());
+        assertTrue(emptyMove.at("/targetSelection/options").isEmpty());
+    }
+
+    @Test
     void targetedRestSettlesCapacityAndLinkedReservesAcrossAllMovePhases() throws Exception {
         installRestRules();
         Path file = compendiumDir.resolve("rules").resolve("ruleset.json");
