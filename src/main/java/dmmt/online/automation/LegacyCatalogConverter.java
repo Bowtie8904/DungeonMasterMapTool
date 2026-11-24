@@ -31,7 +31,7 @@ public final class LegacyCatalogConverter {
     private static final List<String> FAMILIES = List.of("actions", "rollOptions", "rollTriggers", "conditionalRollTriggers", "mitigation");
     private static final Set<String> BLOCK_FIELDS = Set.of("actions", "reloading", "uses", "modifiers", "resources", "rollOptions", "rollTriggers",
             "conditionalRollTriggers", "mitigation", "spellcastDifficulty", "automaticRestUse", "automaticRestUseOnAttempt",
-            "damage", "alternateProfiles", "damageTypeChoice", "rest", "restReroll", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions", "conditionalRollOptions", "conditionalMitigation",
+            "damage", "alternateProfiles", "damageTypeChoice", "rest", "restReroll", "attach", "grantsFeatures", "groupGrantedFeatures", "channelBenefit", "conditionalModifiers", "conditionalActions",             "conditionalRollOptions", "conditionalMitigation", "elementChoice", "stances",
             "hopeReward", "classResourceOnly", "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "zeroHopeClearArmor",
             "overflowHope", "criticalMelee", "deathMove", "manual", "creation", "usesOverrides", "effectCounters", "lunarPhases", "hideSpellcast", "companion", "companionTraining", "conditionalDamageRewards", "experienceRefund", "partyDowntime", "requirement", "unarmoredBase", "ignoreWeaponBurden", "unarmedWeapon", "spellcastSuccessSteps");
     private static final Set<String> DEATH_KINDS = Set.of("hopeBonus", "hopeSpend", "mask", "spectral", "egg", "battleHardened",
@@ -48,7 +48,7 @@ public final class LegacyCatalogConverter {
             "usesSource", "endEffect", "hostOwned", "consumeItem", "quantity", "proficiency", "hopeDie", "diceResource", "condition", "loadoutDomain",
             "required", "traitValue", "multiplier", "allResourceDice", "steps", "damageDie", "diceByLevel", "diceByFeature", "diceConditions", "magicOnly", "weaponRanges",
             "ignoreDisadvantage", "matchingDice", "resourceMultiplier", "input", "experience", "derivedProficiency", "traitChoices", "chooseTrait", "maximizeDie", "requiresRollOutcome", "combo", "secondaryWeaponDie", "linkedDamageTrait", "advantageDie",
-            "magicDamage", "dieSizes", "fearDie", "resourceEmpty", "requiresResource", "expendOn", "ownWeapon", "effectValue");
+            "magicDamage", "dieSizes", "fearDie", "resourceEmpty", "requiresResource", "expendOn", "ownWeapon", "effectValue", "requiresFeature");
     private static final Set<String> TRIGGER_FIELDS = Set.of("id", "label", "description", "on", "cost", "reroll", "when", "outcome",
             "audience", "damage", "sendRoll", "report", "requiresEffect", "excludesEffect", "weaponRange", "failedOnly", "excludeRolls", "die", "uses",
             "usesSource", "steps", "criticalOnly", "weaponAttack", "endEffect", "successIfKnown", "difficulty", "exclusiveRollGroup", "hostOwned",
@@ -73,7 +73,7 @@ public final class LegacyCatalogConverter {
             "excludeSourceActor", "hostOwned", "selectAmount", "resourceRoll", "hopeDice", "layerRoll", "deferSourceUse", "timing", "sendRoll", "chatBenefits", "allowSourceOwner", "benefitsPerAmount",
             "channel", "aura", "loadoutDomain", "requiresZeroHope", "check", "choices", "minimumHope", "keepItem", "portions", "refreshUses", "transferHope", "downtime", "table",
             "hostRollAction", "bloodAutomation", "castTokens", "patronDice", "witchAction", "requiresCompanion", "specialAction", "codexSwap", "spendFavor",
-            "costConditions", "refocus", "chooseEffects", "channelRawPower");
+            "costConditions", "refocus", "chooseEffects", "channelRawPower", "requiresFeature");
     private static final Set<String> BENEFIT_FIELDS = Set.of("id", "label", "steps", "exclusiveClaim", "featureAction", "cost", "report",
             "sourceOnly", "transferStress");
     private static final Set<String> EFFECT_FIELDS = Set.of("name", "kind", "until", "text", "modifiers",
@@ -338,8 +338,21 @@ public final class LegacyCatalogConverter {
         for (String family : families) {
             JsonNode list = legacy.path(family);
             String base = GATED_FAMILIES.getOrDefault(family, family);
-            for (int i = 0; i < list.size(); i++) queue.add(new Nested(base, list.get(i), path + "/" + family + "/" + i));
+            for (int i = 0; i < list.size(); i++) {
+                JsonNode entry = list.get(i);
+                if ("actions".equals(family) && entry.has("shiftStance")) entry = shiftStance(entry, legacy.path("stances"), path + "/actions/" + i, p);
+                if (entry != null) queue.add(new Nested(base, entry, path + "/" + family + "/" + i));
+            }
         }
+        if (legacy.has("elementChoice")) {
+            ObjectNode choice = elementChoice(legacy.get("elementChoice"), path + "/elementChoice", p);
+            if (choice != null) {
+                choice.put("id", unique(choice.path("id").asText(), ruleIds));
+                rules.add(choice);
+            }
+        }
+        if (legacy.has("stances") && !legacy.path("actions").toString().contains("\"shiftStance\""))
+            p.add(path + "/stances", "Stances need a shiftStance action.");
         if (legacy.has("rest")) queue.add(new Nested("rest", legacy.get("rest"), path + "/rest"));
         if (legacy.has("creation")) queue.add(new Nested("creation", legacy.get("creation"), path + "/creation"));
         JsonNode death = legacy.path("deathMove");
@@ -1282,14 +1295,66 @@ public final class LegacyCatalogConverter {
     }
 
     /**
+     * {@code elementChoice}: a persisted, actor-scoped {@code choices.element} set by a sheet button; choosing again replaces it.
+     */
+    private static ObjectNode elementChoice(JsonNode names, String path, Problems p) {
+        if (!names.isArray() || names.isEmpty() || names.size() > 16) { p.add(path, "Expected 1-16 element names."); return null; }
+        ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", "choose-element");
+        rule.putArray("bindings").addObject().put("id", "sheet").put("event", "action.request").put("surface", "sheet").put("mode", "button");
+        ObjectNode pick = rule.putArray("inputs").addObject().put("id", "element").put("kind", "choice").put("label", "Element").put("count", 1);
+        ArrayNode options = pick.putArray("options");
+        Set<String> ids = new HashSet<>();
+        for (int i = 0; i < names.size(); i++) {
+            if (!names.get(i).isTextual() || names.get(i).asText().isBlank() || names.get(i).asText().length() > 64) { p.add(path + "/" + i, "Expected an element name."); return null; }
+            options.addObject().put("id", unique(slug(names.get(i).asText()), ids)).put("label", escape(names.get(i).asText()));
+        }
+        rule.putArray("do").addObject().put("op", "choice.set").put("key", "element").set("value", read("input.element"));
+        rule.putObject("ui").put("label", "Choose element").put("report", "{source.name}: element chosen.");
+        return rule;
+    }
+
+    /**
+     * A {@code shiftStance} action becomes a one-of choice over the block's stances. Starting a stance replaces any other
+     * stance (shared effect group), and a stance ends on Severe damage or when the last Hit Point is marked.
+     */
+    private static JsonNode shiftStance(JsonNode action, JsonNode stances, String path, Problems p) {
+        if (!action.path("shiftStance").asBoolean(false) || !stances.isArray() || stances.isEmpty()) {
+            p.add(path + "/shiftStance", "Expected true and a list of stances on the same feature.");
+            return null;
+        }
+        ObjectNode converted = ((ObjectNode) action.deepCopy());
+        converted.remove("shiftStance");
+        ArrayNode options = RuleJson.JSON.createArrayNode();
+        for (int i = 0; i < stances.size(); i++) {
+            JsonNode stance = stances.get(i);
+            String at = path.replaceFirst("/actions/\\d+$", "/stances/" + i);
+            p.onlyFields(stance, at, Set.of("name", "tier", "chooseTrait", "effect"));
+            if (!stance.path("name").isTextual() || !stance.path("tier").isInt() || !stance.path("effect").isObject()) { p.add(at, "Expected a name, tier and effect."); continue; }
+            ObjectNode effect = (ObjectNode) stance.get("effect").deepCopy();
+            effect.put("group", "stance");
+            effect.put("endOnSourceSevere", true);
+            ObjectNode option = options.addObject().put("id", slug(stance.path("name").asText())).put("label", stance.path("name").asText())
+                    .put("tier", stance.path("tier").asInt()).put("stance", true);
+            if (stance.path("chooseTrait").asBoolean(false)) {
+                option.put("chooseTrait", true);
+                ObjectNode bonus = effect.putArray("rollOptions").addObject().put("id", "trait-damage").put("label", stance.path("name").asText() + ": trait bonus")
+                        .put("roll", "damage").put("required", true).put("value", "@trait");
+            }
+            option.set("effect", effect);
+        }
+        converted.putObject("chooseEffects").put("count", 1).set("options", options);
+        return converted;
+    }
+
+    /**
      * {@code chooseEffects}: the player picks {@code count} distinct options and each starts its own declared effect.
      * A {@code chooseTrait} option is expanded to one option per trait that share a choice group, so one trait is
      * never picked twice, and its effect modifies that trait.
      */
     private static void chooseEffects(JsonNode choose, String path, Problems p, ObjectNode effects, ObjectNode rule, ArrayNode steps) {
         JsonNode list = choose.path("options");
-        if (!choose.path("count").isInt() || choose.path("count").asInt() < 1 || !list.isArray() || list.isEmpty() || list.size() > 8) {
-            p.add(path, "Expected a count and up to 8 options.");
+        if (!choose.path("count").isInt() || choose.path("count").asInt() < 1 || !list.isArray() || list.isEmpty() || list.size() > 24) {
+            p.add(path, "Expected a count and up to 24 options.");
             return;
         }
         if (rule.has("inputs")) { p.add(path, "Choosing effects cannot share an action with another input."); return; }
@@ -1301,7 +1366,7 @@ public final class LegacyCatalogConverter {
         for (int i = 0; i < list.size(); i++) {
             JsonNode option = list.get(i);
             String at = path + "/options/" + i;
-            p.onlyFields(option, at, Set.of("id", "label", "effect", "chooseTrait"));
+            p.onlyFields(option, at, Set.of("id", "label", "effect", "chooseTrait", "tier", "stance"));
             String id = option.path("id").asText("");
             if (!ID.matcher(id).matches() || !option.path("effect").isObject() || !option.path("label").isTextual()) { p.add(at, "Expected an id, label and effect."); continue; }
             boolean perTrait = option.path("chooseTrait").asBoolean(false);
@@ -1312,11 +1377,16 @@ public final class LegacyCatalogConverter {
                     effect.put("name", effect.path("name").asText() + " (" + trait + ")");
                     for (JsonNode modifier : effect.path("modifiers"))
                         if (modifier instanceof ObjectNode object && "trait.@choice".equals(object.path("stat").asText())) object.put("stat", "trait." + trait);
+                    for (JsonNode bonus : effect.path("rollOptions"))
+                        if (bonus instanceof ObjectNode object && "@trait".equals(object.path("value").asText())) object.put("value", "@" + trait.toLowerCase(java.util.Locale.ROOT));
                 }
                 ObjectNode entry = options.addObject().put("id", optionId).put("label", escape(option.path("label").asText() + (perTrait ? ": " + trait : "")));
                 if (perTrait) entry.put("group", id);
+                if (option.has("tier")) entry.putObject("when").putArray("gte").add(read("actor.stats.tier")).add(option.path("tier").asInt());
                 String declared = declareEffect(effect, at + "/effect", p, effects);
                 if (declared == null) continue;
+                if (option.path("stance").asBoolean(false))
+                    effects.with(declared).putObject("endWhen").putArray("gte").add(read("actor.hp.marked")).add(read("actor.hp.capacity"));
                 ObjectNode start = RuleJson.JSON.createObjectNode().put("op", "effect.start").put("effect", declared).put("target", "actor");
                 start.putObject("if").putArray("includes").add(read("input.pick")).add(optionId);
                 starts.add(start);
@@ -1501,6 +1571,11 @@ public final class LegacyCatalogConverter {
             ObjectNode pluck = RuleJson.JSON.createObjectNode();
             pluck.putArray("pluck").add(read("actor.effects")).add("label");
             when.addObject().putArray("includes").add(pluck).add(legacy.path("requiresEffect").asText());
+        }
+        if (legacy.has("requiresFeature")) {
+            if (!legacy.path("requiresFeature").isTextual() || legacy.path("requiresFeature").asText().isBlank())
+                p.add(path + "/requiresFeature", "Expected a feature name.");
+            else when.add(hasFeature(legacy.path("requiresFeature").asText()));
         }
         if (legacy.has("excludesEffect")) {
             ObjectNode pluck = RuleJson.JSON.createObjectNode();
@@ -6354,22 +6429,47 @@ public final class LegacyCatalogConverter {
     /** An effect that adds weapon damage dice: each Proficiency-scaled weapon damage roll gains the dice while it is active. */
     private static List<ObjectNode> effectDamage(JsonNode legacy, String path, Problems p) {
         JsonNode damage = legacy.path("damage");
-        p.onlyFields(damage, path, Set.of("extraDice", "dropLowest", "proficiencyOnly"));
-        int extra = damage.path("extraDice").asInt(-1);
-        if (!damage.path("extraDice").isInt() || extra < 1 || extra > 32) { p.add(path + "/extraDice", "Expected 1-32 extra dice."); return List.of(); }
-        if (damage.path("dropLowest").asInt(0) != 0) { p.add(path + "/dropLowest", "Effects cannot drop damage dice."); return List.of(); }
-        if (!damage.path("proficiencyOnly").asBoolean(false)) { p.add(path + "/proficiencyOnly", "Effect damage dice apply only to Proficiency-scaled weapons."); return List.of(); }
+        p.onlyFields(damage, path, Set.of("extraDice", "dropLowest", "proficiencyOnly", "maximumOnes"));
+        int extra = damage.path("extraDice").asInt(0), drop = damage.path("dropLowest").asInt(0);
+        boolean ones = damage.path("maximumOnes").asBoolean(false);
+        if (!damage.path("extraDice").isInt() && damage.has("extraDice") || extra < 0 || extra > 32 || drop < 0 || drop > 32 || extra == 0 && drop == 0 && !ones
+                || damage.has("dropLowest") && !damage.path("dropLowest").isInt()) { p.add(path, "Expected extra dice, discarded dice or maximumOnes."); return List.of(); }
         String effect = legacy.path("effect").asText();
         ObjectNode rule = RuleJson.JSON.createObjectNode().put("id", slug(effect) + "-damage");
         rule.putArray("bindings").addObject().put("id", "use").put("event", "roll.finished").put("surface", "roll").put("mode", "automatic");
         ArrayNode when = RuleJson.JSON.createArrayNode();
         when.addObject().putArray("eq").add(read("event.check.kind")).add("damage");
-        weaponDiceConditions(when);
+        when.add(hasFact("event.check.weaponSourceId"));
+        if (damage.path("proficiencyOnly").asBoolean(false))
+            when.addObject().putArray("eq").add(read("event.check.fixedDice")).add(false);
         when.add(labelPresent(effect));
         applyWhen(rule, when);
         ArrayNode steps = rule.putArray("do");
-        JsonNode roll = addWeaponDice(steps, read("event.roll"), extra);
-        steps.addObject().put("op", "roll.publish").set("roll", roll);
+        JsonNode[] from = { read("event.roll") };
+        int[] slot = { 0 };
+        java.util.function.BiFunction<String, ObjectNode, ObjectNode> edit = (op, where) -> {
+            String dice = "dice" + (++slot[0]);
+            ObjectNode select = steps.addObject().put("op", "roll.selectDice");
+            select.set("from", from[0].deepCopy());
+            select.set("where", where);
+            select.put("as", dice);
+            ObjectNode step = steps.addObject().put("op", op);
+            step.set("from", from[0].deepCopy());
+            step.set("dice", read("result." + dice));
+            step.put("as", "edit" + slot[0]);
+            from[0] = read("result.edit" + slot[0]);
+            return step;
+        };
+        if (extra > 0) edit.apply("roll.addDicePerPool", weaponDiceWhere(read("event.check.weaponSourceId"))).put("count", extra);
+        if (drop > 0) edit.apply("roll.dropLowestPerPool", weaponDiceWhere(read("event.check.weaponSourceId"))).put("count", drop);
+        if (ones) {
+            ObjectNode where = RuleJson.JSON.createObjectNode();
+            ArrayNode all = where.putArray("and");
+            all.add(weaponDiceWhere(read("event.check.weaponSourceId")));
+            all.addObject().putArray("eq").add(read("die.face")).add(1);
+            edit.apply("roll.setFaces", where).set("face", read("die.sides"));
+        }
+        steps.addObject().put("op", "roll.publish").set("roll", from[0]);
         rule.putObject("ui").put("label", escape(effect));
         return List.of(rule);
     }

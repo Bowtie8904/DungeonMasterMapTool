@@ -2627,6 +2627,24 @@ class LegacyCatalogConverterTest {
     }
 
     @Test
+    void elementChoiceAndStancesConvertToPersistedChoiceAndExclusiveEffects() throws Exception {
+        var result = LegacyCatalogConverter.convert(catalog("""
+                {"id":"attune","name":"Attune","automation":{"elementChoice":["Air","Fire"]}},
+                {"id":"brawl","name":"Brawl","automation":{"stances":[
+                  {"name":"Aggressive","tier":2,"effect":{"name":"Aggressive","kind":"buff","until":"scene","damage":{"extraDice":1,"dropLowest":1}}},
+                  {"name":"Exacting","tier":4,"effect":{"name":"Exacting","kind":"buff","until":"scene","damage":{"extraDice":0,"dropLowest":0,"maximumOnes":true}}}],
+                 "actions":[{"id":"shift","label":"Shift","shiftStance":true,"requiresFeature":"Flow State"}]}}"""));
+        assertEquals(2, result.converted(), result.diagnostics().toString());
+        String element = result.catalog().at("/entries/0/automation").toString();
+        assertTrue(element.contains("choice.set"), element);
+        String stance = result.catalog().at("/entries/1/automation").toString();
+        assertTrue(stance.contains("dropLowestPerPool") && stance.contains("setFaces"), stance);
+        assertTrue(stance.contains("Flow State"), stance);
+        program(result, 0);
+        program(result, 1);
+    }
+
+    @Test
     void containsDieReadsEveryFaceOfTheFinishedRollAndRollSectionsBecomeGroups() throws Exception {
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"redirect","name":"Redirect","automation":{"rollTriggers":[{"id":"redirect","label":"Redirect","on":"any",

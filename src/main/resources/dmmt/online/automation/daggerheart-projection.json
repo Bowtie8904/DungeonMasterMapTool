@@ -55,6 +55,7 @@
     "pools": { "kind": "engine", "path": "automationState.pools", "default": {} },
     "effects": { "kind": "engine", "path": "automationState.effects", "default": [] },
     "conditions": { "kind": "engine", "path": "automationState.conditions", "default": [] },
+    "choices": { "kind": "engine", "path": "automationState.choices", "default": {} },
     "companions": { "kind": "engine", "path": "automationState.companions", "default": [] }
   },
   "poolTracks": [

@@ -1286,6 +1286,26 @@ public final class RuleRuntime {
                         + RuleExpression.number(eval(op.path("by"), context), "/state/" + slot), "/state/" + slot);
                 state.set(slot, result.deepCopy());
             }
+            case "choice.set", "choice.clear" -> {
+                ObjectNode actor = RuleJson.object(context.get("actor"), "/actor");
+                ObjectNode choices = actor.path("choices").isObject() ? (ObjectNode) actor.get("choices") : actor.putObject("choices");
+                String key = op.path("key").asText();
+                if ("choice.clear".equals(kind)) {
+                    choices.remove(key);
+                    result = RuleJson.JSON.getNodeFactory().booleanNode(true);
+                } else {
+                    JsonNode value = eval(op.path("value"), context);
+                    boolean text = value.isTextual() && !value.asText().isBlank() && value.asText().length() <= 64;
+                    if (value.isArray() && !value.isEmpty() && value.size() <= 16) {
+                        text = true;
+                        for (JsonNode member : value) text &= member.isTextual() && !member.asText().isBlank() && member.asText().length() <= 64;
+                    }
+                    if (!text) throw RuleJson.error("/value", "A choice is 1-64 characters of text or a list of up to 16 such texts.");
+                    if (!choices.has(key) && choices.size() >= 32) throw RuleJson.error("/key", "An actor keeps at most 32 choices.");
+                    choices.set(key, value.deepCopy());
+                    result = value;
+                }
+            }
             case "value" -> result = eval(op.path("value"), context);
             case "roll.resolve" -> {
                 if (preview) throw new Unavailable("randomPreview", "This preview requires a committed roll; no dice were rolled.");

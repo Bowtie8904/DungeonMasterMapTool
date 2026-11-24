@@ -49,6 +49,8 @@ public final class RuleCompiler {
             Map.entry("state.set", List.of("slot", "value")),
             Map.entry("state.increment", List.of("slot", "by")),
             Map.entry("flag.set", List.of("flag", "value")),
+            Map.entry("choice.set", List.of("key", "value")),
+            Map.entry("choice.clear", List.of("key")),
             Map.entry("value", List.of("value")),
             Map.entry("roll.resolve", List.of("plan", "metadata")),
             Map.entry("roll.capture", List.of("from")),
@@ -1725,6 +1727,9 @@ public final class RuleCompiler {
                     if (!requiredKind.equals(pools.path(pool).path("kind").asText()))
                         throw RuleJson.error(path + "/pool", "Operation requires a " + requiredKind + " pool.");
                 }
+            } else if ("key".equals(field) && Set.of("choice.set", "choice.clear").contains(op)) {
+                if (!RuleJson.text(value, path + "/key").matches("[a-z][a-z0-9-]{0,31}"))
+                    throw RuleJson.error(path + "/key", "Expected a lowercase choice key of at most 32 characters.");
             } else if ("flag".equals(field)) {
                 String target = RuleJson.text(value, path + "/flag");
                 if (!target.matches("(actor|recipient)\\.[a-zA-Z][a-zA-Z0-9_-]*"))
