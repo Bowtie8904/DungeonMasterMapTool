@@ -1387,8 +1387,14 @@ public final class AutomationHost {
                     actor = actor(pack, working, state, event);
                 }
                 ObjectNode view = RuleRuntime.projectionContext(program, context(state, element, actor, event));
-                if (RuleExpression.bool(RuleExpression.evaluate(definition.getValue().get("endWhen"), view),
-                        "/effects/" + definition.getKey() + "/endWhen"))
+                boolean holds;
+                try {
+                    holds = RuleExpression.bool(RuleExpression.evaluate(definition.getValue().get("endWhen"), view),
+                            "/effects/" + definition.getKey() + "/endWhen");
+                } catch (IllegalArgumentException | RuleRuntime.Unavailable unreadable) {
+                    continue; // the source sheet lacks a fact the condition reads; its own execution reports that
+                }
+                if (holds)
                     ends.add(new SingleHolderEffect(actorId, element.instanceId(),
                             program.sourceId() + "#" + definition.getKey(), actorId));
             }

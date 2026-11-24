@@ -37,7 +37,10 @@ sheets and reports together; retrying the same request does not apply the benefi
 an acceptance group on the `claim.accept` chat surface of the same active source. Generic feature-use restoration
 instead creates a recipient-specific offer: its owner chooses a currently spent use in chat, and the host saves
 the choice and receipt atomically. Catalog-backed inventory grants are also supported; unsupported claim commands
-still reject without spending the claim.
+still reject without spending the claim. Offers made by roll results and sheet actions appear in chat the same way, and
+another player accepts them there for their own character; a claim may also revise the offering roll, which posts the
+revised roll. An ally under a Zone of Protection-style effect has the caster's shared pool applied and written back
+to the caster when they take damage.
 Ending a scene or starting a new session with a format-2 pack applies its automatic rules, limit and pool
 resets, and timed effect expiry to saved active characters, including offline ones, in a single campaign commit.
 Reset expressions use the same host-generated actor, table and session facts as lifecycle rules. Pool reset

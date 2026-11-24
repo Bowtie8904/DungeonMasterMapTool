@@ -1010,10 +1010,9 @@ class AutomationHostTest {
         ObjectNode selection = ((ObjectNode) request("claim", 1, "f-steady", "claim").requiredAt("/selections/0"))
                 .put("bindingId", "use");
         var ledger = new RuleDispatcher.ClaimLedger(0, Set.of());
-        var error = assertThrows(IllegalArgumentException.class, () -> HOST.stageClaim(pack, sheet, sheet, event,
-                "f-steady", "reward", "actor", "self", selection, 1, 1, 0, ledger, null));
-        assertTrue(error.getMessage().contains("cannot publish or revise rolls"), error.getMessage());
-        assertEquals(before, sheet);
+        ObjectNode staged = HOST.stageClaim(pack, sheet, sheet, event,
+                "f-steady", "reward", "actor", "self", selection, 1, 1, 0, ledger, null);
+        assertTrue(staged.toString().contains("claim-extra"), staged.toString());
     }
 
     @Test
