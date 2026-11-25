@@ -60,6 +60,9 @@
         "severity": 1,
         "cost": {
          "hope": 1
+        },
+        "texts": {
+         "option": "Spend Hope instead of an Armor Slot"
         }
        }
       ]
@@ -128,6 +131,9 @@
         "hp": -1,
         "cost": {
          "stress": 1
+        },
+        "texts": {
+         "option": "Mark 1 fewer Hit Point from Severe damage"
         }
        }
       ]
@@ -182,7 +188,7 @@
        {
         "id": "thick-skin",
         "label": "Thick Skin",
-        "description": "Mark 2 Stress instead of marking a Hit Point.",
+        "description": "Only against Minor damage.",
         "when": {
          "severity": [
           "minor"
@@ -191,6 +197,9 @@
         "replaceHp": true,
         "cost": {
          "stress": 2
+        },
+        "texts": {
+         "option": "Mark 2 Stress instead of a Hit Point"
         }
        }
       ]
@@ -218,13 +227,15 @@
        {
         "id": "fortitude",
         "label": "Increased Fortitude",
-        "description": "Resistance to incoming physical damage.",
         "when": {
          "type": "physical"
         },
         "halve": true,
         "cost": {
          "hope": 3
+        },
+        "texts": {
+         "option": "Halve incoming physical damage"
         }
        }
       ]
@@ -277,7 +288,10 @@
         "cost": {
          "stress": 1
         },
-        "description": "Use only on a reaction roll: mark 1 Stress to gain advantage."
+        "description": "Reaction rolls only.",
+        "texts": {
+         "option": "Advantage on a reaction roll"
+        }
        }
       ]
      }
@@ -346,7 +360,11 @@
          "kind": "buff",
          "until": "scene",
          "text": "Your primary weapon is ablaze: +1d6 damage and bright light."
-        }
+        },
+        "texts": {
+         "option": "Wreathe your weapon in flame: +1d6 damage"
+        },
+        "description": "Lasts until the end of the scene."
        }
       ]
      }
@@ -443,7 +461,10 @@
         "cost": {
          "stress": 1
         },
-        "description": "Successful Melee attack; resolve knockback manually."
+        "description": "Successful Melee attack; resolve knockback manually.",
+        "texts": {
+         "option": "Kick for +2d6 damage and knock back"
+        }
        }
       ]
      }
@@ -626,7 +647,10 @@
         "requiresEffect": "Retracted",
         "defaultOn": true,
         "advantage": "disadvantage",
-        "description": "Disadvantage on action rolls."
+        "description": "You have disadvantage on action rolls while retracted.",
+        "texts": {
+         "option": "Retract into your shell"
+        }
        }
       ],
       "mitigation": [
@@ -635,11 +659,14 @@
         "label": "Retracted",
         "requiresEffect": "Retracted",
         "defaultOn": true,
-        "description": "While retracted into your shell you have resistance to physical damage.",
+        "description": "Only while retracted.",
         "when": {
          "type": "physical"
         },
-        "halve": true
+        "halve": true,
+        "texts": {
+         "option": "Resist physical damage while in your shell"
+        }
        }
       ]
      }
@@ -713,7 +740,9 @@
         "roll": "trait:Agility",
         "defaultOn": true,
         "ignoreDisadvantage": true,
-        "description": "Ignore disadvantage on Agility rolls."
+        "texts": {
+         "option": "Ignore disadvantage on Agility rolls"
+        }
        }
       ]
      }
@@ -871,7 +900,9 @@
         "label": "Dread Visage",
         "roll": "action",
         "advantage": "advantage",
-        "description": "You have advantage on rolls to intimidate hostile creatures."
+        "texts": {
+         "option": "Advantage to intimidate hostile creatures"
+        }
        }
       ]
      }
@@ -948,7 +979,10 @@
         "cost": {
          "hope": 1
         },
-        "description": "Successful attack against a target within Melee range."
+        "description": "Successful attack against a target within Melee range.",
+        "texts": {
+         "option": "Gore the target for +1d6 damage"
+        }
        }
       ]
      }
@@ -1018,7 +1052,10 @@
         "label": "Natural Climber",
         "roll": "trait:Agility",
         "advantage": "advantage",
-        "description": "Advantage for balancing and climbing."
+        "description": "Agility rolls only.",
+        "texts": {
+         "option": "Advantage on balancing and climbing"
+        }
        }
       ]
      }
@@ -1178,6 +1215,9 @@
         "hp": -1,
         "cost": {
          "stress": 1
+        },
+        "texts": {
+         "option": "Mark 1 fewer Hit Point from Major damage"
         }
        }
       ]
@@ -1193,7 +1233,10 @@
         "label": "Hunter's Nose",
         "roll": "trait:Instinct",
         "advantage": "advantage",
-        "description": "Only for rolls involving smelling."
+        "description": "Instinct rolls only.",
+        "texts": {
+         "option": "Advantage on rolls involving smelling"
+        }
        }
       ]
      }
@@ -1262,7 +1305,10 @@
         "cost": {
          "stress": 1
         },
-        "description": "Successful Melee attack; resolve knockback manually."
+        "description": "Successful Melee attack; resolve knockback manually.",
+        "texts": {
+         "option": "Kick for +2d6 damage and knock back"
+        }
        }
       ]
      }

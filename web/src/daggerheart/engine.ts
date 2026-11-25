@@ -1071,6 +1071,13 @@ export function rollOptionText(s: Pick<AvailableRollOption, 'source' | 'origin' 
   return template ? formatText(template, actionTextVars({ source: s.source, origin: s.origin, action: s.option })) : rollOptionLabel(s);
 }
 
+/** Roll-dialog / mitigation row parts: the bold feature name and the short description shown after it. */
+export function optionRowParts(s: { source: string; origin?: string; option: { label: string; texts?: ActionTexts } }): { name: string; text: string } {
+  const vars = actionTextVars({ source: s.source, origin: s.origin, action: s.option as Pick<ActionDef, 'label'> });
+  const { name, option } = s.option.texts ?? {};
+  return { name: name ? formatText(name, vars) : s.source, text: option ? formatText(option, vars) : s.option.label };
+}
+
 /** Label of an applied roll contribution: `texts.applied` when configured, otherwise the generated source label. */
 export function rollOptionAppliedLabel(s: Pick<AvailableRollOption, 'source' | 'origin' | 'option'>): string {
   const template = s.option.texts?.applied;

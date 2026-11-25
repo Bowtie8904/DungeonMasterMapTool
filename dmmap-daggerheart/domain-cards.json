@@ -199,26 +199,29 @@
            "id": "damage",
            "label": "Avatar of Terror damage",
            "texts": {
-            "option": "{source} - Avatar of Terror damage",
+            "option": "+1d6 damage per Fear in the GM's pool",
             "applied": "{source} - Avatar of Terror damage"
            },
            "roll": "damage",
            "dice": "@feard6",
-           "defaultOn": true
+           "defaultOn": true,
+           "description": "While transformed."
           },
           {
            "id": "maintain",
            "label": "Maintain Avatar of Terror",
            "texts": {
-            "option": "{source} - Maintain Avatar of Terror",
-            "applied": "{source} - Maintain Avatar of Terror"
+            "option": "Spend a Hope to keep your fear-fueled form",
+            "applied": "{source} - Maintain Avatar of Terror",
+            "name": "Avatar of Terror"
            },
            "roll": "action",
            "cost": {
             "hope": 1
            },
            "defaultOn": true,
-           "hostOwned": true
+           "hostOwned": true,
+           "description": "Required before each action roll; otherwise you revert."
           }
          ]
         }
@@ -726,7 +729,10 @@
       "excludeRolls": [
        "spelldamage"
       ],
-      "description": "Successful attack with a Melee weapon."
+      "description": "Successful attack with a Melee weapon.",
+      "texts": {
+       "option": "Add your Strength to damage"
+      }
      }
     ]
    }
@@ -748,6 +754,9 @@
       "traitValue": "Strength",
       "cost": {
        "hope": 1
+      },
+      "texts": {
+       "option": "Add your Strength to a Presence Roll"
       }
      }
     ],
@@ -1067,12 +1076,15 @@
        {
         "id": "deflect",
         "label": "Arcane Deflection: negate attack damage",
-        "description": "Spend 1 Hope to negate damage from an attack targeting you or an ally within Very Close range.",
+        "description": "Once per long rest; an ally must be within Very Close range.",
         "uses": "source",
         "cost": {
          "hope": 1
         },
-        "negate": true
+        "negate": true,
+        "texts": {
+         "option": "Negate an attack's damage to you or a nearby ally"
+        }
        }
       ]
      }
@@ -1418,13 +1430,13 @@
              "id": "attack",
              "label": "Parallela: next attack may hit another target",
              "texts": {
-              "option": "{source} - Parallela: next attack may hit another target",
+              "option": "Next attack may hit one additional target",
               "applied": "{source} - Parallela: next attack may hit another target"
              },
              "roll": "attack",
              "defaultOn": true,
              "endEffect": "Parallela",
-             "description": "Add one target within range whose Difficulty this attack meets; this grants no numerical attack bonus."
+             "description": "Within range, whose Difficulty the attack meets; no numerical bonus."
             }
            ]
           }
@@ -1625,7 +1637,11 @@
              "when": {
               "type": "magic"
              },
-             "negate": true
+             "negate": true,
+             "texts": {
+              "option": "Immune to magic damage"
+             },
+             "description": "Until your next rest."
             }
            ]
           }
@@ -1672,7 +1688,12 @@
            "roll": "attack",
            "advantage": "advantage",
            "defaultOn": true,
-           "endEffect": "Boost attack"
+           "endEffect": "Boost attack",
+           "texts": {
+            "name": "Boost",
+            "option": "Advantage on an aerial attack"
+           },
+           "description": "Boost off an ally within Close range; target within Far range."
           }
          ]
         }
@@ -1691,7 +1712,11 @@
            "dice": "1d10",
            "defaultOn": true,
            "endEffect": "Boost damage",
-           "description": "Only the prepared aerial attack; discard this effect if it misses."
+           "description": "Only the prepared aerial attack; discard this effect if it misses.",
+           "texts": {
+            "name": "Boost",
+            "option": "Add a d10 to the aerial attack's damage"
+           }
           }
          ]
         }
@@ -1740,13 +1765,15 @@
      {
       "id": "brace",
       "label": "Brace",
-      "description": "Mark a Stress to mark an additional Armor Slot.",
       "when": {
        "armor": true
       },
       "armorSlots": 1,
       "cost": {
        "stress": 1
+      },
+      "texts": {
+       "option": "Mark an additional Armor Slot"
       }
      }
     ]
@@ -1811,7 +1838,11 @@
            "defaultOn": true,
            "dice": "2d12",
            "endEffect": "Breaking Blow",
-           "hostOwned": true
+           "hostOwned": true,
+           "texts": {
+            "option": "Next successful attack against the same target deals an extra 2d12"
+           },
+           "description": "After a successful attack."
           }
          ]
         }
@@ -1848,7 +1879,11 @@
            "defaultOn": true,
            "dice": "2d12",
            "endEffect": "Breaking Blow",
-           "hostOwned": true
+           "hostOwned": true,
+           "texts": {
+            "option": "Next successful attack against the same target deals an extra 2d12"
+           },
+           "description": "After a successful attack."
           }
          ]
         }
@@ -2288,7 +2323,10 @@
              "id": "reduce",
              "label": "Tekaira Armored Beetles",
              "passive": true,
-             "severity": 1
+             "severity": 1,
+             "texts": {
+              "option": "Reduce the next damage severity by one"
+             }
             },
             {
              "id": "keep",
@@ -2297,7 +2335,11 @@
               "hope": 1
              },
              "requiresEffect": "Tekaira Armored Beetles",
-             "preserveAfterIncomingDamage": "Tekaira Armored Beetles"
+             "preserveAfterIncomingDamage": "Tekaira Armored Beetles",
+             "texts": {
+              "name": "Tekaira Armored Beetles",
+              "option": "Keep the beetles for later"
+             }
             }
            ]
           }
@@ -2370,23 +2412,27 @@
            "id": "mounted-attack",
            "label": "Mounted on conjured steed",
            "texts": {
-            "option": "{source} - Mounted on conjured steed",
-            "applied": "{source} - Mounted on conjured steed"
+            "option": "-2 to the attack roll while mounted",
+            "applied": "{source} - Mounted on conjured steed",
+            "name": "Conjured Steed"
            },
            "roll": "attack",
            "value": -2,
-           "defaultOn": true
+           "defaultOn": true,
+           "description": "Unselect when dismounted."
           },
           {
            "id": "mounted-damage",
            "label": "Mounted on conjured steed",
            "texts": {
-            "option": "{source} - Mounted on conjured steed",
-            "applied": "{source} - Mounted on conjured steed"
+            "option": "+2 to damage while mounted",
+            "applied": "{source} - Mounted on conjured steed",
+            "name": "Conjured Steed"
            },
            "roll": "damage",
            "value": 2,
-           "defaultOn": true
+           "defaultOn": true,
+           "description": "Unselect when dismounted."
           }
          ]
         }
@@ -2410,23 +2456,27 @@
              "id": "mounted-attack",
              "label": "Mounted on conjured steed",
              "texts": {
-              "option": "{source} - Mounted on conjured steed",
-              "applied": "{source} - Mounted on conjured steed"
+              "option": "-2 to the attack roll while mounted",
+              "applied": "{source} - Mounted on conjured steed",
+              "name": "Conjured Steed"
              },
              "roll": "attack",
              "value": -2,
-             "defaultOn": true
+             "defaultOn": true,
+             "description": "Unselect when dismounted."
             },
             {
              "id": "mounted-damage",
              "label": "Mounted on conjured steed",
              "texts": {
-              "option": "{source} - Mounted on conjured steed",
-              "applied": "{source} - Mounted on conjured steed"
+              "option": "+2 to damage while mounted",
+              "applied": "{source} - Mounted on conjured steed",
+              "name": "Conjured Steed"
              },
              "roll": "damage",
              "value": 2,
-             "defaultOn": true
+             "defaultOn": true,
+             "description": "Unselect when dismounted."
             }
            ],
            "requiresSourceEffect": "Conjured Steed"
@@ -2543,7 +2593,6 @@
      {
       "id": "adamance",
       "label": "Crimson Adamance",
-      "description": "Spend a Hope and mark a Stress instead of marking your last Hit Point.",
       "when": {
        "lastHp": true
       },
@@ -2551,6 +2600,9 @@
       "cost": {
        "hope": 1,
        "stress": 1
+      },
+      "texts": {
+       "option": "Mark a Stress instead of your last Hit Point"
       }
      }
     ]
@@ -2630,7 +2682,10 @@
       "excludeRolls": [
        "spelldamage"
       ],
-      "description": "Use only after a successful weapon attack."
+      "description": "Successful attack with a weapon.",
+      "texts": {
+       "option": "Add your Finesse or Agility to damage"
+      }
      }
     ]
    }
@@ -2715,7 +2770,7 @@
       "id": "fiend",
       "label": "Dark Army fiend",
       "texts": {
-       "option": "{source} - Dark Army fiend",
+       "option": "Add 1d8 damage per fiend spent",
        "applied": "{source} - Dark Army fiend"
       },
       "usesSource": false,
@@ -2742,6 +2797,9 @@
       },
       "cost": {
        "fiends": 1
+      },
+      "texts": {
+       "option": "Reduce damage by 1d8 per fiend spent"
       }
      }
     ]
@@ -2924,14 +2982,15 @@
            "id": "damage",
            "label": "Deathrun damage",
            "texts": {
-            "option": "{source} - Deathrun damage",
+            "option": "Deal damage to each target in turn, removing a die each time",
             "applied": "{source} - Deathrun damage"
            },
            "roll": "damage",
            "weapon": "any",
            "defaultOn": true,
            "deathrun": true,
-           "hostOwned": true
+           "hostOwned": true,
+           "description": "You can't target the same adversary twice."
           }
          ],
          "actions": [
@@ -2981,14 +3040,15 @@
          "id": "damage",
          "label": "Deathrun damage",
          "texts": {
-          "option": "{source} - Deathrun damage",
+          "option": "Deal damage to each target in turn, removing a die each time",
           "applied": "{source} - Deathrun damage"
          },
          "roll": "damage",
          "weapon": "any",
          "defaultOn": true,
          "deathrun": true,
-         "hostOwned": true
+         "hostOwned": true,
+         "description": "You can't target the same adversary twice."
         }
        ],
        "actions": [
@@ -3005,6 +3065,9 @@
          "endEffect": "Deathrun"
         }
        ]
+      },
+      "texts": {
+       "option": "Run through the battlefield and attack every adversary in your path"
       }
      }
     ],
@@ -3038,9 +3101,12 @@
       "label": "Deft Deceiver",
       "roll": "action",
       "advantage": "advantage",
-      "description": "A roll to deceive or trick someone into believing a lie.",
+      "description": "Only for a lie you tell them.",
       "cost": {
        "hope": 1
+      },
+      "texts": {
+       "option": "Advantage to deceive or trick someone"
       }
      }
     ]
@@ -3583,7 +3649,7 @@
          "id": "flying",
          "label": "Action while flying",
          "texts": {
-          "option": "{source} - Action while flying",
+          "option": "Spend a Flight token on an action roll while flying",
           "applied": "{source} - Action while flying"
          },
          "roll": "action",
@@ -3591,7 +3657,8 @@
          "cost": {
           "flight": 1
          },
-         "hostOwned": true
+         "hostOwned": true,
+         "description": "You descend after the last token."
         }
        ]
       }
@@ -3698,26 +3765,29 @@
            "id": "damage",
            "label": "Force of Nature damage",
            "texts": {
-            "option": "{source} - Force of Nature damage",
+            "option": "+10 to damage on a successful attack or Spellcast Roll",
             "applied": "{source} - Force of Nature damage"
            },
            "roll": "damage",
            "value": 10,
-           "defaultOn": true
+           "defaultOn": true,
+           "description": "While transformed."
           },
           {
            "id": "maintain",
            "label": "Maintain Force of Nature",
            "texts": {
-            "option": "{source} - Maintain Force of Nature",
-            "applied": "{source} - Maintain Force of Nature"
+            "option": "Spend a Hope to keep your nature-spirit form",
+            "applied": "{source} - Maintain Force of Nature",
+            "name": "Force of Nature"
            },
            "roll": "action",
            "cost": {
             "hope": 1
            },
            "defaultOn": true,
-           "hostOwned": true
+           "hostOwned": true,
+           "description": "Required before each action roll; otherwise you revert."
           }
          ],
          "rollTriggers": [
@@ -3760,7 +3830,10 @@
       "roll": "damage",
       "dice": "1d6",
       "requiresRollOutcome": "hopeOrCritical",
-      "description": "Primary weapon Melee attack succeeds with Hope; knockback manual."
+      "description": "Primary weapon Melee attack; knockback is resolved manually.",
+      "texts": {
+       "option": "Add a d6 to damage on a success with Hope"
+      }
      }
     ],
     "actions": [
@@ -3883,7 +3956,11 @@
            "id": "frenzied",
            "label": "Frenzied: can't use Armor Slots",
            "passive": true,
-           "armorBlocked": true
+           "armorBlocked": true,
+           "texts": {
+            "option": "Can't mark Armor Slots"
+           },
+           "description": "Ends when no adversaries remain in sight."
           }
          ]
         }
@@ -3975,6 +4052,9 @@
       "severity": 1,
       "cost": {
        "stress": 1
+      },
+      "texts": {
+       "option": "Reduce Severe damage by one threshold"
       }
      }
     ]
@@ -4658,8 +4738,11 @@
      {
       "id": "shield",
       "label": "I Am Your Shield",
-      "description": "Taking the damage for an ally: you can mark any number of Armor Slots.",
-      "armorSlots": "any"
+      "description": "Ally within Very Close range; mark a Stress to step in front.",
+      "armorSlots": "any",
+      "texts": {
+       "option": "Take an ally's damage and mark any number of Armor Slots"
+      }
      }
     ]
    }
@@ -4722,7 +4805,11 @@
            "roll": "action",
            "advantage": "advantage",
            "defaultOn": true,
-           "endEffect": "Inevitable"
+           "endEffect": "Inevitable",
+           "texts": {
+            "option": "Advantage on your next action roll"
+           },
+           "description": "After you fail an action roll."
           }
          ]
         }
@@ -4908,7 +4995,10 @@
            "label": "Invisibility: spend token",
            "roll": "action",
            "defaultOn": true,
-           "description": "Spend one token on the caster's card when this action roll resolves."
+           "description": "The effect ends after the last token.",
+           "texts": {
+            "option": "Spend an Invisibility token on this action roll"
+           }
           }
          ]
         }
@@ -4928,7 +5018,10 @@
       "label": "Invoke Torment: target has full Stress",
       "roll": "damage",
       "multiplier": 2,
-      "description": "Confirm the target has all Stress marked."
+      "description": "Confirm the target has all Stress marked.",
+      "texts": {
+       "option": "Deal double damage to a target with all Stress marked"
+      }
      }
     ],
     "actions": [
@@ -5687,7 +5780,10 @@
       "cost": {
        "hope": 1
       },
-      "description": "Only within a natural environment."
+      "description": "Only within a natural environment.",
+      "texts": {
+       "option": "Speak with plants and animals"
+      }
      }
     ],
     "actions": [
@@ -5737,7 +5833,10 @@
        "resource": "upstaged",
        "perHp": 1
       },
-      "description": "Gain one token per Hit Point actually marked from this attack."
+      "description": "Only when you mark 1 or more Hit Points from an attack.",
+      "texts": {
+       "option": "Gain a token per Hit Point marked"
+      }
      }
     ],
     "actions": [
@@ -5769,14 +5868,17 @@
        "resource": "upstaged",
        "value": 5
       },
-      "description": "Spend all tokens on your next successful attack, adding +5 damage per token.",
+      "description": "On your next successful attack.",
       "steps": [
        {
         "op": "clear",
         "resource": "upstaged",
         "amount": "all"
        }
-      ]
+      ],
+      "texts": {
+       "option": "Spend all tokens for +5 damage each"
+      }
      }
     ]
    }
@@ -5849,7 +5951,7 @@
       "id": "notoriety",
       "label": "Leverage notoriety",
       "texts": {
-       "option": "{source} - Leverage notoriety",
+       "option": "+10 to a roll when leveraging your notoriety",
        "applied": "{source} - Leverage notoriety"
       },
       "roll": "action",
@@ -5857,7 +5959,7 @@
       "cost": {
        "stress": 1
       },
-      "description": "Only when leveraging your notoriety; prices/vault restriction are manual."
+      "description": "Prices and vault restrictions are resolved manually."
      }
     ]
    }
@@ -5875,12 +5977,15 @@
      {
       "id": "octarine",
       "label": "Octarine Brace",
-      "description": "Give the GM a Fear to mark any number of Armor Slots.",
+      "description": "Give the GM a Fear.",
       "when": {
        "armor": true
       },
       "armorSlots": "any",
-      "giveFear": 1
+      "giveFear": 1,
+      "texts": {
+       "option": "Mark any number of additional Armor Slots for a Fear"
+      }
      }
     ]
    }
@@ -5950,7 +6055,7 @@
      {
       "id": "brink",
       "label": "On the Brink",
-      "description": "With 2 or fewer Hit Points unmarked you don't take Minor damage.",
+      "description": "With 2 or fewer Hit Points unmarked.",
       "passive": true,
       "when": {
        "hpUnmarkedMax": 2,
@@ -5958,7 +6063,10 @@
         "minor"
        ]
       },
-      "negate": true
+      "negate": true,
+      "texts": {
+       "option": "Don't take Minor damage"
+      }
      }
     ]
    }
@@ -6112,7 +6220,10 @@
       "excludeRolls": [
        "attack"
       ],
-      "description": "Use when picking a nonmagical lock, disarming a nonmagical trap, or stealing an item."
+      "description": "Nonmagical locks and traps, or stealing from a target.",
+      "texts": {
+       "option": "Advantage to pick locks, disarm traps or steal"
+      }
      }
     ]
    }
@@ -6230,7 +6341,11 @@
       },
       "cost": {
        "stress": 1
-      }
+      },
+      "texts": {
+       "option": "Add twice your Strength to damage"
+      },
+      "description": "Up to twice per attack."
      }
     ]
    }
@@ -6318,9 +6433,12 @@
       "id": "use",
       "label": "Reaper’s Strike",
       "roll": "attack",
-      "description": "The GM identifies targets in range this roll succeeds against; choose one to mark 5 HP.",
+      "description": "The GM identifies the targets this roll succeeds against; choose one.",
       "cost": {
        "hope": 1
+      },
+      "texts": {
+       "option": "Force a target to mark 5 Hit Points"
       }
      }
     ]
@@ -6373,6 +6491,9 @@
       "advantage": "advantage",
       "cost": {
        "stress": 1
+      },
+      "texts": {
+       "option": "Advantage on an attack"
       }
      }
     ]
@@ -6500,7 +6621,11 @@
            "when": {
             "type": "physical"
            },
-           "halve": true
+           "halve": true,
+           "texts": {
+            "option": "Resist physical damage from outside the barrier"
+           },
+           "description": "Dismiss when the barrier ends or you leave it."
           }
          ]
         }
@@ -6530,7 +6655,11 @@
              "when": {
               "type": "physical"
              },
-             "halve": true
+             "halve": true,
+             "texts": {
+              "option": "Resist physical damage from outside the barrier"
+             },
+             "description": "Dismiss when the barrier ends or you leave it."
             }
            ]
           }
@@ -6677,7 +6806,11 @@
       "when": {
        "markingHp": true
       },
-      "clearStress": 1
+      "clearStress": 1,
+      "texts": {
+       "option": "Add your Proficiency to your Severe threshold"
+      },
+      "description": "Clear a Stress when you mark 1 or more Hit Points from an attack."
      }
     ]
    }
@@ -7397,7 +7530,11 @@
             "armor": true
            },
            "armorSeverity": 1,
-           "endEffectIfNoHp": "Shield Aura"
+           "endEffectIfNoHp": "Shield Aura",
+           "texts": {
+            "option": "Reduce attack severity by one additional threshold"
+           },
+           "description": "When the chosen actor marks an Armor Slot; ends if it prevents all HP marking."
           }
          ]
         }
@@ -7441,7 +7578,11 @@
       "followUp": {
        "dice": "1d6",
        "text": "on 3 or lower, place this card in your vault"
-      }
+      },
+      "texts": {
+       "option": "Reduce damage severity by one threshold"
+      },
+      "description": "Roll a d6; on a 3 or lower, place this card in your vault."
      }
     ]
    }
@@ -7519,7 +7660,7 @@
       "id": "damage",
       "label": "Sigil: roll ALL d8s",
       "texts": {
-       "option": "{source} - Sigil: roll ALL d8s",
+       "option": "Roll all d8s on the card and add them to damage",
        "applied": "{source} - Sigil: roll ALL d8s"
       },
       "roll": "damage",
@@ -7527,7 +7668,7 @@
        "resource": "retribution",
        "sides": 8
       },
-      "description": "Only a successful attack against the marked adversary.",
+      "description": "Successful attack against the marked adversary.",
       "steps": [
        {
         "op": "clear",
@@ -7563,7 +7704,10 @@
       "label": "Signature Move",
       "roll": "action",
       "hopeDie": 20,
-      "description": "Only when performing your named signature combat move."
+      "description": "Only when performing your named signature combat move; once per rest.",
+      "texts": {
+       "option": "Roll a d20 as your Hope Die"
+      }
      }
     ],
     "conditionalRollTriggers": [
@@ -7675,10 +7819,18 @@
          "multiplier": 2,
          "magicDamage": true,
          "endEffect": "Smite",
-         "defaultOn": true
+         "defaultOn": true,
+         "texts": {
+          "option": "Double your weapon damage as magic damage"
+         },
+         "description": "Your next successful weapon attack."
         }
        ]
-      }
+      },
+      "texts": {
+       "option": "Charge your next weapon attack to deal double damage"
+      },
+      "description": "The attack deals magic damage."
      }
     ],
     "uses": {
@@ -7716,7 +7868,11 @@
            "multiplier": 2,
            "magicDamage": true,
            "endEffect": "Smite",
-           "defaultOn": true
+           "defaultOn": true,
+           "texts": {
+            "option": "Double your weapon damage as magic damage"
+           },
+           "description": "Your next successful weapon attack."
           }
          ]
         }
@@ -7791,7 +7947,11 @@
            "when": {
             "type": "physical"
            },
-           "negate": true
+           "negate": true,
+           "texts": {
+            "option": "Immune to physical damage while spectral"
+           },
+           "description": "Ends when you make an action roll targeting another creature."
           }
          ]
         }
@@ -7840,7 +8000,11 @@
            "when": {
             "type": "physical"
            },
-           "negate": true
+           "negate": true,
+           "texts": {
+            "option": "Immune to physical damage"
+           },
+           "description": "Remove after passing through a solid object."
           }
          ]
         }
@@ -7867,7 +8031,11 @@
              "when": {
               "type": "physical"
              },
-             "negate": true
+             "negate": true,
+             "texts": {
+              "option": "Immune to physical damage"
+             },
+             "description": "Remove after passing through a solid object."
             }
            ]
           }
@@ -7908,7 +8076,11 @@
       "gainTokens": {
        "resource": "spellcharge",
        "perHp": 1
-      }
+      },
+      "texts": {
+       "option": "Store a token per Hit Point marked from magic damage"
+      },
+      "description": "Up to your Spellcast trait."
      }
     ],
     "rollOptions": [
@@ -7916,7 +8088,7 @@
       "id": "charge",
       "label": "Spellcharge token",
       "texts": {
-       "option": "{source} - Spellcharge token",
+       "option": "Spend tokens to add a d6 each to damage",
        "applied": "{source} - Spellcharge token"
       },
       "roll": "damage",
@@ -7927,7 +8099,8 @@
       },
       "cost": {
        "spellcharge": 1
-      }
+      },
+      "description": "Successful attack against a target."
      }
     ]
    }
@@ -8112,7 +8285,10 @@
       "cost": {
        "strategic": 1
       },
-      "description": "Only the first Close attack against this adversary; choose one card benefit, not the ally Stress or damage benefit too."
+      "description": "Only the first Close attack against this adversary; choose one card benefit.",
+      "texts": {
+       "option": "Advantage on your first Close attack"
+      }
      },
      {
       "id": "strategic-d8",
@@ -8122,7 +8298,10 @@
       "cost": {
        "strategic": 1
       },
-      "description": "Only the first Close attack against this adversary, if you did not choose advantage or ally Stress clearing."
+      "description": "Only the first Close attack against this adversary, if you did not choose another benefit.",
+      "texts": {
+       "option": "Add a d8 to damage"
+      }
      }
     ]
    }
@@ -8282,7 +8461,10 @@
       "label": "Tactician: Tag Team Hope d20",
       "roll": "action",
       "hopeDie": 20,
-      "description": "Only for a Tag Team Roll. The ally manually adds your applicable Experience when you Help them."
+      "description": "Only for a Tag Team Roll; the ally adds your applicable Experience manually.",
+      "texts": {
+       "option": "Roll a d20 as your Hope Die"
+      }
      }
     ]
    },
@@ -8335,7 +8517,11 @@
       "roll": "card:Teleport",
       "value": 3,
       "exclusive": "teleport-familiarity",
-      "usesSource": false
+      "usesSource": false,
+      "texts": {
+       "option": "Teleport to a place you know very well"
+      },
+      "description": "Spellcast Roll; takes you and willing targets within Close range."
      },
      {
       "id": "frequent",
@@ -8343,7 +8529,11 @@
       "roll": "card:Teleport",
       "value": 1,
       "exclusive": "teleport-familiarity",
-      "usesSource": false
+      "usesSource": false,
+      "texts": {
+       "option": "Teleport to a place you visit frequently"
+      },
+      "description": "Spellcast Roll; takes you and willing targets within Close range."
      },
      {
       "id": "once",
@@ -8351,7 +8541,11 @@
       "roll": "card:Teleport",
       "value": -2,
       "exclusive": "teleport-familiarity",
-      "usesSource": false
+      "usesSource": false,
+      "texts": {
+       "option": "Teleport to a place you visited only once"
+      },
+      "description": "Spellcast Roll; takes you and willing targets within Close range."
      }
     ],
     "uses": {
@@ -8540,7 +8734,7 @@
      {
       "id": "thorns",
       "label": "Thorn Skin",
-      "description": "Spend tokens to reduce the damage by a d6 each.",
+      "description": "Once per rest; deal that damage back to an attacker in Melee range.",
       "quantity": true,
       "roll": {
        "count": "quantity",
@@ -8548,6 +8742,9 @@
       },
       "cost": {
        "thorns": 1
+      },
+      "texts": {
+       "option": "Spend tokens to reduce damage by a d6 each"
       }
      }
     ]
@@ -8792,7 +8989,7 @@
       "id": "toll",
       "label": "Twilight Toll token",
       "texts": {
-       "option": "{source} - Twilight Toll token",
+       "option": "Spend tokens to add a d12 each to damage",
        "applied": "{source} - Twilight Toll token"
       },
       "roll": "damage",
@@ -8961,7 +9158,7 @@
            "id": "act",
            "label": "Disguise: spend a token",
            "texts": {
-            "option": "{source} - Disguise: spend a token",
+            "option": "Spend a Disguise token on an action roll",
             "applied": "{source} - Disguise: spend a token"
            },
            "roll": "action",
@@ -8971,13 +9168,14 @@
            "defaultOn": true,
            "cost": {
             "disguise": 1
-           }
+           },
+           "description": "The disguise drops after the last token."
           },
           {
            "id": "scrutiny",
            "label": "Disguise: avoid scrutiny",
            "texts": {
-            "option": "{source} - Disguise: avoid scrutiny",
+            "option": "Advantage on Presence rolls to avoid scrutiny",
             "applied": "{source} - Disguise: avoid scrutiny"
            },
            "roll": "trait:Presence",
@@ -8985,7 +9183,8 @@
             "reaction",
             "attack"
            ],
-           "advantage": "advantage"
+           "advantage": "advantage",
+           "description": "While disguised."
           }
          ]
         }
@@ -9152,7 +9351,7 @@
       "id": "unyielding",
       "hiddenRoll": true,
       "label": "Unyielding Armor",
-      "description": "Roll d6s equal to your Proficiency; on any 6 reduce severity without marking the Armor Slot.",
+      "description": "Without marking the Armor Slot.",
       "defaultOn": true,
       "when": {
        "armor": true
@@ -9162,7 +9361,10 @@
        "sides": 6,
        "success": 6
       },
-      "saveArmor": 1
+      "saveArmor": 1,
+      "texts": {
+       "option": "Roll d6s equal to your Proficiency; any 6 reduces severity by one threshold"
+      }
      }
     ]
    }
@@ -9320,7 +9522,10 @@
       "roll": "attack",
       "weapon": "any",
       "chooseTrait": true,
-      "defaultOn": true
+      "defaultOn": true,
+      "texts": {
+       "option": "Use a different trait for your weapon"
+      }
      },
      {
       "id": "maximum",
@@ -9329,6 +9534,9 @@
       "maximizeDie": true,
       "cost": {
        "stress": 1
+      },
+      "texts": {
+       "option": "Use the maximum result of one damage die"
       }
      }
     ]
@@ -9404,7 +9612,11 @@
            "when": {
             "type": "physical"
            },
-           "halve": true
+           "halve": true,
+           "texts": {
+            "option": "Resist physical damage within the circle"
+           },
+           "description": "Ends when you leave the circle or mark 2 or more HP."
           }
          ]
         }
@@ -9431,7 +9643,12 @@
              "when": {
               "type": "physical"
              },
-             "halve": true
+             "halve": true,
+             "texts": {
+              "name": "Vital Ward",
+              "option": "Resist physical damage within the caster's circle"
+             },
+             "description": "Remove when you leave; ends when the caster's circle ends."
             }
            ]
           }
@@ -9464,7 +9681,11 @@
            "when": {
             "type": "magic"
            },
-           "halve": true
+           "halve": true,
+           "texts": {
+            "option": "Resist magic damage within the circle"
+           },
+           "description": "Ends when you leave the circle or mark 2 or more HP."
           }
          ]
         }
@@ -9491,7 +9712,12 @@
              "when": {
               "type": "magic"
              },
-             "halve": true
+             "halve": true,
+             "texts": {
+              "name": "Vital Ward",
+              "option": "Resist magic damage within the caster's circle"
+             },
+             "description": "Remove when you leave; ends when the caster's circle ends."
             }
            ]
           }
@@ -9931,7 +10157,7 @@
            "id": "surge",
            "label": "Wild Surge die",
            "texts": {
-            "option": "{source} - Wild Surge die",
+            "option": "Add the Wild Surge Die to your action roll",
             "applied": "{source} - Wild Surge die"
            },
            "roll": "action",
@@ -9947,7 +10173,8 @@
              "resource": "wild-surge",
              "amount": 1
             }
-           ]
+           ],
+           "description": "Increase the die by one after each roll."
           }
          ]
         }
@@ -9968,7 +10195,10 @@
       "label": "Words of Discord: repeat target",
       "roll": "card:Words of Discord",
       "value": -5,
-      "description": "Use when casting again on a target that has realized what happened."
+      "description": "-5 penalty to the Spellcast Roll.",
+      "texts": {
+       "option": "Repeat on a target that realized what happened"
+      }
      }
     ]
    },

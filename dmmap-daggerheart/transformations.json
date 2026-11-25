@@ -56,7 +56,10 @@
         "when": {
          "type": "physical"
         },
-        "halve": true
+        "halve": true,
+        "texts": {
+         "option": "Resist physical damage"
+        }
        },
        {
         "id": "magic-vulnerability",
@@ -65,7 +68,10 @@
         "when": {
          "type": "magic"
         },
-        "double": true
+        "double": true,
+        "texts": {
+         "option": "Take double magic damage"
+        }
        }
       ],
       "actions": [
@@ -211,7 +217,10 @@
         "cost": {
          "feedTokens": 1
         },
-        "fearDie": 20
+        "fearDie": 20,
+        "texts": {
+         "option": "Spend a Feed token for a bonus"
+        }
        },
        {
         "id": "hungry",
@@ -219,7 +228,11 @@
         "roll": "action",
         "resourceEmpty": "feedTokens",
         "defaultOn": true,
-        "advantage": "disadvantage"
+        "advantage": "disadvantage",
+        "texts": {
+         "option": "Disadvantage with no Feed tokens"
+        },
+        "description": "Only while you hold none."
        },
        {
         "id": "hungry-reaction",
@@ -227,7 +240,11 @@
         "roll": "reaction",
         "resourceEmpty": "feedTokens",
         "defaultOn": true,
-        "advantage": "disadvantage"
+        "advantage": "disadvantage",
+        "texts": {
+         "option": "Disadvantage with no Feed tokens"
+        },
+        "description": "Only while you hold none."
        }
       ],
       "rollTriggers": [
@@ -322,7 +339,11 @@
            "dice": "1d10"
           }
          ]
-        }
+        },
+        "texts": {
+         "option": "Enter Wolf Form: +1d10 to attacks and damage"
+        },
+        "description": "Use after marking 1 or more Hit Points."
        }
       ],
       "rollTriggers": [

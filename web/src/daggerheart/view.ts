@@ -11,7 +11,7 @@ import {
 import {
   ActionDef, ActiveEffect, Automation, RollBonus, StatSource, activeFeatures, activeWeapons, actionBlocker, actionCost, addEffect, asksSpellcastRoll, consumeBonus, costText,
   availableRollOptions, commitRollOptions, configuredRollOption, criticalBonus, damageContributions, damageRollFormula, derivedStats, deathrunProficiency, evalValue, experienceModifier, resourceDefinitions, rollBonus, rollExperienceRefund, rollOptionQuantityMax,
-  damagePool, effectCounterMax, effectCounterText, effectiveAdvantage, maximizeDamageDie, maximizableDamageDice, poolDice, rollLocal, rollOptionDice, rollOptionLabel, rollOptionText, actionButtonText, actionTextVars, blockedTitle, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, setTrackSlots, sheetActions, signedDice, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft, usesMax,
+  damagePool, effectCounterMax, effectCounterText, effectiveAdvantage, maximizeDamageDie, maximizableDamageDice, poolDice, rollLocal, rollOptionDice, rollOptionLabel, optionRowParts, actionButtonText, actionTextVars, blockedTitle, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, setTrackSlots, sheetActions, signedDice, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft, usesMax,
 } from './engine';
 import { comboDie, criticalMeleeBonus, refocus, shiftStance } from './brawler';
 import { chooseStance } from './brawler-view';
@@ -2586,11 +2586,17 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     });
     const optionNote = s.option.texts?.optionNote
       ? formatText(s.option.texts.optionNote, actionTextVars({ actor: c.name, source: s.source, origin: s.origin, action: s.option })) : undefined;
+    const costPart = s.prepared || s.active || !cost ? '' : `${cost}${s.option.quantity ? s.option.quantity.resource === 'stress' ? ' per use' : ' per token' : ''}`;
     const note = s.prepared ? 'ready - already used up'
       : s.active ? 'active - no cost'
-      : [cost ? `costs ${cost}${s.option.quantity ? s.option.quantity.resource === 'stress' ? ' per use' : ' per token' : ''} when selected${s.option.effect && optionNote === undefined ? ` (then stays active ${s.option.effect.until === 'scene' ? 'for the scene' : 'as an effect'})` : ''}` : '',
+      : [cost && s.option.effect && optionNote === undefined ? `then stays active ${s.option.effect.until === 'scene' ? 'for the scene' : 'as an effect'}` : '',
         s.option.consumeItem && s.item ? `uses up 1 ${s.item.name} (${s.item.qty} left)` : '',
         optionNote ?? (s.option.required ? 'required' : '')].filter(Boolean).join('; ');
+    const rowText = optionRowParts(s);
+    const custom = s.option.texts?.option !== undefined;
+    const left = s.automation.uses ? usesLeft(c, s.key, s.automation) : null;
+    const detail = [s.option.description, note && note[0].toUpperCase() + note.slice(1),
+      left !== null ? `(${left}/${usesMax(c, s.key, s.automation)} left)` : ''].filter(Boolean).join(' ');
     const initial = s.option.input?.source === 'attackFear' && typeof attackFear === 'number' && Number.isInteger(attackFear)
       && attackFear >= s.option.input.min && attackFear <= s.option.input.max ? attackFear : s.option.input?.default ?? 1;
     const amount = s.option.input || s.option.quantity ? el('input', { type: 'number', step: '1',
@@ -2618,8 +2624,8 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
       sizeSelect.addEventListener('change', () => { dieSizeChoices.set(i, Number(sizeSelect.value)); update(); });
     }
     const choice = el('label', { class: 'dh-roll-option' }, input,
-      el('span', {}, `${rollOptionText(s)}${value ? ` (${signed(value)}${s.option.quantity ? ' per token' : ''})` : ''}${dice ? ` ${signedDice(dice)}` : ''}${note ? `; ${note}` : ''}`,
-        ...(s.option.description ? [el('small', { class: 'muted' }, s.option.description)] : []),
+      el('span', {}, el('b', {}, rowText.name), ` - ${rowText.text}${value && !(custom && !s.option.quantity && rowText.text.includes(signed(value))) ? ` (${signed(value)}${s.option.quantity ? ' per token' : ''})` : ''}${dice && !(custom && rowText.text.includes(signedDice(dice).replace(/^[+-]1?/, ''))) ? ` ${signedDice(dice)}` : ''}${costPart ? ` (${costPart})` : ''}`,
+        ...(detail ? [el('small', { class: 'muted' }, detail)] : []),
         ...(block ? [el('small', { class: 'error' }, block)] : [])));
     const continuingRun = s.option.deathrun && !!runEffect();
     return el('div', { class: `dh-roll-option-row${continuingRun ? ' dh-deathrun-option-row' : ''}` },

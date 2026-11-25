@@ -213,7 +213,10 @@
       "label": "Charging Quiver",
       "roll": "damage",
       "value": "@tier",
-      "description": "Only a successful attack with an arrow stored in this quiver."
+      "description": "Only a successful attack with an arrow stored in this quiver.",
+      "texts": {
+       "option": "Add your tier to damage"
+      }
      }
     ]
    }
@@ -339,6 +342,9 @@
       "uses": {
        "max": 3,
        "per": "rest"
+      },
+      "texts": {
+       "option": "Add your Proficiency to damage"
       }
      }
     ]
@@ -373,7 +379,12 @@
          "sides": 6,
          "success": 6
         },
-        "saveArmor": 1
+        "saveArmor": 1,
+        "texts": {
+         "name": "Valorstone",
+         "option": "Resilient: on a 6 on a d6, reduce severity by one threshold"
+        },
+        "description": "Roll before you mark your last Armor Slot."
        }
       ]
      }
@@ -393,7 +404,9 @@
       "label": "Skeleton Key",
       "roll": "trait:Finesse",
       "advantage": "advantage",
-      "description": "When you use this key to open a locked door, you gain advantage on the Finesse Roll."
+      "texts": {
+       "option": "Advantage on Finesse Rolls to open a locked door"
+      }
      }
     ]
    }
@@ -439,7 +452,10 @@
              "roll": "spellcast",
              "value": 1,
              "defaultOn": true,
-             "description": "Only while within Close range of the activated prism."
+             "description": "Only while within Close range of the activated prism.",
+             "texts": {
+              "option": "+1 to Spellcast Rolls"
+             }
             }
            ]
           }
@@ -525,7 +541,10 @@
        "max": 1,
        "per": "shortRest"
       },
-      "description": "Once per short rest: the sprite’s whispered advice grants advantage on this attack roll."
+      "description": "Once per short rest.",
+      "texts": {
+       "option": "Advantage on an attack roll"
+      }
      }
     ]
    }
@@ -550,7 +569,10 @@
       "label": "Lorekeeper",
       "roll": "action",
       "value": 1,
-      "description": "Only against one of up to three hostile creatures recorded in the book."
+      "description": "Only against one of up to three hostile creatures recorded in the book.",
+      "texts": {
+       "option": "+1 to action rolls against recorded creatures"
+      }
      }
     ]
    }
@@ -780,9 +802,12 @@
      {
       "id": "ring",
       "label": "Ring of Resistance",
-      "description": "After a successful attack against you: resistance to the incoming damage.",
+      "description": "Once per long rest, after a successful attack against you.",
       "halve": true,
-      "uses": "source"
+      "uses": "source",
+      "texts": {
+       "option": "Halve the incoming damage"
+      }
      }
     ]
    }
@@ -870,7 +895,10 @@
          "max": 3,
          "per": "rest"
         },
-        "description": "Activate the charm to attack a target within Close range."
+        "description": "Needs the Melee weapon the charm is attached to.",
+        "texts": {
+         "option": "Attack a target within Close range"
+        }
        }
       ]
      }
@@ -917,7 +945,10 @@
        "max": 1,
        "per": "longRest"
       },
-      "description": "Only for a roll that directly aligns with the principle focused into the chain."
+      "description": "Only for a roll that directly aligns with the principle focused into the chain.",
+      "texts": {
+       "option": "Hope die becomes a d20"
+      }
      }
     ]
    }
@@ -1129,7 +1160,10 @@
       "label": "Honing Relic",
       "roll": "duality",
       "value": 1,
-      "description": "Only when you utilize the Experience you chose for the relic."
+      "description": "Only when you utilize the Experience you chose for the relic.",
+      "texts": {
+       "option": "+1 to a chosen Experience"
+      }
      }
     ]
    }
@@ -1365,7 +1399,11 @@
       "dice": "1d4",
       "cost": {
        "alconite": 1
-      }
+      },
+      "texts": {
+       "option": "+1d4 to a Spellcast Roll"
+      },
+      "description": "Recharge by immersing it in salt water as a downtime move."
      }
     ],
     "actions": [
@@ -1402,20 +1440,23 @@
       "id": "anchor",
       "label": "Avoid forced movement",
       "texts": {
-       "option": "{source} - Avoid forced movement",
+       "option": "Advantage on a reaction roll to avoid forced movement",
        "applied": "{source} - Avoid forced movement"
       },
       "roll": "reaction",
       "advantage": "advantage",
-      "description": "Use only to avoid being moved against your will. Resistance to damage from that movement is in the damage dialog."
+      "description": "Only to avoid being moved against your will."
      }
     ],
     "mitigation": [
      {
       "id": "anchor",
       "label": "Anchoring Hook: forced-movement damage",
-      "description": "Resistance to damage you take from being moved against your will while the anchor is deployed.",
-      "halve": true
+      "description": "While the anchor is deployed.",
+      "halve": true,
+      "texts": {
+       "option": "Resist damage from forced movement"
+      }
      }
     ]
    }
@@ -1476,13 +1517,15 @@
               "id": "advantage",
               "label": "Runestone advantage",
               "texts": {
-               "option": "{source} - Runestone advantage",
-               "applied": "{source} - Runestone advantage"
+               "option": "Advantage on a Spellcast Roll",
+               "applied": "{source} - Runestone advantage",
+               "name": "Runestone"
               },
               "roll": "spellcast",
               "advantage": "advantage",
               "defaultOn": true,
-              "endEffect": "Runestone: Spellcast Advantage"
+              "endEffect": "Runestone: Spellcast Advantage",
+              "description": "Your next Spellcast Roll."
              }
             ]
            }
@@ -1711,11 +1754,13 @@
      {
       "id": "ground",
       "label": "Dread-Weave Boots: ground-triggered magic",
-      "description": "Resistance to magic damage triggered by contact with the ground.",
       "when": {
        "type": "magic"
       },
-      "halve": true
+      "halve": true,
+      "texts": {
+       "option": "Resist magic damage triggered by contact with the ground"
+      }
      }
     ]
    }
@@ -1783,7 +1828,10 @@
       "label": "Flickerbloom",
       "roll": "reaction",
       "advantage": "advantage",
-      "description": "Only against temporal anomalies. If you still fail, mark a Stress."
+      "description": "If you fail the roll, mark a Stress.",
+      "texts": {
+       "option": "Advantage on reaction rolls against temporal anomalies"
+      }
      }
     ]
    }
@@ -1799,14 +1847,18 @@
      {
       "id": "fall",
       "label": "Gravitic Tether: falling",
-      "description": "Half damage from falls.",
-      "halve": true
+      "halve": true,
+      "texts": {
+       "option": "Take half damage from falls"
+      }
      },
      {
       "id": "gravity",
       "label": "Gravitic Tether: gravitational anomaly",
-      "description": "No damage from the effects of gravitational anomalies.",
-      "negate": true
+      "negate": true,
+      "texts": {
+       "option": "No damage from gravitational anomalies"
+      }
      }
     ]
    }
@@ -1929,12 +1981,16 @@
      {
       "id": "divert",
       "label": "Divert into Lightning Scarab",
-      "description": "Electrical damage only: the brooch absorbs it. If the Duality total is less than the diverted damage, use Brooch explodes.",
+      "description": "Electrical damage only; if your Duality total is less than the diverted damage, the brooch explodes.",
       "negate": true,
       "storeDamage": "scarab_damage",
       "followUp": {
        "dice": "2d12",
        "text": "Duality Dice; if lower than the diverted damage, the brooch explodes"
+      },
+      "texts": {
+       "name": "Lightning Scarab",
+       "option": "Divert electrical damage into the brooch"
       }
      }
     ],
@@ -2008,7 +2064,10 @@
       "label": "Pathfinder’s Ledger",
       "roll": "duality",
       "advantage": "advantage",
-      "description": "Only to navigate or avoid being disoriented while scribing your path. Failing with Fear loses a piece of information about the path."
+      "description": "While scribing your path; failing with Fear loses a piece of information.",
+      "texts": {
+       "option": "Advantage to navigate or avoid being disoriented"
+      }
      }
     ]
    }
@@ -2108,7 +2167,10 @@
       "label": "Red Nose of Hope",
       "roll": "trait:Presence",
       "advantage": "advantage",
-      "description": "While wearing the nose, entertaining an audience."
+      "description": "Presence Rolls only, while wearing the nose.",
+      "texts": {
+       "option": "Advantage to entertain an audience"
+      }
      }
     ],
     "rollTriggers": [
@@ -2145,14 +2207,20 @@
       "label": "Rootslicer Gauntlet",
       "roll": "attack",
       "advantage": "advantage",
-      "description": "Only against plant-based creatures and hazards. If you still fail, the GM gains a Fear."
+      "description": "Attacks and Reaction Rolls; if you still fail, the GM gains a Fear.",
+      "texts": {
+       "option": "Advantage against plant-based creatures and hazards"
+      }
      },
      {
       "id": "reaction",
       "label": "Rootslicer Gauntlet",
       "roll": "reaction",
       "advantage": "advantage",
-      "description": "Only against plant-based creatures and hazards. If you still fail, the GM gains a Fear."
+      "description": "Attacks and Reaction Rolls; if you still fail, the GM gains a Fear.",
+      "texts": {
+       "option": "Advantage against plant-based creatures and hazards"
+      }
      }
     ]
    }
@@ -2244,7 +2312,12 @@
            "when": {
             "type": "physical"
            },
-           "halve": true
+           "halve": true,
+           "texts": {
+            "name": "Soulweave Cloak",
+            "option": "Resist physical damage while incorporeal"
+           },
+           "description": "Until you end the condition or the scene ends."
           }
          ]
         }
@@ -2302,14 +2375,20 @@
      {
       "id": "bee",
       "label": "Stingshield Robes: bee-sized attacker",
-      "description": "Only with no marked Armor Slots: immune to damage from creatures up to the size of a bee.",
-      "negate": true
+      "description": "Only with no marked Armor Slots.",
+      "negate": true,
+      "texts": {
+       "option": "Immune to damage from creatures up to the size of a bee"
+      }
      },
      {
       "id": "mouse",
       "label": "Stingshield Robes: mouse-sized attacker",
-      "description": "Only with no marked Armor Slots: resistance to damage from creatures up to the size of a mouse.",
-      "halve": true
+      "description": "Only with no marked Armor Slots.",
+      "halve": true,
+      "texts": {
+       "option": "Resist damage from creatures up to the size of a mouse"
+      }
      }
     ]
    }
@@ -2337,7 +2416,10 @@
       "dice": "1d4",
       "requiresResource": "superior_alconite",
       "expendOn": 4,
-      "description": "On a 4 the energy is expended until you recharge it in salt water as a downtime move."
+      "description": "On a 4 the energy is expended until you recharge it in salt water.",
+      "texts": {
+       "option": "+1d4 to a Spellcast Roll"
+      }
      }
     ],
     "actions": [
@@ -2387,8 +2469,9 @@
         "id": "titan-slayer",
         "label": "Titan-Slayer",
         "texts": {
-         "option": "{source} - Titan-Slayer",
-         "applied": "{source} - Titan-Slayer"
+         "option": "+1 Proficiency to damage",
+         "applied": "{source} - Titan-Slayer",
+         "name": "Tarrasque Sinew"
         },
         "roll": "damage",
         "proficiency": 1,
@@ -2412,7 +2495,10 @@
       "label": "Ticket Master’s Pouch",
       "roll": "trait:Presence",
       "advantage": "advantage",
-      "description": "The pouch can hold a handful of gold. When you use the gold from inside it to pay for something up to a bag of gold in value, you have advantage on Presence Rolls to haggle for the price."
+      "description": "Presence Rolls when paying from the pouch, up to a bag of gold in value.",
+      "texts": {
+       "option": "Advantage to haggle for a price"
+      }
      }
     ]
    }
@@ -2486,8 +2572,9 @@
         "id": "concussive",
         "label": "Concussive",
         "texts": {
-         "option": "{source} - Concussive",
-         "applied": "{source} - Concussive"
+         "option": "+1 Proficiency on this attack",
+         "applied": "{source} - Concussive",
+         "name": "Tortoise Horn"
         },
         "roll": "damage",
         "proficiency": 1,
@@ -2559,7 +2646,9 @@
       "label": "Veilcloak",
       "roll": "trait:Finesse",
       "advantage": "advantage",
-      "description": "Only for Finesse Rolls made while in darkness."
+      "texts": {
+       "option": "Advantage on Finesse Rolls in darkness"
+      }
      }
     ]
    }
@@ -2577,14 +2666,20 @@
       "label": "Veilshroud Hood",
       "roll": "reaction",
       "advantage": "advantage",
-      "description": "Only against illusions and being magically spied on."
+      "description": "Reaction Rolls only.",
+      "texts": {
+       "option": "Advantage against illusions and being magically spied on"
+      }
      },
      {
       "id": "perceive",
       "label": "Veilshroud Hood: dulled senses",
       "roll": "duality",
       "advantage": "disadvantage",
-      "description": "Rolls to perceive normal sights and sounds."
+      "description": "While wearing the hood.",
+      "texts": {
+       "option": "Disadvantage to perceive normal sights and sounds"
+      }
      }
     ]
    }
@@ -2611,8 +2706,9 @@
         "id": "herald",
         "label": "Herald of War",
         "texts": {
-         "option": "{source} - Herald of War",
-         "applied": "{source} - Herald of War"
+         "option": "Add your Presence to the attack roll",
+         "applied": "{source} - Herald of War",
+         "name": "War God's Sigil"
         },
         "roll": "attack",
         "traitValue": "Presence",
@@ -2685,7 +2781,7 @@
      {
       "id": "psychic",
       "label": "Witherroot Charm: ignore psychic attack",
-      "description": "Ignore all damage from a psychic attack; afterwards you have disadvantage on Presence Reaction Rolls until you purge the charm.",
+      "description": "Afterwards you have disadvantage on Presence Reaction Rolls until you purge the charm.",
       "negate": true,
       "uses": "source",
       "effect": {
@@ -2698,14 +2794,16 @@
          "id": "residue",
          "label": "Psychic Residue",
          "texts": {
-          "option": "{source} - Psychic Residue",
+          "option": "Disadvantage on Presence Reaction Rolls",
           "applied": "{source} - Psychic Residue"
          },
          "roll": "reaction",
-         "advantage": "disadvantage",
-         "description": "Presence Reaction Rolls only."
+         "advantage": "disadvantage"
         }
        ]
+      },
+      "texts": {
+       "option": "Ignore all damage from a psychic attack"
       }
      }
     ],
@@ -2738,7 +2836,9 @@
       "label": "Wolffriend Pendant",
       "roll": "duality",
       "advantage": "advantage",
-      "description": "Only to befriend or influence dogs and wolves."
+      "texts": {
+       "option": "Advantage to befriend or influence dogs and wolves"
+      }
      }
     ]
    }
@@ -2818,7 +2918,10 @@
        "min": 0,
        "max": 20
       },
-      "description": "Only when trapping an undead creature: +1 per HP it has marked."
+      "description": "Only when trapping an undead creature.",
+      "texts": {
+       "option": "+1 per marked HP to trap an undead creature"
+      }
      },
      {
       "id": "psychic",
@@ -2828,7 +2931,10 @@
        "resource": "wraith_spirits",
        "value": 1
       },
-      "description": "Only against psychic attacks: +1 per trapped spirit."
+      "description": "Only against psychic attacks.",
+      "texts": {
+       "option": "+1 per trapped spirit against psychic attacks"
+      }
      }
     ]
    }
@@ -2863,8 +2969,10 @@
      {
       "id": "cold",
       "label": "Yeti Coat: cold exposure",
-      "description": "Half damage from exposure to cold.",
-      "halve": true
+      "halve": true,
+      "texts": {
+       "option": "Take half damage from exposure to cold"
+      }
      }
     ]
    }
@@ -3015,7 +3123,9 @@
       "label": "Grapnel",
       "roll": "action",
       "advantage": "advantage",
-      "description": "Only to climb sheer surfaces."
+      "texts": {
+       "option": "Advantage to climb sheer surfaces"
+      }
      }
     ]
    }
@@ -3252,7 +3362,10 @@
        "max": 1,
        "per": "scene"
       },
-      "description": "+1 Proficiency for this attack’s damage."
+      "description": "Applies to this attack's damage.",
+      "texts": {
+       "option": "+1 Proficiency for your next attack"
+      }
      }
     ]
    }
@@ -3696,7 +3809,11 @@
                "type": "physical"
               },
               "negate": true,
-              "endEffect": "Aegis: Physical Immunity"
+              "endEffect": "Aegis: Physical Immunity",
+              "texts": {
+               "name": "Two-Faced Aegis Brooch",
+               "option": "Immune to the next physical damage"
+              }
              }
             ]
            }
@@ -3723,7 +3840,11 @@
                "type": "magic"
               },
               "negate": true,
-              "endEffect": "Aegis: Magic Immunity"
+              "endEffect": "Aegis: Magic Immunity",
+              "texts": {
+               "name": "Two-Faced Aegis Brooch",
+               "option": "Immune to the next magic damage"
+              }
              }
             ]
            }
@@ -4066,15 +4187,16 @@
       "id": "carol",
       "label": "Cursed carol",
       "texts": {
-       "option": "{source} - Cursed carol",
-       "applied": "{source} - Cursed carol"
+       "option": "+2 to a roll to use fire or influence a mind",
+       "applied": "{source} - Cursed carol",
+       "name": "Cursed Carol"
       },
       "roll": "action",
       "value": 2,
       "cost": {
        "hope": 1
       },
-      "description": "Only using fire or influencing a mind. For Codex effects roll refund d6 manually (4+ regains Hope)."
+      "description": "For Codex effects roll a d6 manually (4+ regains the Hope)."
      }
     ]
    }

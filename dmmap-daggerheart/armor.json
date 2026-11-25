@@ -199,7 +199,11 @@
       "when": {
        "type": "magic"
       },
-      "reduce": "@armorScore"
+      "reduce": "@armorScore",
+      "texts": {
+       "name": "Warded",
+       "option": "Reduce incoming magic damage by your Armor Score"
+      }
      }
     ]
    }
@@ -231,7 +235,11 @@
        "sides": 6,
        "success": 6
       },
-      "saveArmor": 1
+      "saveArmor": 1,
+      "texts": {
+       "name": "Resilient",
+       "option": "Roll a d6 before marking your last Armor Slot; on a 6 reduce severity by one threshold"
+      }
      }
     ]
    },
@@ -262,7 +270,11 @@
         "sides": 6,
         "success": 6
        },
-       "saveArmor": 1
+       "saveArmor": 1,
+       "texts": {
+        "name": "Resilient",
+        "option": "Roll a d6 before marking your last Armor Slot; on a 6 reduce severity by one threshold"
+       }
       }
      ]
     }
@@ -350,8 +362,9 @@
       "id": "quiet",
       "label": "Move silently",
       "texts": {
-       "option": "{source} - Move silently",
-       "applied": "{source} - Move silently"
+       "option": "+2 to rolls to move silently",
+       "applied": "{source} - Move silently",
+       "name": "Quiet"
       },
       "roll": "action",
       "value": 2,
@@ -507,7 +520,7 @@
      {
       "id": "impenetrable",
       "label": "Impenetrable",
-      "description": "Mark a Stress instead of marking your last Hit Point.",
+      "description": "Once per short rest, when you would mark your last Hit Point.",
       "when": {
        "lastHp": true
       },
@@ -515,7 +528,11 @@
       "cost": {
        "stress": 1
       },
-      "uses": "source"
+      "uses": "source",
+      "texts": {
+       "name": "Impenetrable",
+       "option": "Mark a Stress instead of your last Hit Point"
+      }
      }
     ]
    }
@@ -540,8 +557,9 @@
       "id": "sharp",
       "label": "Sharp",
       "texts": {
-       "option": "{source} - Sharp",
-       "applied": "{source} - Sharp"
+       "option": "Add a d4 to damage",
+       "applied": "{source} - Sharp",
+       "name": "Sharp"
       },
       "roll": "damage",
       "dice": "1d4",
@@ -574,7 +592,11 @@
       "when": {
        "type": "magic"
       },
-      "armorBlocked": true
+      "armorBlocked": true,
+      "texts": {
+       "name": "Physical",
+       "option": "Can't mark Armor Slots against magic damage"
+      }
      }
     ]
    }
@@ -602,7 +624,11 @@
       "when": {
        "type": "physical"
       },
-      "armorBlocked": true
+      "armorBlocked": true,
+      "texts": {
+       "name": "Magic",
+       "option": "Can't mark Armor Slots against physical damage"
+      }
      }
     ]
    }
@@ -629,6 +655,10 @@
       "passive": true,
       "armorCost": {
        "stress": 1
+      },
+      "texts": {
+       "name": "Painful",
+       "option": "Mark a Stress for each Armor Slot marked"
       }
      }
     ]
@@ -814,7 +844,11 @@
       "id": "fortified",
       "label": "Fortified",
       "passive": true,
-      "armorSeverity": 1
+      "armorSeverity": 1,
+      "texts": {
+       "name": "Fortified",
+       "option": "Armor Slots reduce severity by two thresholds"
+      }
      }
     ]
    }
@@ -884,7 +918,7 @@
      {
       "id": "capacitor",
       "label": "Capacitor",
-      "description": "Reduce magic damage by 1d8 and store the result for your next magic damage roll.",
+      "description": "Once per scene; add the stored result to your next magic damage.",
       "when": {
        "type": "magic"
       },
@@ -902,16 +936,22 @@
          "id": "stored",
          "label": "Capacitor: stored",
          "texts": {
-          "option": "{source} - Capacitor: stored",
-          "applied": "{source} - Capacitor: stored"
+          "option": "Add the stored result to magic damage",
+          "applied": "{source} - Capacitor: stored",
+          "name": "Capacitor"
          },
          "roll": "damage",
          "value": 0,
          "magicOnly": true,
          "defaultOn": true,
-         "endEffect": "Sparkleweave: Capacitor"
+         "endEffect": "Sparkleweave: Capacitor",
+         "description": "Your next magic damage roll."
         }
        ]
+      },
+      "texts": {
+       "name": "Capacitor",
+       "option": "Reduce magic damage by 1d8 and store it"
       }
      }
     ]
@@ -1110,7 +1150,12 @@
       "when": {
        "armor": true
       },
-      "report": "choose another creature within Melee range; it marks a Stress."
+      "report": "choose another creature within Melee range; it marks a Stress.",
+      "texts": {
+       "name": "Echoing Plate",
+       "option": "Another creature in Melee range marks a Stress"
+      },
+      "description": "When you mark an Armor Slot."
      }
     ]
    }
@@ -1138,12 +1183,16 @@
      {
       "id": "phase",
       "label": "Phasebound",
-      "description": "Mark 2 Armor Slots to take no damage.",
+      "description": "Once per scene, instead of taking damage.",
       "negate": true,
       "cost": {
        "armor": 2
       },
-      "uses": "source"
+      "uses": "source",
+      "texts": {
+       "name": "Phasebound",
+       "option": "Take no damage and teleport within Close range"
+      }
      }
     ]
    }
@@ -1203,7 +1252,12 @@
       "when": {
        "type": "magic"
       },
-      "armorSlots": "any"
+      "armorSlots": "any",
+      "texts": {
+       "name": "Mirrorwoven",
+       "option": "Mitigate all magic damage and reflect it"
+      },
+      "description": "Requires a Spellcasting trait; when hit with a magical attack."
      }
     ],
     "actions": [
@@ -1344,12 +1398,13 @@
       "id": "grudge",
       "label": "Punishing Weight",
       "texts": {
-       "option": "{source} - Punishing Weight",
-       "applied": "{source} - Punishing Weight"
+       "option": "+2 to Melee damage",
+       "applied": "{source} - Punishing Weight",
+       "name": "Punishing Weight"
       },
       "roll": "damage",
       "value": 2,
-      "description": "Successful Melee attack after marking Armor this scene.",
+      "description": "After marking an Armor Slot this scene.",
       "weaponRange": "Melee"
      }
     ]
@@ -1375,8 +1430,9 @@
       "id": "intimidate",
       "label": "Rattleclad: threaten or intimidate",
       "texts": {
-       "option": "{source} - Rattleclad: threaten or intimidate",
-       "applied": "{source} - Rattleclad: threaten or intimidate"
+       "option": "+2 to threaten or intimidate",
+       "applied": "{source} - Rattleclad: threaten or intimidate",
+       "name": "Rattleclad"
       },
       "roll": "action",
       "value": 2
@@ -1385,8 +1441,9 @@
       "id": "hidden",
       "label": "Rattleclad: stay hidden or unnoticed",
       "texts": {
-       "option": "{source} - Rattleclad: stay hidden or unnoticed",
-       "applied": "{source} - Rattleclad: stay hidden or unnoticed"
+       "option": "-2 to stay hidden or unnoticed",
+       "applied": "{source} - Rattleclad: stay hidden or unnoticed",
+       "name": "Rattleclad"
       },
       "roll": "action",
       "value": -2
@@ -1447,12 +1504,16 @@
      {
       "id": "sigils",
       "label": "Hungry Sigils",
-      "description": "Against magic damage you can mark any number of Armor Slots; resolve the Fear roll by hand.",
+      "description": "If it reduces damage to zero, roll duality dice; Fear marks 2 HP (resolve by hand).",
       "passive": true,
       "when": {
        "type": "magic"
       },
-      "armorSlots": "any"
+      "armorSlots": "any",
+      "texts": {
+       "name": "Hungry Sigils",
+       "option": "Mark any number of Armor Slots against magic damage"
+      }
      }
     ]
    }
@@ -1546,7 +1607,12 @@
        "armor": true,
        "avoidsAll": true
       },
-      "report": "the attacker marks a Stress."
+      "report": "the attacker marks a Stress.",
+      "texts": {
+       "name": "Glasslight",
+       "option": "Attacker marks a Stress when you negate all damage"
+      },
+      "description": "When Armor Slots reduce an attack to no damage."
      }
     ]
    }
@@ -1692,7 +1758,7 @@
      {
       "id": "thornmail",
       "label": "Thornmail",
-      "description": "Physical Melee attack: mark an Armor Slot to deal 1 damage to the attacker instead of reducing the damage.",
+      "description": "Physical damage from an attack in Melee range.",
       "when": {
        "type": "physical"
       },
@@ -1700,7 +1766,11 @@
       "cost": {
        "armor": 1
       },
-      "report": "deal 1 damage to the attacker."
+      "report": "deal 1 damage to the attacker.",
+      "texts": {
+       "name": "Thornmail",
+       "option": "Deal 1 damage to the attacker instead of reducing damage"
+      }
      }
     ]
    }
@@ -1795,7 +1865,12 @@
        "id": "bastion",
        "label": "Last Bastion",
        "passive": true,
-       "halve": true
+       "halve": true,
+       "texts": {
+        "name": "Last Bastion",
+        "option": "Resistance to all damage until end of scene"
+       },
+       "description": "When you mark your final Armor Slot."
       }
      ]
     }
@@ -1828,7 +1903,12 @@
        "armor": true
       },
       "uses": "source",
-      "report": "all targets within Melee range mark a Stress."
+      "report": "all targets within Melee range mark a Stress.",
+      "texts": {
+       "name": "Cataclysm Plate",
+       "option": "Targets in Melee range mark a Stress"
+      },
+      "description": "Once per rest, when you mark an Armor Slot."
      }
     ]
    }
@@ -1907,7 +1987,12 @@
        "avoidsAll": true
       },
       "gainHope": 1,
-      "giveFear": 1
+      "giveFear": 1,
+      "texts": {
+       "name": "Flicker of Courage",
+       "option": "Gain 1 Hope; the GM gains 1 Fear"
+      },
+      "description": "When an Armor Slot avoids all damage from an attack."
      }
     ]
    }
@@ -2034,7 +2119,12 @@
       },
       "uses": "source",
       "gainHope": 1,
-      "report": "the next attack against you has advantage."
+      "report": "the next attack against you has advantage.",
+      "texts": {
+       "name": "Grim Confidence",
+       "option": "Gain 1 Hope; the next attack against you has advantage"
+      },
+      "description": "Once per scene, when you mark an Armor Slot."
      }
     ]
    }
@@ -2149,7 +2239,12 @@
       "when": {
        "type": "physical"
       },
-      "armorSlots": "any"
+      "armorSlots": "any",
+      "texts": {
+       "name": "Steelwoven",
+       "option": "Mitigate all physical damage and reflect it"
+      },
+      "description": "Requires a Spellcasting trait; when hit with a physical attack."
      }
     ],
     "actions": [
@@ -2216,7 +2311,6 @@
      {
       "id": "lined",
       "label": "Lined",
-      "description": "Mark a Stress to negate Minor damage.",
       "when": {
        "severity": [
         "minor"
@@ -2225,6 +2319,10 @@
       "negate": true,
       "cost": {
        "stress": 1
+      },
+      "texts": {
+       "name": "Lined",
+       "option": "Negate Minor damage"
       }
      }
     ]
@@ -2282,7 +2380,11 @@
       "label": "Bulky",
       "passive": true,
       "finalSevere": true,
-      "markStress": 1
+      "markStress": 1,
+      "texts": {
+       "name": "Bulky",
+       "option": "-1 to Evasion; Severe damage costs a Stress"
+      }
      }
     ]
    },
@@ -2330,7 +2432,6 @@
      {
       "id": "lined",
       "label": "Lined",
-      "description": "Mark a Stress to negate Minor damage.",
       "when": {
        "severity": [
         "minor"
@@ -2339,6 +2440,10 @@
       "negate": true,
       "cost": {
        "stress": 1
+      },
+      "texts": {
+       "name": "Lined",
+       "option": "Negate Minor damage"
       }
      }
     ]
@@ -2394,7 +2499,11 @@
       "label": "Bulky",
       "passive": true,
       "finalSevere": true,
-      "markStress": 1
+      "markStress": 1,
+      "texts": {
+       "name": "Bulky",
+       "option": "-1 to Evasion; Severe damage costs a Stress"
+      }
      }
     ]
    }
@@ -2642,7 +2751,6 @@
      {
       "id": "lined",
       "label": "Lined",
-      "description": "Mark a Stress to negate Minor damage.",
       "when": {
        "severity": [
         "minor"
@@ -2651,6 +2759,10 @@
       "negate": true,
       "cost": {
        "stress": 1
+      },
+      "texts": {
+       "name": "Lined",
+       "option": "Negate Minor damage"
       }
      }
     ]
@@ -2706,7 +2818,11 @@
       "label": "Bulky",
       "passive": true,
       "finalSevere": true,
-      "markStress": 1
+      "markStress": 1,
+      "texts": {
+       "name": "Bulky",
+       "option": "-1 to Evasion; Severe damage costs a Stress"
+      }
      }
     ]
    }
@@ -2754,8 +2870,9 @@
       "id": "stellar",
       "label": "Stellar",
       "texts": {
-       "option": "{source} - Stellar",
-       "applied": "{source} - Stellar"
+       "option": "Advantage on a Spellcast roll",
+       "applied": "{source} - Stellar",
+       "name": "Stellar"
       },
       "roll": "spellcast",
       "advantage": "advantage",
@@ -2883,12 +3000,13 @@
       "id": "advantage",
       "label": "Aquatic",
       "texts": {
-       "option": "{source} - Aquatic",
-       "applied": "{source} - Aquatic"
+       "option": "Advantage on Agility rolls while submerged",
+       "applied": "{source} - Aquatic",
+       "name": "Aquatic"
       },
       "roll": "trait:Agility",
       "advantage": "advantage",
-      "description": "You can breathe underwater and gain advantage on Agility Rolls while submerged."
+      "description": "You can also breathe underwater."
      }
     ]
    }
@@ -2935,7 +3053,6 @@
      {
       "id": "lined",
       "label": "Lined",
-      "description": "Mark a Stress to negate Minor damage.",
       "when": {
        "severity": [
         "minor"
@@ -2944,6 +3061,10 @@
       "negate": true,
       "cost": {
        "stress": 1
+      },
+      "texts": {
+       "name": "Lined",
+       "option": "Negate Minor damage"
       }
      }
     ]
@@ -2999,7 +3120,11 @@
       "label": "Bulky",
       "passive": true,
       "finalSevere": true,
-      "markStress": 1
+      "markStress": 1,
+      "texts": {
+       "name": "Bulky",
+       "option": "-1 to Evasion; Severe damage costs a Stress"
+      }
      }
     ]
    }
@@ -3063,7 +3188,12 @@
       "when": {
        "armor": true
       },
-      "gainHope": 1
+      "gainHope": 1,
+      "texts": {
+       "name": "Divine",
+       "option": "Gain a Hope"
+      },
+      "description": "When you mark an Armor Slot."
      }
     ]
    }
@@ -3094,7 +3224,12 @@
       "followUp": {
        "dice": "1d4",
        "text": "on a 4 the attacker marks Stress equal to the HP you marked"
-      }
+      },
+      "texts": {
+       "name": "Accursed",
+       "option": "Roll a d4; on a 4 the attacker marks equal Stress"
+      },
+      "description": "When you mark Hit Points from an attack."
      }
     ]
    }
@@ -3194,7 +3329,7 @@
      {
       "id": "vitreous",
       "label": "Vitreous",
-      "description": "Mark 2 Armor Slots to take no damage; your thresholds drop by 5 until repaired.",
+      "description": "Your damage thresholds drop by 5 until you repair the armor.",
       "when": {
        "severity": [
         "severe",
@@ -3216,6 +3351,10 @@
          "value": -5
         }
        ]
+      },
+      "texts": {
+       "name": "Vitreous",
+       "option": "Negate Severe or greater damage"
       }
      }
     ]

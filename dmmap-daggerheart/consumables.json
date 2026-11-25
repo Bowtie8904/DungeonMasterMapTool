@@ -46,12 +46,11 @@
       "id": "potion",
       "label": "Drink",
       "texts": {
-       "option": "{source} - Drink",
+       "option": "+1 to your next Agility Roll",
        "applied": "{source} - Drink"
       },
       "roll": "trait:Agility",
       "value": 1,
-      "description": "Drink it as part of this roll.",
       "consumeItem": true
      }
     ]
@@ -99,12 +98,11 @@
       "id": "potion",
       "label": "Drink",
       "texts": {
-       "option": "{source} - Drink",
+       "option": "+1 to your next Strength Roll",
        "applied": "{source} - Drink"
       },
       "roll": "trait:Strength",
       "value": 1,
-      "description": "Drink it as part of this roll.",
       "consumeItem": true
      }
     ]
@@ -152,12 +150,11 @@
       "id": "potion",
       "label": "Drink",
       "texts": {
-       "option": "{source} - Drink",
+       "option": "+1 to your next Finesse Roll",
        "applied": "{source} - Drink"
       },
       "roll": "trait:Finesse",
       "value": 1,
-      "description": "Drink it as part of this roll.",
       "consumeItem": true
      }
     ]
@@ -205,12 +202,11 @@
       "id": "potion",
       "label": "Drink",
       "texts": {
-       "option": "{source} - Drink",
+       "option": "+1 to your next Instinct Roll",
        "applied": "{source} - Drink"
       },
       "roll": "trait:Instinct",
       "value": 1,
-      "description": "Drink it as part of this roll.",
       "consumeItem": true
      }
     ]
@@ -258,12 +254,11 @@
       "id": "potion",
       "label": "Drink",
       "texts": {
-       "option": "{source} - Drink",
+       "option": "+1 to your next Presence Roll",
        "applied": "{source} - Drink"
       },
       "roll": "trait:Presence",
       "value": 1,
-      "description": "Drink it as part of this roll.",
       "consumeItem": true
      }
     ]
@@ -311,12 +306,11 @@
       "id": "potion",
       "label": "Drink",
       "texts": {
-       "option": "{source} - Drink",
+       "option": "+1 to your next Knowledge Roll",
        "applied": "{source} - Drink"
       },
       "roll": "trait:Knowledge",
       "value": 1,
-      "description": "Drink it as part of this roll.",
       "consumeItem": true
      }
     ]
@@ -391,8 +385,11 @@
       "label": "Grindletooth Venom",
       "roll": "damage",
       "dice": "1d6",
-      "description": "Next damage roll with the coated weapon only; apply coating before the attack.",
-      "consumeItem": true
+      "description": "Physical weapon only; apply the coating before the attack.",
+      "consumeItem": true,
+      "texts": {
+       "option": "Add a d6 to your next damage roll with the coated weapon"
+      }
      }
     ]
    }
@@ -544,8 +541,11 @@
       "label": "Improved Grindletooth Venom",
       "roll": "damage",
       "dice": "1d8",
-      "description": "Next damage roll with the coated weapon only; apply coating before the attack.",
-      "consumeItem": true
+      "description": "Physical weapon only; apply the coating before the attack.",
+      "consumeItem": true,
+      "texts": {
+       "option": "Add a d8 to your next damage roll with the coated weapon"
+      }
      }
     ]
    }
@@ -1165,8 +1165,11 @@
       "label": "Redthorn Saliva",
       "roll": "damage",
       "dice": "1d12",
-      "description": "Next damage roll with the coated weapon only; apply coating before the attack.",
-      "consumeItem": true
+      "description": "Physical weapon only; apply the coating before the attack.",
+      "consumeItem": true,
+      "texts": {
+       "option": "Add a d12 to your next damage roll with the coated weapon"
+      }
      }
     ]
    }
@@ -1208,8 +1211,11 @@
       "label": "Mythic Dust",
       "roll": "damage",
       "dice": "1d12",
-      "description": "Next damage roll with the coated weapon only; apply coating before the attack.",
-      "consumeItem": true
+      "description": "Magic weapon only; apply the coating before the attack.",
+      "consumeItem": true,
+      "texts": {
+       "option": "Add a d12 to your next damage roll with the coated weapon"
+      }
      }
     ]
    }
@@ -1408,12 +1414,15 @@
           {
            "id": "void",
            "label": "Inside the Circle of the Void",
-           "description": "Immune to magic damage while inside the void.",
+           "description": "Remove this effect when the void ends.",
            "defaultOn": true,
            "when": {
             "type": "magic"
            },
-           "negate": true
+           "negate": true,
+           "texts": {
+            "option": "Immune to magic damage inside the void"
+           }
           }
          ]
         }
@@ -2047,12 +2056,14 @@
      {
       "id": "mirror",
       "label": "Mirror of Marigold",
-      "description": "Spend a Hope to ignore the damage; the mirror shatters.",
       "negate": true,
       "cost": {
        "hope": 1
       },
-      "consumeItem": true
+      "consumeItem": true,
+      "texts": {
+       "option": "Negate the damage; the mirror shatters"
+      }
      }
     ]
    }
@@ -2248,7 +2259,10 @@
            "roll": "trait:Instinct",
            "advantage": "advantage",
            "defaultOn": true,
-           "description": "If you fail this roll, mark a Stress."
+           "description": "If you fail such a roll, mark a Stress; lasts for the scene.",
+           "texts": {
+            "option": "Advantage on Instinct rolls"
+           }
           }
          ]
         }
@@ -2338,7 +2352,11 @@
            "label": "Blood of the Kaiju (Hope d20)",
            "roll": "duality",
            "hopeDie": 20,
-           "defaultOn": true
+           "defaultOn": true,
+           "texts": {
+            "option": "Hope die becomes a d20"
+           },
+           "description": "Until the end of the scene; then mark all your remaining Stress."
           }
          ],
          "actions": [
@@ -2399,8 +2417,11 @@
            "label": "Blossomveil Petal",
            "roll": "reaction",
            "advantage": "advantage",
-           "description": "Presence Reaction Rolls only.",
-           "endEffect": "Blossomveil Petal"
+           "description": "Presence Reaction Rolls only; the petal is destroyed in sunlight.",
+           "endEffect": "Blossomveil Petal",
+           "texts": {
+            "option": "Advantage on a Presence Reaction Roll"
+           }
           }
          ]
         }
@@ -2777,7 +2798,11 @@
           "id": "invincible",
           "label": "Invincible",
           "passive": true,
-          "negate": true
+          "negate": true,
+          "texts": {
+           "option": "Immune to all damage"
+          },
+          "description": "Until the end of the scene; then make a death move."
          }
         ]
        }
@@ -2873,7 +2898,11 @@
            "label": "Echo Orchid Petal",
            "roll": "reaction",
            "advantage": "advantage",
-           "description": "Only against the actions of the creature you looked at."
+           "description": "Only against the creature you looked at.",
+           "texts": {
+            "name": "Echo Orchid Petal",
+            "option": "Advantage on Reaction Rolls against the creature's actions"
+           }
           }
          ]
         }
@@ -3010,23 +3039,26 @@
            "id": "instinct",
            "label": "Gyre Cap Tea",
            "texts": {
-            "option": "{source} - Gyre Cap Tea",
+            "option": "Advantage on Instinct rolls",
             "applied": "{source} - Gyre Cap Tea"
            },
            "roll": "trait:Instinct",
            "advantage": "advantage",
-           "defaultOn": true
+           "defaultOn": true,
+           "description": "Until your next rest."
           },
           {
            "id": "presence",
            "label": "Gyre Cap Tea: clouded presence",
            "texts": {
-            "option": "{source} - Gyre Cap Tea: clouded presence",
-            "applied": "{source} - Gyre Cap Tea: clouded presence"
+            "option": "Disadvantage on Presence rolls",
+            "applied": "{source} - Gyre Cap Tea: clouded presence",
+            "name": "Gyre Cap Tea"
            },
            "roll": "trait:Presence",
            "advantage": "disadvantage",
-           "defaultOn": true
+           "defaultOn": true,
+           "description": "Until your next rest."
           }
          ]
         }
@@ -3121,7 +3153,11 @@
             12,
             20
            ],
-           "endEffect": "Hero’s Powder"
+           "endEffect": "Hero’s Powder",
+           "texts": {
+            "option": "Add a die to an action or reaction roll"
+           },
+           "description": "Once this scene; the die grows with each death you witness before using it."
           },
           {
            "id": "reaction",
@@ -3135,7 +3171,11 @@
             12,
             20
            ],
-           "endEffect": "Hero’s Powder"
+           "endEffect": "Hero’s Powder",
+           "texts": {
+            "option": "Add a die to an action or reaction roll"
+           },
+           "description": "Once this scene; the die grows with each death you witness before using it."
           }
          ]
         }
@@ -3224,7 +3264,10 @@
            "label": "Liar’s Bane",
            "roll": "duality",
            "advantage": "advantage",
-           "description": "Only to notice traps or see through lies and deceptions."
+           "description": "You must mark a Stress to deceive someone else.",
+           "texts": {
+            "option": "Advantage to notice traps and see through lies"
+           }
           }
          ],
          "actions": [
@@ -3314,7 +3357,11 @@
            "label": "Mucin of Slipperiness",
            "roll": "reaction",
            "advantage": "advantage",
-           "description": "Only to avoid being Restrained."
+           "description": "Until your next rest.",
+           "texts": {
+            "name": "Mucin of Slipperiness",
+            "option": "Advantage on Reaction Rolls to avoid being Restrained"
+           }
           }
          ]
         }
@@ -3475,8 +3522,11 @@
           {
            "id": "cold",
            "label": "Pastry Warmth: cold exposure",
-           "description": "No damage from exposure to cold.",
-           "negate": true
+           "description": "Until your next rest.",
+           "negate": true,
+           "texts": {
+            "option": "No damage from exposure to cold"
+           }
           }
          ]
         }
@@ -3768,7 +3818,10 @@
            "roll": "trait:Instinct",
            "advantage": "advantage",
            "defaultOn": true,
-           "description": "If you fail this roll with Fear, mark a Stress."
+           "description": "If you fail with Fear, mark a Stress; until your next rest.",
+           "texts": {
+            "option": "Advantage on Instinct rolls"
+           }
           }
          ]
         }
@@ -3839,12 +3892,12 @@
            "id": "mind",
            "label": "Fortified Thoughts",
            "texts": {
-            "option": "{source} - Fortified Thoughts",
+            "option": "Advantage against effects that change your state of mind",
             "applied": "{source} - Fortified Thoughts"
            },
            "roll": "reaction",
            "advantage": "advantage",
-           "description": "Only against effects that change your state of mind."
+           "description": "Reaction Rolls only; on a failure you can mark 2 Stress to succeed instead."
           }
          ],
          "actions": [
@@ -3882,12 +3935,12 @@
       "id": "cloves",
       "label": "Toxilily clove",
       "texts": {
-       "option": "{source} - Toxilily clove",
+       "option": "Add your Proficiency to weapon damage",
        "applied": "{source} - Toxilily clove"
       },
       "roll": "damage",
       "value": "@proficiency",
-      "description": "Smear on a weapon: adds your Proficiency to its damage until your next rest. One bulb gives 1d4 cloves; only the first use consumes the bulb.",
+      "description": "Smear a clove on a weapon until your next rest; one bulb gives 1d4 cloves.",
       "consumeItem": true,
       "effect": {
        "name": "Coated Weapon Damage +Proficiency",
@@ -3962,7 +4015,11 @@
            "label": "Trinity Flower Seed",
            "roll": "trait:Instinct",
            "advantage": "advantage",
-           "description": "Insight rolls only."
+           "description": "Until your next rest.",
+           "texts": {
+            "name": "Trinity Flower Seed",
+            "option": "Advantage on Insight rolls"
+           }
           }
          ]
         }
@@ -4002,23 +4059,24 @@
            "id": "notice",
            "label": "True Vision",
            "texts": {
-            "option": "{source} - True Vision",
+            "option": "Advantage to notice physical and magical traps",
             "applied": "{source} - True Vision"
            },
            "roll": "duality",
            "advantage": "advantage",
-           "description": "Only to notice physical and magical traps."
+           "description": "You must mark 2 Stress to attempt to lie."
           },
           {
            "id": "lie",
            "label": "True Vision: lying",
            "texts": {
-            "option": "{source} - True Vision: lying",
-            "applied": "{source} - True Vision: lying"
+            "option": "Disadvantage on rolls to succeed with lying",
+            "applied": "{source} - True Vision: lying",
+            "name": "True Vision"
            },
            "roll": "duality",
            "advantage": "disadvantage",
-           "description": "Rolls to succeed with lying."
+           "description": "For the scene."
           }
          ],
          "actions": [
@@ -4259,7 +4317,7 @@
            "id": "calm",
            "label": "Region of Calm",
            "texts": {
-            "option": "{source} - Region of Calm",
+            "option": "Advantage on Reaction Rolls against fear-based effects",
             "applied": "{source} - Region of Calm"
            },
            "roll": "reaction",
@@ -4305,14 +4363,22 @@
            "label": "Wine of Discourse",
            "roll": "trait:Presence",
            "value": 1,
-           "defaultOn": true
+           "defaultOn": true,
+           "texts": {
+            "option": "+1 to Presence and Knowledge Rolls"
+           },
+           "description": "While sharing the bottle in conversation."
           },
           {
            "id": "knowledge",
            "label": "Wine of Discourse",
            "roll": "trait:Knowledge",
            "value": 1,
-           "defaultOn": true
+           "defaultOn": true,
+           "texts": {
+            "option": "+1 to Presence and Knowledge Rolls"
+           },
+           "description": "While sharing the bottle in conversation."
           }
          ]
         }
@@ -4775,8 +4841,11 @@
           {
            "id": "fall",
            "label": "Featherfall: falling damage",
-           "description": "Ignore damage from falling.",
-           "negate": true
+           "description": "For the next 10 minutes.",
+           "negate": true,
+           "texts": {
+            "option": "Ignore damage from falling"
+           }
           }
          ]
         }
@@ -5009,8 +5078,11 @@
       "label": "Red Ooze Oil",
       "roll": "damage",
       "dice": "1d8",
-      "description": "Next damage roll with the coated weapon only; apply coating before the attack.",
-      "consumeItem": true
+      "description": "Next successful attack with the coated weapon.",
+      "consumeItem": true,
+      "texts": {
+       "option": "+1d8 magic damage and Ignite the target"
+      }
      }
     ]
    }
@@ -5426,8 +5498,11 @@
       "label": "Green Ooze Oil",
       "roll": "damage",
       "dice": "1d8",
-      "description": "Next damage roll with the coated weapon only; apply coating before the attack.",
-      "consumeItem": true
+      "description": "Next successful attack with the coated weapon.",
+      "consumeItem": true,
+      "texts": {
+       "option": "+1d8 magic damage and Corrode the target"
+      }
      }
     ]
    }
@@ -5688,7 +5763,10 @@
            "proficiency": 1,
            "defaultOn": true,
            "endEffect": "Demiurge’s Draught",
-           "description": "Only after a successful attack roll."
+           "description": "Only after a successful attack roll.",
+           "texts": {
+            "option": "+1 Proficiency for your next successful attack"
+           }
           }
          ]
         }
@@ -6420,7 +6498,10 @@
            "label": "Chanting Candle",
            "roll": "duality",
            "advantage": "advantage",
-           "description": "Only to perform music or influence someone else’s behavior."
+           "description": "Creatures within Close range, until the end of the scene.",
+           "texts": {
+            "option": "Advantage to perform music or influence behavior"
+           }
           }
          ]
         }
@@ -6530,8 +6611,9 @@
       "id": "use",
       "label": "Use foraged arcane rune",
       "texts": {
-       "option": "{source} - Use foraged arcane rune",
-       "applied": "{source} - Use foraged arcane rune"
+       "option": "+2 to a Spellcast Roll",
+       "applied": "{source} - Use foraged arcane rune",
+       "name": "Foraged Arcane Rune"
       },
       "roll": "spellcast",
       "value": 2,

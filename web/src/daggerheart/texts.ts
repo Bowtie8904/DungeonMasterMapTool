@@ -14,7 +14,9 @@ export interface ActionTexts {
   reportTitle?: string;
   /** "ACTION USED" lines replacing the generated effect lines. "spent <cost>" stays first; "{effects}" inserts the generated lines. */
   report?: string[];
-  /** Roll-dialog option row text. Value/dice/cost/"per token" notes are appended automatically. */
+  /** Bold feature name of a roll-dialog option or mitigation row. Default: the owning feature/item name. */
+  name?: string;
+  /** Roll-dialog option row description shown after the feature name. Value/dice/cost are appended automatically. */
   option?: string;
   /** Extra non-cost note in the option row, replacing the generated effect wording. */
   optionNote?: string;
@@ -25,7 +27,7 @@ export interface ActionTexts {
 export type TextVars = Record<string, string | number | undefined>;
 
 export const TEXT_FIELDS: ReadonlyArray<keyof ActionTexts> =
-  ['button', 'blocked', 'chatButton', 'roll', 'reportTitle', 'report', 'option', 'optionNote', 'applied'];
+  ['button', 'blocked', 'chatButton', 'roll', 'reportTitle', 'report', 'name', 'option', 'optionNote', 'applied'];
 
 export const TEXT_PLACEHOLDERS: readonly string[] = ['actor', 'target', 'source', 'origin', 'label', 'amount', 'dice', 'result',
   'trait', 'traitValue', 'effect', 'item', 'qty', 'uses', 'usesMax', 'effects'];

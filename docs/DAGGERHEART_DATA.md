@@ -583,7 +583,7 @@ which Experience a free use applies to (Mnemonic Potion), and range/narrative pr
 ### General automation fields
 
 Actions, roll options, roll triggers, mitigation options and feature `automation` blocks accept an optional `texts` object
-(`button`, `blocked`, `chatButton`, `roll`, `reportTitle`, `report`, `option`, `optionNote`, `applied`) with `{placeholder}`
+(`button`, `blocked`, `chatButton`, `roll`, `reportTitle`, `report`, `name`, `option`, `optionNote`, `applied`) with `{placeholder}`
 templates that change displayed wording only; costs are always appended by the app. See the README section
 "Configurable automation texts" for the field and placeholder tables. Unknown fields or placeholders are logged as
 warnings (host) and shown after saving in the catalog editor; they never block loading.

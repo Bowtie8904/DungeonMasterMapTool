@@ -49,7 +49,7 @@ public final class TextTemplates {
         return names;
     }
 
-    private static final List<String> FIELDS = List.of("button", "blocked", "chatButton", "roll", "reportTitle", "report", "option", "optionNote", "applied");
+    private static final List<String> FIELDS = List.of("button", "blocked", "chatButton", "roll", "reportTitle", "report", "name", "option", "optionNote", "applied");
     private static final List<String> NAMES = List.of("actor", "target", "source", "origin", "label", "amount", "dice", "result",
             "trait", "traitValue", "effect", "item", "qty", "uses", "usesMax", "effects");
 

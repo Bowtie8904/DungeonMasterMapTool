@@ -1,7 +1,7 @@
-﻿import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import cases from '../../../src/test/resources/dmmt/text-template-cases.json';
 import { applyReportLines, formatText, templatePlaceholders, validateCatalogTexts, validateTexts } from './texts';
-import { actionButtonText, blockedTitle, rollOptionAppliedLabel, rollOptionText } from './engine';
+import { actionButtonText, blockedTitle, optionRowParts, rollOptionAppliedLabel, rollOptionText } from './engine';
 import type { ActionDef } from './engine';
 
 describe('formatText', () => {
@@ -52,6 +52,8 @@ describe('per-field overrides', () => {
     expect(rollOptionText(s)).toBe('Big Boost');
     expect(rollOptionAppliedLabel(s)).toBe('Used Card');
     expect(rollOptionText({ ...s, option: { label: 'Boost' } } as typeof s)).toBe('Card - Boost');
+    expect(optionRowParts(s)).toEqual({ name: 'Card', text: 'Big Boost' });
+    expect(optionRowParts({ ...s, option: { label: 'Boost', texts: { name: 'Nm', option: 'Does it' } } } as typeof s)).toEqual({ name: 'Nm', text: 'Does it' });
     expect(blockedTitle({ label: 'X', texts: { blocked: 'Nope.' } } as ActionDef, 'No Hope', {})).toBe('Nope. No Hope');
     expect(blockedTitle({ label: 'X' } as ActionDef, 'No Hope', {})).toBe('No Hope');
   });

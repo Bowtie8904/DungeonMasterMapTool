@@ -140,7 +140,10 @@
          "attack"
         ],
         "advantage": "advantage",
-        "description": "You have advantage on rolls to consort with nobles, negotiate prices, or leverage your reputation to get what you want."
+        "description": "Only when consorting with nobles, negotiating prices, or leveraging your reputation.",
+        "texts": {
+         "option": "Advantage with nobles, prices and reputation"
+        }
        }
       ]
      }
@@ -162,7 +165,10 @@
         "label": "Well-Read",
         "roll": "action",
         "advantage": "advantage",
-        "description": "You have advantage on rolls that involve the history, culture, or politics of a prominent person or place."
+        "description": "Only rolls about a prominent person or place.",
+        "texts": {
+         "option": "Advantage on history, culture and politics"
+        }
        }
       ]
      }
@@ -199,7 +205,10 @@
         "label": "Dedicated (Hope d20)",
         "roll": "action",
         "hopeDie": 20,
-        "description": "Embody one of your principles to change your hope die to a d20."
+        "description": "Embody one of your principles with this action.",
+        "texts": {
+         "option": "Hope die becomes a d20"
+        }
        }
       ]
      }
@@ -232,7 +241,11 @@
         },
         "cost": {
          "hope": 1
-        }
+        },
+        "texts": {
+         "option": "Use an ally's Experience as your own"
+        },
+        "description": "Describe how that ally prepared you."
        }
       ]
      }
@@ -254,7 +267,10 @@
         "label": "Steady",
         "roll": "action",
         "advantage": "advantage",
-        "description": "You have advantage on rolls to traverse dangerous cliffs and ledges, navigate harsh environments, and use your survival knowledge."
+        "description": "Dangerous cliffs and ledges, harsh environments, survival knowledge.",
+        "texts": {
+         "option": "Advantage on survival and traversal"
+        }
        }
       ]
      }
@@ -309,6 +325,9 @@
         },
         "cost": {
          "tide": 1
+        },
+        "texts": {
+         "option": "Spend Tide tokens for a bonus"
         }
        }
       ]
@@ -331,7 +350,10 @@
         "label": "Scoundrel",
         "roll": "action",
         "advantage": "advantage",
-        "description": "You have advantage on rolls to negotiate with criminals, detect lies, or find a safe place to hide."
+        "description": "Only to negotiate with criminals, detect lies, or find a safe place to hide.",
+        "texts": {
+         "option": "Advantage with criminals, lies and hiding"
+        }
        }
       ]
      }
@@ -356,7 +378,10 @@
         "excludeRolls": [
          "attack"
         ],
-        "description": "When you’re in an area with low light or heavy shadow, you have advantage on rolls to hide, investigate, or perceive details within that area."
+        "description": "Only in an area with low light or heavy shadow.",
+        "texts": {
+         "option": "Advantage to hide, investigate or perceive"
+        }
        }
       ]
      }
@@ -440,7 +465,9 @@
         "label": "Lightfoot",
         "roll": "action",
         "advantage": "advantage",
-        "description": "Your movement is naturally silent. You have advantage on rolls to move without being heard."
+        "texts": {
+         "option": "Advantage to move without being heard"
+        }
        }
       ]
      }

@@ -231,7 +231,7 @@ describe('ancestry automation and matching catalog rules', () => {
       .toEqual([['actor', 'hp', 2], ['actor', 'stress', 2]]);
     for (const name of ['Privilege', 'Well-Read', 'Steady', 'Scoundrel', 'Low-Light Living', 'Lightfoot']) {
       expect(find('communities', name).rollOptions![0]).toMatchObject({ roll: 'action', advantage: 'advantage' });
-      expect(find('communities', name).rollOptions![0].description).toBeTruthy();
+      expect(find('communities', name).rollOptions![0].texts?.option).toBeTruthy();
     }
     for (const [category, name] of [['items', 'Skeleton Key'], ['items', 'Veilcloak'], ['armor', 'Deep-Forged Coral Armor']]) {
       expect(find(category, name).rollOptions![0].advantage).toBe('advantage');

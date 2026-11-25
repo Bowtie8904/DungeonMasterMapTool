@@ -50,19 +50,22 @@
        {
         "id": "loyal-friend",
         "label": "Loyal Friend: companion intercepts",
-        "description": "Confirm this is attack damage that would mark your last HP and you are within Close range of your available companion. They take the damage instead, marking one Stress.",
+        "description": "Once per long rest; attack damage that would mark your last HP within Close range of your companion. Companion marks one Stress.",
         "companionIntercept": true,
         "when": {
          "lastHp": true
         },
         "replaceHp": true,
         "insteadOfArmor": true,
-        "uses": "source"
+        "uses": "source",
+        "texts": {
+         "option": "Companion takes the damage instead"
+        }
        },
        {
         "id": "loyal-friend-armored",
         "label": "Loyal Friend: Armored companion intercepts",
-        "description": "Confirm attack damage would mark your last HP and you are within Close range. Your companion intercepts; Armored marks one owner Armor Slot instead of companion Stress.",
+        "description": "Once per long rest; attack damage that would mark your last HP within Close range. Marks one of your Armor Slots instead of companion Stress.",
         "companionIntercept": true,
         "companionArmored": true,
         "cost": {
@@ -73,7 +76,10 @@
         },
         "replaceHp": true,
         "insteadOfArmor": true,
-        "uses": "source"
+        "uses": "source",
+        "texts": {
+         "option": "Armored companion takes the damage"
+        }
        }
       ]
      }
@@ -261,7 +267,11 @@
              "roll": "action",
              "advantage": "advantage",
              "endEffect": "Build on companion success",
-             "description": "Your next action builds on the companion's success."
+             "description": "Only your next action, if it builds on the companion's successful Hope command.",
+             "texts": {
+              "name": "Companion",
+              "option": "Advantage on an action that builds on its success"
+             }
             }
            ]
           }
@@ -321,7 +331,11 @@
           "min": 0,
           "max": 2
          }
-        }
+        },
+        "texts": {
+         "option": "Hope die becomes a d20"
+        },
+        "description": "Only while you have 2 or fewer Hit Points unmarked."
        }
       ]
      }
@@ -452,7 +466,11 @@
              "roll": "attack",
              "dice": "1d6",
              "diceResource": "slayer-dice",
-             "endEffect": "Martial Preparation: Slayer Die"
+             "endEffect": "Martial Preparation: Slayer Die",
+             "texts": {
+              "name": "Martial Preparation",
+              "option": "Spend the Slayer Die on an attack or damage roll"
+             }
             },
             {
              "id": "damage",
@@ -460,7 +478,11 @@
              "roll": "damage",
              "dice": "1d6",
              "diceResource": "slayer-dice",
-             "endEffect": "Martial Preparation: Slayer Die"
+             "endEffect": "Martial Preparation: Slayer Die",
+             "texts": {
+              "name": "Martial Preparation",
+              "option": "Spend the Slayer Die on an attack or damage roll"
+             }
             }
            ]
           }
@@ -503,7 +525,10 @@
          "hope": 1
         },
         "usesSource": false,
-        "description": "Use after a successful attack. Add one damage die from your equipped secondary weapon."
+        "description": "After a successful attack with a secondary weapon equipped.",
+        "texts": {
+         "option": "Add a secondary weapon damage die"
+        }
        }
       ],
       "rollTriggers": [
@@ -567,6 +592,9 @@
         },
         "cost": {
          "slayer-dice": 1
+        },
+        "texts": {
+         "option": "Spend Slayer Dice on the roll"
         }
        },
        {
@@ -581,6 +609,9 @@
         },
         "cost": {
          "slayer-dice": 1
+        },
+        "texts": {
+         "option": "Spend Slayer Dice on the roll"
         }
        }
       ]
@@ -619,7 +650,10 @@
         "weapon": "any",
         "matchingDice": true,
         "defaultOn": true,
-        "description": "Double every matching die result across all damage dice for this Spirit Weapon attack, including bonus dice."
+        "description": "Spirit Weapon attacks only; includes bonus dice.",
+        "texts": {
+         "option": "Double matching damage dice"
+        }
        }
       ]
      }
@@ -915,6 +949,9 @@
         "value": 2,
         "cost": {
          "hope": 1
+        },
+        "texts": {
+         "option": "Shape your element to help an action"
         }
        },
        {
@@ -924,6 +961,9 @@
         "value": 3,
         "cost": {
          "hope": 1
+        },
+        "texts": {
+         "option": "Shape your element to add damage"
         }
        }
       ]
@@ -1070,7 +1110,10 @@
         "label": "First Strike (double damage)",
         "roll": "damage",
         "multiplier": 2,
-        "description": "Select only for your first successful attack in the scene."
+        "description": "Only your first successful attack in the scene.",
+        "texts": {
+         "option": "Deal double damage"
+        }
        }
       ]
      }
@@ -1278,7 +1321,10 @@
         "label": "Vexing Malison: Hexed target",
         "roll": "attack",
         "advantage": "advantage",
-        "description": "Select only when attacking a Hexed creature."
+        "description": "Only when attacking a Hexed creature.",
+        "texts": {
+         "option": "Advantage against Hexed creatures"
+        }
        }
       ]
      }
@@ -1379,7 +1425,11 @@
          ]
         },
         "finalSevere": true,
-        "recoveryChoice": true
+        "recoveryChoice": true,
+        "texts": {
+         "option": "Gain a Hope or clear a Stress"
+        },
+        "description": "When you take Severe damage."
        }
       ]
      }
@@ -1416,7 +1466,10 @@
         "cost": {
          "hope": 1
         },
-        "description": "Each Hope targets one additional creature within Melee range."
+        "description": "One additional target per Hope spent.",
+        "texts": {
+         "option": "Target additional creatures in Melee range"
+        }
        }
       ]
      }
@@ -1442,7 +1495,10 @@
         },
         "uses": "source",
         "reflectHp": true,
-        "description": "Confirm the adversary is within Melee range; they mark the same HP you mark."
+        "description": "Once per rest; adversary must be within Melee range.",
+        "texts": {
+         "option": "Adversary marks the same Hit Points you mark"
+        }
        }
       ],
       "actions": [
@@ -1819,6 +1875,9 @@
            "exclusive": "quick",
            "cost": {
             "focus": 1
+           },
+           "texts": {
+            "option": "Target another creature with this attack"
            }
           },
           {
@@ -1828,6 +1887,9 @@
            "exclusive": "quick",
            "cost": {
             "stress": 1
+           },
+           "texts": {
+            "option": "Target another creature with this attack"
            }
           }
          ]
@@ -1941,7 +2003,10 @@
             "focus": 1
            },
            "severity": 1,
-           "insteadOfArmor": true
+           "insteadOfArmor": true,
+           "texts": {
+            "option": "Spend Focus instead of an Armor Slot"
+           }
           }
          ]
         }
@@ -2016,7 +2081,11 @@
            "cost": {
             "focus": 1
            },
-           "proficiency": 1
+           "proficiency": 1,
+           "texts": {
+            "option": "+1 Proficiency for this attack"
+           },
+           "description": "Before you make the attack roll."
           }
          ]
         }
@@ -2035,7 +2104,10 @@
            "label": "Isolating: no nearby creatures",
            "roll": "attack",
            "advantage": "advantage",
-           "description": "Confirm no other creatures are within Very Close range of you or your target."
+           "description": "Only with no other creatures within Very Close range of you or your target.",
+           "texts": {
+            "option": "Advantage on attack rolls"
+           }
           }
          ]
         }
@@ -2122,7 +2194,10 @@
            "cost": {
             "hope": 1
            },
-           "negate": true
+           "negate": true,
+           "texts": {
+            "option": "Negate Minor damage"
+           }
           }
          ]
         }
@@ -2329,7 +2404,10 @@
              "label": "Glamour: leverage your appearance",
              "roll": "trait",
              "advantage": "advantage",
-             "description": "Select only when your illusory appearance helps."
+             "description": "Only when your illusory appearance helps.",
+             "texts": {
+              "option": "Advantage when leveraging your illusory appearance"
+             }
             },
             {
              "id": "maintain",
@@ -2338,7 +2416,10 @@
              "cost": {
               "stress": 1
              },
-             "preserveEffect": "Night's Glamour"
+             "preserveEffect": "Night's Glamour",
+             "texts": {
+              "option": "Maintain your Glamour when dealing damage"
+             }
             }
            ],
            "mitigation": [
@@ -2352,7 +2433,9 @@
               "stress": 1
              },
              "preserveEffect": "Night's Glamour",
-             "description": "Mark a Stress to keep your Glamour when this damage marks HP."
+             "texts": {
+              "option": "Maintain your Glamour when marking Hit Points"
+             }
             }
            ]
           }
@@ -2459,7 +2542,10 @@
         "label": "Adrenaline",
         "roll": "damage",
         "value": "@level",
-        "description": "Only while Vulnerable."
+        "description": "Only while Vulnerable.",
+        "texts": {
+         "option": "Add your level to damage rolls"
+        }
        }
       ]
      }
@@ -2596,7 +2682,11 @@
              "roll": "attack",
              "defaultOn": true,
              "advantage": "advantage",
-             "endEffect": "Veilwalker"
+             "endEffect": "Veilwalker",
+             "texts": {
+              "option": "Advantage on your next attack"
+             },
+             "description": "Only your next attack in this scene."
             }
            ]
           }
@@ -2643,12 +2733,15 @@
        {
         "id": "spectral",
         "label": "Spectral Form",
-        "description": "While in spectral form you have resistance to physical damage.",
+        "description": "Only while in spectral form.",
         "requiresEffect": "Spectral Form",
         "when": {
          "type": "physical"
         },
-        "halve": true
+        "halve": true,
+        "texts": {
+         "option": "Resist physical damage"
+        }
        }
       ]
      }
@@ -2749,7 +2842,10 @@
         "label": "Hearing or scent",
         "roll": "action",
         "advantage": "advantage",
-        "description": "Only when perceiving through hearing or scent."
+        "description": "Hearing and scent only.",
+        "texts": {
+         "option": "Advantage on perception rolls"
+        }
        }
       ]
      }
@@ -2769,7 +2865,11 @@
          "attack",
          "reaction"
         ],
-        "dice": "1d10"
+        "dice": "1d10",
+        "texts": {
+         "option": "Apply Wolf Form bonus die to the roll"
+        },
+        "description": "Agility and Strength action rolls while in Wolf Form."
        },
        {
         "id": "strength",
@@ -2780,7 +2880,11 @@
          "attack",
          "reaction"
         ],
-        "dice": "1d10"
+        "dice": "1d10",
+        "texts": {
+         "option": "Apply Wolf Form bonus die to the roll"
+        },
+        "description": "Agility and Strength action rolls while in Wolf Form."
        }
       ]
      }
@@ -2922,7 +3026,9 @@
               "label": "Tracking advantage",
               "roll": "action",
               "advantage": "advantage",
-              "description": "Only when tracking a creature."
+              "texts": {
+               "option": "Advantage when tracking a creature"
+              }
              }
             ]
            }
@@ -3009,6 +3115,9 @@
               "value": "@proficiency",
               "cost": {
                "stress": 1
+              },
+              "texts": {
+               "option": "Add your Proficiency to the attack roll"
               }
              }
             ]
@@ -3098,12 +3207,15 @@
        {
         "id": "aegis",
         "label": "Dark Aegis",
-        "description": "Spend a Favor to mark no Hit Points.",
+        "description": "Once per long rest.",
         "replaceHp": true,
         "cost": {
          "favor": 1
         },
-        "uses": "source"
+        "uses": "source",
+        "texts": {
+         "option": "Mark no Hit Points instead of taking damage"
+        }
        }
       ]
      }
@@ -3199,12 +3311,15 @@
        {
         "id": "sink",
         "label": "Damage Sink",
-        "description": "Spend a Favor to halve the incoming damage.",
+        "description": "Once per rest.",
         "halve": true,
         "cost": {
          "favor": 1
         },
-        "uses": "source"
+        "uses": "source",
+        "texts": {
+         "option": "Halve incoming damage"
+        }
        }
       ]
      }
@@ -3268,7 +3383,10 @@
         "roll": "action",
         "advantage": "advantage",
         "requiresEffect": "Patron’s Mantle",
-        "description": "Only action rolls to intimidate a target while the mantle is active."
+        "description": "Only action rolls to intimidate a target while the mantle is active.",
+        "texts": {
+         "option": "Advantage to intimidate while cloaked in your Patron's aspect"
+        }
        }
       ]
      }
@@ -3481,7 +3599,7 @@
         "cost": {
          "favor": 1
         },
-        "description": "Tier-scaled Patron Dice; lasts until you deal Severe damage or the scene ends.",
+        "description": "Dice scale with tier; lasts until you deal Severe damage or the scene ends.",
         "diceByLevel": {
          "2": "2d6",
          "5": "3d8",
@@ -3492,6 +3610,9 @@
          "kind": "buff",
          "until": "scene",
          "text": "Patron Dice are added to your damage rolls."
+        },
+        "texts": {
+         "option": "Add Patron Dice to damage"
         }
        }
       ],
@@ -3546,14 +3667,17 @@
        {
         "id": "vengeance",
         "label": "Deadly Vengeance",
-        "description": "Only when marking HP from an attack. Spend a Favor; roll one Patron Die per HP marked. Each 4+ makes the attacker mark 1 HP.",
+        "description": "When you mark Hit Points from an attack; one die per Hit Point marked.",
         "when": {
          "markingHp": true
         },
         "cost": {
          "favor": 1
         },
-        "patronDice": "vengeance"
+        "patronDice": "vengeance",
+        "texts": {
+         "option": "Roll Patron Dice; each 4+ makes the attacker mark a Hit Point"
+        }
        }
       ]
      }
@@ -3593,7 +3717,10 @@
         "cost": {
          "poison": 1
         },
-        "description": "Successful weapon attack; choose Fear Leaf poison. Do not spend another token with Afflict with poison for the same poison."
+        "description": "Successful weapon attack; don't spend another token for the same poison.",
+        "texts": {
+         "option": "Afflict with Fear Leaf poison"
+        }
        }
       ]
      }
@@ -3665,7 +3792,10 @@
         "cost": {
          "poison": 1
         },
-        "description": "Successful weapon attack; choose Leech Weed poison. Do not spend another token with Afflict with poison for the same poison."
+        "description": "Successful weapon attack; don't spend another token for the same poison.",
+        "texts": {
+         "option": "Afflict with Leech Weed poison"
+        }
        }
       ],
       "rollTriggers": [
@@ -3802,6 +3932,9 @@
          "kind": "buff",
          "until": "longRest",
          "text": "Spend Charge for +10 magic damage, or remove it manually for +3 to the target's reaction Difficulty."
+        },
+        "texts": {
+         "option": "Become Charged when you take magic damage"
         }
        }
       ],
@@ -3813,7 +3946,10 @@
         "magicOnly": true,
         "requiresEffect": "Charged",
         "endEffect": "Charged",
-        "value": 10
+        "value": 10,
+        "texts": {
+         "option": "Spend your Charge for a bonus"
+        }
        }
       ]
      }
@@ -4072,7 +4208,10 @@
          "resource": "stress",
          "multiplier": 2
         },
-        "description": "Requires an Experience. Mark 1 Stress instead of spending 1 Hope and double its modifier."
+        "description": "Requires an Experience.",
+        "texts": {
+         "option": "Mark a Stress instead of spending Hope; double the Experience modifier"
+        }
        }
       ]
      }
@@ -4151,7 +4290,10 @@
          "Fueled by Fear": "2d10",
          "Have No Fear": "3d10"
         },
-        "description": "Use after a successful attack with Fear. Extra magic damage."
+        "description": "Only after a successful attack with Fear.",
+        "texts": {
+         "option": "Extra 1d10 magic damage"
+        }
        }
       ]
      }
@@ -4343,12 +4485,15 @@
        {
         "id": "iron-will",
         "label": "Iron Will",
-        "description": "Mark an additional Armor Slot to reduce severity further.",
+        "description": "Physical damage only.",
         "when": {
          "type": "physical",
          "armor": true
         },
-        "armorSlots": 1
+        "armorSlots": 1,
+        "texts": {
+         "option": "Mark an additional Armor Slot to reduce severity"
+        }
        }
       ]
      }
@@ -4384,7 +4529,10 @@
         "hopeDie": 20,
         "requiresEffect": "Contacts Everywhere",
         "endEffect": "Contacts Everywhere",
-        "description": "Only for a Presence roll in conversation."
+        "description": "Only for a Presence roll in conversation.",
+        "texts": {
+         "option": "Hope die becomes a d20"
+        }
        }
       ],
       "mitigation": [
@@ -4397,7 +4545,10 @@
          "markingHp": true
         },
         "markedHpOnly": true,
-        "hp": -1
+        "hp": -1,
+        "texts": {
+         "option": "Reduce Hit Points marked by 1"
+        }
        }
       ]
      }
@@ -4450,7 +4601,11 @@
              "roll": "damage",
              "dice": "2d8",
              "defaultOn": true,
-             "endEffect": "Contacts Everywhere"
+             "endEffect": "Contacts Everywhere",
+             "texts": {
+              "option": "Deal 2d8 damage"
+             },
+             "description": "Choose one benefit; using it ends this effect."
             }
            ],
            "rollTriggers": [
@@ -4808,7 +4963,11 @@
         "label": "+1 Proficiency",
         "roll": "damage",
         "proficiency": 1,
-        "description": "Only for the next successful attack against the adversary who damaged an ally within Melee range."
+        "description": "Only the next successful attack against the adversary who damaged an ally within Melee range.",
+        "texts": {
+         "name": "Act of Reprisal",
+         "option": "+1 Proficiency"
+        }
        }
       ]
      }
@@ -5088,7 +5247,11 @@
            "sides": 6,
            "success": 6,
            "each": true
-          }
+          },
+          "texts": {
+           "option": "Roll a d6 per HP; each 6 reduces HP marked by 1"
+          },
+          "description": "Only while Channeling Earth."
          }
         ]
        }
@@ -5481,7 +5644,11 @@
              "label": "Hover: Agility advantage",
              "roll": "trait:Agility",
              "advantage": "advantage",
-             "defaultOn": true
+             "defaultOn": true,
+             "texts": {
+              "name": "Channeling: Air",
+              "option": "Advantage on Agility while hovering"
+             }
             }
            ]
           }
@@ -5651,7 +5818,10 @@
         "label": "Ethereal Visage",
         "roll": "trait:Presence",
         "advantage": "advantage",
-        "description": "Your supernatural visage strikes awe and fear. While flying, you have advantage on Presence Rolls. When you succeed with Hope on a Presence Roll, you can remove a Fear from the GM’s Fear pool instead of gaining Hope."
+        "description": "Only while flying.",
+        "texts": {
+         "option": "Advantage on Presence rolls"
+        }
        }
       ]
      }
@@ -5688,7 +5858,10 @@
         "cost": {
          "hope": 1
         },
-        "description": "Successful attack while flying."
+        "description": "Successful attack while flying.",
+        "texts": {
+         "option": "Deal an extra 1d8 damage"
+        }
        }
       ],
       "actions": [
@@ -5894,9 +6067,12 @@
         "id": "use",
         "label": "Hold Them Off",
         "roll": "damage",
-        "description": "Use after a successful weapon attack: apply that same attack roll to two additional adversaries within its range.",
+        "description": "After a successful weapon attack; they must be in range of the attack.",
         "cost": {
          "hope": 3
+        },
+        "texts": {
+         "option": "Reuse the attack roll on two more adversaries"
         }
        }
       ]
@@ -5915,12 +6091,15 @@
         "cost": {
          "hope": 1
         },
-        "description": "Spend a Hope on this attack; on a success the target becomes your Focus.",
+        "description": "On a successful attack.",
         "effect": {
          "name": "Ranger’s Focus",
          "kind": "buff",
          "until": "scene",
          "text": "Your attacks against your Focus can be rerolled once by ending this feature."
+        },
+        "texts": {
+         "option": "Make the target your Focus"
         }
        }
       ],
@@ -5994,12 +6173,15 @@
         "cost": {
          "hope": 3
         },
-        "description": "+1 to attack rolls until your next rest.",
+        "description": "Until your next rest.",
         "effect": {
          "name": "No Mercy",
          "kind": "buff",
          "until": "rest",
          "text": "+1 bonus to attack rolls."
+        },
+        "texts": {
+         "option": "+1 to attack rolls"
         }
        }
       ],
@@ -6047,7 +6229,10 @@
         "label": "Combat Training",
         "roll": "damage",
         "value": "@level",
-        "description": "Physical damage only; weapon burden is ignored when equipping weapons."
+        "description": "Physical damage only.",
+        "texts": {
+         "option": "Add your level to physical damage"
+        }
        }
       ]
      }
@@ -6235,7 +6420,10 @@
            "magicOnly": true,
            "value": "@cardLevel",
            "endEffect": "Channel Raw Power",
-           "description": "Use on one spell that deals damage."
+           "description": "One damaging spell.",
+           "texts": {
+            "option": "Add the bonus to a damaging spell"
+           }
           }
          ]
         }
@@ -6352,7 +6540,10 @@
          "Ambush": "@tierd6",
          "Backstab": "@tierd8"
         },
-        "description": "Select only when damaging the adversary you have marked."
+        "description": "Only when damaging the adversary you have marked.",
+        "texts": {
+         "option": "Add d4s equal to your tier to damage"
+        }
        }
       ]
      }
@@ -6525,7 +6716,11 @@
         "combo": true,
         "cost": {
          "stress": 1
-        }
+        },
+        "texts": {
+         "option": "Start a combo strike after damage"
+        },
+        "description": "After a successful Melee weapon attack."
        },
        {
         "id": "focus",
@@ -6536,7 +6731,11 @@
         "requiresFeature": "Flow State",
         "cost": {
          "focus": 1
-        }
+        },
+        "texts": {
+         "option": "Start a combo strike by spending Focus"
+        },
+        "description": "After a successful Melee weapon attack."
        }
       ]
      }
@@ -6619,21 +6818,33 @@
              "label": "Spend Rally Die",
              "roll": "action",
              "dice": "@die",
-             "endEffect": "Rally Die"
+             "endEffect": "Rally Die",
+             "texts": {
+              "option": "Add the Rally Die to the roll"
+             },
+             "description": "One action, reaction or damage roll."
             },
             {
              "id": "reaction",
              "label": "Spend Rally Die",
              "roll": "reaction",
              "dice": "@die",
-             "endEffect": "Rally Die"
+             "endEffect": "Rally Die",
+             "texts": {
+              "option": "Add the Rally Die to the roll"
+             },
+             "description": "One action, reaction or damage roll."
             },
             {
              "id": "damage",
              "label": "Spend Rally Die",
              "roll": "damage",
              "dice": "@die",
-             "endEffect": "Rally Die"
+             "endEffect": "Rally Die",
+             "texts": {
+              "option": "Add the Rally Die to the roll"
+             },
+             "description": "One action, reaction or damage roll."
             }
            ],
            "actions": [
@@ -6705,7 +6916,10 @@
              "label": "Blood Maledict advantage",
              "roll": "action",
              "advantage": "advantage",
-             "description": "Only against the chosen target."
+             "description": "Only against the chosen target.",
+             "texts": {
+              "option": "Advantage on action rolls"
+             }
             }
            ]
           }
@@ -6771,7 +6985,11 @@
                },
                "dieSize": 8
               }
-             ]
+             ],
+             "texts": {
+              "option": "Extra damage on enchanted strikes"
+             },
+             "description": "Weapon and damage type are table-managed."
             }
            ]
           }
@@ -6831,7 +7049,10 @@
              "label": "Vision lore advantage",
              "roll": "action",
              "advantage": "advantage",
-             "description": "Only to recall lore about things in the vision."
+             "description": "Only about things in the vision.",
+             "texts": {
+              "option": "Advantage to recall lore"
+             }
             }
            ]
           }
@@ -7063,7 +7284,10 @@
              "label": "Pack Hunting",
              "roll": "damage",
              "dice": "1d8",
-             "description": "Successful attack against the same target as the ally immediately before you."
+             "description": "Successful attack against the same target as the ally immediately before you.",
+             "texts": {
+              "option": "Add a d8 to damage"
+             }
             }
            ]
           }
@@ -7192,7 +7416,11 @@
              "when": {
               "type": "physical"
              },
-             "halve": true
+             "halve": true,
+             "texts": {
+              "option": "Resist physical damage"
+             },
+             "description": "While retracted; leave the shell before other actions."
             }
            ],
            "actions": [
@@ -7222,7 +7450,11 @@
                   "when": {
                    "type": "physical"
                   },
-                  "reduce": "@armorscore"
+                  "reduce": "@armorscore",
+                  "texts": {
+                   "option": "Stay retracted in your shell"
+                  },
+                  "description": "Leave the shell before performing other actions."
                  }
                 ]
                }
@@ -7423,7 +7655,11 @@
              "proficiency": 1,
              "cost": {
               "stress": 1
-             }
+             },
+             "texts": {
+              "option": "+1 Proficiency for this attack"
+             },
+             "description": "Before the attack."
             }
            ],
            "damage": {
@@ -7657,7 +7893,10 @@
              "cost": {
               "stress": 1
              },
-             "description": "Move into Melee; on success the target marks a Stress."
+             "description": "Attack after moving into Melee range.",
+             "texts": {
+              "option": "Move into Melee; +2 Proficiency, target marks a Stress"
+             }
             }
            ]
           }
@@ -7747,7 +7986,10 @@
              "cost": {
               "hope": 1
              },
-             "description": "After a successful attack; the target becomes temporarily Vulnerable."
+             "description": "After a successful attack; Vulnerability is temporary.",
+             "texts": {
+              "option": "+1 Proficiency; target becomes Vulnerable"
+             }
             }
            ]
           }
@@ -7881,7 +8123,10 @@
              "cost": {
               "hope": 1
              },
-             "description": "After a successful attack; the target becomes Vulnerable."
+             "description": "After a successful attack.",
+             "texts": {
+              "option": "+1 Proficiency; target becomes Vulnerable"
+             }
             }
            ]
           }
@@ -8070,8 +8315,11 @@
              "id": "raptor",
              "label": "Deadly Raptor: reroll dice below Proficiency",
              "roll": "damage",
-             "description": "Move straight from at least Close into Melee and attack in the same action.",
-             "rerollBelowProficiency": true
+             "description": "Fly straight from at least Close into Melee and attack in the same action.",
+             "rerollBelowProficiency": true,
+             "texts": {
+              "option": "Reroll damage dice below your Proficiency"
+             }
             }
            ]
           }
@@ -8130,7 +8378,11 @@
               "sides": 6,
               "success": 5
              },
-             "saveArmor": 1
+             "saveArmor": 1,
+             "texts": {
+              "option": "Roll a d6; on 5+ reduce severity by one"
+             },
+             "description": "When you would mark an Armor Slot."
             }
            ]
           }
@@ -8255,11 +8507,14 @@
         "label": "Sneak Attack",
         "roll": "damage",
         "dice": "1d6",
-        "description": "Successful attack while Cloaked or an ally is in Melee of target.",
+        "description": "Successful attack while Cloaked or while an ally is within Melee range of the target.",
         "diceByLevel": {
          "2": "2d6",
          "5": "3d6",
          "8": "4d6"
+        },
+        "texts": {
+         "option": "Add d6s equal to your tier to damage"
         }
        }
       ]
@@ -8352,7 +8607,10 @@
              "label": "Unstoppable Die",
              "roll": "damage",
              "effectValue": true,
-             "defaultOn": true
+             "defaultOn": true,
+             "texts": {
+              "option": "Add the Unstoppable Die to damage"
+             }
             }
            ],
            "mitigation": [
@@ -8360,11 +8618,14 @@
              "id": "physical",
              "label": "Unstoppable",
              "defaultOn": true,
-             "description": "Reduces physical damage severity by one threshold: Severe to Major, Major to Minor, Minor to None. Magic damage is unaffected.",
+             "description": "Magic damage is unaffected.",
              "when": {
               "type": "physical"
              },
-             "severity": 1
+             "severity": 1,
+             "texts": {
+              "option": "Reduce physical damage by one threshold"
+             }
             }
            ]
           }
@@ -8453,9 +8714,12 @@
         "cost": {
          "favor": 1
         },
-        "description": "Only an action related to your patron’s sphere of influence.",
+        "description": "Only an action related to your patron's sphere of influence.",
         "diceByLevel": {
          "5": "1d8"
+        },
+        "texts": {
+         "option": "Roll a Patron Die"
         }
        }
       ]

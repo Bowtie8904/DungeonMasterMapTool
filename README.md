@@ -1004,7 +1004,8 @@ Format-1 catalog entries (`dmmap-daggerheart/*.json`) may carry an optional `tex
 | `roll` | Label of the roll sent by a reroll trigger |
 | `reportTitle` | "ACTION USED" card title (browser and host) |
 | `report` | "ACTION USED" lines; `spent <cost>` stays first, a line `{effects}` inserts the generated lines, empty lines are dropped |
-| `option` / `optionNote` | Roll-dialog option row text / non-cost note |
+| `name` / `option` | Roll-dialog and mitigation rows render as **name** - option (cost); `name` defaults to the feature name, `option` is the short description. The small line below is the option's `description` (limitation) plus the automatic "(n/max left)" |
+| `optionNote` | Extra non-cost note in the small line |
 | `applied` | Label in the chat roll breakdown |
 
 Placeholders are written `{name}`; `{{` and `}}` give literal braces. Unknown or unavailable placeholders stay literal. Available: `actor`, `target`, `source`, `origin`, `label`, `amount`, `dice`, `result`, `trait`, `traitValue`, `effect`, `item`, `qty`, `uses`, `usesMax`, and `effects` (report only).
