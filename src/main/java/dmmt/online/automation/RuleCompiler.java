@@ -121,8 +121,15 @@ public final class RuleCompiler {
                     + "|roll\\.(attack|damage|spellcast|action|reaction)|trait\\.(Agility|Strength|Finesse|Instinct|Presence|Knowledge)");
 
     /** Document-level declarations that operations and references may name. */
-    record Decl(ObjectNode state, ObjectNode limits, ObjectNode pools, ObjectNode effects, boolean attachable) {
-        Decl(ObjectNode state, ObjectNode limits, ObjectNode pools, ObjectNode effects) { this(state, limits, pools, effects, false); }
+    record Decl(ObjectNode state, ObjectNode limits, ObjectNode pools, ObjectNode effects, boolean attachable, boolean open) {
+        Decl(ObjectNode state, ObjectNode limits, ObjectNode pools, ObjectNode effects) { this(state, limits, pools, effects, false, false); }
+        Decl(ObjectNode state, ObjectNode limits, ObjectNode pools, ObjectNode effects, boolean attachable) { this(state, limits, pools, effects, attachable, false); }
+
+        /** Declarations of whichever source will use a recipe are unknown, so names a recipe reads are not checked against any. */
+        static Decl permissive() {
+            return new Decl(RuleJson.JSON.createObjectNode(), RuleJson.JSON.createObjectNode(),
+                    RuleJson.JSON.createObjectNode(), RuleJson.JSON.createObjectNode(), true, true);
+        }
 
         static Decl empty() {
             return new Decl(RuleJson.JSON.createObjectNode(), RuleJson.JSON.createObjectNode(),
@@ -903,7 +910,7 @@ public final class RuleCompiler {
             if (recipes.put(id, (ObjectNode) recipe) != null) throw RuleJson.error("/recipes/id", "Duplicate recipe ID.");
             RuleJson.object(recipe.path("args"), "/recipes/" + id + "/args");
             RuleJson.object(recipe.path("ui"), "/recipes/" + id + "/ui");
-            validateRecipeArguments(recipe.path("args"), "/recipes/" + id);
+            JsonNode examples = validateRecipeArguments(recipe.path("args"), "/recipes/" + id);
             mergedUi(recipe.path("ui"), RuleJson.JSON.createObjectNode(), "/recipes/" + id);
             if (!recipe.path("rules").isArray() || recipe.path("rules").isEmpty() || recipe.path("rules").size() > 64)
                 throw RuleJson.error("/recipes/" + id + "/rules", "Expected 1-64 recipe rules.");
@@ -918,11 +925,12 @@ public final class RuleCompiler {
                 validateRecipeShape(rule, path);
                 validateRecipeLocalReferences(rule, recipe.path("args"), path);
             }
+            linkRecipe(id, recipe, examples);
         }
         return recipes;
     }
 
-    private static void validateRecipeArguments(JsonNode specs, String path) {
+    private static JsonNode validateRecipeArguments(JsonNode specs, String path) {
         ObjectNode examples = RuleJson.JSON.createObjectNode();
         specs.fields().forEachRemaining(field -> {
             String at = path + "/args/" + field.getKey();
@@ -935,7 +943,7 @@ public final class RuleCompiler {
                     int min = spec.has("min") ? RuleJson.integer(spec.get("min"), at + "/min", -1_000_000, 1_000_000) : -1_000_000;
                     int max = spec.has("max") ? RuleJson.integer(spec.get("max"), at + "/max", -1_000_000, 1_000_000) : 1_000_000;
                     if (min > max) throw RuleJson.error(at, "Minimum exceeds maximum.");
-                    examples.put(field.getKey(), min);
+                    examples.put(field.getKey(), Math.max(min, Math.min(max, 1)));
                 }
                 case "string" -> examples.put(field.getKey(), "example");
                 case "costs" -> examples.putArray(field.getKey());
@@ -943,7 +951,29 @@ public final class RuleCompiler {
             }
             if (spec.has("default")) examples.set(field.getKey(), spec.get("default"));
         });
-        arguments(specs, examples, path);
+        return arguments(specs, examples, path);
+    }
+
+    /** Links every recipe rule once with example arguments, so a recipe that no catalog uses yet is still checked in full. */
+    private static void linkRecipe(String id, JsonNode recipe, JsonNode argsNode) {
+        ObjectNode args = RuleJson.object(argsNode, "/recipes/" + id + "/args");
+        ObjectNode ui = mergedUi(recipe.path("ui"), RuleJson.JSON.createObjectNode(), "/recipes/" + id);
+        int[] nodes = {0};
+        for (int i = 0; i < recipe.path("rules").size(); i++) {
+            JsonNode child = recipe.path("rules").get(i);
+            String path = "/recipes/" + id + "/rules/" + i;
+            if (readsStringArgument(child, recipe.path("args"))) continue;
+            ObjectNode rule = RuleJson.object(substitute(child, args, ui, path), path);
+            addRule(new LinkedHashMap<>(), rule, args, Decl.permissive(), path, nodes);
+        }
+    }
+
+    /** A string argument can stand for any enum, ID or flag, so no single example value can stand in for it. */
+    private static boolean readsStringArgument(JsonNode node, JsonNode specs) {
+        if (node.isObject() && node.has("$arg") && node.get("$arg").isTextual())
+            return "string".equals(specs.path(node.get("$arg").asText()).path("type").asText());
+        for (JsonNode child : node) if (readsStringArgument(child, specs)) return true;
+        return false;
     }
 
     private static void validateRecipeReferences(JsonNode node, JsonNode args, JsonNode ui, String path) {
@@ -1352,7 +1382,7 @@ public final class RuleCompiler {
         if (rule.has("when")) RuleExpression.validate(rule.get("when"), path + "/when");
         if (rule.has("limitSpend") && (!rule.get("limitSpend").isBoolean() || !rule.has("limitRef")))
             throw RuleJson.error(path + "/limitSpend", "Expected a boolean next to limitRef.");
-        if (rule.has("limitRef") && !limits.has(RuleJson.text(rule.get("limitRef"), path + "/limitRef")))
+        if (rule.has("limitRef") && !decl.open() && !limits.has(RuleJson.text(rule.get("limitRef"), path + "/limitRef")))
             throw RuleJson.error(path + "/limitRef", "Unknown use budget.");
         JsonNode bindings = rule.path("bindings");
         if (!bindings.isArray() || bindings.isEmpty() || bindings.size() > 32) throw RuleJson.error(path + "/bindings", "Expected 1-32 bindings.");
@@ -1364,7 +1394,7 @@ public final class RuleCompiler {
             if (!bindingIds.add(RuleJson.id(binding.path("id"), path + "/bindings/id"))) throw RuleJson.error(path, "Duplicate binding ID.");
             if (binding.has("forEach")) {
                 String pool = RuleJson.text(binding.get("forEach"), path + "/bindings/forEach");
-                if (!pools.has(pool) || !"dice".equals(pools.path(pool).path("kind").asText()))
+                if (!decl.open() && (!pools.has(pool) || !"dice".equals(pools.path(pool).path("kind").asText())))
                     throw RuleJson.error(path + "/bindings/forEach", "Expected a declared dice pool.");
                 usesDieContext = true;
             }
@@ -1398,7 +1428,7 @@ public final class RuleCompiler {
                 throw RuleJson.error(path + "/" + list, "Expected a bounded operation list.");
             for (int i = 0; i < steps.size(); i++) {
                 JsonNode step = steps.get(i);
-                validateOperation(step, "costs".equals(list), decl, path + "/" + list + "/" + i);
+                validateOperation(step, "costs".equals(list), decl, path + "/" + list + "/" + i, decl.open());
                 if (step.has("as") && !outputs.add(step.path("as").asText())) throw RuleJson.error(path, "Duplicate operation result ID.");
             }
         }
@@ -1706,7 +1736,7 @@ public final class RuleCompiler {
             String[] parts = ref.split("\\.");
             boolean valid = switch (parts[0]) {
                 case "args" -> args.has(parts[1]);
-                case "state" -> decl.state().has(parts[1]);
+                case "state" -> decl.open() || decl.state().has(parts[1]);
                 case "input" -> inputs.contains(parts[1]);
                 case "result" -> results.contains(parts[1]);
                 case "die" -> die && Set.of("id", "face", "sides", "kept", "origin", "poolId", "role",
@@ -1714,9 +1744,9 @@ public final class RuleCompiler {
                 case "source" -> Set.of("id", "instanceId", "name", "quantity", "retired", "granted").contains(parts[1])
                         || "attachedTo".equals(parts[1]) && decl.attachable() && parts.length == 3 && ATTACHED_TO_FACTS.contains(parts[2]);
                 case "gear" -> false;
-                case "pool" -> decl.pools().has(parts[1]);
-                case "sourcePools" -> decl.pools().has(parts[1]) && "source".equals(decl.pools().path(parts[1]).path("scope").asText());
-                case "effects" -> parts.length == 2 && decl.effects().has(parts[1]);
+                case "pool" -> decl.open() || decl.pools().has(parts[1]);
+                case "sourcePools" -> decl.open() || decl.pools().has(parts[1]) && "source".equals(decl.pools().path(parts[1]).path("scope").asText());
+                case "effects" -> parts.length == 2 && (decl.open() || decl.effects().has(parts[1]));
                 default -> true;
             };
             if (!valid) throw RuleJson.error(path, "Unknown or unavailable reference: " + ref);

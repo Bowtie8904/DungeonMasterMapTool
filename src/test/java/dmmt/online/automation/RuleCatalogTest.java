@@ -581,6 +581,18 @@ class RuleCatalogTest {
     }
 
     @Test
+    void unusedRecipeBodiesAreLinkedAndReportTheExactPath() throws Exception {
+        String catalog = """
+            {"format":"dmmap-daggerheart","version":2,"category":"items","entries":[]}""";
+        ObjectNode recipes = localReferenceRecipes();
+        ((ObjectNode) recipes.at("/recipes/0/rules/0/do/0")).putObject("value").put("read", "input.missing");
+        String message = assertThrows(IllegalArgumentException.class,
+                () -> RuleCatalog.compile(catalog, recipes.toString())).getMessage();
+        assertTrue(message.startsWith("/recipes/test/rules/0/"), message);
+        assertTrue(message.contains("input.missing"), message);
+    }
+
+    @Test
     void unusedRecipeLocalReferencesDeferOnlySubstitutionDependentScopes() throws Exception {
         String catalog = """
             {"format":"dmmap-daggerheart","version":2,"category":"items","entries":[]}""";
