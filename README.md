@@ -1423,6 +1423,14 @@ To regenerate the optional built-in defaults reference, explicitly run
 
 Data locations:
 
+- **Converting saved Online Play data (one-time):** close the application, then run
+  `java -cp target\DungeonMasterMapTool-1.0-SNAPSHOT-all.jar dmmt.online.LegacyDataMigration convert <catalog-dir> <campaigns-dir> <work-dir>`.
+  It backs up first, converts into a staged copy, validates the whole pack and all campaigns, and only then cuts over with a
+  journal. Errors (unresolved or ambiguous references) are printed with the sheet path and block activation without touching
+  your data; fix them and rerun. A rerun resumes an interrupted cutover or does nothing when it already completed.
+  `... LegacyDataMigration rollback <catalog-dir> <campaigns-dir> <work-dir>` restores the backup. The work directory must be
+  outside the catalog and campaign folders; see `docs\ONLINE_AUTOMATION_PLAN.md` (Saved-data conversion).
+
 - **Map library:** `dmmap-projects` beside `dmmap-audio` by default (created on first use, git-ignored; configurable with `library.folder`).
 - **Settings:** `dmmt-settings.ini` next to the jar (see [Settings file](#16-settings-file)); override with `-Ddmmt.settings=<path>`.
 - **Image tile cache:** `%LOCALAPPDATA%\DungeonMasterMapTool\image-cache` (fallback `~/.dmmt/image-cache`); entries unused for 60 days are pruned.
