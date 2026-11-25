@@ -5356,7 +5356,9 @@ public final class AutomationHost {
     }
 
     public ObjectNode recipientSnapshot(Pack pack, ObjectNode sheet, ObjectNode event, String recipientId) {
-        return actor(pack, sheet, projection.state(sheet), event.deepCopy().put("actorId", recipientId));
+        // Snapshots are read-only views; state() would otherwise create automationState on the live sheet.
+        ObjectNode view = sheet.deepCopy();
+        return actor(pack, view, projection.state(view), event.deepCopy().put("actorId", recipientId));
     }
 
     private record SpentLimit(String choiceId, String instanceId, String limitId, String label, int used) {}

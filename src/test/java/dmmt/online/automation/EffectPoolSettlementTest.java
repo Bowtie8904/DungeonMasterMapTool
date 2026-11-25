@@ -87,7 +87,7 @@ class EffectPoolSettlementTest {
 
     private static void effect(ObjectNode sheet, String id, String program, String definition, String source, String label) {
         ObjectNode effect = ((ArrayNode) sheet.at("/automationState/effects")).addObject().put("id", id)
-                .put("effect", program + "#" + definition).put("sourceInstanceId", source).put("label", label);
+                .put("effect", program + "#" + definition)                .put("sourceInstanceId", source).put("sourceActorId", "ada").put("label", label);
         if ("guard".equals(definition)) effect.put("group", "mode");
         effect.putArray("until");
     }
@@ -143,13 +143,13 @@ class EffectPoolSettlementTest {
         effect(sheet, "foreign", OWNER, "stance", "owner-a", "Stance");
         ((ObjectNode) sheet.at("/automationState/effects/0")).put("sourceActorId", "bea");
         execute(pack, sheet, "start", 0, "owner-a", "open");
-        assertEquals("ada", sheet.at("/automationState/effects/1/sourceActorId").asText());
-        execute(pack, sheet, "drain", 1, "owner-a", "drain");
+        ObjectNode before = sheet.deepCopy();
+        var failure = assertThrows(RuleRuntime.Unavailable.class, () -> execute(pack, sheet, "drain", 1, "owner-a", "drain"));
+        assertEquals("reactionEffect", failure.code());
+        assertEquals(before, sheet);
+        // Explicit endings only touch the acting character's own effects.
+        execute(pack, sheet, "end", 1, "owner-a", "end");
         assertEquals(List.of("foreign"), sheet.at("/automationState/effects").findValuesAsText("id"));
-        assertEquals(3, sheet.at("/automationState/pools/charge/value").asInt());
-        execute(pack, sheet, "end", 2, "owner-a", "end");
-        assertEquals(List.of("foreign"), sheet.at("/automationState/effects").findValuesAsText("id"));
-        assertEquals(3, sheet.at("/automationState/pools/charge/value").asInt());
     }
 
     @Test

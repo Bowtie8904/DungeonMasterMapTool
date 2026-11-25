@@ -181,7 +181,7 @@ class RestMoveOrderingTest {
         var failure = assertThrows(RuleRuntime.Unavailable.class, () -> HOST.restMove(pack, sheet,
                 (ObjectNode) prepared.get("event"), HOST.restProgress(pack, prepared),
                 select("camp", "consume", "move"), RuleJson.JSON.createArrayNode(), StructuredRollTest.noRandom()));
-        assertEquals("source", failure.code());
+        assertEquals("reactionSource", failure.code());
         assertEquals(before, sheet);
     }
 

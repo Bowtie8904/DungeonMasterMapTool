@@ -3398,7 +3398,7 @@ class LegacyCatalogConverterTest {
         JsonNode classes = RuleJson.parse(Files.readString(Path.of("dmmap-daggerheart", "classes.json")));
         JsonNode feature = null;
         for (JsonNode entry : classes.path("entries")) for (JsonNode candidate : entry.path("features"))
-            if ("WardenÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢s Protection".equals(candidate.path("name").asText())) feature = candidate;
+            if ("Warden\u2019s Protection".equals(candidate.path("name").asText())) feature = candidate;
         assertNotNull(feature);
         var result = LegacyCatalogConverter.convert(catalog("""
                 {"id":"warden","name":"Warden","automation":%s}""".formatted(feature.path("automation"))));
