@@ -15,7 +15,7 @@ import java.util.Set;
 
 public final class RuleCompiler {
     public static final int FORMAT_VERSION = 2;
-    private static final Set<String> EVENTS = Set.of("action.request", "roll.costs", "roll.prepare", "roll.prepared", "roll.finished",
+    static final Set<String> EVENTS = Set.of("action.request", "roll.costs", "roll.prepare", "roll.prepared", "roll.finished",
             "damage.prepare", "damage.marks", "damage.applied", "claim.accept", "rest.prepare", "rest.short", "rest.long", "scene.end", "session.start",
             "downtime.move", "downtime.completed", "rest.roll", "death.options", "track.changed", "pool.changed", "equipment.changed", "effect.started",
             "effect.ended", "creation.apply", "equipment.plan");
@@ -27,10 +27,10 @@ public final class RuleCompiler {
     static final Set<String> RESETS_UNTIL = Set.of("manual", "scene", "shortRest", "longRest", "rest");
     /** Actor-owned lists that {@code collection.*} operations may change; each item is an object with an {@code id}. */
     static final Set<String> COLLECTIONS = Set.of("inventory", "features", "loadout", "vault", "heritage", "conditions", "companions");
-    private static final Set<String> MODES = Set.of("button", "option", "automatic");
-    private static final Set<String> TEXT_FIELDS = Set.of("label", "description", "report", "preview", "unavailable");
-    private static final Set<String> COSTS = Set.of("resource.spend", "pool.spend", "track.mark", "inventory.consume");
-    private static final Map<String, List<String>> OPERATIONS = Map.ofEntries(
+    static final Set<String> MODES = Set.of("button", "option", "automatic");
+    static final Set<String> TEXT_FIELDS = Set.of("label", "description", "report", "preview", "unavailable");
+    static final Set<String> COSTS = Set.of("resource.spend", "pool.spend", "track.mark", "inventory.consume");
+    static final Map<String, List<String>> OPERATIONS = Map.ofEntries(
             Map.entry("resource.spend", List.of("pool", "amount")),
             Map.entry("resource.gain", List.of("pool", "amount")),
             Map.entry("pool.spend", List.of("pool", "amount", "owner")),
@@ -1956,6 +1956,23 @@ public final class RuleCompiler {
         }
     }
 
+    /** Operation fields a step may omit; every other listed field is required. */
+    static boolean optionalOperationField(String op, String field) {
+        return "pool.roll".equals(op) && Set.of("keepHighest", "replace").contains(field)
+                || "owner".equals(field)
+                || "roll.contribute".equals(op) && "beforeScales".equals(field)
+                || "roll.resolve".equals(op) && "metadata".equals(field)
+                || "damage.resolve".equals(op) && "armor".equals(field)
+                || "track.capacity".equals(op) && Set.of("by", "counter", "amount", "direction").contains(field)
+                || "beastform.assume".equals(op) && !"form".equals(field)
+                || "dice.sequence".equals(op) && "advantaged".equals(field)
+                || "claim.offer".equals(op) && "limit".equals(field)
+                || "plan.adjust".equals(op) && "partyRecovery".equals(field)
+                || Set.of("recovery.offerRoll", "downtime.offerRoll").contains(op) && "offset".equals(field)
+                || "downtime.offerRoll".equals(op) && "group".equals(field)
+                || "inventory.grant".equals(op) && Set.of("to", "tag", "max", "scope").contains(field);
+    }
+
     private static List<String> validateOperationShape(JsonNode operation, boolean cost, String op, String path) {
         List<String> fields = OPERATIONS.get(op);
         if (fields == null || cost && !COSTS.contains(op)) throw RuleJson.error(path + "/op", "Unsupported operation in this phase: " + op);
@@ -1966,20 +1983,7 @@ public final class RuleCompiler {
         RuleJson.fields(operation, path, allowed.toArray(String[]::new));
         if (operation.has("if") && operation.has("as"))
             throw RuleJson.error(path + "/as", "A conditional step cannot name a result; later steps could read a skipped value.");
-        for (String field : fields) if (!operation.has(field)
-                && !("pool.roll".equals(op) && Set.of("keepHighest", "replace").contains(field))
-                && !"owner".equals(field)
-                && !("roll.contribute".equals(op) && "beforeScales".equals(field))
-                && !("roll.resolve".equals(op) && "metadata".equals(field))
-                && !("damage.resolve".equals(op) && "armor".equals(field))
-                && !("track.capacity".equals(op) && Set.of("by", "counter", "amount", "direction").contains(field))
-                && !("beastform.assume".equals(op) && !"form".equals(field))
-                && !("dice.sequence".equals(op) && "advantaged".equals(field))
-                && !("claim.offer".equals(op) && "limit".equals(field))
-                && !("plan.adjust".equals(op) && "partyRecovery".equals(field))
-                && !(Set.of("recovery.offerRoll", "downtime.offerRoll").contains(op) && "offset".equals(field))
-                && !("downtime.offerRoll".equals(op) && "group".equals(field))
-                && !("inventory.grant".equals(op) && Set.of("to", "tag", "max", "scope").contains(field)))
+        for (String field : fields) if (!operation.has(field) && !optionalOperationField(op, field))
             throw RuleJson.error(path + "/" + field, "Missing operation field.");
         if ("plan.adjust".equals(op)) validatePartyRecovery(operation, path, true);
         return fields;

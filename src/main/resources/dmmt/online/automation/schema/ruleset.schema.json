@@ -1,0 +1,4125 @@
+{
+  "$schema" : "https://json-schema.org/draft/2020-12/schema",
+  "$id" : "https://github.com/Bowtie8904/DungeonMasterMapTool/schema/ruleset.schema.json",
+  "title" : "Daggerheart ruleset, format 2",
+  "type" : "object",
+  "additionalProperties" : false,
+  "required" : [ "format", "version", "name" ],
+  "properties" : {
+    "format" : {
+      "const" : "dmmap-daggerheart-ruleset"
+    },
+    "version" : {
+      "const" : 2
+    },
+    "name" : {
+      "type" : "string",
+      "minLength" : 1
+    },
+    "automation" : {
+      "$ref" : "#/$defs/automation"
+    },
+    "rest" : {
+      "$ref" : "#/$defs/rest"
+    }
+  },
+  "$defs" : {
+    "substitution" : {
+      "type" : "object",
+      "minProperties" : 1,
+      "maxProperties" : 1,
+      "anyOf" : [ {
+        "required" : [ "$arg" ]
+      }, {
+        "required" : [ "$ui" ]
+      } ]
+    },
+    "id" : {
+      "type" : "string",
+      "pattern" : "^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}$"
+    },
+    "template" : {
+      "type" : "string",
+      "minLength" : 1
+    },
+    "any" : { },
+    "resetEvents" : {
+      "type" : "array",
+      "minItems" : 1,
+      "uniqueItems" : true,
+      "items" : {
+        "enum" : [ "rest.long", "rest.short", "scene.end", "session.start" ]
+      }
+    },
+    "expression" : {
+      "anyOf" : [ {
+        "type" : [ "string", "number", "boolean", "null" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "literal" : { }
+        },
+        "required" : [ "literal" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "object" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "$ref" : "#/$defs/expression"
+            }
+          }
+        },
+        "required" : [ "object" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "read" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "read" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "exists" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "exists" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "ceil" : {
+            "$ref" : "#/$defs/expression"
+          }
+        },
+        "required" : [ "ceil" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "flatten" : {
+            "$ref" : "#/$defs/expression"
+          }
+        },
+        "required" : [ "flatten" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "floor" : {
+            "$ref" : "#/$defs/expression"
+          }
+        },
+        "required" : [ "floor" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "negate" : {
+            "$ref" : "#/$defs/expression"
+          }
+        },
+        "required" : [ "negate" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "not" : {
+            "$ref" : "#/$defs/expression"
+          }
+        },
+        "required" : [ "not" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "size" : {
+            "$ref" : "#/$defs/expression"
+          }
+        },
+        "required" : [ "size" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "at" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "at" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "containsText" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "containsText" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "count" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "count" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "divide" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "divide" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "effectValue" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "effectValue" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "eq" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "eq" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "gt" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "gt" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "gte" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "gte" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "includes" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "includes" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "indexOf" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "indexOf" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "lt" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "lt" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "lte" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "lte" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "ne" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "ne" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "pluck" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "pluck" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "split" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "split" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "subtract" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "subtract" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "add" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 1,
+            "maxItems" : 128
+          }
+        },
+        "required" : [ "add" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "and" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 1,
+            "maxItems" : 128
+          }
+        },
+        "required" : [ "and" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "max" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 1,
+            "maxItems" : 128
+          }
+        },
+        "required" : [ "max" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "min" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 1,
+            "maxItems" : 128
+          }
+        },
+        "required" : [ "min" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "multiply" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 1,
+            "maxItems" : 128
+          }
+        },
+        "required" : [ "multiply" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "or" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 1,
+            "maxItems" : 128
+          }
+        },
+        "required" : [ "or" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "if" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 3,
+            "maxItems" : 3
+          }
+        },
+        "required" : [ "if" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "clamp" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 3,
+            "maxItems" : 3
+          }
+        },
+        "required" : [ "clamp" ]
+      } ]
+    },
+    "rest" : {
+      "type" : "object",
+      "properties" : {
+        "long" : {
+          "type" : "object",
+          "properties" : {
+            "maxLongMoves" : {
+              "type" : "integer",
+              "minimum" : 0,
+              "maximum" : 32
+            },
+            "maxMoves" : {
+              "type" : "integer",
+              "minimum" : 0,
+              "maximum" : 32
+            },
+            "consecutiveLimit" : {
+              "type" : "integer",
+              "minimum" : 1,
+              "maximum" : 1000
+            },
+            "moves" : {
+              "type" : "integer",
+              "minimum" : 0,
+              "maximum" : 32
+            }
+          },
+          "additionalProperties" : false
+        },
+        "short" : {
+          "type" : "object",
+          "properties" : {
+            "maxLongMoves" : {
+              "type" : "integer",
+              "minimum" : 0,
+              "maximum" : 32
+            },
+            "maxMoves" : {
+              "type" : "integer",
+              "minimum" : 0,
+              "maximum" : 32
+            },
+            "consecutiveLimit" : {
+              "type" : "integer",
+              "minimum" : 1,
+              "maximum" : 1000
+            },
+            "moves" : {
+              "type" : "integer",
+              "minimum" : 0,
+              "maximum" : 32
+            }
+          },
+          "additionalProperties" : false
+        },
+        "startFacts" : {
+          "type" : "object",
+          "additionalProperties" : {
+            "type" : "string"
+          }
+        }
+      },
+      "additionalProperties" : false
+    },
+    "automation" : {
+      "type" : "object",
+      "properties" : {
+        "state" : {
+          "type" : "object",
+          "additionalProperties" : {
+            "$ref" : "#/$defs/any"
+          }
+        },
+        "limits" : {
+          "type" : "object",
+          "additionalProperties" : {
+            "$ref" : "#/$defs/limit"
+          }
+        },
+        "pools" : {
+          "type" : "object",
+          "additionalProperties" : {
+            "$ref" : "#/$defs/pool"
+          }
+        },
+        "effects" : {
+          "type" : "object",
+          "additionalProperties" : {
+            "$ref" : "#/$defs/effect"
+          }
+        },
+        "modifiers" : {
+          "type" : "array",
+          "items" : {
+            "$ref" : "#/$defs/modifier"
+          },
+          "maxItems" : 64
+        },
+        "profiles" : {
+          "type" : "array",
+          "items" : {
+            "$ref" : "#/$defs/profile"
+          },
+          "minItems" : 1,
+          "maxItems" : 8
+        },
+        "rules" : {
+          "type" : "array",
+          "items" : {
+            "$ref" : "#/$defs/rule"
+          },
+          "minItems" : 1,
+          "maxItems" : 256
+        },
+        "attachment" : {
+          "$ref" : "#/$defs/any"
+        },
+        "grants" : {
+          "$ref" : "#/$defs/any"
+        },
+        "entitlements" : {
+          "$ref" : "#/$defs/any"
+        },
+        "limitOverrides" : {
+          "$ref" : "#/$defs/any"
+        },
+        "sourceFields" : {
+          "$ref" : "#/$defs/any"
+        },
+        "partyGrant" : {
+          "type" : "boolean"
+        },
+        "unarmedWeapon" : {
+          "$ref" : "#/$defs/any"
+        },
+        "provides" : {
+          "$ref" : "#/$defs/any"
+        },
+        "borrowCards" : {
+          "$ref" : "#/$defs/any"
+        }
+      },
+      "additionalProperties" : false
+    },
+    "limit" : {
+      "type" : "object",
+      "properties" : {
+        "max" : {
+          "type" : "integer",
+          "minimum" : 1,
+          "maximum" : 1000
+        },
+        "resetOn" : {
+          "$ref" : "#/$defs/resetEvents"
+        }
+      },
+      "additionalProperties" : false,
+      "required" : [ "max", "resetOn" ]
+    },
+    "pool" : {
+      "type" : "object",
+      "properties" : {
+        "kind" : {
+          "enum" : [ "dice", "number" ]
+        },
+        "scope" : {
+          "enum" : [ "actor", "source" ]
+        },
+        "label" : {
+          "$ref" : "#/$defs/template"
+        },
+        "max" : {
+          "$ref" : "#/$defs/expression"
+        },
+        "initial" : {
+          "type" : "integer",
+          "minimum" : 0,
+          "maximum" : 1000000
+        },
+        "resetOn" : {
+          "$ref" : "#/$defs/resetEvents"
+        },
+        "resetTo" : {
+          "$ref" : "#/$defs/expression"
+        },
+        "section" : {
+          "enum" : [ "class", "feature" ]
+        },
+        "whileEffect" : {
+          "$ref" : "#/$defs/id"
+        }
+      },
+      "additionalProperties" : false,
+      "required" : [ "kind", "scope", "max" ]
+    },
+    "effect" : {
+      "type" : "object",
+      "properties" : {
+        "label" : {
+          "$ref" : "#/$defs/template"
+        },
+        "text" : {
+          "$ref" : "#/$defs/template"
+        },
+        "kind" : {
+          "enum" : [ "buff", "debuff" ]
+        },
+        "until" : {
+          "$ref" : "#/$defs/resetEvents"
+        },
+        "stacking" : {
+          "enum" : [ "replace", "replaceAnySource", "stack", "unique" ]
+        },
+        "modifiers" : {
+          "type" : "array",
+          "items" : {
+            "$ref" : "#/$defs/modifier"
+          },
+          "maxItems" : 64
+        },
+        "profile" : {
+          "$ref" : "#/$defs/any"
+        },
+        "while" : {
+          "$ref" : "#/$defs/expression"
+        },
+        "endWhen" : {
+          "$ref" : "#/$defs/expression"
+        },
+        "exclusiveGroup" : {
+          "$ref" : "#/$defs/id"
+        },
+        "singleHolder" : {
+          "type" : "boolean"
+        },
+        "locks" : {
+          "type" : "object",
+          "additionalProperties" : {
+            "$ref" : "#/$defs/expression"
+          }
+        },
+        "restExpiry" : {
+          "enum" : [ "beforeMoves" ]
+        },
+        "blocksMovement" : {
+          "type" : "boolean"
+        },
+        "blocksDeathMoves" : {
+          "type" : "boolean"
+        },
+        "onlineCondition" : {
+          "type" : "object",
+          "properties" : {
+            "id" : {
+              "type" : "string"
+            },
+            "iconId" : {
+              "type" : "string"
+            }
+          },
+          "additionalProperties" : false,
+          "required" : [ "id" ]
+        },
+        "value" : {
+          "type" : "object",
+          "properties" : {
+            "initial" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "max" : {
+              "$ref" : "#/$defs/expression"
+            }
+          },
+          "additionalProperties" : false,
+          "required" : [ "initial" ]
+        },
+        "endsWithSource" : {
+          "$ref" : "#/$defs/id"
+        },
+        "endsWithSourceElement" : {
+          "type" : "boolean"
+        },
+        "captureWeapon" : {
+          "type" : "boolean"
+        }
+      },
+      "additionalProperties" : false
+    },
+    "modifier" : {
+      "type" : "object",
+      "properties" : {
+        "stat" : {
+          "type" : "string"
+        },
+        "op" : {
+          "enum" : [ "add", "atLeast", "atMost", "set" ]
+        },
+        "value" : {
+          "$ref" : "#/$defs/expression"
+        },
+        "when" : {
+          "$ref" : "#/$defs/expression"
+        },
+        "label" : {
+          "$ref" : "#/$defs/template"
+        }
+      },
+      "additionalProperties" : false,
+      "required" : [ "stat", "value" ]
+    },
+    "profile" : {
+      "type" : "object",
+      "properties" : {
+        "id" : {
+          "$ref" : "#/$defs/id"
+        },
+        "label" : {
+          "$ref" : "#/$defs/template"
+        },
+        "trait" : {
+          "type" : "string"
+        },
+        "range" : {
+          "enum" : [ "close", "far", "melee", "veryClose", "veryFar" ]
+        },
+        "damage" : {
+          "$ref" : "#/$defs/any"
+        },
+        "rollKind" : {
+          "enum" : [ "action", "reaction", "spellcast" ]
+        },
+        "difficulty" : {
+          "type" : "integer",
+          "minimum" : 0,
+          "maximum" : 1000000
+        },
+        "origin" : {
+          "type" : "string"
+        },
+        "limitRef" : {
+          "$ref" : "#/$defs/id"
+        },
+        "consumeOn" : {
+          "enum" : [ "attempt", "success" ]
+        }
+      },
+      "additionalProperties" : false,
+      "required" : [ "id", "label" ]
+    },
+    "ui" : {
+      "type" : "object",
+      "additionalProperties" : {
+        "$ref" : "#/$defs/template"
+      }
+    },
+    "binding" : {
+      "type" : "object",
+      "properties" : {
+        "id" : {
+          "$ref" : "#/$defs/id"
+        },
+        "event" : {
+          "enum" : [ "action.request", "claim.accept", "creation.apply", "damage.applied", "damage.marks", "damage.prepare", "death.options", "downtime.completed", "downtime.move", "effect.ended", "effect.started", "equipment.changed", "equipment.plan", "pool.changed", "rest.long", "rest.prepare", "rest.roll", "rest.short", "roll.costs", "roll.finished", "roll.prepare", "roll.prepared", "scene.end", "session.start", "track.changed" ]
+        },
+        "surface" : {
+          "enum" : [ "chat", "companion", "creation", "damage", "death", "downtime", "effect", "equipment", "resource", "rest", "roll", "sheet" ]
+        },
+        "mode" : {
+          "enum" : [ "automatic", "button", "option" ]
+        },
+        "when" : {
+          "$ref" : "#/$defs/expression"
+        },
+        "group" : {
+          "enum" : [ "otherFeatures", "result", "sourceFeature" ]
+        },
+        "defaultOn" : {
+          "$ref" : "#/$defs/expression"
+        },
+        "forEach" : {
+          "$ref" : "#/$defs/any"
+        },
+        "exclusiveGroup" : {
+          "$ref" : "#/$defs/id"
+        },
+        "priority" : {
+          "type" : "integer",
+          "minimum" : -1000,
+          "maximum" : 1000
+        },
+        "claimGroup" : {
+          "$ref" : "#/$defs/id"
+        },
+        "claimGroupScope" : {
+          "enum" : [ "result", "source" ]
+        },
+        "claimScope" : {
+          "type" : "object",
+          "properties" : {
+            "recipients" : {
+              "enum" : [ "otherPlayersCharacters", "playerCharacters", "sourceActor" ]
+            },
+            "excludeSource" : {
+              "type" : "boolean"
+            }
+          },
+          "additionalProperties" : false,
+          "required" : [ "recipients" ]
+        },
+        "audience" : {
+          "enum" : [ "any", "others", "party", "self" ]
+        },
+        "targetSelection" : {
+          "type" : "object",
+          "properties" : {
+            "cardinality" : {
+              "enum" : [ "all", "one" ]
+            },
+            "scope" : {
+              "enum" : [ "activeCharacters", "activePlayerCharacters", "connectedPlayerCharacters" ]
+            },
+            "excludeSource" : {
+              "type" : "boolean"
+            },
+            "where" : {
+              "$ref" : "#/$defs/expression"
+            }
+          },
+          "additionalProperties" : false,
+          "required" : [ "cardinality", "scope" ]
+        },
+        "repeatable" : {
+          "$ref" : "#/$defs/expression"
+        },
+        "restMove" : {
+          "type" : "object",
+          "properties" : {
+            "id" : {
+              "$ref" : "#/$defs/id"
+            },
+            "kind" : {
+              "enum" : [ "any", "long", "longMove", "short" ]
+            },
+            "group" : {
+              "$ref" : "#/$defs/id"
+            },
+            "ally" : {
+              "type" : "boolean"
+            },
+            "narrative" : {
+              "type" : "boolean"
+            }
+          },
+          "additionalProperties" : false,
+          "required" : [ "id", "kind" ]
+        },
+        "restPhase" : {
+          "enum" : [ "afterReset", "beforeReset" ]
+        },
+        "restRollPolicy" : {
+          "enum" : [ "keepHigher" ]
+        }
+      },
+      "additionalProperties" : false,
+      "required" : [ "id", "event", "surface", "mode" ]
+    },
+    "input" : {
+      "allOf" : [ {
+        "if" : {
+          "properties" : {
+            "kind" : {
+              "const" : "integer"
+            }
+          },
+          "required" : [ "kind" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "id" : {
+              "$ref" : "#/$defs/id"
+            },
+            "kind" : { },
+            "min" : {
+              "$ref" : "#/$defs/any"
+            },
+            "max" : {
+              "$ref" : "#/$defs/any"
+            },
+            "default" : {
+              "$ref" : "#/$defs/any"
+            },
+            "label" : {
+              "$ref" : "#/$defs/any"
+            }
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "kind" : {
+              "const" : "die.select"
+            }
+          },
+          "required" : [ "kind" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "id" : {
+              "$ref" : "#/$defs/id"
+            },
+            "kind" : { },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "eligible" : {
+              "$ref" : "#/$defs/any"
+            },
+            "where" : {
+              "$ref" : "#/$defs/any"
+            },
+            "count" : {
+              "$ref" : "#/$defs/any"
+            },
+            "min" : {
+              "$ref" : "#/$defs/any"
+            },
+            "default" : {
+              "$ref" : "#/$defs/any"
+            },
+            "label" : {
+              "$ref" : "#/$defs/any"
+            },
+            "choiceLabel" : {
+              "$ref" : "#/$defs/any"
+            }
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "kind" : {
+              "const" : "choice"
+            }
+          },
+          "required" : [ "kind" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "id" : {
+              "$ref" : "#/$defs/id"
+            },
+            "kind" : { },
+            "label" : {
+              "$ref" : "#/$defs/any"
+            },
+            "options" : {
+              "$ref" : "#/$defs/any"
+            },
+            "optionsFrom" : {
+              "$ref" : "#/$defs/any"
+            },
+            "count" : {
+              "$ref" : "#/$defs/any"
+            },
+            "min" : {
+              "$ref" : "#/$defs/any"
+            }
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "kind" : {
+              "const" : "record.select"
+            }
+          },
+          "required" : [ "kind" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "id" : {
+              "$ref" : "#/$defs/id"
+            },
+            "kind" : { },
+            "label" : {
+              "$ref" : "#/$defs/any"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "where" : {
+              "$ref" : "#/$defs/any"
+            },
+            "choiceLabel" : {
+              "$ref" : "#/$defs/any"
+            }
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "kind" : {
+              "const" : "allocation"
+            }
+          },
+          "required" : [ "kind" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "id" : {
+              "$ref" : "#/$defs/id"
+            },
+            "kind" : { },
+            "label" : {
+              "$ref" : "#/$defs/any"
+            },
+            "options" : {
+              "$ref" : "#/$defs/any"
+            },
+            "optionsFrom" : {
+              "$ref" : "#/$defs/any"
+            },
+            "total" : {
+              "$ref" : "#/$defs/any"
+            },
+            "max" : {
+              "$ref" : "#/$defs/any"
+            }
+          }
+        }
+      } ],
+      "type" : "object",
+      "required" : [ "id", "kind" ],
+      "properties" : {
+        "id" : {
+          "$ref" : "#/$defs/id"
+        },
+        "kind" : {
+          "enum" : [ "allocation", "choice", "die.select", "integer", "record.select" ]
+        }
+      }
+    },
+    "costOperation" : {
+      "type" : "object",
+      "required" : [ "op" ],
+      "properties" : {
+        "op" : {
+          "enum" : [ "inventory.consume", "pool.spend", "resource.spend", "track.mark" ]
+        }
+      },
+      "allOf" : [ {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "inventory.consume"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "amount" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "amount" ]
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "pool.spend"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "pool" : {
+              "$ref" : "#/$defs/any"
+            },
+            "amount" : {
+              "$ref" : "#/$defs/any"
+            },
+            "owner" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "pool", "amount" ]
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "resource.spend"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "pool" : {
+              "$ref" : "#/$defs/any"
+            },
+            "amount" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "pool", "amount" ]
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "track.mark"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "track" : {
+              "$ref" : "#/$defs/any"
+            },
+            "amount" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "track", "amount" ]
+        }
+      } ]
+    },
+    "operation" : {
+      "type" : "object",
+      "required" : [ "op" ],
+      "properties" : {
+        "op" : {
+          "enum" : [ "action.reject", "beastform.assume", "card.borrow", "choice.clear", "choice.set", "claim.offer", "collection.add", "collection.remove", "collection.swap", "countdown.start", "damage.adjust", "damage.assess", "damage.deal", "damage.increase", "damage.mark", "damage.publish", "damage.reduce", "damage.resolve", "damage.without", "dice.highest", "dice.hits", "dice.roll", "dice.sequence", "dice.table", "downtime.offerRoll", "effect.advance", "effect.end", "effect.endLabeled", "effect.start", "event.block", "flag.set", "heritage.replace", "inventory.consume", "inventory.grant", "limit.modify", "limit.reset", "limit.restore", "limits.refresh", "marks.publish", "plan.adjust", "pool.gain", "pool.removeDie", "pool.roll", "pool.spend", "recovery.offerRoll", "resource.gain", "resource.spend", "roll.addDice", "roll.addDicePerPool", "roll.addPoolDie", "roll.annotate", "roll.capture", "roll.check", "roll.contribute", "roll.derive", "roll.diceTotal", "roll.discard", "roll.dropLowest", "roll.dropLowestPerPool", "roll.explode", "roll.keptDice", "roll.publish", "roll.reroll", "roll.resize", "roll.resolve", "roll.selectDice", "roll.setFaces", "roll.swapRoles", "set.subtract", "source.set", "state.increment", "state.set", "table.gain", "table.spend", "track.capacity", "track.clear", "track.mark", "track.markPermanent", "value" ]
+        }
+      },
+      "allOf" : [ {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "action.reject"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "reason" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "reason" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "beastform.assume"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "form" : {
+              "$ref" : "#/$defs/any"
+            },
+            "base" : {
+              "$ref" : "#/$defs/any"
+            },
+            "categories" : {
+              "$ref" : "#/$defs/any"
+            },
+            "advantages" : {
+              "$ref" : "#/$defs/any"
+            },
+            "features" : {
+              "$ref" : "#/$defs/any"
+            },
+            "trait" : {
+              "$ref" : "#/$defs/any"
+            },
+            "evolution" : {
+              "$ref" : "#/$defs/any"
+            },
+            "anyTier" : {
+              "$ref" : "#/$defs/any"
+            },
+            "until" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "form" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "card.borrow"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "lender" : {
+              "$ref" : "#/$defs/any"
+            },
+            "card" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "lender", "card" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "choice.clear"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "key" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "key" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "choice.set"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "key" : {
+              "$ref" : "#/$defs/any"
+            },
+            "value" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "key", "value" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "claim.offer"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "group" : {
+              "$ref" : "#/$defs/any"
+            },
+            "label" : {
+              "$ref" : "#/$defs/any"
+            },
+            "limit" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "group", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "collection.add"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "target" : {
+              "$ref" : "#/$defs/any"
+            },
+            "collection" : {
+              "$ref" : "#/$defs/any"
+            },
+            "item" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "target", "collection", "item" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "collection.remove"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "target" : {
+              "$ref" : "#/$defs/any"
+            },
+            "collection" : {
+              "$ref" : "#/$defs/any"
+            },
+            "item" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "target", "collection", "item" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "collection.swap"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "target" : {
+              "$ref" : "#/$defs/any"
+            },
+            "collection" : {
+              "$ref" : "#/$defs/any"
+            },
+            "item" : {
+              "$ref" : "#/$defs/any"
+            },
+            "with" : {
+              "$ref" : "#/$defs/any"
+            },
+            "withItem" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "target", "collection", "item", "with", "withItem" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "countdown.start"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "label" : {
+              "$ref" : "#/$defs/any"
+            },
+            "value" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "label", "value" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "damage.adjust"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "field" : {
+              "$ref" : "#/$defs/any"
+            },
+            "to" : {
+              "$ref" : "#/$defs/any"
+            },
+            "id" : {
+              "$ref" : "#/$defs/any"
+            },
+            "label" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "field", "to", "id", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "damage.assess"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "type" : {
+              "$ref" : "#/$defs/any"
+            },
+            "thresholds" : {
+              "$ref" : "#/$defs/any"
+            },
+            "massive" : {
+              "$ref" : "#/$defs/any"
+            },
+            "armor" : {
+              "$ref" : "#/$defs/any"
+            },
+            "hitPoints" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "type", "thresholds", "massive", "armor", "hitPoints" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "damage.deal"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "to" : {
+              "$ref" : "#/$defs/any"
+            },
+            "amount" : {
+              "$ref" : "#/$defs/any"
+            },
+            "label" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "to", "amount", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "damage.increase"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "amount" : {
+              "$ref" : "#/$defs/any"
+            },
+            "id" : {
+              "$ref" : "#/$defs/any"
+            },
+            "label" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "amount", "id", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "damage.mark"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "armor" : {
+              "$ref" : "#/$defs/any"
+            },
+            "hitPoints" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "armor", "hitPoints" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "damage.publish"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "damage" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "damage" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "damage.reduce"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "amount" : {
+              "$ref" : "#/$defs/any"
+            },
+            "id" : {
+              "$ref" : "#/$defs/any"
+            },
+            "label" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "amount", "id", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "damage.resolve"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "thresholds" : {
+              "$ref" : "#/$defs/any"
+            },
+            "armor" : {
+              "$ref" : "#/$defs/any"
+            },
+            "hitPoints" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "thresholds", "hitPoints" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "damage.without"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "dice.highest"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "count" : {
+              "$ref" : "#/$defs/any"
+            },
+            "sides" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "count", "sides" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "dice.hits"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "count" : {
+              "$ref" : "#/$defs/any"
+            },
+            "sides" : {
+              "$ref" : "#/$defs/any"
+            },
+            "atLeast" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "count", "sides", "atLeast" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "dice.roll"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "count" : {
+              "$ref" : "#/$defs/any"
+            },
+            "sides" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "count", "sides" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "dice.sequence"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "count" : {
+              "$ref" : "#/$defs/any"
+            },
+            "sides" : {
+              "$ref" : "#/$defs/any"
+            },
+            "stopAt" : {
+              "$ref" : "#/$defs/any"
+            },
+            "advantaged" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "count", "sides", "stopAt" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "dice.table"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "count" : {
+              "$ref" : "#/$defs/any"
+            },
+            "outcomes" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "count", "outcomes" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "downtime.offerRoll"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "roll" : {
+              "$ref" : "#/$defs/any"
+            },
+            "label" : {
+              "$ref" : "#/$defs/any"
+            },
+            "offset" : {
+              "$ref" : "#/$defs/any"
+            },
+            "group" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "roll", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "effect.advance"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "effect" : {
+              "$ref" : "#/$defs/any"
+            },
+            "target" : {
+              "$ref" : "#/$defs/any"
+            },
+            "by" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "effect", "target", "by" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "effect.end"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "effect" : {
+              "$ref" : "#/$defs/any"
+            },
+            "target" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "effect", "target" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "effect.endLabeled"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "label" : {
+              "$ref" : "#/$defs/any"
+            },
+            "target" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "label", "target" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "effect.start"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "effect" : {
+              "$ref" : "#/$defs/any"
+            },
+            "target" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "effect", "target" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "event.block"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "reason" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "reason" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "flag.set"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "flag" : {
+              "$ref" : "#/$defs/any"
+            },
+            "value" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "flag", "value" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "heritage.replace"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "ancestry" : {
+              "$ref" : "#/$defs/any"
+            },
+            "feature" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "ancestry", "feature" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "inventory.consume"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "amount" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "amount" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "inventory.grant"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "catalog" : {
+              "$ref" : "#/$defs/any"
+            },
+            "entry" : {
+              "$ref" : "#/$defs/any"
+            },
+            "quantity" : {
+              "$ref" : "#/$defs/any"
+            },
+            "label" : {
+              "$ref" : "#/$defs/any"
+            },
+            "to" : {
+              "$ref" : "#/$defs/any"
+            },
+            "tag" : {
+              "$ref" : "#/$defs/any"
+            },
+            "max" : {
+              "$ref" : "#/$defs/any"
+            },
+            "scope" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "catalog", "entry", "quantity", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "limit.modify"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "limit" : {
+              "$ref" : "#/$defs/any"
+            },
+            "by" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "limit", "by" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "limit.reset"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "limit" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "limit" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "limit.restore"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "to" : {
+              "$ref" : "#/$defs/any"
+            },
+            "label" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "to", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "limits.refresh"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "on" : {
+              "$ref" : "#/$defs/any"
+            },
+            "label" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "on", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "marks.publish"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "marks" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "marks" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "plan.adjust"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "plan" : {
+              "$ref" : "#/$defs/any"
+            },
+            "field" : {
+              "$ref" : "#/$defs/any"
+            },
+            "by" : {
+              "$ref" : "#/$defs/any"
+            },
+            "label" : {
+              "$ref" : "#/$defs/any"
+            },
+            "partyRecovery" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "plan", "field", "by", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "pool.gain"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "pool" : {
+              "$ref" : "#/$defs/any"
+            },
+            "amount" : {
+              "$ref" : "#/$defs/any"
+            },
+            "owner" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "pool", "amount" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "pool.removeDie"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "pool" : {
+              "$ref" : "#/$defs/any"
+            },
+            "dieId" : {
+              "$ref" : "#/$defs/any"
+            },
+            "owner" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "pool", "dieId" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "pool.roll"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "pool" : {
+              "$ref" : "#/$defs/any"
+            },
+            "count" : {
+              "$ref" : "#/$defs/any"
+            },
+            "sides" : {
+              "$ref" : "#/$defs/any"
+            },
+            "keepHighest" : {
+              "$ref" : "#/$defs/any"
+            },
+            "replace" : {
+              "$ref" : "#/$defs/any"
+            },
+            "owner" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "pool", "count", "sides" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "pool.spend"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "pool" : {
+              "$ref" : "#/$defs/any"
+            },
+            "amount" : {
+              "$ref" : "#/$defs/any"
+            },
+            "owner" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "pool", "amount" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "recovery.offerRoll"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "roll" : {
+              "$ref" : "#/$defs/any"
+            },
+            "track" : {
+              "$ref" : "#/$defs/any"
+            },
+            "label" : {
+              "$ref" : "#/$defs/any"
+            },
+            "offset" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "roll", "track", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "resource.gain"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "pool" : {
+              "$ref" : "#/$defs/any"
+            },
+            "amount" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "pool", "amount" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "resource.spend"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "pool" : {
+              "$ref" : "#/$defs/any"
+            },
+            "amount" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "pool", "amount" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.addDice"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "dice" : {
+              "$ref" : "#/$defs/any"
+            },
+            "count" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "dice", "count" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.addDicePerPool"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "dice" : {
+              "$ref" : "#/$defs/any"
+            },
+            "count" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "dice", "count" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.addPoolDie"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "pool" : {
+              "$ref" : "#/$defs/any"
+            },
+            "dieId" : {
+              "$ref" : "#/$defs/any"
+            },
+            "role" : {
+              "$ref" : "#/$defs/any"
+            },
+            "label" : {
+              "$ref" : "#/$defs/any"
+            },
+            "owner" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "pool", "dieId", "role", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.annotate"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "field" : {
+              "$ref" : "#/$defs/any"
+            },
+            "value" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "field", "value" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.capture"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.check"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.contribute"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "contribution" : {
+              "$ref" : "#/$defs/any"
+            },
+            "beforeScales" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "contribution" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.derive"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "keepSelectedWithin" : {
+              "$ref" : "#/$defs/any"
+            },
+            "keep" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "keepSelectedWithin", "keep" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.diceTotal"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "dice" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "dice" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.discard"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "role" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "role" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.dropLowest"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "dice" : {
+              "$ref" : "#/$defs/any"
+            },
+            "count" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "dice", "count" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.dropLowestPerPool"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "dice" : {
+              "$ref" : "#/$defs/any"
+            },
+            "count" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "dice", "count" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.explode"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "dice" : {
+              "$ref" : "#/$defs/any"
+            },
+            "when" : {
+              "$ref" : "#/$defs/any"
+            },
+            "maxDice" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "dice", "when", "maxDice" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.keptDice"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "role" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "role" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.publish"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "roll" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "roll" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.reroll"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "dice" : {
+              "$ref" : "#/$defs/any"
+            },
+            "choose" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "dice", "choose" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.resize"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "dice" : {
+              "$ref" : "#/$defs/any"
+            },
+            "sides" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "dice", "sides" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.resolve"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "plan" : {
+              "$ref" : "#/$defs/any"
+            },
+            "metadata" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "plan" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.selectDice"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "where" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "where" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.setFaces"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "dice" : {
+              "$ref" : "#/$defs/any"
+            },
+            "face" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "dice", "face" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.swapRoles"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "first" : {
+              "$ref" : "#/$defs/any"
+            },
+            "second" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "first", "second" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "set.subtract"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "from" : {
+              "$ref" : "#/$defs/any"
+            },
+            "items" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "from", "items" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "source.set"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "field" : {
+              "$ref" : "#/$defs/any"
+            },
+            "value" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "field", "value" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "state.increment"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "slot" : {
+              "$ref" : "#/$defs/any"
+            },
+            "by" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "slot", "by" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "state.set"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "slot" : {
+              "$ref" : "#/$defs/any"
+            },
+            "value" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "slot", "value" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "table.gain"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "resource" : {
+              "$ref" : "#/$defs/any"
+            },
+            "amount" : {
+              "$ref" : "#/$defs/any"
+            },
+            "label" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "resource", "amount", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "table.spend"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "resource" : {
+              "$ref" : "#/$defs/any"
+            },
+            "amount" : {
+              "$ref" : "#/$defs/any"
+            },
+            "label" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "resource", "amount", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "track.capacity"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "track" : {
+              "$ref" : "#/$defs/any"
+            },
+            "by" : {
+              "$ref" : "#/$defs/any"
+            },
+            "counter" : {
+              "$ref" : "#/$defs/any"
+            },
+            "amount" : {
+              "$ref" : "#/$defs/any"
+            },
+            "direction" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "track" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "track.clear"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "track" : {
+              "$ref" : "#/$defs/any"
+            },
+            "amount" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "track", "amount" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "track.mark"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "track" : {
+              "$ref" : "#/$defs/any"
+            },
+            "amount" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "track", "amount" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "track.markPermanent"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "track" : {
+              "$ref" : "#/$defs/any"
+            },
+            "amount" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "track", "amount" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "value"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "$ref" : "#/$defs/id"
+            },
+            "if" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "value" : {
+              "$ref" : "#/$defs/any"
+            }
+          },
+          "required" : [ "op", "value" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      } ]
+    },
+    "ruleBody" : {
+      "type" : "object",
+      "properties" : {
+        "id" : {
+          "$ref" : "#/$defs/id"
+        },
+        "bindings" : {
+          "type" : "array",
+          "items" : {
+            "$ref" : "#/$defs/binding"
+          },
+          "minItems" : 1,
+          "maxItems" : 32
+        },
+        "when" : {
+          "$ref" : "#/$defs/expression"
+        },
+        "inputs" : {
+          "type" : "array",
+          "items" : {
+            "$ref" : "#/$defs/input"
+          },
+          "maxItems" : 16
+        },
+        "costs" : {
+          "type" : "array",
+          "items" : {
+            "$ref" : "#/$defs/costOperation"
+          },
+          "maxItems" : 128
+        },
+        "limitRef" : {
+          "$ref" : "#/$defs/id"
+        },
+        "limitSpend" : {
+          "$ref" : "#/$defs/any"
+        },
+        "do" : {
+          "type" : "array",
+          "items" : {
+            "$ref" : "#/$defs/operation"
+          },
+          "maxItems" : 128
+        },
+        "after" : {
+          "type" : "object",
+          "properties" : {
+            "costs" : {
+              "type" : "array",
+              "items" : {
+                "$ref" : "#/$defs/costOperation"
+              },
+              "maxItems" : 128
+            },
+            "do" : {
+              "type" : "array",
+              "items" : {
+                "$ref" : "#/$defs/operation"
+              },
+              "maxItems" : 128
+            },
+            "report" : {
+              "$ref" : "#/$defs/template"
+            }
+          },
+          "additionalProperties" : false
+        },
+        "ui" : {
+          "$ref" : "#/$defs/ui"
+        }
+      },
+      "additionalProperties" : false,
+      "required" : [ "id", "bindings" ]
+    },
+    "rule" : {
+      "if" : {
+        "type" : "object",
+        "required" : [ "useRecipe" ]
+      },
+      "then" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "$ref" : "#/$defs/id"
+          },
+          "useRecipe" : {
+            "type" : "string"
+          },
+          "args" : {
+            "$ref" : "#/$defs/any"
+          },
+          "ui" : {
+            "$ref" : "#/$defs/ui"
+          }
+        },
+        "additionalProperties" : false,
+        "required" : [ "id", "useRecipe" ]
+      },
+      "else" : {
+        "$ref" : "#/$defs/ruleBody"
+      }
+    },
+    "recipe" : {
+      "type" : "object",
+      "properties" : {
+        "id" : {
+          "$ref" : "#/$defs/id"
+        },
+        "ui" : {
+          "type" : "object",
+          "additionalProperties" : {
+            "$ref" : "#/$defs/template"
+          }
+        },
+        "args" : {
+          "type" : "object",
+          "additionalProperties" : {
+            "type" : "object",
+            "properties" : {
+              "type" : {
+                "enum" : [ "costs", "integer", "string" ]
+              },
+              "min" : {
+                "type" : "integer"
+              },
+              "max" : {
+                "type" : "integer"
+              },
+              "default" : {
+                "$ref" : "#/$defs/any"
+              }
+            },
+            "additionalProperties" : false,
+            "required" : [ "type" ]
+          }
+        },
+        "rules" : {
+          "type" : "array",
+          "items" : {
+            "$ref" : "#/$defs/ruleBody"
+          },
+          "minItems" : 1,
+          "maxItems" : 64
+        }
+      },
+      "additionalProperties" : false,
+      "required" : [ "id", "rules" ]
+    }
+  }
+}

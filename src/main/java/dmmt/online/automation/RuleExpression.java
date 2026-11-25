@@ -10,10 +10,10 @@ import java.util.HashSet;
 import java.util.regex.Pattern;
 
 public final class RuleExpression {
-    private static final Set<String> ROOTS = Set.of("source", "actor", "recipient", "event", "state", "input", "die", "result", "args", "effects", "gear", "sourcePools");
-    private static final Set<String> UNARY = Set.of("not", "floor", "ceil", "negate", "size", "flatten");
-    private static final Set<String> BINARY = Set.of("subtract", "divide", "eq", "ne", "gt", "gte", "lt", "lte", "includes", "count", "pluck", "containsText", "at", "effectValue", "indexOf", "split");
-    private static final Set<String> MANY = Set.of("add", "multiply", "min", "max", "and", "or");
+    static final Set<String> ROOTS = Set.of("source", "actor", "recipient", "event", "state", "input", "die", "result", "args", "effects", "gear", "sourcePools");
+    static final Set<String> UNARY = Set.of("not", "floor", "ceil", "negate", "size", "flatten");
+    static final Set<String> BINARY = Set.of("subtract", "divide", "eq", "ne", "gt", "gte", "lt", "lte", "includes", "count", "pluck", "containsText", "at", "effectValue", "indexOf", "split");
+    static final Set<String> MANY = Set.of("add", "multiply", "min", "max", "and", "or");
     private static final Pattern PATH_PART = Pattern.compile("[a-zA-Z_][a-zA-Z0-9_-]*");
     private static final double MAX_NUMBER = 9_007_199_254_740_991d;
 

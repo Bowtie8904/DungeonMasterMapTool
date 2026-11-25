@@ -1,0 +1,6282 @@
+{
+  "$schema" : "https://json-schema.org/draft/2020-12/schema",
+  "$id" : "https://github.com/Bowtie8904/DungeonMasterMapTool/schema/recipes.schema.json",
+  "title" : "Daggerheart shared recipes, format 2",
+  "type" : "object",
+  "additionalProperties" : false,
+  "required" : [ "format", "version", "recipes" ],
+  "properties" : {
+    "format" : {
+      "const" : "dmmap-daggerheart-rules"
+    },
+    "version" : {
+      "const" : 2
+    },
+    "recipes" : {
+      "type" : "array",
+      "items" : {
+        "$ref" : "#/$defs/recipe"
+      }
+    }
+  },
+  "$defs" : {
+    "substitution" : {
+      "type" : "object",
+      "minProperties" : 1,
+      "maxProperties" : 1,
+      "anyOf" : [ {
+        "required" : [ "$arg" ]
+      }, {
+        "required" : [ "$ui" ]
+      } ]
+    },
+    "id" : {
+      "type" : "string",
+      "pattern" : "^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}$"
+    },
+    "template" : {
+      "type" : "string",
+      "minLength" : 1
+    },
+    "any" : { },
+    "resetEvents" : {
+      "type" : "array",
+      "minItems" : 1,
+      "uniqueItems" : true,
+      "items" : {
+        "enum" : [ "rest.long", "rest.short", "scene.end", "session.start" ]
+      }
+    },
+    "expression" : {
+      "anyOf" : [ {
+        "type" : [ "string", "number", "boolean", "null" ]
+      }, {
+        "$ref" : "#/$defs/substitution"
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "literal" : { }
+        },
+        "required" : [ "literal" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "object" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "$ref" : "#/$defs/expression"
+            }
+          }
+        },
+        "required" : [ "object" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "read" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "read" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "exists" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "exists" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "ceil" : {
+            "$ref" : "#/$defs/expression"
+          }
+        },
+        "required" : [ "ceil" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "flatten" : {
+            "$ref" : "#/$defs/expression"
+          }
+        },
+        "required" : [ "flatten" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "floor" : {
+            "$ref" : "#/$defs/expression"
+          }
+        },
+        "required" : [ "floor" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "negate" : {
+            "$ref" : "#/$defs/expression"
+          }
+        },
+        "required" : [ "negate" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "not" : {
+            "$ref" : "#/$defs/expression"
+          }
+        },
+        "required" : [ "not" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "size" : {
+            "$ref" : "#/$defs/expression"
+          }
+        },
+        "required" : [ "size" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "at" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "at" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "containsText" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "containsText" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "count" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "count" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "divide" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "divide" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "effectValue" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "effectValue" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "eq" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "eq" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "gt" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "gt" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "gte" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "gte" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "includes" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "includes" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "indexOf" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "indexOf" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "lt" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "lt" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "lte" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "lte" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "ne" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "ne" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "pluck" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "pluck" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "split" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "split" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "subtract" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 2,
+            "maxItems" : 2
+          }
+        },
+        "required" : [ "subtract" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "add" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 1,
+            "maxItems" : 128
+          }
+        },
+        "required" : [ "add" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "and" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 1,
+            "maxItems" : 128
+          }
+        },
+        "required" : [ "and" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "max" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 1,
+            "maxItems" : 128
+          }
+        },
+        "required" : [ "max" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "min" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 1,
+            "maxItems" : 128
+          }
+        },
+        "required" : [ "min" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "multiply" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 1,
+            "maxItems" : 128
+          }
+        },
+        "required" : [ "multiply" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "or" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 1,
+            "maxItems" : 128
+          }
+        },
+        "required" : [ "or" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "if" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 3,
+            "maxItems" : 3
+          }
+        },
+        "required" : [ "if" ]
+      }, {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "clamp" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/expression"
+            },
+            "minItems" : 3,
+            "maxItems" : 3
+          }
+        },
+        "required" : [ "clamp" ]
+      } ]
+    },
+    "rest" : {
+      "type" : "object",
+      "properties" : {
+        "long" : {
+          "type" : "object",
+          "properties" : {
+            "maxLongMoves" : {
+              "type" : "integer",
+              "minimum" : 0,
+              "maximum" : 32
+            },
+            "maxMoves" : {
+              "type" : "integer",
+              "minimum" : 0,
+              "maximum" : 32
+            },
+            "consecutiveLimit" : {
+              "type" : "integer",
+              "minimum" : 1,
+              "maximum" : 1000
+            },
+            "moves" : {
+              "type" : "integer",
+              "minimum" : 0,
+              "maximum" : 32
+            }
+          },
+          "additionalProperties" : false
+        },
+        "short" : {
+          "type" : "object",
+          "properties" : {
+            "maxLongMoves" : {
+              "type" : "integer",
+              "minimum" : 0,
+              "maximum" : 32
+            },
+            "maxMoves" : {
+              "type" : "integer",
+              "minimum" : 0,
+              "maximum" : 32
+            },
+            "consecutiveLimit" : {
+              "type" : "integer",
+              "minimum" : 1,
+              "maximum" : 1000
+            },
+            "moves" : {
+              "type" : "integer",
+              "minimum" : 0,
+              "maximum" : 32
+            }
+          },
+          "additionalProperties" : false
+        },
+        "startFacts" : {
+          "type" : "object",
+          "additionalProperties" : {
+            "type" : "string"
+          }
+        }
+      },
+      "additionalProperties" : false
+    },
+    "automation" : {
+      "type" : "object",
+      "properties" : {
+        "state" : {
+          "anyOf" : [ {
+            "type" : "object",
+            "additionalProperties" : {
+              "$ref" : "#/$defs/any"
+            }
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "limits" : {
+          "anyOf" : [ {
+            "type" : "object",
+            "additionalProperties" : {
+              "$ref" : "#/$defs/limit"
+            }
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "pools" : {
+          "anyOf" : [ {
+            "type" : "object",
+            "additionalProperties" : {
+              "$ref" : "#/$defs/pool"
+            }
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "effects" : {
+          "anyOf" : [ {
+            "type" : "object",
+            "additionalProperties" : {
+              "$ref" : "#/$defs/effect"
+            }
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "modifiers" : {
+          "anyOf" : [ {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/modifier"
+            },
+            "maxItems" : 64
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "profiles" : {
+          "anyOf" : [ {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/profile"
+            },
+            "minItems" : 1,
+            "maxItems" : 8
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "rules" : {
+          "anyOf" : [ {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/rule"
+            },
+            "minItems" : 1,
+            "maxItems" : 256
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "attachment" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/any"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "grants" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/any"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "entitlements" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/any"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "limitOverrides" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/any"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "sourceFields" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/any"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "partyGrant" : {
+          "anyOf" : [ {
+            "type" : "boolean"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "unarmedWeapon" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/any"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "provides" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/any"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "borrowCards" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/any"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        }
+      },
+      "additionalProperties" : false
+    },
+    "limit" : {
+      "type" : "object",
+      "properties" : {
+        "max" : {
+          "anyOf" : [ {
+            "type" : "integer",
+            "minimum" : 1,
+            "maximum" : 1000
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "resetOn" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/resetEvents"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        }
+      },
+      "additionalProperties" : false,
+      "required" : [ "max", "resetOn" ]
+    },
+    "pool" : {
+      "type" : "object",
+      "properties" : {
+        "kind" : {
+          "anyOf" : [ {
+            "enum" : [ "dice", "number" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "scope" : {
+          "anyOf" : [ {
+            "enum" : [ "actor", "source" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "label" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/template"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "max" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/expression"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "initial" : {
+          "anyOf" : [ {
+            "type" : "integer",
+            "minimum" : 0,
+            "maximum" : 1000000
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "resetOn" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/resetEvents"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "resetTo" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/expression"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "section" : {
+          "anyOf" : [ {
+            "enum" : [ "class", "feature" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "whileEffect" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/id"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        }
+      },
+      "additionalProperties" : false,
+      "required" : [ "kind", "scope", "max" ]
+    },
+    "effect" : {
+      "type" : "object",
+      "properties" : {
+        "label" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/template"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "text" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/template"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "kind" : {
+          "anyOf" : [ {
+            "enum" : [ "buff", "debuff" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "until" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/resetEvents"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "stacking" : {
+          "anyOf" : [ {
+            "enum" : [ "replace", "replaceAnySource", "stack", "unique" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "modifiers" : {
+          "anyOf" : [ {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/modifier"
+            },
+            "maxItems" : 64
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "profile" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/any"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "while" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/expression"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "endWhen" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/expression"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "exclusiveGroup" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/id"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "singleHolder" : {
+          "anyOf" : [ {
+            "type" : "boolean"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "locks" : {
+          "anyOf" : [ {
+            "type" : "object",
+            "additionalProperties" : {
+              "$ref" : "#/$defs/expression"
+            }
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "restExpiry" : {
+          "anyOf" : [ {
+            "enum" : [ "beforeMoves" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "blocksMovement" : {
+          "anyOf" : [ {
+            "type" : "boolean"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "blocksDeathMoves" : {
+          "anyOf" : [ {
+            "type" : "boolean"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "onlineCondition" : {
+          "anyOf" : [ {
+            "type" : "object",
+            "properties" : {
+              "id" : {
+                "anyOf" : [ {
+                  "type" : "string"
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              },
+              "iconId" : {
+                "anyOf" : [ {
+                  "type" : "string"
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              }
+            },
+            "additionalProperties" : false,
+            "required" : [ "id" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "value" : {
+          "anyOf" : [ {
+            "type" : "object",
+            "properties" : {
+              "initial" : {
+                "anyOf" : [ {
+                  "$ref" : "#/$defs/expression"
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              },
+              "max" : {
+                "anyOf" : [ {
+                  "$ref" : "#/$defs/expression"
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              }
+            },
+            "additionalProperties" : false,
+            "required" : [ "initial" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "endsWithSource" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/id"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "endsWithSourceElement" : {
+          "anyOf" : [ {
+            "type" : "boolean"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "captureWeapon" : {
+          "anyOf" : [ {
+            "type" : "boolean"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        }
+      },
+      "additionalProperties" : false
+    },
+    "modifier" : {
+      "type" : "object",
+      "properties" : {
+        "stat" : {
+          "anyOf" : [ {
+            "type" : "string"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "op" : {
+          "anyOf" : [ {
+            "enum" : [ "add", "atLeast", "atMost", "set" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "value" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/expression"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "when" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/expression"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "label" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/template"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        }
+      },
+      "additionalProperties" : false,
+      "required" : [ "stat", "value" ]
+    },
+    "profile" : {
+      "type" : "object",
+      "properties" : {
+        "id" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/id"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "label" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/template"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "trait" : {
+          "anyOf" : [ {
+            "type" : "string"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "range" : {
+          "anyOf" : [ {
+            "enum" : [ "close", "far", "melee", "veryClose", "veryFar" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "damage" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/any"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "rollKind" : {
+          "anyOf" : [ {
+            "enum" : [ "action", "reaction", "spellcast" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "difficulty" : {
+          "anyOf" : [ {
+            "type" : "integer",
+            "minimum" : 0,
+            "maximum" : 1000000
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "origin" : {
+          "anyOf" : [ {
+            "type" : "string"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "limitRef" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/id"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "consumeOn" : {
+          "anyOf" : [ {
+            "enum" : [ "attempt", "success" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        }
+      },
+      "additionalProperties" : false,
+      "required" : [ "id", "label" ]
+    },
+    "ui" : {
+      "type" : "object",
+      "additionalProperties" : {
+        "anyOf" : [ {
+          "$ref" : "#/$defs/template"
+        }, {
+          "$ref" : "#/$defs/substitution"
+        } ]
+      }
+    },
+    "binding" : {
+      "type" : "object",
+      "properties" : {
+        "id" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/id"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "event" : {
+          "anyOf" : [ {
+            "enum" : [ "action.request", "claim.accept", "creation.apply", "damage.applied", "damage.marks", "damage.prepare", "death.options", "downtime.completed", "downtime.move", "effect.ended", "effect.started", "equipment.changed", "equipment.plan", "pool.changed", "rest.long", "rest.prepare", "rest.roll", "rest.short", "roll.costs", "roll.finished", "roll.prepare", "roll.prepared", "scene.end", "session.start", "track.changed" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "surface" : {
+          "anyOf" : [ {
+            "enum" : [ "chat", "companion", "creation", "damage", "death", "downtime", "effect", "equipment", "resource", "rest", "roll", "sheet" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "mode" : {
+          "anyOf" : [ {
+            "enum" : [ "automatic", "button", "option" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "when" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/expression"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "group" : {
+          "anyOf" : [ {
+            "enum" : [ "otherFeatures", "result", "sourceFeature" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "defaultOn" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/expression"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "forEach" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/any"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "exclusiveGroup" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/id"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "priority" : {
+          "anyOf" : [ {
+            "type" : "integer",
+            "minimum" : -1000,
+            "maximum" : 1000
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "claimGroup" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/id"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "claimGroupScope" : {
+          "anyOf" : [ {
+            "enum" : [ "result", "source" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "claimScope" : {
+          "anyOf" : [ {
+            "type" : "object",
+            "properties" : {
+              "recipients" : {
+                "anyOf" : [ {
+                  "enum" : [ "otherPlayersCharacters", "playerCharacters", "sourceActor" ]
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              },
+              "excludeSource" : {
+                "anyOf" : [ {
+                  "type" : "boolean"
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              }
+            },
+            "additionalProperties" : false,
+            "required" : [ "recipients" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "audience" : {
+          "anyOf" : [ {
+            "enum" : [ "any", "others", "party", "self" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "targetSelection" : {
+          "anyOf" : [ {
+            "type" : "object",
+            "properties" : {
+              "cardinality" : {
+                "anyOf" : [ {
+                  "enum" : [ "all", "one" ]
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              },
+              "scope" : {
+                "anyOf" : [ {
+                  "enum" : [ "activeCharacters", "activePlayerCharacters", "connectedPlayerCharacters" ]
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              },
+              "excludeSource" : {
+                "anyOf" : [ {
+                  "type" : "boolean"
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              },
+              "where" : {
+                "anyOf" : [ {
+                  "$ref" : "#/$defs/expression"
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              }
+            },
+            "additionalProperties" : false,
+            "required" : [ "cardinality", "scope" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "repeatable" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/expression"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "restMove" : {
+          "anyOf" : [ {
+            "type" : "object",
+            "properties" : {
+              "id" : {
+                "anyOf" : [ {
+                  "$ref" : "#/$defs/id"
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              },
+              "kind" : {
+                "anyOf" : [ {
+                  "enum" : [ "any", "long", "longMove", "short" ]
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              },
+              "group" : {
+                "anyOf" : [ {
+                  "$ref" : "#/$defs/id"
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              },
+              "ally" : {
+                "anyOf" : [ {
+                  "type" : "boolean"
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              },
+              "narrative" : {
+                "anyOf" : [ {
+                  "type" : "boolean"
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              }
+            },
+            "additionalProperties" : false,
+            "required" : [ "id", "kind" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "restPhase" : {
+          "anyOf" : [ {
+            "enum" : [ "afterReset", "beforeReset" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "restRollPolicy" : {
+          "anyOf" : [ {
+            "enum" : [ "keepHigher" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        }
+      },
+      "additionalProperties" : false,
+      "required" : [ "id", "event", "surface", "mode" ]
+    },
+    "input" : {
+      "allOf" : [ {
+        "if" : {
+          "properties" : {
+            "kind" : {
+              "const" : "integer"
+            }
+          },
+          "required" : [ "kind" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "id" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "kind" : { },
+            "min" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "max" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "default" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "label" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "kind" : {
+              "const" : "die.select"
+            }
+          },
+          "required" : [ "kind" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "id" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "kind" : { },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "eligible" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "where" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "count" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "min" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "default" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "label" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "choiceLabel" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "kind" : {
+              "const" : "choice"
+            }
+          },
+          "required" : [ "kind" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "id" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "kind" : { },
+            "label" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "options" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "optionsFrom" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "count" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "min" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "kind" : {
+              "const" : "record.select"
+            }
+          },
+          "required" : [ "kind" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "id" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "kind" : { },
+            "label" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "where" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "choiceLabel" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "kind" : {
+              "const" : "allocation"
+            }
+          },
+          "required" : [ "kind" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "id" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "kind" : { },
+            "label" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "options" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "optionsFrom" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "total" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "max" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          }
+        }
+      } ],
+      "anyOf" : [ {
+        "$ref" : "#/$defs/substitution"
+      }, {
+        "type" : "object"
+      } ],
+      "required" : [ "id", "kind" ],
+      "properties" : {
+        "id" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/id"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "kind" : {
+          "anyOf" : [ {
+            "enum" : [ "allocation", "choice", "die.select", "integer", "record.select" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        }
+      }
+    },
+    "costOperation" : {
+      "type" : "object",
+      "required" : [ "op" ],
+      "properties" : {
+        "op" : {
+          "anyOf" : [ {
+            "enum" : [ "inventory.consume", "pool.spend", "resource.spend", "track.mark" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        }
+      },
+      "allOf" : [ {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "inventory.consume"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "amount" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "amount" ]
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "pool.spend"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "pool" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "amount" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "owner" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "pool", "amount" ]
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "resource.spend"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "pool" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "amount" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "pool", "amount" ]
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "track.mark"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "track" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "amount" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "track", "amount" ]
+        }
+      } ]
+    },
+    "operation" : {
+      "type" : "object",
+      "required" : [ "op" ],
+      "properties" : {
+        "op" : {
+          "anyOf" : [ {
+            "enum" : [ "action.reject", "beastform.assume", "card.borrow", "choice.clear", "choice.set", "claim.offer", "collection.add", "collection.remove", "collection.swap", "countdown.start", "damage.adjust", "damage.assess", "damage.deal", "damage.increase", "damage.mark", "damage.publish", "damage.reduce", "damage.resolve", "damage.without", "dice.highest", "dice.hits", "dice.roll", "dice.sequence", "dice.table", "downtime.offerRoll", "effect.advance", "effect.end", "effect.endLabeled", "effect.start", "event.block", "flag.set", "heritage.replace", "inventory.consume", "inventory.grant", "limit.modify", "limit.reset", "limit.restore", "limits.refresh", "marks.publish", "plan.adjust", "pool.gain", "pool.removeDie", "pool.roll", "pool.spend", "recovery.offerRoll", "resource.gain", "resource.spend", "roll.addDice", "roll.addDicePerPool", "roll.addPoolDie", "roll.annotate", "roll.capture", "roll.check", "roll.contribute", "roll.derive", "roll.diceTotal", "roll.discard", "roll.dropLowest", "roll.dropLowestPerPool", "roll.explode", "roll.keptDice", "roll.publish", "roll.reroll", "roll.resize", "roll.resolve", "roll.selectDice", "roll.setFaces", "roll.swapRoles", "set.subtract", "source.set", "state.increment", "state.set", "table.gain", "table.spend", "track.capacity", "track.clear", "track.mark", "track.markPermanent", "value" ]
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        }
+      },
+      "allOf" : [ {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "action.reject"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "reason" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "reason" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "beastform.assume"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "form" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "base" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "categories" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "advantages" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "features" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "trait" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "evolution" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "anyTier" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "until" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "form" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "card.borrow"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "lender" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "card" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "lender", "card" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "choice.clear"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "key" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "key" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "choice.set"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "key" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "value" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "key", "value" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "claim.offer"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "group" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "label" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "limit" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "group", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "collection.add"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "target" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "collection" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "item" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "target", "collection", "item" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "collection.remove"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "target" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "collection" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "item" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "target", "collection", "item" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "collection.swap"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "target" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "collection" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "item" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "with" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "withItem" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "target", "collection", "item", "with", "withItem" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "countdown.start"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "label" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "value" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "label", "value" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "damage.adjust"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "field" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "to" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "id" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "label" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "field", "to", "id", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "damage.assess"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "type" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "thresholds" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "massive" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "armor" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "hitPoints" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "type", "thresholds", "massive", "armor", "hitPoints" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "damage.deal"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "to" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "amount" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "label" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "to", "amount", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "damage.increase"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "amount" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "id" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "label" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "amount", "id", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "damage.mark"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "armor" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "hitPoints" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "armor", "hitPoints" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "damage.publish"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "damage" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "damage" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "damage.reduce"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "amount" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "id" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "label" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "amount", "id", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "damage.resolve"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "thresholds" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "armor" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "hitPoints" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "thresholds", "hitPoints" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "damage.without"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "dice.highest"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "count" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "sides" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "count", "sides" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "dice.hits"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "count" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "sides" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "atLeast" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "count", "sides", "atLeast" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "dice.roll"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "count" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "sides" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "count", "sides" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "dice.sequence"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "count" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "sides" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "stopAt" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "advantaged" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "count", "sides", "stopAt" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "dice.table"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "count" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "outcomes" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "count", "outcomes" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "downtime.offerRoll"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "roll" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "label" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "offset" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "group" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "roll", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "effect.advance"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "effect" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "target" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "by" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "effect", "target", "by" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "effect.end"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "effect" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "target" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "effect", "target" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "effect.endLabeled"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "label" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "target" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "label", "target" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "effect.start"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "effect" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "target" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "effect", "target" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "event.block"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "reason" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "reason" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "flag.set"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "flag" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "value" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "flag", "value" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "heritage.replace"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "ancestry" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "feature" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "ancestry", "feature" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "inventory.consume"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "amount" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "amount" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "inventory.grant"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "catalog" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "entry" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "quantity" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "label" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "to" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "tag" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "max" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "scope" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "catalog", "entry", "quantity", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "limit.modify"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "limit" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "by" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "limit", "by" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "limit.reset"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "limit" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "limit" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "limit.restore"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "to" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "label" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "to", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "limits.refresh"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "on" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "label" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "on", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "marks.publish"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "marks" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "marks" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "plan.adjust"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "plan" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "field" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "by" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "label" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "partyRecovery" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "plan", "field", "by", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "pool.gain"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "pool" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "amount" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "owner" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "pool", "amount" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "pool.removeDie"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "pool" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "dieId" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "owner" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "pool", "dieId" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "pool.roll"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "pool" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "count" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "sides" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "keepHighest" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "replace" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "owner" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "pool", "count", "sides" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "pool.spend"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "pool" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "amount" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "owner" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "pool", "amount" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "recovery.offerRoll"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "roll" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "track" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "label" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "offset" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "roll", "track", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "resource.gain"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "pool" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "amount" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "pool", "amount" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "resource.spend"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "pool" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "amount" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "pool", "amount" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.addDice"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "dice" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "count" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "dice", "count" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.addDicePerPool"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "dice" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "count" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "dice", "count" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.addPoolDie"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "pool" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "dieId" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "role" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "label" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "owner" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "pool", "dieId", "role", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.annotate"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "field" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "value" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "field", "value" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.capture"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.check"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.contribute"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "contribution" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "beforeScales" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "contribution" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.derive"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "keepSelectedWithin" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "keep" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "keepSelectedWithin", "keep" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.diceTotal"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "dice" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "dice" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.discard"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "role" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "role" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.dropLowest"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "dice" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "count" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "dice", "count" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.dropLowestPerPool"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "dice" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "count" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "dice", "count" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.explode"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "dice" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "when" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "maxDice" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "dice", "when", "maxDice" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.keptDice"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "role" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "role" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.publish"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "roll" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "roll" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.reroll"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "dice" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "choose" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "dice", "choose" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.resize"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "dice" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "sides" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "dice", "sides" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.resolve"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "plan" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "metadata" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "plan" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.selectDice"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "where" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "where" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.setFaces"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "dice" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "face" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "dice", "face" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "roll.swapRoles"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "first" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "second" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "first", "second" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "set.subtract"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "from" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "items" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "from", "items" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "source.set"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "field" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "value" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "field", "value" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "state.increment"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "slot" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "by" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "slot", "by" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "state.set"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "slot" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "value" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "slot", "value" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "table.gain"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "resource" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "amount" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "label" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "resource", "amount", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "table.spend"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "resource" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "amount" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "label" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "resource", "amount", "label" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "track.capacity"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "track" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "by" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "counter" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "amount" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "direction" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "track" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "track.clear"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "track" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "amount" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "track", "amount" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "track.mark"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "track" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "amount" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "track", "amount" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "track.markPermanent"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "track" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "amount" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "track", "amount" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      }, {
+        "if" : {
+          "properties" : {
+            "op" : {
+              "const" : "value"
+            }
+          },
+          "required" : [ "op" ]
+        },
+        "then" : {
+          "type" : "object",
+          "additionalProperties" : false,
+          "properties" : {
+            "op" : { },
+            "as" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/id"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "if" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/expression"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "value" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/any"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            }
+          },
+          "required" : [ "op", "value" ],
+          "not" : {
+            "required" : [ "as", "if" ]
+          }
+        }
+      } ]
+    },
+    "ruleBody" : {
+      "type" : "object",
+      "properties" : {
+        "id" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/id"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "bindings" : {
+          "anyOf" : [ {
+            "type" : "array",
+            "items" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/binding"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "minItems" : 1,
+            "maxItems" : 32
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "when" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/expression"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "inputs" : {
+          "anyOf" : [ {
+            "type" : "array",
+            "items" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/input"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "maxItems" : 16
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "costs" : {
+          "anyOf" : [ {
+            "type" : "array",
+            "items" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/costOperation"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "maxItems" : 128
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "limitRef" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/id"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "limitSpend" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/any"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "do" : {
+          "anyOf" : [ {
+            "type" : "array",
+            "items" : {
+              "anyOf" : [ {
+                "$ref" : "#/$defs/operation"
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "maxItems" : 128
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "after" : {
+          "anyOf" : [ {
+            "type" : "object",
+            "properties" : {
+              "costs" : {
+                "anyOf" : [ {
+                  "type" : "array",
+                  "items" : {
+                    "anyOf" : [ {
+                      "$ref" : "#/$defs/costOperation"
+                    }, {
+                      "$ref" : "#/$defs/substitution"
+                    } ]
+                  },
+                  "maxItems" : 128
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              },
+              "do" : {
+                "anyOf" : [ {
+                  "type" : "array",
+                  "items" : {
+                    "anyOf" : [ {
+                      "$ref" : "#/$defs/operation"
+                    }, {
+                      "$ref" : "#/$defs/substitution"
+                    } ]
+                  },
+                  "maxItems" : 128
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              },
+              "report" : {
+                "anyOf" : [ {
+                  "$ref" : "#/$defs/template"
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              }
+            },
+            "additionalProperties" : false
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "ui" : {
+          "anyOf" : [ {
+            "$ref" : "#/$defs/ui"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        }
+      },
+      "additionalProperties" : false,
+      "required" : [ "id", "bindings" ]
+    },
+    "rule" : {
+      "$ref" : "#/$defs/ruleBody"
+    },
+    "recipe" : {
+      "type" : "object",
+      "properties" : {
+        "id" : {
+          "$ref" : "#/$defs/id"
+        },
+        "ui" : {
+          "type" : "object",
+          "additionalProperties" : {
+            "$ref" : "#/$defs/template"
+          }
+        },
+        "args" : {
+          "type" : "object",
+          "additionalProperties" : {
+            "type" : "object",
+            "properties" : {
+              "type" : {
+                "anyOf" : [ {
+                  "enum" : [ "costs", "integer", "string" ]
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              },
+              "min" : {
+                "anyOf" : [ {
+                  "type" : "integer"
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              },
+              "max" : {
+                "anyOf" : [ {
+                  "type" : "integer"
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              },
+              "default" : {
+                "anyOf" : [ {
+                  "$ref" : "#/$defs/any"
+                }, {
+                  "$ref" : "#/$defs/substitution"
+                } ]
+              }
+            },
+            "additionalProperties" : false,
+            "required" : [ "type" ]
+          }
+        },
+        "rules" : {
+          "type" : "array",
+          "items" : {
+            "$ref" : "#/$defs/ruleBody"
+          },
+          "minItems" : 1,
+          "maxItems" : 64
+        }
+      },
+      "additionalProperties" : false,
+      "required" : [ "id", "rules" ]
+    }
+  }
+}
