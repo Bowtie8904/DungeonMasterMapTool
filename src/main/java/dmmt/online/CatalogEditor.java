@@ -157,7 +157,9 @@ final class CatalogEditor {
             entries.add(saved);
         }
         validate(file, category);
-        byte[] bytes = splice(before.bytes(), saved, index, file);
+        for (String problem : TextTemplates.diagnostics(category + ".json", saved))
+            java.util.logging.Logger.getLogger(CatalogEditor.class.getName()).warning("Catalog text warning: " + problem);
+        byte[] bytes = splice(before.bytes(), saved,         index, file);
         if (bytes.length > MAX_BYTES) throw new Rejected(413, "Catalog would exceed the file size limit.");
         Path target = path(directory, category);
         Path temporary = Files.createTempFile(target.getParent(), category + "-", ".tmp");

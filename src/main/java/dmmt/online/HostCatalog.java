@@ -80,6 +80,8 @@ final class HostCatalog {
             try {
                 parsed = MAPPER.readTree(bytes);
                 indexAutomation(parsed);
+                if (parsed != null) for (String problem : TextTemplates.diagnostics("catalog", parsed))
+                    java.util.logging.Logger.getLogger(HostCatalog.class.getName()).warning("Catalog text warning: " + problem);
                 if (parsed != null) for (JsonNode card : parsed.path("entries")) {
                     cards.putIfAbsent(card.path("name").asText(), card);
                     for (JsonNode spell : card.path("spells"))

@@ -4721,6 +4721,56 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void closeKnitReportKeepsDefaultTextWithoutConfiguredTexts() throws Exception {
+        String text = closeKnitReport(null);
+        assertEquals("ACTION USED\nHearthborne - Close-Knit\nGiver\n\u2022 Gave 3 Hope to Ally.", text);
+    }
+
+    @Test
+    void configuredReportTextsReplaceTitleAndLinesOfHostActions() throws Exception {
+        ObjectNode texts = MAPPER.createObjectNode().put("reportTitle", "{actor} shares warmth");
+        texts.putArray("report").add("{actor} gave {label}").add("{effects}").add("{missing} {{kept}}");
+        String text = closeKnitReport(texts);
+        String[] lines = text.split("\n");
+        assertEquals("ACTION USED", lines[0]);
+        assertEquals("Giver shares warmth", lines[1]);
+        assertEquals("Giver", lines[2]);
+        assertEquals("\u2022 Giver gave Close-Knit", lines[3]);
+        assertEquals("\u2022 {missing} {kept}", lines[lines.length - 1]);
+        assertTrue(lines.length > 5, text);
+    }
+
+    private String closeKnitReport(ObjectNode texts) throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("source").name("Giver").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("target").name("Ally").ownerId(playerId()).build());
+        ObjectNode source = communitySheet("Hearthborne");
+        ObjectNode target = source.deepCopy();
+        ((ObjectNode) target.path("hope")).put("on", 1);
+        store.saveSheet(campaign.getId(), "source", source.toString());
+        store.saveSheet(campaign.getId(), "target", target.toString());
+        if (texts != null) {
+            ObjectNode catalog = (ObjectNode) MAPPER.readTree(Path.of("dmmap-daggerheart", "communities.json").toFile());
+            for (JsonNode community : catalog.path("entries"))
+                for (JsonNode feature : community.path("features"))
+                    if ("Close-Knit".equals(feature.path("name").asText()))
+                        ((ObjectNode) feature.path("automation").path("actions").get(0)).set("texts", texts);
+            compendiumDir = temp.resolve("texts-compendium");
+            java.nio.file.Files.createDirectories(compendiumDir);
+            java.nio.file.Files.writeString(compendiumDir.resolve("communities.json"), catalog.toString());
+        }
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "source").put("key", "feat:Close-Knit")
+                    .put("actionId", "use").put("targetActorId", "target").put("amount", 3);
+            var result = featureHttp(cookie, request);
+            assertEquals(200, result.statusCode(), result.body());
+            return inbox.next("chat").path("text").asText();
+        } finally { ws.abort(); }
+    }
+
+    @Test
     void oasisUpdatesAnAlliesRestAndRecoveryOnlyByTheImprovementAndRejectsDuplicateAndHistoricalUses() throws Exception {
         campaign.getActors().add(Campaign.Actor.builder().id("source").name("Dune").ownerId(playerId()).build());
         Campaign.Player bob = Campaign.Player.builder().name("Bob").passwordHash(PasswordHasher.hash("secret", 64, 1, 1)).build();

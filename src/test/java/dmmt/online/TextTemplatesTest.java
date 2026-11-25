@@ -23,6 +23,13 @@ class TextTemplatesTest {
     }
 
     @Test
+    void diagnosticsNameUnknownPlaceholdersAndFields() throws Exception {
+        JsonNode doc = new ObjectMapper().readTree("{\"entries\":[{\"name\":\"A\",\"automation\":{\"actions\":[{\"texts\":{\"button\":\"{nope}\",\"bogus\":\"x\",\"report\":[\"{effects}\"],\"roll\":\"{effects}\"}}]}}]}");
+        List<String> problems = TextTemplates.diagnostics("f.json", doc);
+        assertEquals(3, problems.size(), problems.toString());
+    }
+
+    @Test
     void reportKeepsCostFirstAndInsertsGeneratedEffects() {
         List<String> result = TextTemplates.applyReport(List.of("{actor} feels better", "{effects}", "  "), List.of("spent 1 Hope", "Cleared 2 HP"),
                 Map.of("actor", "Ayla"), "spent 1 Hope");

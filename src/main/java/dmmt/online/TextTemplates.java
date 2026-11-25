@@ -49,6 +49,61 @@ public final class TextTemplates {
         return names;
     }
 
+    private static final List<String> FIELDS = List.of("button", "blocked", "chatButton", "roll", "reportTitle", "report", "option", "optionNote", "applied");
+    private static final List<String> NAMES = List.of("actor", "target", "source", "origin", "label", "amount", "dice", "result",
+            "trait", "traitValue", "effect", "item", "qty", "uses", "usesMax", "effects");
+
+    /** Diagnostics for every {@code texts} object in a catalog document (mirrors validateCatalogTexts in texts.ts). */
+    public static List<String> diagnostics(String file, com.fasterxml.jackson.databind.JsonNode node) {
+        List<String> problems = new ArrayList<>();
+        collectDiagnostics(file, node, "", problems);
+        return problems;
+    }
+
+    private static void collectDiagnostics(String file, com.fasterxml.jackson.databind.JsonNode node, String path, List<String> problems) {
+        if (node.isArray()) {
+            for (int i = 0; i < node.size(); i++) collectDiagnostics(file, node.get(i), path + "[" + i + "]", problems);
+        } else if (node.isObject()) {
+            node.fields().forEachRemaining(field -> {
+                String childPath = path.isEmpty() ? field.getKey() : path + "." + field.getKey();
+                if (field.getKey().equals("texts")) validateTexts(file + " " + path + ".texts", field.getValue(), problems);
+                else collectDiagnostics(file, field.getValue(), childPath, problems);
+            });
+        }
+    }
+
+    private static void validateTexts(String where, com.fasterxml.jackson.databind.JsonNode texts, List<String> problems) {
+        if (!texts.isObject()) {
+            problems.add(where + ": texts must be an object");
+            return;
+        }
+        texts.fields().forEachRemaining(field -> {
+            String name = field.getKey();
+            com.fasterxml.jackson.databind.JsonNode value = field.getValue();
+            if (!FIELDS.contains(name)) {
+                problems.add(where + ": unknown texts field \"" + name + "\"");
+                return;
+            }
+            List<String> templates = new ArrayList<>();
+            boolean report = name.equals("report");
+            if (report && value.isArray() && java.util.stream.StreamSupport.stream(value.spliterator(), false).allMatch(v -> v.isTextual())) {
+                value.forEach(v -> templates.add(v.asText()));
+            } else if (!report && value.isTextual()) {
+                templates.add(value.asText());
+            } else {
+                problems.add(where + ": texts." + name + " must be " + (report ? "an array of strings" : "a string"));
+                return;
+            }
+            for (String template : templates) {
+                for (String placeholder : placeholders(template)) {
+                    if (!NAMES.contains(placeholder) || placeholder.equals("effects") && !report) {
+                        problems.add(where + ": texts." + name + " uses unknown placeholder {" + placeholder + "}");
+                    }
+                }
+            }
+        });
+    }
+
     /**
      * Applies a configured report: "spent &lt;cost&gt;" stays first, a line equal to {@code {effects}} inserts the generated lines, empty
      * results are dropped. Without configured lines the generated lines are returned unchanged.

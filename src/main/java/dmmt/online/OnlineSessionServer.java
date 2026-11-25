@@ -2049,10 +2049,17 @@ public final class OnlineSessionServer {
                 sheet.withObject("/resources").put(id, initial);
             }
         sheet.put("compendiumRevision", sheet.path("compendiumRevision").asLong() + 1);
+        String copycatLabel = "Copycat - " + name;
+        Map<String, Object> copycatVars = textVars(borrower, copycat, copycatLabel);
+        copycatVars.put("amount", hope);
+        copycatVars.put("target", source.getName());
+        copycatVars.put("item", name);
+        List<String> copycatLines = configuredLines(definition, new ArrayList<>(List.of("Spent " + hope
+                + " Hope and the once-per-long-rest use. Copied from " + source.getName()
+                + "; ends on any rest or when that actor vaults the original card.")), copycatVars);
         ObjectNode report = chatMessage(borrower.getOwnerId(), campaign.player(borrower.getOwnerId()).getName(), null,
-                "ACTION USED\nCopycat - " + name + "\n" + borrower.getName() + "\n• Spent " + hope
-                        + " Hope and the once-per-long-rest use. Copied from " + source.getName()
-                        + "; ends on any rest or when that actor vaults the original card.");
+                "ACTION USED\n" + configuredTitle(definition, copycatLabel, copycatVars) + "\n" + borrower.getName()
+                        + copycatLines.stream().map(line -> "\n• " + line).reduce("", String::concat));
         commitFeatureSheets(Map.of(borrower.getId(), sheet), report, true);
         sendFeatureState(borrower, sheet);
         deliver(report, null, false);
@@ -2078,7 +2085,8 @@ public final class OnlineSessionServer {
         if (sheet.toString().getBytes(StandardCharsets.UTF_8).length > MAX_SHEET_BYTES)
             throw new IllegalArgumentException("The character sheet is too large.");
         ObjectNode report = result.roll() == null
-                ? actionReportMessage(actor, source, expected, result.lines(), null)
+                ? actionReportMessage(actor, source, configuredTitle(definition, expected, textVars(actor, source, expected)),
+                        configuredLines(definition, result.lines(), textVars(actor, source, expected)), null)
                 : featureRollMessage(actor, source, expected + " damage", result.roll());
         if (result.roll() != null) {
             report.put("source", "damage");
@@ -2286,9 +2294,10 @@ public final class OnlineSessionServer {
             if (definition.has("exclusiveRollGroup"))
                 roll.withArray("featureUses").add(actor.getId() + ":" + key + ":group:" + definition.path("exclusiveRollGroup").asText());
         }
-        ObjectNode report = actionReportMessage(actor, source, name, lines, roll);
-        report.put("actorId", actor.getId());
-        if (kind.equals("zone")) {
+        applyConfiguredReport(definition, lines, name, source.path("name").asText(""), actor);
+        ObjectNode report = actionReportMessage(actor, source, configuredTitle(definition, name, textVars(actor, source, name)), lines, roll);
+                report.put("actorId", actor.getId());
+                if (kind.equals("zone")) {
             JsonNode marker = sheet.path("effects").path(sheet.path("effects").size() - 1);
             ObjectNode action = MAPPER.createObjectNode().put("allowSourceOwner", true);
             ArrayNode benefits = MAPPER.createArrayNode();
@@ -4064,7 +4073,9 @@ public final class OnlineSessionServer {
         if (benefit.path("report").has("text")) lines.add(benefit.path("report").path("text").asText());
         claims.withArray("claimedBy").add(actor.getOwnerId());
         ObjectNode source = MAPPER.createObjectNode().put("name", benefit.path("label").asText());
-        ObjectNode report = actionReportMessage(actor, source, benefit.path("label").asText(), lines, null);
+        String benefitLabel = benefit.path("label").asText();
+        applyConfiguredReport(benefit, lines, benefitLabel, benefitLabel, actor);
+        ObjectNode report = actionReportMessage(actor, source, configuredTitle(benefit, benefitLabel, textVars(actor, source, benefitLabel)), lines, null);
         List<String> deathReports = normalizeDeathChanges(changed);
         if (!deathReports.isEmpty()) report.put("text", report.path("text").asText() + "\n" + String.join("\n", deathReports));
         persistFeatureSheets(changed, message, false, report);
@@ -4139,7 +4150,9 @@ public final class OnlineSessionServer {
         } else if (improvement == 0) {
             report.add("No improvement; kept the original result.");
         }
-        publishActionReport(sourceActor, source, actionReportTitle(sourceSheet, source, "Reroll downtime die"), report, null);
+        report = configuredLines(automation, report, textVars(sourceActor, source, "Reroll downtime die"));
+        publishActionReport(sourceActor, source, configuredTitle(automation, actionReportTitle(sourceSheet, source, "Reroll downtime die"),
+                textVars(sourceActor, source, "Reroll downtime die")), report, null);
     }
 
     private void broadcastChatUpdate(ObjectNode message) {
@@ -4398,7 +4411,8 @@ public final class OnlineSessionServer {
                 applyFeatureSteps(sheet, steps, "Slayer", actor, "feat:Slayer", lines);
                 lines.add("Instead of gaining Hope from this roll.");
                 roll.put("rewardClaimed", true);
-                ObjectNode report = actionReportMessage(actor, slayerSource, "Slayer", lines, roll);
+                applyConfiguredReport(reward, lines, "Slayer", slayerSource.path("name").asText(""), actor);
+                ObjectNode report = actionReportMessage(actor, slayerSource, configuredTitle(reward, "Slayer", textVars(actor, slayerSource, "Slayer")), lines, roll);
                 sheet.put("featureRevision", sheet.path("featureRevision").asLong() + 1);
                 store.saveSheetsAndResults(campaign.getId(), Map.of(actor.getId(), sheet), roll, List.of(report));
                 sendFeatureState(actor, sheet);
@@ -4430,7 +4444,8 @@ public final class OnlineSessionServer {
                 applyFeatureSteps(sheet, steps, "Favor", actor, "feat:Favor", lines);
                 lines.add("Instead of gaining Hope from the successful action roll.");
                 roll.put("rewardClaimed", true);
-                ObjectNode report = actionReportMessage(actor, favorSource, "Favor", lines, roll);
+                applyConfiguredReport(favorReward, lines, "Favor", favorSource.path("name").asText(""), actor);
+                ObjectNode report = actionReportMessage(actor, favorSource, configuredTitle(favorReward, "Favor", textVars(actor, favorSource, "Favor")), lines, roll);
                 sheet.put("featureRevision", sheet.path("featureRevision").asLong() + 1);
                 store.saveSheetsAndResults(campaign.getId(), Map.of(actor.getId(), sheet), roll, List.of(report));
                 sendFeatureState(actor, sheet);
@@ -4463,8 +4478,12 @@ public final class OnlineSessionServer {
                 int remaining = campaign.getFear() - amount;
                 roll.put("rewardClaimed", true);
                 sheet.put("featureRevision", sheet.path("featureRevision").asLong() + 1);
-                ObjectNode report = actionReportMessage(actor, alternativeSource, alternativeSource.path("name").asText(),
-                        List.of("Removed " + amount + " GM Fear instead of gaining Hope (GM Fear: " + remaining + ")."), roll);
+                String alternativeName = alternativeSource.path("name").asText();
+                List<String> alternativeLines = new ArrayList<>(List.of("Removed " + amount + " GM Fear instead of gaining Hope (GM Fear: " + remaining + ")."));
+                Map<String, Object> alternativeVars = textVars(actor, alternativeSource, alternativeName);
+                alternativeVars.put("amount", amount);
+                ObjectNode report = actionReportMessage(actor, alternativeSource, configuredTitle(alternative, alternativeName, alternativeVars),
+                        configuredLines(alternative, alternativeLines, alternativeVars), roll);
                 store.saveFearReward(campaign.getId(), Map.of(actor.getId(), sheet), roll, List.of(report), remaining);
                 campaign.setFear(remaining);
                 if (current != null) {
@@ -5290,18 +5309,32 @@ public final class OnlineSessionServer {
 
     /** Replaces the generated report lines with the optional texts.report lines; "{effects}" keeps the generated ones. */
     private static void applyConfiguredReport(JsonNode definition, List<String> reportLines, String label, String reportSource, Campaign.Actor actor) {
-        JsonNode configured = definition.path("texts").path("report");
-        if (!configured.isArray() || configured.isEmpty()) return;
-        List<String> templates = new ArrayList<>();
-        configured.forEach(line -> templates.add(line.asText("")));
         Map<String, Object> vars = new java.util.HashMap<>();
         vars.put("actor", actor.getName());
         vars.put("source", reportSource);
         vars.put("label", label);
-        List<String> applied = TextTemplates.applyReport(templates, new ArrayList<>(reportLines), vars, null);
+        List<String> applied = configuredLines(definition, reportLines, vars);
+        if (applied == reportLines) return;
         reportLines.clear();
         reportLines.addAll(applied);
     }
+
+    /** Lines from definition.texts.report applied to the generated ones; the same list when nothing is configured. */
+    static List<String> configuredLines(JsonNode definition, List<String> generated, Map<String, Object> vars) {
+        JsonNode configured = definition == null ? null : definition.path("texts").path("report");
+        if (configured == null || !configured.isArray() || configured.isEmpty()) return generated;
+        List<String> templates = new ArrayList<>();
+        configured.forEach(line -> templates.add(line.asText("")));
+        return TextTemplates.applyReport(templates, new ArrayList<>(generated), vars, null);
+    }
+
+    /** definition.texts.reportTitle formatted, or the fallback when absent or blank. */
+    static String configuredTitle(JsonNode definition, String fallback, Map<String, Object> vars) {
+        String template = definition == null ? "" : definition.path("texts").path("reportTitle").asText("");
+        String title = template.isBlank() ? "" : TextTemplates.format(template, vars).strip();
+        return title.isEmpty() ? fallback : title;
+    }
+
     private static String actionReportTitle(JsonNode sheet, JsonNode source, String action) {
         String provenance = source.path("source").asText("");
         String origin;
