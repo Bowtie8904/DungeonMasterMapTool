@@ -1,0 +1,4930 @@
+{
+ "format": "dmmap-daggerheart",
+ "version": 1,
+ "category": "classes",
+ "label": "Classes",
+ "entries": [
+  {
+   "id": "ranger-beastbound-mastery",
+   "name": "Ranger: Beastbound",
+   "kind": "subclass",
+   "domains": [
+    "Bone",
+    "Sage"
+   ],
+   "text": "Play the Beastbound if you want to form a deep bond with an animal ally.",
+   "parent": "Ranger",
+   "stage": "mastery",
+   "spellcastTrait": "Agility",
+   "features": [
+    {
+     "name": "Advanced Training",
+     "text": "Choose two additional level-up options for your companion.",
+     "type": "subclass",
+     "automation": { "companionTraining": 2 }
+    },
+    {
+     "name": "Loyal Friend",
+     "text": "Once per long rest, when the damage from an attack would mark your companion’s last Stress or your last Hit Point and you’re within Close range of each other, you or your companion can rush to the other’s side and take that damage instead.",
+     "type": "subclass",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Loyal Friend",
+        "requiresCompanion": true
+       }
+      ],
+      "mitigation": [
+       {
+        "id": "loyal-friend",
+        "label": "Loyal Friend: companion intercepts",
+        "description": "Confirm this is attack damage that would mark your last HP and you are within Close range of your available companion. They take the damage instead, marking one Stress.",
+        "companionIntercept": true,
+        "when": { "lastHp": true },
+        "replaceHp": true,
+        "insteadOfArmor": true,
+        "uses": "source"
+       },
+       {
+        "id": "loyal-friend-armored",
+        "label": "Loyal Friend: Armored companion intercepts",
+        "description": "Confirm attack damage would mark your last HP and you are within Close range. Your companion intercepts; Armored marks one owner Armor Slot instead of companion Stress.",
+        "companionIntercept": true,
+        "companionArmored": true,
+        "cost": { "armor": 1 },
+        "when": { "lastHp": true },
+        "replaceHp": true,
+        "insteadOfArmor": true,
+        "uses": "source"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "ranger-beastbound-specialization",
+   "name": "Ranger: Beastbound",
+   "kind": "subclass",
+   "domains": [
+    "Bone",
+    "Sage"
+   ],
+   "text": "Play the Beastbound if you want to form a deep bond with an animal ally.",
+   "parent": "Ranger",
+   "stage": "specialization",
+   "spellcastTrait": "Agility",
+   "features": [
+    {
+     "name": "Expert Training",
+     "text": "Choose an additional level-up option for your companion.",
+     "type": "subclass",
+     "automation": { "companionTraining": 1 }
+    },
+    {
+     "name": "Battle-Bonded",
+     "text": "When an adversary attacks you while they’re within your companion’s Melee range, you gain a +2 bonus to your Evasion against the attack.",
+     "type": "subclass"
+    }
+   ]
+  },
+  {
+   "id": "ranger-beastbound-foundation",
+   "name": "Ranger: Beastbound",
+   "kind": "subclass",
+   "domains": [
+    "Bone",
+    "Sage"
+   ],
+   "text": "Play the Beastbound if you want to form a deep bond with an animal ally.",
+   "parent": "Ranger",
+   "stage": "foundation",
+   "spellcastTrait": "Agility",
+   "features": [
+    {
+     "name": "Companion",
+     "text": "You have an animal companion of your choice (at the GM’s discretion). They stay by your side unless you tell them otherwise.\nTake the Ranger Companion sheet. When you level up your character, choose a level-up option for your companion from this sheet as well.\n\n**Commanding your companion:** Make a Spellcast Roll to connect with your companion and command them to take action. You can spend a Hope to add an applicable Companion Experience to the roll.\n\n**Building on their success:** If the command succeeds with Hope and your next action builds on what your companion accomplished, you gain advantage on that next action's roll. This is not automatic advantage after every companion roll: the command must succeed with Hope, and your very next action must build on that success.",
+     "type": "subclass",
+     "automation": {
+      "companion": {
+       "evasion": 10, "stress": 3, "maxStress": 6,
+       "damage": "d6", "range": "Melee",
+       "dice": ["d6", "d8", "d10", "d12"],
+       "ranges": ["Melee", "Very Close", "Close", "Far", "Very Far"],
+       "options": [
+        { "id": "intelligent", "name": "Intelligent", "max": 3, "choose": "experience", "text": "Permanently increase one companion Experience by +1." },
+        { "id": "light-in-the-dark", "name": "Light in the Dark", "max": 1, "stat": "hope", "value": 1, "text": "Your character has one additional Hope slot." },
+        {
+         "id": "creature-comfort", "name": "Creature Comfort", "max": 1,
+         "text": "Once per rest, in a quiet moment with your companion, gain one Hope or both clear one Stress.",
+         "automation": {
+          "uses": { "max": 1, "per": "rest" },
+          "actions": [
+           { "id": "hope", "label": "Gain Hope", "companion": "comfortHope", "confirm": "Confirm you have a quiet moment to give your companion love and attention." },
+           { "id": "stress", "label": "Both clear Stress", "companion": "comfortStress", "confirm": "Confirm you have a quiet moment to give your companion love and attention." }
+          ]
+         }
+        },
+        { "id": "armored", "name": "Armored", "max": 1, "text": "When your companion takes damage, you may mark one owner Armor Slot instead of companion Stress." },
+        { "id": "vicious", "name": "Vicious", "max": 3, "choose": "attack", "text": "Increase the companion damage die or attack range by one step." },
+        { "id": "resilient", "name": "Resilient", "max": 3, "stat": "stress", "value": 1, "text": "Gain one additional companion Stress slot." },
+        { "id": "bonded", "name": "Bonded", "max": 1, "text": "When you mark your last HP, roll one d6 per unmarked companion Stress slot and mark those slots. Any 6 clears your last HP and returns you to the scene." },
+        { "id": "aware", "name": "Aware", "max": 3, "stat": "evasion", "value": 2, "text": "Permanently increase companion Evasion by +2." }
+       ]
+      },
+      "rollTriggers": [
+       {
+        "id": "build-on-companion",
+        "label": "Build on companion success",
+        "on": "companion",
+        "rollSection": "feature",
+        "when": "hope",
+        "description": "Confirm the companion command succeeded with Hope. Only use the advantage if your next action builds on that success.",
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Build on companion success", "kind": "buff", "until": "manual", "unique": true,
+           "text": "Advantage only on your next action if it builds on the companion's successful Hope command. Remove if the next action does not build on it.",
+           "rollOptions": [
+            { "id": "companion-advantage", "label": "Build on companion success", "roll": "action", "advantage": "advantage", "endEffect": "Build on companion success", "description": "Your next action builds on the companion's success." }
+           ]
+          }
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "warrior-call-of-the-brave-mastery",
+   "name": "Warrior: Call of the Brave",
+   "kind": "subclass",
+   "domains": [
+    "Blade",
+    "Bone"
+   ],
+   "text": "Play the Call of the Brave if you want to use the might of your enemies to fuel your own power.",
+   "parent": "Warrior",
+   "stage": "mastery",
+   "features": [
+    {
+     "name": "Camaraderie",
+     "text": "Your unwavering bravery is a rallying point for your allies. You can initiate a Tag Team Roll one additional time per session. Additionally, when an ally initiates a Tag Team Roll with you, they only need to spend 2 Hope to do so.",
+     "type": "subclass"
+    }
+   ]
+  },
+  {
+   "id": "warrior-call-of-the-brave-specialization",
+   "name": "Warrior: Call of the Brave",
+   "kind": "subclass",
+   "domains": [
+    "Blade",
+    "Bone"
+   ],
+   "text": "Play the Call of the Brave if you want to use the might of your enemies to fuel your own power.",
+   "parent": "Warrior",
+   "stage": "specialization",
+   "features": [
+    {
+     "name": "Rise to the Challenge",
+     "text": "You are vigilant in the face of mounting danger. While you have 2 or fewer Hit Points unmarked, you can roll a **d20** as your Hope Die.",
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [{
+       "id": "challenge", "label": "Rise to the Challenge (Hope d20)", "roll": "duality",
+       "hopeDie": 20, "defaultOn": true, "condition": { "unmarkedHp": { "min": 0, "max": 2 } }
+      }]
+     }
+    }
+   ]
+  },
+  {
+   "id": "warrior-call-of-the-brave-foundation",
+   "name": "Warrior: Call of the Brave",
+   "kind": "subclass",
+   "domains": [
+    "Blade",
+    "Bone"
+   ],
+   "text": "Play the Call of the Brave if you want to use the might of your enemies to fuel your own power.",
+   "parent": "Warrior",
+   "stage": "foundation",
+   "features": [
+    {
+     "name": "Courage",
+     "text": "When you fail a roll with Fear, you gain a Hope.",
+     "type": "subclass",
+     "automation": {
+      "rollTriggers": [
+       {
+        "id": "gain",
+        "label": "Failed roll with Fear: gain Hope",
+        "failedOnly": true,
+        "on": "duality",
+        "when": "fear",
+        "excludeRolls": ["reaction"],
+        "description": "Use only if this roll failed. Reaction rolls do not generate Fear.",
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "hope",
+          "amount": 1
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "name": "Battle Ritual",
+     "text": "Once per long rest, before you attempt something incredibly dangerous or face off against a foe who clearly outmatches you, describe what ritual you perform or preparations you make. When you do, clear 2 Stress and gain 2 Hope.",
+     "type": "subclass",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Perform battle ritual",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "stress",
+          "amount": 2
+         },
+         {
+          "op": "gain",
+          "resource": "hope",
+          "amount": 2
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "warrior-call-of-the-slayer-mastery",
+   "name": "Warrior: Call of the Slayer",
+   "kind": "subclass",
+   "domains": [
+    "Blade",
+    "Bone"
+   ],
+   "text": "Play the Call of the Slayer if you want to strike down adversaries with immense force.",
+   "parent": "Warrior",
+   "stage": "mastery",
+   "features": [
+    {
+     "name": "Martial Preparation",
+     "text": "You’re an inspirational warrior to all who travel with you. Your party gains access to the Martial Preparation downtime move. To use this move during a rest, describe how you instruct and train with your party. You and each ally who chooses this downtime move gain a **d6** Slayer Die. A PC with a Slayer Die can spend it to roll the die and add the result to an attack or damage roll of their choice.",
+     "type": "subclass",
+     "automation": {
+      "partyDowntime": true,
+      "actions": [
+       {
+        "id": "train",
+        "label": "Train together: gain a d6 Slayer Die",
+        "timing": "downtime",
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "slayer-dice",
+          "amount": 1,
+          "fallbackEffect": {
+           "name": "Martial Preparation: Slayer Die",
+           "kind": "buff",
+           "until": "manual",
+           "unique": true,
+           "text": "Spend this d6 Slayer Die on one attack or damage roll.",
+           "rollOptions": [
+            { "id": "attack", "label": "Slayer Die", "roll": "attack", "dice": "1d6", "diceResource": "slayer-dice", "endEffect": "Martial Preparation: Slayer Die" },
+            { "id": "damage", "label": "Slayer Die", "roll": "damage", "dice": "1d6", "diceResource": "slayer-dice", "endEffect": "Martial Preparation: Slayer Die" }
+           ]
+          }
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "warrior-call-of-the-slayer-specialization",
+   "name": "Warrior: Call of the Slayer",
+   "kind": "subclass",
+   "domains": [
+    "Blade",
+    "Bone"
+   ],
+   "text": "Play the Call of the Slayer if you want to strike down adversaries with immense force.",
+   "parent": "Warrior",
+   "stage": "specialization",
+   "features": [
+    {
+     "name": "Weapon Specialist",
+     "text": "You can wield multiple weapons with dangerous ease. When you succeed on an attack, you can **spend a Hope** to add one of the damage dice from your secondary weapon to the damage roll. Additionally, once per long rest when you roll your Slayer Dice, reroll any 1s.",
+     "type": "subclass",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      },
+      "rollOptions": [{
+       "id": "secondary", "label": "Add a secondary weapon die (successful attack)",
+       "roll": "damage", "secondaryWeaponDie": true, "cost": { "hope": 1 }, "usesSource": false,
+       "description": "Use after a successful attack. Add one damage die from your equipped secondary weapon."
+      }],
+      "rollTriggers": [{
+       "id": "reroll", "label": "Reroll Slayer Dice showing 1",
+       "on": "any", "rerollResourceDice": "slayer-dice"
+      }]
+     }
+    }
+   ]
+  },
+  {
+   "id": "warrior-call-of-the-slayer-foundation",
+   "name": "Warrior: Call of the Slayer",
+   "kind": "subclass",
+   "domains": [
+    "Blade",
+    "Bone"
+   ],
+   "text": "Play the Call of the Slayer if you want to strike down adversaries with immense force.",
+   "parent": "Warrior",
+   "stage": "foundation",
+   "features": [
+    {
+     "name": "Slayer",
+     "text": "You gain a pool of dice called Slayer Dice. On a roll with Hope, you can place a **d6** on this card instead of gaining a Hope, adding the die to the pool. You can store a number of Slayer Dice equal to your Proficiency. When you make an attack roll or damage roll, you can spend any number of these Slayer Dice, rolling them and adding their result to the roll. At the end of each session, clear any unspent Slayer Dice on this card and gain a Hope per die cleared.",
+     "type": "subclass",
+     "automation": {
+      "classResourceOnly": true,
+      "hopeReward": { "resource": "slayer-dice", "amount": 1, "roll": "action" },
+      "resources": [
+       {
+        "id": "slayer-dice",
+        "label": "Slayer Dice",
+        "initial": 0,
+        "max": "@proficiency",
+        "session": true,
+        "sessionHope": true
+       }
+      ],
+      "rollOptions": [
+       {
+        "id": "slayer-attack",
+        "label": "Slayer Dice",
+        "roll": "attack",
+        "dice": "1d6",
+        "diceResource": "slayer-dice",
+        "quantity": { "resource": "slayer-dice", "label": "Slayer Dice to spend" },
+        "cost": {
+         "slayer-dice": 1
+        }
+       },
+       {
+        "id": "slayer-damage",
+        "label": "Slayer Dice",
+        "roll": "damage",
+        "dice": "1d6",
+        "diceResource": "slayer-dice",
+        "quantity": { "resource": "slayer-dice", "label": "Slayer Dice to spend" },
+        "cost": {
+         "slayer-dice": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "seraph-divine-wielder-mastery",
+   "name": "Seraph: Divine Wielder",
+   "kind": "subclass",
+   "domains": [
+    "Splendor",
+    "Valor"
+   ],
+   "text": "Play the Divine Wielder if you want to dominate the battlefield with a legendary weapon.",
+   "parent": "Seraph",
+   "stage": "mastery",
+   "spellcastTrait": "Strength",
+   "features": [
+    {
+     "name": "Sacred Resonance",
+     "text": "When you roll damage for your “Spirit Weapon” feature, if any of the die results match, double the value of each matching die. For example, if you roll two 5s, they count as two 10s.",
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [{
+       "id": "resonance", "label": "Sacred Resonance", "roll": "damage",
+       "weaponRanges": ["Melee", "Very Close", "Close"], "weapon": "any",
+       "matchingDice": true, "defaultOn": true,
+       "description": "Double every matching die result across all damage dice for this Spirit Weapon attack, including bonus dice."
+      }]
+     }
+    }
+   ]
+  },
+  {
+   "id": "seraph-divine-wielder-specialization",
+   "name": "Seraph: Divine Wielder",
+   "kind": "subclass",
+   "domains": [
+    "Splendor",
+    "Valor"
+   ],
+   "text": "Play the Divine Wielder if you want to dominate the battlefield with a legendary weapon.",
+   "parent": "Seraph",
+   "stage": "specialization",
+   "spellcastTrait": "Strength",
+   "features": [
+    {
+     "name": "Devout",
+     "text": "When you roll your Prayer Dice, you can roll an additional die and discard the lowest result. Additionally, you can use your “Sparing Touch” feature twice instead of once per long rest.",
+     "type": "subclass",
+     "automation": { "usesOverrides": { "feat:Sparing Touch": 2 } }
+    }
+   ]
+  },
+  {
+   "id": "seraph-divine-wielder-foundation",
+   "name": "Seraph: Divine Wielder",
+   "kind": "subclass",
+   "domains": [
+    "Splendor",
+    "Valor"
+   ],
+   "text": "Play the Divine Wielder if you want to dominate the battlefield with a legendary weapon.",
+   "parent": "Seraph",
+   "stage": "foundation",
+   "spellcastTrait": "Strength",
+   "features": [
+    {
+     "name": "Spirit Weapon",
+     "text": "When you have an equipped weapon with a range of Melee or Very Close, it can fly from your hand to attack an adversary within Close range and then return to you. You can **mark a Stress** to target an additional adversary within range with the same attack roll.",
+     "type": "subclass",
+     "automation": {
+      "rollTriggers": [
+       {
+        "id": "use",
+        "label": "Spirit Weapon: target an additional adversary",
+        "on": "attack", "weaponAttack": true,
+        "weaponRanges": ["Melee", "Very Close", "Close"],
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Sparing Touch",
+     "text": "Once per long rest, touch a creature and clear 2 Hit Points or 2 Stress from them.",
+     "type": "subclass",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      },
+      "actions": [
+       {
+        "id": "hp",
+        "label": "Sparing Touch: clear 2 HP",
+        "target": "actor",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "hp",
+          "amount": 2
+         }
+        ]
+       },
+       {
+        "id": "stress",
+        "label": "Sparing Touch: clear 2 Stress",
+        "target": "actor",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "stress",
+          "amount": 2
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "sorcerer-elemental-origin-mastery",
+   "name": "Sorcerer: Elemental Origin",
+   "kind": "subclass",
+   "domains": [
+    "Arcana",
+    "Midnight"
+   ],
+   "text": "Play the Elemental Origin if you want to channel raw magic to take the shape of a particular element.",
+   "parent": "Sorcerer",
+   "stage": "mastery",
+   "spellcastTrait": "Instinct",
+   "features": [
+    {
+     "name": "Transcendence",
+     "text": "Once per long rest, you can transform into a physical manifestation of your element. When you do, describe your transformation and choose two of the following benefits to gain until your next rest:\n\n- +4 bonus to your Severe threshold\n\n- +1 bonus to a character trait of your choice\n\n- +1 bonus to your Proficiency\n\n- +2 bonus to your Evasion",
+     "type": "subclass",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Transcendence",
+        "chooseEffects": {
+         "count": 2,
+         "options": [
+          { "id": "severe", "label": "+4 Severe threshold", "effect": { "name": "Transcendence: Severe threshold", "kind": "buff", "until": "rest", "modifiers": [{ "stat": "severeThreshold", "value": 4 }] } },
+          { "id": "trait", "label": "+1 to a trait", "chooseTrait": true, "effect": { "name": "Transcendence: Trait", "kind": "buff", "until": "rest", "modifiers": [{ "stat": "trait.@choice", "value": 1 }] } },
+          { "id": "proficiency", "label": "+1 Proficiency", "effect": { "name": "Transcendence: Proficiency", "kind": "buff", "until": "rest", "modifiers": [{ "stat": "proficiency", "value": 1 }] } },
+          { "id": "evasion", "label": "+2 Evasion", "effect": { "name": "Transcendence: Evasion", "kind": "buff", "until": "rest", "modifiers": [{ "stat": "evasion", "value": 2 }] } }
+         ]
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "sorcerer-elemental-origin-specialization",
+   "name": "Sorcerer: Elemental Origin",
+   "kind": "subclass",
+   "domains": [
+    "Arcana",
+    "Midnight"
+   ],
+   "text": "Play the Elemental Origin if you want to channel raw magic to take the shape of a particular element.",
+   "parent": "Sorcerer",
+   "stage": "specialization",
+   "spellcastTrait": "Instinct",
+   "features": [
+    {
+     "name": "Natural Evasion",
+     "text": "You can call forth your element to protect you from harm. When an attack roll against you succeeds, you can **mark a Stress** and describe how you use your element to defend you. When you do, roll a **d6** and add its result to your Evasion against the attack.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Natural Evasion",
+        "sendRoll": { "dice": "1d6", "label": "Natural Evasion: add to Evasion against this attack" },
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "sorcerer-elemental-origin-foundation",
+   "name": "Sorcerer: Elemental Origin",
+   "kind": "subclass",
+   "domains": [
+    "Arcana",
+    "Midnight"
+   ],
+   "text": "Play the Elemental Origin if you want to channel raw magic to take the shape of a particular element.",
+   "parent": "Sorcerer",
+   "stage": "foundation",
+   "spellcastTrait": "Instinct",
+   "features": [
+    {
+     "name": "Elementalist",
+     "text": "Choose one of the following elements at character creation: air, earth, fire, lightning, water.\nYou can shape this element into harmless effects. Additionally, **spend a Hope** and describe how your control over this element helps an action roll you’re about to make, then either gain a +2 bonus to the roll or a +3 bonus to the roll’s damage.",
+     "type": "subclass",
+     "automation": {
+      "elementChoice": ["Air", "Earth", "Fire", "Lightning", "Water"],
+      "rollOptions": [
+       {
+        "id": "elemental-action",
+        "label": "Elemental aid: action",
+        "roll": "action",
+        "value": 2,
+        "cost": {
+         "hope": 1
+        }
+       },
+       {
+        "id": "elemental-damage",
+        "label": "Elemental aid: damage",
+        "roll": "damage",
+        "value": 3,
+        "cost": {
+         "hope": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "assassin-executioners-guild-mastery",
+   "name": "Assassin: Executioners Guild",
+   "kind": "subclass",
+   "domains": [
+    "Blade",
+    "Midnight"
+   ],
+   "text": "Play the Executioners Guild if you want to strike down your targets with lethal precision.",
+   "parent": "Assassin",
+   "stage": "mastery",
+   "spellcastTrait": "Agility",
+   "features": [
+    {
+     "name": "True Strike",
+     "text": "Once per long rest when you fail an attack, you can **spend a Hope** to make it a success instead.",
+     "type": "subclass",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "True Strike",
+        "cost": {
+         "hope": 1
+        }
+       }
+      ],
+      "rollTriggers": [
+       {
+        "id": "use",
+        "label": "True Strike",
+        "on": "attack",
+        "when": "failure",
+        "cost": { "hope": 1 },
+        "description": "Turn this failed attack into a success. Confirm the result with the GM."
+       }
+      ]
+     }
+    },
+    {
+     "name": "Backstab",
+     "text": "Your “Marked for Death” feature uses **d8s** instead of d6s.",
+     "type": "subclass"
+    }
+   ]
+  },
+  {
+   "id": "assassin-executioners-guild-specialization",
+   "name": "Assassin: Executioners Guild",
+   "kind": "subclass",
+   "domains": [
+    "Blade",
+    "Midnight"
+   ],
+   "text": "Play the Executioners Guild if you want to strike down your targets with lethal precision.",
+   "parent": "Assassin",
+   "stage": "specialization",
+   "spellcastTrait": "Agility",
+   "features": [
+    {
+     "name": "Death Strike",
+     "text": "When you deal Severe damage to a creature, you can **mark a Stress** to force them to mark an additional Hit Point.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Death Strike",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ],
+      "rollTriggers": [
+       {
+        "id": "use",
+        "label": "Death Strike",
+        "on": "damage",
+        "cost": { "stress": 1 },
+        "description": "Use only after dealing Severe damage. The target marks an additional Hit Point."
+       }
+      ]
+     }
+    },
+    {
+     "name": "Scorpion’s Poise",
+     "text": "You gain a +2 bonus to your Evasion against attacks made by a creature you’ve *Marked for Death*.",
+     "type": "subclass"
+    }
+   ]
+  },
+  {
+   "id": "assassin-executioners-guild-foundation",
+   "name": "Assassin: Executioners Guild",
+   "kind": "subclass",
+   "domains": [
+    "Blade",
+    "Midnight"
+   ],
+   "text": "Play the Executioners Guild if you want to strike down your targets with lethal precision.",
+   "parent": "Assassin",
+   "stage": "foundation",
+   "spellcastTrait": "Agility",
+   "features": [
+    {
+     "name": "First Strike",
+     "text": "The first time in a scene you succeed on an attack, you deal double damage.",
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "first-strike",
+        "label": "First Strike (double damage)",
+        "roll": "damage",
+        "multiplier": 2,
+        "description": "Select only for your first successful attack in the scene."
+       }
+      ]
+     }
+    },
+    {
+     "name": "Ambush",
+     "text": "Your “Marked for Death” feature uses **d6s** instead of d4s.",
+     "type": "subclass"
+    }
+   ]
+  },
+  {
+   "id": "witch-hedge-mastery",
+   "name": "Witch: Hedge",
+   "kind": "subclass",
+   "domains": [
+    "Sage",
+    "Dread"
+   ],
+   "text": "Play the Hedge if you want to use your craft to empower yourself and your party.",
+   "parent": "Witch",
+   "stage": "mastery",
+   "spellcastTrait": "Knowledge",
+   "features": [
+    {
+     "name": "Circle of Power",
+     "text": "Once per rest, mark a circle on the ground outlining a Very Close area around you, and place a number of tokens equal to your Spellcast trait on this card. While within this circle, you and your allies gain a +2 bonus to damage thresholds, attack rolls, and Evasion. Remove a token each time you or an ally within the circle makes an action roll or evades an attack. This spell lasts until the last token is removed or you exit the circle.",
+     "type": "subclass",
+     "automation": {
+      "resources": [{ "id": "circle-of-power", "label": "Tokens", "initial": 0, "resetOn": "rest", "whileEffect": "Circle of Power", "cardOnly": true }],
+      "uses": {
+       "max": 1,
+       "per": "rest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Circle of Power",
+        "steps": [
+         { "op": "clear", "resource": "circle-of-power", "amount": "all" },
+         { "op": "gain", "resource": "circle-of-power", "amount": "@spellcast" },
+         { "op": "effect", "effect": { "name": "Circle of Power", "kind": "buff", "until": "rest", "witchGrant": "circle", "tokenResource": "circle-of-power", "text": "You and allies within the circle gain +2 thresholds, Evasion and attack rolls. Spend a token whenever someone in the circle makes an action roll or evades an attack. Remove this effect when you leave the circle." } }
+        ]
+       },
+       {
+        "id": "spend", "label": "Spend a circle token", "usesSource": false,
+        "requiresEffect": "Circle of Power", "cost": { "circle-of-power": 1 }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "witch-hedge-specialization",
+   "name": "Witch: Hedge",
+   "kind": "subclass",
+   "domains": [
+    "Sage",
+    "Dread"
+   ],
+   "text": "Play the Hedge if you want to use your craft to empower yourself and your party.",
+   "parent": "Witch",
+   "stage": "specialization",
+   "spellcastTrait": "Knowledge",
+   "features": [
+    {
+     "name": "Walk Between Worlds",
+     "text": "During a moment of calm, make a **Spellcast Roll (13)**. Once per rest on a success, you can **mark a Stress** to step beyond the veil of death and converse with any nearby spirits. Place a number of tokens equal to your Spellcast trait on this card and remove one each time a spirit answers a question. When the last token is removed or at the end of the scene, you return to the Mortal Realm in the same spot you left it.",
+     "type": "subclass",
+     "automation": {
+      "resources": [{ "id": "walk-between-worlds", "label": "Tokens", "initial": 0, "resetOn": "rest", "whileEffect": "Walk Between Worlds", "cardOnly": true }],
+      "uses": {
+       "max": 1,
+       "per": "rest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Walk Between Worlds (13)", "usesSource": false,
+        "actionRoll": { "trait": "spellcast", "difficulty": 13 }
+       },
+       {
+        "id": "spend", "label": "Spirit answers: spend a token", "usesSource": false,
+        "requiresEffect": "Walk Between Worlds", "cost": { "walk-between-worlds": 1 }
+       }
+      ],
+      "rollTriggers": [{
+       "id": "enter", "label": "Step beyond the veil", "on": "feat:Walk Between Worlds", "when": "success", "difficulty": 13,
+       "cost": { "stress": 1 },
+       "steps": [
+        { "op": "clear", "resource": "walk-between-worlds", "amount": "all" },
+        { "op": "gain", "resource": "walk-between-worlds", "amount": "@spellcast" },
+        { "op": "effect", "effect": { "name": "Walk Between Worlds", "kind": "buff", "until": "scene", "tokenResource": "walk-between-worlds", "text": "Converse with nearby spirits. Spend one token per answer; return to the same spot when the last token is spent or the scene ends." } }
+       ]
+      }]
+     }
+    },
+    {
+     "name": "Vexing Malison",
+     "text": "You have advantage on attacks against *Hexed* creatures.",
+     "type": "subclass",
+     "automation": { "rollOptions": [{ "id": "hexed", "label": "Vexing Malison: Hexed target", "roll": "attack", "advantage": "advantage", "description": "Select only when attacking a Hexed creature." }] }
+    }
+   ]
+  },
+  {
+   "id": "witch-hedge-foundation",
+   "name": "Witch: Hedge",
+   "kind": "subclass",
+   "domains": [
+    "Sage",
+    "Dread"
+   ],
+   "text": "Play the Hedge if you want to use your craft to empower yourself and your party.",
+   "parent": "Witch",
+   "stage": "foundation",
+   "spellcastTrait": "Knowledge",
+   "features": [
+    {
+     "name": "Herbal Remedies",
+     "text": "When you or an ally in the scene clears 1 or more Hit Points or Stress as the result of using a consumable, increase the number cleared by 1.",
+     "type": "subclass"
+    },
+    {
+     "name": "Enchanted Talisman",
+     "text": "Once per rest, you can imbue a small item with your protective essence. ** Spend any number of Hope **to place an equal number of tokens on this card. When the person holding the talisman takes damage, spend a token to reduce the number of Hit Points they mark by one. Clear all tokens from this card when you take a rest.",
+     "type": "subclass",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "rest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Imbue talisman", "witchAction": "talisman"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "brawler-juggernaut-mastery",
+   "name": "Brawler: Juggernaut",
+   "kind": "subclass",
+   "domains": [
+    "Valor",
+    "Bone"
+   ],
+   "text": "Play the Juggernaut if you want to pulverize your opponents with crushing blows.",
+   "parent": "Brawler",
+   "stage": "mastery",
+   "features": [
+    {
+     "name": "Pummeljoy",
+     "text": "When you critically succeed on a Melee weapon attack, you gain an additional Hope, clear an additional Stress, and gain a +1 bonus to your Proficiency for that attack.",
+     "type": "subclass",
+     "automation": { "criticalMelee": { "hope": 1, "stress": 1, "proficiency": 1 } }
+    },
+    {
+     "name": "Not Done Yet",
+     "text": "When you take Severe damage, you can gain a Hope or clear a Stress.",
+     "type": "subclass",
+     "automation": {
+      "mitigation": [{
+       "id": "recover", "label": "Not Done Yet", "passive": true,
+       "when": { "severity": ["severe", "massive"] }, "finalSevere": true,
+       "recoveryChoice": true
+      }]
+     }
+    }
+   ]
+  },
+  {
+   "id": "brawler-juggernaut-specialization",
+   "name": "Brawler: Juggernaut",
+   "kind": "subclass",
+   "domains": [
+    "Valor",
+    "Bone"
+   ],
+   "text": "Play the Juggernaut if you want to pulverize your opponents with crushing blows.",
+   "parent": "Brawler",
+   "stage": "specialization",
+   "features": [
+    {
+     "name": "Surrounded",
+     "text": "When you make an attack with a Melee weapon, you can **spend any number of Hope **to target an equal number of additional creatures within Melee range.",
+     "type": "subclass",
+     "automation": { "rollOptions": [{
+      "id": "targets", "label": "Target additional creatures", "roll": "attack", "weaponRange": "Melee",
+      "quantity": { "resource": "hope", "label": "Additional targets / Hope (default 1)" },
+      "cost": { "hope": 1 }, "description": "Each Hope targets one additional creature within Melee range."
+     }] }
+    },
+    {
+     "name": "Eye for an Eye",
+     "text": "Once per rest when an adversary within Melee range forces you to mark any number of Hit Points, you can **mark a Stress** to force them to mark the same number of Hit Points.",
+     "type": "subclass",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "rest"
+      },
+      "mitigation": [{
+       "id": "retaliate", "label": "Eye for an Eye", "when": { "markingHp": true },
+       "cost": { "stress": 1 }, "uses": "source", "reflectHp": true,
+       "description": "Confirm the adversary is within Melee range; they mark the same HP you mark."
+      }],
+      "actions": [
+       {
+        "id": "use",
+        "label": "Eye for an Eye",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "brawler-juggernaut-foundation",
+   "name": "Brawler: Juggernaut",
+   "kind": "subclass",
+   "domains": [
+    "Valor",
+    "Bone"
+   ],
+   "text": "Play the Juggernaut if you want to pulverize your opponents with crushing blows.",
+   "parent": "Brawler",
+   "stage": "foundation",
+   "features": [
+    {
+     "name": "Rugged",
+     "text": "Gain a permanent +3 bonus to your Severe damage threshold.",
+     "type": "subclass",
+     "automation": {
+      "modifiers": [
+       {
+        "stat": "severeThreshold",
+        "value": 3
+       }
+      ]
+     }
+    },
+    {
+     "name": "Overwhelm",
+     "text": "When you succeed on an attack against a target, you can ** spend a Hope **to throw the target within Close range or to force them to mark a Stress.",
+     "type": "subclass",
+     "automation": {
+      "rollTriggers": [{
+       "id": "overwhelm", "label": "Overwhelm: throw or mark Stress", "on": "attack",
+       "cost": { "hope": 1 }, "description": "Use only after a successful attack. Throw the target within Close range or force them to mark a Stress."
+      }],
+      "actions": [
+       {
+        "id": "use",
+        "label": "Overwhelm",
+        "cost": {
+         "hope": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "brawler-martial-artist-mastery",
+   "name": "Brawler: Martial Artist",
+   "kind": "subclass",
+   "domains": [
+    "Valor",
+    "Bone"
+   ],
+   "text": "Play the Martial Artist if you want to use a variety of fighting styles to eliminate your foes.",
+   "parent": "Brawler",
+   "stage": "mastery",
+   "features": [
+    {
+     "name": "Limit Breaker",
+     "text": "Once per rest, you can perform an unbelievable feat of athletic prowess, such as running across water, leaping between distant rooftops, or scaling a building without needing to roll. When you do, gain a Hope and clear a Stress.",
+     "type": "subclass",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "rest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Perform athletic feat",
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "hope",
+          "amount": 1
+         },
+         {
+          "op": "clear",
+          "resource": "stress",
+          "amount": 1
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "name": "Flow State",
+     "text": "You can **mark a Stress** instead of spending a Focus to shift into a different stance. Additionally, you can **spend a Focus **instead of marking a Stress to start a combo strike.",
+     "type": "subclass"
+    }
+   ]
+  },
+  {
+   "id": "brawler-martial-artist-specialization",
+   "name": "Brawler: Martial Artist",
+   "kind": "subclass",
+   "domains": [
+    "Valor",
+    "Bone"
+   ],
+   "text": "Play the Martial Artist if you want to use a variety of fighting styles to eliminate your foes.",
+   "parent": "Brawler",
+   "stage": "specialization",
+   "features": [
+    {
+     "name": "Keen Defenses",
+     "text": "When you’re targeted by an attack, you can **spend a Focus** to gain a bonus to your Evasion equal to your tier against the attack.",
+     "type": "subclass",
+     "automation": { "actions": [{
+      "id": "defend", "label": "Keen Defenses", "cost": { "focus": 1 },
+      "sendRoll": { "dice": "@tier", "base": "evasion", "label": "Keen Defenses: Evasion against this attack" }
+     }] }
+    },
+    {
+     "name": "Focus Cannon",
+     "text": "**Spend a Focus** to make an Instinct Roll against an adversary within Far range. On a success, deal **d20+3** magic damage using your Proficiency.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       { "id": "attack", "label": "Focus Cannon: Instinct roll", "cost": { "focus": 1 }, "actionRoll": { "trait": "Instinct" } },
+       { "id": "damage", "label": "Focus Cannon: damage", "damage": { "dice": "d20+3", "type": "magic" } }
+      ],
+      "rollTriggers": [{
+       "id": "damage", "label": "Focus Cannon: damage (on success)", "on": "feat:Focus Cannon",
+       "damage": { "dice": "d20+3", "type": "magic" }
+      }]
+     }
+    }
+   ]
+  },
+  {
+   "id": "brawler-martial-artist-foundation",
+   "name": "Brawler: Martial Artist",
+   "kind": "subclass",
+   "domains": [
+    "Valor",
+    "Bone"
+   ],
+   "text": "Play the Martial Artist if you want to use a variety of fighting styles to eliminate your foes.",
+   "parent": "Brawler",
+   "stage": "foundation",
+   "features": [
+    {
+     "name": "Stance Fighter",
+     "text": "You can channel your inner resolve to shift into martial stances that grant you special benefits in combat.\nTake the Martial Stances sheet and choose two martial stances from Tier 1. Each time you level up your character, choose an additional stance from your tier or lower.\nYou can spend a Focus to shift into a martial stance and gain its effects. You can shift only into stances you’ve marked as known. When you shift into a stance, it’s considered your active stance until you drop out of it.\nYou can’t shift into or have more than one active stance at a time. Until you shift into a stance, you are not considered to be in a stance or to have an active stance.\nIf you are already in a stance when you shift into a different stance, you automatically drop out of the previously active stance. You also drop out of your active stance when you take Severe damage or mark your last Hit Point. Otherwise, you drop out of your active stance at the end of the scene. When you drop out of a stance, you lose any ongoing benefits it provides.",
+     "type": "subclass",
+     "automation": {
+      "grantsFeatures": ["Focus"],
+      "actions": [
+       { "id": "shift", "label": "Shift stance", "shiftStance": true, "cost": { "focus": 1 } },
+       { "id": "flow-shift", "label": "Flow State: shift stance", "shiftStance": true, "requiresFeature": "Flow State", "cost": { "stress": 1 } }
+      ],
+      "rollTriggers": [
+       { "id": "invigorating", "label": "Invigorating: successful attack", "on": "attack", "requiresEffect": "Invigorating", "check": { "dice": "1d4", "success": 4, "gain": "focus" } },
+       { "id": "grapple-focus", "label": "Grappling: Restrain or throw (successful Melee hit)", "on": "attack", "requiresEffect": "Grappling", "weaponRange": "Melee", "cost": { "focus": 1 } },
+       { "id": "grapple-stress", "label": "Grappling: Restrain or throw (successful Melee hit)", "on": "attack", "requiresEffect": "Grappling", "weaponRange": "Melee", "cost": { "stress": 1 } },
+       { "id": "scary", "label": "Scary: target marks a Stress (on success)", "on": "attack", "requiresEffect": "Scary" },
+       { "id": "crushing", "label": "Crushing: target marks +1 HP (Severe damage)", "on": "damage", "requiresEffect": "Crushing", "cost": { "hope": 1 } }
+      ],
+      "stances": [
+       { "name": "Favored", "tier": 1, "chooseTrait": true, "effect": { "name": "Favored", "kind": "buff", "until": "scene", "text": "Gain a bonus to damage rolls equal to a trait of your choice." } },
+       { "name": "Invigorating", "tier": 1, "effect": { "name": "Invigorating", "kind": "buff", "until": "scene", "text": "On a successful attack, roll a d4. On a result of 4, gain a Focus." } },
+       { "name": "Quick", "tier": 1, "effect": { "name": "Quick", "kind": "buff", "until": "scene", "text": "When you make an attack, you can spend a Focus or mark a Stress to target another creature within range with that attack.",
+        "rollOptions": [
+         { "id": "quick-focus", "label": "Quick: additional target", "roll": "attack", "exclusive": "quick", "cost": { "focus": 1 } },
+         { "id": "quick-stress", "label": "Quick: additional target", "roll": "attack", "exclusive": "quick", "cost": { "stress": 1 } }
+        ] } },
+       { "name": "Reliable", "tier": 1, "effect": { "name": "Reliable", "kind": "buff", "until": "scene", "text": "Gain a +1 bonus to your attack rolls.", "modifiers": [{ "roll": "attack", "value": 1 }] } },
+       { "name": "Aggressive", "tier": 2, "effect": { "name": "Aggressive", "kind": "buff", "until": "scene", "text": "Gain a −1 penalty to your Evasion. On a successful attack, roll an additional damage die and discard the lowest result.", "modifiers": [{ "stat": "evasion", "value": -1 }], "damage": { "extraDice": 1, "dropLowest": 1 } } },
+       { "name": "Anchored", "tier": 2, "effect": { "name": "Anchored", "kind": "buff", "until": "scene", "text": "Gain a +2 bonus to your damage thresholds. While in this stance, you can’t be moved against your will.", "modifiers": [{ "stat": "thresholds", "value": 2 }] } },
+       { "name": "Defensive", "tier": 2, "effect": { "name": "Defensive", "kind": "buff", "until": "scene", "text": "Attack rolls targeting you from within Melee range have disadvantage unless the attacker marks a Stress to negate the disadvantage." } },
+       { "name": "Otherworldly", "tier": 2, "effect": { "name": "Otherworldly", "kind": "buff", "until": "scene", "text": "On a successful attack, you can deal physical or magic damage." } },
+       { "name": "Grappling", "tier": 3, "effect": { "name": "Grappling", "kind": "buff", "until": "scene", "text": "On a successful attack within Melee range, you can spend a Focus or mark a Stress to temporarily Restrain the target or throw the target up to Close range." } },
+       { "name": "Scary", "tier": 3, "effect": { "name": "Scary", "kind": "buff", "until": "scene", "text": "On a successful attack, the target must mark a Stress." } },
+       { "name": "Stable", "tier": 3, "effect": { "name": "Stable", "kind": "buff", "until": "scene", "text": "You can spend a Focus instead of an Armor Slot to reduce damage.", "mitigation": [{ "id": "stable", "label": "Stable: spend Focus instead of Armor", "cost": { "focus": 1 }, "severity": 1, "insteadOfArmor": true }] } },
+       { "name": "Vigilant", "tier": 3, "effect": { "name": "Vigilant", "kind": "buff", "until": "scene", "text": "When you are targeted by an attack, you can mark a Stress to gain a d6 bonus to your Evasion against the attack.", "actions": [{ "id": "vigilant", "label": "Vigilant: defend", "cost": { "stress": 1 }, "sendRoll": { "dice": "1d6", "base": "evasion", "label": "Vigilant: Evasion against this attack" } }] } },
+       { "name": "Crushing", "tier": 4, "effect": { "name": "Crushing", "kind": "buff", "until": "scene", "text": "When you deal Severe damage, you can spend a Hope to force the target to mark an additional Hit Point." } },
+       { "name": "Exacting", "tier": 4, "effect": { "name": "Exacting", "kind": "buff", "until": "scene", "text": "When you roll a 1 on a damage die, you can treat it as the highest value on the die instead.", "damage": { "extraDice": 0, "dropLowest": 0, "maximumOnes": true } } },
+       { "name": "Honed", "tier": 4, "effect": { "name": "Honed", "kind": "buff", "until": "scene", "text": "Spend a Focus before you make an attack roll to gain a +1 bonus to your Proficiency for that attack.", "rollOptions": [{ "id": "honed", "label": "Honed: +1 Proficiency for this attack", "roll": "attack", "cost": { "focus": 1 }, "proficiency": 1 }] } },
+       { "name": "Isolating", "tier": 4, "effect": { "name": "Isolating", "kind": "buff", "until": "scene", "text": "Gain advantage on attack rolls when there are no other creatures within Very Close range of you or your target.", "rollOptions": [{ "id": "isolated", "label": "Isolating: no nearby creatures", "roll": "attack", "advantage": "advantage", "description": "Confirm no other creatures are within Very Close range of you or your target." }] } }
+      ]
+     }
+    },
+    {
+     "name": "Focus",
+     "text": "Focus represents your character’s poise, clarity, and control. Once per rest during a moment of calm, you can clear your mind and refocus your martial instincts. Clear your Focus track, then roll a number of d6s equal to your Instinct and gain Focus equal to the highest result rolled. You can hold a maximum of 6 Focus.",
+     "type": "subclass",
+     "automation": {
+      "resources": [{ "id": "focus", "label": "Focus", "initial": 0, "max": 6 }],
+      "actions": [
+       { "id": "refocus", "label": "Refocus (moment of calm)", "refocus": true, "uses": { "max": 1, "per": "rest" } }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "witch-moon-mastery",
+   "name": "Witch: Moon",
+   "kind": "subclass",
+   "domains": [
+    "Sage",
+    "Dread"
+   ],
+   "text": "Play the Moon if you want to embody celestial power to amplify your magic.",
+   "parent": "Witch",
+   "stage": "mastery",
+   "spellcastTrait": "Instinct",
+   "features": [
+    {
+     "name": "Lunar Phases",
+     "text": "At the beginning of each session, roll a **d6** and place it on this card. You gain the matching effect until the end of session.\nOnce per rest, you can **spend a Hope** to increase the value of this die by one. If you increase the value of a 6, it becomes a 1.\n\n- **1:** Spend a Hope to negate Minor damage.\n- **2-3:** +2 to damage rolls.\n- **4:** +3 to damage thresholds.\n- **5-6:** +1 to Evasion.",
+     "type": "subclass",
+     "automation": {
+      "effectCounters": [{ "label": "Lunar die", "effect": "Lunar Phases", "cardOnly": true }],
+      "lunarPhases": [
+       { "faces": [1], "effect": { "name": "Lunar Phases", "kind": "buff", "text": "Spend a Hope to negate Minor damage.", "mitigation": [{ "id": "minor", "label": "Lunar Phases: negate Minor damage", "when": { "severity": ["minor"] }, "cost": { "hope": 1 }, "negate": true }] } },
+       { "faces": [2, 3], "effect": { "name": "Lunar Phases", "kind": "buff", "text": "+2 to damage rolls.", "modifiers": [{ "roll": "damage", "value": 2 }] } },
+       { "faces": [4], "effect": { "name": "Lunar Phases", "kind": "buff", "text": "+3 to Major and Severe damage thresholds.", "modifiers": [{ "stat": "thresholds", "value": 3 }] } },
+       { "faces": [5, 6], "effect": { "name": "Lunar Phases", "kind": "buff", "text": "+1 to Evasion.", "modifiers": [{ "stat": "evasion", "value": 1 }] } }
+      ],
+      "actions": [
+       {
+        "id": "roll", "label": "Roll Lunar Phases d6", "witchAction": "lunarRoll", "uses": { "max": 1, "per": "session" }
+       },
+       {
+        "id": "advance", "label": "Increase lunar die", "witchAction": "lunarAdvance",
+        "uses": { "max": 1, "per": "rest" }, "cost": { "hope": 1 }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "witch-moon-specialization",
+   "name": "Witch: Moon",
+   "kind": "subclass",
+   "domains": [
+    "Sage",
+    "Dread"
+   ],
+   "text": "Play the Moon if you want to embody celestial power to amplify your magic.",
+   "parent": "Witch",
+   "stage": "specialization",
+   "spellcastTrait": "Instinct",
+   "features": [
+    {
+     "name": "Moonbeam",
+     "text": "Once per session, you can conjure a column of moonlight that illuminates the area within Close range until the end of the scene. While bathed in this moonlight, you and your allies gain a +1 bonus to Spellcast Rolls and can see through illusions.",
+     "type": "subclass",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "session"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Moonbeam",
+        "steps": [{ "op": "effect", "effect": { "name": "Moonbeam source", "kind": "buff", "until": "scene", "witchGrant": "moonbeam", "text": "Allies within Close range gain +1 to Spellcast Rolls and see through illusions. Ends at scene end." } }]
+       }
+      ]
+     }
+    },
+    {
+     "name": "Ire of Pale Light",
+     "text": "When a *Hexed* creature within Very Far range fails an attack, they must mark a Stress.",
+     "type": "subclass"
+    }
+   ]
+  },
+  {
+   "id": "witch-moon-foundation",
+   "name": "Witch: Moon",
+   "kind": "subclass",
+   "domains": [
+    "Sage",
+    "Dread"
+   ],
+   "text": "Play the Moon if you want to embody celestial power to amplify your magic.",
+   "parent": "Witch",
+   "stage": "foundation",
+   "spellcastTrait": "Instinct",
+   "features": [
+    {
+     "name": "Night’s Glamour",
+     "text": "Make a **Spellcast Roll (13)** to *Glamour* yourself in a bewitching facade. While *Glamoured*, you have advantage on rolls that leverage your illusory appearance. Additionally, adversaries within Close range must mark a Stress to attack you.\nUnless you **mark a Stress** to maintain your *Glamour*, it drops when you mark a Hit Point or deal damage.",
+     "type": "subclass",
+     "automation": {
+      "actions": [{ "id": "roll", "label": "Night's Glamour (13)", "actionRoll": { "trait": "spellcast", "difficulty": 13 } }],
+      "rollTriggers": [{
+       "id": "glamour", "label": "Become Glamoured", "on": "feat:Night’s Glamour", "when": "success", "difficulty": 13, "automatic": true,
+       "steps": [{ "op": "effect", "effect": {
+        "name": "Night's Glamour", "kind": "buff", "until": "manual", "endOnMarkedHp": true, "endOnDealtDamage": true,
+        "text": "Advantage on rolls leveraging your illusory appearance. Adversaries within Close range must mark Stress to attack you. Mark Stress to maintain this Glamour when you mark HP or deal damage; otherwise it drops.",
+        "rollOptions": [
+         { "id": "appearance", "label": "Glamour: leverage your appearance", "roll": "trait", "advantage": "advantage", "description": "Select only when your illusory appearance helps." },
+         { "id": "maintain", "label": "Maintain Glamour when dealing damage", "roll": "damage", "cost": { "stress": 1 }, "preserveEffect": "Night's Glamour" }
+        ],
+        "mitigation": [{ "id": "maintain", "label": "Maintain Glamour", "when": { "markingHp": true }, "cost": { "stress": 1 }, "preserveEffect": "Night's Glamour", "description": "Mark a Stress to keep your Glamour when this damage marks HP." }]
+       } }]
+      }]
+     }
+    }
+   ]
+  },
+  {
+   "id": "rogue-nightwalker-mastery",
+   "name": "Rogue: Nightwalker",
+   "kind": "subclass",
+   "domains": [
+    "Midnight",
+    "Grace"
+   ],
+   "text": "Play the Nightwalker if you want to manipulate shadows to maneuver through the environment.",
+   "parent": "Rogue",
+   "stage": "mastery",
+   "spellcastTrait": "Finesse",
+   "features": [
+    {
+     "name": "Fleeting Shadow",
+     "text": "Gain a permanent +1 bonus to your Evasion. You can use your “Shadow Stepper” feature to move within Very Far range.",
+     "type": "subclass",
+     "automation": {
+      "modifiers": [
+       {
+        "stat": "evasion",
+        "value": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "Vanishing Act",
+     "text": "**Mark a Stress** to become *Cloaked* at any time. When *Cloaked* from this feature, you automatically clear the *Restrained* condition if you have it. You remain *Cloaked* in this way until you roll with Fear or until your next rest.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Vanishing Act",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "rogue-nightwalker-specialization",
+   "name": "Rogue: Nightwalker",
+   "kind": "subclass",
+   "domains": [
+    "Midnight",
+    "Grace"
+   ],
+   "text": "Play the Nightwalker if you want to manipulate shadows to maneuver through the environment.",
+   "parent": "Rogue",
+   "stage": "specialization",
+   "spellcastTrait": "Finesse",
+   "features": [
+    {
+     "name": "Dark Cloud",
+     "text": "Make a **Spellcast Roll(15)**. On a success, create a temporary dark cloud that covers any area within Close range. Anyone in this cloud can’t see outside of it, and anyone outside of it can’t see in. You’re considered *Cloaked* from any adversary for whom the cloud blocks line of sight.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       { "id": "cast", "label": "Dark Cloud", "actionRoll": { "trait": "spellcast", "difficulty": 15 } }
+      ]
+     }
+    },
+    {
+     "name": "Adrenaline",
+     "text": "While you’re *Vulnerable*, add your level to your damage rolls.",
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "adrenaline",
+        "label": "Adrenaline",
+        "roll": "damage",
+        "value": "@level",
+        "description": "Only while Vulnerable."
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "rogue-nightwalker-foundation",
+   "name": "Rogue: Nightwalker",
+   "kind": "subclass",
+   "domains": [
+    "Midnight",
+    "Grace"
+   ],
+   "text": "Play the Nightwalker if you want to manipulate shadows to maneuver through the environment.",
+   "parent": "Rogue",
+   "stage": "foundation",
+   "spellcastTrait": "Finesse",
+   "features": [
+    {
+     "name": "Shadow Stepper",
+     "text": "You can move from shadow to shadow. When you move into an area of darkness or a shadow cast by another creature or object, you can **mark a Stress** to disappear from where you are and reappear inside another shadow within Far range. When you reappear, you are *Cloaked*.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Shadow Stepper",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "blood-hunter-order-of-the-ghost-slayer-foundation",
+   "name": "Blood Hunter: Order of the Ghost Slayer",
+   "kind": "subclass",
+   "domains": [
+    "Blade",
+    "Blood"
+   ],
+   "text": "",
+   "parent": "Blood Hunter",
+   "stage": "foundation",
+   "spellcastTrait": "Agility",
+   "features": [
+    {
+     "name": "Chasing Death",
+     "text": "While you have 1–3 unmarked Hit Points, you can use your Crimson Rite feature without paying the Hit Point cost. If you have only 1 unmarked Hit Point, you roll d8s instead of d6s for the extra damage of your Crimson Rite.",
+     "type": "subclass"
+    },
+    {
+     "name": "Shadowed Grit",
+     "text": "When the GM gains a Fear from a Duality Dice roll, you can **mark a Stress** to gain a Hope.",
+     "type": "subclass",
+     "automation": {
+      "rollTriggers": [
+       {
+        "id": "hope",
+        "label": "Shadowed Grit: gain a Hope",
+        "on": "duality",
+        "excludeRolls": ["reaction"],
+        "when": "fear",
+        "description": "The GM gained a Fear from this roll.",
+        "cost": {
+         "stress": 1
+        },
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "hope",
+          "amount": 1
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "blood-hunter-order-of-the-ghost-slayer-specialization",
+   "name": "Blood Hunter: Order of the Ghost Slayer",
+   "kind": "subclass",
+   "domains": [
+    "Blade",
+    "Blood"
+   ],
+   "text": "",
+   "parent": "Blood Hunter",
+   "stage": "specialization",
+   "spellcastTrait": "Agility",
+   "features": [
+    {
+     "name": "Veilwalker",
+     "text": "You can briefly slip into the realm between the living and the dead. **Spend 2 Hope** to disappear and then reappear next to a creature or a corpse within Far range. You then have advantage on the next attack roll you make in this scene.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Veilwalker",
+        "steps": [{ "op": "effect", "effect": {
+         "name": "Veilwalker", "kind": "buff", "until": "scene",
+         "text": "Advantage on your next attack in this scene.",
+         "rollOptions": [{ "id": "attack", "label": "Veilwalker advantage", "roll": "attack", "defaultOn": true, "advantage": "advantage", "endEffect": "Veilwalker" }]
+        } }],
+        "cost": {
+         "hope": 2
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "blood-hunter-order-of-the-ghost-slayer-mastery",
+   "name": "Blood Hunter: Order of the Ghost Slayer",
+   "kind": "subclass",
+   "domains": [
+    "Blade",
+    "Blood"
+   ],
+   "text": "",
+   "parent": "Blood Hunter",
+   "stage": "mastery",
+   "spellcastTrait": "Agility",
+   "features": [
+    {
+     "name": "Spectral Form",
+     "text": "You have another death move option: Spectral Form. When you choose this option, you clear a Hit Point, your body becomes spectral, you have resistance to physical damage, and you can pass through objects. This form ends if you clear any more Hit Points. It also ends if you mark your last Hit Point, which forces you to take a different death move. You’re shunted to the nearest open space if you’re inside an object when the form ends.",
+     "type": "subclass",
+     "automation": {
+      "deathMove": { "kind": "spectral" },
+      "actions": [
+       { "id": "use", "label": "Spectral Form death move", "deathMove": "spectral" }
+      ],
+      "mitigation": [
+       {
+        "id": "spectral",
+        "label": "Spectral Form",
+        "description": "While in spectral form you have resistance to physical damage.",
+        "requiresEffect": "Spectral Form",
+        "when": {
+         "type": "physical"
+        },
+        "halve": true
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "blood-hunter-order-of-the-lycan-mastery",
+   "name": "Blood Hunter: Order of the Lycan",
+   "kind": "subclass",
+   "domains": [
+    "Blade",
+    "Blood"
+   ],
+   "text": "",
+   "parent": "Blood Hunter",
+   "stage": "mastery",
+   "spellcastTrait": "Strength",
+   "features": [
+    {
+     "name": "Master the Beast",
+     "text": "When you are in your Wolf Form and would mark your last Stress, you can instead put one of your Domain cards from your Loadout into your Vault; you can’t Recall that Domain card until you finish a long rest.\n\nWhen you Frenzy from marking your last Stress while in Wolf Form, you gain 2 Hope.",
+     "type": "subclass"
+    }
+   ]
+  },
+  {
+   "id": "blood-hunter-order-of-the-lycan-specialization",
+   "name": "Blood Hunter: Order of the Lycan",
+   "kind": "subclass",
+   "domains": [
+    "Blade",
+    "Blood"
+   ],
+   "text": "",
+   "parent": "Blood Hunter",
+   "stage": "specialization",
+   "spellcastTrait": "Strength",
+   "features": [
+    {
+     "name": "Feral Hide",
+     "text": "While in your Wolf Form, you gain a bonus to your Damage Thresholds equal to your Tier.",
+     "type": "subclass",
+     "automation": { "modifiers": [{ "stat": "thresholds", "value": "@tier", "requiresEffect": "Wolf Form" }] }
+    },
+    {
+     "name": "Lycan Regeneration",
+     "text": "While in your Wolf Form with all your Hit Points marked, you can mark a Stress to clear a Hit Point. You can do this while unconscious.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Lycan Regeneration",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "blood-hunter-order-of-the-lycan-foundation",
+   "name": "Blood Hunter: Order of the Lycan",
+   "kind": "subclass",
+   "domains": [
+    "Blade",
+    "Blood"
+   ],
+   "text": "",
+   "parent": "Blood Hunter",
+   "stage": "foundation",
+   "spellcastTrait": "Strength",
+   "features": [
+    {
+     "name": "Werewolf",
+     "text": "You gain the Werewolf Transformation card. Your rolls to perceive via hearing and scent have advantage.",
+     "type": "subclass",
+     "automation": { "rollOptions": [
+      { "id": "hearing-scent", "label": "Hearing or scent", "roll": "action", "advantage": "advantage", "description": "Only when perceiving through hearing or scent." }
+     ] }
+    },
+    {
+     "name": "Control the Beast",
+     "text": "While in your Wolf Form, you can apply that form’s bonus die to your Agility and Strength Action Rolls.",
+     "type": "subclass",
+     "automation": { "rollOptions": [
+      { "id": "agility", "label": "Wolf Form bonus", "roll": "trait:Agility", "requiresEffect": "Wolf Form", "excludeRolls": ["attack", "reaction"], "dice": "1d10" },
+      { "id": "strength", "label": "Wolf Form bonus", "roll": "trait:Strength", "requiresEffect": "Wolf Form", "excludeRolls": ["attack", "reaction"], "dice": "1d10" }
+     ] }
+    }
+   ]
+  },
+  {
+   "id": "blood-hunter-order-of-the-mutant-specialization",
+   "name": "Blood Hunter: Order of the Mutant",
+   "kind": "subclass",
+   "domains": [
+    "Blade",
+    "Blood"
+   ],
+   "text": "",
+   "parent": "Blood Hunter",
+   "stage": "specialization",
+   "spellcastTrait": "Agility",
+   "features": [
+    {
+     "name": "Improved Mutagens",
+     "text": "When you choose a mutagen benefit, your options also include the following:\n\n- **Nerves of Steel.** Whenever you must **mark a Stress**, you can **spend 2 Hope **instead.\n\n- **Rapidity. **Your Evasion increases by 1.\n\n- **Ironskin.** Your Severe damage threshold increases by a number equal to your Proficiency.",
+     "type": "subclass"
+    },
+    {
+     "name": "Volatile Toxins",
+     "text": "You can choose two mutagen benefits instead of one. If you do, **mark a Hit Point** that can’t be cleared until you finish your next rest.",
+     "type": "subclass"
+    }
+   ]
+  },
+  {
+   "id": "blood-hunter-order-of-the-mutant-foundation",
+   "name": "Blood Hunter: Order of the Mutant",
+   "kind": "subclass",
+   "domains": [
+    "Blade",
+    "Blood"
+   ],
+   "text": "",
+   "parent": "Blood Hunter",
+   "stage": "foundation",
+   "spellcastTrait": "Agility",
+   "features": [
+    {
+     "name": "Mutagens",
+     "text": "You employ mutagenic toxins created to enhance your abilities. When you finish a rest, you can drink one such toxin to gain its effects, which last until you finish your next rest. These effects include a +1 bonus to one trait of your choice, a −1 penalty to a different trait of your choice, and your choice of one of the following benefits:\n\n- **Celerity. **If you are Restrained or Vulnerable, you can **mark a Stress** to end the condition on yourself.\n\n- **Durable.** Your Armor Score increases by 2.\n\n- **Hunter’s Senses.** You have advantage on any action roll you make to track a creature, and you can see in complete darkness.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Mutagens",
+        "timing": "downtime",
+        "downtime": { "additional": true },
+        "mutagens": {
+         "traitBonus": 1,
+         "traitBonusByFeature": { "Mastered Mutagens": 2 },
+         "maxBenefitsByFeature": { "Volatile Toxins": 2 },
+         "extraBenefitCost": { "hp": 1 },
+         "benefits": [
+          { "id": "celerity", "effect": {
+           "name": "Celerity", "kind": "buff", "until": "rest",
+           "text": "Mark a Stress to end Restrained or Vulnerable on yourself.",
+           "actions": [
+            { "id": "restrained", "label": "End Restrained", "requiresEffect": "Restrained", "cost": { "stress": 1 }, "endEffect": "Restrained" },
+            { "id": "vulnerable", "label": "End Vulnerable", "requiresEffect": "Vulnerable", "cost": { "stress": 1 }, "endEffect": "Vulnerable" }
+           ]
+          } },
+          { "id": "durable", "effect": {
+           "name": "Durable", "kind": "buff", "until": "rest", "text": "Your Armor Score increases by 2.", "modifiers": [{ "stat": "armorScore", "value": 2 }]
+          } },
+          { "id": "hunter-senses", "effect": {
+           "name": "Hunter's Senses", "kind": "buff", "until": "rest", "text": "See in complete darkness; advantage when tracking a creature.",
+           "rollOptions": [{ "id": "track", "label": "Tracking advantage", "roll": "action", "advantage": "advantage", "description": "Only when tracking a creature." }]
+          } },
+          { "id": "nerves-of-steel", "requiresFeature": "Improved Mutagens", "effect": {
+           "name": "Nerves of Steel", "kind": "buff", "until": "rest", "text": "Spend 2 Hope instead of marking a Stress.",
+           "actions": [{ "id": "hope", "label": "Spend Hope instead of Stress", "cost": { "hope": 2 } }]
+          } },
+          { "id": "rapidity", "requiresFeature": "Improved Mutagens", "effect": {
+           "name": "Rapidity", "kind": "buff", "until": "rest", "text": "Your Evasion increases by 1.", "modifiers": [{ "stat": "evasion", "value": 1 }]
+          } },
+          { "id": "ironskin", "requiresFeature": "Improved Mutagens", "effect": {
+           "name": "Ironskin", "kind": "buff", "until": "rest", "text": "Your Severe damage threshold increases by your Proficiency.", "modifiers": [{ "stat": "severeThreshold", "value": "@proficiency" }]
+          } },
+          { "id": "aetherblood", "requiresFeature": "Mastered Mutagens", "effect": {
+           "name": "Aetherblood", "kind": "buff", "until": "rest", "text": "See invisible creatures and objects, transparent visual illusions, and the true form of magically transformed creatures and objects within line of sight."
+          } },
+          { "id": "fury", "requiresFeature": "Mastered Mutagens", "effect": {
+           "name": "Fury", "kind": "buff", "until": "rest",
+           "text": "When you make an attack roll, mark a Stress to add your Proficiency to the roll.",
+           "rollOptions": [{ "id": "attack", "label": "Fury", "roll": "attack", "value": "@proficiency", "cost": { "stress": 1 } }]
+          } },
+          { "id": "steelflesh", "requiresFeature": "Mastered Mutagens", "effect": {
+           "name": "Steelflesh", "kind": "buff", "until": "rest", "text": "Your Major damage threshold increases by your Proficiency.", "modifiers": [{ "stat": "majorThreshold", "value": "@proficiency" }]
+          } }
+         ]
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "blood-hunter-order-of-the-mutant-mastery",
+   "name": "Blood Hunter: Order of the Mutant",
+   "kind": "subclass",
+   "domains": [
+    "Blade",
+    "Blood"
+   ],
+   "text": "",
+   "parent": "Blood Hunter",
+   "stage": "mastery",
+   "spellcastTrait": "Agility",
+   "features": [
+    {
+     "name": "Mastered Mutagens",
+     "text": "The trait bonus and penalty you get from your Mutagens feature changes to +2 and −2, respectively. When you choose a mutagen benefit, your options also include the following:\n\n- **Aetherblood. **Within your line of sight, you can see creatures and objects that are invisible, and visual illusions appear transparent to you. If a creature or an object within your line of sight has been transformed by magic, you can see its true form.\n\n- **Fury.** When you make an attack roll, you can **mark a Stress** to gain a bonus to the roll equal to your Proficiency.\n\n- **Steelflesh.** Your Major damage threshold increases by a number equal to your Proficiency.",
+     "type": "subclass"
+    }
+   ]
+  },
+  {
+   "id": "warlock-pact-of-the-endless-mastery",
+   "name": "Warlock: Pact Of The Endless",
+   "kind": "subclass",
+   "domains": [
+    "Dread",
+    "Grace"
+   ],
+   "text": "Play the Pact of the Endless if you want to stand strong against enemies and avoid death.",
+   "parent": "Warlock",
+   "stage": "mastery",
+   "spellcastTrait": "Presence",
+   "features": [
+    {
+     "name": "Dark Aegis",
+     "text": "Once per long rest when you would take damage, you can **spend a Favor** instead of marking Hit Points.",
+     "type": "subclass",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Prevent damage",
+        "cost": {
+         "favor": 1
+        }
+       }
+      ],
+      "mitigation": [
+       {
+        "id": "aegis",
+        "label": "Dark Aegis",
+        "description": "Spend a Favor to mark no Hit Points.",
+        "replaceHp": true,
+        "cost": {
+         "favor": 1
+        },
+        "uses": "source"
+       }
+      ]
+     }
+    },
+    {
+     "name": "Draining Bane",
+     "text": "When an adversary targets you or an ally within Very Close range with an attack, you can **spend a Favor** to *Drain* them. When you do, they must mark a Stress, and you can clear a Stress. While *Drained*, the target uses a **d12** instead of a d20 for attack rolls (including for advantage or disadvantage) until they fail a roll.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "drain",
+        "label": "Drain attacker; clear own Stress",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "stress",
+          "amount": 1
+         }
+        ],
+        "cost": {
+         "favor": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "warlock-pact-of-the-endless-specialization",
+   "name": "Warlock: Pact Of The Endless",
+   "kind": "subclass",
+   "domains": [
+    "Dread",
+    "Grace"
+   ],
+   "text": "Play the Pact of the Endless if you want to stand strong against enemies and avoid death.",
+   "parent": "Warlock",
+   "stage": "specialization",
+   "spellcastTrait": "Presence",
+   "features": [
+    {
+     "name": "Harrowing Invocation",
+     "text": "When an adversary targets you or an ally within Very Close range with an attack, you can **spend a Favor** to give them disadvantage on the roll. If the adversary fails the roll, they must also mark a Stress.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Harrowing Invocation",
+        "cost": {
+         "favor": 1
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Damage Sink",
+     "text": "Once per rest, you can **spend a Favor** to halve incoming damage.",
+     "type": "subclass",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "rest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Halve incoming damage",
+        "cost": {
+         "favor": 1
+        }
+       }
+      ],
+      "mitigation": [
+       {
+        "id": "sink",
+        "label": "Damage Sink",
+        "description": "Spend a Favor to halve the incoming damage.",
+        "halve": true,
+        "cost": {
+         "favor": 1
+        },
+        "uses": "source"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "warlock-pact-of-the-endless-foundation",
+   "name": "Warlock: Pact Of The Endless",
+   "kind": "subclass",
+   "domains": [
+    "Dread",
+    "Grace"
+   ],
+   "text": "Play the Pact of the Endless if you want to stand strong against enemies and avoid death.",
+   "parent": "Warlock",
+   "stage": "foundation",
+   "spellcastTrait": "Presence",
+   "features": [
+    {
+     "name": "Patron’s Mantle",
+     "text": "**Spend a Favor** to cloak yourself in a terrifying aspect of your Patron that lasts until you take Severe damage or the scene ends. While this effect is active, you gain a bonus to your damage thresholds equal to your tier and have advantage on action rolls to intimidate a target.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Patron’s Mantle",
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Patron’s Mantle",
+           "kind": "buff",
+           "until": "scene",
+           "endOnSourceSevere": true,
+           "text": "Patron’s Mantle",
+           "modifiers": [
+            {
+             "stat": "thresholds",
+             "value": "@tier"
+            }
+           ]
+          }
+         }
+        ],
+        "cost": {
+         "favor": 1
+        }
+       }
+      ],
+      "rollOptions": [
+       {
+        "id": "intimidate",
+        "label": "Patron’s Mantle",
+        "roll": "action",
+        "advantage": "advantage",
+        "requiresEffect": "Patron’s Mantle",
+        "description": "Only action rolls to intimidate a target while the mantle is active."
+       }
+      ]
+     }
+    },
+    {
+     "name": "Deathless Embrace",
+     "text": "Once per rest, **spend any number of Favor** to roll an equal number of Patron Dice. For each result of 4 or higher, clear a Hit Point.",
+     "type": "subclass",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "rest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Deathless Embrace",
+        "patronDice": "heal"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "warlock-pact-of-the-wrathful-mastery",
+   "name": "Warlock: Pact Of The Wrathful",
+   "kind": "subclass",
+   "domains": [
+    "Dread",
+    "Grace"
+   ],
+   "text": "Play the Pact of the Wrathful if you want to destroy those who act against you.",
+   "parent": "Warlock",
+   "stage": "mastery",
+   "spellcastTrait": "Presence",
+   "features": [
+    {
+     "name": "Fearsome Attack",
+     "text": "**Spend a Favor** to reroll any number of your damage dice. You can continue spending Favor to use this feature on the same damage roll.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Reroll damage dice",
+        "cost": {
+         "favor": 1
+        }
+       }
+      ],
+      "rollTriggers": [{
+       "id": "reroll", "label": "Fearsome Attack", "on": "damage",
+       "damageDice": "reroll", "repeatable": true, "cost": { "favor": 1 }
+      }]
+     }
+    },
+    {
+     "name": "Otherworldly Ire",
+     "text": "Once per rest when you take damage, you can **spend any number of Favor** to roll that many Patron Dice and target a number of creatures within Close range equal to the highest result. Each target must mark a Hit Point.",
+     "type": "subclass",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "rest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Otherworldly Ire",
+        "patronDice": "ire"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "warlock-pact-of-the-wrathful-specialization",
+   "name": "Warlock: Pact Of The Wrathful",
+   "kind": "subclass",
+   "domains": [
+    "Dread",
+    "Grace"
+   ],
+   "text": "Play the Pact of the Wrathful if you want to destroy those who act against you.",
+   "parent": "Warlock",
+   "stage": "specialization",
+   "spellcastTrait": "Presence",
+   "features": [
+    {
+     "name": "Menacing Reach",
+     "text": "**Spend a Favor** to increase the range of your primary weapon by one step (such as Melee to Very Close or Very Close to Close) to a maximum of Very Far range. This effect ends when you make a successful attack with that weapon.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Increase weapon range",
+        "menacingReach": true,
+        "cost": {
+         "favor": 1
+        }
+       }
+      ],
+      "rollTriggers": [{
+       "id": "end", "label": "Menacing Reach: end after successful attack", "on": "attack",
+       "primaryWeapon": true, "requiresEffect": "Menacing Reach", "endEffect": "Menacing Reach"
+      }]
+     }
+    },
+    {
+     "name": "Diminish My Foes",
+     "text": "When you succeed with Hope on an action roll against a target, you can **spend any number of Favor** to force the target to mark an equal number of Stress.",
+     "type": "subclass",
+     "automation": {
+      "actions": [{ "id": "use", "label": "Diminish My Foes", "spendFavor": true }],
+      "rollTriggers": [{
+       "id": "use", "label": "Diminish My Foes", "on": "action", "when": "hope",
+       "description": "Only after a successful action roll against a target.",
+       "spendFavor": true
+      }]
+     }
+    }
+   ]
+  },
+  {
+   "id": "warlock-pact-of-the-wrathful-foundation",
+   "name": "Warlock: Pact Of The Wrathful",
+   "kind": "subclass",
+   "domains": [
+    "Dread",
+    "Grace"
+   ],
+   "text": "Play the Pact of the Wrathful if you want to destroy those who act against you.",
+   "parent": "Warlock",
+   "stage": "foundation",
+   "spellcastTrait": "Presence",
+   "features": [
+    {
+     "name": "Patron’s Fury",
+     "text": "** Spend a Favor **to imbue your attacks with your Patron’s power until you deal Severe damage or the scene ends. When you roll damage while this effect is active, you also roll a number of Patron Dice equal to your tier and add their total to the damage dealt.",
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "patrons-fury",
+        "label": "Patron’s Fury",
+        "roll": "damage",
+        "dice": "1d6",
+        "cost": {
+         "favor": 1
+        },
+        "description": "Tier-scaled Patron Dice; lasts until you deal Severe damage or the scene ends.",
+        "diceByLevel": {
+         "2": "2d6",
+         "5": "3d8",
+         "8": "4d8"
+        },
+        "effect": {
+         "name": "Patron’s Fury",
+         "kind": "buff",
+         "until": "scene",
+         "text": "Patron Dice are added to your damage rolls."
+        }
+       }
+      ],
+      "actions": [
+       {
+        "id": "activate",
+        "label": "Patron’s Fury",
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Patron’s Fury",
+           "kind": "buff",
+           "until": "scene",
+           "text": "Patron Dice are added to your damage rolls."
+          }
+         }
+        ],
+        "cost": {
+         "favor": 1
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Deadly Vengeance",
+     "text": "When you mark any number of Hit Points from an attack, you can **spend a Favor** to roll an equal number of Patron Dice. For each result of 4 or higher, the attacker marks a Hit Point.",
+     "type": "subclass",
+     "automation": {
+      "actions": [{ "id": "use", "label": "Deadly Vengeance", "patronDice": "vengeance", "cost": { "favor": 1 } }],
+      "mitigation": [{
+       "id": "vengeance", "label": "Deadly Vengeance",
+       "description": "Only when marking HP from an attack. Spend a Favor; roll one Patron Die per HP marked. Each 4+ makes the attacker mark 1 HP.",
+       "when": { "markingHp": true }, "cost": { "favor": 1 }, "patronDice": "vengeance"
+      }]
+     }
+    }
+   ]
+  },
+  {
+   "id": "assassin-poisoners-guild-mastery",
+   "name": "Assassin: Poisoners Guild",
+   "kind": "subclass",
+   "domains": [
+    "Blade",
+    "Midnight"
+   ],
+   "text": "Play the Poisoners Guild if you want to debilitate your targets with punishing afflictions.",
+   "parent": "Assassin",
+   "stage": "mastery",
+   "spellcastTrait": "Knowledge",
+   "features": [
+    {
+     "name": "Venomancer",
+     "text": "You also know these poisons:\n\n- ***Blight Seed:***The target gains a −3 penalty to their damage thresholds until the end of the scene. This effect can’t stack.\n\n- ***Fear Leaf:*** You deal extra damage equal to the result of your Fear Die on this attack.\n\n- ***Corpse Thorn:*** The target gains disadvantage on reaction rolls until the end of the scene.",
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "fear-leaf",
+        "label": "Fear Leaf",
+        "roll": "damage",
+        "input": { "label": "Fear Die result on the attack", "default": 1, "min": 1, "max": 20, "source": "attackFear" },
+        "cost": { "poison": 1 },
+        "description": "Successful weapon attack; choose Fear Leaf poison. Do not spend another token with Afflict with poison for the same poison."
+       }
+      ]
+     }
+    },
+    {
+     "name": "Adder’s Blessing",
+     "text": "You are immune to poisons and other toxins.",
+     "type": "subclass"
+    }
+   ]
+  },
+  {
+   "id": "assassin-poisoners-guild-specialization",
+   "name": "Assassin: Poisoners Guild",
+   "kind": "subclass",
+   "domains": [
+    "Blade",
+    "Midnight"
+   ],
+   "text": "Play the Poisoners Guild if you want to debilitate your targets with punishing afflictions.",
+   "parent": "Assassin",
+   "stage": "specialization",
+   "spellcastTrait": "Knowledge",
+   "features": [
+    {
+     "name": "Poison Compendium",
+     "text": "You also know these poisons:\n\n- ***Midnight Vine: ***The target has disadvantage on attack rolls until it marks a Stress to clear this condition.\n\n- ***Gorgon Root: ***The target becomes temporarily *Restrained*.",
+     "type": "subclass"
+    },
+    {
+     "name": "Twin Fang",
+     "text": "When you afflict a target *Marked for Death* with a poison you know, you can spend an additional token to also inflict the effect of a second poison you know.",
+     "type": "subclass"
+    }
+   ]
+  },
+  {
+   "id": "assassin-poisoners-guild-foundation",
+   "name": "Assassin: Poisoners Guild",
+   "kind": "subclass",
+   "domains": [
+    "Blade",
+    "Midnight"
+   ],
+   "text": "Play the Poisoners Guild if you want to debilitate your targets with punishing afflictions.",
+   "parent": "Assassin",
+   "stage": "foundation",
+   "spellcastTrait": "Knowledge",
+   "features": [
+    {
+     "name": "Toxic Concoctions",
+     "text": "**Mark a Stress** to place **1d4+1** tokens on this card. When you make a successful weapon attack, you can spend a token to afflict the target with a poison. You know these poisons:\n\n- ***Ghost Petal: *** The target becomes temporarily *Vulnerable*.\n\n- ***Grave Spore:*** The target must also mark a Stress.\n\n- ***Leech Weed:*** You deal an extra **1d6** damage on this attack.\n\nWhen you take a long rest, clear all unspent tokens.",
+     "type": "subclass",
+     "automation": {
+      "resources": [
+       {
+        "id": "poison",
+        "label": "Poison tokens",
+        "initial": 0,
+        "resetOn": "longRest"
+       }
+      ],
+      "rollOptions": [
+       {
+        "id": "leech-weed",
+        "label": "Leech Weed",
+        "roll": "damage",
+        "dice": "1d6",
+        "cost": {
+         "poison": 1
+        },
+        "description": "Successful weapon attack; choose Leech Weed poison. Do not spend another token with Afflict with poison for the same poison."
+       }
+      ],
+      "rollTriggers": [
+       {
+        "id": "poison",
+        "label": "Afflict with poison",
+        "on": "attack",
+        "weaponAttack": true,
+        "cost": { "poison": 1 },
+        "description": "Use after a successful weapon attack to afflict the target with a poison you know. Leech Weed and Fear Leaf damage options spend their own token instead."
+       }
+      ],
+      "actions": [
+       {
+        "id": "brew",
+        "label": "Brew toxic concoctions",
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "poison",
+          "amount": "1d4+1"
+         }
+        ],
+        "cost": {
+         "stress": 1
+        }
+       },
+       {
+        "id": "poison",
+        "label": "Afflict with poison",
+        "cost": {
+         "poison": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "sorcerer-primal-origin-mastery",
+   "name": "Sorcerer: Primal Origin",
+   "kind": "subclass",
+   "domains": [
+    "Arcana",
+    "Midnight"
+   ],
+   "text": "Play the Primal Origin if you want to extend the versatility of your spells in powerful ways.",
+   "parent": "Sorcerer",
+   "stage": "mastery",
+   "spellcastTrait": "Instinct",
+   "features": [
+    {
+     "name": "Arcane Charge",
+     "text": "You can gather magical energy to enhance your capabilities. When you take magic damage, you become *Charged*. Alternatively, you can **spend 2 Hope** to become *Charged*. When you successfully make an attack that deals magic damage while *Charged*, you can clear your *Charge* to either gain a +10 bonus to the damage roll or gain a +3 bonus to the Difficulty of a reaction roll the spell causes the target to make. You stop being *Charged* at your next long rest.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Arcane Charge",
+        "steps": [{ "op": "effect", "effect": { "name": "Charged", "kind": "buff", "until": "longRest", "text": "Spend Charge for +10 magic damage, or remove it manually for +3 to the target's reaction Difficulty." } }],
+        "cost": {
+         "hope": 2
+        }
+       },
+       {
+        "id": "magic-damage",
+        "label": "Charged by magic damage",
+        "steps": [{ "op": "effect", "effect": { "name": "Charged", "kind": "buff", "until": "longRest", "text": "Spend Charge for +10 magic damage, or remove it manually for +3 to the target's reaction Difficulty." } }]
+       }
+      ],
+      "mitigation": [
+       { "id": "charge", "label": "Arcane Charge: become Charged", "defaultOn": true, "when": { "type": "magic", "severity": ["minor", "major", "severe", "massive"] },
+        "effect": { "name": "Charged", "kind": "buff", "until": "longRest", "text": "Spend Charge for +10 magic damage, or remove it manually for +3 to the target's reaction Difficulty." } }
+      ],
+      "rollOptions": [
+       { "id": "damage", "label": "Spend Charge", "roll": "damage", "magicOnly": true, "requiresEffect": "Charged", "endEffect": "Charged", "value": 10 }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "sorcerer-primal-origin-specialization",
+   "name": "Sorcerer: Primal Origin",
+   "kind": "subclass",
+   "domains": [
+    "Arcana",
+    "Midnight"
+   ],
+   "text": "Play the Primal Origin if you want to extend the versatility of your spells in powerful ways.",
+   "parent": "Sorcerer",
+   "stage": "specialization",
+   "spellcastTrait": "Instinct",
+   "features": [
+    {
+     "name": "Enchanted Aid",
+     "text": "You can enhance the magic of others with your essence. When you Help an Ally with a Spellcast Roll, you can roll a **d8** as your advantage die. Once per long rest, after an ally has made a Spellcast Roll with your help, you can swap the results of their Duality Dice.",
+     "type": "subclass",
+     "automation": {
+      "uses": { "max": 1, "per": "longRest" },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Help an Ally: d8",
+        "usesSource": false,
+        "sendRoll": { "dice": "1d8", "label": "Enchanted Aid: advantage die" }
+       },
+       {
+        "id": "manual-swap",
+        "label": "Swap Duality dice"
+       }
+      ],
+      "rollTriggers": [
+       { "id": "swap", "label": "Enchanted Aid: swap Duality dice", "on": "spellcast", "audience": "ally", "swapDuality": true,
+        "description": "Use only if you helped this ally's Spellcast roll. Independent of the d8 Help roll." }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "sorcerer-primal-origin-foundation",
+   "name": "Sorcerer: Primal Origin",
+   "kind": "subclass",
+   "domains": [
+    "Arcana",
+    "Midnight"
+   ],
+   "text": "Play the Primal Origin if you want to extend the versatility of your spells in powerful ways.",
+   "parent": "Sorcerer",
+   "stage": "foundation",
+   "spellcastTrait": "Instinct",
+   "features": [
+    {
+     "name": "Manipulate Magic",
+     "text": "Your primal origin allows you to modify the essence of magic itself. After you cast a spell or make an attack using a weapon that deals magic damage, you can **mark a Stress** to do one of the following:\n\n- Extend the spell or attack’s reach by one range\n\n- Gain a +2 bonus to the action roll’s result\n\n- Double a damage die of your choice\n\n- Hit an additional target within range",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Manipulate Magic",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ],
+      "rollTriggers": [
+       { "id": "action", "label": "Manipulate Magic", "on": "action", "magicAction": true, "cost": { "stress": 1 },
+        "choices": [
+         { "id": "reach", "label": "Extend reach by one range" },
+         { "id": "bonus", "label": "+2 to this roll", "addDice": "2" },
+         { "id": "target", "label": "Hit an additional target within range" }
+        ]
+       },
+       { "id": "damage", "label": "Manipulate Magic: double a die", "on": "damage", "magicOnly": true, "cost": { "stress": 1 }, "damageDice": "double" }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "wizard-school-of-knowledge-mastery",
+   "name": "Wizard: School of Knowledge",
+   "kind": "subclass",
+   "domains": [
+    "Codex",
+    "Splendor"
+   ],
+   "text": "Play the School of Knowledge if you want a keen understanding of the world around you.",
+   "parent": "Wizard",
+   "stage": "mastery",
+   "spellcastTrait": "Knowledge",
+   "features": [
+    {
+     "name": "Brilliant",
+     "text": "Take an additional domain card of your level or lower from a domain you have access to.",
+     "type": "subclass"
+    },
+    {
+     "name": "Honed Expertise",
+     "text": "When you use an Experience, roll a **d6**. On a result of 5 or higher, you can use it without spending Hope.",
+     "type": "subclass",
+     "automation": {
+      "experienceRefund": { "dice": "1d6", "min": 5 }
+     }
+    }
+   ]
+  },
+  {
+   "id": "wizard-school-of-knowledge-specialization",
+   "name": "Wizard: School of Knowledge",
+   "kind": "subclass",
+   "domains": [
+    "Codex",
+    "Splendor"
+   ],
+   "text": "Play the School of Knowledge if you want a keen understanding of the world around you.",
+   "parent": "Wizard",
+   "stage": "specialization",
+   "spellcastTrait": "Knowledge",
+   "features": [
+    {
+     "name": "Accomplished",
+     "text": "Take an additional domain card of your level or lower from a domain you have access to.",
+     "type": "subclass"
+    },
+    {
+     "name": "Perfect Recall",
+     "text": "Once per rest, when you recall a domain card in your vault, you can reduce its Recall Cost by 1.",
+     "type": "subclass",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "rest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Perfect Recall"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "wizard-school-of-knowledge-foundation",
+   "name": "Wizard: School of Knowledge",
+   "kind": "subclass",
+   "domains": [
+    "Codex",
+    "Splendor"
+   ],
+   "text": "Play the School of Knowledge if you want a keen understanding of the world around you.",
+   "parent": "Wizard",
+   "stage": "foundation",
+   "spellcastTrait": "Knowledge",
+   "features": [
+    {
+     "name": "Prepared",
+     "text": "Take an additional domain card of your level or lower from a domain you have access to.",
+     "type": "subclass",
+     "automation": {
+      "creation": {
+       "domainCards": 1
+      }
+     }
+    },
+    {
+     "name": "Adept",
+     "text": "When you Utilize an Experience, you can **mark a Stress** instead of spending a Hope. If you do, double your Experience modifier for that roll.",
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "adept",
+        "label": "Adept",
+        "roll": "duality",
+        "experience": { "resource": "stress", "multiplier": 2 },
+        "description": "Requires an Experience. Mark 1 Stress instead of spending 1 Hope and double its modifier."
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "wizard-school-of-war-specialization",
+   "name": "Wizard: School of War",
+   "kind": "subclass",
+   "domains": [
+    "Codex",
+    "Splendor"
+   ],
+   "text": "Play the School of War if you want to utilize trained magic for violence.",
+   "parent": "Wizard",
+   "stage": "specialization",
+   "spellcastTrait": "Knowledge",
+   "features": [
+    {
+     "name": "Conjure Shield",
+     "text": "You can maintain a protective barrier of magic. While you have at least 2 Hope, you add your Proficiency to your Evasion.",
+     "type": "subclass",
+     "automation": {
+      "modifiers": [
+       { "stat": "evasion", "value": "@proficiency", "hopeMin": 2 }
+      ]
+     }
+    },
+    {
+     "name": "Fueled by Fear",
+     "text": "The extra magic damage from your “Face Your Fear” feature increases to **2d10**.",
+     "type": "subclass"
+    }
+   ]
+  },
+  {
+   "id": "wizard-school-of-war-foundation",
+   "name": "Wizard: School of War",
+   "kind": "subclass",
+   "domains": [
+    "Codex",
+    "Splendor"
+   ],
+   "text": "Play the School of War if you want to utilize trained magic for violence.",
+   "parent": "Wizard",
+   "stage": "foundation",
+   "spellcastTrait": "Knowledge",
+   "features": [
+    {
+     "name": "Battlemage",
+     "text": "You’ve focused your studies on becoming an unconquerable force on the battlefield. Gain an additional Hit Point slot.",
+     "type": "subclass",
+     "automation": {
+      "creation": {
+       "hp": 1
+      }
+     }
+    },
+    {
+     "name": "Face Your Fear",
+     "text": "When you succeed with Fear on an attack roll, you deal an extra **1d10** magic damage.",
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "fear",
+        "label": "Face Your Fear",
+        "roll": "damage",
+        "dice": "1d10",
+        "diceByFeature": { "Fueled by Fear": "2d10", "Have No Fear": "3d10" },
+        "description": "Use after a successful attack with Fear. Extra magic damage."
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "wizard-school-of-war-mastery",
+   "name": "Wizard: School of War",
+   "kind": "subclass",
+   "domains": [
+    "Codex",
+    "Splendor"
+   ],
+   "text": "Play the School of War if you want to utilize trained magic for violence.",
+   "parent": "Wizard",
+   "stage": "mastery",
+   "spellcastTrait": "Knowledge",
+   "features": [
+    {
+     "name": "Thrive in Chaos",
+     "text": "When you succeed on an attack, you can **mark a Stress** after rolling damage to force the target to mark an additional Hit Point.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Thrive in Chaos",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ],
+      "rollTriggers": [
+       {
+        "id": "use",
+        "label": "Thrive in Chaos",
+        "on": "damage",
+        "cost": { "stress": 1 },
+        "description": "Use after a successful attack. The target marks an additional Hit Point."
+       }
+      ]
+     }
+    },
+    {
+     "name": "Have No Fear",
+     "text": "The extra magic damage from your “Face Your Fear” feature increases to **3d10**.",
+     "type": "subclass"
+    }
+   ]
+  },
+  {
+   "id": "guardian-stalwart-mastery",
+   "name": "Guardian: Stalwart",
+   "kind": "subclass",
+   "domains": [
+    "Valor",
+    "Blade"
+   ],
+   "text": "Play the Stalwart if you want to take heavy blows and keep fighting.",
+   "parent": "Guardian",
+   "stage": "mastery",
+   "features": [
+    {
+     "name": "Undaunted",
+     "text": "Gain a permanent +3 bonus to your damage thresholds.",
+     "type": "subclass",
+     "automation": {
+      "modifiers": [
+       {
+        "stat": "thresholds",
+        "value": 3
+       }
+      ]
+     }
+    },
+    {
+     "name": "Loyal Protector",
+     "text": "When an ally within Close range has 2 or fewer Hit Points and would take damage, you can **mark a Stress** to sprint to their side and take the damage instead.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Loyal Protector",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "guardian-stalwart-specialization",
+   "name": "Guardian: Stalwart",
+   "kind": "subclass",
+   "domains": [
+    "Valor",
+    "Blade"
+   ],
+   "text": "Play the Stalwart if you want to take heavy blows and keep fighting.",
+   "parent": "Guardian",
+   "stage": "specialization",
+   "features": [
+    {
+     "name": "Unrelenting",
+     "text": "Gain a permanent +2 bonus to your damage thresholds.",
+     "type": "subclass",
+     "automation": {
+      "modifiers": [
+       {
+        "stat": "thresholds",
+        "value": 2
+       }
+      ]
+     }
+    },
+    {
+     "name": "Partners-in-Arms",
+     "text": "When an ally within Very Close range takes damage, you can **mark an Armor Slot** to reduce the severity by one threshold.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Partners-in-Arms",
+        "cost": {
+         "armor": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "guardian-stalwart-foundation",
+   "name": "Guardian: Stalwart",
+   "kind": "subclass",
+   "domains": [
+    "Valor",
+    "Blade"
+   ],
+   "text": "Play the Stalwart if you want to take heavy blows and keep fighting.",
+   "parent": "Guardian",
+   "stage": "foundation",
+   "features": [
+    {
+     "name": "Unwavering",
+     "text": "Gain a permanent +1 bonus to your damage thresholds.",
+     "type": "subclass",
+     "automation": {
+      "modifiers": [
+       {
+        "stat": "thresholds",
+        "value": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "Iron Will",
+     "text": "When you take physical damage, you can **mark an additional Armor Slot** to reduce the severity.",
+     "type": "subclass",
+     "automation": {
+      "mitigation": [
+       {
+        "id": "iron-will",
+        "label": "Iron Will",
+        "description": "Mark an additional Armor Slot to reduce severity further.",
+        "when": {
+         "type": "physical",
+         "armor": true
+        },
+        "armorSlots": 1
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "rogue-syndicate-mastery",
+   "name": "Rogue: Syndicate",
+   "kind": "subclass",
+   "domains": [
+    "Midnight",
+    "Grace"
+   ],
+   "text": "Play the Syndicate if you want to have a web of contacts everywhere you go.",
+   "parent": "Rogue",
+   "stage": "mastery",
+   "spellcastTrait": "Finesse",
+   "features": [
+    {
+     "name": "Reliable Backup",
+     "text": "You can use your “Contacts Everywhere” feature three times per session. The following options are added to the list of benefits you can choose from when you use that feature:\n\n- When you mark 1 or more Hit Points, they can rush out to shield you, reducing the Hit Points marked by 1.\n\n- When you make a Presence Roll in conversation, they back you up. You can roll a **d20** as your Hope Die.",
+     "type": "subclass",
+     "automation": {
+      "usesOverrides": { "feat:Contacts Everywhere": 3 },
+      "rollOptions": [
+       { "id": "presence", "label": "Reliable Backup: Hope d20", "roll": "trait:Presence", "hopeDie": 20, "requiresEffect": "Contacts Everywhere", "endEffect": "Contacts Everywhere", "description": "Only for a Presence roll in conversation." }
+      ],
+      "mitigation": [
+       { "id": "shield", "label": "Reliable Backup: reduce HP marked by 1", "requiresEffect": "Contacts Everywhere", "endEffect": "Contacts Everywhere", "when": { "markingHp": true }, "markedHpOnly": true, "hp": -1 }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "rogue-syndicate-specialization",
+   "name": "Rogue: Syndicate",
+   "kind": "subclass",
+   "domains": [
+    "Midnight",
+    "Grace"
+   ],
+   "text": "Play the Syndicate if you want to have a web of contacts everywhere you go.",
+   "parent": "Rogue",
+   "stage": "specialization",
+   "spellcastTrait": "Finesse",
+   "features": [
+    {
+     "name": "Contacts Everywhere",
+     "text": "Once per session, you can briefly call on a shady contact. Choose one of the following benefits and describe what brought them here to help you in this moment:\n\n- They provide 1 handful of gold, a unique tool, or a mundane object that the situation requires.\n\n- On your next action roll, their help provides a +3 bonus to the result of your Hope or Fear Die.\n\n- The next time you deal damage, they snipe from the shadows, adding **2d8** to your damage roll.",
+     "type": "subclass",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "session"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Contacts Everywhere",
+        "steps": [
+         { "op": "effect", "effect": {
+          "name": "Contacts Everywhere", "kind": "buff", "until": "session",
+          "text": "Choose one benefit from Contacts Everywhere; using it ends this effect.",
+          "rollOptions": [
+           { "id": "damage", "label": "Contacts Everywhere: 2d8 damage", "roll": "damage", "dice": "2d8", "defaultOn": true, "endEffect": "Contacts Everywhere" }
+          ],
+          "rollTriggers": [
+           { "id": "hope", "label": "Contacts Everywhere: +3 Hope die", "on": "action", "usesSource": false, "requiresEffect": "Contacts Everywhere", "endEffect": "Contacts Everywhere", "dualityDieBonus": { "die": "hope", "value": 3 } },
+           { "id": "fear", "label": "Contacts Everywhere: +3 Fear die", "on": "action", "usesSource": false, "requiresEffect": "Contacts Everywhere", "endEffect": "Contacts Everywhere", "dualityDieBonus": { "die": "fear", "value": 3 } }
+          ]
+         } }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "rogue-syndicate-foundation",
+   "name": "Rogue: Syndicate",
+   "kind": "subclass",
+   "domains": [
+    "Midnight",
+    "Grace"
+   ],
+   "text": "Play the Syndicate if you want to have a web of contacts everywhere you go.",
+   "parent": "Rogue",
+   "stage": "foundation",
+   "spellcastTrait": "Finesse",
+   "features": [
+    {
+     "name": "Well-Connected",
+     "text": "When you arrive in a prominent town or environment, you know somebody who calls this place home. Give them a name, note how you think they could be useful, and choose one fact from the following list:\n\n- They owe me a favor, but they’ll be hard to find.\n\n- They’re going to ask for something in exchange.\n\n- They’re always in a great deal of trouble.\n\n- We used to be together. It’s a long story.\n\n- We didn’t part on great terms.",
+     "type": "subclass"
+    }
+   ]
+  },
+  {
+   "id": "bard-troubadour-mastery",
+   "name": "Bard: Troubadour",
+   "kind": "subclass",
+   "domains": [
+    "Grace",
+    "Codex"
+   ],
+   "text": "Play the Troubadour if you want to play music to bolster your allies.",
+   "parent": "Bard",
+   "stage": "mastery",
+   "spellcastTrait": "Presence",
+   "features": [
+    {
+     "name": "Virtuoso",
+     "text": "You are among the greatest of your craft and your skill is boundless. You can perform each of your “Gifted Performer” feature’s songs twice instead of once per long rest.",
+     "type": "subclass",
+     "automation": {
+      "usesOverrides": {
+       "feat:Relaxing Song": 2,
+       "feat:Epic Song": 2,
+       "feat:Heartbreaking Song": 2
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "bard-troubadour-specialization",
+   "name": "Bard: Troubadour",
+   "kind": "subclass",
+   "domains": [
+    "Grace",
+    "Codex"
+   ],
+   "text": "Play the Troubadour if you want to play music to bolster your allies.",
+   "parent": "Bard",
+   "stage": "specialization",
+   "spellcastTrait": "Presence",
+   "features": [
+    {
+     "name": "Maestro",
+     "text": "Your rallying songs steel the courage of those who listen. When you give a Rally Die to an ally, they can gain a Hope or clear a Stress.",
+     "type": "subclass",
+     "automation": {
+      "actionBenefits": {
+       "feat:Rally": [
+        { "id": "hope", "label": "Maestro: gain 1 Hope", "steps": [{ "op": "gain", "resource": "hope", "amount": 1 }] },
+        { "id": "stress", "label": "Maestro: clear 1 Stress", "steps": [{ "op": "clear", "resource": "stress", "amount": 1 }] }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "bard-troubadour-foundation",
+   "name": "Bard: Troubadour",
+   "kind": "subclass",
+   "domains": [
+    "Grace",
+    "Codex"
+   ],
+   "text": "Play the Troubadour if you want to play music to bolster your allies.",
+   "parent": "Bard",
+   "stage": "foundation",
+   "spellcastTrait": "Presence",
+   "features": [
+    {
+     "name": "Gifted Performer",
+     "text": "Describe how you perform for others. You can play each song once per long rest.",
+     "type": "subclass",
+     "automation": {
+      "grantsFeatures": ["Relaxing Song", "Epic Song", "Heartbreaking Song"],
+      "groupGrantedFeatures": true
+     }
+    },
+    {
+     "name": "Relaxing Song",
+     "text": "You and all allies within Close range clear a Hit Point. Once per long rest.",
+     "type": "subclass",
+     "automation": {
+      "uses": { "max": 1, "per": "longRest" },
+      "actions": [{
+       "id": "use", "label": "Relaxing Song",
+       "steps": [{ "op": "clear", "resource": "hp", "amount": 1 }],
+       "chatBenefits": [{ "id": "heal", "label": "Within Close range: clear 1 HP", "steps": [{ "op": "clear", "resource": "hp", "amount": 1 }] }]
+      }]
+     }
+    },
+    {
+     "name": "Epic Song",
+     "text": "Make a target within Close range temporarily Vulnerable. Once per long rest.",
+     "type": "subclass",
+     "automation": {
+      "uses": { "max": 1, "per": "longRest" },
+      "actions": [{ "id": "use", "label": "Epic Song" }],
+      "manual": ["Choose a target within Close range and apply Vulnerable at the table."]
+     }
+    },
+    {
+     "name": "Heartbreaking Song",
+     "text": "You and all allies within Close range gain a Hope. Once per long rest.",
+     "type": "subclass",
+     "automation": {
+      "uses": { "max": 1, "per": "longRest" },
+      "actions": [{
+       "id": "use", "label": "Heartbreaking Song",
+       "steps": [{ "op": "gain", "resource": "hope", "amount": 1 }],
+       "chatBenefits": [{ "id": "hope", "label": "Within Close range: gain 1 Hope", "steps": [{ "op": "gain", "resource": "hope", "amount": 1 }] }]
+      }]
+     }
+    }
+   ]
+  },
+  {
+   "id": "guardian-vengeance-mastery",
+   "name": "Guardian: Vengeance",
+   "kind": "subclass",
+   "domains": [
+    "Valor",
+    "Blade"
+   ],
+   "text": "Play the Vengeance if you want to strike down enemies who harm you or your allies.",
+   "parent": "Guardian",
+   "stage": "mastery",
+   "features": [
+    {
+     "name": "Nemesis",
+     "text": "**Spend 2 Hope** to *Prioritize* an adversary until your next rest. When you make an attack against your *Prioritized* adversary, you can swap the results of your Hope and Fear Dice. You can only *Prioritize* one adversary at a time.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Nemesis",
+        "cost": {
+         "hope": 2
+        },
+        "steps": [{ "op": "effect", "effect": {
+         "name": "Prioritized", "kind": "buff", "until": "rest",
+         "text": "Nemesis: one prioritized adversary until your next rest. Use Swap Hope and Fear only on attacks against that adversary; using Nemesis again replaces the previous target."
+        } }]
+       }
+      ],
+      "rollTriggers": [{
+       "id": "swap", "label": "Nemesis: swap Hope and Fear", "on": "attack",
+       "requiresEffect": "Prioritized", "swapDuality": true,
+       "description": "Only against your prioritized adversary."
+      }]
+     }
+    }
+   ]
+  },
+  {
+   "id": "guardian-vengeance-specialization",
+   "name": "Guardian: Vengeance",
+   "kind": "subclass",
+   "domains": [
+    "Valor",
+    "Blade"
+   ],
+   "text": "Play the Vengeance if you want to strike down enemies who harm you or your allies.",
+   "parent": "Guardian",
+   "stage": "specialization",
+   "features": [
+    {
+     "name": "Act of Reprisal",
+     "text": "When an adversary damages an ally within Melee range, you gain a +1 bonus to your Proficiency for the next successful attack you make against that adversary.",
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [{
+       "id": "reprisal", "label": "+1 Proficiency", "roll": "damage", "proficiency": 1,
+       "description": "Only for the next successful attack against the adversary who damaged an ally within Melee range."
+      }]
+     }
+    }
+   ]
+  },
+  {
+   "id": "guardian-vengeance-foundation",
+   "name": "Guardian: Vengeance",
+   "kind": "subclass",
+   "domains": [
+    "Valor",
+    "Blade"
+   ],
+   "text": "Play the Vengeance if you want to strike down enemies who harm you or your allies.",
+   "parent": "Guardian",
+   "stage": "foundation",
+   "features": [
+    {
+     "name": "At Ease",
+     "text": "Gain an additional Stress slot.",
+     "type": "subclass",
+     "automation": {
+      "creation": {
+       "stress": 1
+      }
+     }
+    },
+    {
+     "name": "Revenge",
+     "text": "When an adversary within Melee range succeeds on an attack against you, you can **mark 2 Stress** to force the attacker to mark a Hit Point.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Revenge",
+        "cost": {
+         "stress": 2
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "druid-warden-of-renewal-mastery",
+   "name": "Druid: Warden of Renewal",
+   "kind": "subclass",
+   "domains": [
+    "Sage",
+    "Arcana"
+   ],
+   "text": "Play the Warden of Renewal if you want to use powerful magic to heal your party.",
+   "parent": "Druid",
+   "stage": "mastery",
+   "spellcastTrait": "Instinct",
+   "features": [
+    {
+     "name": "Defender",
+     "text": "Your animal transformation embodies a healing guardian spirit. When you’re in Beastform and an ally within Close range marks 2 or more Hit Points, you can **mark a Stress** to reduce the number of Hit Points they mark by 1.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Defender",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "druid-warden-of-renewal-specialization",
+   "name": "Druid: Warden of Renewal",
+   "kind": "subclass",
+   "domains": [
+    "Sage",
+    "Arcana"
+   ],
+   "text": "Play the Warden of Renewal if you want to use powerful magic to heal your party.",
+   "parent": "Druid",
+   "stage": "specialization",
+   "spellcastTrait": "Instinct",
+   "features": [
+    {
+     "name": "Regenerative Reach",
+     "text": "You can target creatures within Very Close range with your “Regeneration” feature.",
+     "type": "subclass"
+    },
+    {
+     "name": "Warden’s Protection",
+     "text": "Once per long rest, **spend 2 Hope** to clear 2 Hit Points on **1d4** allies within Close range.",
+     "type": "subclass",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Warden’s Protection",
+        "cost": { "hope": 2 },
+        "report": { "dice": "1d4", "text": "Clear 2 HP on each of up to {amount} allies within Close range." }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "druid-warden-of-renewal-foundation",
+   "name": "Druid: Warden of Renewal",
+   "kind": "subclass",
+   "domains": [
+    "Sage",
+    "Arcana"
+   ],
+   "text": "Play the Warden of Renewal if you want to use powerful magic to heal your party.",
+   "parent": "Druid",
+   "stage": "foundation",
+   "spellcastTrait": "Instinct",
+   "features": [
+    {
+     "name": "Clarity of Nature",
+     "text": "Once per long rest, you can create a space of natural serenity within Close range. When you spend a few minutes resting within the space, clear Stress equal to your Instinct, distributed as you choose between you and your allies.",
+     "type": "subclass",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Clarity of Nature",
+        "report": { "amount": "@Instinct", "text": "Clear {amount} Stress in total, distributed between you and your allies after resting in the space." }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Regeneration",
+     "text": "Touch a creature and **spend 3 Hope**. That creature clears **1d4** Hit Points.",
+     "type": "subclass",
+     "automation": {
+      "actions": [{ "id": "use", "label": "Regeneration", "target": "actor", "cost": { "hope": 3 },
+       "steps": [{ "op": "clear", "resource": "hp", "amount": "1d4" }] }]
+     }
+    }
+   ]
+  },
+  {
+   "id": "druid-warden-of-the-elements-mastery",
+   "name": "Druid: Warden of the Elements",
+   "kind": "subclass",
+   "domains": [
+    "Sage",
+    "Arcana"
+   ],
+   "text": "Play the Warden of the Elements if you want to embody the natural elements of the wild.",
+   "parent": "Druid",
+   "stage": "mastery",
+   "spellcastTrait": "Instinct",
+   "features": [
+    {
+     "name": "Elemental Dominion",
+     "text": "You further embody your element. While *Channeling*, you gain the following benefit:",
+     "type": "subclass",
+     "automation": { "grantsFeatures": ["Elemental Dominion: Fire", "Elemental Dominion: Earth", "Elemental Dominion: Water", "Elemental Dominion: Air"], "groupGrantedFeatures": true }
+    },
+    {
+     "name": "Elemental Dominion: Fire",
+     "text": "While Channeling Fire, gain +1 Proficiency for attacks and spells that deal damage.",
+     "type": "subclass",
+     "automation": { "channelBenefit": { "element": "Fire", "effect": {
+      "name": "Elemental Dominion: Fire", "kind": "buff", "requiresEffect": "Channeling: Fire",
+      "text": "+1 Proficiency for attacks and spells that deal damage.", "damage": { "extraDice": 1, "dropLowest": 0, "proficiencyOnly": true }
+     } } }
+     },
+     {
+     "name": "Elemental Dominion: Earth",
+     "text": "While Channeling Earth, when you would mark HP, roll a d6 per HP. Each 6 reduces HP marked by 1.",
+     "type": "subclass",
+     "automation": { "channelBenefit": { "element": "Earth", "effect": {
+      "name": "Elemental Dominion: Earth", "kind": "buff", "requiresEffect": "Channeling: Earth",
+      "mitigation": [{ "id": "earth", "label": "Elemental Dominion: Earth", "when": { "markingHp": true },
+       "hp": -1, "markedHpOnly": true, "roll": { "count": "hp", "sides": 6, "success": 6, "each": true } }]
+     } } }
+     },
+     {
+     "name": "Elemental Dominion: Water",
+     "text": "While Channeling Water, when an attack against you succeeds, mark a Stress to make the attacker temporarily Vulnerable.",
+     "type": "subclass",
+     "automation": {
+      "channelBenefit": { "element": "Water", "effect": { "name": "Elemental Dominion: Water", "kind": "buff", "requiresEffect": "Channeling: Water", "text": "Mark a Stress when hit to make the attacker temporarily Vulnerable." } },
+      "actions": [{ "id": "vulnerable", "label": "Make attacker Vulnerable", "requiresEffect": "Elemental Dominion: Water", "cost": { "stress": 1 },
+       "report": { "text": "The attacker is temporarily Vulnerable." } }]
+     }
+     },
+     {
+     "name": "Elemental Dominion: Air",
+     "text": "While Channeling Air, gain +1 Evasion and you can fly.",
+     "type": "subclass",
+     "automation": { "channelBenefit": { "element": "Air", "effect": {
+      "name": "Elemental Dominion: Air", "kind": "buff", "requiresEffect": "Channeling: Air",
+      "text": "You can fly.", "modifiers": [{ "stat": "evasion", "value": 1 }]
+     } } }
+    }
+   ]
+  },
+  {
+   "id": "druid-warden-of-the-elements-specialization",
+   "name": "Druid: Warden of the Elements",
+   "kind": "subclass",
+   "domains": [
+    "Sage",
+    "Arcana"
+   ],
+   "text": "Play the Warden of the Elements if you want to embody the natural elements of the wild.",
+   "parent": "Druid",
+   "stage": "specialization",
+   "spellcastTrait": "Instinct",
+   "features": [
+    {
+     "name": "Elemental Aura",
+     "text": "Once per rest while *Channeling*, you can assume an aura matching your element. The aura affects targets within Close range until your *Channeling* ends.",
+     "type": "subclass",
+     "automation": {
+      "grantsFeatures": ["Elemental Aura: Fire", "Elemental Aura: Earth", "Elemental Aura: Water", "Elemental Aura: Air"],
+      "groupGrantedFeatures": true,
+      "uses": {
+       "max": 1,
+       "per": "rest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Elemental Aura",
+        "aura": true
+       }
+      ]
+     }
+    },
+    {
+     "name": "Elemental Aura: Fire",
+     "text": "While your Fire aura is active, adversaries within Close range that mark HP must also mark a Stress.",
+     "type": "subclass",
+     "automation": { "channelBenefit": { "element": "aura", "effect": { "name": "Elemental Aura: Fire", "kind": "buff", "until": "rest", "text": "Adversaries within Close range that mark HP must also mark a Stress." } } }
+     },
+     {
+     "name": "Elemental Aura: Earth",
+     "text": "While your Earth aura is active, allies within Close range gain +1 Strength. Each player explicitly selects the bonus when in range.",
+     "type": "subclass",
+     "automation": { "channelBenefit": { "element": "aura", "effect": { "name": "Elemental Aura: Earth", "kind": "buff", "until": "rest", "text": "Every player character may explicitly select +1 on a Strength roll while within Close range." } } }
+     },
+     {
+     "name": "Elemental Aura: Water",
+     "text": "While your Water aura is active, when an adversary within Close range damages you, mark a Stress to move them anywhere within Very Close range of their position.",
+     "type": "subclass",
+     "automation": {
+      "channelBenefit": { "element": "aura", "effect": { "name": "Elemental Aura: Water", "kind": "buff", "until": "rest", "text": "Mark a Stress after being damaged to move the adversary within Very Close range of their position." } },
+      "actions": [{ "id": "move", "label": "Move attacker", "requiresEffect": "Elemental Aura: Water", "cost": { "stress": 1 },
+       "report": { "text": "Move the damaging adversary anywhere within Very Close range of their current position." } }]
+     }
+     },
+     {
+     "name": "Elemental Aura: Air",
+     "text": "While your Air aura is active, when you or an ally within Close range takes damage from beyond Melee range, reduce it by 1d8.",
+     "type": "subclass",
+     "automation": {
+      "channelBenefit": { "element": "aura", "effect": { "name": "Elemental Aura: Air", "kind": "buff", "until": "rest", "text": "Reduce damage from beyond Melee range to you or an ally within Close range by 1d8." } },
+      "actions": [{ "id": "reduce", "label": "Roll damage reduction", "requiresEffect": "Elemental Aura: Air",
+       "sendRoll": { "dice": "1d8", "label": "Elemental Aura: Air - damage reduction" } }]
+     }
+    }
+   ]
+  },
+  {
+   "id": "druid-warden-of-the-elements-foundation",
+   "name": "Druid: Warden of the Elements",
+   "kind": "subclass",
+   "domains": [
+    "Sage",
+    "Arcana"
+   ],
+   "text": "Play the Warden of the Elements if you want to embody the natural elements of the wild.",
+   "parent": "Druid",
+   "stage": "foundation",
+   "spellcastTrait": "Instinct",
+   "features": [
+    {
+     "name": "Elemental Incarnation",
+     "text": "**Mark a Stress** to *Channel* one of the following elements until you take Severe damage or until your next rest:",
+     "type": "subclass",
+     "automation": {
+      "grantsFeatures": ["Elemental Incarnation: Fire", "Elemental Incarnation: Earth", "Elemental Incarnation: Water", "Elemental Incarnation: Air"],
+      "groupGrantedFeatures": true
+     }
+    },
+    {
+     "name": "Elemental Incarnation: Fire",
+     "text": "Mark a Stress to Channel Fire until Severe damage or your next rest. When an adversary within Melee range damages you, they take 1d10 magic damage.",
+     "type": "subclass",
+     "automation": { "actions": [
+      { "id": "channel", "label": "Channel Fire", "channel": "Fire", "cost": { "stress": 1 },
+       "steps": [{ "op": "effect", "effect": { "name": "Channeling: Fire", "kind": "buff", "group": "channel", "until": "rest", "endOnDamage": 3, "text": "An adversary within Melee range that damages you takes 1d10 magic damage." } }] },
+      { "id": "retaliate", "label": "Fire retaliation", "requiresEffect": "Channeling: Fire", "sendRoll": { "dice": "1d10", "label": "Elemental Incarnation: Fire - magic damage" } }
+     ] }
+     },
+     {
+     "name": "Elemental Incarnation: Earth",
+     "text": "Mark a Stress to Channel Earth until Severe damage or your next rest. Add your Proficiency to damage thresholds.",
+     "type": "subclass",
+     "automation": { "actions": [{ "id": "channel", "label": "Channel Earth", "channel": "Earth", "cost": { "stress": 1 },
+      "steps": [{ "op": "effect", "effect": { "name": "Channeling: Earth", "kind": "buff", "group": "channel", "until": "rest", "endOnDamage": 3,
+       "modifiers": [{ "stat": "thresholds", "value": "@proficiency" }] } }] }] }
+     },
+     {
+     "name": "Elemental Incarnation: Water",
+     "text": "Mark a Stress to Channel Water until Severe damage or your next rest. When you damage an adversary within Melee range, all other adversaries within Very Close range mark a Stress.",
+     "type": "subclass",
+     "automation": { "actions": [{ "id": "channel", "label": "Channel Water", "channel": "Water", "cost": { "stress": 1 },
+      "steps": [{ "op": "effect", "effect": { "name": "Channeling: Water", "kind": "buff", "group": "channel", "until": "rest", "endOnDamage": 3, "text": "When you damage an adversary within Melee range, all other adversaries within Very Close range mark a Stress." } }] }] }
+     },
+     {
+     "name": "Elemental Incarnation: Air",
+     "text": "Mark a Stress to Channel Air until Severe damage or your next rest. You can hover and gain advantage on Agility rolls.",
+     "type": "subclass",
+     "automation": { "actions": [{ "id": "channel", "label": "Channel Air", "channel": "Air", "cost": { "stress": 1 },
+      "steps": [{ "op": "effect", "effect": { "name": "Channeling: Air", "kind": "buff", "group": "channel", "until": "rest", "endOnDamage": 3, "text": "You can hover.",
+       "rollOptions": [{ "id": "hover", "label": "Hover: Agility advantage", "roll": "trait:Agility", "advantage": "advantage", "defaultOn": true }] } }] }] }
+    }
+   ]
+  },
+  {
+   "id": "ranger-wayfinder-mastery",
+   "name": "Ranger: Wayfinder",
+   "kind": "subclass",
+   "domains": [
+    "Bone",
+    "Sage"
+   ],
+   "text": "Play the Wayfinder if you want to hunt your prey and strike with deadly force.",
+   "parent": "Ranger",
+   "stage": "mastery",
+   "spellcastTrait": "Agility",
+   "features": [
+    {
+     "name": "Apex Predator",
+     "text": "Before you make an attack roll against your *Focus*, you can **spend a Hope**. On a successful attack, you remove a Fear from the GM’s Fear pool.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Apex Predator",
+        "cost": {
+         "hope": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "ranger-wayfinder-specialization",
+   "name": "Ranger: Wayfinder",
+   "kind": "subclass",
+   "domains": [
+    "Bone",
+    "Sage"
+   ],
+   "text": "Play the Wayfinder if you want to hunt your prey and strike with deadly force.",
+   "parent": "Ranger",
+   "stage": "specialization",
+   "spellcastTrait": "Agility",
+   "features": [
+    {
+     "name": "Elusive Predator",
+     "text": "When your *Focus* makes an attack against you, you gain a +2 bonus to your Evasion against the attack.",
+     "type": "subclass"
+    }
+   ]
+  },
+  {
+   "id": "ranger-wayfinder-foundation",
+   "name": "Ranger: Wayfinder",
+   "kind": "subclass",
+   "domains": [
+    "Bone",
+    "Sage"
+   ],
+   "text": "Play the Wayfinder if you want to hunt your prey and strike with deadly force.",
+   "parent": "Ranger",
+   "stage": "foundation",
+   "spellcastTrait": "Agility",
+   "features": [
+    {
+     "name": "Ruthless Predator",
+     "text": "When you make a damage roll, you can **mark a Stress** to gain a +1 bonus to your Proficiency. Additionally, when you deal Severe damage to an adversary, they must mark a Stress.",
+     "type": "subclass",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Ruthless Predator",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Path Forward",
+     "text": "When you’re traveling to a place you’ve previously visited or you carry an object that has been at the location before, you can identify the shortest, most direct path to your destination.",
+     "type": "subclass"
+    }
+   ]
+  },
+  {
+   "id": "seraph-winged-sentinel-mastery",
+   "name": "Seraph: Winged Sentinel",
+   "kind": "subclass",
+   "domains": [
+    "Splendor",
+    "Valor"
+   ],
+   "text": "Play the Winged Sentinel if you want to take flight and strike crushing blows from the sky.",
+   "parent": "Seraph",
+   "stage": "mastery",
+   "spellcastTrait": "Strength",
+   "features": [
+    {
+     "name": "Ascendant",
+     "text": "Gain a permanent +4 bonus to your Severe damage threshold.",
+     "type": "subclass",
+     "automation": {
+      "modifiers": [
+       {
+        "stat": "severeThreshold",
+        "value": 4
+       }
+      ]
+     }
+    },
+    {
+     "name": "Power of the Gods",
+     "text": "While flying, you deal an extra **1d12** damage instead of 1d8 from your “Wings of Light” feature.",
+     "type": "subclass"
+    }
+   ]
+  },
+  {
+   "id": "seraph-winged-sentinel-specialization",
+   "name": "Seraph: Winged Sentinel",
+   "kind": "subclass",
+   "domains": [
+    "Splendor",
+    "Valor"
+   ],
+   "text": "Play the Winged Sentinel if you want to take flight and strike crushing blows from the sky.",
+   "parent": "Seraph",
+   "stage": "specialization",
+   "spellcastTrait": "Strength",
+   "features": [
+    {
+     "name": "Ethereal Visage",
+     "text": "Your supernatural visage strikes awe and fear. While flying, you have advantage on Presence Rolls. When you succeed with Hope on a Presence Roll, you can remove a Fear from the GM’s Fear pool instead of gaining Hope.",
+     "type": "subclass",
+     "automation": {
+      "hopeReward": { "removeFear": 1, "roll": "trait:Presence" },
+      "rollOptions": [
+       {
+        "id": "advantage",
+        "label": "Ethereal Visage",
+        "roll": "trait:Presence",
+        "advantage": "advantage",
+        "description": "Your supernatural visage strikes awe and fear. While flying, you have advantage on Presence Rolls. When you succeed with Hope on a Presence Roll, you can remove a Fear from the GM’s Fear pool instead of gaining Hope."
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "seraph-winged-sentinel-foundation",
+   "name": "Seraph: Winged Sentinel",
+   "kind": "subclass",
+   "domains": [
+    "Splendor",
+    "Valor"
+   ],
+   "text": "Play the Winged Sentinel if you want to take flight and strike crushing blows from the sky.",
+   "parent": "Seraph",
+   "stage": "foundation",
+   "spellcastTrait": "Strength",
+   "features": [
+    {
+     "name": "Wings of Light",
+     "text": "You can fly. While flying, you can do the following:\n\n- **Mark a Stress** to pick up and carry another willing creature approximately your size or smaller.\n\n- **Spend a Hope** to deal an extra **1d8** damage on a successful attack.",
+     "type": "subclass",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "wings",
+        "label": "Wings of Light",
+        "roll": "damage",
+        "dice": "1d8",
+        "diceByFeature": { "Power of the Gods": "1d12" },
+        "cost": {
+         "hope": 1
+        },
+        "description": "Successful attack while flying."
+       }
+      ],
+      "actions": [
+       {
+        "id": "carry",
+        "label": "Carry willing creature while flying",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "bard-wordsmith-mastery",
+   "name": "Bard: Wordsmith",
+   "kind": "subclass",
+   "domains": [
+    "Grace",
+    "Codex"
+   ],
+   "text": "Play the Wordsmith if you want to use clever wordplay and captivate crowds.",
+   "parent": "Bard",
+   "stage": "mastery",
+   "spellcastTrait": "Presence",
+   "features": [
+    {
+     "name": "Epic Poetry",
+     "text": "Your Rally Die increases to a **d10**. Additionally, when you Help an Ally, you can narrate the moment as if you were writing the tale of their heroism in a memoir. When you do, roll a **d10** as your advantage die.",
+     "type": "subclass",
+     "automation": {
+      "actions": [{
+       "id": "help", "label": "Help an Ally: roll d10 advantage",
+       "cost": { "hope": 1 },
+       "sendRoll": { "dice": "1d10", "label": "Epic Poetry: d10 advantage die" }
+      }]
+     }
+    }
+   ]
+  },
+  {
+   "id": "bard-wordsmith-specialization",
+   "name": "Bard: Wordsmith",
+   "kind": "subclass",
+   "domains": [
+    "Grace",
+    "Codex"
+   ],
+   "text": "Play the Wordsmith if you want to use clever wordplay and captivate crowds.",
+   "parent": "Bard",
+   "stage": "specialization",
+   "spellcastTrait": "Presence",
+   "features": [
+    {
+     "name": "Eloquent",
+     "text": "Your moving words boost morale. Once per session, when you encourage an ally, you can do one of the following:\n\n- Allow them to find a mundane object or tool they need.\n\n- Help an Ally without spending Hope.\n\n- Give them an additional downtime move during their next rest.",
+     "type": "subclass",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "session"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Eloquent"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "bard-wordsmith-foundation",
+   "name": "Bard: Wordsmith",
+   "kind": "subclass",
+   "domains": [
+    "Grace",
+    "Codex"
+   ],
+   "text": "Play the Wordsmith if you want to use clever wordplay and captivate crowds.",
+   "parent": "Bard",
+   "stage": "foundation",
+   "spellcastTrait": "Presence",
+   "features": [
+    {
+     "name": "Rousing Speech",
+     "text": "Once per long rest, you can give a heartfelt, inspiring speech. All allies within Far range clear 2 Stress.",
+     "type": "subclass",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Rousing Speech",
+        "chatBenefits": [{ "id": "stress", "label": "Within Far range: clear 2 Stress", "steps": [{ "op": "clear", "resource": "stress", "amount": 2 }] }]
+       }
+      ]
+     }
+    },
+    {
+     "name": "Heart of a Poet",
+     "text": "After you make an action roll to impress, persuade, or offend someone, you can **spend a Hope** to add a **d4** to the roll.",
+     "type": "subclass",
+     "automation": {
+      "rollTriggers": [
+       {
+        "id": "poet",
+        "label": "Heart of a Poet",
+        "on": "action",
+        "addDice": "1d4",
+        "cost": {
+         "hope": 1
+        },
+        "description": "Only to impress, persuade, or offend someone."
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "ranger",
+   "name": "Ranger",
+   "kind": "class",
+   "domains": [
+    "Bone",
+    "Sage"
+   ],
+   "text": "As a ranger, your keen eyes and graceful haste make you indispensable when tracking down enemies and navigating the wilds.",
+   "startingHp": 6,
+   "startingEvasion": 12,
+   "features": [
+    {
+     "name": "Hold Them Off",
+     "text": "**Spend 3 Hope** when you succeed on an attack with a weapon to use that same roll against two additional adversaries within range of the attack.",
+     "type": "hope",
+     "automation": {
+      "actions": [{ "id": "use", "label": "Hold Them Off", "cost": { "hope": 3 } }],
+      "rollOptions": [
+       {
+        "id": "use",
+        "label": "Hold Them Off",
+        "roll": "damage",
+        "description": "Use after a successful weapon attack: apply that same attack roll to two additional adversaries within its range.",
+        "cost": {
+         "hope": 3
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Ranger’s Focus",
+     "text": "**Spend a Hope** and make an attack against a target. On a success, deal your attack’s normal damage and temporarily make the attack’s target your *Focus*. Until this feature ends or you make a different creature your *Focus*, you gain the following benefits against your *Focus*:\n\n- You know precisely what direction they are in.\n\n- When you deal damage to them, they must mark a Stress.\n\n- When you fail an attack against them, you can end your Ranger’s Focus feature to reroll your Duality Dice.",
+     "type": "class",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "rangers-focus",
+        "label": "Ranger’s Focus",
+        "roll": "attack",
+        "cost": {
+         "hope": 1
+        },
+        "description": "Spend a Hope on this attack; on a success the target becomes your Focus.",
+        "effect": {
+         "name": "Ranger’s Focus",
+         "kind": "buff",
+         "until": "scene",
+         "text": "Your attacks against your Focus can be rerolled once by ending this feature."
+        }
+       }
+      ],
+      "rollTriggers": [
+       {
+        "id": "reroll",
+        "label": "Ranger’s Focus: reroll (ends the feature)",
+        "on": "attack",
+        "when": "failure",
+        "description": "Reroll a failed attack against your Focus.",
+        "reroll": "duality",
+        "requiresEffect": "Ranger’s Focus",
+        "endEffect": "Ranger’s Focus"
+       }
+      ],
+      "actions": [
+       {
+        "id": "activate",
+        "label": "Ranger’s Focus",
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Ranger’s Focus",
+           "kind": "buff",
+           "until": "scene",
+           "text": "Your attacks against your Focus can be rerolled once by ending this feature."
+          }
+         }
+        ],
+        "cost": {
+         "hope": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "warrior",
+   "name": "Warrior",
+   "kind": "class",
+   "domains": [
+    "Blade",
+    "Bone"
+   ],
+   "text": "As a warrior, you run into battle without hesitation or caution, knowing you can strike down whatever enemy stands in your path.",
+   "startingHp": 6,
+   "startingEvasion": 11,
+   "features": [
+    {
+     "name": "No Mercy",
+     "text": "**Spend 3 Hope** to gain a +1 bonus to your attack rolls until your next rest.",
+     "type": "hope",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "no-mercy",
+        "label": "No Mercy",
+        "roll": "attack",
+        "value": 1,
+        "cost": {
+         "hope": 3
+        },
+        "description": "+1 to attack rolls until your next rest.",
+        "effect": {
+         "name": "No Mercy",
+         "kind": "buff",
+         "until": "rest",
+         "text": "+1 bonus to attack rolls."
+        }
+       }
+      ],
+      "actions": [
+       {
+        "id": "activate",
+        "label": "No Mercy",
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "No Mercy",
+           "kind": "buff",
+           "until": "rest",
+           "text": "+1 bonus to attack rolls."
+          }
+         }
+        ],
+        "cost": {
+         "hope": 3
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Attack of Opportunity",
+     "text": "If an adversary within Melee range attempts to leave that range, make a reaction roll using a trait of your choice against their Difficulty. Choose one effect on a success, or two if you critically succeed:\n\n- They can’t move from where they are.\n\n- You deal damage to them equal to your primary weapon’s damage.\n\n- You move with them.",
+     "type": "class"
+    },
+    {
+     "name": "Combat Training",
+     "text": "You ignore burden when equipping weapons. When you deal physical damage, you gain a bonus to your damage roll equal to your level.",
+     "type": "class",
+     "automation": {
+      "ignoreWeaponBurden": true,
+      "rollOptions": [
+       {
+        "id": "training",
+        "label": "Combat Training",
+        "roll": "damage",
+        "value": "@level",
+        "description": "Physical damage only; weapon burden is ignored when equipping weapons."
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "seraph",
+   "name": "Seraph",
+   "kind": "class",
+   "domains": [
+    "Splendor",
+    "Valor"
+   ],
+   "text": "As a seraph, you’ve taken a vow to a god who helps you channel sacred arcane power to keep your party on their feet.",
+   "startingHp": 7,
+   "startingEvasion": 9,
+   "features": [
+    {
+     "name": "Life Support",
+     "text": "**Spend 3 Hope** to clear a Hit Point on an ally within Close range.",
+     "type": "hope",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Life Support",
+        "cost": {
+         "hope": 3
+        },
+        "target": "actor",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "hp",
+          "amount": 1
+         }
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "name": "Prayer Dice",
+     "text": "At the beginning of each session, roll a number of **d4s** equal to your subclass’s Spellcast trait and place them on your character sheet in the space provided. These are your Prayer Dice. You can spend any number of Prayer Dice to aid yourself or an ally within Far range. You can use a spent die’s value to reduce incoming damage, add to a roll’s result after the roll is made, or gain Hope equal to the result. At the end of each session, clear all unspent Prayer Dice.",
+     "type": "class",
+     "automation": {
+      "dicePool": { "id": "prayer", "label": "Prayer Dice", "count": "@spellcast", "sides": 4, "extraByFeature": { "Devout": 1 } },
+      "uses": { "max": 1, "per": "session" },
+      "actions": [{
+       "id": "roll", "label": "Roll Prayer Dice", "rollDicePool": true
+      }]
+     }
+    }
+   ]
+  },
+  {
+   "id": "sorcerer",
+   "name": "Sorcerer",
+   "kind": "class",
+   "domains": [
+    "Arcana",
+    "Midnight"
+   ],
+   "text": "As a sorcerer, you were born with innate magical power, and you’ve learned how to wield that power to get what you want.",
+   "startingHp": 6,
+   "startingEvasion": 10,
+   "features": [
+    {
+     "name": "Volatile Magic",
+     "text": "**Spend 3 Hope** to reroll any number of your damage dice on an attack that deals magic damage.",
+     "type": "hope",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Volatile Magic",
+        "cost": {
+         "hope": 3
+        }
+       }
+      ],
+      "rollTriggers": [
+       { "id": "reroll", "label": "Volatile Magic", "on": "damage", "magicOnly": true, "cost": { "hope": 3 }, "damageDice": "reroll" }
+      ]
+     }
+    },
+    {
+     "name": "Arcane Sense",
+     "text": "You can sense the presence of magical people and objects within Close range.",
+     "type": "class"
+    },
+    {
+     "name": "Minor Illusion",
+     "text": "Make a **Spellcast Roll (10)**. On a success, you create a minor visual illusion no larger than yourself within Close range. This illusion is convincing to anyone at Close range or farther.",
+     "type": "class",
+     "automation": {
+      "actions": [{ "id": "spellcast", "label": "Spellcast (10)", "actionRoll": { "trait": "spellcast", "difficulty": 10 } }]
+     }
+    },
+    {
+     "name": "Channel Raw Power",
+     "text": "Once per long rest, you can place a domain card from your loadout into your vault and choose to either:\n\n- Gain Hope equal to the level of the card.\n\n- Enhance a spell that deals damage, gaining a bonus to your damage roll equal to twice the level of the card.",
+     "type": "class",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Channel Raw Power",
+        "channelRawPower": { "name": "Channel Raw Power", "kind": "buff", "until": "manual",
+         "text": "Spend this bonus on one damaging spell.",
+         "rollOptions": [{ "id": "damage", "label": "Channel Raw Power", "roll": "damage", "magicOnly": true, "value": "@cardLevel", "endEffect": "Channel Raw Power", "description": "Use on one spell that deals damage." }]
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "assassin",
+   "name": "Assassin",
+   "kind": "class",
+   "domains": [
+    "Blade",
+    "Midnight"
+   ],
+   "text": "As an assassin, you blend expertise in stealth and a mastery over death, dealing fatal blows tothe unwary with lethal accuracy.",
+   "startingHp": 5,
+   "startingEvasion": 12,
+   "features": [
+    {
+     "name": "Deadly Determination",
+     "text": "**Spend 3 Hope** to clear 2 Stress.",
+     "type": "hope",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Clear 2 Stress",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "stress",
+          "amount": 2
+         }
+        ],
+        "cost": {
+         "hope": 3
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Marked For Death",
+     "text": "On a successful weapon attack, you can **mark a Stress** to make the target *Marked for Death*. When you deal damage to a target you’ve *Marked for Death*, add a number of **d4s** equal to your tier to the damage roll.\nYou can have only one adversary *Marked for Death* at a time. This condition lasts until you take a rest, the current adversary *Marked for Death* is defeated, or the GM spends a number of Fear equal to your tier to clear it.",
+     "type": "class",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Marked For Death",
+        "cost": {
+         "stress": 1
+        },
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Marked for Death",
+           "kind": "buff",
+           "until": "rest",
+           "text": "One adversary is marked. Select the damage bonus only against that adversary. Remove this effect when the adversary is defeated or the GM spends Fear equal to your tier to clear the mark."
+          }
+         }
+        ]
+       }
+      ],
+      "rollTriggers": [
+       {
+        "id": "use",
+        "label": "Marked For Death",
+        "on": "attack",
+        "weaponAttack": true,
+        "cost": { "stress": 1 },
+        "description": "Use after a successful weapon attack to mark that target.",
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Marked for Death",
+           "kind": "buff",
+           "until": "rest",
+           "text": "One adversary is marked. Select the damage bonus only against that adversary. Remove this effect when the adversary is defeated or the GM spends Fear equal to your tier to clear the mark."
+          }
+         }
+        ]
+       }
+      ],
+      "rollOptions": [
+       {
+        "id": "marked-for-death",
+        "label": "Marked for Death",
+        "roll": "damage",
+        "requiresEffect": "Marked for Death",
+        "dice": "@tierd4",
+        "diceByFeature": { "Ambush": "@tierd6", "Backstab": "@tierd8" },
+        "description": "Select only when damaging the adversary you have marked."
+       }
+      ]
+     }
+    },
+    {
+     "name": "Get In & Get Out",
+     "text": "**Spend a Hope** to ask the GM for a quick or inconspicuous way into or out of a place you can see. The next roll you make that acts on this information has advantage.",
+     "type": "class",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Get In & Get Out",
+        "cost": {
+         "hope": 1
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "witch",
+   "name": "Witch",
+   "kind": "class",
+   "domains": [
+    "Sage",
+    "Dread"
+   ],
+   "text": "As a witch, you use detailed knowledge of magical craft to weave spells that bolster your allies and hex your enemies.",
+   "startingHp": 6,
+   "startingEvasion": 10,
+   "features": [
+    {
+     "name": "Witch’s Charm",
+     "text": "When you or an ally within Far range fails an action roll, you can **spend 3 Hope** to change it into a success with Fear instead.",
+     "type": "hope",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Witch’s Charm",
+        "cost": {
+         "hope": 3
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Hex",
+     "text": "**Mark a Stress** to temporarily *Hex* a target within Far range. While *Hexed*, the target gains a penalty to their damage rolls and Difficulty equal to your tier. The maximum number of creatures you can *Hex* at one time is equal to your Spellcast trait.",
+     "type": "class",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Hex",
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Commune",
+     "text": "Once per long rest during a moment of calm, you can commune with an ancestor, a deity, a spirit, or an otherworldly being. Ask them a question, then roll a number of **d6s** equal to your Spellcast trait. Choose one of the results and reference the chart below for the effect.\n\n- **1-3:** You taste a flavor, smell a scent, or feel a sensation relevant to the answer.\n- **4-5:** You hear sounds or see a vision relevant to the answer.\n- **6:** You psychically experience a scene relevant to the answer as if you were there.",
+     "type": "class",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Commune", "sendRoll": { "dice": "@spellcastd6", "label": "Commune" }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "brawler",
+   "name": "Brawler",
+   "kind": "class",
+   "domains": [
+    "Valor",
+    "Bone"
+   ],
+   "text": "As a brawler, you’ve honed your body into a lethal weapon, allowing you to deliverpowerful strikes that intimidate your foes.",
+   "startingHp": 6,
+   "startingEvasion": 10,
+   "features": [
+    {
+     "name": "Square Up",
+     "text": "**Spend 3 Hope** to intimidate a target within Close range, making them temporarily *Vulnerable*.",
+     "type": "hope",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Square Up",
+        "cost": {
+         "hope": 3
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "I Am The Weapon",
+     "text": "Your barehanded attacks are as strong as any blade. You have a primary weapon called Brawler’s Strike equipped while you have no other Active Weapons. It uses a trait of your choice, has Melee range, and deals **d8+d6** physical damage using your Proficiency (both the d8 and d6 scale off your Proficiency). While this weapon is active, you gain a +1 bonus to your Evasion.",
+     "type": "class",
+     "automation": {
+      "unarmedWeapon": { "name": "Brawler's Strike", "slot": "Primary", "damageType": "phys", "range": "Melee", "damage": "d8+d6", "hands": 1, "tier": 1 }
+     }
+    },
+    {
+     "name": "Combo Strike",
+     "text": "After rolling damage on a successful attack with a Melee weapon, you can **mark a Stress** to start a combo strike. When you do, roll your Combo Die and note the result, then continue rolling your Combo Die until the result of your latest roll is lower than the roll that preceded it. You deal extra damage equal to the total of all rolled Combo Die results on this attack. The results can’t be modified by any means.\nYour Combo Die starts as a **d4**. Once per tier, you can increase your Combo Die by one step as a level advancement option.",
+     "type": "class",
+     "automation": {
+      "rollOptions": [
+       { "id": "stress", "label": "Combo Strike", "roll": "damage", "weaponRange": "Melee", "combo": true, "cost": { "stress": 1 } },
+       { "id": "focus", "label": "Flow State: Combo Strike", "roll": "damage", "weaponRange": "Melee", "combo": true, "requiresFeature": "Flow State", "cost": { "focus": 1 } }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "bard",
+   "name": "Bard",
+   "kind": "class",
+   "domains": [
+    "Grace",
+    "Codex"
+   ],
+   "text": "As a bard, you know how to get people to talk, bring attention to yourself, and use words or music to influence the world around you.",
+   "startingHp": 5,
+   "startingEvasion": 10,
+   "features": [
+    {
+     "name": "Make a Scene",
+     "text": "**Spend 3 Hope** to temporarily *Distract* a target within Close range, giving them a -2 penalty to their Difficulty.",
+     "type": "hope",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Make a Scene",
+        "cost": {
+         "hope": 3
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Rally",
+     "text": "Once per session, describe how you rally the party and give yourself and each of your allies a Rally Die. At level 1, your Rally Die is a **d6**. A PC can spend their Rally Die to roll it, adding the result to their action roll, reaction roll, damage roll, or to clear a number of Stress equal to the result. At the end of each session, clear all unspent Rally Dice.\nAt level 5, your Rally Die increases to a **d8**.",
+     "type": "class",
+     "automation": {
+      "uses": {
+       "max": 1,
+       "per": "session"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Rally",
+        "target": "allActors",
+        "steps": [{
+         "op": "effect",
+         "effect": {
+          "name": "Rally Die", "kind": "buff", "until": "session", "unique": true,
+          "text": "Spend this die on one action, reaction or damage roll, or to clear Stress.",
+          "die": { "dice": "1d6", "diceByLevel": { "5": "1d8" }, "diceByFeature": { "Epic Poetry": "1d10" } },
+          "rollOptions": [
+           { "id": "action", "label": "Spend Rally Die", "roll": "action", "dice": "@die", "endEffect": "Rally Die" },
+           { "id": "reaction", "label": "Spend Rally Die", "roll": "reaction", "dice": "@die", "endEffect": "Rally Die" },
+           { "id": "damage", "label": "Spend Rally Die", "roll": "damage", "dice": "@die", "endEffect": "Rally Die" }
+          ],
+          "actions": [{ "id": "stress", "label": "Spend Rally Die: clear Stress", "endEffect": "Rally Die", "steps": [{ "op": "clear", "resource": "stress", "amount": "@die" }] }]
+         }
+        }]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "blood-hunter",
+   "name": "Blood Hunter",
+   "kind": "class",
+   "domains": [
+    "Blade",
+    "Blood"
+   ],
+   "text": "As a blood hunter, you harness the power of hemocraft—that is, blood magic—in your relentless pursuit of evil creatures.",
+   "startingHp": 7,
+   "startingEvasion": 9,
+   "features": [
+    {
+     "name": "Blood Maledict",
+     "text": "Spend 3 Hope to target a creature within Far range or in a vision from your Grim Psychometry. Until you finish a rest, take Severe damage, or use this feature again, you have advantage on all action rolls against the target.",
+     "type": "hope",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Blood Maledict",
+        "steps": [{ "op": "effect", "effect": {
+         "name": "Blood Maledict", "kind": "buff", "until": "rest", "endOnSourceSevere": true,
+         "text": "Advantage on action rolls against your chosen target. Ends on Severe damage, a rest, or reuse.",
+         "rollOptions": [{ "id": "target", "label": "Blood Maledict advantage", "roll": "action", "advantage": "advantage", "description": "Only against the chosen target." }]
+        } }],
+        "cost": {
+         "hope": 3
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Crimson Rite",
+     "text": "You can enchant your strikes with bloodthirsty power at the cost of your vitality. Mark a Hit Point to enchant one of your active weapons. Until you finish your next rest, that weapon deals physical or magic damage (choose when you use this feature) and an extra 1d6 damage when you hit with it. This extra damage increases to 2d6 at level 5 and 3d6 at level 8.",
+     "type": "class",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Crimson Rite",
+        "costConditions": [{ "feature": "Chasing Death", "unmarkedHp": { "min": 1, "max": 3 }, "cost": { "hp": 0 } }],
+        "steps": [{ "op": "effect", "effect": {
+         "name": "Crimson Rite", "kind": "buff", "until": "rest",
+         "text": "Optional extra damage for your enchanted strikes; weapon and damage type are table-managed.",
+         "rollOptions": [{
+          "id": "damage", "label": "Crimson Rite", "roll": "damage", "dice": "1d6", "diceByLevel": { "5": "2d6", "8": "3d6" },
+          "diceConditions": [{ "feature": "Chasing Death", "unmarkedHp": { "min": 1, "max": 1 }, "dieSize": 8 }]
+         }]
+        } }],
+        "cost": {
+         "hp": 1
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Grim Psychometry",
+     "text": "While inspecting a creature, a location, or an object within Very Close range, make a Spellcast Roll (12) . On a success, mark a Stress to have a vision of the most recent violence involving the target, and until you finish a rest, you have advantage on any action roll to recall lore about things in the vision.",
+     "type": "class",
+     "automation": {
+      "actions": [{ "id": "spellcast", "label": "Spellcast (12)", "actionRoll": { "trait": "spellcast", "difficulty": 12 } }],
+      "rollTriggers": [{
+       "id": "vision", "label": "Grim Psychometry: mark Stress for a vision", "on": "feat:Grim Psychometry", "when": "success", "difficulty": 12,
+       "cost": { "stress": 1 },
+       "steps": [{ "op": "effect", "effect": {
+        "name": "Grim Psychometry", "kind": "buff", "until": "rest", "text": "Advantage when recalling lore about things in the vision.",
+        "rollOptions": [{ "id": "lore", "label": "Vision lore advantage", "roll": "action", "advantage": "advantage", "description": "Only to recall lore about things in the vision." }]
+       } }]
+      }]
+     }
+    }
+   ]
+  },
+  {
+   "id": "druid",
+   "name": "Druid",
+   "kind": "class",
+   "domains": [
+    "Sage",
+    "Arcana"
+   ],
+   "text": "As a druid, you are a force of nature, preserving the balance of life and death by channeling the wilds themselves through you.",
+   "startingHp": 6,
+   "startingEvasion": 10,
+   "features": [
+    {
+     "name": "Evolution",
+     "text": "**Spend 3 Hope** to transform into a Beastform without marking a Stress. When you do, choose one trait to raise by +1 until you drop out of that Beastform.",
+     "type": "hope",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Evolution",
+        "evolution": true,
+        "cost": {
+         "hope": 3
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Beastform",
+     "text": "**Mark a Stress** to magically transform into a creature of your tier or lower from the Beastform list. You can drop out of this form at any time. While transformed, you can’t use weapons or cast spells from domain cards, but you can still use other features or abilities you have access to. Spells you cast before you transform stay active and last for their normal duration, and you can talk and communicate as normal. Additionally, you gain the Beastform’s features, add their Evasion bonus to your Evasion, and use the trait specified in their statistics for your attack. While you’re in a Beastform, your armor becomes part of your body and you mark Armor Slots as usual; when you drop out of a Beastform, those marked Armor Slots remain marked. If you mark your last Hit Point, you automatically drop out of this form.",
+     "type": "class",
+     "automation": {
+      "beastforms": [
+       {
+        "name": "Agile Scout", "tier": 1, "examples": "Fox, Mouse, Weasel", "trait": "Agility", "bonus": 1, "evasion": 2, "damage": "d4",
+        "advantages": ["deceive", "locate", "sneak"],
+        "features": [
+         { "name": "Agile", "text": "Your movement is silent. Spend a Hope to move up to Far range without rolling.",
+          "automation": { "actions": [{ "id": "move", "label": "Move to Far range", "cost": { "hope": 1 }, "report": { "text": "Moved up to Far range without rolling." } }] } },
+         { "name": "Fragile", "text": "When you take Major or greater damage, drop out of Beastform." }
+        ]
+       },
+       {
+        "name": "Household Friend", "tier": 1, "examples": "Cat, Dog, Rabbit", "trait": "Instinct", "bonus": 1, "evasion": 2, "damage": "d6",
+        "advantages": ["climb", "locate", "protect"],
+        "features": [
+         { "name": "Companion", "text": "When you Help an Ally, roll a d8 as your advantage die.",
+          "automation": { "actions": [{ "id": "help", "label": "Help an Ally", "cost": { "hope": 1 }, "sendRoll": { "dice": "1d8", "label": "Companion - Help an Ally advantage die" } }] } },
+         { "name": "Fragile", "text": "When you take Major or greater damage, drop out of Beastform." }
+        ]
+       },
+       {
+        "name": "Nimble Grazer", "tier": 1, "examples": "Deer, Gazelle, Goat", "trait": "Agility", "bonus": 1, "evasion": 3, "damage": "d6",
+        "advantages": ["leap", "sneak", "sprint"],
+        "features": [
+         { "name": "Elusive Prey", "text": "When an attack would succeed against you, mark a Stress and add a d4 to your Evasion against it.",
+          "automation": { "actions": [{ "id": "evade", "label": "Elusive Prey", "cost": { "stress": 1 }, "sendRoll": { "dice": "1d4", "base": "evasion", "label": "Elusive Prey - Evasion against this attack" } }] } },
+         { "name": "Fragile", "text": "When you take Major or greater damage, drop out of Beastform." }
+        ]
+       },
+       {
+        "name": "Pack Predator", "tier": 1, "examples": "Coyote, Hyena, Wolf", "trait": "Strength", "bonus": 2, "evasion": 1, "damage": "d8+2",
+        "advantages": ["attack", "sprint", "track"],
+        "features": [
+         { "name": "Hobbling Strike", "text": "After a successful Melee attack, mark a Stress to make the target temporarily Vulnerable.",
+          "automation": { "rollTriggers": [{ "id": "hobble", "label": "Hobbling Strike: target temporarily Vulnerable", "on": "attack", "weaponRange": "Melee", "successIfKnown": true, "cost": { "stress": 1 }, "report": { "text": "After your successful Melee attack, the target is temporarily Vulnerable." } }] } },
+         { "name": "Pack Hunting", "text": "After a successful attack against the same target as an ally acting immediately before you, add a d8 to damage.",
+          "automation": { "rollOptions": [{ "id": "pack", "label": "Pack Hunting", "roll": "damage", "dice": "1d8", "description": "Successful attack against the same target as the ally immediately before you." }] } }
+        ]
+       },
+       {
+        "name": "Aquatic Scout", "tier": 1, "examples": "Eel, Fish, Octopus", "trait": "Agility", "bonus": 1, "evasion": 2, "damage": "d4",
+        "advantages": ["navigate", "sneak", "swim"],
+        "features": [
+         { "name": "Aquatic", "text": "You can breathe and move naturally underwater." },
+         { "name": "Fragile", "text": "When you take Major or greater damage, drop out of Beastform." }
+        ]
+       },
+       {
+        "name": "Stalking Arachnid", "tier": 1, "examples": "Tarantula, Wolf Spider", "trait": "Finesse", "bonus": 1, "evasion": 2, "damage": "d6+1",
+        "advantages": ["attack", "climb", "sneak"],
+        "features": [
+         { "name": "Venomous Bite", "text": "On a successful Melee attack, the target is temporarily Poisoned, taking 1d10 direct physical damage each time they act.",
+          "automation": {
+           "actions": [{ "id": "poison", "label": "Poison damage (direct)", "sendRoll": { "dice": "1d10", "label": "Venomous Bite - direct physical poison damage" } }],
+           "rollTriggers": [{ "id": "poisoned", "label": "Venomous Bite: target temporarily Poisoned", "on": "attack", "weaponRange": "Melee", "successIfKnown": true, "report": { "text": "After your successful Melee attack, the target is temporarily Poisoned, taking 1d10 direct physical damage each time they act." } }]
+          } },
+         { "name": "Webslinger", "text": "Create webbing supporting one creature. Succeed on a Finesse Roll to temporarily Restrain a target within Close range.",
+          "automation": { "actions": [{ "id": "web", "label": "Webslinger", "actionRoll": { "trait": "Finesse" } }] } }
+        ]
+       },
+       {
+        "name": "Armored Sentry", "tier": 2, "examples": "Armadillo, Pangolin, Turtle", "trait": "Strength", "bonus": 1, "evasion": 1, "damage": "d8+2",
+        "advantages": ["dig", "locate", "protect"],
+        "features": [
+         { "name": "Armored Shell", "text": "Resist physical damage. Mark an Armor Slot to retract; after resistance, reduce physical damage by Armor Score. Leave the shell before other actions.",
+          "automation": {
+           "mitigation": [{ "id": "resist", "label": "Armored Shell resistance", "passive": true, "when": { "type": "physical" }, "halve": true }],
+           "actions": [
+            { "id": "retract", "label": "Retract into shell", "cost": { "armor": 1 }, "steps": [{ "op": "effect", "effect": { "name": "Retracted Shell", "kind": "buff", "text": "Leave the shell before performing other actions.",
+             "mitigation": [{ "id": "shell", "label": "Retracted Shell", "passive": true, "when": { "type": "physical" }, "reduce": "@armorscore" }] } }] },
+            { "id": "leave", "label": "Leave shell", "requiresEffect": "Retracted Shell", "endEffect": "Retracted Shell" }
+           ]
+          } },
+         { "name": "Cannonball", "text": "Mark a Stress: an ally throws you at a Close adversary with an Agility or Strength attack, dealing d12+2 physical damage using their Proficiency. Spend a Hope for a second Very Close target taking half damage.",
+          "automation": { "actions": [
+           { "id": "launch", "label": "Cannonball (invite ally to throw)", "cost": { "stress": 1 }, "allowSourceOwner": true,
+            "chatBenefits": [
+             { "id": "agility", "label": "Cannonball: throw with Agility", "exclusiveClaim": true, "featureAction": { "name": "Cannonball Throw", "id": "attack" },
+              "steps": [{ "op": "effect", "effect": { "name": "Cannonball Throw", "kind": "buff", "until": "scene",
+               "features": [{ "source": "Cannonball", "name": "Cannonball Throw", "text": "Throw your ally at a target within Close range. On success, deal d12+2 physical damage using your Proficiency.",
+                "automation": { "actions": [
+                 { "id": "attack", "label": "Cannonball throw (Agility)", "actionRoll": { "trait": "Agility", "attack": true } },
+                 { "id": "damage", "label": "Cannonball damage", "damage": { "dice": "d12+2", "type": "physical" }, "endEffect": "Cannonball Throw" }
+                ] } }]
+              } }] },
+             { "id": "strength", "label": "Cannonball: throw with Strength", "exclusiveClaim": true, "featureAction": { "name": "Cannonball Throw", "id": "attack" },
+              "steps": [{ "op": "effect", "effect": { "name": "Cannonball Throw", "kind": "buff", "until": "scene",
+               "features": [{ "source": "Cannonball", "name": "Cannonball Throw", "text": "Throw your ally at a target within Close range. On success, deal d12+2 physical damage using your Proficiency.",
+                "automation": { "actions": [
+                 { "id": "attack", "label": "Cannonball throw (Strength)", "actionRoll": { "trait": "Strength", "attack": true } },
+                 { "id": "damage", "label": "Cannonball damage", "damage": { "dice": "d12+2", "type": "physical" }, "endEffect": "Cannonball Throw" }
+                ] } }]
+              } }] }
+            ] },
+           { "id": "second", "label": "Cannonball: second target", "cost": { "hope": 1 }, "report": { "text": "A second adversary within Very Close range of the first takes half the first target's damage." } }
+          ] } }
+        ]
+       },
+       {
+        "name": "Powerful Beast", "tier": 2, "examples": "Bear, Bull, Moose", "trait": "Strength", "bonus": 3, "evasion": 1, "damage": "d10+4",
+        "advantages": ["navigate", "protect", "scare"],
+        "features": [
+         { "name": "Rampage", "text": "When a damage die is 1, roll a d10 and add it. Before an attack, mark a Stress for +1 Proficiency for that attack.",
+          "automation": {
+           "rollOptions": [{ "id": "rampage", "label": "Rampage: +1 Proficiency", "roll": "attack", "proficiency": 1, "cost": { "stress": 1 } }],
+           "damage": { "extraDice": 0, "dropLowest": 0, "onesBonus": 10, "label": "Rampage" }
+          } },
+         { "name": "Thick Hide", "text": "+2 to damage thresholds.", "automation": { "modifiers": [{ "stat": "thresholds", "value": 2 }] } }
+        ]
+       },
+       {
+        "name": "Mighty Strider", "tier": 2, "examples": "Camel, Horse, Zebra", "trait": "Agility", "bonus": 1, "evasion": 2, "damage": "d8+1",
+        "advantages": ["leap", "navigate", "sprint"],
+        "features": [
+         { "name": "Carrier", "text": "Carry up to two willing allies when you move." },
+         { "name": "Trample", "text": "Mark a Stress to move up to Close in a straight line and attack all targets within Melee of the line. Successful targets take d8+1 physical damage using your Proficiency and are temporarily Vulnerable.",
+          "automation": { "actions": [
+           { "id": "attack", "label": "Trample attack", "cost": { "stress": 1 }, "actionRoll": { "trait": "beastform", "attack": true } },
+           { "id": "damage", "label": "Trample damage", "damage": { "dice": "d8+1", "type": "physical" } }
+          ],
+          "rollTriggers": [{ "id": "vulnerable", "label": "Trample: targets temporarily Vulnerable", "on": "feat:Trample", "successIfKnown": true, "report": { "text": "Each target the Trample attack succeeded against is temporarily Vulnerable." } }] } }
+        ]
+       },
+       {
+        "name": "Striking Serpent", "tier": 2, "examples": "Cobra, Rattlesnake, Viper", "trait": "Finesse", "bonus": 1, "evasion": 2, "damage": "d8+4", "range": "Very Close",
+        "advantages": ["climb", "deceive", "sprint"],
+        "features": [
+         { "name": "Venomous Strike", "text": "Attack any number of Very Close targets. On success they are temporarily Poisoned, taking 1d10 direct physical damage each time they act.",
+          "automation": { "actions": [
+           { "id": "attack", "label": "Venomous Strike", "actionRoll": { "trait": "beastform", "attack": true } },
+           { "id": "poison", "label": "Poison damage (direct)", "sendRoll": { "dice": "1d10", "label": "Venomous Strike - direct physical poison damage" } }
+          ],
+          "rollTriggers": [{ "id": "poisoned", "label": "Venomous Strike: targets temporarily Poisoned", "on": "feat:Venomous Strike", "successIfKnown": true, "report": { "text": "Each target the Venomous Strike succeeded against is temporarily Poisoned, taking 1d10 direct physical damage each time they act." } }] } },
+         { "name": "Warning Hiss", "text": "Mark a Stress to force any number of Melee targets back to Very Close range.",
+          "automation": { "actions": [{ "id": "hiss", "label": "Warning Hiss", "cost": { "stress": 1 }, "report": { "text": "Chosen targets within Melee range move back to Very Close range." } }] } }
+        ]
+       },
+       {
+        "name": "Pouncing Predator", "tier": 2, "examples": "Cheetah, Lion, Panther", "trait": "Instinct", "bonus": 1, "evasion": 3, "damage": "d8+6",
+        "advantages": ["attack", "climb", "sneak"],
+        "features": [
+         { "name": "Fleet", "text": "Spend a Hope to move up to Far without rolling.",
+          "automation": { "actions": [{ "id": "move", "label": "Fleet", "cost": { "hope": 1 }, "report": { "text": "Moved up to Far range without rolling." } }] } },
+         { "name": "Takedown", "text": "Mark a Stress to move into Melee and attack. On success, +2 Proficiency for this attack and the target marks a Stress.",
+          "automation": { "rollOptions": [{ "id": "takedown", "label": "Takedown", "roll": "attack", "proficiency": 2, "cost": { "stress": 1 }, "description": "Move into Melee; on success the target marks a Stress." }] } }
+        ]
+       },
+       {
+        "name": "Winged Beast", "tier": 2, "examples": "Hawk, Owl, Raven", "trait": "Finesse", "bonus": 1, "evasion": 3, "damage": "d4+2",
+        "advantages": ["deceive", "locate", "scare"],
+        "features": [
+         { "name": "Bird's-Eye View", "text": "Fly at will. Once per rest while airborne, ask the GM about the scene below without rolling; the first character acting on this information has advantage.",
+          "automation": { "actions": [{ "id": "question", "label": "Bird's-Eye View: ask the GM", "uses": { "max": 1, "per": "rest" }, "report": { "text": "Ask the GM about the scene below. The first character to act on the information has advantage." } }] } },
+         { "name": "Hollow Bones", "text": "-2 to damage thresholds.", "automation": { "modifiers": [{ "stat": "thresholds", "value": -2 }] } }
+        ]
+       },
+       {
+        "name": "Great Predator", "tier": 3, "examples": "Dire Wolf, Velociraptor, Sabertooth Tiger", "trait": "Strength", "bonus": 2, "evasion": 2, "damage": "d12+8",
+        "advantages": ["attack", "sneak", "sprint"],
+        "features": [
+         { "name": "Carrier", "text": "Carry up to two willing allies when you move." },
+         { "name": "Vicious Maul", "text": "After a successful attack, spend a Hope to make the target temporarily Vulnerable and gain +1 Proficiency for this attack.",
+          "automation": { "rollOptions": [{ "id": "maul", "label": "Vicious Maul", "roll": "damage", "proficiency": 1, "cost": { "hope": 1 }, "description": "After a successful attack; the target becomes temporarily Vulnerable." }] } }
+        ]
+       },
+       {
+        "name": "Mighty Lizard", "tier": 3, "examples": "Alligator, Crocodile, Gila Monster", "trait": "Instinct", "bonus": 2, "evasion": 1, "damage": "d10+7",
+        "advantages": ["attack", "sneak", "track"],
+        "features": [
+         { "name": "Physical Defense", "text": "+3 to damage thresholds.", "automation": { "modifiers": [{ "stat": "thresholds", "value": 3 }] } },
+         { "name": "Snapping Strike", "text": "After a successful Melee attack, spend a Hope to clamp the target in your jaws, making them temporarily Restrained and Vulnerable.",
+          "automation": { "rollTriggers": [{ "id": "snap", "label": "Snapping Strike: target Restrained and Vulnerable", "on": "attack", "weaponRange": "Melee", "successIfKnown": true, "cost": { "hope": 1 }, "report": { "text": "After your successful Melee attack, the target is temporarily Restrained and Vulnerable in your jaws." } }] } }
+        ]
+       },
+       {
+        "name": "Great Winged Beast", "tier": 3, "examples": "Giant Eagle, Falcon", "trait": "Finesse", "bonus": 2, "evasion": 3, "damage": "d8+6",
+        "advantages": ["deceive", "distract", "locate"],
+        "features": [
+         { "name": "Bird's-Eye View", "text": "Fly at will. Once per rest while airborne, ask the GM about the scene below without rolling; the first character acting on this information has advantage.",
+          "automation": { "actions": [{ "id": "question", "label": "Bird's-Eye View: ask the GM", "uses": { "max": 1, "per": "rest" }, "report": { "text": "Ask the GM about the scene below. The first character to act on the information has advantage." } }] } },
+         { "name": "Carrier", "text": "Carry up to two willing allies when you move." }
+        ]
+       },
+       {
+        "name": "Aquatic Predator", "tier": 3, "examples": "Dolphin, Orca, Shark", "trait": "Agility", "bonus": 2, "evasion": 4, "damage": "d10+6",
+        "advantages": ["attack", "swim", "track"],
+        "features": [
+         { "name": "Aquatic", "text": "You can breathe and move naturally underwater." },
+         { "name": "Vicious Maul", "text": "After a successful attack, spend a Hope to make the target Vulnerable and gain +1 Proficiency for this attack.",
+          "automation": { "rollOptions": [{ "id": "maul", "label": "Vicious Maul", "roll": "damage", "proficiency": 1, "cost": { "hope": 1 }, "description": "After a successful attack; the target becomes Vulnerable." }] } }
+        ]
+       },
+       { "name": "Legendary Beast", "tier": 3, "evolved": { "maxTier": 1, "damage": 6, "trait": 1, "evasion": 2 } },
+       { "name": "Legendary Hybrid", "tier": 3, "examples": "Griffon, Sphinx", "trait": "Strength", "bonus": 2, "evasion": 3, "damage": "d10+8",
+        "hybrid": { "count": 2, "maxTier": 2, "advantages": 4, "features": 2, "stress": 1 } },
+       {
+        "name": "Massive Behemoth", "tier": 4, "examples": "Elephant, Mammoth, Rhinoceros", "trait": "Strength", "bonus": 3, "evasion": 1, "damage": "d12+12",
+        "advantages": ["locate", "protect", "scare", "sprint"],
+        "features": [
+         { "name": "Carrier", "text": "Carry up to four willing allies when you move." },
+         { "name": "Demolish", "text": "Spend a Hope to move up to Far in a straight line and attack all targets within Melee of the line. Success: d8+10 physical damage using your Proficiency and temporarily Vulnerable.",
+          "automation": { "actions": [
+           { "id": "attack", "label": "Demolish attack", "cost": { "hope": 1 }, "actionRoll": { "trait": "beastform", "attack": true } },
+           { "id": "damage", "label": "Demolish damage", "damage": { "dice": "d8+10", "type": "physical" } }
+          ],
+          "rollTriggers": [{ "id": "vulnerable", "label": "Demolish: targets temporarily Vulnerable", "on": "feat:Demolish", "successIfKnown": true, "report": { "text": "Each target the Demolish attack succeeded against is temporarily Vulnerable." } }] } },
+         { "name": "Undaunted", "text": "+2 to damage thresholds.", "automation": { "modifiers": [{ "stat": "thresholds", "value": 2 }] } }
+        ]
+       },
+       {
+        "name": "Terrible Lizard", "tier": 4, "examples": "Brachiosaurus, Tyrannosaurus", "trait": "Strength", "bonus": 3, "evasion": 2, "damage": "d12+10",
+        "advantages": ["attack", "deceive", "scare", "track"],
+        "features": [
+         { "name": "Devastating Strikes", "text": "When you deal Severe damage to a Melee target, mark a Stress to force them to mark an additional HP.",
+          "automation": { "rollTriggers": [{ "id": "devastate", "label": "Devastating Strikes: +1 HP (Severe damage to a Melee target)", "on": "damage", "weaponRange": "Melee", "cost": { "stress": 1 }, "report": { "text": "The Melee target that took Severe damage marks one additional HP." } }] } },
+         { "name": "Massive Stride", "text": "Move up to Far without rolling. Ignore rough terrain at the GM's discretion." }
+        ]
+       },
+       {
+        "name": "Mythic Aerial Hunter", "tier": 4, "examples": "Dragon, Pterodactyl, Roc, Wyvern", "trait": "Finesse", "bonus": 3, "evasion": 4, "damage": "d10+11",
+        "advantages": ["attack", "deceive", "locate", "navigate"],
+        "features": [
+         { "name": "Carrier", "text": "Carry up to three willing allies when you move." },
+         { "name": "Deadly Raptor", "text": "Fly at will and move up to Far as part of your action. After flying straight from at least Close into Melee and attacking, reroll damage dice below your Proficiency.",
+          "automation": { "rollOptions": [{ "id": "raptor", "label": "Deadly Raptor: reroll dice below Proficiency", "roll": "damage", "description": "Move straight from at least Close into Melee and attack in the same action.", "rerollBelowProficiency": true }] } }
+        ]
+       },
+       {
+        "name": "Epic Aquatic Beast", "tier": 4, "examples": "Giant Squid, Whale", "trait": "Agility", "bonus": 3, "evasion": 3, "damage": "d10+10",
+        "advantages": ["locate", "protect", "scare", "track"],
+        "features": [
+         { "name": "Ocean Master", "text": "Breathe and move naturally underwater. On a successful Melee attack, temporarily Restrain the target.",
+          "automation": { "rollTriggers": [{ "id": "restrain", "label": "Ocean Master: target temporarily Restrained", "on": "attack", "weaponRange": "Melee", "successIfKnown": true, "report": { "text": "After your successful Melee attack, the target is temporarily Restrained." } }] } },
+         { "name": "Unyielding", "text": "When you would mark an Armor Slot, roll a d6. On 5+, reduce severity by one without marking the slot.",
+          "automation": { "mitigation": [{ "id": "unyielding", "label": "Unyielding", "passive": true, "when": { "armor": true }, "roll": { "sides": 6, "success": 5 }, "saveArmor": 1 }] } }
+        ]
+       },
+       { "name": "Mythic Beast", "tier": 4, "evolved": { "maxTier": 2, "damage": 9, "trait": 2, "evasion": 3, "increaseDie": true } },
+       { "name": "Mythic Hybrid", "tier": 4, "examples": "Chimera, Cockatrice, Manticore", "trait": "Strength", "bonus": 3, "evasion": 2, "damage": "d12+10",
+        "hybrid": { "count": 3, "maxTier": 3, "advantages": 5, "features": 3, "stress": 2 } }
+      ],
+      "actions": [
+       {
+        "id": "use",
+        "label": "Beastform",
+        "beastform": true,
+        "cost": {
+         "stress": 1
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Wildtouch",
+     "text": "You can perform harmless, subtle effects that involve nature—such as causing a flower to rapidly grow, summoning a slight gust of wind, or starting a campfire—at will.",
+     "type": "class"
+    }
+   ]
+  },
+  {
+   "id": "rogue",
+   "name": "Rogue",
+   "kind": "class",
+   "domains": [
+    "Midnight",
+    "Grace"
+   ],
+   "text": "As a rogue, you have experience fighting with your blade as well as your wit, preferring to move quickly and fight quietly.",
+   "startingHp": 6,
+   "startingEvasion": 12,
+   "features": [
+    {
+     "name": "Rogue’s Dodge",
+     "text": "**Spend 3 Hope** to gain a +2 bonus to your Evasion until the next time an attack succeeds against you. Otherwise, this bonus lasts until your next rest.",
+     "type": "hope",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Rogue’s Dodge",
+        "steps": [
+         {
+          "op": "effect",
+          "effect": {
+           "name": "Rogue’s Dodge",
+           "kind": "buff",
+           "until": "rest",
+           "text": "Rogue’s Dodge",
+           "modifiers": [
+            {
+             "stat": "evasion",
+             "value": 2
+            }
+           ]
+          }
+         }
+        ],
+        "cost": {
+         "hope": 3
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Cloaked",
+     "text": "Any time you would be *Hidden*, you are instead *Cloaked*. In addition to the benefits of the *Hidden* condition, while *Cloaked* you remain unseen if you are stationary when an adversary moves to where they would normally see you. After you make an attack or end a move within line of sight of an adversary, you are no longer *Cloaked*.",
+     "type": "class"
+    },
+    {
+     "name": "Sneak Attack",
+     "text": "When you succeed on an attack while *Cloaked* or while an ally is within Melee range of your target, add a number of **d6s** equal to your tier to your damage roll.",
+     "type": "class",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "sneak",
+        "label": "Sneak Attack",
+        "roll": "damage",
+        "dice": "1d6",
+        "description": "Successful attack while Cloaked or an ally is in Melee of target.",
+        "diceByLevel": {
+         "2": "2d6",
+         "5": "3d6",
+         "8": "4d6"
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "guardian",
+   "name": "Guardian",
+   "kind": "class",
+   "domains": [
+    "Valor",
+    "Blade"
+   ],
+   "text": "As a guardian, you run into danger to protect your party, keeping watch over those who might not survive without you there.",
+   "startingHp": 7,
+   "startingEvasion": 9,
+   "features": [
+    {
+     "name": "Frontline Tank",
+     "text": "**Spend 3 Hope** to clear 2 Armor Slots.",
+     "type": "hope",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Clear 2 Armor Slots",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "armor",
+          "amount": 2
+         }
+        ],
+        "cost": {
+         "hope": 3
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Unstoppable",
+     "text": "Once per long rest, you can become *Unstoppable*. You gain an Unstoppable Die. At level 1, your Unstoppable Die is a **d4**. Place it on your character sheet in the space provided, starting with the 1 value facing up. After you make a damage roll that deals 1 or more Hit Points to a target, increase the Unstoppable Die value by one. When the die’s value would exceed its maximum value or when the scene ends, remove the die and drop out of *Unstoppable*. At level 5, your Unstoppable Die increases to a **d6**.\nWhile *Unstoppable*, you gain the following benefits:\n\n- You reduce the severity of physical damage by one threshold (Severe to Major, Major to Minor, Minor to None).\n\n- You add the current value of the Unstoppable Die to your damage roll.\n\n- You can’t be *Restrained* or *Vulnerable*.",
+     "type": "class",
+     "automation": {
+      "effectCounters": [{ "label": "Unstoppable Die", "effect": "Unstoppable" }],
+      "uses": {
+       "max": 1,
+       "per": "longRest"
+      },
+      "actions": [
+       {
+        "id": "use",
+        "label": "Unstoppable",
+        "steps": [{ "op": "effect", "effect": {
+         "name": "Unstoppable", "kind": "buff", "until": "scene",
+         "counter": { "value": 1, "max": 4, "maxByLevel": { "5": 6 } },
+         "text": "Add the current Unstoppable Die value to damage and reduce physical damage severity by one threshold. You cannot be Restrained or Vulnerable. Advance the die after a damage roll deals at least 1 HP; the buff ends on overflow or at scene end.",
+         "rollOptions": [{
+          "id": "damage", "label": "Unstoppable Die", "roll": "damage",
+          "effectValue": true, "defaultOn": true
+         }],
+         "mitigation": [{
+          "id": "physical", "label": "Unstoppable", "defaultOn": true,
+           "description": "Reduces physical damage severity by one threshold: Severe to Major, Major to Minor, Minor to None. Magic damage is unaffected.",
+          "when": { "type": "physical" }, "severity": 1
+         }]
+        } }]
+       }
+      ],
+      "rollTriggers": [{
+       "id": "advance", "label": "Unstoppable: dealt HP - increase die", "on": "damage",
+       "requiresEffect": "Unstoppable", "advanceEffect": "Unstoppable", "usesSource": false,
+       "description": "Use only after this damage roll dealt at least 1 HP to a target."
+      }]
+     }
+    }
+   ]
+  },
+  {
+   "id": "warlock",
+   "name": "Warlock",
+   "kind": "class",
+   "domains": [
+    "Dread",
+    "Grace"
+   ],
+   "text": "As a warlock, you’ve pledged your life to an otherworldly patron in exchange for extraordinary power.",
+   "startingHp": 5,
+   "startingEvasion": 11,
+   "features": [
+    {
+     "name": "Patron’s Boon",
+     "text": "When you fail a roll, you can **spend 3 Hope** to reroll with advantage.",
+     "type": "hope",
+     "automation": {
+      "actions": [{ "id": "use", "label": "Patron’s Boon", "cost": { "hope": 3 } }],
+      "rollTriggers": [
+       {
+        "id": "reroll",
+        "label": "Patron’s Boon: reroll with advantage",
+        "on": "duality",
+        "when": "failure",
+        "cost": {
+         "hope": 3
+        },
+        "reroll": "duality",
+        "advantage": true
+       }
+      ]
+     }
+    },
+    {
+     "name": "Patron’s Pact",
+     "text": "You have committed yourself to a supernatural entity—such as a god, fae, or demon—in exchange for power. Write their name on your character sheet, then work with your GM to determine their sphere of influence (such as Nature, Chaos, Wisdom, Mischief, Love, War, Justice, or Death). Before making an action roll that relates to your patron’s sphere of influence, you can **spend a Favor **to call upon their aid, rolling your Patron Die and adding its result to the total. Your Patron Die starts at a **d6** and increases to a **d8** at level 5.",
+     "type": "class",
+     "automation": {
+      "rollOptions": [
+       {
+        "id": "patron-die",
+        "label": "Patron Die",
+        "roll": "action",
+        "dice": "1d6",
+        "cost": {
+         "favor": 1
+        },
+        "description": "Only an action related to your patron’s sphere of influence.",
+        "diceByLevel": {
+         "5": "1d8"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Favor",
+     "text": "You start with 3 Favor. You can use a downtime move to show tribute to your patron. Describe how and gain Favor equal to your Spellcast trait. Additionally, when you succeed on an action roll with Hope, you can choose to gain a Favor instead of a Hope.",
+     "type": "class",
+     "automation": {
+      "classResourceOnly": true,
+      "hopeReward": { "favor": 1, "roll": "action" },
+      "resources": [
+       {
+        "id": "favor",
+        "label": "Favor",
+        "initial": 3
+       }
+      ],
+      "actions": [
+       {
+        "id": "tribute",
+        "label": "Downtime tribute",
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "favor",
+          "amount": "@spellcast"
+         }
+        ],
+        "timing": "downtime"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "wizard",
+   "name": "Wizard",
+   "kind": "class",
+   "domains": [
+    "Codex",
+    "Splendor"
+   ],
+   "text": "As a wizard, you’ve become familiar with the arcane through the relentless study of grimoires and other tools of magic.",
+   "startingHp": 5,
+   "startingEvasion": 11,
+   "features": [
+    {
+     "name": "Not This Time",
+     "text": "**Spend 3 Hope** to force an adversary within Far range to reroll an attack or damage roll.",
+     "type": "hope",
+     "automation": {
+      "actions": [
+       {
+        "id": "use",
+        "label": "Not This Time",
+        "cost": {
+         "hope": 3
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Prestidigitation",
+     "text": "You can perform harmless, subtle magical effects at will. For example, you can change an object’s color, create a smell, light a candle, cause a tiny object to float, illuminate a room, or repair a small object.",
+     "type": "class"
+    },
+    {
+     "name": "Strange Patterns",
+     "text": "Choose a number between 1 and 12. When you roll that number on a Duality Die, gain a Hope or clear a Stress. You can change this number when you take a long rest.",
+     "type": "class",
+     "automation": {
+      "resources": [
+       {
+        "id": "strange-pattern",
+        "label": "Strange Patterns number",
+        "initial": 0,
+        "max": 12
+       }
+      ],
+      "rollTriggers": [
+       {
+        "id": "hope",
+        "label": "Strange Patterns: gain a Hope",
+        "on": "duality",
+        "when": "dieMatches",
+        "description": "A Duality Die matches your chosen number.",
+        "matchResource": "strange-pattern",
+        "steps": [
+         {
+          "op": "gain",
+          "resource": "hope",
+          "amount": 1
+         }
+        ]
+       },
+       {
+        "id": "stress",
+        "label": "Strange Patterns: clear a Stress",
+        "on": "duality",
+        "when": "dieMatches",
+        "description": "A Duality Die matches your chosen number.",
+        "matchResource": "strange-pattern",
+        "steps": [
+         {
+          "op": "clear",
+          "resource": "stress",
+          "amount": 1
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}

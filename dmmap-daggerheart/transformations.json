@@ -1,207 +1,1501 @@
 {
- "format": "dmmap-daggerheart",
- "version": 1,
- "category": "transformations",
- "label": "Transformations",
- "entries": [
-  {
-   "id": "demigod",
-   "name": "Demigod",
-   "text": "Demigods are mortal creatures whose veins flow with the blood of the gods.",
-   "features": [
-    {
-     "name": "Gifted",
-     "text": "You gain a +1 bonus to action, reaction, and damage rolls.",
-     "automation": {
-      "modifiers": [
-       {
-        "roll": "action",
-        "value": 1
-       },
-       {
-        "roll": "reaction",
-        "value": 1
-       },
-       {
-        "roll": "damage",
-        "value": 1
-       }
-      ]
-     }
-    },
-    {
-     "name": "Weight of Divinity",
-     "text": "When you fail a roll, you must mark a Stress or the GM gains a Fear."
-    }
-   ]
-  },
-  {
-   "id": "ghost",
-   "name": "Ghost",
-   "text": "Ghosts are the spirits of the once-living who are bound to the Mortal Realm.",
-   "features": [
-    {
-     "name": "Unfinished Business",
-     "text": "Work with your GM to decide what purpose or desire keeps you bound to the Mortal Realm. When you fulfill it, you cross through the veil of death."
-    },
-    {
-     "name": "Ephemeral",
-     "text": "Your body wavers in and out of being corporeal. You are resistant to physical damage, take double magic damage, and can **mark 2 Stress** to momentarily pass through a solid object.",
-     "automation": {
-      "mitigation": [
-       { "id": "physical-resistance", "label": "Ephemeral physical resistance", "passive": true, "when": { "type": "physical" }, "halve": true },
-       { "id": "magic-vulnerability", "label": "Ephemeral double magic damage", "passive": true, "when": { "type": "magic" }, "double": true }
-      ],
-      "actions": [
-       { "id": "pass-through", "label": "Pass through a solid object", "cost": { "stress": 2 } }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "id": "reanimated",
-   "name": "Reanimated",
-   "text": "Reanimated are corpses who have been brought back to life.",
-   "features": [
-    {
-     "name": "Corpse",
-     "text": "During a rest, you can clear Hit Points only if you have access to remains from a recently deceased creature. Describe how you use these materials to maintain your corpse."
-    },
-    {
-     "name": "Won’t Stay Dead",
-     "text": "When you choose the Risk It All death move and fail, you can **permanently mark a Hit Point** to succeed instead. When you do, you still use the Hope Die’s value to clear Hit Points and Stress. When you permanently mark your last Hit Point, you pass through the veil of death.",
-     "automation": {
-      "deathMove": { "kind": "undying" }
-     }
-    }
-   ]
-  },
-  {
-   "id": "shapeshifter",
-   "name": "Shapeshifter",
-   "text": "Shapeshifters are creatures who can change their physical form.",
-   "features": [
-    {
-     "name": "Change Shape",
-     "text": "During a rest, you can use a downtime move to swap your current ancestry with another. When you do, describe how your appearance changes.",
-     "automation": {
-      "actions": [
-       {
-        "id": "change-ancestry",
-        "label": "Change ancestry and choose a feature",
-        "timing": "downtime",
-        "ancestryChoice": "ancestry"
-       }
-      ]
-     }
-    },
-    {
-     "name": "Only Skin Deep",
-     "text": "You gain the benefit of only one of your chosen ancestry’s features, which you select when you choose the ancestry. You can use a downtime move to choose a different feature from that ancestry.",
-     "automation": {
-      "actions": [
-       {
-        "id": "change-feature",
-        "label": "Choose a different ancestry feature",
-        "timing": "downtime",
-        "ancestryChoice": "feature"
-       }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "id": "vampire",
-   "name": "Vampire",
-   "text": "Vampires are undead creatures with sharp fangs who feed on the blood of the living.",
-   "features": [
-    {
-     "name": "Fangs",
-     "text": "Make an attack using a trait of your choice to bite a target within Melee range. On a success, deal **d6** physical damage using your Proficiency.",
-     "automation": {
-      "actions": [
-       { "id": "attack", "label": "Attack", "actionRoll": { "trait": "highest", "attack": true } },
-       { "id": "damage", "label": "Damage", "damage": { "dice": "d6", "type": "physical" } }
-      ]
-     }
-    },
-    {
-     "name": "Feed",
-     "text": "On a successful “Fangs” attack against a creature that can bleed, you can **mark a Stress** to feed. Place a number of tokens on this card equal to the number of Hit Points the target marks. You can hold up to 6 tokens at a time. Before you make an action roll, you can spend a token to make your Fear Die a **d20**. When you take a long rest, remove a token. While there are no tokens on this card, you make action and reaction rolls with disadvantage.",
-     "automation": {
-      "resources": [
-       { "id": "feedTokens", "label": "Feed tokens", "initial": 0, "max": 6, "longRestLoss": 1 }
-      ],
-      "rollOptions": [
-       { "id": "feed-fear", "label": "Spend a token (Fear d20)", "roll": "action", "cost": { "feedTokens": 1 }, "fearDie": 20 },
-       { "id": "hungry", "label": "No Feed tokens (disadvantage)", "roll": "action", "resourceEmpty": "feedTokens", "defaultOn": true, "advantage": "disadvantage" },
-       { "id": "hungry-reaction", "label": "No Feed tokens (disadvantage)", "roll": "reaction", "resourceEmpty": "feedTokens", "defaultOn": true, "advantage": "disadvantage" }
-      ],
-      "rollTriggers": [
-       {
-        "id": "feed",
-        "label": "Feed",
-        "on": "attack",
-        "weapon": "Fangs",
-        "description": "Use only after a successful Fangs attack against a creature that can bleed.",
-        "tokenGain": { "resource": "feedTokens", "max": 6 },
-        "rollSection": "feature",
-        "cost": {
-         "stress": 1
-        }
-       }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "id": "werewolf",
-   "name": "Werewolf",
-   "text": "Werewolves are creatures who transform into large supernatural wolves.",
-   "features": [
-    {
-     "name": "Wolf Form",
-     "text": "When you mark 1 or more Hit Points, you can **mark a Stress** to enter your Wolf Form. While in this form, you gain a **1d10** bonus to attack and damage rolls. When you roll with Hope while in Wolf Form, you must mark a Stress. Your Wolf Form lasts until you go into your “Howling Rampage” or take a rest.",
-     "automation": {
-      "actions": [
-       {
-        "id": "use",
-        "label": "Wolf Form",
-        "cost": {
-         "stress": 1
+  "format" : "dmmap-daggerheart",
+  "version" : 2,
+  "category" : "transformations",
+  "label" : "Transformations",
+  "entries" : [ {
+    "id" : "demigod",
+    "name" : "Demigod",
+    "text" : "Demigods are mortal creatures whose veins flow with the blood of the gods.",
+    "features" : [ {
+      "name" : "Gifted",
+      "text" : "You gain a +1 bonus to action, reaction, and damage rolls.",
+      "automation" : {
+        "modifiers" : [ {
+          "stat" : "roll.action",
+          "value" : 1
+        }, {
+          "stat" : "roll.reaction",
+          "value" : 1
+        }, {
+          "stat" : "roll.damage",
+          "value" : 1
+        } ]
+      },
+      "id" : "gifted",
+      "_catalogFeatureId" : "4e4e98f9-4d27-303f-877e-7847c2f6b4f1"
+    }, {
+      "name" : "Weight of Divinity",
+      "text" : "When you fail a roll, you must mark a Stress or the GM gains a Fear.",
+      "_catalogFeatureId" : "ebd3fd82-dd14-3889-b192-e44198b3d6d8"
+    } ]
+  }, {
+    "id" : "ghost",
+    "name" : "Ghost",
+    "text" : "Ghosts are the spirits of the once-living who are bound to the Mortal Realm.",
+    "features" : [ {
+      "name" : "Unfinished Business",
+      "text" : "Work with your GM to decide what purpose or desire keeps you bound to the Mortal Realm. When you fulfill it, you cross through the veil of death.",
+      "_catalogFeatureId" : "baaee59a-13fd-3ec3-9ca7-18a02da8ee4c"
+    }, {
+      "name" : "Ephemeral",
+      "text" : "Your body wavers in and out of being corporeal. You are resistant to physical damage, take double magic damage, and can **mark 2 Stress** to momentarily pass through a solid object.",
+      "automation" : {
+        "rules" : [ {
+          "id" : "pass-through",
+          "bindings" : [ {
+            "id" : "sheet",
+            "event" : "action.request",
+            "surface" : "sheet",
+            "mode" : "button"
+          } ],
+          "costs" : [ {
+            "op" : "track.mark",
+            "track" : "actor.stress",
+            "amount" : 2
+          } ],
+          "ui" : {
+            "label" : "Pass through a solid object"
+          }
+        }, {
+          "id" : "physical-resistance",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "damage.prepare",
+            "surface" : "damage",
+            "mode" : "automatic"
+          } ],
+          "ui" : {
+            "label" : "Ephemeral physical resistance"
+          },
+          "when" : {
+            "and" : [ {
+              "gt" : [ {
+                "read" : "event.damage.amount"
+              }, 0 ]
+            }, {
+              "eq" : [ {
+                "read" : "event.damageType"
+              }, "physical" ]
+            } ]
+          },
+          "do" : [ {
+            "op" : "damage.reduce",
+            "from" : {
+              "read" : "event.damage"
+            },
+            "amount" : {
+              "floor" : {
+                "divide" : [ {
+                  "read" : "event.damage.amount"
+                }, 2 ]
+              }
+            },
+            "id" : "physical-resistance",
+            "label" : "Ephemeral physical resistance",
+            "as" : "reduced"
+          }, {
+            "op" : "damage.publish",
+            "damage" : {
+              "read" : "result.reduced.damage"
+            }
+          } ]
+        }, {
+          "id" : "magic-vulnerability",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "damage.prepare",
+            "surface" : "damage",
+            "mode" : "automatic"
+          } ],
+          "ui" : {
+            "label" : "Ephemeral double magic damage"
+          },
+          "when" : {
+            "and" : [ {
+              "gt" : [ {
+                "read" : "event.damage.amount"
+              }, 0 ]
+            }, {
+              "eq" : [ {
+                "read" : "event.damageType"
+              }, "magic" ]
+            } ]
+          },
+          "do" : [ {
+            "op" : "damage.increase",
+            "from" : {
+              "read" : "event.damage"
+            },
+            "amount" : {
+              "read" : "event.damage.amount"
+            },
+            "id" : "magic-vulnerability",
+            "label" : "Ephemeral double magic damage",
+            "as" : "reduced"
+          }, {
+            "op" : "damage.publish",
+            "damage" : {
+              "read" : "result.reduced.damage"
+            }
+          } ]
+        } ]
+      },
+      "id" : "ephemeral",
+      "_catalogFeatureId" : "1f557745-988e-37e8-85f2-2e1d3d687612"
+    } ]
+  }, {
+    "id" : "reanimated",
+    "name" : "Reanimated",
+    "text" : "Reanimated are corpses who have been brought back to life.",
+    "features" : [ {
+      "name" : "Corpse",
+      "text" : "During a rest, you can clear Hit Points only if you have access to remains from a recently deceased creature. Describe how you use these materials to maintain your corpse.",
+      "_catalogFeatureId" : "01bfbac4-e956-3774-b0e3-e8a0d215248c"
+    }, {
+      "name" : "Won’t Stay Dead",
+      "text" : "When you choose the Risk It All death move and fail, you can **permanently mark a Hit Point** to succeed instead. When you do, you still use the Hope Die’s value to clear Hit Points and Stress. When you permanently mark your last Hit Point, you pass through the veil of death.",
+      "automation" : {
+        "rules" : [ {
+          "id" : "undying",
+          "bindings" : [ {
+            "id" : "claim",
+            "event" : "roll.finished",
+            "surface" : "roll",
+            "mode" : "button",
+            "claimGroup" : "death-outcome",
+            "audience" : "self",
+            "claimScope" : {
+              "recipients" : "sourceActor"
+            }
+          } ],
+          "when" : {
+            "and" : [ {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "death" ]
+            }, {
+              "eq" : [ {
+                "read" : "event.check.move"
+              }, "risk" ]
+            }, {
+              "eq" : [ {
+                "read" : "event.check.dominant"
+              }, "fear" ]
+            }, {
+              "ne" : [ {
+                "read" : "event.check.critical"
+              }, true ]
+            } ]
+          },
+          "do" : [ {
+            "op" : "track.capacity",
+            "track" : "actor.hp",
+            "by" : -1,
+            "as" : "hp"
+          }, {
+            "op" : "roll.annotate",
+            "field" : "deathOutcome",
+            "value" : "hope",
+            "as" : "roll",
+            "from" : {
+              "read" : "event.roll"
+            }
+          }, {
+            "op" : "roll.publish",
+            "roll" : {
+              "read" : "result.roll"
+            }
+          } ],
+          "ui" : {
+            "label" : "Mark a Hit Point permanently to succeed with Hope",
+            "report" : "Permanently marked a Hit Point to succeed with Hope."
+          }
+        } ]
+      },
+      "id" : "won-t-stay-dead",
+      "_catalogFeatureId" : "aa5e7b20-520d-3619-9311-e3a44c609952"
+    } ]
+  }, {
+    "id" : "shapeshifter",
+    "name" : "Shapeshifter",
+    "text" : "Shapeshifters are creatures who can change their physical form.",
+    "features" : [ {
+      "name" : "Change Shape",
+      "text" : "During a rest, you can use a downtime move to swap your current ancestry with another. When you do, describe how your appearance changes.",
+      "automation" : {
+        "rules" : [ {
+          "id" : "change-ancestry",
+          "bindings" : [ {
+            "id" : "downtime",
+            "event" : "downtime.move",
+            "surface" : "downtime",
+            "mode" : "button",
+            "restMove" : {
+              "id" : "change-ancestry",
+              "kind" : "any"
+            }
+          } ],
+          "inputs" : [ {
+            "id" : "pick",
+            "kind" : "record.select",
+            "label" : "Ancestry and feature to take",
+            "choiceLabel" : "{input.option.ancestry} - {input.option.feature}",
+            "from" : {
+              "literal" : [ {
+                "ancestry" : "Aetheris",
+                "feature" : "Hallowed Aura",
+                "slot" : 0
+              }, {
+                "ancestry" : "Aetheris",
+                "feature" : "Celestial Wings",
+                "slot" : 1
+              }, {
+                "ancestry" : "Clank",
+                "feature" : "Purposeful Design",
+                "slot" : 0
+              }, {
+                "ancestry" : "Clank",
+                "feature" : "Efficient",
+                "slot" : 1
+              }, {
+                "ancestry" : "Drakona",
+                "feature" : "Scales",
+                "slot" : 0
+              }, {
+                "ancestry" : "Drakona",
+                "feature" : "Elemental Breath",
+                "slot" : 1
+              }, {
+                "ancestry" : "Dwarf",
+                "feature" : "Thick Skin",
+                "slot" : 0
+              }, {
+                "ancestry" : "Dwarf",
+                "feature" : "Increased Fortitude",
+                "slot" : 1
+              }, {
+                "ancestry" : "Earthkin",
+                "feature" : "Stoneskin",
+                "slot" : 0
+              }, {
+                "ancestry" : "Earthkin",
+                "feature" : "Immovable",
+                "slot" : 1
+              }, {
+                "ancestry" : "Elf",
+                "feature" : "Quick Reactions",
+                "slot" : 0
+              }, {
+                "ancestry" : "Elf",
+                "feature" : "Celestial Trance",
+                "slot" : 1
+              }, {
+                "ancestry" : "Emberkin",
+                "feature" : "Fireproof",
+                "slot" : 0
+              }, {
+                "ancestry" : "Emberkin",
+                "feature" : "Ignition",
+                "slot" : 1
+              }, {
+                "ancestry" : "Faerie",
+                "feature" : "Luckbender",
+                "slot" : 0
+              }, {
+                "ancestry" : "Faerie",
+                "feature" : "Wings",
+                "slot" : 1
+              }, {
+                "ancestry" : "Faun",
+                "feature" : "Caprine Leap",
+                "slot" : 0
+              }, {
+                "ancestry" : "Faun",
+                "feature" : "Kick",
+                "slot" : 1
+              }, {
+                "ancestry" : "Firbolg",
+                "feature" : "Charge",
+                "slot" : 0
+              }, {
+                "ancestry" : "Firbolg",
+                "feature" : "Unshakable",
+                "slot" : 1
+              }, {
+                "ancestry" : "Fungril",
+                "feature" : "Fungril Network",
+                "slot" : 0
+              }, {
+                "ancestry" : "Fungril",
+                "feature" : "Death Connection",
+                "slot" : 1
+              }, {
+                "ancestry" : "Galapa",
+                "feature" : "Shell",
+                "slot" : 0
+              }, {
+                "ancestry" : "Galapa",
+                "feature" : "Retract",
+                "slot" : 1
+              }, {
+                "ancestry" : "Giant",
+                "feature" : "Endurance",
+                "slot" : 0
+              }, {
+                "ancestry" : "Giant",
+                "feature" : "Reach",
+                "slot" : 1
+              }, {
+                "ancestry" : "Gnome",
+                "feature" : "Nimble Fingers",
+                "slot" : 0
+              }, {
+                "ancestry" : "Gnome",
+                "feature" : "Flicker Step",
+                "slot" : 1
+              }, {
+                "ancestry" : "Goblin",
+                "feature" : "Surefooted",
+                "slot" : 0
+              }, {
+                "ancestry" : "Goblin",
+                "feature" : "Danger Sense",
+                "slot" : 1
+              }, {
+                "ancestry" : "Halfling",
+                "feature" : "Luckbringer",
+                "slot" : 0
+              }, {
+                "ancestry" : "Halfling",
+                "feature" : "Internal Compass",
+                "slot" : 1
+              }, {
+                "ancestry" : "Human",
+                "feature" : "High Stamina",
+                "slot" : 0
+              }, {
+                "ancestry" : "Human",
+                "feature" : "Adaptability",
+                "slot" : 1
+              }, {
+                "ancestry" : "Infernis",
+                "feature" : "Fearless",
+                "slot" : 0
+              }, {
+                "ancestry" : "Infernis",
+                "feature" : "Dread Visage",
+                "slot" : 1
+              }, {
+                "ancestry" : "Katari",
+                "feature" : "Feline Instincts",
+                "slot" : 0
+              }, {
+                "ancestry" : "Katari",
+                "feature" : "Retracting Claws",
+                "slot" : 1
+              }, {
+                "ancestry" : "Orc",
+                "feature" : "Sturdy",
+                "slot" : 0
+              }, {
+                "ancestry" : "Orc",
+                "feature" : "Tusks",
+                "slot" : 1
+              }, {
+                "ancestry" : "Ribbet",
+                "feature" : "Amphibious",
+                "slot" : 0
+              }, {
+                "ancestry" : "Ribbet",
+                "feature" : "Long Tongue",
+                "slot" : 1
+              }, {
+                "ancestry" : "Simiah",
+                "feature" : "Natural Climber",
+                "slot" : 0
+              }, {
+                "ancestry" : "Simiah",
+                "feature" : "Nimble",
+                "slot" : 1
+              }, {
+                "ancestry" : "Skykin",
+                "feature" : "Gale Force",
+                "slot" : 0
+              }, {
+                "ancestry" : "Skykin",
+                "feature" : "Eye of the Storm",
+                "slot" : 1
+              }, {
+                "ancestry" : "Tidekin",
+                "feature" : "Amphibious",
+                "slot" : 0
+              }, {
+                "ancestry" : "Tidekin",
+                "feature" : "Lifespring",
+                "slot" : 1
+              }, {
+                "ancestry" : "Ursusfolk",
+                "feature" : "Iron Skin",
+                "slot" : 0
+              }, {
+                "ancestry" : "Ursusfolk",
+                "feature" : "Hunter's Nose",
+                "slot" : 1
+              }, {
+                "ancestry" : "Centaur",
+                "feature" : "Charge",
+                "slot" : 0
+              }, {
+                "ancestry" : "Centaur",
+                "feature" : "Kick",
+                "slot" : 1
+              }, {
+                "ancestry" : "Birdfolk",
+                "feature" : "Hawkeye",
+                "slot" : 0
+              }, {
+                "ancestry" : "Birdfolk",
+                "feature" : "Sprint Flight",
+                "slot" : 1
+              } ]
+            }
+          } ],
+          "do" : [ {
+            "op" : "heritage.replace",
+            "ancestry" : {
+              "read" : "input.pick.ancestry"
+            },
+            "feature" : {
+              "read" : "input.pick.feature"
+            }
+          } ],
+          "ui" : {
+            "label" : "Change ancestry and choose a feature"
+          }
+        } ]
+      },
+      "id" : "change-shape",
+      "_catalogFeatureId" : "51c3ef9a-6063-3544-8c6c-919d032f0f8f"
+    }, {
+      "name" : "Only Skin Deep",
+      "text" : "You gain the benefit of only one of your chosen ancestry’s features, which you select when you choose the ancestry. You can use a downtime move to choose a different feature from that ancestry.",
+      "automation" : {
+        "rules" : [ {
+          "id" : "change-feature",
+          "bindings" : [ {
+            "id" : "downtime",
+            "event" : "downtime.move",
+            "surface" : "downtime",
+            "mode" : "button",
+            "restMove" : {
+              "id" : "change-feature",
+              "kind" : "any"
+            }
+          } ],
+          "inputs" : [ {
+            "id" : "pick",
+            "kind" : "record.select",
+            "label" : "Ancestry feature to retain",
+            "choiceLabel" : "{input.option.ancestry} - {input.option.feature}",
+            "from" : {
+              "literal" : [ {
+                "ancestry" : "Aetheris",
+                "feature" : "Hallowed Aura",
+                "slot" : 0
+              }, {
+                "ancestry" : "Aetheris",
+                "feature" : "Celestial Wings",
+                "slot" : 1
+              }, {
+                "ancestry" : "Clank",
+                "feature" : "Purposeful Design",
+                "slot" : 0
+              }, {
+                "ancestry" : "Clank",
+                "feature" : "Efficient",
+                "slot" : 1
+              }, {
+                "ancestry" : "Drakona",
+                "feature" : "Scales",
+                "slot" : 0
+              }, {
+                "ancestry" : "Drakona",
+                "feature" : "Elemental Breath",
+                "slot" : 1
+              }, {
+                "ancestry" : "Dwarf",
+                "feature" : "Thick Skin",
+                "slot" : 0
+              }, {
+                "ancestry" : "Dwarf",
+                "feature" : "Increased Fortitude",
+                "slot" : 1
+              }, {
+                "ancestry" : "Earthkin",
+                "feature" : "Stoneskin",
+                "slot" : 0
+              }, {
+                "ancestry" : "Earthkin",
+                "feature" : "Immovable",
+                "slot" : 1
+              }, {
+                "ancestry" : "Elf",
+                "feature" : "Quick Reactions",
+                "slot" : 0
+              }, {
+                "ancestry" : "Elf",
+                "feature" : "Celestial Trance",
+                "slot" : 1
+              }, {
+                "ancestry" : "Emberkin",
+                "feature" : "Fireproof",
+                "slot" : 0
+              }, {
+                "ancestry" : "Emberkin",
+                "feature" : "Ignition",
+                "slot" : 1
+              }, {
+                "ancestry" : "Faerie",
+                "feature" : "Luckbender",
+                "slot" : 0
+              }, {
+                "ancestry" : "Faerie",
+                "feature" : "Wings",
+                "slot" : 1
+              }, {
+                "ancestry" : "Faun",
+                "feature" : "Caprine Leap",
+                "slot" : 0
+              }, {
+                "ancestry" : "Faun",
+                "feature" : "Kick",
+                "slot" : 1
+              }, {
+                "ancestry" : "Firbolg",
+                "feature" : "Charge",
+                "slot" : 0
+              }, {
+                "ancestry" : "Firbolg",
+                "feature" : "Unshakable",
+                "slot" : 1
+              }, {
+                "ancestry" : "Fungril",
+                "feature" : "Fungril Network",
+                "slot" : 0
+              }, {
+                "ancestry" : "Fungril",
+                "feature" : "Death Connection",
+                "slot" : 1
+              }, {
+                "ancestry" : "Galapa",
+                "feature" : "Shell",
+                "slot" : 0
+              }, {
+                "ancestry" : "Galapa",
+                "feature" : "Retract",
+                "slot" : 1
+              }, {
+                "ancestry" : "Giant",
+                "feature" : "Endurance",
+                "slot" : 0
+              }, {
+                "ancestry" : "Giant",
+                "feature" : "Reach",
+                "slot" : 1
+              }, {
+                "ancestry" : "Gnome",
+                "feature" : "Nimble Fingers",
+                "slot" : 0
+              }, {
+                "ancestry" : "Gnome",
+                "feature" : "Flicker Step",
+                "slot" : 1
+              }, {
+                "ancestry" : "Goblin",
+                "feature" : "Surefooted",
+                "slot" : 0
+              }, {
+                "ancestry" : "Goblin",
+                "feature" : "Danger Sense",
+                "slot" : 1
+              }, {
+                "ancestry" : "Halfling",
+                "feature" : "Luckbringer",
+                "slot" : 0
+              }, {
+                "ancestry" : "Halfling",
+                "feature" : "Internal Compass",
+                "slot" : 1
+              }, {
+                "ancestry" : "Human",
+                "feature" : "High Stamina",
+                "slot" : 0
+              }, {
+                "ancestry" : "Human",
+                "feature" : "Adaptability",
+                "slot" : 1
+              }, {
+                "ancestry" : "Infernis",
+                "feature" : "Fearless",
+                "slot" : 0
+              }, {
+                "ancestry" : "Infernis",
+                "feature" : "Dread Visage",
+                "slot" : 1
+              }, {
+                "ancestry" : "Katari",
+                "feature" : "Feline Instincts",
+                "slot" : 0
+              }, {
+                "ancestry" : "Katari",
+                "feature" : "Retracting Claws",
+                "slot" : 1
+              }, {
+                "ancestry" : "Orc",
+                "feature" : "Sturdy",
+                "slot" : 0
+              }, {
+                "ancestry" : "Orc",
+                "feature" : "Tusks",
+                "slot" : 1
+              }, {
+                "ancestry" : "Ribbet",
+                "feature" : "Amphibious",
+                "slot" : 0
+              }, {
+                "ancestry" : "Ribbet",
+                "feature" : "Long Tongue",
+                "slot" : 1
+              }, {
+                "ancestry" : "Simiah",
+                "feature" : "Natural Climber",
+                "slot" : 0
+              }, {
+                "ancestry" : "Simiah",
+                "feature" : "Nimble",
+                "slot" : 1
+              }, {
+                "ancestry" : "Skykin",
+                "feature" : "Gale Force",
+                "slot" : 0
+              }, {
+                "ancestry" : "Skykin",
+                "feature" : "Eye of the Storm",
+                "slot" : 1
+              }, {
+                "ancestry" : "Tidekin",
+                "feature" : "Amphibious",
+                "slot" : 0
+              }, {
+                "ancestry" : "Tidekin",
+                "feature" : "Lifespring",
+                "slot" : 1
+              }, {
+                "ancestry" : "Ursusfolk",
+                "feature" : "Iron Skin",
+                "slot" : 0
+              }, {
+                "ancestry" : "Ursusfolk",
+                "feature" : "Hunter's Nose",
+                "slot" : 1
+              }, {
+                "ancestry" : "Centaur",
+                "feature" : "Charge",
+                "slot" : 0
+              }, {
+                "ancestry" : "Centaur",
+                "feature" : "Kick",
+                "slot" : 1
+              }, {
+                "ancestry" : "Birdfolk",
+                "feature" : "Hawkeye",
+                "slot" : 0
+              }, {
+                "ancestry" : "Birdfolk",
+                "feature" : "Sprint Flight",
+                "slot" : 1
+              } ]
+            },
+            "where" : {
+              "and" : [ {
+                "ne" : [ {
+                  "indexOf" : [ {
+                    "split" : [ {
+                      "read" : "actor.ancestry"
+                    }, " / " ]
+                  }, {
+                    "read" : "input.option.ancestry"
+                  } ]
+                }, -1 ]
+              }, {
+                "or" : [ {
+                  "eq" : [ {
+                    "size" : {
+                      "split" : [ {
+                        "read" : "actor.ancestry"
+                      }, " / " ]
+                    }
+                  }, 1 ]
+                }, {
+                  "eq" : [ {
+                    "indexOf" : [ {
+                      "split" : [ {
+                        "read" : "actor.ancestry"
+                      }, " / " ]
+                    }, {
+                      "read" : "input.option.ancestry"
+                    } ]
+                  }, {
+                    "read" : "input.option.slot"
+                  } ]
+                } ]
+              }, {
+                "ne" : [ {
+                  "read" : "input.option.feature"
+                }, {
+                  "read" : "actor.ancestryFeature"
+                } ]
+              } ]
+            }
+          } ],
+          "do" : [ {
+            "op" : "heritage.replace",
+            "ancestry" : {
+              "read" : "actor.ancestry"
+            },
+            "feature" : {
+              "read" : "input.pick.feature"
+            }
+          } ],
+          "ui" : {
+            "label" : "Choose a different ancestry feature"
+          }
+        } ]
+      },
+      "id" : "only-skin-deep",
+      "_catalogFeatureId" : "8dc90230-3d61-38b2-b67f-b8f406044821"
+    } ]
+  }, {
+    "id" : "vampire",
+    "name" : "Vampire",
+    "text" : "Vampires are undead creatures with sharp fangs who feed on the blood of the living.",
+    "features" : [ {
+      "name" : "Fangs",
+      "text" : "Make an attack using a trait of your choice to bite a target within Melee range. On a success, deal **d6** physical damage using your Proficiency.",
+      "automation" : {
+        "rules" : [ {
+          "id" : "attack",
+          "bindings" : [ {
+            "id" : "sheet",
+            "event" : "action.request",
+            "surface" : "sheet",
+            "mode" : "button"
+          } ],
+          "do" : [ {
+            "op" : "roll.resolve",
+            "plan" : {
+              "literal" : {
+                "id" : "attack-roll",
+                "contributions" : [ {
+                  "id" : "attack-hope",
+                  "kind" : "dice",
+                  "role" : "hope",
+                  "sourceId" : "core",
+                  "label" : "Hope Die",
+                  "count" : 1,
+                  "sides" : 12
+                }, {
+                  "id" : "attack-fear",
+                  "kind" : "dice",
+                  "role" : "fear",
+                  "sourceId" : "core",
+                  "label" : "Fear Die",
+                  "count" : 1,
+                  "sides" : 12
+                }, {
+                  "id" : "attack-trait",
+                  "kind" : "flat",
+                  "role" : "modifier",
+                  "sourceId" : "core",
+                  "label" : "highest",
+                  "value" : {
+                    "max" : [ {
+                      "read" : "actor.traits.Agility"
+                    }, {
+                      "read" : "actor.traits.Strength"
+                    }, {
+                      "read" : "actor.traits.Finesse"
+                    }, {
+                      "read" : "actor.traits.Instinct"
+                    }, {
+                      "read" : "actor.traits.Presence"
+                    }, {
+                      "read" : "actor.traits.Knowledge"
+                    } ]
+                  }
+                } ],
+                "metadata" : {
+                  "kind" : "action",
+                  "trait" : "highest",
+                  "attack" : true,
+                  "origin" : "feat:Fangs"
+                }
+              }
+            },
+            "as" : "actionRoll"
+          } ],
+          "ui" : {
+            "label" : "Attack",
+            "report" : "Roll total: {result.actionRoll.total}."
+          }
+        }, {
+          "id" : "damage",
+          "bindings" : [ {
+            "id" : "sheet",
+            "event" : "action.request",
+            "surface" : "sheet",
+            "mode" : "button"
+          } ],
+          "do" : [ {
+            "op" : "roll.resolve",
+            "plan" : {
+              "literal" : {
+                "id" : "damage-damage",
+                "contributions" : [ {
+                  "id" : "damage-damage-dice",
+                  "kind" : "dice",
+                  "role" : "damage",
+                  "sourceId" : "core",
+                  "label" : "Damage",
+                  "count" : {
+                    "read" : "actor.proficiency.value"
+                  },
+                  "sides" : 6
+                } ],
+                "metadata" : {
+                  "kind" : "damage",
+                  "damageType" : "physical",
+                  "fixedDice" : false,
+                  "origin" : "feat:Fangs"
+                }
+              }
+            },
+            "as" : "actionDamage"
+          } ],
+          "ui" : {
+            "label" : "Damage",
+            "report" : "Damage total: {result.actionDamage.total}."
+          }
+        } ]
+      },
+      "id" : "fangs",
+      "_catalogFeatureId" : "1158609d-712e-36f4-9123-81efc467ed83"
+    }, {
+      "name" : "Feed",
+      "text" : "On a successful “Fangs” attack against a creature that can bleed, you can **mark a Stress** to feed. Place a number of tokens on this card equal to the number of Hit Points the target marks. You can hold up to 6 tokens at a time. Before you make an action roll, you can spend a token to make your Fear Die a **d20**. When you take a long rest, remove a token. While there are no tokens on this card, you make action and reaction rolls with disadvantage.",
+      "automation" : {
+        "pools" : {
+          "feedTokens" : {
+            "kind" : "number",
+            "scope" : "actor",
+            "label" : "Feed tokens",
+            "max" : 6,
+            "initial" : 0
+          }
         },
-        "steps": [
-         { "op": "effect", "effect": { "name": "Wolf Form", "kind": "buff", "until": "rest", "modifiers": [
-          { "roll": "attack", "dice": "1d10" }, { "roll": "damage", "dice": "1d10" }
-         ] } }
-        ]
-       }
-      ],
-      "mitigation": [
-       { "id": "wolf-form", "label": "Enter Wolf Form", "when": { "markingHp": true }, "excludesEffect": "Wolf Form", "cost": { "stress": 1 },
-        "effect": { "name": "Wolf Form", "kind": "buff", "until": "rest", "modifiers": [
-         { "roll": "attack", "dice": "1d10" }, { "roll": "damage", "dice": "1d10" }
-        ] }
-       }
-      ],
-      "rollTriggers": [
-       { "id": "hope-stress", "label": "Wolf Form: mark Stress", "on": "duality", "when": "hopeOrCritical", "requiresEffect": "Wolf Form", "cost": { "stress": 1 } }
-      ]
-     }
-    },
-    {
-     "name": "Howling Rampage",
-     "text": "When you mark your last Stress while in Wolf Form, you go into a rampage. Roll a number of **d20**s equal to your tier and deal that much physical damage to all creatures within Very Close range, then drop out of Wolf Form.",
-     "automation": {
-      "actions": [
-       { "id": "rampage", "label": "Howling Rampage", "requiresEffect": "Wolf Form", "sendRoll": { "dice": "@tierd20", "label": "Howling Rampage - physical damage (Very Close)" }, "endEffect": "Wolf Form" }
-      ]
-     }
-    }
-   ]
-  }
- ]
+        "rules" : [ {
+          "id" : "long-rest-loss-feedTokens",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "rest.long",
+            "surface" : "resource",
+            "mode" : "automatic"
+          } ],
+          "ui" : {
+            "label" : "Feed tokens",
+            "report" : "Lost {result.lost} Feed tokens during the long rest."
+          },
+          "when" : {
+            "gt" : [ {
+              "read" : "actor.pools.feedTokens.value"
+            }, 0 ]
+          },
+          "do" : [ {
+            "op" : "pool.spend",
+            "pool" : "feedTokens",
+            "as" : "lost",
+            "amount" : {
+              "min" : [ {
+                "read" : "actor.pools.feedTokens.value"
+              }, 1 ]
+            }
+          } ]
+        }, {
+          "id" : "feed-fear",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "roll.prepare",
+            "surface" : "roll",
+            "mode" : "option"
+          } ],
+          "ui" : {
+            "label" : "Spend a token (Fear d20)"
+          },
+          "when" : {
+            "or" : [ {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "action" ]
+            }, {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "attack" ]
+            }, {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "spellcast" ]
+            } ]
+          },
+          "costs" : [ {
+            "op" : "pool.spend",
+            "pool" : "feedTokens",
+            "amount" : 1
+          } ],
+          "do" : [ {
+            "op" : "roll.selectDice",
+            "from" : {
+              "read" : "event.roll"
+            },
+            "where" : {
+              "eq" : [ {
+                "read" : "die.role"
+              }, "fear" ]
+            },
+            "as" : "fearDice"
+          }, {
+            "op" : "roll.resize",
+            "from" : {
+              "read" : "event.roll"
+            },
+            "dice" : {
+              "read" : "result.fearDice"
+            },
+            "sides" : 20,
+            "as" : "fearResized"
+          }, {
+            "op" : "roll.publish",
+            "roll" : {
+              "read" : "result.fearResized"
+            }
+          } ]
+        }, {
+          "id" : "hungry",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "roll.prepare",
+            "surface" : "roll",
+            "mode" : "option",
+            "defaultOn" : true
+          } ],
+          "ui" : {
+            "label" : "No Feed tokens (disadvantage)"
+          },
+          "when" : {
+            "and" : [ {
+              "or" : [ {
+                "eq" : [ {
+                  "read" : "event.check.kind"
+                }, "action" ]
+              }, {
+                "eq" : [ {
+                  "read" : "event.check.kind"
+                }, "attack" ]
+              }, {
+                "eq" : [ {
+                  "read" : "event.check.kind"
+                }, "spellcast" ]
+              } ]
+            }, {
+              "eq" : [ {
+                "read" : "actor.pools.feedTokens.value"
+              }, 0 ]
+            } ]
+          },
+          "do" : [ {
+            "op" : "roll.annotate",
+            "from" : {
+              "read" : "event.roll"
+            },
+            "field" : "disadvantageSuggested",
+            "value" : true,
+            "as" : "suggested"
+          }, {
+            "op" : "roll.publish",
+            "roll" : {
+              "read" : "result.suggested"
+            }
+          } ]
+        }, {
+          "id" : "hungry-reaction",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "roll.prepare",
+            "surface" : "roll",
+            "mode" : "option",
+            "defaultOn" : true
+          } ],
+          "ui" : {
+            "label" : "No Feed tokens (disadvantage)"
+          },
+          "when" : {
+            "and" : [ {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "reaction" ]
+            }, {
+              "eq" : [ {
+                "read" : "actor.pools.feedTokens.value"
+              }, 0 ]
+            } ]
+          },
+          "do" : [ {
+            "op" : "roll.annotate",
+            "from" : {
+              "read" : "event.roll"
+            },
+            "field" : "disadvantageSuggested",
+            "value" : true,
+            "as" : "suggested"
+          }, {
+            "op" : "roll.publish",
+            "roll" : {
+              "read" : "result.suggested"
+            }
+          } ]
+        }, {
+          "id" : "feed",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "roll.finished",
+            "surface" : "roll",
+            "mode" : "button",
+            "group" : "sourceFeature"
+          } ],
+          "ui" : {
+            "label" : "Feed",
+            "description" : "Use only after a successful Fangs attack against a creature that can bleed."
+          },
+          "when" : {
+            "and" : [ {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "attack" ]
+            }, {
+              "eq" : [ {
+                "read" : "event.check.sourceName"
+              }, "Fangs" ]
+            } ]
+          },
+          "costs" : [ {
+            "op" : "track.mark",
+            "track" : "actor.stress",
+            "amount" : 1
+          } ],
+          "inputs" : [ {
+            "id" : "amount",
+            "kind" : "integer",
+            "label" : "HP marked by the target",
+            "min" : 1,
+            "max" : 6
+          } ],
+          "do" : [ {
+            "op" : "pool.gain",
+            "pool" : "feedTokens",
+            "as" : "gained",
+            "amount" : {
+              "read" : "input.amount"
+            }
+          } ]
+        } ]
+      },
+      "id" : "feed",
+      "_catalogFeatureId" : "58783842-38bb-359e-a91f-78affa8da68b"
+    } ]
+  }, {
+    "id" : "werewolf",
+    "name" : "Werewolf",
+    "text" : "Werewolves are creatures who transform into large supernatural wolves.",
+    "features" : [ {
+      "name" : "Wolf Form",
+      "text" : "When you mark 1 or more Hit Points, you can **mark a Stress** to enter your Wolf Form. While in this form, you gain a **1d10** bonus to attack and damage rolls. When you roll with Hope while in Wolf Form, you must mark a Stress. Your Wolf Form lasts until you go into your “Howling Rampage” or take a rest.",
+      "automation" : {
+        "effects" : {
+          "wolf-form" : {
+            "label" : "Wolf Form",
+            "kind" : "buff",
+            "until" : [ "rest.short", "rest.long" ],
+            "modifiers" : [ ]
+          },
+          "wolf-form-2" : {
+            "label" : "Wolf Form",
+            "kind" : "buff",
+            "until" : [ "rest.short", "rest.long" ],
+            "modifiers" : [ ]
+          }
+        },
+        "rules" : [ {
+          "id" : "use",
+          "bindings" : [ {
+            "id" : "sheet",
+            "event" : "action.request",
+            "surface" : "sheet",
+            "mode" : "button"
+          } ],
+          "costs" : [ {
+            "op" : "track.mark",
+            "track" : "actor.stress",
+            "amount" : 1
+          } ],
+          "do" : [ {
+            "op" : "effect.start",
+            "effect" : "wolf-form",
+            "target" : "actor"
+          } ],
+          "ui" : {
+            "label" : "Wolf Form"
+          }
+        }, {
+          "id" : "hope-stress",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "roll.finished",
+            "surface" : "roll",
+            "mode" : "button"
+          } ],
+          "ui" : {
+            "label" : "Wolf Form: mark Stress"
+          },
+          "when" : {
+            "and" : [ {
+              "or" : [ {
+                "and" : [ {
+                  "exists" : "event.check.duality"
+                }, {
+                  "eq" : [ {
+                    "read" : "event.check.duality"
+                  }, true ]
+                } ]
+              }, {
+                "and" : [ {
+                  "exists" : "event.check.dominant"
+                }, {
+                  "ne" : [ {
+                    "read" : "event.check.dominant"
+                  }, null ]
+                } ]
+              } ]
+            }, {
+              "or" : [ {
+                "eq" : [ {
+                  "read" : "event.check.dominant"
+                }, "hope" ]
+              }, {
+                "eq" : [ {
+                  "read" : "event.check.critical"
+                }, true ]
+              } ]
+            }, {
+              "includes" : [ {
+                "pluck" : [ {
+                  "read" : "actor.effects"
+                }, "label" ]
+              }, "Wolf Form" ]
+            } ]
+          },
+          "costs" : [ {
+            "op" : "track.mark",
+            "track" : "actor.stress",
+            "amount" : 1
+          } ]
+        }, {
+          "id" : "wolf-form",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "damage.applied",
+            "surface" : "damage",
+            "mode" : "button"
+          } ],
+          "ui" : {
+            "label" : "Enter Wolf Form"
+          },
+          "when" : {
+            "and" : [ {
+              "gt" : [ {
+                "read" : "event.applied.incoming"
+              }, 0 ]
+            }, {
+              "gt" : [ {
+                "read" : "event.applied.wouldMark"
+              }, 0 ]
+            }, {
+              "not" : {
+                "includes" : [ {
+                  "pluck" : [ {
+                    "read" : "actor.effects"
+                  }, "label" ]
+                }, "Wolf Form" ]
+              }
+            } ]
+          },
+          "costs" : [ {
+            "op" : "track.mark",
+            "track" : "actor.stress",
+            "amount" : 1
+          } ],
+          "do" : [ {
+            "op" : "effect.start",
+            "effect" : "wolf-form-2",
+            "target" : "actor"
+          } ]
+        }, {
+          "id" : "bonus-0",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "roll.prepare",
+            "surface" : "roll",
+            "mode" : "automatic"
+          } ],
+          "ui" : {
+            "label" : "Wolf Form"
+          },
+          "when" : {
+            "and" : [ {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "attack" ]
+            }, {
+              "includes" : [ {
+                "pluck" : [ {
+                  "read" : "actor.effects"
+                }, "label" ]
+              }, "Wolf Form" ]
+            } ]
+          },
+          "do" : [ {
+            "op" : "roll.contribute",
+            "from" : {
+              "read" : "event.roll"
+            },
+            "contribution" : {
+              "id" : "bonus-0-dice",
+              "kind" : "dice",
+              "role" : "modifier",
+              "label" : "Wolf Form",
+              "count" : 1,
+              "sides" : 10
+            },
+            "as" : "roll1"
+          }, {
+            "op" : "roll.publish",
+            "roll" : {
+              "read" : "result.roll1"
+            }
+          } ]
+        }, {
+          "id" : "bonus-1",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "roll.prepare",
+            "surface" : "roll",
+            "mode" : "automatic"
+          } ],
+          "ui" : {
+            "label" : "Wolf Form"
+          },
+          "when" : {
+            "and" : [ {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "damage" ]
+            }, {
+              "includes" : [ {
+                "pluck" : [ {
+                  "read" : "actor.effects"
+                }, "label" ]
+              }, "Wolf Form" ]
+            } ]
+          },
+          "do" : [ {
+            "op" : "roll.contribute",
+            "from" : {
+              "read" : "event.roll"
+            },
+            "contribution" : {
+              "id" : "bonus-1-dice",
+              "kind" : "dice",
+              "role" : "damage",
+              "label" : "Wolf Form",
+              "count" : 1,
+              "sides" : 10
+            },
+            "as" : "roll1"
+          }, {
+            "op" : "roll.publish",
+            "roll" : {
+              "read" : "result.roll1"
+            }
+          } ]
+        }, {
+          "id" : "bonus-0-2",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "roll.prepare",
+            "surface" : "roll",
+            "mode" : "automatic"
+          } ],
+          "ui" : {
+            "label" : "Wolf Form"
+          },
+          "when" : {
+            "and" : [ {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "attack" ]
+            }, {
+              "includes" : [ {
+                "pluck" : [ {
+                  "read" : "actor.effects"
+                }, "label" ]
+              }, "Wolf Form" ]
+            } ]
+          },
+          "do" : [ {
+            "op" : "roll.contribute",
+            "from" : {
+              "read" : "event.roll"
+            },
+            "contribution" : {
+              "id" : "bonus-0-dice",
+              "kind" : "dice",
+              "role" : "modifier",
+              "label" : "Wolf Form",
+              "count" : 1,
+              "sides" : 10
+            },
+            "as" : "roll1"
+          }, {
+            "op" : "roll.publish",
+            "roll" : {
+              "read" : "result.roll1"
+            }
+          } ]
+        }, {
+          "id" : "bonus-1-2",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "roll.prepare",
+            "surface" : "roll",
+            "mode" : "automatic"
+          } ],
+          "ui" : {
+            "label" : "Wolf Form"
+          },
+          "when" : {
+            "and" : [ {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "damage" ]
+            }, {
+              "includes" : [ {
+                "pluck" : [ {
+                  "read" : "actor.effects"
+                }, "label" ]
+              }, "Wolf Form" ]
+            } ]
+          },
+          "do" : [ {
+            "op" : "roll.contribute",
+            "from" : {
+              "read" : "event.roll"
+            },
+            "contribution" : {
+              "id" : "bonus-1-dice",
+              "kind" : "dice",
+              "role" : "damage",
+              "label" : "Wolf Form",
+              "count" : 1,
+              "sides" : 10
+            },
+            "as" : "roll1"
+          }, {
+            "op" : "roll.publish",
+            "roll" : {
+              "read" : "result.roll1"
+            }
+          } ]
+        } ]
+      },
+      "id" : "wolf-form",
+      "_catalogFeatureId" : "fd884cdd-b8ad-3f5c-93e2-1a2ab466aa04"
+    }, {
+      "name" : "Howling Rampage",
+      "text" : "When you mark your last Stress while in Wolf Form, you go into a rampage. Roll a number of **d20**s equal to your tier and deal that much physical damage to all creatures within Very Close range, then drop out of Wolf Form.",
+      "automation" : {
+        "rules" : [ {
+          "id" : "rampage",
+          "bindings" : [ {
+            "id" : "sheet",
+            "event" : "action.request",
+            "surface" : "sheet",
+            "mode" : "button"
+          } ],
+          "when" : {
+            "includes" : [ {
+              "pluck" : [ {
+                "read" : "actor.effects"
+              }, "label" ]
+            }, "Wolf Form" ]
+          },
+          "do" : [ {
+            "op" : "roll.resolve",
+            "plan" : {
+              "literal" : {
+                "id" : "rampage-roll",
+                "contributions" : [ {
+                  "id" : "rampage-roll-dice",
+                  "kind" : "dice",
+                  "role" : "roll",
+                  "sourceId" : "core",
+                  "label" : "Howling Rampage - physical damage (Very Close)",
+                  "count" : {
+                    "max" : [ 0, {
+                      "read" : "actor.stats.tier"
+                    } ]
+                  },
+                  "sides" : 20
+                } ],
+                "metadata" : {
+                  "kind" : "roll",
+                  "label" : "Howling Rampage - physical damage (Very Close)",
+                  "origin" : "feat:Howling Rampage"
+                }
+              }
+            },
+            "as" : "sentRoll"
+          }, {
+            "op" : "effect.endLabeled",
+            "label" : "Wolf Form",
+            "target" : "actor"
+          } ],
+          "ui" : {
+            "label" : "Howling Rampage",
+            "report" : "Howling Rampage - physical damage (Very Close): {result.sentRoll.total}."
+          }
+        } ]
+      },
+      "id" : "howling-rampage",
+      "_catalogFeatureId" : "0a7cdbdb-5acc-3ea1-980b-9f196aa214ff"
+    } ]
+  } ]
 }

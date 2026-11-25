@@ -1,400 +1,961 @@
 {
- "format": "dmmap-daggerheart",
- "version": 1,
- "category": "communities",
- "label": "Communities",
- "entries": [
-  {
-   "id": "duneborne",
-   "name": "Duneborne",
-   "text": "Being part of a duneborne community means you’ve made a home among the shifting sands and arid climate of the desert.",
-   "features": [
-    {
-     "name": "Oasis",
-     "text": "During a short rest, you or an ally can reroll a die used for a downtime move and take the higher result.",
-     "automation": {
-      "restReroll": true,
-      "uses": { "max": 1, "per": "rest" }
-     }
-    }
-   ]
-  },
-  {
-   "id": "freeborne",
-   "name": "Freeborne",
-   "text": "Being part of a freeborne community means you’re from a collective that once lived under tyrannical rule but is now liberated.",
-   "features": [
-    {
-     "name": "Unbound",
-     "text": "Once per session when you roll with **Fear**, you can change it into a roll with Hope instead.",
-     "automation": {
-      "uses": {
-       "max": 1,
-       "per": "session"
-      },
-      "actions": [
-       { "id": "use", "label": "Unbound" }
-      ],
-      "rollTriggers": [
-       {
-        "id": "hope",
-        "label": "Unbound: change Fear into Hope",
-        "on": "duality",
-        "when": "fear",
-        "description": "The GM does not gain Fear.",
-        "outcome": "hope"
-       }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "id": "frostborne",
-   "name": "Frostborne",
-   "text": "Being part of a frostborne community means you come from a place of snow and ice.",
-   "features": [
-    {
-     "name": "Hardy",
-     "text": "When you take a rest, you clear a Hit Point.",
-     "automation": {
-      "rest": {
-       "passives": [
-        {
-         "id": "recovery",
-         "label": "clear 1 HP",
-         "defaultOn": true,
-         "steps": [
-          {
-           "op": "clear",
-           "resource": "hp",
-           "amount": 1
+  "format" : "dmmap-daggerheart",
+  "version" : 2,
+  "category" : "communities",
+  "label" : "Communities",
+  "entries" : [ {
+    "id" : "duneborne",
+    "name" : "Duneborne",
+    "text" : "Being part of a duneborne community means you’ve made a home among the shifting sands and arid climate of the desert.",
+    "features" : [ {
+      "name" : "Oasis",
+      "text" : "During a short rest, you or an ally can reroll a die used for a downtime move and take the higher result.",
+      "automation" : {
+        "limits" : {
+          "uses" : {
+            "max" : 1,
+            "resetOn" : [ "rest.short", "rest.long" ]
           }
-         ]
-        }
-       ]
-      }
-     }
-    }
-   ]
-  },
-  {
-   "id": "hearthborne",
-   "name": "Hearthborne",
-   "text": "Being part of a hearthborne community means you come from humble origins, having lived in a modest village or quaint countryside.",
-   "features": [
-    {
-     "name": "Close-Knit",
-     "text": "Once per long rest, you can **spend any number of Hope** to grant an ally within Far range an equal number of Hope.",
-     "automation": {
-      "uses": {
-       "max": 1,
-       "per": "longRest"
+        },
+        "rules" : [ {
+          "id" : "rest-reroll",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "rest.roll",
+            "surface" : "chat",
+            "mode" : "button"
+          } ],
+          "limitRef" : "uses",
+          "do" : [ {
+            "op" : "roll.keptDice",
+            "role" : "downtime",
+            "as" : "dice",
+            "from" : {
+              "read" : "event.roll"
+            }
+          }, {
+            "op" : "roll.reroll",
+            "choose" : "higherTotal",
+            "as" : "rerolled",
+            "from" : {
+              "read" : "event.roll"
+            },
+            "dice" : {
+              "read" : "result.dice"
+            }
+          }, {
+            "op" : "roll.publish",
+            "roll" : {
+              "read" : "result.rerolled"
+            }
+          } ],
+          "ui" : {
+            "label" : "Reroll downtime die",
+            "report" : "{actor.name} rerolled the downtime die and kept {result.rerolled.total}."
+          }
+        } ]
       },
-      "actions": [
-       {
-        "id": "use",
-        "label": "Close-Knit",
-        "target": "actor",
-        "transferHope": true
-       }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "id": "highborne",
-   "name": "Highborne",
-   "text": "Being part of a highborne community means you’re accustomed to a life of elegance, opulence, and prestige within the upper echelons of society.",
-   "features": [
-    {
-     "name": "Privilege",
-     "text": "You have advantage on rolls to consort with nobles, negotiate prices, or leverage your reputation to get what you want.",
-     "automation": {
-      "rollOptions": [
-       {
-        "id": "advantage",
-        "label": "Privilege",
-        "roll": "action",
-        "excludeRolls": ["attack"],
-        "advantage": "advantage",
-        "description": "You have advantage on rolls to consort with nobles, negotiate prices, or leverage your reputation to get what you want."
-       }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "id": "loreborne",
-   "name": "Loreborne",
-   "text": "Being part of a loreborne community means you’re from a society that favors strong academic or political prowess.",
-   "features": [
-    {
-     "name": "Well-Read",
-     "text": "You have advantage on rolls that involve the history, culture, or politics of a prominent person or place.",
-     "automation": {
-      "rollOptions": [
-       {
-        "id": "advantage",
-        "label": "Well-Read",
-        "roll": "action",
-        "advantage": "advantage",
-        "description": "You have advantage on rolls that involve the history, culture, or politics of a prominent person or place."
-       }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "id": "orderborne",
-   "name": "Orderborne",
-   "text": "Being part of an orderborne community means you’re from a collective that focuses on discipline or faith, and you uphold a set of principles that reflect your experience there.",
-   "features": [
-    {
-     "name": "Dedicated",
-     "text": "Record three sayings or values your upbringing instilled in you. Once per rest, when you describe how you’re embodying one of these principles through your current action, you can roll a d20 as your Hope Die.",
-     "automation": {
-      "uses": {
-       "max": 1,
-       "per": "rest"
+      "id" : "oasis",
+      "_catalogFeatureId" : "cf604894-e8a7-3fb2-871c-be118c6bf1f7"
+    } ]
+  }, {
+    "id" : "freeborne",
+    "name" : "Freeborne",
+    "text" : "Being part of a freeborne community means you’re from a collective that once lived under tyrannical rule but is now liberated.",
+    "features" : [ {
+      "name" : "Unbound",
+      "text" : "Once per session when you roll with **Fear**, you can change it into a roll with Hope instead.",
+      "automation" : {
+        "limits" : {
+          "uses" : {
+            "max" : 1,
+            "resetOn" : [ "session.start" ]
+          }
+        },
+        "rules" : [ {
+          "id" : "use",
+          "bindings" : [ {
+            "id" : "sheet",
+            "event" : "action.request",
+            "surface" : "sheet",
+            "mode" : "button"
+          } ],
+          "limitRef" : "uses",
+          "ui" : {
+            "label" : "Unbound"
+          }
+        }, {
+          "id" : "hope",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "roll.finished",
+            "surface" : "roll",
+            "mode" : "button"
+          } ],
+          "ui" : {
+            "label" : "Unbound: change Fear into Hope",
+            "description" : "The GM does not gain Fear."
+          },
+          "when" : {
+            "and" : [ {
+              "or" : [ {
+                "and" : [ {
+                  "exists" : "event.check.duality"
+                }, {
+                  "eq" : [ {
+                    "read" : "event.check.duality"
+                  }, true ]
+                } ]
+              }, {
+                "and" : [ {
+                  "exists" : "event.check.dominant"
+                }, {
+                  "ne" : [ {
+                    "read" : "event.check.dominant"
+                  }, null ]
+                } ]
+              } ]
+            }, {
+              "eq" : [ {
+                "read" : "event.check.dominant"
+              }, "fear" ]
+            }, {
+              "ne" : [ {
+                "read" : "event.check.critical"
+              }, true ]
+            }, {
+              "ne" : [ {
+                "read" : "event.check.dominant"
+              }, "hope" ]
+            }, {
+              "ne" : [ {
+                "read" : "event.check.critical"
+              }, true ]
+            } ]
+          },
+          "limitRef" : "uses"
+        } ]
       },
-      "actions": [
-       {
-        "id": "use",
-        "label": "Dedicated"
-       }
-       ],
-       "rollOptions": [
-       {
-        "id": "hope-die",
-        "label": "Dedicated (Hope d20)",
-        "roll": "action",
-        "hopeDie": 20,
-        "description": "Embody one of your principles to change your hope die to a d20."
-       }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "id": "reborne",
-   "name": "Reborne",
-   "text": "You were once a member of a different community that you’re no longer part of.",
-   "features": [
-    {
-     "name": "Found Family",
-     "text": "Once per rest, you can **spend a Hope** to use an ally’s Experience as if it were your own. When you do so, describe how your time with that ally prepared you for this moment.\nWhen you join a new community or rediscover your old one, you can permanently trade this card for that one instead.",
-     "automation": {
-      "uses": {
-       "max": 1,
-       "per": "rest"
+      "id" : "unbound",
+      "_catalogFeatureId" : "971023ce-ae27-3e5e-92e4-804496e995d8"
+    } ]
+  }, {
+    "id" : "frostborne",
+    "name" : "Frostborne",
+    "text" : "Being part of a frostborne community means you come from a place of snow and ice.",
+    "features" : [ {
+      "name" : "Hardy",
+      "text" : "When you take a rest, you clear a Hit Point.",
+      "automation" : {
+        "rules" : [ {
+          "id" : "recovery",
+          "bindings" : [ {
+            "id" : "rest-short",
+            "event" : "rest.short",
+            "surface" : "rest",
+            "mode" : "option",
+            "defaultOn" : true
+          }, {
+            "id" : "rest-long",
+            "event" : "rest.long",
+            "surface" : "rest",
+            "mode" : "option",
+            "defaultOn" : true
+          } ],
+          "ui" : {
+            "label" : "clear 1 HP"
+          },
+          "do" : [ {
+            "op" : "track.clear",
+            "track" : "actor.hp",
+            "amount" : 1
+          } ]
+        } ]
       },
-      "rollOptions": [
-       {
-        "id": "use",
-        "label": "Found Family",
-        "roll": "action",
-        "input": { "label": "Ally Experience bonus", "default": 2, "min": 0, "max": 20 },
-        "cost": {
-         "hope": 1
-        }
-       }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "id": "ridgeborne",
-   "name": "Ridgeborne",
-   "text": "Being part of a ridgeborne community means you’ve called the rocky peaks and sharp cliffs of the mountainside home.",
-   "features": [
-    {
-     "name": "Steady",
-     "text": "You have advantage on rolls to traverse dangerous cliffs and ledges, navigate harsh environments, and use your survival knowledge.",
-     "automation": {
-      "rollOptions": [
-       {
-        "id": "advantage",
-        "label": "Steady",
-        "roll": "action",
-        "advantage": "advantage",
-        "description": "You have advantage on rolls to traverse dangerous cliffs and ledges, navigate harsh environments, and use your survival knowledge."
-       }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "id": "seaborne",
-   "name": "Seaborne",
-   "text": "Being part of a seaborne community means you lived on or near a large body of water.",
-   "features": [
-    {
-     "name": "Know the Tide",
-     "text": "You can sense the ebb and flow of life. When you roll with Fear, place a token on this card. You can hold a number of tokens equal to your level. Before you make an action roll, you can spend any number of these tokens to gain a +1 bonus to the roll for each token spent. At the end of each session, clear all unspent tokens.",
-     "automation": {
-      "resources": [
-       {
-        "id": "tide",
-        "label": "Tide",
-        "initial": 0,
-        "max": "@level",
-        "session": true
-       }
-      ],
-      "rollTriggers": [
-       {
-        "id": "gain",
-        "label": "Gain Tide token",
-        "on": "duality",
-        "when": "fear",
-        "steps": [
-         {
-          "op": "gain",
-          "resource": "tide",
-          "amount": 1
-         }
-        ]
-       }
-      ],
-      "rollOptions": [
-       {
-        "id": "tide",
-        "label": "Spend Tide token",
-        "roll": "action",
-        "value": 1,
-        "quantity": { "resource": "tide", "label": "Tide tokens" },
-        "cost": {
-         "tide": 1
-        }
-       }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "id": "slyborne",
-   "name": "Slyborne",
-   "text": "Being part of a slyborne community means you come from a group that operates outside the law, including all manner of criminals, grifters, and con artists.",
-   "features": [
-    {
-     "name": "Scoundrel",
-     "text": "You have advantage on rolls to negotiate with criminals, detect lies, or find a safe place to hide.",
-     "automation": {
-      "rollOptions": [
-       {
-        "id": "advantage",
-        "label": "Scoundrel",
-        "roll": "action",
-        "advantage": "advantage",
-        "description": "You have advantage on rolls to negotiate with criminals, detect lies, or find a safe place to hide."
-       }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "id": "underborne",
-   "name": "Underborne",
-   "text": "Being part of an underborne community means you’re from a subterranean society.",
-   "features": [
-    {
-     "name": "Low-Light Living",
-     "text": "When you’re in an area with low light or heavy shadow, you have advantage on rolls to hide, investigate, or perceive details within that area.",
-     "automation": {
-      "rollOptions": [
-       {
-        "id": "advantage",
-        "label": "Low-Light Living",
-        "roll": "action",
-        "advantage": "advantage",
-        "excludeRolls": [
-         "attack"
-        ],
-        "description": "When you’re in an area with low light or heavy shadow, you have advantage on rolls to hide, investigate, or perceive details within that area."
-       }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "id": "wanderborne",
-   "name": "Wanderborne",
-   "text": "Being part of a wanderborne community means you’ve lived as a nomad, forgoing a permanent home and experiencing a wide variety of cultures.",
-   "features": [
-    {
-     "name": "Nomadic Pack",
-     "text": "Add a Nomadic Pack to your inventory. Once per session, you can **spend a Hope** to reach into this pack and pull out a mundane item that’s useful to your situation. Work with the GM to figure out what item you take out.",
-     "automation": {
-      "uses": {
-       "max": 1,
-       "per": "session"
+      "id" : "hardy",
+      "_catalogFeatureId" : "bb7534dd-d0ba-3c36-a0a4-ded69f77070a"
+    } ]
+  }, {
+    "id" : "hearthborne",
+    "name" : "Hearthborne",
+    "text" : "Being part of a hearthborne community means you come from humble origins, having lived in a modest village or quaint countryside.",
+    "features" : [ {
+      "name" : "Close-Knit",
+      "text" : "Once per long rest, you can **spend any number of Hope** to grant an ally within Far range an equal number of Hope.",
+      "automation" : {
+        "limits" : {
+          "uses" : {
+            "max" : 1,
+            "resetOn" : [ "rest.long" ]
+          }
+        },
+        "rules" : [ {
+          "id" : "use",
+          "bindings" : [ {
+            "id" : "sheet",
+            "event" : "action.request",
+            "surface" : "sheet",
+            "mode" : "button",
+            "targetSelection" : {
+              "cardinality" : "one",
+              "scope" : "connectedPlayerCharacters",
+              "excludeSource" : true
+            }
+          } ],
+          "inputs" : [ {
+            "id" : "amount",
+            "kind" : "integer",
+            "label" : "Hope to give",
+            "min" : 1,
+            "max" : {
+              "read" : "actor.hope.value"
+            }
+          } ],
+          "when" : {
+            "gte" : [ {
+              "read" : "actor.hope.value"
+            }, 1 ]
+          },
+          "costs" : [ {
+            "op" : "resource.spend",
+            "pool" : "actor.hope",
+            "amount" : {
+              "read" : "input.amount"
+            }
+          } ],
+          "limitRef" : "uses",
+          "do" : [ {
+            "op" : "resource.gain",
+            "pool" : "recipient.hope",
+            "amount" : {
+              "read" : "input.amount"
+            }
+          } ],
+          "ui" : {
+            "label" : "Close-Knit",
+            "report" : "Gave {input.amount} Hope to {recipient.name}."
+          }
+        } ]
       },
-      "actions": [
-       {
-        "id": "use",
-        "label": "Nomadic Pack",
-        "cost": { "hope": 1 }
-       }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "id": "warborne",
-   "name": "Warborne",
-   "text": "Being part of a warborne community means you come from a place that is, or was, ravaged by war.",
-   "features": [
-    {
-     "name": "Brave Face",
-     "text": "Once per session when you would be forced to **mark a Stress**, you can **spend a Hope** instead.",
-     "automation": {
-      "uses": {
-       "max": 1,
-       "per": "session"
+      "id" : "close-knit",
+      "_catalogFeatureId" : "9d7d5ba1-9d9c-36de-b0fc-3e4e6e0c113c"
+    } ]
+  }, {
+    "id" : "highborne",
+    "name" : "Highborne",
+    "text" : "Being part of a highborne community means you’re accustomed to a life of elegance, opulence, and prestige within the upper echelons of society.",
+    "features" : [ {
+      "name" : "Privilege",
+      "text" : "You have advantage on rolls to consort with nobles, negotiate prices, or leverage your reputation to get what you want.",
+      "automation" : {
+        "rules" : [ {
+          "id" : "advantage",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "roll.prepare",
+            "surface" : "roll",
+            "mode" : "option"
+          } ],
+          "ui" : {
+            "label" : "Privilege",
+            "description" : "You have advantage on rolls to consort with nobles, negotiate prices, or leverage your reputation to get what you want."
+          },
+          "when" : {
+            "and" : [ {
+              "or" : [ {
+                "eq" : [ {
+                  "read" : "event.check.kind"
+                }, "action" ]
+              }, {
+                "eq" : [ {
+                  "read" : "event.check.kind"
+                }, "attack" ]
+              }, {
+                "eq" : [ {
+                  "read" : "event.check.kind"
+                }, "spellcast" ]
+              } ]
+            }, {
+              "ne" : [ {
+                "read" : "event.check.kind"
+              }, "attack" ]
+            } ]
+          },
+          "do" : [ {
+            "op" : "roll.annotate",
+            "from" : {
+              "read" : "event.roll"
+            },
+            "field" : "advantageSuggested",
+            "value" : true,
+            "as" : "suggested"
+          }, {
+            "op" : "roll.publish",
+            "roll" : {
+              "read" : "result.suggested"
+            }
+          } ]
+        } ]
       },
-      "actions": [
-       {
-        "id": "use",
-        "label": "Brave Face",
-        "cost": { "hope": 1 }
-       }
-      ]
-     }
-    }
-   ]
-  },
-  {
-   "id": "wildborne",
-   "name": "Wildborne",
-   "text": "Being part of a wildborne community means you lived deep within the forest.",
-   "features": [
-    {
-     "name": "Lightfoot",
-     "text": "Your movement is naturally silent. You have advantage on rolls to move without being heard.",
-     "automation": {
-      "rollOptions": [
-       {
-        "id": "advantage",
-        "label": "Lightfoot",
-        "roll": "action",
-        "advantage": "advantage",
-        "description": "Your movement is naturally silent. You have advantage on rolls to move without being heard."
-       }
-      ]
-     }
-    }
-   ]
-  }
- ]
+      "id" : "privilege",
+      "_catalogFeatureId" : "be0bca2b-dd5c-3a0f-a58c-6b4c5c27d48d"
+    } ]
+  }, {
+    "id" : "loreborne",
+    "name" : "Loreborne",
+    "text" : "Being part of a loreborne community means you’re from a society that favors strong academic or political prowess.",
+    "features" : [ {
+      "name" : "Well-Read",
+      "text" : "You have advantage on rolls that involve the history, culture, or politics of a prominent person or place.",
+      "automation" : {
+        "rules" : [ {
+          "id" : "advantage",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "roll.prepare",
+            "surface" : "roll",
+            "mode" : "option"
+          } ],
+          "ui" : {
+            "label" : "Well-Read",
+            "description" : "You have advantage on rolls that involve the history, culture, or politics of a prominent person or place."
+          },
+          "when" : {
+            "or" : [ {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "action" ]
+            }, {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "attack" ]
+            }, {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "spellcast" ]
+            } ]
+          },
+          "do" : [ {
+            "op" : "roll.annotate",
+            "from" : {
+              "read" : "event.roll"
+            },
+            "field" : "advantageSuggested",
+            "value" : true,
+            "as" : "suggested"
+          }, {
+            "op" : "roll.publish",
+            "roll" : {
+              "read" : "result.suggested"
+            }
+          } ]
+        } ]
+      },
+      "id" : "well-read",
+      "_catalogFeatureId" : "e3978407-66cb-3f44-89e5-3208e71eea2e"
+    } ]
+  }, {
+    "id" : "orderborne",
+    "name" : "Orderborne",
+    "text" : "Being part of an orderborne community means you’re from a collective that focuses on discipline or faith, and you uphold a set of principles that reflect your experience there.",
+    "features" : [ {
+      "name" : "Dedicated",
+      "text" : "Record three sayings or values your upbringing instilled in you. Once per rest, when you describe how you’re embodying one of these principles through your current action, you can roll a d20 as your Hope Die.",
+      "automation" : {
+        "limits" : {
+          "uses" : {
+            "max" : 1,
+            "resetOn" : [ "rest.short", "rest.long" ]
+          }
+        },
+        "rules" : [ {
+          "id" : "use",
+          "bindings" : [ {
+            "id" : "sheet",
+            "event" : "action.request",
+            "surface" : "sheet",
+            "mode" : "button"
+          } ],
+          "limitRef" : "uses",
+          "ui" : {
+            "label" : "Dedicated"
+          }
+        }, {
+          "id" : "hope-die",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "roll.prepare",
+            "surface" : "roll",
+            "mode" : "option"
+          } ],
+          "ui" : {
+            "label" : "Dedicated (Hope d20)",
+            "description" : "Embody one of your principles to change your hope die to a d20."
+          },
+          "when" : {
+            "or" : [ {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "action" ]
+            }, {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "attack" ]
+            }, {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "spellcast" ]
+            } ]
+          },
+          "limitRef" : "uses",
+          "do" : [ {
+            "op" : "roll.selectDice",
+            "from" : {
+              "read" : "event.roll"
+            },
+            "where" : {
+              "eq" : [ {
+                "read" : "die.role"
+              }, "hope" ]
+            },
+            "as" : "hopeDice"
+          }, {
+            "op" : "roll.resize",
+            "from" : {
+              "read" : "event.roll"
+            },
+            "dice" : {
+              "read" : "result.hopeDice"
+            },
+            "sides" : 20,
+            "as" : "hopeResized"
+          }, {
+            "op" : "roll.publish",
+            "roll" : {
+              "read" : "result.hopeResized"
+            }
+          } ]
+        } ]
+      },
+      "id" : "dedicated",
+      "_catalogFeatureId" : "975c0658-9e6d-3440-a7be-92f68f61c246"
+    } ]
+  }, {
+    "id" : "reborne",
+    "name" : "Reborne",
+    "text" : "You were once a member of a different community that you’re no longer part of.",
+    "features" : [ {
+      "name" : "Found Family",
+      "text" : "Once per rest, you can **spend a Hope** to use an ally’s Experience as if it were your own. When you do so, describe how your time with that ally prepared you for this moment.\nWhen you join a new community or rediscover your old one, you can permanently trade this card for that one instead.",
+      "automation" : {
+        "limits" : {
+          "uses" : {
+            "max" : 1,
+            "resetOn" : [ "rest.short", "rest.long" ]
+          }
+        },
+        "rules" : [ {
+          "id" : "use",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "roll.prepare",
+            "surface" : "roll",
+            "mode" : "option"
+          } ],
+          "ui" : {
+            "label" : "Found Family"
+          },
+          "inputs" : [ {
+            "id" : "bonus",
+            "kind" : "integer",
+            "label" : "Ally Experience bonus",
+            "min" : 0,
+            "max" : 20,
+            "default" : 2
+          } ],
+          "when" : {
+            "or" : [ {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "action" ]
+            }, {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "attack" ]
+            }, {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "spellcast" ]
+            } ]
+          },
+          "costs" : [ {
+            "op" : "resource.spend",
+            "pool" : "actor.hope",
+            "amount" : 1
+          } ],
+          "limitRef" : "uses",
+          "do" : [ {
+            "op" : "roll.contribute",
+            "from" : {
+              "read" : "event.roll"
+            },
+            "contribution" : {
+              "id" : "use-input",
+              "kind" : "flat",
+              "role" : "modifier",
+              "label" : "Found Family",
+              "value" : {
+                "read" : "input.bonus"
+              }
+            },
+            "as" : "roll1"
+          }, {
+            "op" : "roll.publish",
+            "roll" : {
+              "read" : "result.roll1"
+            }
+          } ]
+        } ]
+      },
+      "id" : "found-family",
+      "_catalogFeatureId" : "c49f4e80-b766-3c7e-a578-99b5439e7607"
+    } ]
+  }, {
+    "id" : "ridgeborne",
+    "name" : "Ridgeborne",
+    "text" : "Being part of a ridgeborne community means you’ve called the rocky peaks and sharp cliffs of the mountainside home.",
+    "features" : [ {
+      "name" : "Steady",
+      "text" : "You have advantage on rolls to traverse dangerous cliffs and ledges, navigate harsh environments, and use your survival knowledge.",
+      "automation" : {
+        "rules" : [ {
+          "id" : "advantage",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "roll.prepare",
+            "surface" : "roll",
+            "mode" : "option"
+          } ],
+          "ui" : {
+            "label" : "Steady",
+            "description" : "You have advantage on rolls to traverse dangerous cliffs and ledges, navigate harsh environments, and use your survival knowledge."
+          },
+          "when" : {
+            "or" : [ {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "action" ]
+            }, {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "attack" ]
+            }, {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "spellcast" ]
+            } ]
+          },
+          "do" : [ {
+            "op" : "roll.annotate",
+            "from" : {
+              "read" : "event.roll"
+            },
+            "field" : "advantageSuggested",
+            "value" : true,
+            "as" : "suggested"
+          }, {
+            "op" : "roll.publish",
+            "roll" : {
+              "read" : "result.suggested"
+            }
+          } ]
+        } ]
+      },
+      "id" : "steady",
+      "_catalogFeatureId" : "2acf44a6-d8dc-33c6-a898-e06e2ebf62be"
+    } ]
+  }, {
+    "id" : "seaborne",
+    "name" : "Seaborne",
+    "text" : "Being part of a seaborne community means you lived on or near a large body of water.",
+    "features" : [ {
+      "name" : "Know the Tide",
+      "text" : "You can sense the ebb and flow of life. When you roll with Fear, place a token on this card. You can hold a number of tokens equal to your level. Before you make an action roll, you can spend any number of these tokens to gain a +1 bonus to the roll for each token spent. At the end of each session, clear all unspent tokens.",
+      "automation" : {
+        "pools" : {
+          "tide" : {
+            "kind" : "number",
+            "scope" : "actor",
+            "label" : "Tide",
+            "max" : {
+              "read" : "actor.level"
+            },
+            "initial" : 0,
+            "resetOn" : [ "session.start" ]
+          }
+        },
+        "rules" : [ {
+          "id" : "tide",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "roll.prepare",
+            "surface" : "roll",
+            "mode" : "option"
+          } ],
+          "ui" : {
+            "label" : "Spend Tide token"
+          },
+          "inputs" : [ {
+            "id" : "quantity",
+            "kind" : "integer",
+            "label" : "Tide tokens",
+            "min" : 1,
+            "max" : {
+              "read" : "actor.pools.tide.value"
+            }
+          } ],
+          "when" : {
+            "and" : [ {
+              "or" : [ {
+                "eq" : [ {
+                  "read" : "event.check.kind"
+                }, "action" ]
+              }, {
+                "eq" : [ {
+                  "read" : "event.check.kind"
+                }, "attack" ]
+              }, {
+                "eq" : [ {
+                  "read" : "event.check.kind"
+                }, "spellcast" ]
+              } ]
+            }, {
+              "gte" : [ {
+                "read" : "actor.pools.tide.value"
+              }, 1 ]
+            } ]
+          },
+          "costs" : [ {
+            "op" : "pool.spend",
+            "pool" : "tide",
+            "amount" : {
+              "multiply" : [ 1, {
+                "read" : "input.quantity"
+              } ]
+            }
+          } ],
+          "do" : [ {
+            "op" : "roll.contribute",
+            "from" : {
+              "read" : "event.roll"
+            },
+            "contribution" : {
+              "id" : "tide-flat",
+              "kind" : "flat",
+              "role" : "modifier",
+              "label" : "Spend Tide token",
+              "value" : {
+                "multiply" : [ 1, {
+                  "read" : "input.quantity"
+                } ]
+              }
+            },
+            "as" : "roll1"
+          }, {
+            "op" : "roll.publish",
+            "roll" : {
+              "read" : "result.roll1"
+            }
+          } ]
+        }, {
+          "id" : "gain",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "roll.finished",
+            "surface" : "roll",
+            "mode" : "button"
+          } ],
+          "ui" : {
+            "label" : "Gain Tide token"
+          },
+          "when" : {
+            "and" : [ {
+              "or" : [ {
+                "and" : [ {
+                  "exists" : "event.check.duality"
+                }, {
+                  "eq" : [ {
+                    "read" : "event.check.duality"
+                  }, true ]
+                } ]
+              }, {
+                "and" : [ {
+                  "exists" : "event.check.dominant"
+                }, {
+                  "ne" : [ {
+                    "read" : "event.check.dominant"
+                  }, null ]
+                } ]
+              } ]
+            }, {
+              "eq" : [ {
+                "read" : "event.check.dominant"
+              }, "fear" ]
+            }, {
+              "ne" : [ {
+                "read" : "event.check.critical"
+              }, true ]
+            } ]
+          },
+          "do" : [ {
+            "op" : "pool.gain",
+            "pool" : "tide",
+            "amount" : 1
+          } ]
+        } ]
+      },
+      "id" : "know-the-tide",
+      "_catalogFeatureId" : "704aa9a0-e423-3039-b13c-a99ed1e8b763"
+    } ]
+  }, {
+    "id" : "slyborne",
+    "name" : "Slyborne",
+    "text" : "Being part of a slyborne community means you come from a group that operates outside the law, including all manner of criminals, grifters, and con artists.",
+    "features" : [ {
+      "name" : "Scoundrel",
+      "text" : "You have advantage on rolls to negotiate with criminals, detect lies, or find a safe place to hide.",
+      "automation" : {
+        "rules" : [ {
+          "id" : "advantage",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "roll.prepare",
+            "surface" : "roll",
+            "mode" : "option"
+          } ],
+          "ui" : {
+            "label" : "Scoundrel",
+            "description" : "You have advantage on rolls to negotiate with criminals, detect lies, or find a safe place to hide."
+          },
+          "when" : {
+            "or" : [ {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "action" ]
+            }, {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "attack" ]
+            }, {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "spellcast" ]
+            } ]
+          },
+          "do" : [ {
+            "op" : "roll.annotate",
+            "from" : {
+              "read" : "event.roll"
+            },
+            "field" : "advantageSuggested",
+            "value" : true,
+            "as" : "suggested"
+          }, {
+            "op" : "roll.publish",
+            "roll" : {
+              "read" : "result.suggested"
+            }
+          } ]
+        } ]
+      },
+      "id" : "scoundrel",
+      "_catalogFeatureId" : "2b84ab40-77a7-3b39-b9c4-801a5bb8355b"
+    } ]
+  }, {
+    "id" : "underborne",
+    "name" : "Underborne",
+    "text" : "Being part of an underborne community means you’re from a subterranean society.",
+    "features" : [ {
+      "name" : "Low-Light Living",
+      "text" : "When you’re in an area with low light or heavy shadow, you have advantage on rolls to hide, investigate, or perceive details within that area.",
+      "automation" : {
+        "rules" : [ {
+          "id" : "advantage",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "roll.prepare",
+            "surface" : "roll",
+            "mode" : "option"
+          } ],
+          "ui" : {
+            "label" : "Low-Light Living",
+            "description" : "When you’re in an area with low light or heavy shadow, you have advantage on rolls to hide, investigate, or perceive details within that area."
+          },
+          "when" : {
+            "and" : [ {
+              "or" : [ {
+                "eq" : [ {
+                  "read" : "event.check.kind"
+                }, "action" ]
+              }, {
+                "eq" : [ {
+                  "read" : "event.check.kind"
+                }, "attack" ]
+              }, {
+                "eq" : [ {
+                  "read" : "event.check.kind"
+                }, "spellcast" ]
+              } ]
+            }, {
+              "ne" : [ {
+                "read" : "event.check.kind"
+              }, "attack" ]
+            } ]
+          },
+          "do" : [ {
+            "op" : "roll.annotate",
+            "from" : {
+              "read" : "event.roll"
+            },
+            "field" : "advantageSuggested",
+            "value" : true,
+            "as" : "suggested"
+          }, {
+            "op" : "roll.publish",
+            "roll" : {
+              "read" : "result.suggested"
+            }
+          } ]
+        } ]
+      },
+      "id" : "low-light-living",
+      "_catalogFeatureId" : "50792497-0db4-34b0-89c5-e36e35bf3e5c"
+    } ]
+  }, {
+    "id" : "wanderborne",
+    "name" : "Wanderborne",
+    "text" : "Being part of a wanderborne community means you’ve lived as a nomad, forgoing a permanent home and experiencing a wide variety of cultures.",
+    "features" : [ {
+      "name" : "Nomadic Pack",
+      "text" : "Add a Nomadic Pack to your inventory. Once per session, you can **spend a Hope** to reach into this pack and pull out a mundane item that’s useful to your situation. Work with the GM to figure out what item you take out.",
+      "automation" : {
+        "limits" : {
+          "uses" : {
+            "max" : 1,
+            "resetOn" : [ "session.start" ]
+          }
+        },
+        "rules" : [ {
+          "id" : "use",
+          "bindings" : [ {
+            "id" : "sheet",
+            "event" : "action.request",
+            "surface" : "sheet",
+            "mode" : "button"
+          } ],
+          "costs" : [ {
+            "op" : "resource.spend",
+            "pool" : "actor.hope",
+            "amount" : 1
+          } ],
+          "limitRef" : "uses",
+          "ui" : {
+            "label" : "Nomadic Pack"
+          }
+        } ]
+      },
+      "id" : "nomadic-pack",
+      "_catalogFeatureId" : "312a01f2-4a0d-3923-9488-0c1d22baf47b"
+    } ]
+  }, {
+    "id" : "warborne",
+    "name" : "Warborne",
+    "text" : "Being part of a warborne community means you come from a place that is, or was, ravaged by war.",
+    "features" : [ {
+      "name" : "Brave Face",
+      "text" : "Once per session when you would be forced to **mark a Stress**, you can **spend a Hope** instead.",
+      "automation" : {
+        "limits" : {
+          "uses" : {
+            "max" : 1,
+            "resetOn" : [ "session.start" ]
+          }
+        },
+        "rules" : [ {
+          "id" : "use",
+          "bindings" : [ {
+            "id" : "sheet",
+            "event" : "action.request",
+            "surface" : "sheet",
+            "mode" : "button"
+          } ],
+          "costs" : [ {
+            "op" : "resource.spend",
+            "pool" : "actor.hope",
+            "amount" : 1
+          } ],
+          "limitRef" : "uses",
+          "ui" : {
+            "label" : "Brave Face"
+          }
+        } ]
+      },
+      "id" : "brave-face",
+      "_catalogFeatureId" : "d10d4525-1512-3a54-9021-43fb26121261"
+    } ]
+  }, {
+    "id" : "wildborne",
+    "name" : "Wildborne",
+    "text" : "Being part of a wildborne community means you lived deep within the forest.",
+    "features" : [ {
+      "name" : "Lightfoot",
+      "text" : "Your movement is naturally silent. You have advantage on rolls to move without being heard.",
+      "automation" : {
+        "rules" : [ {
+          "id" : "advantage",
+          "bindings" : [ {
+            "id" : "use",
+            "event" : "roll.prepare",
+            "surface" : "roll",
+            "mode" : "option"
+          } ],
+          "ui" : {
+            "label" : "Lightfoot",
+            "description" : "Your movement is naturally silent. You have advantage on rolls to move without being heard."
+          },
+          "when" : {
+            "or" : [ {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "action" ]
+            }, {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "attack" ]
+            }, {
+              "eq" : [ {
+                "read" : "event.check.kind"
+              }, "spellcast" ]
+            } ]
+          },
+          "do" : [ {
+            "op" : "roll.annotate",
+            "from" : {
+              "read" : "event.roll"
+            },
+            "field" : "advantageSuggested",
+            "value" : true,
+            "as" : "suggested"
+          }, {
+            "op" : "roll.publish",
+            "roll" : {
+              "read" : "result.suggested"
+            }
+          } ]
+        } ]
+      },
+      "id" : "lightfoot",
+      "_catalogFeatureId" : "71e9158e-ae4d-3a3c-8d92-0ef6333394f3"
+    } ]
+  } ]
 }
