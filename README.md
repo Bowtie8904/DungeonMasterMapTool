@@ -394,6 +394,10 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   sheet, or focus it and press Enter/Space. Row text is not selectable, and single-clicking no longer moves the camera. Disabled and
   testing indicators remain visible; token customization and pop-out controls are inside the sheet.
 - **Daggerheart character sheet**: players open sheets from My actors.
+  Saved sheets are formatted JSON; catalog-backed feature and domain-card descriptions and rules are stored
+  by reference when unmodified, so catalog updates appear without removing and re-adding them. Custom content,
+  overrides and character state remain on the sheet. Existing sheets migrate when next saved. Keep the referenced
+  compendium files available; missing entries must be restored before affected sheets can open.
   **Edit mode** is off by default; its labeled On/Off switch sits beside the sheet title
   and is hidden when minimized, with extra spacing from the title and a muted gray label while off.
   Enable it to edit the character name, portrait (hover/focus for **Edit image**),

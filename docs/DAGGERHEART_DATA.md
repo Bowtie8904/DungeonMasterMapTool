@@ -90,7 +90,13 @@ authorize catalog edits: `GET/PUT /api/dm/catalog/{category}` requires the loopb
 Catalog writes emit an additive `catalogChanged` notification. Browser/DM compendiums reload their caches;
 open sheets flush pending player edits and request current rules. The host also resolves rules on sheet reads,
 saves and authoritative feature actions, so closed/offline sheets use current JSON after reopening/restarting.
-Sheet reads project the latest rules without rewriting character files; the next sheet save persists that projection.
+Sheet reads project the latest rules without rewriting character files. On the next save, unchanged
+catalog-backed class/heritage features and domain-card text, automation and grimoire spells are stored as
+references instead of duplicate content; sheet JSON is pretty-printed. Equipment and custom or overridden
+fields remain stored normally. The host resolves these storage-only references before sending full sheets
+to clients or using their rules. If a referenced entry or learned feature is missing, restore the catalog
+entry before opening the sheet; keep the catalogs with campaign backups. Older application versions cannot
+read the compact on-disk representation, although existing clients continue to receive full sheets.
 This is not a character rebuild: tracks, resource values, quantities, spent-use counters, choices, advancements
 and notes remain intact. Class starting values and `automation.creation` grants are not reapplied.
 

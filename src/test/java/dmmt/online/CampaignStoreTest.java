@@ -581,14 +581,14 @@ class CampaignStoreTest {
         Path journal = dir.resolve(campaign.getId()).resolve("sheet-transfer.json");
         Files.writeString(journal, "{\"source\":{\"qty\":0},\"target\":{\"qty\":1}}");
         CampaignStore reopened = new CampaignStore(dir);
-        assertEquals("{\"qty\":1}", reopened.loadSheet(campaign.getId(), "target"));
-        assertEquals("{\"qty\":0}", reopened.loadSheet(campaign.getId(), "source"));
-        assertTrue(Files.notExists(journal));
         var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        assertEquals(1, mapper.readTree(reopened.loadSheet(campaign.getId(), "target")).path("qty").asInt());
+        assertEquals(0, mapper.readTree(reopened.loadSheet(campaign.getId(), "source")).path("qty").asInt());
+        assertTrue(Files.notExists(journal));
         reopened.transferSheets(campaign.getId(), "source", mapper.createObjectNode().put("qty", 1),
                 "target", mapper.createObjectNode().put("qty", 0));
-        assertEquals("{\"qty\":1}", reopened.loadSheet(campaign.getId(), "source"));
-        assertEquals("{\"qty\":0}", reopened.loadSheet(campaign.getId(), "target"));
+        assertEquals(1, mapper.readTree(reopened.loadSheet(campaign.getId(), "source")).path("qty").asInt());
+        assertEquals(0, mapper.readTree(reopened.loadSheet(campaign.getId(), "target")).path("qty").asInt());
     }
 
     @Test

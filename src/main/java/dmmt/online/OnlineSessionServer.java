@@ -513,7 +513,10 @@ public final class OnlineSessionServer {
 
     private void refreshCatalogSheet(ObjectNode sheet) throws IOException {
         java.nio.file.Path directory = host.compendiumDirectory();
-        if (directory == null || !java.nio.file.Files.isDirectory(directory)) return;
+        if (directory == null || !java.nio.file.Files.isDirectory(directory)) {
+            SheetReferences.resolve(sheet, List.of());
+            return;
+        }
         catalogs().refresh(sheet);
         for (String location : List.of("loadout", "vault"))
             for (JsonNode node : sheet.path(location)) {
@@ -1511,6 +1514,8 @@ public final class OnlineSessionServer {
                 for (var entry : grants.entrySet()) sendFeatureState(c.actor(entry.getKey()), entry.getValue());
             }
             json(ctx, 200, sheetState(actor));
+        } catch (SheetReferences.MissingReference e) {
+            json(ctx, 500, errorBody(e.getMessage()));
         } catch (IOException e) {
             json(ctx, 500, errorBody("Could not read the character sheet."));
             return;
@@ -1724,6 +1729,8 @@ public final class OnlineSessionServer {
             json(ctx, 400, errorBody("Invalid sheet"));
         } catch (IllegalArgumentException e) {
             json(ctx, 400, errorBody(e.getMessage()));
+        } catch (SheetReferences.MissingReference e) {
+            json(ctx, 500, errorBody(e.getMessage()));
         } catch (IOException e) {
             json(ctx, 500, errorBody("Could not read or save the character sheet."));
         }

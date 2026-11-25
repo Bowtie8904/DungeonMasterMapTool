@@ -128,6 +128,7 @@ final class HostCatalog {
                     throw new CatalogEditor.Rejected(400, "Catalog must be an object with an entries list.");
                 files.add(object);
             }
+            SheetReferences.resolve(sheet, files);
             CatalogSheets.refresh(sheet, files);
         }
 

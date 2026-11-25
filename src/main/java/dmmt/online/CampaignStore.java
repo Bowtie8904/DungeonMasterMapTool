@@ -512,7 +512,9 @@ public final class CampaignStore {
         invalidateSheet(file);
         Files.createDirectories(file.getParent());
         Path temp = file.resolveSibling(actorId + ".json.tmp");
-        Files.writeString(temp, json, java.nio.charset.StandardCharsets.UTF_8);
+        JsonNode sheet = MAPPER.readTree(json);
+        if (sheet instanceof ObjectNode object) SheetReferences.compact(object);
+        MAPPER.writerWithDefaultPrettyPrinter().writeValue(temp.toFile(), sheet);
         Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
     }
 

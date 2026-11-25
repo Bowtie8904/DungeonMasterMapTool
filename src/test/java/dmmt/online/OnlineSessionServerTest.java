@@ -15,6 +15,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.WebSocket;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -1010,6 +1011,46 @@ class OnlineSessionServerTest {
         if (version != null) request.header("If-Match", version);
         return http.send(request.PUT(HttpRequest.BodyPublishers.ofString(patch.toString())).build(),
                 HttpResponse.BodyHandlers.ofString());
+    }
+
+    @Test
+    void referencedFeaturesRemainFullOnWireAcrossPatchesAndCatalogChanges() throws Exception {
+        compendiumDir = Files.createDirectories(temp.resolve("reference-catalog"));
+        Path classes = compendiumDir.resolve("classes.json");
+        Files.writeString(classes, """
+                {"category":"classes","entries":[{"id":"bard","name":"Bard","kind":"class","features":[
+                {"name":"Check","text":"Original rules","automation":{"actions":[
+                {"id":"check","label":"Check","check":{"dice":"1d6","unless":0,"mark":"stress"}}]}}]}]}
+                """);
+        campaign.getActors().add(Campaign.Actor.builder().id("reference").name("Hero").ownerId(playerId()).build());
+        ObjectNode initial = performanceSheet().put("className", "Bard");
+        ((ObjectNode) initial.path("features").get(0)).put("source", "Class feature - Bard").put("text", "Original rules");
+        store.saveSheet(campaign.getId(), "reference", initial.toString());
+        String cookie = cookie();
+        JsonNode baseline = MAPPER.readTree(sheetRead(cookie, "reference").body());
+        ObjectNode patch = MAPPER.createObjectNode();
+        patch.putObject("fields").put("notes", "Saved");
+        patch.putArray("removed");
+        var saved = patchSheet(cookie, "reference", patch, baseline.path("version").asText());
+        assertEquals(200, saved.statusCode(), saved.body());
+        JsonNode full = MAPPER.readTree(saved.body());
+        assertEquals("Original rules", full.path("sheet").path("features").get(0).path("text").asText());
+        assertFalse(store.loadSheet(campaign.getId(), "reference").contains("Original rules"));
+        assertFalse(full.toString().contains("_storedFields"));
+        Files.writeString(classes, Files.readString(classes).replace("Original rules", "Updated rules"));
+        var updated = sheetRead(cookie, "reference");
+        assertEquals(200, updated.statusCode(), updated.body());
+        JsonNode current = MAPPER.readTree(updated.body());
+        assertEquals("Updated rules", current.path("sheet").path("features").get(0).path("text").asText());
+        assertEquals("Saved", current.path("sheet").path("notes").asText());
+        patch.withObject("/fields").put("notes", "Second save");
+        var second = patchSheet(cookie, "reference", patch, current.path("version").asText());
+        assertEquals(200, second.statusCode(), second.body());
+        assertEquals(409, patchSheet(cookie, "reference", patch, current.path("version").asText()).statusCode());
+        Files.delete(classes);
+        var missing = sheetRead(cookie, "reference");
+        assertEquals(500, missing.statusCode());
+        assertTrue(missing.body().contains("Missing catalog reference classes/bard"));
     }
 
     @Test
