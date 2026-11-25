@@ -97,7 +97,7 @@ public class Campaign {
         @Builder.Default
         private String domainCardView = "card";
         private String color;
-        /** {@code argon2id$m$t$p$saltB64$hashB64}; empty until the DM sets a password. */
+        /** {@code argon2id$m$t$p$saltB64$hashB64}; absent until configured, even empty passwords are hashed. */
         private String passwordHash;
     }
 

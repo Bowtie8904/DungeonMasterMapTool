@@ -248,7 +248,7 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   appearance. The DM can still open/close locked portals. Browser controls require a supporting host;
   DM Link now requires compatibility version 7 on both machines because map snapshots include locks.
 - **Campaigns** are separate from maps: each has a game system (currently Daggerheart; no gameplay effect yet),
-  players (username + password, set/reset by you), actors (artwork, owner, a mock character sheet that is not saved),
+  players (username + optional password, set/reset by you), actors (artwork, owner, a mock character sheet that is not saved),
   and per-player fog memory that survives map switches, sessions and browsers. Campaigns live in
   `online.campaignsDirectory` (default: a `dmmap-campaigns` folder beside the settings file; the older `campaigns`
   folder is not migrated).
@@ -256,8 +256,10 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   subtabs. Everything is managed with tables and right-click menus; F2 renames and Delete removes:
   - **Campaigns:** name, system, player and actor counts. Select a row to make it active; right-click to open,
     rename, create or delete. *New campaign* asks for a name and a game system.
-  - **Players:** username, password state, owned actors and online status with ping. Right-click to set the
-    password, rename, kick, add or delete (renaming, a new password or deleting signs the player out).
+  - **Players:** username, credential state, owned actors and online status with ping. Usernames need at least one
+    non-whitespace character. Passwords can be any length, including blank; anyone can claim an account without a
+    password. Right-click to set the password, rename, kick, add or delete (renaming, a new password or deleting
+    signs the player out). A configured credential can be a blank password; a missing credential cannot sign in.
   - **Actors:** a folder tree with all folders expanded by default and each actor's artwork (default token art when
     none) and owner. Folders can still be collapsed. Right-click for owner, artwork, rename, remove, place at view
     centre and folder management; drag actors and folders into folders, or **drag an actor straight onto the map**
@@ -356,7 +358,7 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   actors, and normal character creation, advancement and loadout limits still apply.
 - **Actor tokens** are stored in the map file; older builds still open such maps. Actor tokens of other campaigns
   are flagged in the Actors tab and can be removed there (never automatic).
-- Share the invite link; players pick their name and enter their password (failed logins are rate limited).
+- Share the invite link; players pick their name and enter their password if set (failed logins are rate limited).
   Each account allows only one browser login session at a time; occupied accounts disappear from the
   automatically refreshed login list. Tabs and sheet pop-outs in the same browser session still work.
 - **Campaign notes:** the browser's **Notes** sidebar tab sits between My actors and Compendium.

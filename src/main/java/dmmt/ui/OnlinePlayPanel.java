@@ -297,8 +297,8 @@ public final class OnlinePlayPanel extends VBox {
         add.disableProperty().bind(playersHeading.textProperty().isEqualTo(""));
 
         TableColumn<Campaign.Player, String> name = column("Username", Campaign.Player::getName);
-        TableColumn<Campaign.Player, String> password = column("Password",
-                p -> hasPassword(p) ? "Set" : "Missing");
+        TableColumn<Campaign.Player, String> password = column("Credentials",
+                p -> hasCredentials(p) ? "Configured" : "Missing");
         password.setCellFactory(c -> new TableCell<>() {
             @Override protected void updateItem(String value, boolean empty) {
                 super.updateItem(value, empty);
@@ -715,10 +715,10 @@ public final class OnlinePlayPanel extends VBox {
                 item("Delete…", MaterialDesignD.DELETE_OUTLINE, () -> deletePlayer(player)));
     }
 
-    private Function<String, String> playerNameProblem(String exceptId) {
+    static Function<String, String> playerNameProblem(Campaign campaign, String exceptId) {
         return name -> {
             if (name == null || name.isBlank()) return "Enter a username.";
-            boolean taken = current.getPlayers().stream()
+            boolean taken = campaign.getPlayers().stream()
                     .anyMatch(p -> !p.getId().equals(exceptId) && p.getName().equalsIgnoreCase(name.trim()));
             return taken ? "A player with this username already exists." : null;
         };
@@ -726,7 +726,7 @@ public final class OnlinePlayPanel extends VBox {
 
     private void addPlayer() {
         if (current == null) return;
-        OnlineDialogs.addPlayer(window(), playerNameProblem(null)).ifPresent(created -> {
+        OnlineDialogs.addPlayer(window(), playerNameProblem(current, null)).ifPresent(created -> {
             current.getPlayers().add(Campaign.Player.builder().name(created.name())
                     .passwordHash(PasswordHasher.hash(created.password())).build());
             persist();
@@ -743,7 +743,7 @@ public final class OnlinePlayPanel extends VBox {
 
     private void renamePlayer(Campaign.Player player) {
         Dialogs.askText(window(), "Rename player", "Rename " + player.getName(), MaterialDesignR.RENAME_BOX,
-                "Rename", player.getName(), playerNameProblem(player.getId())).ifPresent(name -> {
+                "Rename", player.getName(), playerNameProblem(current, player.getId())).ifPresent(name -> {
             if (name.equals(player.getName())) return;
             player.setName(name);
             signOut(player.getId(), "Your username was changed by the DM");
@@ -778,7 +778,7 @@ public final class OnlinePlayPanel extends VBox {
         if (controller.running() && controller.server() != null) controller.server().kick(playerId, reason);
     }
 
-    private static boolean hasPassword(Campaign.Player player) {
+    private static boolean hasCredentials(Campaign.Player player) {
         return player.getPasswordHash() != null && !player.getPasswordHash().isBlank();
     }
 

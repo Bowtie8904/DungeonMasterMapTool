@@ -7954,6 +7954,23 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void loginAcceptsHashedBlankPasswordsButNotMissingCredentials() throws Exception {
+        Campaign.Player player = campaign.getPlayers().get(0);
+        player.setPasswordHash(null);
+        assertEquals(401, login("").statusCode());
+        player.setPasswordHash(PasswordHasher.hash("", 64, 1, 1));
+        assertEquals(401, login("a").statusCode());
+        assertEquals(200, login("").statusCode());
+    }
+
+    @Test
+    void loginAcceptsShortPasswordsAndRejectsBlankPassword() throws Exception {
+        campaign.getPlayers().get(0).setPasswordHash(PasswordHasher.hash("a", 64, 1, 1));
+        assertEquals(401, login("").statusCode());
+        assertEquals(200, login("a").statusCode());
+    }
+
+    @Test
     void loginReservesAccountAndRejectsAnotherBrowser() throws Exception {
         assertEquals(playerId(), availablePlayers().get(0).path("id").asText());
         String cookie = cookie();

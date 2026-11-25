@@ -27,8 +27,6 @@ import java.util.function.Supplier;
 
 /** Dark-themed multi-field dialogs of the Online Play tab (campaign creation, players, passwords). */
 public final class OnlineDialogs {
-    public static final int MIN_PASSWORD_LENGTH = 4;
-
     public record NewCampaign(String name, String system) {
     }
 
@@ -86,7 +84,7 @@ public final class OnlineDialogs {
         name.setPromptText("Login name");
         PasswordField password = new PasswordField();
         PasswordField repeat = new PasswordField();
-        Label hint = new Label("Players sign in with this username and password. Share them privately.");
+        Label hint = new Label("Leave the password blank for no password. Anyone can claim an unprotected account.");
         hint.getStyleClass().add("muted");
         hint.setWrapText(true);
         return form(owner, "Add player", "Add a player", MaterialDesignA.ACCOUNT_PLUS_OUTLINE, "Add player",
@@ -101,7 +99,8 @@ public final class OnlineDialogs {
     public static Optional<String> setPassword(Window owner, String playerName) {
         PasswordField password = new PasswordField();
         PasswordField repeat = new PasswordField();
-        Label hint = new Label("Connected browsers of this player are signed out and must log in again.");
+        Label hint = new Label("Leave blank for no password; anyone can claim an unprotected account. "
+                + "Connected browsers are signed out and must log in again.");
         hint.getStyleClass().add("muted");
         hint.setWrapText(true);
         return form(owner, "Set password", "New password for " + playerName, MaterialDesignL.LOCK_OUTLINE,
@@ -110,10 +109,7 @@ public final class OnlineDialogs {
     }
 
     static String passwordProblem(String password, String repeat) {
-        if (password == null || password.length() < MIN_PASSWORD_LENGTH) {
-            return "The password needs at least " + MIN_PASSWORD_LENGTH + " characters.";
-        }
-        if (!password.equals(repeat)) {
+        if (password == null || !password.equals(repeat)) {
             return "The passwords do not match.";
         }
         return null;

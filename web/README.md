@@ -1,5 +1,8 @@
 # Online Play web client
 
+The login password field may be left blank for accounts configured without a password. Such accounts can be
+claimed by anyone who can reach the session; existing password-protected accounts still require their password.
+
 Item artwork uses optional catalog/sheet `image: "/item-icons/author/icon-name.svg"` metadata.
 The same decorative icons appear in Equipment, Loot, compendium rows/details and shared/transfer
 chat cards; desktop chat renders their bundled SVG paths natively. New custom items receive an icon
