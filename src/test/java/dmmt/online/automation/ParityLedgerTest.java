@@ -163,6 +163,10 @@ class ParityLedgerTest {
             if (reloadProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("reloading: " + reloadProblem);
             String miscProblem = miscMismatch(pack, placed, legacyAutomation(row));
             if (miscProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("misc: " + miscProblem);
+            String deathProblem = deathMismatch(pack, placed, legacyAutomation(row));
+            if (deathProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("death: " + deathProblem);
+            String manualProblem = manualMismatch(legacyAutomation(row));
+            if (manualProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("manual: " + manualProblem);
             String armorProblem = armorMismatch(pack, placed, legacyAutomation(row));
             if (armorProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("armor: " + armorProblem);
             String triggerProblem = triggerMismatch(pack, placed, expected.path("triggers"));
@@ -199,7 +203,7 @@ class ParityLedgerTest {
     private static final java.util.Set<String> PROBED = java.util.Set.of("actions", "uses", "rest", "modifiers", "rollOptions",
             "conditionalRollOptions", "conditionalModifiers", "conditionalActions", "usesOverrides", "rollTriggers", "conditionalRollTriggers", "attach", "mitigation", "conditionalMitigation", "alternateProfiles", "damage", "spellcastDifficulty", "spellcastSuccessSteps", "hideSpellcast", "automaticRestUse", "automaticRestUseOnAttempt",
             "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "equipEffect", "zeroHopeClearArmor", "resources", "classResourceOnly",
-            "reloading", "requirement", "damageTypeChoice", "criticalMelee", "ignoreWeaponBurden", "unarmedWeapon", "conditionalDamageRewards", "dicePool");
+            "reloading", "requirement", "damageTypeChoice", "criticalMelee", "ignoreWeaponBurden", "unarmedWeapon", "conditionalDamageRewards", "dicePool", "deathMove", "manual");
 
     private static void writeLedger(Map<String, List<String>> failures) throws Exception {
         Path file = Path.of("docs/automation-parity-ledger.csv");
@@ -304,7 +308,7 @@ class ParityLedgerTest {
     private static JsonNode currentAutomation;
 
     private static final List<String> ARMOR_HOSTED = List.of("armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "equipEffect", "zeroHopeClearArmor", "resources", "classResourceOnly",
-            "reloading", "requirement", "damageTypeChoice", "criticalMelee", "ignoreWeaponBurden", "unarmedWeapon", "conditionalDamageRewards", "dicePool");
+            "reloading", "requirement", "damageTypeChoice", "criticalMelee", "ignoreWeaponBurden", "unarmedWeapon", "conditionalDamageRewards", "dicePool", "deathMove", "manual");
     private static final int[][] ARMOR_STEPS = {{0, 3}, {2, 3}, {4, 3}, {3, 3}, {4, 3}, {4, 0}, {4, 2}};
 
     private static JsonNode legacyAutomation(Row row) throws Exception {
@@ -616,6 +620,222 @@ class ParityLedgerTest {
         } catch (Exception e) {
             return "rejected: " + e.getMessage() + " @ " + (e instanceof RuntimeException r ? frames(r) : "");
         }
+        return null;
+    }
+
+    /** Manual notes stay descriptive: legacy shows them as text, so every note must reach a player-facing rule description. */
+    private static String manualMismatch(JsonNode legacy) {
+        if (legacy == null || !legacy.has("manual")) return null;
+        StringBuilder shown = new StringBuilder();
+        for (JsonNode rule : currentAutomation.path("rules")) shown.append(rule.path("ui").path("description").asText()).append(' ');
+        String haystack = shown.toString().replaceAll("[^A-Za-z0-9]", "");
+        for (JsonNode note : legacy.get("manual"))
+            if (!haystack.contains(note.asText().replaceAll("[^A-Za-z0-9]", ""))) return "manual note not shown: " + note.asText();
+        return null;
+    }
+
+    private static final com.fasterxml.jackson.databind.ObjectMapper MAPPER = new com.fasterxml.jackson.databind.ObjectMapper();
+
+    private static ObjectNode deathEvent() {
+        return AutomationHost.event("action.request", "parity", 1).put("sessionId", "session");
+    }
+
+    private static ObjectNode deathBase(Placed placed) {
+        ObjectNode base = placed.sheet().deepCopy();
+        base.withObject("/hp").put("on", 6).put("slots", 6);
+        base.put("permanentHp", 0);
+        base.putArray("effects");
+        return base;
+    }
+
+    /** Death moves: the legacy DeathMoves rules are the baseline for the converted death roll options and death buttons. */
+    private static String deathMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy) {
+        if (legacy == null || !legacy.path("deathMove").isObject()) return null;
+        String kind = legacy.path("deathMove").path("kind").asText();
+        String key = kind + ":owner", name = "Source";
+        try {
+            switch (kind) {
+                case "hopeBonus", "hopeSpend", "mask" -> {
+                    return deathRollMismatch(pack, placed, legacy, kind, key, name);
+                }
+                case "undying" -> {
+                    return undyingMismatch(pack, placed, legacy, key, name);
+                }
+                case "lifeWard" -> {
+                    // Legacy Life Ward is manual (only the ally effect is automated, covered by the actions probe); the death button is a new-engine superset.
+                    return null;
+                }
+                default -> {
+                    return deathButtonMismatch(pack, placed, legacy, kind, key, name);
+                }
+            }
+        } catch (RuntimeException e) {
+            return "rejected: " + e.getMessage() + " @ " + frames(e);
+        } catch (Exception e) {
+            return "rejected: " + e;
+        }
+    }
+
+    private static JsonNode legacyTake(ObjectNode sheet, ObjectNode request, String key, String name, JsonNode legacy, Random random) {
+        JsonNode entry = sheet.withArray("inventory").isEmpty() ? (sheet.withArray("loadout").isEmpty() ? null : sheet.withArray("loadout").get(0))
+                : sheet.withArray("inventory").get(0);
+        return dmmt.online.LegacyDeathBridge.take(sheet, request, key, name, legacy, entry, random);
+    }
+
+    private static String deathRollMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy, String kind, String key, String name) {
+        boolean spends = !"hopeBonus".equals(kind);
+        for (String move : List.of("risk", "avoid")) {
+            for (int[] faces : new int[][] {{5, 3}, {2, 9}, {4, 4}, {1, 12}, {12, 1}}) {
+                for (int hope : new int[] {3, 0}) {
+                    for (boolean spend : spends ? new boolean[] {false, true} : new boolean[] {false}) {
+                        String label = kind + " " + move + " " + faces[0] + "/" + faces[1] + " hope " + hope + " spend " + spend;
+                        ObjectNode base = deathBase(placed);
+                        base.withObject("/hope").put("on", hope);
+                        ObjectNode ls = base.deepCopy(), ns = base.deepCopy();
+                        if ("mask".equals(kind)) {
+                            ls.withObject("/resources").put("death-mask", 1);
+                            ObjectNode gain = RuleJson.JSON.createObjectNode().put("requestId", "g" + REQUESTS.incrementAndGet()).put("expectedRevision", HOST.revision(ns));
+                            gain.putArray("selections").addObject().put("sourceInstanceId", "owner").put("ruleId", "gain-token").put("bindingId", "sheet");
+                            HOST.execute(pack, ns, deathEvent(), gain, "self", "self", constantDice());
+                        }
+                        ObjectNode request = MAPPER.createObjectNode().put("move", move);
+                        if (spend && "hopeSpend".equals(kind)) request.put("blessedHope", 1);
+                        if (spend && "mask".equals(kind)) request.put("mask", true).put("wearingMask", true);
+                        JsonNode taken = null;
+                        String legacyError = null;
+                        try {
+                            taken = legacyTake(ls, request, key, name, legacy, dualityDice(faces[0], faces[1]));
+                        } catch (IllegalArgumentException e) {
+                            legacyError = e.getMessage();
+                        }
+                        JsonNode chosen = null;
+                        for (JsonNode option : HOST.describeDeath(pack, ns, deathEvent(), "self").at("/rolls/" + move + "/options"))
+                            if (ownOption(option)) chosen = option;
+                        if (spend && chosen == null) {
+                            if (legacyError == null) return label + ": legacy allowed the spend but the new engine offers no option";
+                            continue;
+                        }
+                        if (spend && legacyError != null) return label + ": new engine offers an option legacy rejects (" + legacyError + ")";
+                        if (legacyError != null && !spend) return label + ": legacy rejected a plain roll: " + legacyError;
+                        ObjectNode roll = checkRequest(ns, "action", "Agility", spend ? chosen : null);
+                        roll.put("requestId", "d" + REQUESTS.incrementAndGet()).remove("checkRoll");
+                        roll.putObject("deathRoll").put("move", move);
+                        JsonNode receipt = HOST.execute(pack, ns, deathEvent(), roll, "self", "self", dualityDice(faces[0], faces[1]));
+                        JsonNode check = receipt.at("/event/check");
+                        if ("risk".equals(move)) {
+                            String outcome = check.path("critical").asBoolean() ? "crit" : "success".equals(check.path("outcome").asText()) ? "hope" : "fear";
+                            JsonNode result = taken.path("deathResult");
+                            if (!outcome.equals(result.path("outcome").asText()) || check.path("adjustedHope").asInt() != result.path("adjustedHope").asInt())
+                                return label + ": legacy " + result.path("outcome").asText() + " adjusted " + result.path("adjustedHope").asInt()
+                                        + " new " + outcome + " adjusted " + check.path("adjustedHope").asInt();
+                        } else if (ls.path("scars").asInt() != ns.path("scars").asInt() || ls.at("/hope/slots").asInt() != ns.at("/hope/slots").asInt())
+                            return label + ": scars legacy " + ls.path("scars").asInt() + " new " + ns.path("scars").asInt();
+                        if (ls.at("/hope/on").asInt() != ns.at("/hope/on").asInt())
+                            return label + ": hope legacy " + ls.at("/hope/on").asInt() + " new " + ns.at("/hope/on").asInt();
+                        int legacyUses = ls.path("usage").path(key).path("used").asInt();
+                        if (legacyUses != usesTaken(ns)) return label + ": uses legacy " + legacyUses + " new " + usesTaken(ns);
+                        if ("mask".equals(kind) && spend && poolTotal(ns) != ls.at("/resources/death-mask").asInt())
+                            return label + ": mask tokens legacy " + ls.at("/resources/death-mask").asInt() + " new " + poolTotal(ns);
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private static int poolTotal(JsonNode sheet) {
+        java.util.Map<String, Integer> values = new java.util.TreeMap<>();
+        collectPools(sheet.path("automationState"), values);
+        return values.values().stream().mapToInt(Integer::intValue).sum();
+    }
+
+    private static String deathButtonMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy, String kind, String key, String name) {
+        for (int hope : new int[] {3, 0}) {
+            for (int permanent : new int[] {0, 2}) {
+                for (int dice : new int[] {2, 5}) {
+                    for (int qty : "egg".equals(kind) ? new int[] {2, 0} : new int[] {2}) {
+                        String label = kind + " hope " + hope + " permanent " + permanent + " die " + dice + " qty " + qty;
+                        ObjectNode base = deathBase(placed);
+                        base.withObject("/hope").put("on", hope);
+                        base.put("permanentHp", permanent);
+                        if (!base.withArray("inventory").isEmpty()) ((ObjectNode) base.withArray("inventory").get(0)).put("qty", qty);
+                        ObjectNode ls = base.deepCopy(), ns = base.deepCopy();
+                        String legacyError = null;
+                        try {
+                            legacyTake(ls, MAPPER.createObjectNode().put("move", kind), key, name, legacy, fixedDice(dice));
+                        } catch (IllegalArgumentException e) {
+                            legacyError = e.getMessage();
+                        }
+                        JsonNode button = null;
+                        for (JsonNode action : HOST.describeDeath(pack, ns, deathEvent(), "self").path("actions"))
+                            if (ownOption(action) && "death".equals(action.path("bindingId").asText()) && action.path("available").asBoolean(true)) button = action;
+                        if (button == null) {
+                            if (legacyError == null) return label + ": legacy allowed it but the new engine offers no death button";
+                            continue;
+                        }
+                        ObjectNode request = RuleJson.JSON.createObjectNode().put("requestId", "b" + REQUESTS.incrementAndGet())
+                                .put("expectedRevision", HOST.revision(ns)).put("deathAction", true);
+                        request.putArray("selections").addObject().put("sourceInstanceId", button.path("sourceInstanceId").asText())
+                                .put("ruleId", button.path("ruleId").asText()).put("bindingId", "death").putObject("inputs");
+                        try {
+                            HOST.execute(pack, ns, deathEvent(), request, "self", "self", fixedDice(dice));
+                        } catch (RuntimeException rejected) {
+                            if (legacyError == null) return label + ": legacy allowed it but the new engine rejected: " + rejected.getMessage() + " @ " + frames(rejected);
+                            continue;
+                        }
+                        if (legacyError != null) return label + ": new engine allowed it but legacy rejected: " + legacyError;
+                        if (ls.at("/hp/on").asInt() != ns.at("/hp/on").asInt()) return label + ": hp legacy " + ls.at("/hp/on").asInt() + " new " + ns.at("/hp/on").asInt();
+                        if (ls.at("/hope/on").asInt() != ns.at("/hope/on").asInt()) return label + ": hope legacy " + ls.at("/hope/on").asInt() + " new " + ns.at("/hope/on").asInt();
+                        if (ls.withArray("loadout").size() != ns.withArray("loadout").size() || ls.withArray("vault").size() != ns.withArray("vault").size())
+                            return label + ": loadout/vault legacy " + ls.withArray("loadout").size() + "/" + ls.withArray("vault").size()
+                                    + " new " + ns.withArray("loadout").size() + "/" + ns.withArray("vault").size();
+                        if (!ls.withArray("inventory").isEmpty() && ls.at("/inventory/0/qty").asInt() != ns.at("/inventory/0/qty").asInt())
+                            return label + ": qty legacy " + ls.at("/inventory/0/qty").asInt() + " new " + ns.at("/inventory/0/qty").asInt();
+                        boolean legacySpectral = false;
+                        for (JsonNode effect : ls.path("effects")) legacySpectral |= "Spectral Form".equals(effect.path("name").asText());
+                        if (legacySpectral != effectLabels(pack, ns).contains("Spectral Form"))
+                            return label + ": Spectral Form legacy " + legacySpectral + " new " + !legacySpectral;
+                        int legacyUses = ls.path("usage").path(key).path("used").asInt();
+                        if (legacyUses != usesTaken(ns)) return label + ": uses legacy " + legacyUses + " new " + usesTaken(ns);
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Won't Stay Dead: a failed Risk It All may permanently mark one HP to succeed with Hope. */
+    private static String undyingMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy, String key, String name) {
+        ObjectNode base = deathBase(placed);
+        ObjectNode ls = base.deepCopy(), ns = base.deepCopy();
+        JsonNode taken = legacyTake(ls, MAPPER.createObjectNode().put("move", "risk"), key, name, legacy, dualityDice(2, 8));
+        ObjectNode roll = MAPPER.createObjectNode().put("deathMove", "risk");
+        roll.set("deathResult", taken.path("deathResult"));
+        roll.putObject("featureRoll");
+        dmmt.online.LegacyDeathBridge.recover(ls, roll, MAPPER.createObjectNode().put("undying", true), true);
+        ObjectNode recover = MAPPER.createObjectNode().put("hp", 2).put("stress", 0);
+        dmmt.online.LegacyDeathBridge.recover(ls, roll, recover, true);
+
+        ObjectNode request = RuleJson.JSON.createObjectNode().put("requestId", "u" + REQUESTS.incrementAndGet()).put("expectedRevision", HOST.revision(ns));
+        request.putArray("selections");
+        request.putObject("deathRoll").put("move", "risk");
+        JsonNode rolled = HOST.execute(pack, ns, deathEvent(), request, "self", "self", dualityDice(2, 8));
+        if (!"failure".equals(rolled.at("/event/check/outcome").asText())) return "new engine did not fail the Risk It All roll";
+        JsonNode revised = claimResult(pack, ns, deathEvent(), rolled, "undying");
+        if (revised == null) return "no Won't Stay Dead button offered after a failed Risk It All roll";
+        if (!"success".equals(revised.at("/event/check/outcome").asText())) return "converted roll did not succeed with Hope";
+        ObjectNode apply = RuleJson.JSON.createObjectNode().put("requestId", "a" + REQUESTS.incrementAndGet()).put("expectedRevision", HOST.revision(ns))
+                .put("resultId", revised.at("/event/resultId").asText());
+        ObjectNode selection = apply.putArray("selections").addObject().put("sourceInstanceId", "ruleset:base")
+                .put("ruleId", "death-recover").put("bindingId", "claim");
+        selection.putObject("inputs").put("hp", 2).put("stress", 0);
+        HOST.execute(pack, ns, deathEvent(), apply, "self", "self", constantDice());
+        int legacyMarked = ls.at("/hp/on").asInt() - ls.path("permanentHp").asInt();
+        if (legacyMarked != ns.at("/hp/on").asInt() || ls.at("/stress/on").asInt() != ns.at("/stress/on").asInt())
+            return "after recovery marked HP legacy " + legacyMarked + " new " + ns.at("/hp/on").asInt()
+                    + " stress legacy " + ls.at("/stress/on").asInt() + " new " + ns.at("/stress/on").asInt();
+        if (ls.path("permanentHp").asInt() != base.at("/hp/slots").asInt() - ns.at("/hp/slots").asInt())
+            return "permanently marked HP legacy " + ls.path("permanentHp").asInt() + " new " + (base.at("/hp/slots").asInt() - ns.at("/hp/slots").asInt());
         return null;
     }
 
