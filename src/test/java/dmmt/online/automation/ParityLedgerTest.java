@@ -153,6 +153,8 @@ class ParityLedgerTest {
             if (attachProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("attach: " + attachProblem);
             String initProblem = initMismatch(pack, placed, expected.path("init"), legacyAutomation(row));
             if (initProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("init: " + initProblem);
+            String spellProblem = spellcastMismatch(pack, placed, legacyAutomation(row));
+            if (spellProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("spellcast: " + spellProblem);
             String armorProblem = armorMismatch(pack, placed, legacyAutomation(row));
             if (armorProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("armor: " + armorProblem);
             String triggerProblem = triggerMismatch(pack, placed, expected.path("triggers"));
@@ -187,7 +189,7 @@ class ParityLedgerTest {
 
     /** Automation fields whose behavior the harness replays against the legacy baseline. */
     private static final java.util.Set<String> PROBED = java.util.Set.of("actions", "uses", "rest", "modifiers", "rollOptions",
-            "conditionalRollOptions", "conditionalModifiers", "conditionalActions", "usesOverrides", "rollTriggers", "conditionalRollTriggers", "attach", "mitigation", "conditionalMitigation",
+            "conditionalRollOptions", "conditionalModifiers", "conditionalActions", "usesOverrides", "rollTriggers", "conditionalRollTriggers", "attach", "mitigation", "conditionalMitigation", "spellcastDifficulty", "spellcastSuccessSteps", "hideSpellcast", "automaticRestUse", "automaticRestUseOnAttempt",
             "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "equipEffect", "zeroHopeClearArmor", "resources", "classResourceOnly");
 
     private static void writeLedger(Map<String, List<String>> failures) throws Exception {
@@ -300,6 +302,60 @@ class ParityLedgerTest {
         return legacy.at(row.pointer());
     }
 
+    private static int usesTaken(JsonNode sheet) {
+        int[] total = {0};
+        sheet.at("/automationState/sources").properties().forEach(s -> total[0] += s.getValue().at("/usage/uses").asInt());
+        return total[0];
+    }
+
+    /** Spellcast roll difficulty, use consumption on attempt or success, hidden spellcast buttons and success steps against the legacy card automation. */
+    private static String spellcastMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy) {
+        if (legacy == null || !(legacy.has("spellcastDifficulty") || legacy.has("hideSpellcast"))) return null;
+        JsonNode profiles = currentAutomation.path("profiles");
+        JsonNode profile = null;
+        for (JsonNode candidate : profiles)
+            if (candidate.path("id").asText().startsWith("spellcast-roll")) profile = candidate;
+        if (legacy.path("hideSpellcast").asBoolean()) return profile == null ? null : "hideSpellcast row still offers " + profile.path("id").asText();
+        if (profile == null) return "no spellcast profile; profiles=" + profiles;
+        int difficulty = legacy.path("spellcastDifficulty").asInt();
+        if (profile.path("difficulty").asInt(-1) != difficulty) return "difficulty legacy=" + difficulty + " new=" + profile.path("difficulty");
+        boolean consumes = legacy.path("automaticRestUse").asBoolean(), onAttempt = legacy.path("automaticRestUseOnAttempt").asBoolean();
+        String consume = profile.path("consumeOn").asText("");
+        String want = !consumes ? "" : onAttempt ? "attempt" : "success";
+        if (!consume.equals(want)) return "consumeOn legacy=" + want + " new=" + consume;
+        java.util.List<String> instances = new ArrayList<>();
+        for (var element : HOST.sources(pack, placed.sheet())) if (element.sourceId().equals(placed.sourceId())) instances.add(element.instanceId());
+        int[][] dice = {{1, 2}, {12, 11}};
+        int[] taken = new int[2];
+        JsonNode[] pools = new JsonNode[2];
+        for (int i = 0; i < 2; i++) {
+            ObjectNode sheet = placed.sheet().deepCopy();
+            for (JsonNode trait : sheet.withArray("traits")) ((ObjectNode) trait).put("mod", 1);
+            RuntimeException last = null;
+            boolean done = false;
+            for (String instance : instances) {
+                ObjectNode copy = sheet.deepCopy();
+                ObjectNode request = RuleJson.JSON.createObjectNode().put("requestId", "r").put("expectedRevision", HOST.revision(copy));
+                request.putArray("selections");
+                request.putObject("profileRoll").put("sourceInstanceId", instance).put("profileId", profile.path("id").asText()).put("kind", "spellcast");
+                try {
+                    HOST.execute(pack, copy, AutomationHost.event("action.request", "parity", 1), request, "self", "self", dualityDice(dice[i][0], dice[i][1]));
+                    taken[i] = usesTaken(copy);
+                    pools[i] = copy.at("/automationState/pools");
+                    done = true;
+                    break;
+                } catch (RuntimeException e) {
+                    last = e;
+                }
+            }
+            if (!done) return "spellcast roll rejected: " + (last == null ? "" : last.getMessage() + " @ " + frames(last));
+        }
+        int failTaken = onAttempt ? 1 : 0, successTaken = consumes ? 1 : 0;
+        if (taken[0] != failTaken) return "uses after failed cast legacy=" + failTaken + " new=" + taken[0];
+        if (taken[1] != successTaken) return "uses after successful cast legacy=" + successTaken + " new=" + taken[1];
+        if (legacy.has("spellcastSuccessSteps") && pools[0].equals(pools[1])) return "success steps did not change anything on a successful cast; pools=" + pools[1];
+        return null;
+    }
     private static String armorSignature(java.util.Set<String> labels, ObjectNode sheet) {
         return String.join("+", new java.util.TreeSet<>(labels)) + "|armor=" + sheet.at("/armorTrack/on").asInt() + "|hope=" + sheet.at("/hope/on").asInt();
     }
