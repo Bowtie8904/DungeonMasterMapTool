@@ -12,8 +12,8 @@
     { "path": "borrowedCards", "children": [{ "path": "spells", "derive": true }] },
     { "path": "loadout", "children": [{ "path": "spells", "derive": true }] },
     { "path": "inventory", "quantity": "qty" },
-    { "path": "activeWeapons", "equipment": "weapons" },
-    { "path": "activeArmor", "single": true, "equipment": "armor" }
+    { "path": "activeWeapons", "equipment": "weapons", "children": [{ "path": "attachments", "item": "item" }] },
+    { "path": "activeArmor", "single": true, "equipment": "armor", "children": [{ "path": "attachments", "item": "item" }] }
   ],
   "actor": {
     "name": { "kind": "value", "path": "name" },

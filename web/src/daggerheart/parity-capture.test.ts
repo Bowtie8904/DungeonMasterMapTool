@@ -2,13 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import type { Automation, ActionDef, DiceRoll } from './engine';
 import {
-  actionBlocker, applyRest,   availableRollOptions, commitRollOptions, configuredRollOption, derivedStats, effectiveAdvantage, experienceModifier,
+  actionBlocker, applyRest, availableRollOptions, availableRollTriggers, commitRollOptions, configuredRollOption, derivedStats, effectiveAdvantage, experienceModifier,
   rollBonus, runActionDetailed, selectedRollBonus, selectionBlocker, sheetActions, suggestedAdvantage, syncResources, traitTotal, useConsumableUnit,
   withSelectedAmount,
 } from './engine';
+import { weaponAttackBlocker } from './engine';
+import { attachBlocker, attachItem, detachItem } from './attachments';
 import { emptyCharacter } from './data';
 import { armorFrom, cardFrom, weaponFrom } from './compendium';
 import type { CompendiumEntry } from './compendium';
+import type { RollContext } from './engine';
 import type { CharacterSheet } from './types';
 
 /**
@@ -272,23 +275,102 @@ function probeRolls(row: Row) {
         entry.total = withOption.value - base.value + diceTotal(withOption.dice) - diceTotal(base.dice) + advantage * 3
           + (experience ? experienceModifier(2, [selected]) : 0);
         entry.advantageSuggested = suggestedAdvantage([selected]);
-        entry.spent = Object.fromEntries((['hope', 'hp', 'stress', 'armor', 'gold'] as const).map(k => [k, after[k] - before[k]]).filter(([, v]) => v !== 0));
+        // A host-owned option's cost is paid by the host, not by the legacy commit.
+        const hostCost = (k: 'hope' | 'hp' | 'stress' | 'armor' | 'gold') => selected.option.hostOwned ? (selected.option.cost?.[k] ?? 0) * (k === 'hope' || k === 'gold' ? -1 : 1) : 0;
+        entry.spent = Object.fromEntries((['hope', 'hp', 'stress', 'armor', 'gold'] as const).map(k => [k, after[k] - before[k] + hostCost(k)]).filter(([, v]) => v !== 0));
       }
       offered[`${mine.option.id}`] = entry;
     });
     const traitName = scenario.targets.find(t => t.startsWith('trait:'))?.slice(6) as TraitName | undefined;
     const traitShift = traitName ? traitTotal(fresh.sheet, traitName) - (fresh.sheet.traits.find(t => t.name === traitName)?.mod ?? 0) : 0;
-    out[scenario.id] = { always: always.value + diceTotal(always.dice) + traitShift, offered };
+    const attackBlocker = scenario.id === 'attack' && weapon ? weaponAttackBlocker(fresh.sheet, weapon) : null;
+    out[scenario.id] = { always: always.value + diceTotal(always.dice) + traitShift, offered, ...(attackBlocker ? { blocker: attackBlocker } : {}) };
   }
   return out;
 }
 
+/** Result buttons (roll triggers) the legacy engine offers on a finished roll of each scenario and outcome. */
+function probeTriggers(row: Row) {
+  const placed = placeForRolls(row);
+  if (!placed || !(placed.automation.rollTriggers?.length || placed.automation.conditionalRollTriggers?.length)) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const scenario of rollScenarios(placed)) {
+    const outcomes: Array<[string, number, number]> = scenario.id === 'damage' ? [['damage', 0, 0]] : [['hope', 5, 3], ['fear', 3, 5], ['critical', 4, 4]];
+    for (const [name, hope, fear] of outcomes) {
+      const fresh = placeForRolls(row)!;
+      syncResources(fresh.sheet);
+      const weapon = scenario.weapon ? fresh.sheet.activeWeapons[0] : undefined;
+      const ctx: RollContext = { source: scenario.targets.join(','), hope, fear, total: hope + fear + 5, kind: scenario.id === 'damage' ? 'damage' : 'duality',
+        ...(weapon ? { weapon: weapon.name } : {}), ...(hope === fear ? {} : { outcome: hope > fear ? 'hope' as const : 'fear' as const }) };
+      const offered: Record<string, unknown> = {};
+      const allies: Record<string, boolean> = {};
+      for (const t of availableRollTriggers(fresh.sheet, ctx)) {
+        if (t.key !== placed.key && !t.key.startsWith(`${placed.key}/`)) continue;
+        const converted = (t.trigger as { outcome?: string }).outcome;
+        if (converted && (hope === fear || (hope > fear ? 'hope' : 'fear') === converted)) continue;
+        if (t.trigger.audience === 'ally') { allies[t.trigger.id] = true; continue; }
+        const blocker = actionBlocker(fresh.sheet, t.key, t.automation, t.trigger);
+        offered[t.trigger.id] = { label: t.trigger.label, ...(blocker ? { blocker } : {}) };
+      }
+      out[`${scenario.id}:${name}`] = offered;
+      if (Object.keys(allies).length) out[`ally:${scenario.id}:${name}`] = allies;
+    }
+  }
+  return out;
+}
+
+/** Which equipped weapons/armor each attachable item may be attached to, and the rolls on the first compatible gear after attaching. */
+function probeAttach(row: Row) {
+  const placed = place(row);
+  const def = placed?.consumable?.automation?.attach;
+  if (!placed || !def) return undefined;
+  const gearOf = (kind: 'weapons' | 'armor', index: number) => {
+    const entry = catalog(kind).entries[index];
+    const c = standardSheet();
+    c.experiences = [{ name: 'Parity', mod: 2 }];
+    if (kind === 'weapons') c.activeWeapons = [weaponFrom(entry)]; else c.activeArmor = armorFrom(entry);
+    c.inventory.push(structuredClone(placed.consumable!));
+    return c;
+  };
+  const blocked: Record<string, boolean> = {};
+  const rolls: Record<string, unknown> = {};
+  for (const kind of ['weapons', 'armor'] as const) {
+    let shown = 0;
+    catalog(kind).entries.forEach((entry, index) => {
+      const c = gearOf(kind, index);
+      const gear = kind === 'weapons' ? c.activeWeapons[0] : c.activeArmor!;
+      const reason = attachBlocker(gear, def);
+      blocked[`${kind}/${index}`] = !!reason;
+      if (reason || shown >= 3) return;
+      shown++;
+      attachItem(c, c.inventory[0], gear);
+      syncResources(c);
+      const scenarios = kind === 'weapons' ? [['attack', ['attack', `trait:${(gear as { trait: string }).trait}`, 'action']], ['damage', ['damage']]] as const
+        : [['check:action:Agility', ['action', 'trait:Agility']]] as const;
+      const out: Record<string, unknown> = {};
+      for (const [id, targets] of scenarios) {
+        const weapon = kind === 'weapons' ? c.activeWeapons[0] : undefined;
+        const always = rollBonus(c, [...targets], weapon, false);
+        const trait = targets.find(t => t.startsWith('trait:'))?.slice(6);
+        const shift = trait ? traitTotal(c, trait as never) - (c.traits.find(t => t.name === trait)?.mod ?? 0) : 0;
+        out[id] = { always: always.value + diceTotal(always.dice) + shift,
+          offered: availableRollOptions(c, [...targets], weapon).map(o => o.option.id).sort() };
+      }
+      rolls[`${kind}/${index}`] = { ...out, feature: (gear as { feature?: { name: string } }).feature?.name ?? null,
+        trait: kind === 'weapons' ? (gear as { trait: string }).trait : null, inventory: c.inventory.length };
+      const detached = structuredClone(c);
+      detachItem(detached, kind === 'weapons' ? detached.activeWeapons[0] : detached.activeArmor!, 0);
+      (rolls[`${kind}/${index}`] as Record<string, unknown>).detached = detached.inventory.map(i => `${i.name}:${i.qty}`);
+    });
+  }
+  return { blocked, rolls };
+}
 export function capture(): Record<string, unknown> {
   const rows = csv(readFileSync(new URL('docs/automation-parity-ledger.csv', ROOT), 'utf8'));
   const out: Record<string, unknown> = {};
   for (const row of rows) {
     const key = `${row.category}${row.pointer}`;
-    out[key] = { actions: probeActions(row), stats: probeStats(row), rest: probeRest(row), rolls: probeRolls(row) };
+    out[key] = { actions: probeActions(row), stats: probeStats(row), rest: probeRest(row), rolls: probeRolls(row), triggers: probeTriggers(row), attach: probeAttach(row) };
   }
   return out;
 }

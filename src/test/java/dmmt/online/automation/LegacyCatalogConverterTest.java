@@ -2279,7 +2279,7 @@ class LegacyCatalogConverterTest {
                   {"id":"fate","label":"Reroll Hope","reroll":"hope","when":"fear","uses":"source"},
                   {"id":"strike","label":"Strike","criticalOnly":true,"weaponAttack":true,"damage":{"dice":"1d6+1","fixed":true},
                    "steps":[{"op":"gain","resource":"hope","amount":"@proficiency"}],"usesSource":false},
-                  {"id":"luck","label":"Lucky","when":"hopeDie","die":6,"outcome":"success","report":"Lucky!"}]}}"""));
+                  {"id":"luck","label":"Lucky","when":"hopeDie","die":6,"outcome":"hope","report":"Lucky!"}]}}"""));
         JsonNode rules = block(result, 0).path("rules");
         assertEquals("uses", rules.at("/0/limitRef").asText());
         assertEquals("roll.reroll", rules.at("/0/do/1/op").asText());
@@ -2298,7 +2298,7 @@ class LegacyCatalogConverterTest {
         ObjectNode critical = context(program, "{\"hope\":{\"value\":0,\"max\":6},\"proficiency\":{\"value\":2}}", """
                 {"type":"roll.finished","check":{"kind":"attack","weapon":"primary","critical":true,"dominant":"hope","hopeDie":6,"outcome":"success"},"roll":%s}"""
                 .formatted(ROLL));
-        assertEquals(List.of("luck", "strike"), available(program, critical, "roll"));
+        assertEquals(List.of("strike"), available(program, critical, "roll"), "A conversion outcome is never offered on a critical.");
         var resolution = run(program, critical, "strike");
         assertEquals(2, resolution.contexts().getFirst().at("/actor/hope/value").asInt());
         JsonNode damage = resolution.actions().getFirst().diceRolls().getFirst();
@@ -2327,13 +2327,13 @@ class LegacyCatalogConverterTest {
         String actor = "{\"hope\":{\"value\":2,\"max\":6},\"stress\":{\"marked\":0,\"capacity\":6}}";
         String roll = "{\"type\":\"roll.finished\",\"check\":{\"kind\":\"action\",\"origin\":\"card:Strike\",\"trait\":\"Agility\",\"dominant\":\"hope\",\"critical\":false,\"outcome\":null,\"total\":10,\"difficulty\":null},\"roll\":" + ROLL + "}";
         ObjectNode unknownDifficulty = context(program, actor, roll);
-        assertEquals(List.of("hope", "trait"), available(program, unknownDifficulty, "roll"));
+        assertEquals(List.of("fail-hope", "fail-stress", "hope", "trait"), available(program, unknownDifficulty, "roll"));
 
         ObjectNode failure = context(program, actor, roll.replace("\"outcome\":null", "\"outcome\":\"failure\""));
         assertEquals(List.of("fail-hope", "fail-stress", "trait"), available(program, failure, "roll"));
         assertThrows(IllegalArgumentException.class, () -> run(program, failure, "fail-hope", "fail-stress"));
 
-        ObjectNode success = context(program, actor, roll.replace("\"total\":10,\"difficulty\":null", "\"total\":12,\"difficulty\":12"));
+        ObjectNode success = context(program, actor, roll.replace("\"outcome\":null,\"total\":10,\"difficulty\":null", "\"outcome\":\"success\",\"total\":12,\"difficulty\":12"));
         assertEquals(List.of("hope", "success", "trait"), available(program, success, "roll"));
     }
 
@@ -3188,7 +3188,7 @@ class LegacyCatalogConverterTest {
         RuleCompiler.Program program = program(result, 0);
         assertEquals(List.of(), program.attachmentBlockers(RuleJson.parse("""
                 {"kind":"weapon","name":"Longbow","range":"far","damageType":"physical","hasFeature":false,"generated":false,"hasTraitAttachment":false}"""), source));
-        assertEquals(List.of("Attach this to weapon gear.", "Requires a bow."), program.attachmentBlockers(RuleJson.parse("""
+        assertEquals(List.of("Attach this to weapon gear."), program.attachmentBlockers(RuleJson.parse("""
                 {"kind":"armor","name":"Leather","hasFeature":false,"generated":false}"""), source));
         assertEquals(List.of("Generated weapons cannot hold attachments.", "Axe already has a feature.", "Requires a bow."),
                 program.attachmentBlockers(RuleJson.parse("""

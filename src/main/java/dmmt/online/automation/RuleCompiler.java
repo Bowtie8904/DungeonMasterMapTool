@@ -375,7 +375,7 @@ public final class RuleCompiler {
             context.set("source", source.deepCopy());
             List<String> reasons = new ArrayList<>();
             if (!attachment.path("to").asText().equals(gear.path("kind").asText()))
-                reasons.add("Attach this to " + attachment.path("to").asText() + " gear.");
+                return List.of("Attach this to " + attachment.path("to").asText() + " gear.");
             for (JsonNode requirement : attachment.path("requires"))
                 if (!RuleExpression.evaluate(requirement.get("when"), context).asBoolean())
                     reasons.add(RuleTemplate.render(requirement.path("reason").asText(), context));

@@ -22,9 +22,13 @@ public final class SheetProjection {
     private static final Set<String> KINDS = Set.of("value", "object", "map", "first", "collection", "tally", "engine", "length");
 
     public record SourceElement(String sourceId, String instanceId, String name, ObjectNode element,
-                                String quantityField, String sourcePath) {
+                                String quantityField, String sourcePath, SourceElement attachedTo) {
         public SourceElement(String sourceId, String instanceId, String name, ObjectNode element, String quantityField) {
-            this(sourceId, instanceId, name, element, quantityField, null);
+            this(sourceId, instanceId, name, element, quantityField, null, null);
+        }
+        public SourceElement(String sourceId, String instanceId, String name, ObjectNode element,
+                             String quantityField, String sourcePath) {
+            this(sourceId, instanceId, name, element, quantityField, sourcePath, null);
         }
     }
 
@@ -189,10 +193,14 @@ public final class SheetProjection {
     }
 
     private static void validateSource(JsonNode source, String at, boolean child) {
-        RuleJson.fields(source, at, "path", "single", "quantity", "derive", "children", "equipment");
+        RuleJson.fields(source, at, "path", "single", "quantity", "derive", "children", "equipment", "item");
         path(source.get("path"), at + "/path");
         if (source.has("single")) RuleExpression.bool(source.get("single"), at + "/single");
         if (source.has("quantity")) path(source.get("quantity"), at + "/quantity");
+        if (source.has("item")) {
+            RuleJson.id(source.get("item"), at + "/item");
+            if (!child) throw RuleJson.error(at + "/item", "Only nested sources can hold an attached item.");
+        }
         if (source.has("equipment")) {
             RuleJson.id(source.get("equipment"), at + "/equipment");
             if (child) throw RuleJson.error(at + "/equipment", "Only top-level sources can identify equipment locations.");
@@ -523,7 +531,9 @@ public final class SheetProjection {
         List<JsonNode> elements = new ArrayList<>();
         if (location.path("single").asBoolean()) { if (value.isObject()) elements.add(value); }
         else if (value.isArray()) value.forEach(elements::add);
-        for (JsonNode element : elements) {
+        String itemField = location.path("item").asText(null);
+        for (JsonNode wrapper : elements) {
+            JsonNode element = itemField == null ? wrapper : wrapper.path(itemField);
             if (!(element instanceof ObjectNode object)) continue;
             String sourceId = element.path(sourceField).isTextual() ? element.path(sourceField).asText() : null;
             String instanceId = element.path(instanceField).isTextual() ? element.path(instanceField).asText() : null;
@@ -544,7 +554,7 @@ public final class SheetProjection {
                 if (!instances.add(instanceId))
                     throw RuleJson.error("/" + instanceField, "Duplicate source instance on the sheet: " + instanceId);
                 source = new SourceElement(sourceId, instanceId, element.path(nameField).asText(""),
-                        object, location.path("quantity").asText(null), sourcePath);
+                        object, location.path("quantity").asText(null), sourcePath, itemField == null ? null : parent);
                 result.add(source);
             }
             for (JsonNode child : location.path("children"))
@@ -587,7 +597,7 @@ public final class SheetProjection {
         } else if (value instanceof ArrayNode elements) {
             for (int i = 0; i < elements.size(); i++) {
                 JsonNode element = elements.get(i);
-                if (element == target) { elements.remove(i); return true; }
+                if (element == target || location.has("item") && element.path(location.path("item").asText()) == target) { elements.remove(i); return true; }
                 if (element instanceof ObjectNode object)
                     for (JsonNode child : location.path("children"))
                         if (removeSource(object, child, target)) return true;

@@ -162,6 +162,9 @@ public final class AutomationHost {
     /** Active sheet sources plus the pack's reserved shared source, if present. */
     public List<SheetProjection.SourceElement> sources(Pack pack, ObjectNode sheet) {
         List<SheetProjection.SourceElement> sources = projection.sources(sheet);
+        // An attachable item does nothing until it is attached to gear.
+        sources.removeIf(source -> source.attachedTo() == null && pack.programs().get(source.sourceId()) != null
+                && pack.programs().get(source.sourceId()).attachment() != null);
         if (pack.rulesetName() == null) return sources;
         for (var source : sources)
             if (RULESET_SOURCE.equals(source.instanceId()) || RULESET_SOURCE.equals(source.sourceId()))
@@ -171,6 +174,133 @@ public final class AutomationHost {
         return sources;
     }
 
+    /** Reasons the inventory item cannot be attached to the equipped gear, empty when it may be. */
+    public List<String> attachBlockers(Pack pack, ObjectNode sheet, String itemInstanceId, String gearInstanceId) {
+        var item = attachableItem(pack, sheet, itemInstanceId);
+        var gear = equippedGear(sheet, gearInstanceId);
+        return pack.programs().get(item.sourceId()).attachmentBlockers(gearFacts(pack, gear), sourceContext(item));
+    }
+
+    /** Moves one unit of the inventory item onto the gear; the item's rules then act for that gear until it is detached. */
+    public ObjectNode attach(Pack pack, ObjectNode sheet, String itemInstanceId, String gearInstanceId) {
+        List<String> blockers = attachBlockers(pack, sheet, itemInstanceId, gearInstanceId);
+        if (!blockers.isEmpty()) throw new IllegalArgumentException(blockers.getFirst());
+        ObjectNode working = sheet.deepCopy();
+        var item = attachableItem(pack, working, itemInstanceId);
+        var gear = equippedGear(working, gearInstanceId).element();
+        JsonNode declaration = pack.programs().get(item.sourceId()).attachment();
+        if (!gear.path("attachments").isArray() || gear.path("attachments").isEmpty()) {
+            ObjectNode base = gear.putObject("attachmentBase");
+            if (gear.has("feature")) base.set("feature", gear.get("feature").deepCopy());
+            if (gear.has("trait")) base.set("trait", gear.get("trait").deepCopy());
+            gear.putArray("attachments");
+        }
+        ObjectNode copy = item.element().deepCopy();
+        copy.put(item.quantityField(), 1);
+        java.util.Set<String> taken = new java.util.HashSet<>();
+        projection.sources(working).forEach(source -> taken.add(source.instanceId()));
+        int n = 1;
+        while (taken.contains(itemInstanceId + ".att" + n)) n++;
+        copy.put(projection.instanceField(), itemInstanceId + ".att" + n);
+        ((ArrayNode) gear.get("attachments")).addObject().set("item", copy);
+        int quantity = item.element().path(item.quantityField()).asInt(1);
+        if (quantity <= 1) remove(working, item);
+        else item.element().put(item.quantityField(), quantity - 1);
+        if (declaration.has("feature")) gear.set("feature", declaration.get("feature").deepCopy());
+        if (declaration.has("trait")) gear.put("trait", declaration.get("trait").asText());
+        projection.state(working).put("revision", revision(working) + 1);
+        return working;
+    }
+
+    /** Returns an attached item to the inventory and restores the gear's own feature and trait. */
+    public ObjectNode detach(Pack pack, ObjectNode sheet, String attachedInstanceId) {
+        ObjectNode working = sheet.deepCopy();
+        var attached = projection.sources(working).stream()
+                .filter(source -> source.attachedTo() != null && source.instanceId().equals(attachedInstanceId))
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("That attachment is no longer on this gear."));
+        ObjectNode gear = attached.attachedTo().element();
+        ObjectNode returned = attached.element().deepCopy();
+        ArrayNode attachments = (ArrayNode) gear.get("attachments");
+        for (int i = 0; i < attachments.size(); i++)
+            if (attachments.get(i).path("item") == attached.element()) { attachments.remove(i); break; }
+        if (attachments.isEmpty()) {
+            JsonNode base = gear.path("attachmentBase");
+            if (base.has("feature")) gear.set("feature", base.get("feature")); else gear.remove("feature");
+            if (base.has("trait")) gear.set("trait", base.get("trait"));
+            gear.remove("attachments");
+            gear.remove("attachmentBase");
+        } else {
+            JsonNode base = gear.path("attachmentBase");
+            JsonNode feature = null, trait = null;
+            for (JsonNode attachment : attachments) {
+                var program = pack.programs().get(attachment.path("item").path(projection.sourceField()).asText());
+                JsonNode def = program == null ? null : program.attachment();
+                if (def == null) continue;
+                if (def.has("feature")) feature = def.get("feature");
+                if (def.has("trait")) trait = def.get("trait");
+            }
+            if (feature != null) gear.set("feature", feature.deepCopy());
+            else if (base.has("feature")) gear.set("feature", base.get("feature")); else gear.remove("feature");
+            if (trait != null) gear.set("trait", trait);
+            else if (base.has("trait")) gear.set("trait", base.get("trait"));
+        }
+        String instanceField = projection.instanceField();
+        String original = returned.path(instanceField).asText();
+        int cut = original.lastIndexOf(".att");
+        String origin = cut < 0 ? original : original.substring(0, cut);
+        String quantityField = "qty";
+        for (JsonNode stack : working.withArray("inventory")) {
+            if (stack instanceof ObjectNode object && origin.equals(object.path(instanceField).asText())) {
+                object.put(quantityField, object.path(quantityField).asInt(0) + 1);
+                projection.state(working).put("revision", revision(working) + 1);
+                return working;
+            }
+        }
+        returned.put(quantityField, 1).put(instanceField, origin);
+        working.withArray("inventory").add(returned);
+        projection.state(working).put("revision", revision(working) + 1);
+        return working;
+    }
+
+    private SheetProjection.SourceElement attachableItem(Pack pack, ObjectNode sheet, String instanceId) {
+        var item = projection.sources(sheet).stream()
+                .filter(source -> source.attachedTo() == null && source.instanceId().equals(instanceId)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("No such item to attach."));
+        var program = pack.programs().get(item.sourceId());
+        if (program == null || program.attachment() == null || item.quantityField() == null)
+            throw new IllegalArgumentException(item.name() + " cannot be attached.");
+        if (item.element().path(item.quantityField()).asInt(1) < 1)
+            throw new IllegalArgumentException("No " + item.name() + " left to attach.");
+        return item;
+    }
+
+    private SheetProjection.SourceElement equippedGear(ObjectNode sheet, String instanceId) {
+        return projection.sources(sheet).stream()
+                .filter(source -> source.attachedTo() == null && source.instanceId().equals(instanceId)
+                        && ("activeWeapons".equals(source.sourcePath()) || "activeArmor".equals(source.sourcePath())))
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("That gear is not equipped."));
+    }
+
+    private static ObjectNode gearFacts(Pack pack, SheetProjection.SourceElement gear) {
+        ObjectNode element = gear.element();
+        boolean weapon = "activeWeapons".equals(gear.sourcePath());
+        ObjectNode facts = RuleJson.JSON.createObjectNode().put("kind", weapon ? "weapon" : "armor").put("name", gear.name());
+        facts.put("hasFeature", element.has("feature") && !element.get("feature").isNull());
+        if (weapon) {
+            String range = element.path("range").asText("").replaceAll("\\s+", "").toLowerCase(java.util.Locale.ROOT);
+            facts.put("range", "veryclose".equals(range) ? "veryClose" : "veryfar".equals(range) ? "veryFar" : range);
+            String type = element.path("damageType").asText("").toLowerCase(java.util.Locale.ROOT);
+            facts.put("damageType", type.startsWith("mag") ? "magic" : "physical");
+            facts.put("generated", element.path("generated").asBoolean(false) || element.path("generated").isTextual());
+            boolean traitAttached = false;
+            for (JsonNode attachment : element.path("attachments")) {
+                var program = pack.programs().get(attachment.path("item").path("automationSource").asText());
+                if (program != null && program.attachment() != null && program.attachment().has("trait")) traitAttached = true;
+            }
+            facts.put("hasTraitAttachment", traitAttached);
+        } else facts.put("range", "").put("damageType", "").put("generated", false).put("hasTraitAttachment", false);
+        return facts;
+    }
     public long revision(ObjectNode sheet) {
         return projection.state(sheet).path("revision").asLong();
     }
@@ -5451,6 +5581,10 @@ public final class AutomationHost {
         if (element.quantityField() != null) source.put("quantity", element.element().path(element.quantityField()).asInt(1));
         if (element.instanceId().startsWith(PARTY_GRANT_PREFIX)) source.put("granted", true);
         if (element.element().path("retired").asBoolean(false)) source.put("retired", true);
+        SheetProjection.SourceElement gear = element.attachedTo();
+        if (gear != null)
+            source.putObject("attachedTo").put("id", gear.sourceId()).put("instanceId", gear.instanceId()).put("name", gear.name())
+                    .put("kind", gear.sourcePath() != null && gear.sourcePath().startsWith("activeWeapons") ? "weapon" : "armor");
         return source;
     }
 

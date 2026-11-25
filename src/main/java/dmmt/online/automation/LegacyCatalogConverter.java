@@ -489,6 +489,20 @@ public final class LegacyCatalogConverter {
             if ("actions".equals(next.family()) && p.sourceId().startsWith("consumables:") && next.path().matches(Pattern.quote(path) + "/actions/\\d+"))
                 consumableUnit(legacyRule, next.path(), p, pools, rule);
             rules.add(rule);
+            if (Set.of("rollTriggers", "conditionalRollTriggers").contains(next.family())
+                    && "secondWind".equals(legacyRule.path("splendorAction").asText())) {
+                // Without Hope the legacy button still clears the roller's own benefit.
+                ObjectNode own = rule.deepCopy();
+                own.put("id", unique(rule.path("id").asText(), ruleIds));
+                ((ObjectNode) own.path("bindings").get(0)).remove("targetSelection");
+                JsonNode hopeful = own.path("when").path("and").get(0);
+                ((ArrayNode) own.path("when").get("and")).set(0, RuleJson.JSON.createObjectNode().set("not", hopeful));
+                for (JsonNode step : own.path("do")) {
+                    JsonNode track = step.get("track");
+                    if (track != null && track.asText().startsWith("recipient.")) ((ObjectNode) step).put("track", "actor." + track.asText().substring("recipient.".length()));
+                }
+                rules.add(own);
+            }
             for (ObjectNode follow : extra) {
                 follow.put("id", unique(follow.path("id").asText(), ruleIds));
                 rules.add(follow);
@@ -3596,7 +3610,10 @@ public final class LegacyCatalogConverter {
         }
         if (trigger.has("when")) {
             String condition = trigger.path("when").asText();
-            if (Set.of("hope", "fear").contains(condition)) when.addObject().putArray("eq").add(read("event.check.dominant")).add(condition);
+            if (Set.of("hope", "fear").contains(condition)) {
+                when.addObject().putArray("eq").add(read("event.check.dominant")).add(condition);
+                when.addObject().putArray("ne").add(read("event.check.critical")).add(true);
+            }
             else if ("hopeOrCritical".equals(condition)) {
                 ArrayNode any = RuleJson.JSON.createArrayNode();
                 any.addObject().putArray("eq").add(read("event.check.dominant")).add("hope");
@@ -3611,7 +3628,7 @@ public final class LegacyCatalogConverter {
                 success.addObject().putArray("gte").add(read("event.check.total")).add(difficulty.deepCopy());
                 all.addObject().set("or", success);
                 when.addObject().set("and", all);
-            } else if ("failure".equals(condition)) when.addObject().putArray("eq").add(read("event.check.outcome")).add("failure");
+            } else if ("failure".equals(condition)) when.addObject().putArray("ne").add(read("event.check.outcome")).add("success");
             else if ("always".equals(condition)) {
                 // No condition is needed for an unconditional trigger.
             } else if ("hopeDie".equals(condition) && trigger.path("die").isInt())
@@ -3652,8 +3669,20 @@ public final class LegacyCatalogConverter {
             notFailure.putArray("eq").add(read("event.check.outcome")).add("failure");
             when.addObject().set("not", notFailure);
         }
-        if (trigger.has("outcome")) when.addObject().putArray("eq").add(read("event.check.outcome")).add(trigger.path("outcome").asText());
-        if (trigger.path("failedOnly").asBoolean(false)) when.addObject().putArray("eq").add(read("event.check.outcome")).add("failure");
+        if (trigger.has("outcome")) {
+            // The legacy outcome is the result a trigger converts to; it is not offered when the roll already has it (or is critical).
+            String converted = trigger.path("outcome").asText();
+            if (!Set.of("hope", "fear").contains(converted)) p.add(path + "/outcome", "Expected hope or fear.");
+            else {
+                when.addObject().putArray("ne").add(read("event.check.dominant")).add(converted);
+                when.addObject().putArray("ne").add(read("event.check.critical")).add(true);
+            }
+        }
+        if (trigger.path("failedOnly").asBoolean(false)) {
+            // Players do not always know the difficulty, so a roll that is not known to have succeeded may have failed.
+            when.addObject().putArray("ne").add(read("event.check.outcome")).add("success");
+            when.addObject().putArray("ne").add(read("event.check.critical")).add(true);
+        }
         if (trigger.path("criticalOnly").asBoolean(false)) when.addObject().putArray("eq").add(read("event.check.critical")).add(true);
         if (trigger.has("swapDuality")) {
             if (!trigger.path("swapDuality").isBoolean()) p.add(path + "/swapDuality", "Expected a boolean.");
@@ -3693,6 +3722,7 @@ public final class LegacyCatalogConverter {
                 kinds.addObject().putArray("eq").add(read("event.check.kind")).add("attack");
                 kinds.addObject().putArray("eq").add(read("event.check.kind")).add("damage");
                 when.addObject().set("or", kinds);
+                when.addObject().put("exists", "event.check.facesByRole." + resource);
                 when.addObject().putArray("includes").add(read("event.check.facesByRole." + resource)).add(1);
             }
         }

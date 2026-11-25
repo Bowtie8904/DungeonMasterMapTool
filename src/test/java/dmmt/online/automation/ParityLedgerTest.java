@@ -124,7 +124,7 @@ class ParityLedgerTest {
     void everyLedgerRowMatchesTheLegacyBaseline(@TempDir Path staging) throws Exception {
         LegacyCatalogConverter.main(new String[]{"dmmap-daggerheart", staging.toString()});
         Map<String, String> texts = new LinkedHashMap<>();
-        Map<String, JsonNode> catalogs = new LinkedHashMap<>();
+        Map<String, JsonNode> catalogs = currentCatalogs = new LinkedHashMap<>();
         for (String category : CATEGORIES) {
             String text = Files.readString(staging.resolve(category + ".json"));
             texts.put(category, text);
@@ -147,6 +147,10 @@ class ParityLedgerTest {
             String rollProblem = rollMismatch(pack, placed, expected.path("rolls"));
             if (rollProblem == null) rollProblem = weaponRollMismatch(pack, placed, expected.path("rolls"));
             if (rollProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("rolls: " + rollProblem);
+            String attachProblem = attachMismatch(pack, placed, expected.path("attach"));
+            if (attachProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("attach: " + attachProblem);
+            String triggerProblem = triggerMismatch(pack, placed, expected.path("triggers"));
+            if (triggerProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("triggers: " + triggerProblem);
             for (var action : expected.path("actions").properties()) {
                 String problem = actionMismatch(pack, placed, action.getKey(), action.getValue());
                 if (problem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add(action.getKey() + ": " + problem);
@@ -177,7 +181,7 @@ class ParityLedgerTest {
 
     /** Automation fields whose behavior the harness replays against the legacy baseline. */
     private static final java.util.Set<String> PROBED = java.util.Set.of("actions", "uses", "rest", "modifiers", "rollOptions",
-            "conditionalRollOptions", "conditionalModifiers", "conditionalActions", "usesOverrides");
+            "conditionalRollOptions", "conditionalModifiers", "conditionalActions", "usesOverrides", "rollTriggers", "conditionalRollTriggers", "attach");
 
     private static void writeLedger(Map<String, List<String>> failures) throws Exception {
         Path file = Path.of("docs/automation-parity-ledger.csv");
@@ -493,9 +497,9 @@ class ParityLedgerTest {
                 }
                 Map<String, JsonNode> offered = new TreeMap<>();
                 for (JsonNode option : weaponOptions(pack, sheet, event, instance, kind))
-                    if (ownOption(option) && option.path("available").asBoolean(true)) offered.put(option.path("ruleId").asText(), option);
+                    if (ownOption(option) && option.path("available").asBoolean(true) && !"magic-damage".equals(option.path("ruleId").asText())) offered.put(option.path("ruleId").asText(), option); // legacy offers the damage type as a select outside the option list
                 for (String key : new ArrayList<>(offered.keySet())) {
-                    String stripped = key.replaceFirst("-\\d+$", "");
+                    String stripped = key.replaceFirst("((-\\d+)+|\\.start)$", "");
                     // The converter disambiguates a rule id shared with another rule of the same source.
                     if (!stripped.equals(key) && legacy.path("offered").has(stripped) && !offered.containsKey(stripped)) offered.put(stripped, offered.remove(key));
                 }
@@ -523,6 +527,7 @@ class ParityLedgerTest {
                     }
                 }
             } catch (RuntimeException e) {
+                if (legacy.has("blocker")) continue; // both engines refuse the attack; the wording differs
                 return where + "rejected: " + e.getMessage() + " @ " + frames(e);
             }
         }
@@ -536,6 +541,161 @@ class ParityLedgerTest {
         return frames.toString();
     }
 
+    private static Random dualityDice(int hope, int fear) {
+        return new Random(0) {
+            private int calls;
+            @Override public int nextInt(int bound) {
+                calls++;
+                if (bound == 12 && calls == 1) return hope - 1;
+                if (bound == 12 && calls == 2) return fear - 1;
+                return Math.min(3, bound) - 1;
+            }
+        };
+    }
+
+    /** Result buttons offered after each roll scenario and outcome, against the legacy roll triggers. */
+    private static String triggerMismatch(AutomationHost.Pack pack, Placed placed, JsonNode expected) {
+        if (expected.isMissingNode() || expected.isNull()) return null;
+        for (var scenario : expected.properties()) {
+            if (scenario.getKey().startsWith("ally:")) {
+                String problem = allyTriggerMismatch(pack, placed, scenario.getKey(), scenario.getValue());
+                if (problem != null) return problem;
+                continue;
+            }
+            String[] parts = scenario.getKey().split(":");
+            String name = scenario.getKey();
+            try {
+                ObjectNode sheet;
+                ObjectNode request;
+                ObjectNode event = AutomationHost.event("action.request", "parity", 1);
+                boolean damage = "damage".equals(parts[0]);
+                if ("check".equals(parts[0])) {
+                    sheet = placed.sheet().deepCopy();
+                    request = checkRequest(sheet, parts[1], parts[2], null);
+                } else {
+                    sheet = withWeapon(placed.sheet());
+                    request = profileRequest(sheet, sheet.withArray("activeWeapons").get(0).path("instanceId").asText(), parts[0], null);
+                }
+                int hope = "hope".equals(parts[parts.length - 1]) ? 5 : "fear".equals(parts[parts.length - 1]) ? 3 : 4;
+                int fear = "hope".equals(parts[parts.length - 1]) ? 3 : "fear".equals(parts[parts.length - 1]) ? 5 : 4;
+                JsonNode result = HOST.execute(pack, sheet, event, request, "self", "self", damage ? constantDice() : dualityDice(hope, fear));
+                Map<String, JsonNode> actual = new TreeMap<>();
+                for (JsonNode action : result.path("resultActions"))
+                    if (ownOption(action)) actual.put(action.path("ruleId").asText(), action);
+                for (String key : new ArrayList<>(actual.keySet())) {
+                    String stripped = key.replaceFirst("((-\\d+)+|\\.start)$", "");
+                    if (!stripped.equals(key) && expected.path(name).has(stripped) && !actual.containsKey(stripped)) actual.put(stripped, actual.remove(key));
+                }
+                var legacy = new TreeMap<String, JsonNode>();
+                scenario.getValue().properties().forEach(e -> {
+                    if (!e.getValue().has("blocker") || actual.containsKey(e.getKey())) legacy.put(e.getKey(), e.getValue());
+                });
+                if (!actual.keySet().equals(legacy.keySet())) return name + ": triggers legacy=" + legacy.keySet() + " new=" + actual.keySet();
+            } catch (Exception e) {
+                return name + ": rejected: " + e.getMessage() + " @ " + (e instanceof RuntimeException r ? frames(r) : "");
+            }
+        }
+        return null;
+    }
+
+    /** Ally-audience triggers: another character's finished roll, described for this owner as another player. */
+    private static String allyTriggerMismatch(AutomationHost.Pack pack, Placed placed, String name, JsonNode expected) {
+        String[] parts = name.split(":");
+        if (!"check".equals(parts[1])) return null;
+        String outcome = parts[parts.length - 1];
+        int hope = "hope".equals(outcome) ? 5 : "fear".equals(outcome) ? 3 : 4, fear = "hope".equals(outcome) ? 3 : "fear".equals(outcome) ? 5 : 4;
+        try {
+            ObjectNode roller = standardSheet();
+            ObjectNode rolled = HOST.execute(pack, roller, AutomationHost.event("action.request", "roller", 1),
+                    checkRequest(roller, parts[2], parts[3], null), "self", "self", dualityDice(hope, fear));
+            ObjectNode event = ((ObjectNode) rolled.required("event")).deepCopy();
+            JsonNode described = HOST.describe(pack, placed.sheet().deepCopy(), event, "roll", "other");
+            java.util.Set<String> actual = new java.util.TreeSet<>();
+            for (JsonNode action : described.path("actions"))
+                if (ownOption(action)) actual.add(action.path("ruleId").asText().replaceFirst("((-\\d+)+|\\.start)$", ""));
+            java.util.Set<String> legacy = new java.util.TreeSet<>();
+            expected.properties().forEach(e -> legacy.add(e.getKey()));
+            if (!actual.equals(legacy)) return name + ": ally triggers legacy=" + legacy + " new=" + actual;
+            return null;
+        } catch (Exception e) {
+            return name + ": rejected: " + e.getMessage() + " @ " + (e instanceof RuntimeException r ? frames(r) : "");
+        }
+    }
+
+    private static Map<String, JsonNode> currentCatalogs = new LinkedHashMap<>();
+
+    private static String norm(String id) { return id.replaceFirst("((-\\d+)+|\\.start)$", ""); }
+
+    /** Attachable items: which gear accepts them, and the rolls on the first compatible gear once attached and detached. */
+    private static String attachMismatch(AutomationHost.Pack pack, Placed placed, JsonNode expected) {
+        if (expected.isMissingNode() || expected.isNull()) return null;
+        try {
+            for (var gear : expected.path("blocked").properties()) {
+                String[] parts = gear.getKey().split("/");
+                Placed host = place(new Row(parts[0], "/entries/" + parts[1] + "/automation"), currentCatalogs.get(parts[0]));
+                ObjectNode sheet = host.sheet();
+                sheet.withArray("inventory").add(placed.sheet().withArray("inventory").get(0).deepCopy());
+                String gearInstance = "owner";
+                if ("weapons".equals(parts[0])) ((ObjectNode) sheet.withArray("activeWeapons").get(0)).put("instanceId", "gear");
+                else sheet.withObject("/activeArmor").put("instanceId", "gear");
+                gearInstance = "gear";
+                // Both gear and item use instance "owner" in place(); the item is re-keyed here.
+                ((ObjectNode) sheet.withArray("inventory").get(0)).put("instanceId", "item");
+                List<String> blockers = HOST.attachBlockers(pack, sheet, "item", gearInstance);
+                if (blockers.isEmpty() == gear.getValue().asBoolean())
+                    return gear.getKey() + ": attach legacy=" + (gear.getValue().asBoolean() ? "blocked" : "allowed") + " new=" + (blockers.isEmpty() ? "allowed" : "blocked: " + blockers);
+                JsonNode want = expected.path("rolls").path(gear.getKey());
+                if (want.isMissingNode()) continue;
+                ObjectNode attached = HOST.attach(pack, sheet, "item", gearInstance);
+                if (attached.withArray("inventory").size() != want.path("inventory").asInt())
+                    return gear.getKey() + ": inventory after attach legacy=" + want.path("inventory").asInt() + " new=" + attached.withArray("inventory").size();
+                ObjectNode event = AutomationHost.event("action.request", "parity", 1);
+                if ("weapons".equals(parts[0])) {
+                    ObjectNode plain = standardSheet();
+                    plain.putArray("experiences").addObject().put("name", "Parity").put("mod", 2);
+                    ObjectNode weapon = ((ObjectNode) attached.withArray("activeWeapons").get(0)).deepCopy();
+                    weapon.remove(List.of("feature", "attachments", "attachmentBase"));
+                    weapon.put("automationSource", "weapons:plain").put("instanceId", "plain");
+                    plain.withArray("activeWeapons").add(weapon);
+                    for (String kind : List.of("attack", "damage")) {
+                        int base = rollTotal(HOST.execute(pack, plain.deepCopy(), event, profileRequest(plain, "plain", kind, null), "self", "self", constantDice()));
+                        int always = rollTotal(HOST.execute(pack, attached.deepCopy(), event, profileRequest(attached, "gear", kind, null), "self", "self", constantDice())) - base;
+                        if (always != want.path(kind).path("always").asInt()) return gear.getKey() + ": attached " + kind + " always legacy=" + want.path(kind).path("always").asInt() + " new=" + always;
+                        java.util.Set<String> offered = new java.util.TreeSet<>();
+                        for (JsonNode option : weaponOptions(pack, attached, event, "gear", kind))
+                            if (ownOption(option) && option.path("available").asBoolean(true) && !"magic-damage".equals(option.path("ruleId").asText())) offered.add(norm(option.path("ruleId").asText()));
+                        java.util.Set<String> legacy = new java.util.TreeSet<>();
+                        want.path(kind).path("offered").forEach(id -> legacy.add(id.asText()));
+                        if (!offered.equals(legacy)) return gear.getKey() + ": attached " + kind + " options legacy=" + legacy + " new=" + offered;
+                    }
+                } else {
+                    ObjectNode plain = standardSheet();
+                    plain.putArray("experiences").addObject().put("name", "Parity").put("mod", 2);
+                    int base = rollTotal(HOST.execute(pack, plain.deepCopy(), event, checkRequest(plain, "action", "Agility", null), "self", "self", constantDice()));
+                    int always = rollTotal(HOST.execute(pack, attached.deepCopy(), event, checkRequest(attached, "action", "Agility", null), "self", "self", constantDice())) - base;
+                    JsonNode legacy = want.path("check:action:Agility");
+                    if (always != legacy.path("always").asInt()) return gear.getKey() + ": attached check always legacy=" + legacy.path("always").asInt() + " new=" + always;
+                    java.util.Set<String> offered = new java.util.TreeSet<>();
+                    for (JsonNode option : HOST.describeCheck(pack, attached, event, "action", "Agility", "self").path("options"))
+                        if (ownOption(option) && option.path("available").asBoolean(true) && !"magic-damage".equals(option.path("ruleId").asText())) offered.add(norm(option.path("ruleId").asText()));
+                    java.util.Set<String> wantIds = new java.util.TreeSet<>();
+                    legacy.path("offered").forEach(id -> wantIds.add(id.asText()));
+                    if (!offered.equals(wantIds)) return gear.getKey() + ": attached check options legacy=" + wantIds + " new=" + offered;
+                }
+                String attachedId = HOST.sources(pack, attached).stream().filter(s -> s.attachedTo() != null).findFirst().orElseThrow().instanceId();
+                ObjectNode detached = HOST.detach(pack, attached, attachedId);
+                List<String> stacks = new ArrayList<>();
+                detached.withArray("inventory").forEach(i -> stacks.add(i.path("name").asText() + ":" + i.path("qty").asInt()));
+                java.util.Collections.sort(stacks);
+                List<String> legacyStacks = new ArrayList<>();
+                want.path("detached").forEach(i -> legacyStacks.add(i.asText()));
+                if (!stacks.equals(legacyStacks)) return gear.getKey() + ": inventory after detach legacy=" + legacyStacks + " new=" + stacks;
+            }
+        } catch (RuntimeException e) {
+            return "attach rejected: " + e.getMessage() + " @ " + frames(e);
+        }
+        return null;
+    }
     /** Check rolls: always-on contributions, offered options and each option's effect against the legacy scenario. */
     private static String rollMismatch(AutomationHost.Pack pack, Placed placed, JsonNode expected) {
         if (expected.isMissingNode() || expected.isNull()) return null;
@@ -553,7 +713,7 @@ class ParityLedgerTest {
                     JsonNode described = HOST.describeCheck(pack, sheet, event, kind, trait, "self");
                     Map<String, JsonNode> offered = new TreeMap<>();
                     for (JsonNode option : described.path("options"))
-                        if (ownOption(option) && option.path("available").asBoolean(true)) offered.put(option.path("ruleId").asText(), option);
+                        if (ownOption(option) && option.path("available").asBoolean(true) && !"magic-damage".equals(option.path("ruleId").asText())) offered.put(option.path("ruleId").asText(), option); // legacy offers the damage type as a select outside the option list
                     var legacyOptions = new TreeMap<String, JsonNode>();
                     legacy.path("offered").properties().forEach(e -> {
                         if (!e.getValue().has("blocker") || offered.containsKey(e.getKey())) legacyOptions.put(e.getKey(), e.getValue());
