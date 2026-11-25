@@ -151,6 +151,8 @@ class ParityLedgerTest {
             if (mitigationProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("mitigation: " + mitigationProblem);
             String attachProblem = attachMismatch(pack, placed, expected.path("attach"));
             if (attachProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("attach: " + attachProblem);
+            String armorProblem = armorMismatch(pack, placed, legacyArmorAutomation(row));
+            if (armorProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("armor: " + armorProblem);
             String triggerProblem = triggerMismatch(pack, placed, expected.path("triggers"));
             if (triggerProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("triggers: " + triggerProblem);
             for (var action : expected.path("actions").properties()) {
@@ -183,7 +185,8 @@ class ParityLedgerTest {
 
     /** Automation fields whose behavior the harness replays against the legacy baseline. */
     private static final java.util.Set<String> PROBED = java.util.Set.of("actions", "uses", "rest", "modifiers", "rollOptions",
-            "conditionalRollOptions", "conditionalModifiers", "conditionalActions", "usesOverrides", "rollTriggers", "conditionalRollTriggers", "attach", "mitigation", "conditionalMitigation");
+            "conditionalRollOptions", "conditionalModifiers", "conditionalActions", "usesOverrides", "rollTriggers", "conditionalRollTriggers", "attach", "mitigation", "conditionalMitigation",
+            "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "equipEffect", "zeroHopeClearArmor");
 
     private static void writeLedger(Map<String, List<String>> failures) throws Exception {
         Path file = Path.of("docs/automation-parity-ledger.csv");
@@ -266,6 +269,89 @@ class ParityLedgerTest {
     }
 
     private static JsonNode currentAutomation;
+
+    private static final List<String> ARMOR_HOSTED = List.of("armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "equipEffect", "zeroHopeClearArmor");
+    private static final int[][] ARMOR_STEPS = {{0, 3}, {2, 3}, {4, 3}, {3, 3}, {4, 3}, {4, 0}, {4, 2}};
+
+    private static JsonNode legacyArmorAutomation(Row row) throws Exception {
+        if (!"armor".equals(row.category())) return null;
+        JsonNode legacy = new com.fasterxml.jackson.databind.ObjectMapper().readTree(Files.readString(Path.of("dmmap-daggerheart/armor.json")));
+        return legacy.at(row.pointer());
+    }
+
+    private static String armorSignature(java.util.Set<String> labels, ObjectNode sheet) {
+        return String.join("+", new java.util.TreeSet<>(labels)) + "|armor=" + sheet.at("/armorTrack/on").asInt() + "|hope=" + sheet.at("/hope/on").asInt();
+    }
+
+    /** Replays equip, mark, clear and zero-hope steps through the legacy host class and through the new host's save flow. */
+    private static String armorMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacyAutomation) throws Exception {
+        if (legacyAutomation == null || ARMOR_HOSTED.stream().noneMatch(legacyAutomation::has)) return null;
+        String name = placed.sheet().at("/activeArmor/name").asText();
+        ObjectNode legacyPrevious = standardSheet();
+        legacyPrevious.withObject("/armorTrack").put("on", 0);
+        legacyPrevious.withArray("effects");
+        legacyPrevious.withObject("/activeArmor").put("name", "Other").putObject("automation");
+        ObjectNode newPrevious = legacyPrevious.deepCopy();
+        newPrevious.set("activeArmor", RuleJson.JSON.createObjectNode().put("name", "Other"));
+        for (int index = 0; index < ARMOR_STEPS.length; index++) {
+            int[] step = ARMOR_STEPS[index];
+            ObjectNode legacyNext = legacyPrevious.deepCopy();
+            legacyNext.withObject("/activeArmor").put("name", name).set("automation", legacyAutomation.deepCopy());
+            legacyNext.withObject("/armorTrack").put("on", step[0]);
+            legacyNext.withObject("/hope").put("on", step[1]);
+            dmmt.online.ArmorFeatureRules.normalize(legacyPrevious, legacyNext);
+            java.util.Set<String> legacyLabels = new java.util.HashSet<>();
+            for (JsonNode effect : legacyNext.path("effects")) legacyLabels.add(effect.path("name").asText());
+
+            ObjectNode next = placed.sheet().deepCopy();
+            if (newPrevious.has("automationState")) next.set("automationState", newPrevious.get("automationState").deepCopy());
+            next.withObject("/armorTrack").put("on", step[0]);
+            next.withObject("/hope").put("on", step[1]);
+            java.util.Set<String> labels;
+            try {
+                saveThroughHost(pack, newPrevious, next);
+                labels = effectLabels(pack, next);
+            } catch (RuntimeException e) {
+                return "step " + index + " rejected: " + e.getMessage();
+            }
+            String want = armorSignature(legacyLabels, legacyNext), got = armorSignature(labels, next);
+            if (!want.equals(got)) return "step " + index + " " + java.util.Arrays.toString(step) + " legacy=" + want + " new=" + got;
+            legacyPrevious = legacyNext;
+            newPrevious = next;
+        }
+        return null;
+    }
+
+    /** Mirrors the server's sheet save: effect transitions, equipment changes and track changes become host events. */
+    private static void saveThroughHost(AutomationHost.Pack pack, ObjectNode previous, ObjectNode saved) {
+        List<ObjectNode> events = new ArrayList<>();
+        if (!HOST.projection().equipmentChanges(previous, saved).isEmpty())
+            HOST.endEffectsOfRemovedSources(pack, saved, AutomationHost.event("action.request", "parity", 0));
+        events.addAll(HOST.effectTransitions(pack, previous, saved, AutomationHost.event("action.request", "parity", 0)));
+        for (var change : HOST.projection().equipmentChanges(previous, saved)) {
+            ObjectNode event = AutomationHost.event("equipment.changed", "parity", 0);
+            ObjectNode equipment = event.putObject("equipment").put("slot", change.slot());
+            equipment.set("before", change.before());
+            equipment.set("after", change.after());
+            events.add(event);
+        }
+        for (var change : HOST.projection().trackChanges(previous, saved)) {
+            ObjectNode event = AutomationHost.event("track.changed", "parity", 0);
+            event.put("track", change.track()).put("change", change.change()).put("requested", change.requested());
+            event.set("before", change.before());
+            event.set("after", change.after());
+            events.add(event);
+        }
+        for (ObjectNode event : events) HOST.automatic(pack, saved, event, constantDice());
+    }
+
+    private static java.util.Set<String> effectLabels(AutomationHost.Pack pack, ObjectNode sheet) {
+        java.util.Set<String> labels = new java.util.HashSet<>();
+        for (JsonNode effect : HOST.describe(pack, sheet, AutomationHost.event("action.request", "parity", 0), "sheet", "self").path("derivedEffects"))
+            labels.add(effect.path("label").asText());
+        for (JsonNode effect : HOST.projection().actorFact(sheet, "effects")) labels.add(effect.path("label").asText(effect.path("name").asText()));
+        return labels;
+    }
 
     /** Runs a downtime-surface rule through a rest move; returns "no-downtime" when the rule has no such binding. */
     private static String downtimeMismatch(AutomationHost.Pack pack, Placed placed, ObjectNode sheet, String actionId) {
