@@ -268,8 +268,8 @@
       "id": "quick",
       "label": "Quick: target another creature",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Quick: target another creature",
+       "applied": "{source} - Quick: target another creature"
       },
       "roll": "attack",
       "cost": {
@@ -856,8 +856,8 @@
       "id": "quick",
       "label": "Quick: target another creature",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Quick: target another creature",
+       "applied": "{source} - Quick: target another creature"
       },
       "roll": "attack",
       "cost": {
@@ -1080,8 +1080,8 @@
       "id": "quick",
       "label": "Quick: target another creature",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Quick: target another creature",
+       "applied": "{source} - Quick: target another creature"
       },
       "roll": "attack",
       "cost": {
@@ -1605,7 +1605,7 @@
       "id": "invigorating",
       "label": "Invigorating: roll a d4",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Invigorating: roll a d4"
       },
       "on": "attack",
       "description": "Use after a successful attack with this weapon. On a 4, clear a Stress.",
@@ -1650,8 +1650,8 @@
       "id": "persuasive",
       "label": "Persuasive",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Persuasive",
+       "applied": "{source} - Persuasive"
       },
       "roll": "trait:Presence",
       "value": 2,
@@ -1944,8 +1944,8 @@
       "id": "quick",
       "label": "Quick: target another creature",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Quick: target another creature",
+       "applied": "{source} - Quick: target another creature"
       },
       "roll": "attack",
       "cost": {
@@ -2153,8 +2153,8 @@
       "id": "devastating",
       "label": "Devastating: d20 damage die",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Devastating: d20 damage die",
+       "applied": "{source} - Devastating: d20 damage die"
       },
       "roll": "attack",
       "damageDie": 20,
@@ -2221,8 +2221,8 @@
       "id": "dueling",
       "label": "Dueling: target is isolated",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Dueling: target is isolated",
+       "applied": "{source} - Dueling: target is isolated"
       },
       "roll": "attack",
       "advantage": "advantage",
@@ -2590,7 +2590,7 @@
       "id": "lucky",
       "label": "Lucky: reroll the failed attack",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Lucky: reroll the failed attack"
       },
       "on": "attack",
       "when": "failure",
@@ -2692,8 +2692,8 @@
       "id": "painful",
       "label": "Painful: mark a Stress",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Painful: mark a Stress",
+       "applied": "{source} - Painful: mark a Stress"
       },
       "roll": "damage",
       "cost": {
@@ -3083,8 +3083,8 @@
       "id": "quick",
       "label": "Quick: target another creature",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Quick: target another creature",
+       "applied": "{source} - Quick: target another creature"
       },
       "roll": "attack",
       "cost": {
@@ -3230,8 +3230,8 @@
       "id": "quick",
       "label": "Quick: target another creature",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Quick: target another creature",
+       "applied": "{source} - Quick: target another creature"
       },
       "roll": "attack",
       "cost": {
@@ -3268,7 +3268,7 @@
       "id": "concussive",
       "label": "Concussive: knock the target back to Far range",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Concussive: knock the target back to Far range"
       },
       "on": "attack",
       "cost": {
@@ -3384,7 +3384,7 @@
       "id": "grappling",
       "label": "Grappling: Restrain the target or pull it into Melee range",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Grappling: Restrain the target or pull it into Melee range"
       },
       "on": "attack",
       "cost": {
@@ -3421,8 +3421,8 @@
       "id": "bouncing",
       "label": "Bouncing: targets hit",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Bouncing: targets hit",
+       "applied": "{source} - Bouncing: targets hit"
       },
       "roll": "attack",
       "cost": {
@@ -3738,7 +3738,7 @@
       "id": "lifestealing",
       "label": "Lifestealing: roll a d6",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Lifestealing: roll a d6"
       },
       "on": "attack",
       "description": "Use after a successful attack with this weapon. Choose what a 6 clears, then roll.",
@@ -3800,8 +3800,8 @@
       "id": "greedy",
       "label": "Greedy: spend a handful of gold, +1 Proficiency",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Greedy: spend a handful of gold, +1 Proficiency",
+       "applied": "{source} - Greedy: spend a handful of gold, +1 Proficiency"
       },
       "roll": "damage",
       "proficiency": 1,
@@ -3866,8 +3866,8 @@
       "id": "painful",
       "label": "Painful: mark a Stress",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Painful: mark a Stress",
+       "applied": "{source} - Painful: mark a Stress"
       },
       "roll": "damage",
       "cost": {
@@ -4011,8 +4011,8 @@
       "id": "quick",
       "label": "Quick: target another creature",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Quick: target another creature",
+       "applied": "{source} - Quick: target another creature"
       },
       "roll": "attack",
       "cost": {
@@ -4050,8 +4050,8 @@
       "id": "quick",
       "label": "Quick: target another creature",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Quick: target another creature",
+       "applied": "{source} - Quick: target another creature"
       },
       "roll": "attack",
       "cost": {
@@ -4088,8 +4088,8 @@
       "id": "quick",
       "label": "Quick: target another creature",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Quick: target another creature",
+       "applied": "{source} - Quick: target another creature"
       },
       "roll": "attack",
       "cost": {
@@ -4126,8 +4126,8 @@
       "id": "quick",
       "label": "Quick: target another creature",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Quick: target another creature",
+       "applied": "{source} - Quick: target another creature"
       },
       "roll": "attack",
       "cost": {
@@ -4398,8 +4398,8 @@
       "id": "primary-damage",
       "label": "Paired",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Paired",
+       "applied": "{source} - Paired"
       },
       "roll": "damage",
       "value": 2,
@@ -4500,8 +4500,8 @@
       "id": "primary-damage",
       "label": "Paired",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Paired",
+       "applied": "{source} - Paired"
       },
       "roll": "damage",
       "value": 2,
@@ -4538,10 +4538,10 @@
       "id": "use",
       "label": "Startling",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Startling",
+       "chatButton": "Startling",
+       "roll": "Startling",
+       "reportTitle": "{source} - Startling"
       },
       "cost": {
        "stress": 1
@@ -4617,8 +4617,8 @@
       "id": "primary-damage",
       "label": "Paired",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Paired",
+       "applied": "{source} - Paired"
       },
       "roll": "damage",
       "value": 3,
@@ -4716,8 +4716,8 @@
       "id": "primary-damage",
       "label": "Paired",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Paired",
+       "applied": "{source} - Paired"
       },
       "roll": "damage",
       "value": 3,
@@ -4753,10 +4753,10 @@
       "id": "use",
       "label": "Startling",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Startling",
+       "chatButton": "Startling",
+       "roll": "Startling",
+       "reportTitle": "{source} - Startling"
       },
       "cost": {
        "stress": 1
@@ -4835,8 +4835,8 @@
       "id": "primary-damage",
       "label": "Double Duty",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Double Duty",
+       "applied": "{source} - Double Duty"
       },
       "roll": "damage",
       "value": 1,
@@ -4872,10 +4872,10 @@
       "id": "parry",
       "label": "Parry",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Parry",
+       "chatButton": "Parry",
+       "roll": "Parry",
+       "reportTitle": "{source} - Parry"
       },
       "sendRoll": {
        "dice": "@total_proficiencyd6",
@@ -4932,8 +4932,8 @@
       "id": "primary-damage",
       "label": "Paired",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Paired",
+       "applied": "{source} - Paired"
       },
       "roll": "damage",
       "value": 4,
@@ -5031,8 +5031,8 @@
       "id": "primary-damage",
       "label": "Paired",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Paired",
+       "applied": "{source} - Paired"
       },
       "roll": "damage",
       "value": 4,
@@ -5068,10 +5068,10 @@
       "id": "use",
       "label": "Startling",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Startling",
+       "chatButton": "Startling",
+       "roll": "Startling",
+       "reportTitle": "{source} - Startling"
       },
       "cost": {
        "stress": 1
@@ -5144,10 +5144,10 @@
       "id": "use",
       "label": "Deflecting",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Deflecting",
+       "chatButton": "Deflecting",
+       "roll": "Deflecting",
+       "reportTitle": "{source} - Deflecting"
       },
       "cost": {
        "armor": 1
@@ -5187,8 +5187,8 @@
       "id": "charged",
       "label": "Charged: +1 Proficiency",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Charged: +1 Proficiency",
+       "applied": "{source} - Charged: +1 Proficiency"
       },
       "roll": "attack",
       "weapon": "primary",
@@ -5258,8 +5258,8 @@
       "id": "primary-damage",
       "label": "Paired",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Paired",
+       "applied": "{source} - Paired"
       },
       "roll": "damage",
       "value": 5,
@@ -5357,8 +5357,8 @@
       "id": "primary-damage",
       "label": "Paired",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Paired",
+       "applied": "{source} - Paired"
       },
       "roll": "damage",
       "value": 5,
@@ -5394,10 +5394,10 @@
       "id": "use",
       "label": "Startling",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Startling",
+       "chatButton": "Startling",
+       "roll": "Startling",
+       "reportTitle": "{source} - Startling"
       },
       "cost": {
        "stress": 1
@@ -5512,7 +5512,7 @@
       "id": "locked-on",
       "label": "Locked On: next primary attack succeeds",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Locked On: next primary attack succeeds"
       },
       "on": "attack",
       "description": "Use after a successful attack with this weapon.",
@@ -5529,8 +5529,8 @@
            "id": "success",
            "label": "Locked On: automatically succeeds against the same target",
            "texts": {
-            "option": "{source} - {label}",
-            "applied": "{source} - {label}"
+            "option": "{source} - Locked On: automatically succeeds against the same target",
+            "applied": "{source} - Locked On: automatically succeeds against the same target"
            },
            "roll": "attack",
            "weapon": "primary",
@@ -5641,10 +5641,10 @@
       "id": "use",
       "label": "Swatter",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Swatter",
+       "chatButton": "Swatter",
+       "roll": "Swatter",
+       "reportTitle": "{source} - Swatter"
       },
       "cost": {
        "stress": 1
@@ -5679,7 +5679,7 @@
       "id": "restraining",
       "label": "Restraining: temporarily Restrain the target",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Restraining: temporarily Restrain the target"
       },
       "on": "attack",
       "cost": {
@@ -5720,10 +5720,10 @@
       "id": "use",
       "label": "Watchful: cast Floating Eye",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Watchful: cast Floating Eye",
+       "chatButton": "Watchful: cast Floating Eye",
+       "roll": "Watchful: cast Floating Eye",
+       "reportTitle": "{source} - Watchful: cast Floating Eye"
       },
       "steps": [
        {
@@ -5738,8 +5738,8 @@
            "id": "watchful",
            "label": "Watchful: against mind reading or clairvoyance",
            "texts": {
-            "option": "{source} - {label}",
-            "applied": "{source} - {label}"
+            "option": "{source} - Watchful: against mind reading or clairvoyance",
+            "applied": "{source} - Watchful: against mind reading or clairvoyance"
            },
            "roll": "reaction",
            "advantage": "disadvantage"
@@ -5795,8 +5795,8 @@
          "id": "stored",
          "label": "Channeling: stored damage",
          "texts": {
-          "option": "{source} - {label}",
-          "applied": "{source} - {label}"
+          "option": "{source} - Channeling: stored damage",
+          "applied": "{source} - Channeling: stored damage"
          },
          "roll": "damage",
          "value": 0,
@@ -5836,7 +5836,7 @@
       "id": "deforming",
       "label": "Deforming: deform the target's metal armor",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Deforming: deform the target's metal armor"
       },
       "on": "attack",
       "cost": {
@@ -5873,8 +5873,8 @@
       "id": "undead",
       "label": "Life-Linked: against undead",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Life-Linked: against undead",
+       "applied": "{source} - Life-Linked: against undead"
       },
       "roll": "spellcast",
       "value": 2,
@@ -5930,10 +5930,10 @@
       "id": "use",
       "label": "Webslinger: Restrain a target",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Webslinger: Restrain a target",
+       "chatButton": "Webslinger: Restrain a target",
+       "roll": "Webslinger: Restrain a target",
+       "reportTitle": "{source} - Webslinger: Restrain a target"
       },
       "actionRoll": {
        "trait": "Finesse"
@@ -5968,8 +5968,8 @@
       "id": "quick",
       "label": "Quick: target another creature",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Quick: target another creature",
+       "applied": "{source} - Quick: target another creature"
       },
       "roll": "attack",
       "cost": {
@@ -6158,8 +6158,8 @@
       "id": "ricochet",
       "label": "Ricochet: target another creature",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Ricochet: target another creature",
+       "applied": "{source} - Ricochet: target another creature"
       },
       "roll": "attack",
       "cost": {
@@ -6257,8 +6257,8 @@
       "id": "penalty",
       "label": "Aimed: target is close or engaged",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Aimed: target is close or engaged",
+       "applied": "{source} - Aimed: target is close or engaged"
       },
       "roll": "attack",
       "advantage": "disadvantage",
@@ -6269,8 +6269,8 @@
       "id": "ignore",
       "label": "Aimed: ignore the penalty",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Aimed: ignore the penalty",
+       "applied": "{source} - Aimed: ignore the penalty"
       },
       "roll": "attack",
       "cost": {
@@ -6309,8 +6309,8 @@
       "id": "quick",
       "label": "Quick: target another creature",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Quick: target another creature",
+       "applied": "{source} - Quick: target another creature"
       },
       "roll": "attack",
       "cost": {
@@ -6513,10 +6513,10 @@
       "id": "parry",
       "label": "Parry",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Parry",
+       "chatButton": "Parry",
+       "roll": "Parry",
+       "reportTitle": "{source} - Parry"
       },
       "sendRoll": {
        "dice": "@total_proficiencyd8",
@@ -6674,8 +6674,8 @@
       "id": "ricochet",
       "label": "Ricochet: target another creature",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Ricochet: target another creature",
+       "applied": "{source} - Ricochet: target another creature"
       },
       "roll": "attack",
       "cost": {
@@ -6770,8 +6770,8 @@
       "id": "penalty",
       "label": "Aimed: target is close or engaged",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Aimed: target is close or engaged",
+       "applied": "{source} - Aimed: target is close or engaged"
       },
       "roll": "attack",
       "advantage": "disadvantage",
@@ -6782,8 +6782,8 @@
       "id": "ignore",
       "label": "Aimed: ignore the penalty",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Aimed: ignore the penalty",
+       "applied": "{source} - Aimed: ignore the penalty"
       },
       "roll": "attack",
       "cost": {
@@ -6850,8 +6850,8 @@
       "id": "omnipresent",
       "label": "Omnipresent: target within Very Far range",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Omnipresent: target within Very Far range",
+       "applied": "{source} - Omnipresent: target within Very Far range"
       },
       "roll": "attack",
       "advantage": "disadvantage",
@@ -6924,7 +6924,7 @@
       "id": "invigorating",
       "label": "Invigorating: roll a d4",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Invigorating: roll a d4"
       },
       "on": "attack",
       "description": "Use after a successful attack with this weapon. On a 4, clear a Stress.",
@@ -6969,8 +6969,8 @@
       "id": "volleyed",
       "label": "Volleyed: target a group",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Volleyed: target a group",
+       "applied": "{source} - Volleyed: target a group"
       },
       "roll": "attack",
       "cost": {
@@ -7007,8 +7007,8 @@
       "id": "quick",
       "label": "Quick: target another creature",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Quick: target another creature",
+       "applied": "{source} - Quick: target another creature"
       },
       "roll": "attack",
       "cost": {
@@ -7152,8 +7152,8 @@
       "id": "accelerator",
       "label": "Accelerator: move to Far range, +1 Proficiency",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Accelerator: move to Far range, +1 Proficiency",
+       "applied": "{source} - Accelerator: move to Far range, +1 Proficiency"
       },
       "roll": "attack",
       "proficiency": 1,
@@ -7245,8 +7245,8 @@
       "id": "quick",
       "label": "Quick: target another creature",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Quick: target another creature",
+       "applied": "{source} - Quick: target another creature"
       },
       "roll": "attack",
       "cost": {
@@ -7283,7 +7283,7 @@
       "id": "bolstering",
       "label": "Bolstering: PCs within Close range gain a Hope",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Bolstering: PCs within Close range gain a Hope"
       },
       "on": "attack",
       "criticalOnly": true,
@@ -7338,7 +7338,7 @@
       "id": "rebounding",
       "label": "Rebounding: reroll with disadvantage",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Rebounding: reroll with disadvantage"
       },
       "on": "attack",
       "when": "failure",
@@ -7416,8 +7416,8 @@
       "id": "ricochet",
       "label": "Ricochet: target another creature",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Ricochet: target another creature",
+       "applied": "{source} - Ricochet: target another creature"
       },
       "roll": "attack",
       "cost": {
@@ -7512,8 +7512,8 @@
       "id": "penalty",
       "label": "Aimed: target is close or engaged",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Aimed: target is close or engaged",
+       "applied": "{source} - Aimed: target is close or engaged"
       },
       "roll": "attack",
       "advantage": "disadvantage",
@@ -7524,8 +7524,8 @@
       "id": "ignore",
       "label": "Aimed: ignore the penalty",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Aimed: ignore the penalty",
+       "applied": "{source} - Aimed: ignore the penalty"
       },
       "roll": "attack",
       "cost": {
@@ -7563,7 +7563,7 @@
       "id": "concussive",
       "label": "Concussive: knock the target back to Far range",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Concussive: knock the target back to Far range"
       },
       "on": "attack",
       "cost": {
@@ -7621,8 +7621,8 @@
       "id": "bouncing",
       "label": "Bouncing: additional targets",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Bouncing: additional targets",
+       "applied": "{source} - Bouncing: additional targets"
       },
       "roll": "attack",
       "cost": {
@@ -7716,7 +7716,7 @@
       "id": "catalytic",
       "label": "Catalytic: ally gains +3 to next attack",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Catalytic: ally gains +3 to next attack"
       },
       "on": "attack",
       "cost": {
@@ -7778,8 +7778,8 @@
       "id": "quick",
       "label": "Quick: target another creature",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Quick: target another creature",
+       "applied": "{source} - Quick: target another creature"
       },
       "roll": "attack",
       "cost": {
@@ -7948,8 +7948,8 @@
       "id": "extend-1",
       "label": "Extending: reach Very Close",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Extending: reach Very Close",
+       "applied": "{source} - Extending: reach Very Close"
       },
       "roll": "attack",
       "value": -1,
@@ -7960,8 +7960,8 @@
       "id": "extend-2",
       "label": "Extending: reach Close",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Extending: reach Close",
+       "applied": "{source} - Extending: reach Close"
       },
       "roll": "attack",
       "value": -2,
@@ -7972,8 +7972,8 @@
       "id": "extend-3",
       "label": "Extending: reach Far",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Extending: reach Far",
+       "applied": "{source} - Extending: reach Far"
       },
       "roll": "attack",
       "value": -3,
@@ -7984,8 +7984,8 @@
       "id": "extend-4",
       "label": "Extending: reach Very Far",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Extending: reach Very Far",
+       "applied": "{source} - Extending: reach Very Far"
       },
       "roll": "attack",
       "value": -4,
@@ -8021,8 +8021,8 @@
       "id": "devastating",
       "label": "Devastating: d20 damage die",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Devastating: d20 damage die",
+       "applied": "{source} - Devastating: d20 damage die"
       },
       "roll": "attack",
       "damageDie": 20,
@@ -8089,8 +8089,8 @@
       "id": "quick",
       "label": "Quick: target another creature",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Quick: target another creature",
+       "applied": "{source} - Quick: target another creature"
       },
       "roll": "attack",
       "cost": {
@@ -8195,8 +8195,8 @@
       "id": "ricochet",
       "label": "Ricochet: target another creature",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Ricochet: target another creature",
+       "applied": "{source} - Ricochet: target another creature"
       },
       "roll": "attack",
       "cost": {
@@ -8291,8 +8291,8 @@
       "id": "penalty",
       "label": "Aimed: target is close or engaged",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Aimed: target is close or engaged",
+       "applied": "{source} - Aimed: target is close or engaged"
       },
       "roll": "attack",
       "advantage": "disadvantage",
@@ -8303,8 +8303,8 @@
       "id": "ignore",
       "label": "Aimed: ignore the penalty",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Aimed: ignore the penalty",
+       "applied": "{source} - Aimed: ignore the penalty"
       },
       "roll": "attack",
       "cost": {
@@ -8413,8 +8413,8 @@
       "id": "bouncing",
       "label": "Bouncing: additional targets",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Bouncing: additional targets",
+       "applied": "{source} - Bouncing: additional targets"
       },
       "roll": "attack",
       "cost": {
@@ -8455,10 +8455,10 @@
       "id": "conjure",
       "label": "Conjure",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Conjure",
+       "chatButton": "Conjure",
+       "roll": "Conjure",
+       "reportTitle": "{source} - Conjure"
       },
       "cost": {
        "stress": 1
@@ -8504,7 +8504,7 @@
       "id": "magnetic",
       "label": "Magnetic: pull adversaries near the target",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Magnetic: pull adversaries near the target"
       },
       "on": "attack",
       "cost": {
@@ -8541,8 +8541,8 @@
       "id": "follow-up",
       "label": "Follow-Up: +1 Proficiency",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Follow-Up: +1 Proficiency",
+       "applied": "{source} - Follow-Up: +1 Proficiency"
       },
       "roll": "damage",
       "weapon": "primary",
@@ -8582,8 +8582,8 @@
       "id": "primary-damage",
       "label": "Paired",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Paired",
+       "applied": "{source} - Paired"
       },
       "roll": "damage",
       "value": 2,
@@ -8712,8 +8712,8 @@
       "id": "primary-damage",
       "label": "Focused",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Focused",
+       "applied": "{source} - Focused"
       },
       "roll": "damage",
       "value": 1,
@@ -8750,8 +8750,8 @@
       "id": "follow-up",
       "label": "Follow-Up: +1 Proficiency",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Follow-Up: +1 Proficiency",
+       "applied": "{source} - Follow-Up: +1 Proficiency"
       },
       "roll": "damage",
       "weapon": "primary",
@@ -8790,8 +8790,8 @@
       "id": "primary-damage",
       "label": "Paired",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Paired",
+       "applied": "{source} - Paired"
       },
       "roll": "damage",
       "value": 3,
@@ -8916,8 +8916,8 @@
       "id": "primary-damage",
       "label": "Focused",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Focused",
+       "applied": "{source} - Focused"
       },
       "roll": "damage",
       "value": 1,
@@ -8974,10 +8974,10 @@
       "id": "use",
       "label": "Deflecting",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Deflecting",
+       "chatButton": "Deflecting",
+       "roll": "Deflecting",
+       "reportTitle": "{source} - Deflecting"
       },
       "cost": {
        "armor": 1
@@ -9023,8 +9023,8 @@
       "id": "primary-damage",
       "label": "Double Duty",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Double Duty",
+       "applied": "{source} - Double Duty"
       },
       "roll": "damage",
       "value": 1,
@@ -9060,7 +9060,7 @@
       "id": "entangling",
       "label": "Entangling: target becomes temporarily Vulnerable",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Entangling: target becomes temporarily Vulnerable"
       },
       "on": "attack",
       "cost": {
@@ -9098,8 +9098,8 @@
       "id": "follow-up",
       "label": "Follow-Up: +1 Proficiency",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Follow-Up: +1 Proficiency",
+       "applied": "{source} - Follow-Up: +1 Proficiency"
       },
       "roll": "damage",
       "weapon": "primary",
@@ -9138,8 +9138,8 @@
       "id": "primary-damage",
       "label": "Paired",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Paired",
+       "applied": "{source} - Paired"
       },
       "roll": "damage",
       "value": 4,
@@ -9264,8 +9264,8 @@
       "id": "primary-damage",
       "label": "Focused",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Focused",
+       "applied": "{source} - Focused"
       },
       "roll": "damage",
       "value": 1,
@@ -9331,7 +9331,7 @@
       "id": "targeted",
       "label": "Targeted: next weapon attack succeeds",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Targeted: next weapon attack succeeds"
       },
       "on": "attack",
       "when": "failure",
@@ -9354,8 +9354,8 @@
            "id": "success",
            "label": "Targeted: this attack automatically succeeds",
            "texts": {
-            "option": "{source} - {label}",
-            "applied": "{source} - {label}"
+            "option": "{source} - Targeted: this attack automatically succeeds",
+            "applied": "{source} - Targeted: this attack automatically succeeds"
            },
            "roll": "attack",
            "weapon": "any",
@@ -9397,7 +9397,7 @@
       "id": "draining",
       "label": "Draining: target marks a Stress, you clear a Stress",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Draining: target marks a Stress, you clear a Stress"
       },
       "on": "attack",
       "cost": {
@@ -9472,8 +9472,8 @@
       "id": "follow-up",
       "label": "Follow-Up: +1 Proficiency",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Follow-Up: +1 Proficiency",
+       "applied": "{source} - Follow-Up: +1 Proficiency"
       },
       "roll": "damage",
       "weapon": "primary",
@@ -9512,8 +9512,8 @@
       "id": "primary-damage",
       "label": "Paired",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Paired",
+       "applied": "{source} - Paired"
       },
       "roll": "damage",
       "value": 5,
@@ -9638,8 +9638,8 @@
       "id": "primary-damage",
       "label": "Focused",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Focused",
+       "applied": "{source} - Focused"
       },
       "roll": "damage",
       "value": 1,
@@ -9675,7 +9675,7 @@
       "id": "inverted",
       "label": "Inverted: gain a Hope",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Inverted: gain a Hope"
       },
       "on": "attack",
       "when": "fear",
@@ -9790,10 +9790,10 @@
       "id": "use",
       "label": "Make Them Dance",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Make Them Dance",
+       "chatButton": "Make Them Dance",
+       "roll": "Make Them Dance",
+       "reportTitle": "{source} - Make Them Dance"
       },
       "cost": {
        "stress": 1

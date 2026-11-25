@@ -39,9 +39,9 @@
         "id": "use",
         "label": "Loyal Friend",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Loyal Friend",
+         "chatButton": "Loyal Friend",
+         "roll": "Loyal Friend"
         },
         "requiresCompanion": true
        }
@@ -176,9 +176,9 @@
             "id": "hope",
             "label": "Gain Hope",
             "texts": {
-             "button": "{label}",
-             "chatButton": "{label}",
-             "roll": "{label}"
+             "button": "Gain Hope",
+             "chatButton": "Gain Hope",
+             "roll": "Gain Hope"
             },
             "companion": "comfortHope",
             "confirm": "Confirm you have a quiet moment to give your companion love and attention."
@@ -187,9 +187,9 @@
             "id": "stress",
             "label": "Both clear Stress",
             "texts": {
-             "button": "{label}",
-             "chatButton": "{label}",
-             "roll": "{label}"
+             "button": "Both clear Stress",
+             "chatButton": "Both clear Stress",
+             "roll": "Both clear Stress"
             },
             "companion": "comfortStress",
             "confirm": "Confirm you have a quiet moment to give your companion love and attention."
@@ -239,7 +239,7 @@
         "id": "build-on-companion",
         "label": "Build on companion success",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Build on companion success"
         },
         "on": "companion",
         "rollSection": "feature",
@@ -350,7 +350,7 @@
         "id": "gain",
         "label": "Failed roll with Fear: gain Hope",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Failed roll with Fear: gain Hope"
         },
         "failedOnly": true,
         "on": "duality",
@@ -384,9 +384,9 @@
         "id": "use",
         "label": "Perform battle ritual",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Perform battle ritual",
+         "chatButton": "Perform battle ritual",
+         "roll": "Perform battle ritual"
         },
         "steps": [
          {
@@ -429,9 +429,9 @@
         "id": "train",
         "label": "Train together: gain a d6 Slayer Die",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Train together: gain a d6 Slayer Die",
+         "chatButton": "Train together: gain a d6 Slayer Die",
+         "roll": "Train together: gain a d6 Slayer Die"
         },
         "timing": "downtime",
         "steps": [
@@ -511,7 +511,7 @@
         "id": "reroll",
         "label": "Reroll Slayer Dice showing 1",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Reroll Slayer Dice showing 1"
         },
         "on": "any",
         "rerollResourceDice": "slayer-dice"
@@ -674,7 +674,7 @@
         "id": "use",
         "label": "Spirit Weapon: target an additional adversary",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Spirit Weapon: target an additional adversary"
         },
         "on": "attack",
         "weaponAttack": true,
@@ -704,9 +704,9 @@
         "id": "hp",
         "label": "Sparing Touch: clear 2 HP",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Sparing Touch: clear 2 HP",
+         "chatButton": "Sparing Touch: clear 2 HP",
+         "roll": "Sparing Touch: clear 2 HP"
         },
         "target": "actor",
         "steps": [
@@ -721,9 +721,9 @@
         "id": "stress",
         "label": "Sparing Touch: clear 2 Stress",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Sparing Touch: clear 2 Stress",
+         "chatButton": "Sparing Touch: clear 2 Stress",
+         "roll": "Sparing Touch: clear 2 Stress"
         },
         "target": "actor",
         "steps": [
@@ -766,9 +766,9 @@
         "id": "use",
         "label": "Transcendence",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Transcendence",
+         "chatButton": "Transcendence",
+         "roll": "Transcendence"
         },
         "chooseEffects": {
          "count": 2,
@@ -865,9 +865,9 @@
         "id": "use",
         "label": "Natural Evasion",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Natural Evasion",
+         "chatButton": "Natural Evasion",
+         "roll": "Natural Evasion"
         },
         "sendRoll": {
          "dice": "1d6",
@@ -958,9 +958,9 @@
         "id": "use",
         "label": "True Strike",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "True Strike",
+         "chatButton": "True Strike",
+         "roll": "True Strike"
         },
         "cost": {
          "hope": 1
@@ -972,7 +972,7 @@
         "id": "use",
         "label": "True Strike",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "True Strike"
         },
         "on": "attack",
         "when": "failure",
@@ -1014,9 +1014,9 @@
         "id": "use",
         "label": "Death Strike",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Death Strike",
+         "chatButton": "Death Strike",
+         "roll": "Death Strike"
         },
         "cost": {
          "stress": 1
@@ -1028,7 +1028,7 @@
         "id": "use",
         "label": "Death Strike",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Death Strike"
         },
         "on": "damage",
         "cost": {
@@ -1119,9 +1119,9 @@
         "id": "use",
         "label": "Circle of Power",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Circle of Power",
+         "chatButton": "Circle of Power",
+         "roll": "Circle of Power"
         },
         "steps": [
          {
@@ -1151,9 +1151,9 @@
         "id": "spend",
         "label": "Spend a circle token",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Spend a circle token",
+         "chatButton": "Spend a circle token",
+         "roll": "Spend a circle token"
         },
         "usesSource": false,
         "requiresEffect": "Circle of Power",
@@ -1203,9 +1203,9 @@
         "id": "use",
         "label": "Walk Between Worlds (13)",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Walk Between Worlds (13)",
+         "chatButton": "Walk Between Worlds (13)",
+         "roll": "Walk Between Worlds (13)"
         },
         "usesSource": false,
         "actionRoll": {
@@ -1217,9 +1217,9 @@
         "id": "spend",
         "label": "Spirit answers: spend a token",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Spirit answers: spend a token",
+         "chatButton": "Spirit answers: spend a token",
+         "roll": "Spirit answers: spend a token"
         },
         "usesSource": false,
         "requiresEffect": "Walk Between Worlds",
@@ -1233,7 +1233,7 @@
         "id": "enter",
         "label": "Step beyond the veil",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Step beyond the veil"
         },
         "on": "feat:Walk Between Worlds",
         "when": "success",
@@ -1327,9 +1327,9 @@
         "id": "use",
         "label": "Imbue talisman",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Imbue talisman",
+         "chatButton": "Imbue talisman",
+         "roll": "Imbue talisman"
         },
         "witchAction": "talisman"
        }
@@ -1450,9 +1450,9 @@
         "id": "use",
         "label": "Eye for an Eye",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Eye for an Eye",
+         "chatButton": "Eye for an Eye",
+         "roll": "Eye for an Eye"
         },
         "cost": {
          "stress": 1
@@ -1498,7 +1498,7 @@
         "id": "overwhelm",
         "label": "Overwhelm: throw or mark Stress",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Overwhelm: throw or mark Stress"
         },
         "on": "attack",
         "cost": {
@@ -1512,9 +1512,9 @@
         "id": "use",
         "label": "Overwhelm",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Overwhelm",
+         "chatButton": "Overwhelm",
+         "roll": "Overwhelm"
         },
         "cost": {
          "hope": 1
@@ -1551,9 +1551,9 @@
         "id": "use",
         "label": "Perform athletic feat",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Perform athletic feat",
+         "chatButton": "Perform athletic feat",
+         "roll": "Perform athletic feat"
         },
         "steps": [
          {
@@ -1600,9 +1600,9 @@
         "id": "defend",
         "label": "Keen Defenses",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Keen Defenses",
+         "chatButton": "Keen Defenses",
+         "roll": "Keen Defenses"
         },
         "cost": {
          "focus": 1
@@ -1626,9 +1626,9 @@
         "id": "attack",
         "label": "Focus Cannon: Instinct roll",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Focus Cannon: Instinct roll",
+         "chatButton": "Focus Cannon: Instinct roll",
+         "roll": "Focus Cannon: Instinct roll"
         },
         "cost": {
          "focus": 1
@@ -1641,9 +1641,9 @@
         "id": "damage",
         "label": "Focus Cannon: damage",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Focus Cannon: damage",
+         "chatButton": "Focus Cannon: damage",
+         "roll": "Focus Cannon: damage"
         },
         "damage": {
          "dice": "d20+3",
@@ -1656,7 +1656,7 @@
         "id": "damage",
         "label": "Focus Cannon: damage (on success)",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Focus Cannon: damage (on success)"
         },
         "on": "feat:Focus Cannon",
         "damage": {
@@ -1694,9 +1694,9 @@
         "id": "shift",
         "label": "Shift stance",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Shift stance",
+         "chatButton": "Shift stance",
+         "roll": "Shift stance"
         },
         "shiftStance": true,
         "cost": {
@@ -1707,9 +1707,9 @@
         "id": "flow-shift",
         "label": "Flow State: shift stance",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Flow State: shift stance",
+         "chatButton": "Flow State: shift stance",
+         "roll": "Flow State: shift stance"
         },
         "shiftStance": true,
         "requiresFeature": "Flow State",
@@ -1723,7 +1723,7 @@
         "id": "invigorating",
         "label": "Invigorating: successful attack",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Invigorating: successful attack"
         },
         "on": "attack",
         "requiresEffect": "Invigorating",
@@ -1737,7 +1737,7 @@
         "id": "grapple-focus",
         "label": "Grappling: Restrain or throw (successful Melee hit)",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Grappling: Restrain or throw (successful Melee hit)"
         },
         "on": "attack",
         "requiresEffect": "Grappling",
@@ -1750,7 +1750,7 @@
         "id": "grapple-stress",
         "label": "Grappling: Restrain or throw (successful Melee hit)",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Grappling: Restrain or throw (successful Melee hit)"
         },
         "on": "attack",
         "requiresEffect": "Grappling",
@@ -1763,7 +1763,7 @@
         "id": "scary",
         "label": "Scary: target marks a Stress (on success)",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Scary: target marks a Stress (on success)"
         },
         "on": "attack",
         "requiresEffect": "Scary"
@@ -1772,7 +1772,7 @@
         "id": "crushing",
         "label": "Crushing: target marks +1 HP (Severe damage)",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Crushing: target marks +1 HP (Severe damage)"
         },
         "on": "damage",
         "requiresEffect": "Crushing",
@@ -1959,9 +1959,9 @@
            "id": "vigilant",
            "label": "Vigilant: defend",
            "texts": {
-            "button": "{label}",
-            "chatButton": "{label}",
-            "roll": "{label}"
+            "button": "Vigilant: defend",
+            "chatButton": "Vigilant: defend",
+            "roll": "Vigilant: defend"
            },
            "cost": {
             "stress": 1
@@ -2061,9 +2061,9 @@
         "id": "refocus",
         "label": "Refocus (moment of calm)",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Refocus (moment of calm)",
+         "chatButton": "Refocus (moment of calm)",
+         "roll": "Refocus (moment of calm)"
         },
         "refocus": true,
         "uses": {
@@ -2183,9 +2183,9 @@
         "id": "roll",
         "label": "Roll Lunar Phases d6",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Roll Lunar Phases d6",
+         "chatButton": "Roll Lunar Phases d6",
+         "roll": "Roll Lunar Phases d6"
         },
         "witchAction": "lunarRoll",
         "uses": {
@@ -2197,9 +2197,9 @@
         "id": "advance",
         "label": "Increase lunar die",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Increase lunar die",
+         "chatButton": "Increase lunar die",
+         "roll": "Increase lunar die"
         },
         "witchAction": "lunarAdvance",
         "uses": {
@@ -2242,9 +2242,9 @@
         "id": "use",
         "label": "Moonbeam",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Moonbeam",
+         "chatButton": "Moonbeam",
+         "roll": "Moonbeam"
         },
         "steps": [
          {
@@ -2292,9 +2292,9 @@
         "id": "roll",
         "label": "Night's Glamour (13)",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Night's Glamour (13)",
+         "chatButton": "Night's Glamour (13)",
+         "roll": "Night's Glamour (13)"
         },
         "actionRoll": {
          "trait": "spellcast",
@@ -2307,7 +2307,7 @@
         "id": "glamour",
         "label": "Become Glamoured",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Become Glamoured"
         },
         "on": "feat:Night’s Glamour",
         "when": "success",
@@ -2400,9 +2400,9 @@
         "id": "use",
         "label": "Vanishing Act",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Vanishing Act",
+         "chatButton": "Vanishing Act",
+         "roll": "Vanishing Act"
         },
         "cost": {
          "stress": 1
@@ -2436,9 +2436,9 @@
         "id": "cast",
         "label": "Dark Cloud",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Dark Cloud",
+         "chatButton": "Dark Cloud",
+         "roll": "Dark Cloud"
         },
         "actionRoll": {
          "trait": "spellcast",
@@ -2489,9 +2489,9 @@
         "id": "use",
         "label": "Shadow Stepper",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Shadow Stepper",
+         "chatButton": "Shadow Stepper",
+         "roll": "Shadow Stepper"
         },
         "cost": {
          "stress": 1
@@ -2530,7 +2530,7 @@
         "id": "hope",
         "label": "Shadowed Grit: gain a Hope",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Shadowed Grit: gain a Hope"
         },
         "on": "duality",
         "excludeRolls": [
@@ -2577,9 +2577,9 @@
         "id": "use",
         "label": "Veilwalker",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Veilwalker",
+         "chatButton": "Veilwalker",
+         "roll": "Veilwalker"
         },
         "steps": [
          {
@@ -2712,9 +2712,9 @@
         "id": "use",
         "label": "Lycan Regeneration",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Lycan Regeneration",
+         "chatButton": "Lycan Regeneration",
+         "roll": "Lycan Regeneration"
         },
         "cost": {
          "stress": 1
@@ -2835,9 +2835,9 @@
         "id": "use",
         "label": "Mutagens",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Mutagens",
+         "chatButton": "Mutagens",
+         "roll": "Mutagens"
         },
         "timing": "downtime",
         "downtime": {
@@ -2867,9 +2867,9 @@
               "id": "restrained",
               "label": "End Restrained",
               "texts": {
-               "button": "{label}",
-               "chatButton": "{label}",
-               "roll": "{label}"
+               "button": "End Restrained",
+               "chatButton": "End Restrained",
+               "roll": "End Restrained"
               },
               "requiresEffect": "Restrained",
               "cost": {
@@ -2881,9 +2881,9 @@
               "id": "vulnerable",
               "label": "End Vulnerable",
               "texts": {
-               "button": "{label}",
-               "chatButton": "{label}",
-               "roll": "{label}"
+               "button": "End Vulnerable",
+               "chatButton": "End Vulnerable",
+               "roll": "End Vulnerable"
               },
               "requiresEffect": "Vulnerable",
               "cost": {
@@ -2940,9 +2940,9 @@
               "id": "hope",
               "label": "Spend Hope instead of Stress",
               "texts": {
-               "button": "{label}",
-               "chatButton": "{label}",
-               "roll": "{label}"
+               "button": "Spend Hope instead of Stress",
+               "chatButton": "Spend Hope instead of Stress",
+               "roll": "Spend Hope instead of Stress"
               },
               "cost": {
                "hope": 2
@@ -3085,9 +3085,9 @@
         "id": "use",
         "label": "Prevent damage",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Prevent damage",
+         "chatButton": "Prevent damage",
+         "roll": "Prevent damage"
         },
         "cost": {
          "favor": 1
@@ -3118,9 +3118,9 @@
         "id": "drain",
         "label": "Drain attacker; clear own Stress",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Drain attacker; clear own Stress",
+         "chatButton": "Drain attacker; clear own Stress",
+         "roll": "Drain attacker; clear own Stress"
         },
         "steps": [
          {
@@ -3161,9 +3161,9 @@
         "id": "use",
         "label": "Harrowing Invocation",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Harrowing Invocation",
+         "chatButton": "Harrowing Invocation",
+         "roll": "Harrowing Invocation"
         },
         "cost": {
          "favor": 1
@@ -3186,9 +3186,9 @@
         "id": "use",
         "label": "Halve incoming damage",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Halve incoming damage",
+         "chatButton": "Halve incoming damage",
+         "roll": "Halve incoming damage"
         },
         "cost": {
          "favor": 1
@@ -3234,9 +3234,9 @@
         "id": "use",
         "label": "Patron’s Mantle",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Patron’s Mantle",
+         "chatButton": "Patron’s Mantle",
+         "roll": "Patron’s Mantle"
         },
         "steps": [
          {
@@ -3287,9 +3287,9 @@
         "id": "use",
         "label": "Deathless Embrace",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Deathless Embrace",
+         "chatButton": "Deathless Embrace",
+         "roll": "Deathless Embrace"
         },
         "patronDice": "heal"
        }
@@ -3321,9 +3321,9 @@
         "id": "use",
         "label": "Reroll damage dice",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Reroll damage dice",
+         "chatButton": "Reroll damage dice",
+         "roll": "Reroll damage dice"
         },
         "cost": {
          "favor": 1
@@ -3335,7 +3335,7 @@
         "id": "reroll",
         "label": "Fearsome Attack",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Fearsome Attack"
         },
         "on": "damage",
         "damageDice": "reroll",
@@ -3361,9 +3361,9 @@
         "id": "use",
         "label": "Otherworldly Ire",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Otherworldly Ire",
+         "chatButton": "Otherworldly Ire",
+         "roll": "Otherworldly Ire"
         },
         "patronDice": "ire"
        }
@@ -3395,9 +3395,9 @@
         "id": "use",
         "label": "Increase weapon range",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Increase weapon range",
+         "chatButton": "Increase weapon range",
+         "roll": "Increase weapon range"
         },
         "menacingReach": true,
         "cost": {
@@ -3410,7 +3410,7 @@
         "id": "end",
         "label": "Menacing Reach: end after successful attack",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Menacing Reach: end after successful attack"
         },
         "on": "attack",
         "primaryWeapon": true,
@@ -3430,9 +3430,9 @@
         "id": "use",
         "label": "Diminish My Foes",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Diminish My Foes",
+         "chatButton": "Diminish My Foes",
+         "roll": "Diminish My Foes"
         },
         "spendFavor": true
        }
@@ -3442,7 +3442,7 @@
         "id": "use",
         "label": "Diminish My Foes",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Diminish My Foes"
         },
         "on": "action",
         "when": "hope",
@@ -3500,9 +3500,9 @@
         "id": "activate",
         "label": "Patron’s Fury",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Patron’s Fury",
+         "chatButton": "Patron’s Fury",
+         "roll": "Patron’s Fury"
         },
         "steps": [
          {
@@ -3532,9 +3532,9 @@
         "id": "use",
         "label": "Deadly Vengeance",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Deadly Vengeance",
+         "chatButton": "Deadly Vengeance",
+         "roll": "Deadly Vengeance"
         },
         "patronDice": "vengeance",
         "cost": {
@@ -3673,7 +3673,7 @@
         "id": "poison",
         "label": "Afflict with poison",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Afflict with poison"
         },
         "on": "attack",
         "weaponAttack": true,
@@ -3688,9 +3688,9 @@
         "id": "brew",
         "label": "Brew toxic concoctions",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Brew toxic concoctions",
+         "chatButton": "Brew toxic concoctions",
+         "roll": "Brew toxic concoctions"
         },
         "steps": [
          {
@@ -3707,9 +3707,9 @@
         "id": "poison",
         "label": "Afflict with poison",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Afflict with poison",
+         "chatButton": "Afflict with poison",
+         "roll": "Afflict with poison"
         },
         "cost": {
          "poison": 1
@@ -3743,9 +3743,9 @@
         "id": "use",
         "label": "Arcane Charge",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Arcane Charge",
+         "chatButton": "Arcane Charge",
+         "roll": "Arcane Charge"
         },
         "steps": [
          {
@@ -3766,9 +3766,9 @@
         "id": "magic-damage",
         "label": "Charged by magic damage",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Charged by magic damage",
+         "chatButton": "Charged by magic damage",
+         "roll": "Charged by magic damage"
         },
         "steps": [
          {
@@ -3847,9 +3847,9 @@
         "id": "use",
         "label": "Help an Ally: d8",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Help an Ally: d8",
+         "chatButton": "Help an Ally: d8",
+         "roll": "Help an Ally: d8"
         },
         "usesSource": false,
         "sendRoll": {
@@ -3861,9 +3861,9 @@
         "id": "manual-swap",
         "label": "Swap Duality dice",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Swap Duality dice",
+         "chatButton": "Swap Duality dice",
+         "roll": "Swap Duality dice"
         }
        }
       ],
@@ -3872,7 +3872,7 @@
         "id": "swap",
         "label": "Enchanted Aid: swap Duality dice",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Enchanted Aid: swap Duality dice"
         },
         "on": "spellcast",
         "audience": "ally",
@@ -3907,9 +3907,9 @@
         "id": "use",
         "label": "Manipulate Magic",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Manipulate Magic",
+         "chatButton": "Manipulate Magic",
+         "roll": "Manipulate Magic"
         },
         "cost": {
          "stress": 1
@@ -3921,7 +3921,7 @@
         "id": "action",
         "label": "Manipulate Magic",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Manipulate Magic"
         },
         "on": "action",
         "magicAction": true,
@@ -3948,7 +3948,7 @@
         "id": "damage",
         "label": "Manipulate Magic: double a die",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Manipulate Magic: double a die"
         },
         "on": "damage",
         "magicOnly": true,
@@ -4025,9 +4025,9 @@
         "id": "use",
         "label": "Perfect Recall",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Perfect Recall",
+         "chatButton": "Perfect Recall",
+         "roll": "Perfect Recall"
         }
        }
       ]
@@ -4181,9 +4181,9 @@
         "id": "use",
         "label": "Thrive in Chaos",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Thrive in Chaos",
+         "chatButton": "Thrive in Chaos",
+         "roll": "Thrive in Chaos"
         },
         "cost": {
          "stress": 1
@@ -4195,7 +4195,7 @@
         "id": "use",
         "label": "Thrive in Chaos",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Thrive in Chaos"
         },
         "on": "damage",
         "cost": {
@@ -4248,9 +4248,9 @@
         "id": "use",
         "label": "Loyal Protector",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Loyal Protector",
+         "chatButton": "Loyal Protector",
+         "roll": "Loyal Protector"
         },
         "cost": {
          "stress": 1
@@ -4296,9 +4296,9 @@
         "id": "use",
         "label": "Partners-in-Arms",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Partners-in-Arms",
+         "chatButton": "Partners-in-Arms",
+         "roll": "Partners-in-Arms"
         },
         "cost": {
          "armor": 1
@@ -4431,9 +4431,9 @@
         "id": "use",
         "label": "Contacts Everywhere",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Contacts Everywhere",
+         "chatButton": "Contacts Everywhere",
+         "roll": "Contacts Everywhere"
         },
         "steps": [
          {
@@ -4458,7 +4458,7 @@
              "id": "hope",
              "label": "Contacts Everywhere: +3 Hope die",
              "texts": {
-              "chatButton": "{label}"
+              "chatButton": "Contacts Everywhere: +3 Hope die"
              },
              "on": "action",
              "usesSource": false,
@@ -4473,7 +4473,7 @@
              "id": "fear",
              "label": "Contacts Everywhere: +3 Fear die",
              "texts": {
-              "chatButton": "{label}"
+              "chatButton": "Contacts Everywhere: +3 Fear die"
              },
              "on": "action",
              "usesSource": false,
@@ -4629,9 +4629,9 @@
         "id": "use",
         "label": "Relaxing Song",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Relaxing Song",
+         "chatButton": "Relaxing Song",
+         "roll": "Relaxing Song"
         },
         "steps": [
          {
@@ -4671,9 +4671,9 @@
         "id": "use",
         "label": "Epic Song",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Epic Song",
+         "chatButton": "Epic Song",
+         "roll": "Epic Song"
         }
        }
       ],
@@ -4696,9 +4696,9 @@
         "id": "use",
         "label": "Heartbreaking Song",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Heartbreaking Song",
+         "chatButton": "Heartbreaking Song",
+         "roll": "Heartbreaking Song"
         },
         "steps": [
          {
@@ -4748,9 +4748,9 @@
         "id": "use",
         "label": "Nemesis",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Nemesis",
+         "chatButton": "Nemesis",
+         "roll": "Nemesis"
         },
         "cost": {
          "hope": 2
@@ -4773,7 +4773,7 @@
         "id": "swap",
         "label": "Nemesis: swap Hope and Fear",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Nemesis: swap Hope and Fear"
         },
         "on": "attack",
         "requiresEffect": "Prioritized",
@@ -4847,9 +4847,9 @@
         "id": "use",
         "label": "Revenge",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Revenge",
+         "chatButton": "Revenge",
+         "roll": "Revenge"
         },
         "cost": {
          "stress": 2
@@ -4883,9 +4883,9 @@
         "id": "use",
         "label": "Defender",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Defender",
+         "chatButton": "Defender",
+         "roll": "Defender"
         },
         "cost": {
          "stress": 1
@@ -4928,9 +4928,9 @@
         "id": "use",
         "label": "Warden’s Protection",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Warden’s Protection",
+         "chatButton": "Warden’s Protection",
+         "roll": "Warden’s Protection"
         },
         "cost": {
          "hope": 2
@@ -4972,9 +4972,9 @@
         "id": "use",
         "label": "Clarity of Nature",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Clarity of Nature",
+         "chatButton": "Clarity of Nature",
+         "roll": "Clarity of Nature"
         },
         "report": {
          "amount": "@Instinct",
@@ -4994,9 +4994,9 @@
         "id": "use",
         "label": "Regeneration",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Regeneration",
+         "chatButton": "Regeneration",
+         "roll": "Regeneration"
         },
         "target": "actor",
         "cost": {
@@ -5114,9 +5114,9 @@
         "id": "vulnerable",
         "label": "Make attacker Vulnerable",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Make attacker Vulnerable",
+         "chatButton": "Make attacker Vulnerable",
+         "roll": "Make attacker Vulnerable"
         },
         "requiresEffect": "Elemental Dominion: Water",
         "cost": {
@@ -5187,9 +5187,9 @@
         "id": "use",
         "label": "Elemental Aura",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Elemental Aura",
+         "chatButton": "Elemental Aura",
+         "roll": "Elemental Aura"
         },
         "aura": true
        }
@@ -5247,9 +5247,9 @@
         "id": "move",
         "label": "Move attacker",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Move attacker",
+         "chatButton": "Move attacker",
+         "roll": "Move attacker"
         },
         "requiresEffect": "Elemental Aura: Water",
         "cost": {
@@ -5281,9 +5281,9 @@
         "id": "reduce",
         "label": "Roll damage reduction",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Roll damage reduction",
+         "chatButton": "Roll damage reduction",
+         "roll": "Roll damage reduction"
         },
         "requiresEffect": "Elemental Aura: Air",
         "sendRoll": {
@@ -5333,9 +5333,9 @@
         "id": "channel",
         "label": "Channel Fire",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Channel Fire",
+         "chatButton": "Channel Fire",
+         "roll": "Channel Fire"
         },
         "channel": "Fire",
         "cost": {
@@ -5359,9 +5359,9 @@
         "id": "retaliate",
         "label": "Fire retaliation",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Fire retaliation",
+         "chatButton": "Fire retaliation",
+         "roll": "Fire retaliation"
         },
         "requiresEffect": "Channeling: Fire",
         "sendRoll": {
@@ -5382,9 +5382,9 @@
         "id": "channel",
         "label": "Channel Earth",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Channel Earth",
+         "chatButton": "Channel Earth",
+         "roll": "Channel Earth"
         },
         "channel": "Earth",
         "cost": {
@@ -5422,9 +5422,9 @@
         "id": "channel",
         "label": "Channel Water",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Channel Water",
+         "chatButton": "Channel Water",
+         "roll": "Channel Water"
         },
         "channel": "Water",
         "cost": {
@@ -5457,9 +5457,9 @@
         "id": "channel",
         "label": "Channel Air",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Channel Air",
+         "chatButton": "Channel Air",
+         "roll": "Channel Air"
         },
         "channel": "Air",
         "cost": {
@@ -5516,9 +5516,9 @@
         "id": "use",
         "label": "Apex Predator",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Apex Predator",
+         "chatButton": "Apex Predator",
+         "roll": "Apex Predator"
         },
         "cost": {
          "hope": 1
@@ -5572,9 +5572,9 @@
         "id": "use",
         "label": "Ruthless Predator",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Ruthless Predator",
+         "chatButton": "Ruthless Predator",
+         "roll": "Ruthless Predator"
         },
         "cost": {
          "stress": 1
@@ -5696,9 +5696,9 @@
         "id": "carry",
         "label": "Carry willing creature while flying",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Carry willing creature while flying",
+         "chatButton": "Carry willing creature while flying",
+         "roll": "Carry willing creature while flying"
         },
         "cost": {
          "stress": 1
@@ -5732,9 +5732,9 @@
         "id": "help",
         "label": "Help an Ally: roll d10 advantage",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Help an Ally: roll d10 advantage",
+         "chatButton": "Help an Ally: roll d10 advantage",
+         "roll": "Help an Ally: roll d10 advantage"
         },
         "cost": {
          "hope": 1
@@ -5776,9 +5776,9 @@
         "id": "use",
         "label": "Eloquent",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Eloquent",
+         "chatButton": "Eloquent",
+         "roll": "Eloquent"
         }
        }
       ]
@@ -5813,9 +5813,9 @@
         "id": "use",
         "label": "Rousing Speech",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Rousing Speech",
+         "chatButton": "Rousing Speech",
+         "roll": "Rousing Speech"
         },
         "chatBenefits": [
          {
@@ -5844,7 +5844,7 @@
         "id": "poet",
         "label": "Heart of a Poet",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Heart of a Poet"
         },
         "on": "action",
         "addDice": "1d4",
@@ -5880,9 +5880,9 @@
         "id": "use",
         "label": "Hold Them Off",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Hold Them Off",
+         "chatButton": "Hold Them Off",
+         "roll": "Hold Them Off"
         },
         "cost": {
          "hope": 3
@@ -5929,7 +5929,7 @@
         "id": "reroll",
         "label": "Ranger’s Focus: reroll (ends the feature)",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Ranger’s Focus: reroll (ends the feature)"
         },
         "on": "attack",
         "when": "failure",
@@ -5944,9 +5944,9 @@
         "id": "activate",
         "label": "Ranger’s Focus",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Ranger’s Focus",
+         "chatButton": "Ranger’s Focus",
+         "roll": "Ranger’s Focus"
         },
         "steps": [
          {
@@ -6008,9 +6008,9 @@
         "id": "activate",
         "label": "No Mercy",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "No Mercy",
+         "chatButton": "No Mercy",
+         "roll": "No Mercy"
         },
         "steps": [
          {
@@ -6076,9 +6076,9 @@
         "id": "use",
         "label": "Life Support",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Life Support",
+         "chatButton": "Life Support",
+         "roll": "Life Support"
         },
         "cost": {
          "hope": 3
@@ -6118,9 +6118,9 @@
         "id": "roll",
         "label": "Roll Prayer Dice",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Roll Prayer Dice",
+         "chatButton": "Roll Prayer Dice",
+         "roll": "Roll Prayer Dice"
         },
         "rollDicePool": true
        }
@@ -6151,9 +6151,9 @@
         "id": "use",
         "label": "Volatile Magic",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Volatile Magic",
+         "chatButton": "Volatile Magic",
+         "roll": "Volatile Magic"
         },
         "cost": {
          "hope": 3
@@ -6165,7 +6165,7 @@
         "id": "reroll",
         "label": "Volatile Magic",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Volatile Magic"
         },
         "on": "damage",
         "magicOnly": true,
@@ -6192,9 +6192,9 @@
         "id": "spellcast",
         "label": "Spellcast (10)",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Spellcast (10)",
+         "chatButton": "Spellcast (10)",
+         "roll": "Spellcast (10)"
         },
         "actionRoll": {
          "trait": "spellcast",
@@ -6218,9 +6218,9 @@
         "id": "use",
         "label": "Channel Raw Power",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Channel Raw Power",
+         "chatButton": "Channel Raw Power",
+         "roll": "Channel Raw Power"
         },
         "channelRawPower": {
          "name": "Channel Raw Power",
@@ -6267,9 +6267,9 @@
         "id": "use",
         "label": "Clear 2 Stress",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Clear 2 Stress",
+         "chatButton": "Clear 2 Stress",
+         "roll": "Clear 2 Stress"
         },
         "steps": [
          {
@@ -6295,9 +6295,9 @@
         "id": "use",
         "label": "Marked For Death",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Marked For Death",
+         "chatButton": "Marked For Death",
+         "roll": "Marked For Death"
         },
         "cost": {
          "stress": 1
@@ -6320,7 +6320,7 @@
         "id": "use",
         "label": "Marked For Death",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Marked For Death"
         },
         "on": "attack",
         "weaponAttack": true,
@@ -6367,9 +6367,9 @@
         "id": "use",
         "label": "Get In & Get Out",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Get In & Get Out",
+         "chatButton": "Get In & Get Out",
+         "roll": "Get In & Get Out"
         },
         "cost": {
          "hope": 1
@@ -6402,9 +6402,9 @@
         "id": "use",
         "label": "Witch’s Charm",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Witch’s Charm",
+         "chatButton": "Witch’s Charm",
+         "roll": "Witch’s Charm"
         },
         "cost": {
          "hope": 3
@@ -6423,9 +6423,9 @@
         "id": "use",
         "label": "Hex",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Hex",
+         "chatButton": "Hex",
+         "roll": "Hex"
         },
         "cost": {
          "stress": 1
@@ -6448,9 +6448,9 @@
         "id": "use",
         "label": "Commune",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Commune",
+         "chatButton": "Commune",
+         "roll": "Commune"
         },
         "sendRoll": {
          "dice": "@spellcastd6",
@@ -6484,9 +6484,9 @@
         "id": "use",
         "label": "Square Up",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Square Up",
+         "chatButton": "Square Up",
+         "roll": "Square Up"
         },
         "cost": {
          "hope": 3
@@ -6565,9 +6565,9 @@
         "id": "use",
         "label": "Make a Scene",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Make a Scene",
+         "chatButton": "Make a Scene",
+         "roll": "Make a Scene"
         },
         "cost": {
          "hope": 3
@@ -6590,9 +6590,9 @@
         "id": "use",
         "label": "Rally",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Rally",
+         "chatButton": "Rally",
+         "roll": "Rally"
         },
         "target": "allActors",
         "steps": [
@@ -6641,9 +6641,9 @@
              "id": "stress",
              "label": "Spend Rally Die: clear Stress",
              "texts": {
-              "button": "{label}",
-              "chatButton": "{label}",
-              "roll": "{label}"
+              "button": "Spend Rally Die: clear Stress",
+              "chatButton": "Spend Rally Die: clear Stress",
+              "roll": "Spend Rally Die: clear Stress"
              },
              "endEffect": "Rally Die",
              "steps": [
@@ -6686,9 +6686,9 @@
         "id": "use",
         "label": "Blood Maledict",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Blood Maledict",
+         "chatButton": "Blood Maledict",
+         "roll": "Blood Maledict"
         },
         "steps": [
          {
@@ -6728,9 +6728,9 @@
         "id": "use",
         "label": "Crimson Rite",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Crimson Rite",
+         "chatButton": "Crimson Rite",
+         "roll": "Crimson Rite"
         },
         "costConditions": [
          {
@@ -6794,9 +6794,9 @@
         "id": "spellcast",
         "label": "Spellcast (12)",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Spellcast (12)",
+         "chatButton": "Spellcast (12)",
+         "roll": "Spellcast (12)"
         },
         "actionRoll": {
          "trait": "spellcast",
@@ -6809,7 +6809,7 @@
         "id": "vision",
         "label": "Grim Psychometry: mark Stress for a vision",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Grim Psychometry: mark Stress for a vision"
         },
         "on": "feat:Grim Psychometry",
         "when": "success",
@@ -6865,9 +6865,9 @@
         "id": "use",
         "label": "Evolution",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Evolution",
+         "chatButton": "Evolution",
+         "roll": "Evolution"
         },
         "evolution": true,
         "cost": {
@@ -6906,9 +6906,9 @@
              "id": "move",
              "label": "Move to Far range",
              "texts": {
-              "button": "{label}",
-              "chatButton": "{label}",
-              "roll": "{label}"
+              "button": "Move to Far range",
+              "chatButton": "Move to Far range",
+              "roll": "Move to Far range"
              },
              "cost": {
               "hope": 1
@@ -6949,9 +6949,9 @@
              "id": "help",
              "label": "Help an Ally",
              "texts": {
-              "button": "{label}",
-              "chatButton": "{label}",
-              "roll": "{label}"
+              "button": "Help an Ally",
+              "chatButton": "Help an Ally",
+              "roll": "Help an Ally"
              },
              "cost": {
               "hope": 1
@@ -6993,9 +6993,9 @@
              "id": "evade",
              "label": "Elusive Prey",
              "texts": {
-              "button": "{label}",
-              "chatButton": "{label}",
-              "roll": "{label}"
+              "button": "Elusive Prey",
+              "chatButton": "Elusive Prey",
+              "roll": "Elusive Prey"
              },
              "cost": {
               "stress": 1
@@ -7038,7 +7038,7 @@
              "id": "hobble",
              "label": "Hobbling Strike: target temporarily Vulnerable",
              "texts": {
-              "chatButton": "{label}"
+              "chatButton": "Hobbling Strike: target temporarily Vulnerable"
              },
              "on": "attack",
              "weaponRange": "Melee",
@@ -7117,9 +7117,9 @@
              "id": "poison",
              "label": "Poison damage (direct)",
              "texts": {
-              "button": "{label}",
-              "chatButton": "{label}",
-              "roll": "{label}"
+              "button": "Poison damage (direct)",
+              "chatButton": "Poison damage (direct)",
+              "roll": "Poison damage (direct)"
              },
              "sendRoll": {
               "dice": "1d10",
@@ -7132,7 +7132,7 @@
              "id": "poisoned",
              "label": "Venomous Bite: target temporarily Poisoned",
              "texts": {
-              "chatButton": "{label}"
+              "chatButton": "Venomous Bite: target temporarily Poisoned"
              },
              "on": "attack",
              "weaponRange": "Melee",
@@ -7153,9 +7153,9 @@
              "id": "web",
              "label": "Webslinger",
              "texts": {
-              "button": "{label}",
-              "chatButton": "{label}",
-              "roll": "{label}"
+              "button": "Webslinger",
+              "chatButton": "Webslinger",
+              "roll": "Webslinger"
              },
              "actionRoll": {
               "trait": "Finesse"
@@ -7200,9 +7200,9 @@
              "id": "retract",
              "label": "Retract into shell",
              "texts": {
-              "button": "{label}",
-              "chatButton": "{label}",
-              "roll": "{label}"
+              "button": "Retract into shell",
+              "chatButton": "Retract into shell",
+              "roll": "Retract into shell"
              },
              "cost": {
               "armor": 1
@@ -7233,9 +7233,9 @@
              "id": "leave",
              "label": "Leave shell",
              "texts": {
-              "button": "{label}",
-              "chatButton": "{label}",
-              "roll": "{label}"
+              "button": "Leave shell",
+              "chatButton": "Leave shell",
+              "roll": "Leave shell"
              },
              "requiresEffect": "Retracted Shell",
              "endEffect": "Retracted Shell"
@@ -7252,9 +7252,9 @@
              "id": "launch",
              "label": "Cannonball (invite ally to throw)",
              "texts": {
-              "button": "{label}",
-              "chatButton": "{label}",
-              "roll": "{label}"
+              "button": "Cannonball (invite ally to throw)",
+              "chatButton": "Cannonball (invite ally to throw)",
+              "roll": "Cannonball (invite ally to throw)"
              },
              "cost": {
               "stress": 1
@@ -7287,9 +7287,9 @@
                        "id": "attack",
                        "label": "Cannonball throw (Agility)",
                        "texts": {
-                        "button": "{label}",
-                        "chatButton": "{label}",
-                        "roll": "{label}"
+                        "button": "Cannonball throw (Agility)",
+                        "chatButton": "Cannonball throw (Agility)",
+                        "roll": "Cannonball throw (Agility)"
                        },
                        "actionRoll": {
                         "trait": "Agility",
@@ -7300,9 +7300,9 @@
                        "id": "damage",
                        "label": "Cannonball damage",
                        "texts": {
-                        "button": "{label}",
-                        "chatButton": "{label}",
-                        "roll": "{label}"
+                        "button": "Cannonball damage",
+                        "chatButton": "Cannonball damage",
+                        "roll": "Cannonball damage"
                        },
                        "damage": {
                         "dice": "d12+2",
@@ -7344,9 +7344,9 @@
                        "id": "attack",
                        "label": "Cannonball throw (Strength)",
                        "texts": {
-                        "button": "{label}",
-                        "chatButton": "{label}",
-                        "roll": "{label}"
+                        "button": "Cannonball throw (Strength)",
+                        "chatButton": "Cannonball throw (Strength)",
+                        "roll": "Cannonball throw (Strength)"
                        },
                        "actionRoll": {
                         "trait": "Strength",
@@ -7357,9 +7357,9 @@
                        "id": "damage",
                        "label": "Cannonball damage",
                        "texts": {
-                        "button": "{label}",
-                        "chatButton": "{label}",
-                        "roll": "{label}"
+                        "button": "Cannonball damage",
+                        "chatButton": "Cannonball damage",
+                        "roll": "Cannonball damage"
                        },
                        "damage": {
                         "dice": "d12+2",
@@ -7381,9 +7381,9 @@
              "id": "second",
              "label": "Cannonball: second target",
              "texts": {
-              "button": "{label}",
-              "chatButton": "{label}",
-              "roll": "{label}"
+              "button": "Cannonball: second target",
+              "chatButton": "Cannonball: second target",
+              "roll": "Cannonball: second target"
              },
              "cost": {
               "hope": 1
@@ -7475,9 +7475,9 @@
              "id": "attack",
              "label": "Trample attack",
              "texts": {
-              "button": "{label}",
-              "chatButton": "{label}",
-              "roll": "{label}"
+              "button": "Trample attack",
+              "chatButton": "Trample attack",
+              "roll": "Trample attack"
              },
              "cost": {
               "stress": 1
@@ -7491,9 +7491,9 @@
              "id": "damage",
              "label": "Trample damage",
              "texts": {
-              "button": "{label}",
-              "chatButton": "{label}",
-              "roll": "{label}"
+              "button": "Trample damage",
+              "chatButton": "Trample damage",
+              "roll": "Trample damage"
              },
              "damage": {
               "dice": "d8+1",
@@ -7506,7 +7506,7 @@
              "id": "vulnerable",
              "label": "Trample: targets temporarily Vulnerable",
              "texts": {
-              "chatButton": "{label}"
+              "chatButton": "Trample: targets temporarily Vulnerable"
              },
              "on": "feat:Trample",
              "successIfKnown": true,
@@ -7543,9 +7543,9 @@
              "id": "attack",
              "label": "Venomous Strike",
              "texts": {
-              "button": "{label}",
-              "chatButton": "{label}",
-              "roll": "{label}"
+              "button": "Venomous Strike",
+              "chatButton": "Venomous Strike",
+              "roll": "Venomous Strike"
              },
              "actionRoll": {
               "trait": "beastform",
@@ -7556,9 +7556,9 @@
              "id": "poison",
              "label": "Poison damage (direct)",
              "texts": {
-              "button": "{label}",
-              "chatButton": "{label}",
-              "roll": "{label}"
+              "button": "Poison damage (direct)",
+              "chatButton": "Poison damage (direct)",
+              "roll": "Poison damage (direct)"
              },
              "sendRoll": {
               "dice": "1d10",
@@ -7571,7 +7571,7 @@
              "id": "poisoned",
              "label": "Venomous Strike: targets temporarily Poisoned",
              "texts": {
-              "chatButton": "{label}"
+              "chatButton": "Venomous Strike: targets temporarily Poisoned"
              },
              "on": "feat:Venomous Strike",
              "successIfKnown": true,
@@ -7591,9 +7591,9 @@
              "id": "hiss",
              "label": "Warning Hiss",
              "texts": {
-              "button": "{label}",
-              "chatButton": "{label}",
-              "roll": "{label}"
+              "button": "Warning Hiss",
+              "chatButton": "Warning Hiss",
+              "roll": "Warning Hiss"
              },
              "cost": {
               "stress": 1
@@ -7630,9 +7630,9 @@
              "id": "move",
              "label": "Fleet",
              "texts": {
-              "button": "{label}",
-              "chatButton": "{label}",
-              "roll": "{label}"
+              "button": "Fleet",
+              "chatButton": "Fleet",
+              "roll": "Fleet"
              },
              "cost": {
               "hope": 1
@@ -7687,9 +7687,9 @@
              "id": "question",
              "label": "Bird's-Eye View: ask the GM",
              "texts": {
-              "button": "{label}",
-              "chatButton": "{label}",
-              "roll": "{label}"
+              "button": "Bird's-Eye View: ask the GM",
+              "chatButton": "Bird's-Eye View: ask the GM",
+              "roll": "Bird's-Eye View: ask the GM"
              },
              "uses": {
               "max": 1,
@@ -7789,7 +7789,7 @@
              "id": "snap",
              "label": "Snapping Strike: target Restrained and Vulnerable",
              "texts": {
-              "chatButton": "{label}"
+              "chatButton": "Snapping Strike: target Restrained and Vulnerable"
              },
              "on": "attack",
              "weaponRange": "Melee",
@@ -7829,9 +7829,9 @@
              "id": "question",
              "label": "Bird's-Eye View: ask the GM",
              "texts": {
-              "button": "{label}",
-              "chatButton": "{label}",
-              "roll": "{label}"
+              "button": "Bird's-Eye View: ask the GM",
+              "chatButton": "Bird's-Eye View: ask the GM",
+              "roll": "Bird's-Eye View: ask the GM"
              },
              "uses": {
               "max": 1,
@@ -7942,9 +7942,9 @@
              "id": "attack",
              "label": "Demolish attack",
              "texts": {
-              "button": "{label}",
-              "chatButton": "{label}",
-              "roll": "{label}"
+              "button": "Demolish attack",
+              "chatButton": "Demolish attack",
+              "roll": "Demolish attack"
              },
              "cost": {
               "hope": 1
@@ -7958,9 +7958,9 @@
              "id": "damage",
              "label": "Demolish damage",
              "texts": {
-              "button": "{label}",
-              "chatButton": "{label}",
-              "roll": "{label}"
+              "button": "Demolish damage",
+              "chatButton": "Demolish damage",
+              "roll": "Demolish damage"
              },
              "damage": {
               "dice": "d8+10",
@@ -7973,7 +7973,7 @@
              "id": "vulnerable",
              "label": "Demolish: targets temporarily Vulnerable",
              "texts": {
-              "chatButton": "{label}"
+              "chatButton": "Demolish: targets temporarily Vulnerable"
              },
              "on": "feat:Demolish",
              "successIfKnown": true,
@@ -8022,7 +8022,7 @@
              "id": "devastate",
              "label": "Devastating Strikes: +1 HP (Severe damage to a Melee target)",
              "texts": {
-              "chatButton": "{label}"
+              "chatButton": "Devastating Strikes: +1 HP (Severe damage to a Melee target)"
              },
              "on": "damage",
              "weaponRange": "Melee",
@@ -8102,7 +8102,7 @@
              "id": "restrain",
              "label": "Ocean Master: target temporarily Restrained",
              "texts": {
-              "chatButton": "{label}"
+              "chatButton": "Ocean Master: target temporarily Restrained"
              },
              "on": "attack",
              "weaponRange": "Melee",
@@ -8170,9 +8170,9 @@
         "id": "use",
         "label": "Beastform",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Beastform",
+         "chatButton": "Beastform",
+         "roll": "Beastform"
         },
         "beastform": true,
         "cost": {
@@ -8211,9 +8211,9 @@
         "id": "use",
         "label": "Rogue’s Dodge",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Rogue’s Dodge",
+         "chatButton": "Rogue’s Dodge",
+         "roll": "Rogue’s Dodge"
         },
         "steps": [
          {
@@ -8289,9 +8289,9 @@
         "id": "use",
         "label": "Clear 2 Armor Slots",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Clear 2 Armor Slots",
+         "chatButton": "Clear 2 Armor Slots",
+         "roll": "Clear 2 Armor Slots"
         },
         "steps": [
          {
@@ -8327,9 +8327,9 @@
         "id": "use",
         "label": "Unstoppable",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Unstoppable",
+         "chatButton": "Unstoppable",
+         "roll": "Unstoppable"
         },
         "steps": [
          {
@@ -8377,7 +8377,7 @@
         "id": "advance",
         "label": "Unstoppable: dealt HP - increase die",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Unstoppable: dealt HP - increase die"
         },
         "on": "damage",
         "requiresEffect": "Unstoppable",
@@ -8412,9 +8412,9 @@
         "id": "use",
         "label": "Patron’s Boon",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Patron’s Boon",
+         "chatButton": "Patron’s Boon",
+         "roll": "Patron’s Boon"
         },
         "cost": {
          "hope": 3
@@ -8426,7 +8426,7 @@
         "id": "reroll",
         "label": "Patron’s Boon: reroll with advantage",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Patron’s Boon: reroll with advantage"
         },
         "on": "duality",
         "when": "failure",
@@ -8483,9 +8483,9 @@
         "id": "tribute",
         "label": "Downtime tribute",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Downtime tribute",
+         "chatButton": "Downtime tribute",
+         "roll": "Downtime tribute"
         },
         "steps": [
          {
@@ -8523,9 +8523,9 @@
         "id": "use",
         "label": "Not This Time",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Not This Time",
+         "chatButton": "Not This Time",
+         "roll": "Not This Time"
         },
         "cost": {
          "hope": 3
@@ -8557,7 +8557,7 @@
         "id": "hope",
         "label": "Strange Patterns: gain a Hope",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Strange Patterns: gain a Hope"
         },
         "on": "duality",
         "when": "dieMatches",
@@ -8575,7 +8575,7 @@
         "id": "stress",
         "label": "Strange Patterns: clear a Stress",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Strange Patterns: clear a Stress"
         },
         "on": "duality",
         "when": "dieMatches",

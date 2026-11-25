@@ -318,10 +318,10 @@
       "id": "use",
       "label": "Shifting",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Shifting",
+       "chatButton": "Shifting",
+       "roll": "Shifting",
+       "reportTitle": "{source} - Shifting"
       },
       "cost": {
        "armor": 1
@@ -350,8 +350,8 @@
       "id": "quiet",
       "label": "Move silently",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Move silently",
+       "applied": "{source} - Move silently"
       },
       "roll": "action",
       "value": 2,
@@ -540,8 +540,8 @@
       "id": "sharp",
       "label": "Sharp",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Sharp",
+       "applied": "{source} - Sharp"
       },
       "roll": "damage",
       "dice": "1d4",
@@ -738,10 +738,10 @@
       "id": "use",
       "label": "Timeslowing",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Timeslowing",
+       "chatButton": "Timeslowing",
+       "roll": "Timeslowing",
+       "reportTitle": "{source} - Timeslowing"
       },
       "hostOwned": true,
       "cost": {
@@ -902,8 +902,8 @@
          "id": "stored",
          "label": "Capacitor: stored",
          "texts": {
-          "option": "{source} - {label}",
-          "applied": "{source} - {label}"
+          "option": "{source} - Capacitor: stored",
+          "applied": "{source} - Capacitor: stored"
          },
          "roll": "damage",
          "value": 0,
@@ -964,7 +964,7 @@
       "id": "reroll",
       "label": "Trickster's Step: reroll with advantage",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Trickster's Step: reroll with advantage"
       },
       "on": "trait:Agility",
       "excludeRolls": [
@@ -1039,7 +1039,7 @@
       "id": "terrifying",
       "label": "Terrifying: drive the target back",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Terrifying: drive the target back"
       },
       "on": "attack",
       "weaponAttack": true,
@@ -1075,10 +1075,10 @@
       "id": "use",
       "label": "Gravitic",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Gravitic",
+       "chatButton": "Gravitic",
+       "roll": "Gravitic",
+       "reportTitle": "{source} - Gravitic"
       },
       "cost": {
        "stress": 1
@@ -1168,10 +1168,10 @@
       "id": "use",
       "label": "Anchored",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Anchored",
+       "chatButton": "Anchored",
+       "roll": "Anchored",
+       "reportTitle": "{source} - Anchored"
       },
       "cost": {
        "armor": 1
@@ -1211,10 +1211,10 @@
       "id": "reflect",
       "label": "Mirrorwoven: Spellcast roll to reflect",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Mirrorwoven: Spellcast roll to reflect",
+       "chatButton": "Mirrorwoven: Spellcast roll to reflect",
+       "roll": "Mirrorwoven: Spellcast roll to reflect",
+       "reportTitle": "{source} - Mirrorwoven: Spellcast roll to reflect"
       },
       "cost": {
        "armor": 1
@@ -1344,8 +1344,8 @@
       "id": "grudge",
       "label": "Punishing Weight",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Punishing Weight",
+       "applied": "{source} - Punishing Weight"
       },
       "roll": "damage",
       "value": 2,
@@ -1375,8 +1375,8 @@
       "id": "intimidate",
       "label": "Rattleclad: threaten or intimidate",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Rattleclad: threaten or intimidate",
+       "applied": "{source} - Rattleclad: threaten or intimidate"
       },
       "roll": "action",
       "value": 2
@@ -1385,8 +1385,8 @@
       "id": "hidden",
       "label": "Rattleclad: stay hidden or unnoticed",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Rattleclad: stay hidden or unnoticed",
+       "applied": "{source} - Rattleclad: stay hidden or unnoticed"
       },
       "roll": "action",
       "value": -2
@@ -1489,10 +1489,10 @@
       "id": "break",
       "label": "Break vow",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Break vow",
+       "chatButton": "Break vow",
+       "roll": "Break vow",
+       "reportTitle": "{source} - Break vow"
       },
       "requiresEffect": "Oathbound",
       "endEffect": "Oathbound",
@@ -1571,7 +1571,7 @@
       "id": "reroll-strength",
       "label": "Brace Point: reroll",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Brace Point: reroll"
       },
       "on": "trait:Strength",
       "excludeRolls": [
@@ -1589,7 +1589,7 @@
       "id": "reroll-agility",
       "label": "Brace Point: reroll",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Brace Point: reroll"
       },
       "on": "trait:Agility",
       "excludeRolls": [
@@ -1607,7 +1607,7 @@
       "id": "reroll-finesse",
       "label": "Brace Point: reroll",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Brace Point: reroll"
       },
       "on": "trait:Finesse",
       "excludeRolls": [
@@ -1758,10 +1758,10 @@
       "id": "use",
       "label": "Juggernaut",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Juggernaut",
+       "chatButton": "Juggernaut",
+       "roll": "Juggernaut",
+       "reportTitle": "{source} - Juggernaut"
       },
       "cost": {
        "armor": 1
@@ -1857,10 +1857,10 @@
       "id": "use",
       "label": "Helper: spent Hope to help an ally",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Helper: spent Hope to help an ally",
+       "chatButton": "Helper: spent Hope to help an ally",
+       "roll": "Helper: spent Hope to help an ally",
+       "reportTitle": "{source} - Helper: spent Hope to help an ally"
       },
       "steps": [
        {
@@ -1932,10 +1932,10 @@
       "id": "use",
       "label": "Steady the Line",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Steady the Line",
+       "chatButton": "Steady the Line",
+       "roll": "Steady the Line",
+       "reportTitle": "{source} - Steady the Line"
       },
       "cost": {
        "armor": 1
@@ -1976,10 +1976,10 @@
       "id": "use",
       "label": "Tempered Spirit: began the scene with more Hope than Fear",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Tempered Spirit: began the scene with more Hope than Fear",
+       "chatButton": "Tempered Spirit: began the scene with more Hope than Fear",
+       "roll": "Tempered Spirit: began the scene with more Hope than Fear",
+       "reportTitle": "{source} - Tempered Spirit: began the scene with more Hope than Fear"
       },
       "steps": [
        {
@@ -2157,10 +2157,10 @@
       "id": "reflect",
       "label": "Steelwoven: Spellcast roll to reflect",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Steelwoven: Spellcast roll to reflect",
+       "chatButton": "Steelwoven: Spellcast roll to reflect",
+       "roll": "Steelwoven: Spellcast roll to reflect",
+       "reportTitle": "{source} - Steelwoven: Spellcast roll to reflect"
       },
       "cost": {
        "armor": 1
@@ -2423,10 +2423,10 @@
       "id": "use",
       "label": "Mnemonic",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Mnemonic",
+       "chatButton": "Mnemonic",
+       "roll": "Mnemonic",
+       "reportTitle": "{source} - Mnemonic"
       }
      }
     ]
@@ -2494,10 +2494,10 @@
       "id": "use",
       "label": "Absorbing",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Absorbing",
+       "chatButton": "Absorbing",
+       "roll": "Absorbing",
+       "reportTitle": "{source} - Absorbing"
       },
       "steps": [
        {
@@ -2583,10 +2583,10 @@
       "id": "use",
       "label": "Resplendent",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Resplendent",
+       "chatButton": "Resplendent",
+       "roll": "Resplendent",
+       "reportTitle": "{source} - Resplendent"
       },
       "steps": [
        {
@@ -2754,8 +2754,8 @@
       "id": "stellar",
       "label": "Stellar",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Stellar",
+       "applied": "{source} - Stellar"
       },
       "roll": "spellcast",
       "advantage": "advantage",
@@ -2790,7 +2790,7 @@
       "id": "fortune",
       "label": "Fortune-Favored: failure with Hope becomes success with Fear",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Fortune-Favored: failure with Hope becomes success with Fear"
       },
       "on": "duality",
       "when": "hope",
@@ -2846,7 +2846,7 @@
       "id": "bloodthirsty",
       "label": "Bloodthirsty: clear 1 HP",
       "texts": {
-       "chatButton": "{label}"
+       "chatButton": "Bloodthirsty: clear 1 HP"
       },
       "on": "attack",
       "criticalOnly": true,
@@ -2883,8 +2883,8 @@
       "id": "advantage",
       "label": "Aquatic",
       "texts": {
-       "option": "{source} - {label}",
-       "applied": "{source} - {label}"
+       "option": "{source} - Aquatic",
+       "applied": "{source} - Aquatic"
       },
       "roll": "trait:Agility",
       "advantage": "advantage",
@@ -3028,10 +3028,10 @@
       "id": "use",
       "label": "Ghostwalker",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Ghostwalker",
+       "chatButton": "Ghostwalker",
+       "roll": "Ghostwalker",
+       "reportTitle": "{source} - Ghostwalker"
       },
       "cost": {
        "stress": 1
@@ -3180,10 +3180,10 @@
       "id": "repair",
       "label": "Repair Vitreous armor",
       "texts": {
-       "button": "{label}",
-       "chatButton": "{label}",
-       "roll": "{label}",
-       "reportTitle": "{source} - {label}"
+       "button": "Repair Vitreous armor",
+       "chatButton": "Repair Vitreous armor",
+       "roll": "Repair Vitreous armor",
+       "reportTitle": "{source} - Repair Vitreous armor"
       },
       "timing": "downtime",
       "requiresEffect": "Vitreous Cracked",

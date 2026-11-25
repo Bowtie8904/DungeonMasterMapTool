@@ -40,9 +40,9 @@
         "id": "use",
         "label": "Unbound",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Unbound",
+         "chatButton": "Unbound",
+         "roll": "Unbound"
         }
        }
       ],
@@ -51,7 +51,7 @@
         "id": "hope",
         "label": "Unbound: change Fear into Hope",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Unbound: change Fear into Hope"
         },
         "on": "duality",
         "when": "fear",
@@ -110,9 +110,9 @@
         "id": "use",
         "label": "Close-Knit",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Close-Knit",
+         "chatButton": "Close-Knit",
+         "roll": "Close-Knit"
         },
         "target": "actor",
         "transferHope": true
@@ -187,9 +187,9 @@
         "id": "use",
         "label": "Dedicated",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Dedicated",
+         "chatButton": "Dedicated",
+         "roll": "Dedicated"
         }
        }
       ],
@@ -284,7 +284,7 @@
         "id": "gain",
         "label": "Gain Tide token",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Gain Tide token"
         },
         "on": "duality",
         "when": "fear",
@@ -381,9 +381,9 @@
         "id": "use",
         "label": "Nomadic Pack",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Nomadic Pack",
+         "chatButton": "Nomadic Pack",
+         "roll": "Nomadic Pack"
         },
         "cost": {
          "hope": 1
@@ -412,9 +412,9 @@
         "id": "use",
         "label": "Brave Face",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Brave Face",
+         "chatButton": "Brave Face",
+         "roll": "Brave Face"
         },
         "cost": {
          "hope": 1

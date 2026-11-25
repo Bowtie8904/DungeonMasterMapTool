@@ -73,9 +73,9 @@
         "id": "pass-through",
         "label": "Pass through a solid object",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Pass through a solid object",
+         "chatButton": "Pass through a solid object",
+         "roll": "Pass through a solid object"
         },
         "cost": {
          "stress": 2
@@ -120,9 +120,9 @@
         "id": "change-ancestry",
         "label": "Change ancestry and choose a feature",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Change ancestry and choose a feature",
+         "chatButton": "Change ancestry and choose a feature",
+         "roll": "Change ancestry and choose a feature"
         },
         "timing": "downtime",
         "ancestryChoice": "ancestry"
@@ -139,9 +139,9 @@
         "id": "change-feature",
         "label": "Choose a different ancestry feature",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Choose a different ancestry feature",
+         "chatButton": "Choose a different ancestry feature",
+         "roll": "Choose a different ancestry feature"
         },
         "timing": "downtime",
         "ancestryChoice": "feature"
@@ -165,9 +165,9 @@
         "id": "attack",
         "label": "Attack",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Attack",
+         "chatButton": "Attack",
+         "roll": "Attack"
         },
         "actionRoll": {
          "trait": "highest",
@@ -178,9 +178,9 @@
         "id": "damage",
         "label": "Damage",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Damage",
+         "chatButton": "Damage",
+         "roll": "Damage"
         },
         "damage": {
          "dice": "d6",
@@ -235,7 +235,7 @@
         "id": "feed",
         "label": "Feed",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Feed"
         },
         "on": "attack",
         "weapon": "Fangs",
@@ -268,9 +268,9 @@
         "id": "use",
         "label": "Wolf Form",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Wolf Form",
+         "chatButton": "Wolf Form",
+         "roll": "Wolf Form"
         },
         "cost": {
          "stress": 1
@@ -330,7 +330,7 @@
         "id": "hope-stress",
         "label": "Wolf Form: mark Stress",
         "texts": {
-         "chatButton": "{label}"
+         "chatButton": "Wolf Form: mark Stress"
         },
         "on": "duality",
         "when": "hopeOrCritical",
@@ -351,9 +351,9 @@
         "id": "rampage",
         "label": "Howling Rampage",
         "texts": {
-         "button": "{label}",
-         "chatButton": "{label}",
-         "roll": "{label}"
+         "button": "Howling Rampage",
+         "chatButton": "Howling Rampage",
+         "roll": "Howling Rampage"
         },
         "requiresEffect": "Wolf Form",
         "sendRoll": {
