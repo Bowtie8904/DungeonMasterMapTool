@@ -34,8 +34,7 @@ import { openDemiplaneImport } from './demiplane-view';
 
 import { openCompanionMancer, openLevelUp, openMancer, openTransformation } from './mancer';
 import { companionAvailable, companionFeatures, companionRules, companionWeapon, hasCompanionTraining, markCompanionDamage, resolveBonded } from './companion';
-import { rich, inline } from './rich';
-import { automationPanel } from '../automation/panel';
+import { inline, rich } from './rich';
 import { MAX_LEVEL, replaceAncestry } from './rules';
 import { chooseAncestryFeature } from './ancestry-choice';
 import { openTestingEditor } from './testing-view';
@@ -1626,9 +1625,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
 
   function charPage(): HTMLElement {
     featurePage = el('div', {}, featurePanel());
-    if (!opts.actorId || opts.readOnly?.()) return featurePage;
-    return el('div', {}, automationPanel(opts.actorId),
-      automationPanel(opts.actorId, 'downtime', 'Downtime', undefined, undefined, 'downtime.move'), featurePage);
+    return featurePage;
   }
 
   function characterFeatureCard(f: Feature, children: Feature[] = [], quick = false): HTMLElement {

@@ -178,10 +178,6 @@ public final class OnlineSessionServer {
     private final String dmCompendiumToken = java.util.UUID.randomUUID() + "-" + java.util.UUID.randomUUID();
     private String sessionId = java.util.UUID.randomUUID().toString();
     private final Random diceRandom = new Random();
-    private final dmmt.online.automation.AutomationHost automationHost = dmmt.online.automation.AutomationHost.bundled();
-    private dmmt.online.automation.AutomationHost.Pack automationPack;
-    private String automationFailureRevision;
-    private String automationFailure;
     private final Map<String, String> sessions = new ConcurrentHashMap<>();
     private final Map<String, Client> clients = new ConcurrentHashMap<>();
     private final ChatActionReports chatActions = new ChatActionReports();
@@ -325,8 +321,6 @@ public final class OnlineSessionServer {
         javalin.get("/api/sheet/{id}", ctx -> withSheetOperation(ctx, this::handleSheet));
         javalin.get("/api/copycat/{id}", ctx -> withSheetOperation(ctx, this::handleCopycatCandidates));
         javalin.get("/api/splendor/{id}", ctx -> withSheetOperation(ctx, this::handleSplendorCandidates));
-        javalin.get("/api/automation/{id}", ctx -> withSheetOperation(ctx, this::handleAutomationDescribe));
-        javalin.post("/api/automation/{id}", ctx -> withSheetOperation(ctx, this::handleAutomationExecute));
         javalin.put("/api/sheet/{id}", ctx -> withSheetOperation(ctx, this::handleSheetSave));
         javalin.post("/api/sheet/{id}/demiplane", this::handleDemiplaneImport);
         javalin.post("/api/feature", ctx -> withSheetOperation(ctx, this::handleFeature));
@@ -1269,7 +1263,6 @@ public final class OnlineSessionServer {
                         || path.equals("/api/actors/" + grant.actorId() + "/artwork")
                         || path.equals("/api/copycat/" + grant.actorId())
                         || path.equals("/api/splendor/" + grant.actorId())
-                        || path.equals("/api/automation/" + grant.actorId())
                         || path.equals("/api/death-move/" + grant.actorId())
                         || path.startsWith("/api/compendium") || path.startsWith("/a/") || path.startsWith("/t/"))
                     return grant.ownerId();
@@ -1666,8 +1659,6 @@ public final class OnlineSessionServer {
             CopycatCards.preserveSave((ObjectNode) sheet, previous);
             SpecialCardActions.preserveSave((ObjectNode) sheet, previous, actor.isTestingCharacter(), expected != null);
             SplendorActions.preserveSave((ObjectNode) sheet, previous);
-            if (previous.has("automationState")) ((ObjectNode) sheet).set("automationState", previous.get("automationState").deepCopy());
-            else ((ObjectNode) sheet).remove("automationState");
             DmEffectProtection.validate(previous, sheet, null);
             BoneValorRules.validateSave(previous, (ObjectNode) sheet);
             String problem = CharacterSheetRules.problem(sheet, previous, actor.isTestingCharacter(), c.getFear());
@@ -5656,131 +5647,6 @@ public final class OnlineSessionServer {
             return object.deepCopy();
         }
         return object;
-    }
-
-    /** Compiles format-2 catalogs plus rules.json once per combined compendium revision. */
-    private dmmt.online.automation.AutomationHost.Pack automationPack() throws IOException {
-        HostCatalog.Snapshot snapshot = catalogs();
-        Map<String, String> sources = new java.util.LinkedHashMap<>();
-        StringBuilder key = new StringBuilder();
-        for (String category : CatalogEditor.CATEGORIES) {
-            byte[] bytes = snapshot.bytes(category);
-            if (bytes == null) continue;
-            sources.put(category, new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
-            key.append(category).append('=').append(snapshot.revision(category)).append(';');
-        }
-        byte[] recipes = snapshot.bytes("rules");
-        key.append("rules=").append(recipes == null ? "-" : snapshot.revision("rules"));
-        String revision = CampaignStore.sha256(key.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        if (automationPack != null && automationPack.revision().equals(revision)) return automationPack;
-        if (revision.equals(automationFailureRevision))
-            throw new dmmt.online.automation.AutomationHost.NotReady(automationFailure);
-        try {
-            automationPack = dmmt.online.automation.AutomationHost.compile(revision, sources,
-                    recipes == null ? null : new String(recipes, java.nio.charset.StandardCharsets.UTF_8));
-            automationFailureRevision = null;
-            return automationPack;
-        } catch (dmmt.online.automation.AutomationHost.NotReady e) {
-            automationPack = null;
-            automationFailureRevision = revision;
-            automationFailure = e.getMessage();
-            throw e;
-        }
-    }
-
-    /** Owner (or the DM sheet grant acting as owner) is "self"; any other session player is "other". */
-    private String automationRelation(String playerId, Campaign.Actor actor) {
-        return playerId.equals(actor.getOwnerId()) ? "self" : "other";
-    }
-
-    private Campaign.Actor automationActor(String actorId) {
-        Campaign.Actor actor = campaign == null ? null : campaign.actor(actorId);
-        if (actor == null) throw new IllegalArgumentException("Choose an active character.");
-        if (actor.isDisabled()) throw new IllegalArgumentException("This character is disabled.");
-        return actor;
-    }
-
-    private static ObjectNode automationEvent(JsonNode node) {
-        if (node == null || node.isMissingNode() || node.isNull())
-            return MAPPER.createObjectNode().put("type", "action.request");
-        if (!node.isObject() || !node.path("type").isTextual())
-            throw new IllegalArgumentException("Invalid automation event.");
-        return (ObjectNode) node.deepCopy();
-    }
-
-    private synchronized void handleAutomationDescribe(Context ctx) {
-        String playerId = requirePlayer(ctx);
-        if (playerId == null) return;
-        try {
-            Campaign.Actor actor = automationActor(ctx.pathParam("id"));
-            String surface = ctx.queryParam("surface");
-            String type = ctx.queryParam("event");
-            ObjectNode event = MAPPER.createObjectNode().put("type", type == null || type.isBlank() ? "action.request" : type);
-            ObjectNode sheet = storedSheet(actor.getId());
-            ObjectNode response = automationHost.describe(automationPack(), sheet, event,
-                    surface == null || surface.isBlank() ? "sheet" : surface, automationRelation(playerId, actor));
-            ctx.header("Cache-Control", "no-store");
-            json(ctx, 200, response);
-        } catch (dmmt.online.automation.AutomationHost.NotReady e) {
-            json(ctx, 409, errorBody("Automation is unavailable: " + e.getMessage()));
-        } catch (IllegalArgumentException e) {
-            json(ctx, 400, errorBody(e.getMessage()));
-        } catch (IOException e) {
-            json(ctx, 500, errorBody("Could not read automation actions."));
-        }
-    }
-
-    private synchronized void handleAutomationExecute(Context ctx) {
-        String playerId = requirePlayer(ctx);
-        if (playerId == null) return;
-        if (ctx.bodyAsBytes().length > config.maxMessageBytes()) {
-            json(ctx, 413, errorBody("Automation request is too large."));
-            return;
-        }
-        try {
-            JsonNode body = MAPPER.readTree(ctx.body());
-            if (body == null || !body.isObject() || !body.path("request").isObject())
-                throw new IllegalArgumentException("Invalid automation request.");
-            Campaign.Actor actor = automationActor(ctx.pathParam("id"));
-            ObjectNode sheet = storedSheet(actor.getId());
-            Map<String, JsonNode> sourceNames = new java.util.HashMap<>();
-            for (var element : automationHost.projection().sources(sheet))
-                sourceNames.put(element.instanceId(), element.element().deepCopy());
-            long revisionBefore = automationHost.revision(sheet);
-            ObjectNode response = automationHost.execute(automationPack(), sheet, automationEvent(body.get("event")),
-                    (ObjectNode) body.get("request"), automationRelation(playerId, actor), diceRandom);
-            if (response.path("revision").asLong() != revisionBefore) {
-                sheet.put("featureRevision", sheet.path("featureRevision").asLong(0) + 1);
-                store.saveSheets(campaign.getId(), Map.of(actor.getId(), sheet));
-                sendFeatureState(actor, sheet);
-                for (JsonNode action : response.path("actions")) {
-                    String report = action.path("report").asText("");
-                    if (report.isBlank()) continue;
-                    JsonNode source = sourceNames.getOrDefault(action.path("sourceInstanceId").asText(),
-                            MAPPER.createObjectNode().put("name", "Automation"));
-                    publishActionReport(actor, source, source.path("name").asText("Automation"), List.of(report), null);
-                }
-                for (JsonNode item : response.path("outbox")) {
-                    ObjectNode message = chatMessage(actor.getOwnerId(), campaign.player(actor.getOwnerId()).getName(), null,
-                            clip("AUTOMATION REQUEST\n" + actor.getName() + "\n" + item.path("label").asText(item.path("type").asText("Request"))));
-                    message.set("automationRequest", item.deepCopy());
-                    deliver(message, null);
-                }
-            }
-            json(ctx, 200, response);
-        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
-            json(ctx, 400, errorBody("Invalid automation request."));
-        } catch (dmmt.online.automation.AutomationHost.NotReady e) {
-            json(ctx, 409, errorBody("Automation is unavailable: " + e.getMessage()));
-        } catch (dmmt.online.automation.RuleRuntime.Unavailable e) {
-            json(ctx, 409, errorBody(e.getMessage()));
-        } catch (SecurityException e) {
-            json(ctx, 403, errorBody(e.getMessage()));
-        } catch (IllegalArgumentException e) {
-            json(ctx, 400, errorBody(e.getMessage()));
-        } catch (IOException e) {
-            json(ctx, 500, errorBody("Could not save the automation result."));
-        }
     }
 
     private Campaign.Actor ownedActor(String playerId, String actorId) {
