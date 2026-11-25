@@ -133,7 +133,7 @@ The browser's simplified-lighting option still uses flat shapes for performance.
 - **Blade and Midnight roll actions:** Whirlwind, Glancing Blow (half Proficiency rounded up),
   and successful-Spellcast Eclipse offer chat buttons. Versatile Fighter offers a highest-trait
   attack selector and a Stress-paid individual damage-die maximizer. Rage Up carries its attack
-  bonus to that attack's damage, with one spinner selecting one or two uses; Reaper's Strike is an attack option.
+  bonus and card-source preview to that attack's damage, with one spinner selecting one or two uses; Reaper's Strike is an attack option.
   Glancing Blow opens the normal damage window at half Proficiency, retaining damage options.
   Pick and Pull and Uncanny Disguise's avoid-scrutiny advantage exclude weapon attacks.
 - **Midnight effects:** Uncanny Disguise replaces its tokens when activated and preselects spending

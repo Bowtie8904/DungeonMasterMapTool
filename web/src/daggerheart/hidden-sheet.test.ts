@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { emptyCharacter } from './data';
-import { renderSheetView, SheetBus } from './view';
+import { renderSheetView, SheetBus, type RollRequest } from './view';
 
 class Element {
   className = '';
@@ -41,7 +41,7 @@ it('keeps hidden-sheet damage/spell handlers live without building full DOM, and
   c.activeWeapons = [{ name: 'Sword', slot: 'Primary', damageType: 'phys', damage: 'd8', hands: 1, tier: 1, trait: 'Agility', range: 'Melee' }];
   const bus = new SheetBus();
   const changed = vi.fn();
-  const onRoll = vi.fn(() => true);
+  const onRoll = vi.fn((_request: RollRequest) => true);
   const view = renderSheetView({ character: c, bus, visible: () => false, onChange: changed, onRoll }) as unknown as Element;
   expect(view.children).toEqual([]);
   expect(created).toHaveBeenCalledTimes(1);
@@ -59,4 +59,22 @@ it('keeps hidden-sheet damage/spell handlers live without building full DOM, and
   expect(view.children).toEqual([]);
   expect(bus.spellDamage?.('Spell', { dice: '2d6', fixed: true }, false, vi.fn())).toBe(true);
   expect(body.text).toContain('Spell damage');
+});
+
+it.each([6, 12])('includes the linked Rage Up source in a %i damage bonus', async bonus => {
+  const body = new Element('body');
+  vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag), addEventListener: vi.fn(), removeEventListener: vi.fn() });
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  vi.stubGlobal('requestAnimationFrame', vi.fn());
+  const c = emptyCharacter('Hero');
+  c.activeWeapons = [{ name: 'Sword', slot: 'Primary', damageType: 'phys', damage: 'd8', hands: 1, tier: 1, trait: 'Strength', range: 'Melee' }];
+  const source = { name: 'Rage Up', text: 'Original Rage Up rules', source: 'Copycat - Blade - Level 6 Ability' };
+  const bus = new SheetBus();
+  const onRoll = vi.fn((_request: RollRequest) => true);
+  renderSheetView({ character: c, bus, visible: () => false, onRoll });
+  expect(bus.damage?.('Sword', false, undefined, 0, bonus, undefined, undefined, undefined, source)).toBe(true);
+  await body.all(node => node.tag === 'button' && node.text === 'Roll to chat')[0].listeners.get('click')?.();
+  expect(onRoll.mock.calls[0][0]).toMatchObject({
+    contributions: expect.arrayContaining([{ label: 'Rage Up', expression: String(bonus), rollSource: source }]),
+  });
 });

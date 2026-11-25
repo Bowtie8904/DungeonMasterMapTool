@@ -494,7 +494,7 @@ Blade/Midnight automation uses result-card actions for Not Good Enough, Whirlwin
 Glancing Blow (half current Proficiency rounded up) and successful-Spellcast Eclipse.
 Versatile Fighter selects an attack trait (highest current trait by default) and can maximize
 one selected damage die for Stress. Rage Up's attack choice follows only that attack's
-linked damage, with one 1-2 use spinner, and Reaper's Strike is selected with an attack.
+linked damage and its card-source preview, with one 1-2 use spinner, and Reaper's Strike is selected with an attack.
 Glancing Blow opens the normal damage window at half Proficiency rounded up, including damage options.
 Pick and Pull and Uncanny Disguise's avoid-scrutiny advantage exclude weapon attacks.
 Uncanny Disguise has one Stress-paid activation replacing its tokens; its buff preselects

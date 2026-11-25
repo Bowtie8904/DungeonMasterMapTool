@@ -90,7 +90,7 @@ export class SheetBus {
   /** Recently sent rolls by ref, so chat buttons can repeat them. */
   readonly sent = new Map<string, RollRequest>();
   /** Opens the damage dialog for an equipped weapon; set by the rendered sheet. */
-  damage?: (weapon: string, critical?: boolean, attackFear?: number, proficiencyBonus?: number, linkedBonus?: number, action?: WeaponDamageAction, outcome?: 'hope' | 'fear' | 'critical', attack?: { profile?: string; damageDie?: number }) => boolean;
+  damage?: (weapon: string, critical?: boolean, attackFear?: number, proficiencyBonus?: number, linkedBonus?: number, action?: WeaponDamageAction, outcome?: 'hope' | 'fear' | 'critical', attack?: { profile?: string; damageDie?: number }, linkedSource?: RollSource) => boolean;
   /** Opens the damage dialog for a spell; onSent runs once the roll was sent. */
   spellDamage?: (label: string, spec: NonNullable<ActionDef['damage']>, critical: boolean, onSent: () => void, rollSource?: RollSource, pendingAction?: PendingAction) => boolean;
   subscribe(fn: (save?: boolean) => void): void { this.listeners.push(fn); }
@@ -509,19 +509,19 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     return true;
   };
   const rollDamage = (label: string, expression: string, rollSource?: RollSource) => opts.onRoll({ label, expression, rollSource });
-  const openWeaponDamage = (w: Weapon, critical = false, targets = ['damage'], after?: () => void, rollSource?: RollSource, pendingAction?: PendingAction, attackFear?: number, proficiencyBonus = 0, linkedBonus = 0, action?: WeaponDamageAction, outcome?: 'hope' | 'fear' | 'critical') => {
+  const openWeaponDamage = (w: Weapon, critical = false, targets = ['damage'], after?: () => void, rollSource?: RollSource, pendingAction?: PendingAction, attackFear?: number, proficiencyBonus = 0, linkedBonus = 0, action?: WeaponDamageAction, outcome?: 'hope' | 'fear' | 'critical', linkedSource?: RollSource) => {
     const exhausted = c.effects.find(e => e.deathrun && deathrunProficiency(c, e.counter?.value ?? 0) <= 0);
     if (exhausted && !targets.includes('spelldamage')) {
       if (!opts.onFeature) { opts.onLog?.('End the exhausted Deathrun before rolling damage.'); return; }
       void opts.onFeature(`effect:${exhausted.id}`, 'end').then(() =>
-        openWeaponDamage(w, critical, targets, after, rollSource, pendingAction, attackFear, proficiencyBonus, linkedBonus, action, outcome))
+        openWeaponDamage(w, critical, targets, after, rollSource, pendingAction, attackFear, proficiencyBonus, linkedBonus, action, outcome, linkedSource))
         .catch((e: Error) => opts.onLog?.(`Could not end Deathrun: ${e.message}`));
       return;
     }
     const bonus = rollBonus(c, targets, w, false);
     if (linkedBonus) {
       bonus.value += linkedBonus;
-      bonus.contributions.push({ label: 'Rage Up', expression: String(linkedBonus) });
+      bonus.contributions.push({ label: 'Rage Up', expression: String(linkedBonus), rollSource: linkedSource });
       bonus.names.push('Rage Up');
     }
     openRollDialog(root, c, `${w.name}${w.profile ? ` (${w.profile})` : ''} damage`, [], bonus, action?.submit ?? sendRoll(['damage', ...(w.damageType === 'magic' ? ['magicdamage'] : []), ...(targets.includes('spelldamage') ? ['spelldamage'] : []), ...(w.profile ? [`weaponProfile:${w.profile}`] : []), ...(w.dieOverride ? [`damageDie:${w.dieOverride}`] : [])].join(','), w.name, rollSource ?? rollSourceFor(c, `weapon:${w.name}`)),
@@ -532,13 +532,13 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     openWeaponDamage(spell, critical, ['damage', 'spelldamage'], onSent, rollSource, pendingAction);
     return true;
   };
-  if (opts.bus) opts.bus.damage = (name, critical, attackFear, proficiencyBonus, linkedBonus, action, outcome, attack) => {
+  if (opts.bus) opts.bus.damage = (name, critical, attackFear, proficiencyBonus, linkedBonus, action, outcome, attack, linkedSource) => {
     const companion = companionWeapon(c);
     const equipped = companion?.name === name ? companion : activeWeapons(c).find((x) => x.name === name);
     const profiled = equipped && attack?.profile ? weaponWithProfile(equipped, attack.profile) : equipped;
     const w = profiled && attack?.damageDie ? { ...profiled, damage: profiled.damage.replace(/(\d*)d\d+/i, `$1d${attack.damageDie}`), dieOverride: attack.damageDie } : profiled;
     if (w?.generated === 'companion' && !companionAvailable(c)) { opts.onLog?.('Your companion is unavailable.'); return false; }
-    if (w) openWeaponDamage(w, critical, ['damage'], undefined, undefined, undefined, attackFear, proficiencyBonus, linkedBonus, action, outcome);
+    if (w) openWeaponDamage(w, critical, ['damage'], undefined, undefined, undefined, attackFear, proficiencyBonus, linkedBonus, action, outcome, linkedSource);
     else {
       if (action) return false;
       const feature = [...activeFeatures(c), ...c.heritage].find((f) => f.name === name);

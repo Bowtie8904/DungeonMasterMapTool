@@ -139,6 +139,9 @@ describe('community catalog automation', () => {
       body.find(e => e.tag === 'button' && e.text === 'Roll to chat').fire('click');
       expect(send.mock.calls[0][0]).toMatchObject({ expression: '2d12+3', source: expect.stringContaining(`linkedDamage:${6 * uses}`) });
       expect(send.mock.calls[0][0].source).toContain('trait:Strength');
+      expect(send.mock.calls[0][0].contributions).toContainEqual(expect.objectContaining({
+        rollSource: { name: 'Rage Up', text: c.loadout[1].text, source: 'Blade - Level 6 Ability' },
+      }));
       expect(c.stress.on).toBe(sent ? uses : 0);
     });
 

@@ -269,6 +269,39 @@ describe('cross-player roll buttons', () => {
     expect(sent).toHaveLength(0);
   });
 
+  it('carries the original Rage Up snapshot to damage and resolves legacy attacks from the card', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Fighter', undefined);
+    c.loadout = [{ name: 'Rage Up', domain: 'Blade', level: 6, type: 'Ability', recall: 1, text: 'Current rules' }];
+    const damage = vi.fn((..._args: unknown[]) => true);
+    const { host } = hostFor({ 'actor-b': c });
+    const supported = { ...host, playerId: original.fromId,
+      sheet: async () => ({ character: c, bus: { damage } as unknown as SheetBus, save: Object.assign(() => undefined, { flush: async () => undefined }) }) };
+    const source = { name: 'Rage Up', text: 'Original rules', source: 'Copycat - Blade - Level 6 Ability' };
+    const attack = { ...original, source: 'action,attack,option:card:Copycat/Rage Up:rage1,linkedDamage:12', weapon: 'Dagger',
+      breakdown: [{ label: 'Rage Up', expression: '0', total: 0, rolls: [], rollSource: source }] };
+    const snapshot = rollButtons(attack, supported) as unknown as FakeElement;
+    const legacy = rollButtons({ ...attack, source: 'action,attack,linkedDamage:6', breakdown: undefined }, supported) as unknown as FakeElement;
+    const ordinary = rollButtons({ ...attack, source: 'action,attack', breakdown: undefined }, supported) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await snapshot.queryAll('button').find(button => button.text === 'Damage')!.click();
+    expect(damage.mock.calls[0][4]).toBe(12);
+    expect(damage.mock.calls[0][8]).toEqual(source);
+    await legacy.queryAll('button').find(button => button.text === 'Damage')!.click();
+    expect(damage.mock.calls[1][8]).toEqual({ name: 'Rage Up', text: 'Current rules', source: 'Blade - Level 6 Ability' });
+    await ordinary.queryAll('button').find(button => button.text === 'Damage')!.click();
+    expect(damage.mock.calls[2][4]).toBeUndefined();
+    expect(damage.mock.calls[2][8]).toBeUndefined();
+
+    const rage = c.loadout[0];
+    c.loadout = [{ name: 'Copycat', domain: 'Midnight', level: 8, type: 'Ability', recall: 1, text: '',
+      borrowedCard: { sourceActorId: 'other', sourceActorName: 'Other', card: rage } }];
+    const copied = rollButtons({ ...attack, breakdown: undefined }, supported) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await copied.queryAll('button').find(button => button.text === 'Damage')!.click();
+    expect(damage.mock.calls[3][8]).toEqual({ name: 'Rage Up', text: 'Current rules', source: 'Copycat - Blade - Level 6 Ability' });
+  });
+
   it('offers the correct Blade chat actions and carries Rage Up only from the clicked attack', async () => {
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
     const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));

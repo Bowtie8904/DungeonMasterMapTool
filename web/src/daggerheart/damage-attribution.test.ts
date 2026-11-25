@@ -5,6 +5,7 @@ import { configuredRollOption, damageContributions, rollBonus, selectedRollBonus
 
 const files = ['classes', 'ancestries', 'communities', 'weapons', 'armor', 'consumables', 'domain-cards', 'transformations', 'items'];
 const options: Array<{ catalog: string; name: string; text: string; option: RollOption }> = [];
+const linkedOptions: Array<{ catalog: string; name: string; option: RollOption }> = [];
 function collect(value: unknown, catalog: string, name = '', text = ''): void {
   if (Array.isArray(value)) { value.forEach(item => collect(item, catalog, name, text)); return; }
   if (!value || typeof value !== 'object') return;
@@ -15,6 +16,7 @@ function collect(value: unknown, catalog: string, name = '', text = ''): void {
     if ((key === 'rollOptions' || key === 'conditionalRollOptions') && Array.isArray(child)) {
       for (const option of child as RollOption[]) {
         if (option.roll === 'damage') options.push({ catalog, name, text, option });
+        if (option.linkedDamageTrait) linkedOptions.push({ catalog, name, option });
       }
     }
     collect(child, catalog, name, text);
@@ -23,6 +25,11 @@ function collect(value: unknown, catalog: string, name = '', text = ''): void {
 for (const file of files) collect(JSON.parse(readFileSync(new URL(`../../../dmmap-daggerheart/${file}.json`, import.meta.url), 'utf8')), file);
 
 describe('catalog damage attribution', () => {
+  it('identifies all attack-linked trait damage options requiring source handoff', () => {
+    expect(linkedOptions.map(({ catalog, name, option }) => [catalog, name, option.id]))
+      .toEqual([['domain-cards', 'Rage Up', 'rage1']]);
+  });
+
   it.each(options)('$catalog: $name / $option.id has one described contribution', ({ name, text, option }) => {
     const c = emptyCharacter('Roller');
     c.level = 5;

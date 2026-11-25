@@ -562,7 +562,13 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         const fear = ctx?.kind !== 'damage' ? ctx?.fear : undefined;
         const outcome = critical ? 'critical' : ctx?.outcome ?? (ctx && ctx.hope > ctx.fear ? 'hope' : 'fear');
         const extra = attack ? [attack] as const : [] as const;
-        const opened = linkedBonus
+        const tags = m.source?.split(',') ?? [];
+        const linkedKey = tags.includes('option:card:Copycat/Rage Up:rage1') ? 'card:Copycat/Rage Up' : 'card:Rage Up';
+        const linkedSource = linkedBonus ? m.breakdown?.find(detail => detail.rollSource?.name === 'Rage Up')?.rollSource
+          ?? rollSourceFor(rolledActor.sheet.character, linkedKey) : undefined;
+        const opened = linkedBonus && linkedSource
+          ? rolledActor.sheet.bus.damage?.(m.weapon!, critical, fear, proficiency, linkedBonus, undefined, outcome, attack, linkedSource)
+          : linkedBonus
           ? rolledActor.sheet.bus.damage?.(m.weapon!, critical, fear, proficiency, linkedBonus, undefined, outcome, ...extra)
           : rolledActor.sheet.bus.damage?.(m.weapon!, critical, fear, proficiency, undefined, undefined, outcome, ...extra);
         if (!opened) host.toast(`${m.weapon} is no longer equipped.`);
