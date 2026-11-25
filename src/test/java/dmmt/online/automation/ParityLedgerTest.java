@@ -167,6 +167,8 @@ class ParityLedgerTest {
             if (deathProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("death: " + deathProblem);
             String manualProblem = manualMismatch(legacyAutomation(row));
             if (manualProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("manual: " + manualProblem);
+            String builderProblem = builderMismatch(pack, placed, legacyAutomation(row));
+            if (builderProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("builder: " + builderProblem);
             String armorProblem = armorMismatch(pack, placed, legacyAutomation(row));
             if (armorProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("armor: " + armorProblem);
             String triggerProblem = triggerMismatch(pack, placed, expected.path("triggers"));
@@ -203,7 +205,7 @@ class ParityLedgerTest {
     private static final java.util.Set<String> PROBED = java.util.Set.of("actions", "uses", "rest", "modifiers", "rollOptions",
             "conditionalRollOptions", "conditionalModifiers", "conditionalActions", "usesOverrides", "rollTriggers", "conditionalRollTriggers", "attach", "mitigation", "conditionalMitigation", "alternateProfiles", "damage", "spellcastDifficulty", "spellcastSuccessSteps", "hideSpellcast", "automaticRestUse", "automaticRestUseOnAttempt",
             "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "equipEffect", "zeroHopeClearArmor", "resources", "classResourceOnly",
-            "reloading", "requirement", "damageTypeChoice", "criticalMelee", "ignoreWeaponBurden", "unarmedWeapon", "conditionalDamageRewards", "dicePool", "deathMove", "manual");
+            "reloading", "requirement", "damageTypeChoice", "criticalMelee", "ignoreWeaponBurden", "unarmedWeapon", "conditionalDamageRewards", "dicePool", "deathMove", "manual", "creation", "companionTraining", "grantsFeatures", "groupGrantedFeatures", "beastformFree", "elementChoice", "overflowHope", "unarmoredBase");
 
     private static void writeLedger(Map<String, List<String>> failures) throws Exception {
         Path file = Path.of("docs/automation-parity-ledger.csv");
@@ -308,7 +310,7 @@ class ParityLedgerTest {
     private static JsonNode currentAutomation;
 
     private static final List<String> ARMOR_HOSTED = List.of("armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "equipEffect", "zeroHopeClearArmor", "resources", "classResourceOnly",
-            "reloading", "requirement", "damageTypeChoice", "criticalMelee", "ignoreWeaponBurden", "unarmedWeapon", "conditionalDamageRewards", "dicePool", "deathMove", "manual");
+            "reloading", "requirement", "damageTypeChoice", "criticalMelee", "ignoreWeaponBurden", "unarmedWeapon", "conditionalDamageRewards", "dicePool", "deathMove", "manual", "creation", "companionTraining", "grantsFeatures", "groupGrantedFeatures", "beastformFree", "elementChoice", "overflowHope", "unarmoredBase");
     private static final int[][] ARMOR_STEPS = {{0, 3}, {2, 3}, {4, 3}, {3, 3}, {4, 3}, {4, 0}, {4, 2}};
 
     private static JsonNode legacyAutomation(Row row) throws Exception {
@@ -631,6 +633,97 @@ class ParityLedgerTest {
         String haystack = shown.toString().replaceAll("[^A-Za-z0-9]", "");
         for (JsonNode note : legacy.get("manual"))
             if (!haystack.contains(note.asText().replaceAll("[^A-Za-z0-9]", ""))) return "manual note not shown: " + note.asText();
+        return null;
+    }
+
+    /** Creation allowances, companion training, granted feature groups, free beastforms, element choice, armor overflow and the unarmored base against legacy. */
+    private static String builderMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy) {
+        if (legacy == null) return null;
+        if (legacy.has("creation")) {
+            boolean applies = false;
+            Map<String, Integer> planned = new TreeMap<>();
+            for (JsonNode rule : currentAutomation.path("rules"))
+                if ("creation".equals(rule.path("id").asText()) && "creation.apply".equals(rule.at("/bindings/0/event").asText())) {
+                    applies = true;
+                    for (JsonNode step : rule.path("do"))
+                        if ("plan.adjust".equals(step.path("op").asText()) && "event.creation".equals(step.path("plan").asText()))
+                            planned.merge(step.path("field").asText(), step.path("by").asInt(), Integer::sum);
+                }
+            if (!applies) return "no creation.apply rule";
+            Map<String, Integer> want = new TreeMap<>();
+            legacy.get("creation").properties().forEach(e -> want.put(e.getKey(), e.getValue().asInt()));
+            if (!want.equals(planned)) return "creation allowances legacy " + want + " new " + planned;
+        }
+        if (legacy.has("companionTraining") && legacy.get("companionTraining").asInt() != currentAutomation.at("/entitlements/companionTraining").asInt(-1))
+            return "companion training legacy " + legacy.get("companionTraining") + " new " + currentAutomation.at("/entitlements/companionTraining");
+        if (legacy.has("grantsFeatures") && !legacy.get("grantsFeatures").equals(currentAutomation.at("/grants/features")))
+            return "granted features legacy " + legacy.get("grantsFeatures") + " new " + currentAutomation.at("/grants/features");
+        if (legacy.has("grantsFeatures") && !(legacy.path("groupGrantedFeatures").asBoolean() ? "grouped" : "separate").equals(currentAutomation.at("/grants/display").asText()))
+            return "granted feature display legacy grouped=" + legacy.path("groupGrantedFeatures").asBoolean() + " new " + currentAutomation.at("/grants/display");
+        if (legacy.has("beastformFree") && !legacy.get("beastformFree").equals(currentAutomation.at("/provides/beastformFree")))
+            return "free beastforms legacy " + legacy.get("beastformFree") + " new " + currentAutomation.at("/provides/beastformFree");
+        if (legacy.has("elementChoice")) {
+            JsonNode input = null;
+            for (JsonNode rule : currentAutomation.path("rules"))
+                if ("choose-element".equals(rule.path("id").asText())) input = rule.at("/inputs/0");
+            if (input == null) return "no element choice action";
+            List<String> offered = input.path("options").findValuesAsText("label");
+            List<String> want = new ArrayList<>();
+            legacy.get("elementChoice").forEach(e -> want.add(e.asText()));
+            if (!want.equals(offered)) return "elements legacy " + want + " new " + offered;
+        }
+        if (legacy.has("overflowHope")) return overflowMismatch(pack, placed, legacy.get("overflowHope").asInt());
+        if (legacy.has("unarmoredBase")) return unarmoredMismatch(pack, placed, legacy.get("unarmoredBase"));
+        return null;
+    }
+
+    /** Overflowing: clearing more Armor Slots than are marked gains Hope (bounded by the Hope track) once per clear. */
+    private static String overflowMismatch(AutomationHost.Pack pack, Placed placed, int gain) {
+        for (int marked : new int[] {0, 1, 3})
+            for (int requested : new int[] {1, 2, 4})
+                for (int hope : new int[] {3, 5, 6}) {
+                    String label = "marked " + marked + " requested " + requested + " hope " + hope;
+                    int cleared = Math.min(marked, requested);
+                    int want = Math.min(6, hope + (requested > cleared ? gain : 0));
+                    ObjectNode before = placed.sheet().deepCopy();
+                    before.withObject("/armorTrack").put("on", 1);
+                    ObjectNode sheet = before.deepCopy();
+                    sheet.withObject("/armorTrack").put("on", 0).put("slots", 4);
+                    sheet.withObject("/hope").put("on", hope);
+                    ObjectNode event = AutomationHost.event("track.changed", "parity", 0);
+                    event.put("track", "armorTrack").put("change", "clear").put("requested", requested);
+                    event.putObject("before").put("marked", marked).put("capacity", 4);
+                    event.putObject("after").put("marked", marked - cleared).put("capacity", 4);
+                    try {
+                        HOST.automatic(pack, sheet, event, constantDice());
+                    } catch (RuntimeException e) {
+                        return label + ": rejected: " + e.getMessage();
+                    }
+                    if (sheet.at("/hope/on").asInt() != want) return label + ": hope legacy " + want + " new " + sheet.at("/hope/on").asInt();
+                }
+        return null;
+    }
+
+    /** Bare Bones style armor: score, Major and Severe thresholds by tier while no armor is equipped, and no effect with armor. */
+    private static String unarmoredMismatch(AutomationHost.Pack pack, Placed placed, JsonNode base) {
+        for (int level : new int[] {1, 3, 5, 8, 10}) {
+            int tier = level == 1 ? 1 : level < 5 ? 2 : level < 8 ? 3 : 4;
+            ObjectNode sheet = placed.sheet().deepCopy();
+            sheet.put("level", level);
+            int trait = 0;
+            for (JsonNode t : sheet.path("traits")) if (base.path("trait").asText().equals(t.path("name").asText())) trait = t.path("mod").asInt();
+            int score = base.path("score").asInt() + trait;
+            int major = base.at("/thresholdsByTier/" + tier + "/0").asInt() + level;
+            int severe = base.at("/thresholdsByTier/" + tier + "/1").asInt() + level;
+            ObjectNode stats = statsOf(pack, sheet);
+            if (stats.path("armorSlots").asInt() != score || stats.path("major").asInt() != major || stats.path("severe").asInt() != severe)
+                return "level " + level + " unarmored legacy " + score + "/" + major + "/" + severe + " new " + stats;
+            ObjectNode armored = sheet.deepCopy();
+            armored.putObject("activeArmor").put("name", "Plain").put("score", 3).put("major", 8).put("severe", 17);
+            ObjectNode plain = armored.deepCopy();
+            plain.withArray("loadout").removeAll();
+            if (!statsOf(pack, armored).equals(statsOf(pack, plain))) return "level " + level + " unarmored base applied with armor equipped";
+        }
         return null;
     }
 
