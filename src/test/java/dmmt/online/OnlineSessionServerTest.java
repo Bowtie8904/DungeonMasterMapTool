@@ -15706,6 +15706,8 @@ class OnlineSessionServerTest {
             var edit = http.send(HttpRequest.newBuilder(URI.create(url)).header("Authorization", "Bearer " + token)
                     .PUT(HttpRequest.BodyPublishers.ofString(request.toString())).build(), HttpResponse.BodyHandlers.ofString());
             assertEquals(200, edit.statusCode(), edit.body());
+            assertTrue(Set.of("active", "retained", "unavailable")
+                    .contains(MAPPER.readTree(edit.body()).path("automation").path("state").asText()), edit.body());
             assertEquals("catalogChanged", inbox.next("catalogChanged").path("type").asText());
             assertEquals("New rules", MAPPER.readTree(file.toFile()).path("entries").get(0).path("text").asText());
             assertEquals(409, http.send(HttpRequest.newBuilder(URI.create(url)).header("Authorization", "Bearer " + token)
@@ -15724,6 +15726,31 @@ class OnlineSessionServerTest {
             assertEquals(200, persist.statusCode(), persist.body());
             assertEquals("Renamed torch", MAPPER.readTree(store.loadSheet(campaign.getId(), "target")).path("inventory").get(0).path("name").asText());
         } finally { ws.abort(); }
+    }
+
+    @Test
+    void failedRuleEditsKeepTheLastGoodRevisionActiveAndNameTheProblem() throws Exception {
+        installRestRules();
+        String token = URI.create(server.dmCompendiumUrl()).getFragment();
+        String url = "http://127.0.0.1:" + port + "/api/dm/catalog/consumables";
+        Path ruleset = compendiumDir.resolve("rules").resolve("ruleset.json");
+        String good = java.nio.file.Files.readString(ruleset);
+        assertEquals("active", catalogStatus(url, token).path("state").asText());
+        ObjectNode broken = (ObjectNode) MAPPER.readTree(good);
+        broken.withObject("/automation").withArray("rules").addObject().put("id", "bad").put("useRecipe", "missing-recipe");
+        java.nio.file.Files.writeString(ruleset, broken.toString());
+        JsonNode status = catalogStatus(url, token);
+        assertEquals("retained", status.path("state").asText(), status.toString());
+        assertTrue(status.path("message").asText().contains("/"), status.toString());
+        java.nio.file.Files.writeString(ruleset, good);
+        assertEquals("active", catalogStatus(url, token).path("state").asText());
+    }
+
+    private JsonNode catalogStatus(String url, String token) throws Exception {
+        var response = http.send(HttpRequest.newBuilder(URI.create(url)).header("Authorization", "Bearer " + token).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, response.statusCode(), response.body());
+        return MAPPER.readTree(response.body()).path("automation");
     }
 
     private HttpResponse<String> dmSheetHttp(String actorId, String token, JsonNode body, String version) throws Exception {

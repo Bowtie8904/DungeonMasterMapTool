@@ -187,6 +187,7 @@ public final class OnlineSessionServer {
     private dmmt.online.automation.AutomationHost.Pack automationPack;
     private String automationFailureRevision;
     private String automationFailure;
+    private dmmt.online.automation.AutomationHost.Pack lastGoodPack;
     private final Map<String, String> sessions = new ConcurrentHashMap<>();
     private final Map<String, Client> clients = new ConcurrentHashMap<>();
     private final ChatActionReports chatActions = new ChatActionReports();
@@ -534,6 +535,7 @@ public final class OnlineSessionServer {
             } else document = CatalogEditor.read(host.compendiumDirectory(), ctx.pathParam("category"));
             ObjectNode response = MAPPER.createObjectNode().put("revision", document.revision());
             response.set("file", CatalogEditor.editable(document.file()));
+            response.set("automation", automationStatus());
             json(ctx, 200, response);
         } catch (CatalogEditor.Rejected e) {
             json(ctx, e.status(), errorBody(e.getMessage()));
@@ -5894,8 +5896,10 @@ public final class OnlineSessionServer {
                 .append(";ruleset=").append(snapshot.rulesetRevision());
         String revision = CampaignStore.sha256(key.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
         if (automationPack != null && automationPack.revision().equals(revision)) return automationPack;
-        if (revision.equals(automationFailureRevision))
+        if (revision.equals(automationFailureRevision)) {
+            if (lastGoodPack != null) return lastGoodPack;
             throw new dmmt.online.automation.AutomationHost.NotReady(automationFailure);
+        }
         try {
             Map<String, String> sources = new java.util.LinkedHashMap<>();
             byte[] recipes = snapshot.recipeBytes();
@@ -5910,14 +5914,40 @@ public final class OnlineSessionServer {
             automationPack = dmmt.online.automation.AutomationHost.compile(revision, sources,
                     recipes == null ? null : new String(recipes, StandardCharsets.UTF_8),
                     ruleset == null ? null : new String(ruleset, StandardCharsets.UTF_8));
+            lastGoodPack = automationPack;
             automationFailureRevision = null;
+            automationFailure = null;
             return automationPack;
         } catch (dmmt.online.automation.AutomationHost.NotReady e) {
             automationPack = null;
             automationFailureRevision = revision;
             automationFailure = e.getMessage();
+            // A rejected edit must not take automation offline: the last compiled revision keeps serving.
+            if (lastGoodPack != null) return lastGoodPack;
             throw e;
         }
+    }
+
+    /** Compiles the current files and reports whether they are active, rejected in favour of the previous revision, or unusable. */
+    private ObjectNode automationStatus() {
+        ObjectNode status = MAPPER.createObjectNode();
+        try {
+            var pack = automationPack();
+            if (automationFailureRevision == null) {
+                status.put("state", "active");
+                status.put("message", "These rules compiled and are active for new previews and actions.");
+            } else {
+                status.put("state", "retained");
+                status.put("message", automationFailure);
+                status.put("detail", "The previous valid revision stays active until this error is fixed.");
+            }
+            status.put("revision", pack.revision());
+        } catch (IOException | RuntimeException e) {
+            status.put("state", "unavailable");
+            status.put("message", e.getMessage() == null ? "The rules could not be compiled." : e.getMessage());
+            status.put("detail", "Automation previews stay unavailable until this error is fixed.");
+        }
+        return status;
     }
 
     private String automationRelation(Context ctx, String playerId, Campaign.Actor actor) {

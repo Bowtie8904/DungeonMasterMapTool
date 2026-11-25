@@ -395,6 +395,9 @@ button.share-icon:disabled { opacity: .25; }
 .catalog-main h2 { margin-top: 0; }
 .catalog-intro { font-size: 13px; line-height: 1.5; padding: 12px; background: #ffffff08; border-left: 3px solid var(--accent); }
 .catalog-save-bar { background: var(--panel); padding: 10px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.catalog-rules-status { margin: 8px 16px; padding: 10px 12px; border-left: 3px solid var(--accent); background: #ffffff08; overflow-wrap: anywhere; }
+.catalog-rules-status.failed { border-left-color: #e5534b; }
+.catalog-rules-status p { margin: 4px 0 0; font-size: 13px; }
 .catalog-view-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 10px; border-bottom: 1px solid var(--border); }
 .catalog-view-tabs .active { background: var(--accent); color: #0b0e12; }
 .catalog-breadcrumbs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }

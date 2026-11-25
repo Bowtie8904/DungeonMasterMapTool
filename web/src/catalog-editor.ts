@@ -7,7 +7,8 @@ import {
   ruleSection, ruleSummary, STEP_TEMPLATES, type EditorTab, type CatalogObject, type CatalogValue,
 } from './catalog-fields';
 
-interface Document { file: CatalogObject; revision: string }
+export interface AutomationStatus { state: 'active' | 'retained' | 'unavailable'; message: string; detail?: string; revision?: string }
+interface Document { file: CatalogObject; revision: string; automation?: AutomationStatus }
 interface Panel { value: CatalogObject | CatalogValue[]; path: string; title: string }
 export type CatalogRequest = (url: string, data?: CatalogObject, method?: string) => Promise<Response>;
 
@@ -24,6 +25,7 @@ export class CatalogEditor {
   private busy = false;
   private message = '';
   private error = false;
+  private automationStatus?: AutomationStatus;
   private listeners = new Set<() => void>();
   private tab: EditorTab = 'Overview';
   private panels: Panel[] = [];
@@ -51,7 +53,9 @@ export class CatalogEditor {
     try {
       await Promise.all(Object.keys(CATALOG_LABELS).map(async category => {
         const response = await this.request(`/api/dm/catalog/${category}`);
-        this.documents.set(category, await response.json() as Document);
+        const document = await response.json() as Document;
+        this.documents.set(category, document);
+        this.automationStatus = document.automation ?? this.automationStatus;
       }));
       this.shapes = new CatalogShapes([...this.documents.values()].map(document => document.file));
       this.message = 'Select an entry, or create a new one. Nothing is written until you click Save.';
@@ -83,6 +87,7 @@ export class CatalogEditor {
     try {
       const document = await (await this.request(`/api/dm/catalog/${this.category}`)).json() as Document;
       this.documents.set(this.category, document);
+      this.automationStatus = document.automation ?? this.automationStatus;
       this.shapes = new CatalogShapes([...this.documents.values()].map(d => d.file));
       this.draft = undefined; this.message = 'Catalog reloaded. Select an entry to edit.'; this.error = false;
     } catch (error) { this.fail(error); }
@@ -98,6 +103,7 @@ export class CatalogEditor {
         revision: document.revision, existingId: this.existingId, entry: this.draft,
       }, 'PUT')).json() as Document;
       this.documents.set(this.category, result);
+      this.automationStatus = result.automation;
       this.existingId = String(this.draft.id);
       const savedEntry = Array.isArray(result.file.entries)
         ? result.file.entries.find(entry => isCatalogObject(entry) && entry.id === this.existingId) : undefined;
@@ -108,7 +114,9 @@ export class CatalogEditor {
       this.original = JSON.stringify(this.draft);
       this.panels = [];
       this.shapes = new CatalogShapes([...this.documents.values()].map(d => d.file));
-      this.message = `Saved to ${this.category}.json. Linked sheets and compendiums now use these rules.`;
+      this.message = result.automation && result.automation.state !== 'active'
+        ? `Saved to ${this.category}.json, but the automation rules were not accepted. See the rules status below.`
+        : `Saved to ${this.category}.json. Linked sheets and compendiums now use these rules.`;
       this.error = false;
       try { await this.saved(); }
       catch (error) { this.fail(new Error(`The JSON was saved, but the compendium could not refresh: ${(error as Error).message}`)); }
@@ -150,8 +158,9 @@ export class CatalogEditor {
     const status = el('p', { class: this.error ? 'error' : 'muted', role: this.error ? 'alert' : 'status' },
       this.busy ? 'Working...' : this.message);
     const main = el('main', { class: 'catalog-main' });
+    const rules = this.rulesStatus();
     const workspace = el('section', { class: 'catalog-workspace' },
-      el('h2', {}, this.draft ? String(this.draft.name || 'New entry') : 'Daggerheart catalog editor'), status);
+      el('h2', {}, this.draft ? String(this.draft.name || 'New entry') : 'Daggerheart catalog editor'), status, rules);
     if (this.draft) {
       const form = el('form', { class: 'catalog-form', id: 'catalog-entry-form' });
       const save = el('button', { type: 'submit', class: 'primary', disabled: this.busy }, 'Save to JSON');
@@ -210,6 +219,17 @@ export class CatalogEditor {
     this.renderedView = `${this.tab}:${this.tab === 'Automation' ? this.sourcePath : this.tab === 'Features' ? this.featurePath : ''}:${this.panels.at(-1)?.path ?? ''}`;
     main.scrollTop = this.scrollPositions.get(this.renderedView) ?? 0;
     list.scrollTop = navScroll;
+  }
+
+  /** Compile result of the saved files; an error names the exact JSON path, and the previous revision keeps serving. */
+  private rulesStatus(): HTMLElement {
+    const status = this.automationStatus;
+    if (!status) return el('div', { hidden: true });
+    const ok = status.state === 'active';
+    const title = ok ? 'Automation rules: active'
+      : status.state === 'retained' ? 'Automation rules: last valid revision kept' : 'Automation rules: previews unavailable';
+    return el('section', { class: `catalog-rules-status ${ok ? 'ok' : 'failed'}`, role: ok ? 'status' : 'alert' },
+      el('strong', {}, title), el('p', {}, status.message), ...(status.detail ? [el('p', { class: 'muted' }, status.detail)] : []));
   }
 
   private notify(): void { for (const listener of this.listeners) listener(); }
