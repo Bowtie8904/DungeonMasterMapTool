@@ -321,6 +321,7 @@ class CompendiumWindowTest {
                 var response = java.net.http.HttpClient.newHttpClient().send(java.net.http.HttpRequest.newBuilder(
                                 java.net.URI.create("http://127.0.0.1:" + server.port() + "/api/sheet/hero"))
                         .header("Authorization", "Bearer " + dmToken)
+                        .header(dmmt.online.OnlineProtocol.CONTRACT_HEADER, String.valueOf(dmmt.online.OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION))
                         .PUT(java.net.http.HttpRequest.BodyPublishers.ofString(saved.toString())).build(),
                         java.net.http.HttpResponse.BodyHandlers.ofString());
                 assertEquals(200, response.statusCode(), response.body());
