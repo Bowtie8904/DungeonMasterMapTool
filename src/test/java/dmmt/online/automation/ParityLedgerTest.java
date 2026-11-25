@@ -159,6 +159,10 @@ class ParityLedgerTest {
             if (altProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("alternateProfiles: " + altProblem);
             String damageProblem = damageDiceMismatch(pack, placed, expected.path("damageDice"));
             if (damageProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("damage: " + damageProblem);
+            String reloadProblem = reloadingMismatch(pack, placed, legacyAutomation(row));
+            if (reloadProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("reloading: " + reloadProblem);
+            String miscProblem = miscMismatch(pack, placed, legacyAutomation(row));
+            if (miscProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("misc: " + miscProblem);
             String armorProblem = armorMismatch(pack, placed, legacyAutomation(row));
             if (armorProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("armor: " + armorProblem);
             String triggerProblem = triggerMismatch(pack, placed, expected.path("triggers"));
@@ -194,7 +198,8 @@ class ParityLedgerTest {
     /** Automation fields whose behavior the harness replays against the legacy baseline. */
     private static final java.util.Set<String> PROBED = java.util.Set.of("actions", "uses", "rest", "modifiers", "rollOptions",
             "conditionalRollOptions", "conditionalModifiers", "conditionalActions", "usesOverrides", "rollTriggers", "conditionalRollTriggers", "attach", "mitigation", "conditionalMitigation", "alternateProfiles", "damage", "spellcastDifficulty", "spellcastSuccessSteps", "hideSpellcast", "automaticRestUse", "automaticRestUseOnAttempt",
-            "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "equipEffect", "zeroHopeClearArmor", "resources", "classResourceOnly");
+            "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "equipEffect", "zeroHopeClearArmor", "resources", "classResourceOnly",
+            "reloading", "requirement", "damageTypeChoice", "criticalMelee", "ignoreWeaponBurden", "unarmedWeapon", "conditionalDamageRewards", "dicePool");
 
     private static void writeLedger(Map<String, List<String>> failures) throws Exception {
         Path file = Path.of("docs/automation-parity-ledger.csv");
@@ -298,7 +303,8 @@ class ParityLedgerTest {
     }
     private static JsonNode currentAutomation;
 
-    private static final List<String> ARMOR_HOSTED = List.of("armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "equipEffect", "zeroHopeClearArmor", "resources", "classResourceOnly");
+    private static final List<String> ARMOR_HOSTED = List.of("armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "equipEffect", "zeroHopeClearArmor", "resources", "classResourceOnly",
+            "reloading", "requirement", "damageTypeChoice", "criticalMelee", "ignoreWeaponBurden", "unarmedWeapon", "conditionalDamageRewards", "dicePool");
     private static final int[][] ARMOR_STEPS = {{0, 3}, {2, 3}, {4, 3}, {3, 3}, {4, 3}, {4, 0}, {4, 2}};
 
     private static JsonNode legacyAutomation(Row row) throws Exception {
@@ -428,6 +434,191 @@ class ParityLedgerTest {
         }
         return null;
     }
+    private static Random fixedDice(int value) {
+        return new Random(0) {
+            @Override public int nextInt(int bound) { return Math.min(value, bound) - 1; }
+        };
+    }
+
+    /** Reloading weapons: the legacy check die unloads on its fail value, an unloaded weapon cannot attack and reloading costs one Stress. */
+    private static String reloadingMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy) {
+        if (legacy == null || !legacy.path("reloading").isObject()) return null;
+        int fail = legacy.path("reloading").path("fail").asInt(1);
+        int safe = fail == 1 ? 2 : 1;
+        ObjectNode event = AutomationHost.event("action.request", "parity", 1);
+        try {
+            ObjectNode sheet = withWeapon(placed.sheet());
+            String instance = sheet.withArray("activeWeapons").get(0).path("instanceId").asText();
+            HOST.execute(pack, sheet, event, profileRequest(sheet, instance, "attack", null), "self", "self", fixedDice(safe));
+            HOST.execute(pack, sheet, event, profileRequest(sheet, instance, "attack", null), "self", "self", fixedDice(safe));
+            HOST.execute(pack, sheet, event, profileRequest(sheet, instance, "attack", null), "self", "self", fixedDice(fail));
+            try {
+                HOST.execute(pack, sheet, event, profileRequest(sheet, instance, "attack", null), "self", "self", fixedDice(safe));
+                return "attack with an unloaded weapon was not blocked";
+            } catch (RuntimeException expectedBlock) {
+                // legacy throws "is unloaded" here
+            }
+            int stress = sheet.at("/stress/on").asInt();
+            ObjectNode reload = RuleJson.JSON.createObjectNode().put("requestId", "reload").put("expectedRevision", HOST.revision(sheet));
+            reload.putArray("selections").addObject().put("sourceInstanceId", instance).put("ruleId", "reload").put("bindingId", "sheet").putObject("inputs");
+            HOST.execute(pack, sheet, event, reload, "self", "self", fixedDice(safe));
+            if (sheet.at("/stress/on").asInt() != stress + 1) return "reload stress legacy=" + (stress + 1) + " new=" + sheet.at("/stress/on").asInt();
+            HOST.execute(pack, sheet, event, profileRequest(sheet, instance, "attack", null), "self", "self", fixedDice(safe));
+        } catch (Exception e) {
+            return "rejected: " + e.getMessage() + " @ " + (e instanceof RuntimeException r ? frames(r) : "");
+        }
+        return null;
+    }
+
+    private static JsonNode claimResult(AutomationHost.Pack pack, ObjectNode sheet, ObjectNode event, JsonNode rolled, String ruleId) {
+        for (JsonNode action : rolled.path("resultActions")) {
+            if (!ruleId.equals(norm(action.path("ruleId").asText())) || !ownOption(action)) continue;
+            ObjectNode claim = RuleJson.JSON.createObjectNode().put("requestId", "c" + REQUESTS.incrementAndGet()).put("expectedRevision", HOST.revision(sheet))
+                    .put("resultId", rolled.at("/event/resultId").asText());
+            claim.putArray("selections").addObject().put("sourceInstanceId", action.path("sourceInstanceId").asText())
+                    .put("ruleId", action.path("ruleId").asText()).put("bindingId", action.path("bindingId").asText());
+            return HOST.execute(pack, sheet, event, claim, "self", "self", constantDice());
+        }
+        return null;
+    }
+
+    private static void setTrait(ObjectNode sheet, String trait, int mod) {
+        for (JsonNode node : sheet.withArray("traits")) if (trait.equals(node.path("name").asText())) ((ObjectNode) node).put("mod", mod);
+    }
+
+    /** Weapon and feature rules without a dedicated family: requirement, damage type choice, critical melee, burden, unarmed, damage rewards, dice pools. */
+    private static String miscMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy) {
+        if (legacy == null) return null;
+        ObjectNode event = AutomationHost.event("action.request", "parity", 1);
+        try {
+            if (legacy.path("requirement").isObject()) {
+                JsonNode requirement = legacy.path("requirement");
+                for (int value = -3; value <= 3; value++) {
+                    ObjectNode sheet = withWeapon(placed.sheet());
+                    setTrait(sheet, requirement.path("trait").asText(), value);
+                    boolean legacyBlocked = requirement.has("max") && value > requirement.path("max").asInt()
+                            || requirement.has("min") && value < requirement.path("min").asInt();
+                    boolean blocked = false;
+                    try {
+                        HOST.execute(pack, sheet, event, profileRequest(sheet, sheet.withArray("activeWeapons").get(0).path("instanceId").asText(), "attack", null), "self", "self", constantDice());
+                    } catch (RuntimeException e) {
+                        blocked = true;
+                    }
+                    if (blocked != legacyBlocked) return "requirement " + requirement + " at " + value + ": legacy blocked=" + legacyBlocked + " new blocked=" + blocked;
+                }
+            }
+            if (legacy.path("damageTypeChoice").asBoolean()) {
+                ObjectNode sheet = withWeapon(placed.sheet());
+                String instance = sheet.withArray("activeWeapons").get(0).path("instanceId").asText();
+                JsonNode offered = null;
+                for (JsonNode option : weaponOptions(pack, sheet, event, instance, "damage")) if (ownOption(option)) offered = option;
+                if (offered == null) return "damage type choice is not offered";
+                String plain = HOST.execute(pack, sheet.deepCopy(), event, profileRequest(sheet, instance, "damage", null), "self", "self", constantDice()).toString();
+                String chosen = HOST.execute(pack, sheet.deepCopy(), event, profileRequest(sheet, instance, "damage", offered), "self", "self", constantDice()).toString();
+                if (plain.contains("\"damageType\":\"magic\"") || !chosen.contains("\"damageType\":\"magic\"")) return "choosing the magic damage type does not change the damage type";
+            }
+            if (legacy.path("criticalMelee").isObject()) {
+                JsonNode bonus = legacy.path("criticalMelee");
+                ObjectNode sheet = withWeapon(placed.sheet());
+                String instance = sheet.withArray("activeWeapons").get(0).path("instanceId").asText();
+                int hope = sheet.at("/hope/on").asInt(), stress = sheet.at("/stress/on").asInt();
+                ObjectNode baseline = sheet.deepCopy();
+                int plainDamage = rollTotal(HOST.execute(pack, baseline, event, profileRequest(baseline, instance, "damage", null), "self", "self", constantDice()));
+                JsonNode rolled = HOST.execute(pack, sheet, event, profileRequest(sheet, instance, "attack", null), "self", "self", dualityDice(5, 5));
+                if (claimResult(pack, sheet, event, rolled, "critical-melee-reward") == null) return "critical melee reward is not offered on a critical melee attack";
+                if (sheet.at("/hope/on").asInt() != Math.min(6, hope + 1 + bonus.path("hope").asInt()) || sheet.at("/stress/on").asInt() != Math.max(0, stress - 1 - bonus.path("stress").asInt()))
+                    return "critical melee reward legacy hope+" + (1 + bonus.path("hope").asInt()) + " stress-" + (1 + bonus.path("stress").asInt())
+                            + " new hope " + hope + "->" + sheet.at("/hope/on").asInt() + " stress " + stress + "->" + sheet.at("/stress/on").asInt();
+                int boosted = rollTotal(HOST.execute(pack, sheet, event, profileRequest(sheet, instance, "damage", null), "self", "self", constantDice()));
+                ObjectNode moreProficiency = plainBase(baseline);
+                int plainBase = rollTotal(HOST.execute(pack, moreProficiency, event, profileRequest(moreProficiency, "plain", "damage", null), "self", "self", constantDice()));
+                moreProficiency = plainBase(baseline);
+                moreProficiency.withObject("/proficiency").put("on", 2 + bonus.path("proficiency").asInt());
+                int plainBoosted = rollTotal(HOST.execute(pack, moreProficiency, event, profileRequest(moreProficiency, "plain", "damage", null), "self", "self", constantDice()));
+                if (boosted - plainDamage != plainBoosted - plainBase) return "critical melee damage proficiency legacy +" + (plainBoosted - plainBase) + " new +" + (boosted - plainDamage);
+                int after = rollTotal(HOST.execute(pack, sheet, event, profileRequest(sheet, instance, "damage", null), "self", "self", constantDice()));
+                if (after != plainDamage) return "critical melee proficiency lasts beyond the next damage roll";
+            }
+            if (legacy.path("ignoreWeaponBurden").asBoolean()) {
+                ObjectNode plan = AutomationHost.event("equipment.plan", "self", 0);
+                plan.set("equipment", RuleJson.parse("{\"handLimit\":2,\"ignoreBurden\":0,\"adjustable\":{\"ignoreBurden\":{\"min\":0,\"max\":1}}}"));
+                if (HOST.automatic(pack, placed.sheet().deepCopy(), plan, constantDice()).at("/event/equipment/ignoreBurden").asInt() != 1) return "weapon burden is not ignored";
+            }
+            if (legacy.path("unarmedWeapon").isObject()) {
+                JsonNode spec = legacy.path("unarmedWeapon");
+                ObjectNode sheet = placed.sheet().deepCopy();
+                sheet.putArray("activeWeapons");
+                if (!HOST.synchronizeUnarmedWeapon(pack, sheet)) return "unarmed weapon is not generated";
+                JsonNode weapon = sheet.at("/activeWeapons/0");
+                for (String field : List.of("name", "slot", "range", "damage", "damageType"))
+                    if (spec.has(field) && !spec.path(field).asText().equalsIgnoreCase(weapon.path(field).asText()))
+                        return "unarmed " + field + " legacy=" + spec.path(field).asText() + " new=" + weapon.path(field).asText();
+                int best = Integer.MIN_VALUE, chosen = Integer.MIN_VALUE;
+                for (JsonNode trait : sheet.withArray("traits")) {
+                    best = Math.max(best, trait.path("mod").asInt());
+                    if (trait.path("name").asText().equals(weapon.path("trait").asText())) chosen = trait.path("mod").asInt();
+                }
+                if (chosen != best) return "unarmed weapon does not use the highest trait";
+            }
+            if (legacy.path("conditionalDamageRewards").isArray()) {
+                for (JsonNode reward : legacy.path("conditionalDamageRewards")) {
+                    for (int extraCards = 0; extraCards <= 4; extraCards += 3) {
+                        ObjectNode sheet = placed.sheet().deepCopy();
+                        for (int i = 0; i < extraCards; i++)
+                            sheet.withArray("loadout").addObject().put("level", 1).put("domain", reward.path("loadoutDomain").path("domain").asText("Blood")).put("type", "Ability").put("name", "Filler " + i).put("text", "");
+                        int domainCards = 0;
+                        for (JsonNode card : sheet.withArray("loadout"))
+                            if (reward.path("loadoutDomain").path("domain").asText().equalsIgnoreCase(card.path("domain").asText())) domainCards++;
+                        for (int amount : new int[] {1, 6, 20}) {
+                            ObjectNode working = sheet.deepCopy();
+                            ObjectNode request = RuleJson.JSON.createObjectNode().put("requestId", "d").put("expectedRevision", HOST.revision(working));
+                            request.putArray("selections");
+                            request.putObject("damage").put("amount", amount).put("armor", 0).put("type", "physical");
+                            HOST.execute(pack, working, AutomationHost.event("action.request", "parity", 0), request, "self", "self", constantDice());
+                            int hp = working.at("/hp/on").asInt() - sheet.at("/hp/on").asInt();
+                            boolean gated = hp >= Math.max(1, reward.path("minHp").asInt())
+                                    && (!reward.has("loadoutDomain") || domainCards >= reward.path("loadoutDomain").path("min").asInt());
+                            int armorOn = sheet.at("/armorTrack/on").asInt();
+                            int expectedHope = Math.min(6, sheet.at("/hope/on").asInt() + (gated ? reward.path("gainHope").asInt() : 0));
+                            int expectedArmor = armorOn - (gated ? Math.min(armorOn, reward.path("clearArmor").asInt()) : 0);
+                            if (working.at("/hope/on").asInt() != expectedHope || working.at("/armorTrack/on").asInt() != expectedArmor)
+                                return "damage reward amount " + amount + " cards " + domainCards + ": legacy hope " + expectedHope + " armor " + expectedArmor
+                                        + " new hope " + working.at("/hope/on").asInt() + " armor " + working.at("/armorTrack/on").asInt();
+                        }
+                    }
+                }
+            }
+            if (legacy.path("dicePool").isObject()) {
+                JsonNode pool = legacy.path("dicePool");
+                for (int mod : new int[] {1, 3})
+                    for (boolean devout : new boolean[] {false, true})
+                        for (long seed = 1; seed <= 3; seed++) {
+                            ObjectNode sheet = placed.sheet().deepCopy();
+                            setTrait(sheet, "Instinct", mod);
+                            if (devout) sheet.withArray("features").addObject().put("name", "Devout").put("label", "Devout").put("text", "").put("automationSource", "classes:seraph-divine-wielder-specialization:features:devout").put("instanceId", "devout");
+                            int count = mod + (devout ? pool.path("extraByFeature").path("Devout").asInt() : 0);
+                            Random legacyRandom = new Random(seed);
+                            List<Integer> faces = new ArrayList<>();
+                            for (int i = 0; i < count; i++) faces.add(legacyRandom.nextInt(pool.path("sides").asInt()) + 1);
+                            faces.sort(java.util.Comparator.reverseOrder());
+                            int expectedSum = faces.subList(0, mod).stream().mapToInt(Integer::intValue).sum();
+                            String instance = HOST.sources(pack, sheet).stream().filter(s -> placed.sourceId().equals(s.sourceId())).findFirst().orElseThrow().instanceId();
+                            ObjectNode request = RuleJson.JSON.createObjectNode().put("requestId", "pool").put("expectedRevision", HOST.revision(sheet));
+                            request.putArray("selections").addObject().put("sourceInstanceId", instance).put("ruleId", "roll").put("bindingId", "sheet").putObject("inputs");
+                            HOST.execute(pack, sheet, event, request, "self", "self", new Random(seed));
+                            int sum = 0, dice = 0;
+                            for (JsonNode source : sheet.at("/automationState/sources"))
+                                for (JsonNode face : source.at("/sourcePools/prayer/dice")) { sum += face.path("face").asInt(); dice++; }
+                            if (sum != expectedSum || dice != mod)
+                                return "dice pool mod " + mod + " devout " + devout + " seed " + seed + ": legacy " + mod + " dice sum " + expectedSum + " new " + dice + " dice sum " + sum + " sources=" + HOST.sources(pack, sheet).stream().map(s -> s.sourceId()).toList();
+                        }
+            }
+        } catch (Exception e) {
+            return "rejected: " + e.getMessage() + " @ " + (e instanceof RuntimeException r ? frames(r) : "");
+        }
+        return null;
+    }
+
     private static String armorSignature(java.util.Set<String> labels, ObjectNode sheet) {
         return String.join("+", new java.util.TreeSet<>(labels)) + "|armor=" + sheet.at("/armorTrack/on").asInt() + "|hope=" + sheet.at("/hope/on").asInt();
     }
@@ -673,8 +864,11 @@ class ParityLedgerTest {
         return !option.path("sourceId").asText().startsWith("ruleset:");
     }
 
+    private static final java.util.concurrent.atomic.AtomicInteger REQUESTS = new java.util.concurrent.atomic.AtomicInteger();
+
     private static ObjectNode profileRequest(ObjectNode sheet, String instance, String kind, JsonNode option) {
         ObjectNode request = checkRequest(sheet, "action", "Agility", option);
+        request.put("requestId", "r" + REQUESTS.incrementAndGet());
         request.remove("checkRoll");
         request.putObject("profileRoll").put("sourceInstanceId", instance).put("profileId", "weapon.base").put("kind", kind);
         return request;

@@ -67,6 +67,7 @@
         "vault": { "kind": "collection", "path": "vault", "fields": { "id": "name", "domain": "domain", "level": "level", "permanent": "permanentlyVaulted" }, "writable": false, "transfer": "cards" },
     "vitalityBenefitCount": { "kind": "length", "path": "vitalityBenefits" },
     "heritage": { "kind": "collection", "path": "heritage", "fields": { "id": "name", "label": "name" }, "writable": false },
+    "featureNames": { "kind": "collection", "path": "features", "fields": { "id": "name", "label": "name" }, "writable": false },
     "pools": { "kind": "engine", "path": "automationState.pools", "default": {} },
     "effects": { "kind": "engine", "path": "automationState.effects", "default": [] },
     "conditions": { "kind": "engine", "path": "automationState.conditions", "default": [] },

@@ -2228,10 +2228,16 @@ public final class LegacyCatalogConverter {
     private static ObjectNode hasFeature(String name) {
         ObjectNode any = RuleJson.JSON.createObjectNode();
         ArrayNode or = any.putArray("or");
-        for (String collection : List.of("actor.features", "actor.heritage")) {
+        for (String collection : List.of("actor.features", "actor.featureNames", "actor.heritage")) {
             ObjectNode pluck = RuleJson.JSON.createObjectNode();
             pluck.putArray("pluck").add(read(collection)).add("label");
-            or.addObject().putArray("includes").add(pluck).add(name);
+            ObjectNode includes = RuleJson.JSON.createObjectNode();
+            includes.putArray("includes").add(pluck).add(name);
+            if (!"actor.featureNames".equals(collection)) { or.add(includes); continue; }
+            ObjectNode guarded = or.addObject();
+            ArrayNode branch = guarded.putArray("if");
+            branch.addObject().put("exists", collection);
+            branch.add(includes).add(false);
         }
         return any;
     }
