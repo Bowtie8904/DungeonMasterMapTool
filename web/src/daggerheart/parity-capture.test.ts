@@ -6,7 +6,7 @@ import {
   rollBonus, runActionDetailed, selectedRollBonus, selectionBlocker, sheetActions, suggestedAdvantage, syncResources, traitTotal, useConsumableUnit,
   withSelectedAmount,
 } from './engine';
-import { weaponAttackBlocker } from './engine';
+import { damageContributions, damagePool, weaponAttackBlocker, weaponDamageRules } from './engine';
 import { applyDamage, availableMitigations, computeDamage, mitigationBlocker } from './damage';
 import { attachBlocker, attachItem, detachItem } from './attachments';
 import { emptyCharacter } from './data';
@@ -297,6 +297,17 @@ function probeRolls(row: Row) {
   return out;
 }
 
+/** The legacy damage expression and host dice rules of weapons with their own damage pool, replayed with seeded dice on the Java side. */
+function probeDamageDice(row: Row) {
+  const placed = placeForRolls(row);
+  const weapon = placed?.sheet.activeWeapons[0];
+  if (!placed || !weapon || row.category !== 'weapons' || !weapon.automation?.damage) return undefined;
+  syncResources(placed.sheet);
+  const targets = ['damage', ...(weapon.damageType === 'magic' ? ['magicdamage'] : [])];
+  const bonus = rollBonus(placed.sheet, targets, weapon, false);
+  return { proficiency: placed.sheet.proficiency.on, expressions: damageContributions(placed.sheet, weapon, bonus).map(c => c.expression),
+    rules: weaponDamageRules(placed.sheet, weapon) ?? null, pool: damagePool(placed.sheet, weapon) ?? null };
+}
 /** Result buttons (roll triggers) the legacy engine offers on a finished roll of each scenario and outcome. */
 function probeTriggers(row: Row) {
   const placed = placeForRolls(row);
@@ -416,7 +427,7 @@ export function capture(): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const row of rows) {
     const key = `${row.category}${row.pointer}`;
-    out[key] = { actions: probeActions(row), stats: probeStats(row), init: probeInit(row), rest: probeRest(row), rolls: probeRolls(row), triggers: probeTriggers(row), attach: probeAttach(row), mitigation: probeMitigation(row) };
+    out[key] = { actions: probeActions(row), stats: probeStats(row), init: probeInit(row), rest: probeRest(row), rolls: probeRolls(row), triggers: probeTriggers(row), attach: probeAttach(row), mitigation: probeMitigation(row), damageDice: probeDamageDice(row) };
   }
   return out;
 }

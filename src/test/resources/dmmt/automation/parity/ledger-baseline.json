@@ -128633,6 +128633,19 @@
      "always": 0,
      "offered": {}
     }
+   },
+   "damageDice": {
+    "proficiency": 2,
+    "expressions": [
+     "3d10kh2",
+     "+3"
+    ],
+    "rules": null,
+    "pool": {
+     "extraDice": 1,
+     "dropLowest": 1,
+     "maximumOnes": false
+    }
    }
   },
   "weapons/entries/5/automation": {
@@ -129106,6 +129119,18 @@
      "always": 0,
      "offered": {}
     }
+   },
+   "damageDice": {
+    "proficiency": 2,
+    "expressions": [
+     "3d6kh2"
+    ],
+    "rules": null,
+    "pool": {
+     "extraDice": 1,
+     "dropLowest": 1,
+     "maximumOnes": false
+    }
    }
   },
   "weapons/entries/25/automation": {
@@ -129261,6 +129286,19 @@
     "damage": {
      "always": 0,
      "offered": {}
+    }
+   },
+   "damageDice": {
+    "proficiency": 2,
+    "expressions": [
+     "3d10kh2",
+     "+6"
+    ],
+    "rules": null,
+    "pool": {
+     "extraDice": 1,
+     "dropLowest": 1,
+     "maximumOnes": false
     }
    }
   },
@@ -129658,6 +129696,19 @@
      "always": 0,
      "offered": {}
     }
+   },
+   "damageDice": {
+    "proficiency": 2,
+    "expressions": [
+     "3d10kh2",
+     "+4"
+    ],
+    "rules": null,
+    "pool": {
+     "extraDice": 1,
+     "dropLowest": 1,
+     "maximumOnes": false
+    }
    }
   },
   "weapons/entries/41/automation": {
@@ -129734,6 +129785,24 @@
     "damage": {
      "always": 0,
      "offered": {}
+    }
+   },
+   "damageDice": {
+    "proficiency": 2,
+    "expressions": [
+     "2d10",
+     "+6"
+    ],
+    "rules": {
+     "explode": "once",
+     "label": "Brutal"
+    },
+    "pool": {
+     "extraDice": 0,
+     "dropLowest": 0,
+     "maximumOnes": false,
+     "explode": "once",
+     "label": "Brutal"
     }
    }
   },
@@ -130052,6 +130121,19 @@
      "always": 0,
      "offered": {}
     }
+   },
+   "damageDice": {
+    "proficiency": 2,
+    "expressions": [
+     "3d6kh2",
+     "+6"
+    ],
+    "rules": null,
+    "pool": {
+     "extraDice": 1,
+     "dropLowest": 1,
+     "maximumOnes": false
+    }
    }
   },
   "weapons/entries/48/automation": {
@@ -130282,6 +130364,19 @@
     "damage": {
      "always": 0,
      "offered": {}
+    }
+   },
+   "damageDice": {
+    "proficiency": 2,
+    "expressions": [
+     "3d6kh2",
+     "+3"
+    ],
+    "rules": null,
+    "pool": {
+     "extraDice": 1,
+     "dropLowest": 1,
+     "maximumOnes": false
     }
    }
   },
@@ -130515,6 +130610,24 @@
      "always": 0,
      "offered": {}
     }
+   },
+   "damageDice": {
+    "proficiency": 2,
+    "expressions": [
+     "2d6",
+     "+4"
+    ],
+    "rules": {
+     "explode": "once",
+     "label": "Brutal"
+    },
+    "pool": {
+     "extraDice": 0,
+     "dropLowest": 0,
+     "maximumOnes": false,
+     "explode": "once",
+     "label": "Brutal"
+    }
    }
   },
   "weapons/entries/64/automation": {
@@ -130591,6 +130704,19 @@
     "damage": {
      "always": 0,
      "offered": {}
+    }
+   },
+   "damageDice": {
+    "proficiency": 2,
+    "expressions": [
+     "3d6kh2",
+     "+4"
+    ],
+    "rules": null,
+    "pool": {
+     "extraDice": 1,
+     "dropLowest": 1,
+     "maximumOnes": false
     }
    }
   },
@@ -131059,6 +131185,19 @@
     "damage": {
      "always": 0,
      "offered": {}
+    }
+   },
+   "damageDice": {
+    "proficiency": 2,
+    "expressions": [
+     "3d10kh2",
+     "+9"
+    ],
+    "rules": null,
+    "pool": {
+     "extraDice": 1,
+     "dropLowest": 1,
+     "maximumOnes": false
     }
    }
   },
@@ -131863,6 +132002,19 @@
      "always": 0,
      "offered": {}
     }
+   },
+   "damageDice": {
+    "proficiency": 2,
+    "expressions": [
+     "3d10kh2",
+     "+8"
+    ],
+    "rules": null,
+    "pool": {
+     "extraDice": 1,
+     "dropLowest": 1,
+     "maximumOnes": false
+    }
    }
   },
   "weapons/entries/90/automation": {
@@ -131939,6 +132091,24 @@
     "damage": {
      "always": 0,
      "offered": {}
+    }
+   },
+   "damageDice": {
+    "proficiency": 2,
+    "expressions": [
+     "2d10",
+     "+7"
+    ],
+    "rules": {
+     "explode": "once",
+     "label": "Brutal"
+    },
+    "pool": {
+     "extraDice": 0,
+     "dropLowest": 0,
+     "maximumOnes": false,
+     "explode": "once",
+     "label": "Brutal"
     }
    }
   },
@@ -132247,6 +132417,19 @@
     "damage": {
      "always": 0,
      "offered": {}
+    }
+   },
+   "damageDice": {
+    "proficiency": 2,
+    "expressions": [
+     "3d6kh2",
+     "+6"
+    ],
+    "rules": null,
+    "pool": {
+     "extraDice": 1,
+     "dropLowest": 1,
+     "maximumOnes": false
     }
    }
   },
@@ -132697,6 +132880,24 @@
      "always": 0,
      "offered": {}
     }
+   },
+   "damageDice": {
+    "proficiency": 2,
+    "expressions": [
+     "2d6",
+     "+7"
+    ],
+    "rules": {
+     "onesAs": 6,
+     "label": "Self-Correcting"
+    },
+    "pool": {
+     "extraDice": 0,
+     "dropLowest": 0,
+     "maximumOnes": false,
+     "onesAs": 6,
+     "label": "Self-Correcting"
+    }
    }
   },
   "weapons/entries/110/automation": {
@@ -132773,6 +132974,19 @@
     "damage": {
      "always": 0,
      "offered": {}
+    }
+   },
+   "damageDice": {
+    "proficiency": 2,
+    "expressions": [
+     "3d6kh2",
+     "+7"
+    ],
+    "rules": null,
+    "pool": {
+     "extraDice": 1,
+     "dropLowest": 1,
+     "maximumOnes": false
     }
    }
   },
@@ -133006,6 +133220,19 @@
     "damage": {
      "always": 0,
      "offered": {}
+    }
+   },
+   "damageDice": {
+    "proficiency": 2,
+    "expressions": [
+     "3d10kh2",
+     "+12"
+    ],
+    "rules": null,
+    "pool": {
+     "extraDice": 1,
+     "dropLowest": 1,
+     "maximumOnes": false
     }
    }
   },
@@ -133697,6 +133924,24 @@
      "always": 0,
      "offered": {}
     }
+   },
+   "damageDice": {
+    "proficiency": 2,
+    "expressions": [
+     "2d8",
+     "+9"
+    ],
+    "rules": {
+     "onesAs": 8,
+     "label": "Serrated"
+    },
+    "pool": {
+     "extraDice": 0,
+     "dropLowest": 0,
+     "maximumOnes": false,
+     "onesAs": 8,
+     "label": "Serrated"
+    }
    }
   },
   "weapons/entries/132/automation": {
@@ -134222,6 +134467,19 @@
      "always": 0,
      "offered": {}
     }
+   },
+   "damageDice": {
+    "proficiency": 2,
+    "expressions": [
+     "3d6kh2",
+     "+9"
+    ],
+    "rules": null,
+    "pool": {
+     "extraDice": 1,
+     "dropLowest": 1,
+     "maximumOnes": false
+    }
    }
   },
   "weapons/entries/147/automation": {
@@ -134516,6 +134774,19 @@
     "damage": {
      "always": 0,
      "offered": {}
+    }
+   },
+   "damageDice": {
+    "proficiency": 2,
+    "expressions": [
+     "3d8kh2",
+     "+9"
+    ],
+    "rules": null,
+    "pool": {
+     "extraDice": 1,
+     "dropLowest": 1,
+     "maximumOnes": false
     }
    }
   },
@@ -143983,6 +144254,24 @@
      "always": 0,
      "offered": {}
     }
+   },
+   "damageDice": {
+    "proficiency": 2,
+    "expressions": [
+     "2d8",
+     "+10"
+    ],
+    "rules": {
+     "onesAs": 8,
+     "label": "Serrated"
+    },
+    "pool": {
+     "extraDice": 0,
+     "dropLowest": 0,
+     "maximumOnes": false,
+     "onesAs": 8,
+     "label": "Serrated"
+    }
    }
   },
   "weapons/entries/296/automation": {
@@ -147076,6 +147365,24 @@
     "damage": {
      "always": 0,
      "offered": {}
+    }
+   },
+   "damageDice": {
+    "proficiency": 2,
+    "expressions": [
+     "2d8",
+     "+6"
+    ],
+    "rules": {
+     "explode": "repeat",
+     "label": "Recursive"
+    },
+    "pool": {
+     "extraDice": 0,
+     "dropLowest": 0,
+     "maximumOnes": false,
+     "explode": "repeat",
+     "label": "Recursive"
     }
    }
   },

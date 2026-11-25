@@ -155,6 +155,10 @@ class ParityLedgerTest {
             if (initProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("init: " + initProblem);
             String spellProblem = spellcastMismatch(pack, placed, legacyAutomation(row));
             if (spellProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("spellcast: " + spellProblem);
+            String altProblem = alternateProfileMismatch(pack, placed, legacyAutomation(row));
+            if (altProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("alternateProfiles: " + altProblem);
+            String damageProblem = damageDiceMismatch(pack, placed, expected.path("damageDice"));
+            if (damageProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("damage: " + damageProblem);
             String armorProblem = armorMismatch(pack, placed, legacyAutomation(row));
             if (armorProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("armor: " + armorProblem);
             String triggerProblem = triggerMismatch(pack, placed, expected.path("triggers"));
@@ -189,7 +193,7 @@ class ParityLedgerTest {
 
     /** Automation fields whose behavior the harness replays against the legacy baseline. */
     private static final java.util.Set<String> PROBED = java.util.Set.of("actions", "uses", "rest", "modifiers", "rollOptions",
-            "conditionalRollOptions", "conditionalModifiers", "conditionalActions", "usesOverrides", "rollTriggers", "conditionalRollTriggers", "attach", "mitigation", "conditionalMitigation", "spellcastDifficulty", "spellcastSuccessSteps", "hideSpellcast", "automaticRestUse", "automaticRestUseOnAttempt",
+            "conditionalRollOptions", "conditionalModifiers", "conditionalActions", "usesOverrides", "rollTriggers", "conditionalRollTriggers", "attach", "mitigation", "conditionalMitigation", "alternateProfiles", "damage", "spellcastDifficulty", "spellcastSuccessSteps", "hideSpellcast", "automaticRestUse", "automaticRestUseOnAttempt",
             "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "equipEffect", "zeroHopeClearArmor", "resources", "classResourceOnly");
 
     private static void writeLedger(Map<String, List<String>> failures) throws Exception {
@@ -354,6 +358,74 @@ class ParityLedgerTest {
         if (taken[0] != failTaken) return "uses after failed cast legacy=" + failTaken + " new=" + taken[0];
         if (taken[1] != successTaken) return "uses after successful cast legacy=" + successTaken + " new=" + taken[1];
         if (legacy.has("spellcastSuccessSteps") && pools[0].equals(pools[1])) return "success steps did not change anything on a successful cast; pools=" + pools[1];
+        return null;
+    }
+    private static void distinctTraits(ObjectNode sheet) {
+        int mod = 0;
+        for (JsonNode trait : sheet.withArray("traits")) ((ObjectNode) trait).put("mod", mod++ - 1);
+    }
+
+    /** Alternate weapon statistics attack and damage like the same weapon carrying those statistics. */
+    private static String alternateProfileMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy) throws Exception {
+        if (legacy == null || !legacy.path("alternateProfiles").isArray()) return null;
+        for (JsonNode alt : legacy.path("alternateProfiles")) {
+            String profileId = NON_SLUG.matcher(alt.path("label").asText().toLowerCase(java.util.Locale.ROOT)).replaceAll("-").replaceAll("^-|-$", "");
+            for (String kind : List.of("attack", "damage")) {
+                try {
+                    ObjectNode sheet = withWeapon(placed.sheet());
+                    distinctTraits(sheet);
+                    ObjectNode weapon = (ObjectNode) sheet.withArray("activeWeapons").get(0);
+                    String instance = weapon.path("instanceId").asText();
+                    ObjectNode event = AutomationHost.event("action.request", "parity", 1);
+                    ObjectNode baseSheet = plainBase(sheet);
+                    distinctTraits(baseSheet);
+                    int plainBaseTotal = rollTotal(HOST.execute(pack, baseSheet, event, profileRequest(baseSheet, "plain", kind, null), "self", "self", constantDice()));
+                    ObjectNode altPlain = plainBase(sheet);
+                    distinctTraits(altPlain);
+                    ObjectNode stats = (ObjectNode) altPlain.withArray("activeWeapons").get(0);
+                    stats.put("trait", alt.path("trait").asText()).put("range", alt.path("range").asText()).put("damage", alt.path("damage").asText());
+                    if (alt.has("damageType")) stats.put("damageType", alt.path("damageType").asText());
+                    int plainAltTotal = rollTotal(HOST.execute(pack, altPlain, event, profileRequest(altPlain, "plain", kind, null), "self", "self", constantDice()));
+                    ObjectNode baseProfile = sheet.deepCopy();
+                    int ownBase = rollTotal(HOST.execute(pack, baseProfile, event, profileRequest(baseProfile, instance, kind, null), "self", "self", constantDice()));
+                    ObjectNode altRequest = profileRequest(sheet, instance, kind, null);
+                    ((ObjectNode) altRequest.get("profileRoll")).put("profileId", profileId);
+                    int ownAlt = rollTotal(HOST.execute(pack, sheet, event, altRequest, "self", "self", constantDice()));
+                    if (ownAlt - ownBase != plainAltTotal - plainBaseTotal)
+                        return alt.path("label").asText() + " " + kind + ": legacy delta=" + (plainAltTotal - plainBaseTotal) + " new delta=" + (ownAlt - ownBase);
+                } catch (RuntimeException e) {
+                    return alt.path("label").asText() + " " + kind + " rejected: " + e.getMessage() + " @ " + frames(e);
+                }
+            }
+        }
+        return null;
+    }
+    /** Replays the legacy damage dice pipeline (roll, ones-as, explode, ones-bonus) and compares it with the new damage roll. */
+    private static String damageDiceMismatch(AutomationHost.Pack pack, Placed placed, JsonNode expected) throws Exception {
+        if (expected == null || expected.isMissingNode() || expected.isNull()) return null;
+        for (long seed = 1; seed <= 4; seed++) {
+            String joined = String.join("", java.util.stream.StreamSupport.stream(expected.path("expressions").spliterator(), false)
+                    .map(JsonNode::asText).toList()).replace("+-", "-");
+            Random legacyRandom = new Random(seed);
+            dmmt.online.DiceRoller.Result result = dmmt.online.DiceRoller.roll(joined, 100, legacyRandom);
+            JsonNode rules = expected.path("rules");
+            if (rules.has("onesAs")) result = dmmt.online.DiceRoller.onesAs(result, rules.path("onesAs").asInt(), 100);
+            int onesBonusDice = rules.has("onesBonus") ? dmmt.online.DiceRoller.countOnes(result, 100) : 0;
+            int total = result.total();
+            if (rules.has("explode")) {
+                for (int[] die : dmmt.online.DiceRoller.explode(result, "repeat".equals(rules.path("explode").asText()), 100, legacyRandom)) total += die[1];
+            }
+            for (int i = 0; i < onesBonusDice; i++) total += legacyRandom.nextInt(rules.path("onesBonus").asInt()) + 1;
+            try {
+                ObjectNode sheet = withWeapon(placed.sheet());
+                String instance = sheet.withArray("activeWeapons").get(0).path("instanceId").asText();
+                ObjectNode event = AutomationHost.event("action.request", "parity", 1);
+                int actual = rollTotal(HOST.execute(pack, sheet, event, profileRequest(sheet, instance, "damage", null), "self", "self", new Random(seed)));
+                if (actual != total) return "seed " + seed + ": legacy damage total=" + total + " new=" + actual + " expr=" + joined + " rules=" + rules;
+            } catch (RuntimeException e) {
+                return "damage rejected: " + e.getMessage() + " @ " + frames(e);
+            }
+        }
         return null;
     }
     private static String armorSignature(java.util.Set<String> labels, ObjectNode sheet) {
