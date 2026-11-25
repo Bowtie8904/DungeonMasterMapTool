@@ -168,6 +168,22 @@ describe('automation panel', () => {
     expect(fake(panel).text).toContain('Roll total: 14.');
   });
 
+  it('folds per-die buttons into one compact chip per stored die', async () => {
+    const dice = ['d1', 'd2', 'd3', 'd4'].flatMap((eachId, i) => [
+      action({ eachId, ruleId: 'spend-for-hope', label: `Prayer Dice (+${i + 1})` }),
+      action({ eachId, ruleId: 'remove-die', label: `Remove Prayer Dice die (${i + 1})` }),
+    ]);
+    const submit = vi.fn(async (_actor: string, _intent: RuleIntent) => ({}));
+    const panel = automationPanel('a1', 'sheet', 'Actions', async () => ({ revision: 4, actions: dice }), submit);
+    await settle();
+    const buttons = fake(panel).all('button');
+    expect(buttons.map(b => b.text)).toEqual(['+', '\u00d7', '+', '\u00d7', '+', '\u00d7', '+', '\u00d7']);
+    expect(fake(panel).all('strong').map(s => s.text)).toEqual(['1', '2', '3', '4']);
+    buttons[2].click();
+    await settle();
+    expect(submit).toHaveBeenCalledWith('a1', expect.objectContaining({ ruleId: 'spend-for-hope', eachId: 'd2' }));
+  });
+
   it('describes and submits on the configured surface and event', async () => {
     const fetchActions = vi.fn(async (): Promise<DescribedActions> => ({ revision: 1, actions: [action({ revision: 1 })] }));
     const submit = vi.fn(async () => ({ actions: [] }));

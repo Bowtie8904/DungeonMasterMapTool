@@ -466,6 +466,10 @@ button.share-icon:disabled { opacity: .25; }
 .dh-pool-die > strong { min-width: 12px; text-align: center; font-size: 13px; font-variant-numeric: tabular-nums; }
 .dh .dh-pool-die > button { width: 15px; min-width: 15px; height: 18px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 13px; line-height: 18px; }
 .dh .dh-pool-die > button:hover { background: #ffffff12; color: var(--text); }
+.automation-panel .dh-pool-die > .dh { display: inline-flex; align-items: center; margin: 0; }
+.automation-panel .dh-pool-die .dh > button { width: 18px; min-width: 18px; height: 18px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 14px; line-height: 18px; }
+.automation-panel .dh-pool-die .dh > button:hover:not(:disabled) { background: #ffffff12; color: var(--text); }
+.automation-panel .dh-pool-die .dh > span, .automation-panel .dh-pool-die .dh > .error:empty { display: none; }
 .dh .dh-pool-die > .dh-die-hope { color: #ffda84; background: #ffda841a; font-size: 17px; font-weight: 750; border-radius: 3px; }
 .dh .dh-pool-die > .dh-die-hope:hover { color: #ffe8ad; background: #ffda8433; }
 .app-message-dialog { width: min(420px, calc(100vw - 32px)); padding: 20px; border: 1px solid var(--border); border-radius: 10px; color: var(--text); background: var(--panel); box-shadow: 0 16px 48px #0008; }

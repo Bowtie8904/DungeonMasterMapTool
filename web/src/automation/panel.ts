@@ -205,6 +205,34 @@ export function historyResultControls(roll: RollMessage, playerId: string, sessi
 }
 
 /**
+ * Folds per-item (forEach) buttons into one compact chip per stored item, such as a rolled Prayer die, so that N items
+ * do not become 2N labelled buttons. This is presentation only: every glyph submits the host-described binding.
+ */
+function dieChips(revision: number, buttons: RuleDescriptor[],
+  submit: (intent: RuleIntent) => Promise<void>): HTMLElement[] {
+  const groups = new Map<string, RuleDescriptor[]>();
+  for (const action of buttons) {
+    if (action.eachId === undefined) continue;
+    const key = `${action.sourceInstanceId}\u0000${action.eachId}`;
+    groups.set(key, [...(groups.get(key) ?? []), action]);
+  }
+  if (!groups.size) return [];
+  const chips = [...groups.values()].map(actions => {
+    const face = /\(\+?(\d+)\)/.exec(actions[0].label)?.[1] ?? '?';
+    const chip = el('span', { class: 'dh-pool-die' }, el('strong', {}, face));
+    for (const action of actions) {
+      const control = ruleControl({ ...action, revision, label: /remove/i.test(action.ruleId) ? '\u00d7' : '+',
+        description: action.available ? action.label : `${action.label}: ${action.reason ?? 'Unavailable'}` },
+        submit, CONTROL_TEXT);
+      control.children[0]?.setAttribute('aria-label', action.label);
+      chip.append(control);
+    }
+    return chip;
+  });
+  return [el('div', { class: 'dh-dice-pool', role: 'group', ariaLabel: 'Stored dice' }, ...chips)];
+}
+
+/**
  * Renders every independent button the host describes for this actor and surface. The panel stays hidden while the
  * host has no automation pack or no visible actions, and refreshes itself after each completed action.
  */
@@ -226,7 +254,7 @@ export function automationPanel(actorId: string, surface = 'sheet', title = 'Act
       const described = await fetchActions(actorId, surface, event);
       if (current !== generation) return;
       const buttons = (described?.actions ?? []).filter(action => action.mode === 'button');
-      const controls = buttons.map(action => ruleControl({ ...action, revision: described!.revision }, async intent => {
+      const controls = buttons.filter(action => action.eachId === undefined).map(action => ruleControl({ ...action, revision: described!.revision }, async intent => {
         let result: unknown;
         try { result = await submit(actorId, intent); }
         catch (failure) {
@@ -265,9 +293,19 @@ export function automationPanel(actorId: string, surface = 'sheet', title = 'Act
             }, CONTROL_TEXT));
         }
       }
-      list.replaceChildren(...controls);
+      list.replaceChildren(...controls, ...dieChips(described?.revision ?? 0, buttons, async intent => {
+        let result: unknown;
+        try { result = await submit(actorId, intent); }
+        catch (failure) {
+          if (!(failure instanceof ApiError) || failure.status !== 409) throw failure;
+          void load(failure.message);
+          return;
+        }
+        output.textContent = actionReports(result).join('\n');
+        void load();
+      }));
       status.textContent = notice;
-      root.hidden = controls.length === 0 && !output.textContent && !notice;
+      root.hidden = list.children.length === 0 && !output.textContent && !notice;
     } catch (failure) {
       if (current !== generation) return;
       status.textContent = failure instanceof Error ? failure.message : CONTROL_TEXT.failed;

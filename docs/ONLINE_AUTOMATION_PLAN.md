@@ -866,7 +866,7 @@ The preview evaluates `set.subtract` and `roll.derive`; it reads `result.damage.
 
 ### Example 3: generated controls and claims
 
-Prayer Dice is a different test: **one rule per stored die**, not one counter and not a special `prayer` widget. Declare a face pool with session lifetime, a once-per-session roll rule, independent samples equal to the configured count plus extras and `keepHighest` equal to the base count. Devout modifies the draw count by stable feature reference. Instantiate the following binding for each kept die; this fragment shows the chat use:
+Prayer Dice is a different test: **one rule per stored die**, not one counter and not a special `prayer` widget. Declare a face pool with session lifetime, a once-per-session roll rule, independent samples equal to the configured count plus extras and `keepHighest` equal to the base count. Devout modifies the draw count by stable feature reference. Presentation decision: the generic sheet panel folds every `forEach` button into one compact chip per stored item (face value plus a glyph per binding, full label in title/aria-label), so four dice do not become eight labelled buttons; chips only submit host-described bindings and own no state or rules. Instantiate the following binding for each kept die; this fragment shows the chat use:
 
 ```json
 {
