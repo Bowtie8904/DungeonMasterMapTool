@@ -33,25 +33,24 @@ for (const expanded of [false, true]) {
     renderLogEntry({ kind: 'roll', m: { ...common, id: 3, expression: '2d6+3', rolls: [5, 6], total: 14, label: 'Shortbow damage' } }, 'mira'),
     renderLogEntry({ kind: 'chat', m: { ...common, id: 4, from: 'Gamemaster', fromId: 'dm', toId: 'mira', to: 'Mira', text: 'You notice a second set of eyes behind the creature.' } }, 'mira'));
   column.querySelector('details').open = expanded;
-  column.querySelector('.roll-source').open = expanded;
   document.getElementById('cards').append(column);
 }
 try {
   const source = { name: 'Arcane Bolt', source: 'Book of Magic - Codex', text: 'Make a **Spellcast Roll**.\n- Deal magic damage.\n<script>unsafe</scr' + 'ipt>' };
   const card = renderLogEntry({ kind: 'roll', m: { ...roll, id: 5, label: 'Spellcast (Knowledge) - Arcane Bolt', rollSource: source } }, 'mira');
   const assert = (ok, message) => { if (!ok) throw new Error(message); };
-  const disclosure = card.querySelector('.roll-source');
-  assert(disclosure && !disclosure.open, 'Source must start collapsed');
-  assert(disclosure.querySelector('summary').textContent === 'Source: Arcane Bolt', 'Missing source label');
-  assert(disclosure.querySelector('b').textContent === 'Spellcast Roll', 'Missing formatted description');
-  assert(!disclosure.querySelector('button, input, script'), 'Descriptions must not contain actions or HTML');
-  disclosure.querySelector('summary').click();
-  assert(disclosure.open && !card.querySelector('.roll-breakdown').open, 'Source must expand independently');
+  const title = card.querySelector('.roll-title');
+  const preview = title.querySelector('.roll-source-preview');
+  assert(preview && title.tabIndex === 0, 'Title must have a focusable source preview');
+  assert(title.getAttribute('aria-describedby') === preview.id, 'Missing tooltip association');
+  assert(preview.querySelector('b').textContent === 'Spellcast Roll', 'Missing formatted description');
+  assert(!preview.querySelector('button, input, script'), 'Descriptions must not contain actions or HTML');
+  assert(!card.querySelector('.roll-source') && !card.querySelector('.roll-breakdown').open, 'Source must not add a disclosure');
   document.getElementById('cards').append(card);
   const action = renderLogEntry({ kind: 'chat', m: { ...common, id: 6, text: 'Rolled 1d4 [3]', rollSource: source } }, 'mira');
-  assert(action.querySelector('.roll-source'), 'Local action results need context');
+  assert(action.querySelector('.message-text .roll-source-preview'), 'Local action results need context');
   const legacy = renderLogEntry({ kind: 'roll', m: { ...roll, rollSource: undefined } }, 'mira');
-  assert(!legacy.querySelector('.roll-source'), 'Legacy rolls must not invent a source');
+  assert(!legacy.querySelector('.roll-title .roll-source-preview'), 'Legacy rolls must not invent a source');
   const c = emptyCharacter('Context check');
   c.mancer.done = true;
   c.features = [{ name: 'Deflect', source: 'Class', text: 'Deflect rules', automation: { actions: [
@@ -94,7 +93,7 @@ try {
   click(document.querySelector('.dh-rolldlg'), 'Roll to chat');
   assert(sent.rollSource.name === 'Shield', 'Follow-up spell damage lost source context');
   sheet.remove();
-  document.getElementById('result').textContent = 'PASS: collapsed source, independent expansion, formatted safe descriptions, feature/local action rolls, Spellcast, grimoire, spell damage, legacy rolls';
+  document.getElementById('result').textContent = 'PASS: title previews, formatted safe descriptions, feature/local action rolls, Spellcast, grimoire, spell damage, legacy rolls';
 } catch (error) {
   document.getElementById('result').textContent = 'FAIL: ' + error.stack;
 }

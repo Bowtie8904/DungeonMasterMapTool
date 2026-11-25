@@ -1630,9 +1630,6 @@
 .chat-detail-negative { -fx-text-fill: #f2a4a4; -fx-font-weight: bold; -fx-font-size: 12px; }
 .chat-detail-total { -fx-border-color: transparent; }
 .chat-detail-total .label { -fx-text-fill: #f5d490; -fx-font-weight: bold; -fx-font-size: 12px; }
-.chat-roll-source { -fx-padding: 0 14 12 14; }
-.chat-roll .chat-roll-source { -fx-padding: 2 14 0 14; }
-.chat-roll .chat-roll-source:expanded { -fx-padding: 4 14 8 14; }
 .chat-source-name, .chat-shared-name { -fx-font-weight: bold; -fx-font-size: 15px; -fx-text-fill: -dm-text; }
 .chat-source-preview .chat-source-name { -fx-text-fill: #f5d490; }
 .chat-source-tooltip .scroll-pane, .chat-source-tooltip .viewport { -fx-background-color: transparent; }

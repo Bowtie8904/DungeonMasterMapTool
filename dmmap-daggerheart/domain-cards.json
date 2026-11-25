@@ -4067,11 +4067,11 @@
     "actions": [
      {
       "id": "question",
-      "label": "Gifted Tracker: ask one question",
+      "label": "Ask one question",
       "texts": {
-       "button": "Gifted Tracker: ask one question",
-       "chatButton": "Gifted Tracker: ask one question",
-       "roll": "Gifted Tracker: ask one question"
+       "button": "Ask one question",
+       "chatButton": "Ask one question",
+       "roll": "Ask one question"
       },
       "cost": {
        "hope": 1
@@ -9065,12 +9065,12 @@
      },
      {
       "id": "spend",
-      "label": "Spend token: -1 to an attack roll",
+      "label": "-1 to an attack roll",
       "texts": {
-       "button": "Spend token: -1 to an attack roll",
-       "chatButton": "Spend token: -1 to an attack roll",
-       "roll": "Spend token: -1 to an attack roll",
-       "reportTitle": "{source} - Spend token: -1 to an attack roll"
+       "button": "-1 to an attack roll",
+       "chatButton": "-1 to an attack roll",
+       "roll": "-1 to an attack roll",
+       "reportTitle": "{source} - -1 to an attack roll"
       },
       "usesSource": false,
       "cost": {

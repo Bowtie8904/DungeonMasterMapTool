@@ -525,11 +525,13 @@ Contributions and returned details may also include a bounded description-only
 `rollSource: {name, text, source}`. Hover or focus the row to open its themed source preview to the left of chat
 when space permits, leaving the breakdown list unobstructed; Escape dismisses it. Narrow screens use an
 above-or-below fallback.
+The same preview appears on a sourced roll or action title, or on the text of a source-bearing plain action
+message; there is no separate source section.
 Chat action buttons also show the full associated feature, card, effect or weapon description when available.
 Disabled actions remain inspectable and include their availability reason.
 The desktop DM chat uses the same saved descriptions. Older messages without row descriptions remain usable.
 These fields are additive; compatibility versions are unchanged. Older hosts/history fall back to formula
-and dice details. Open breakdown and source sections survive new messages and updates to their own message,
+and dice details. Open breakdown sections survive new messages and updates to their own message,
 independently for each viewer. The reader's scroll position survives new messages.
 Action buttons under a roll are grouped into subtly separated sections: **roll results** (primary blue: Hope rewards,
 weapon damage and damage caused by the rolling feature, such as a successful spell's damage), **feature effects**
@@ -687,7 +689,7 @@ The page reports PASS/FAIL; it is not included in the production bundle.
 `checks/token-controls.html` isolates token click/box selection, half-tile arrows, movement rollback,
 rotation commands/previews/cancellation, pause and older-host capability handling with the real app and canvas.
 `checks/chat-cards.html` previews real chat/roll cards with collapsed and expanded details side by side,
-and checks safe, independent source disclosures and source propagation from feature/local action rolls,
+and checks safe title source previews and source propagation from feature/local action rolls,
 Spellcast, individual grimoire spells and follow-up spell damage.
 All 236 domain cards and every grimoire spell have an individual audit disposition and a complete
 open-decision list in `../plan.md`. Nested grimoire target actions resolve their full book/spell key.

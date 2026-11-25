@@ -149,7 +149,7 @@ function rollContent(m: RollMessage): HTMLElement {
     el('span', { class: 'roll-equals' }, '='),
     el('div', { class: 'roll-total' }, el('span', {}, 'TOTAL'), el('strong', {}, secret ? '?' : String(m.total))));
   const body = el('div', { class: 'roll-body' },
-    el('div', { class: 'roll-title' }, `${m.label ?? (secret ? 'Secret roll' : duality ? 'Duality roll' : 'Dice roll')}${m.source?.split(',').includes('reaction') ? ' - Reaction roll' : ''}`), equation);
+    sourcePreview(el('div', { class: 'roll-title' }, `${m.label ?? (secret ? 'Secret roll' : duality ? 'Duality roll' : 'Dice roll')}${m.source?.split(',').includes('reaction') ? ' - Reaction roll' : ''}`), m.rollSource), equation);
   if (secret) return body;
   if (duality) {
     const r = dualityResult(values, m.total);
@@ -250,15 +250,8 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
   }
   if (action) {
     card.append(el('div', { class: 'action-banner' }, el('strong', {}, action.title.startsWith('Death move - ') ? 'Death move' : 'Action used')),
-      el('div', { class: 'action-title' }, action.title),
+      sourcePreview(el('div', { class: 'action-title' }, action.title), m.rollSource),
       el('ul', { class: 'action-lines' }, ...action.lines.map((l) => el('li', {}, l))));
-    if (m.rollSource) {
-      card.append(el('details', { class: 'roll-source' },
-        el('summary', {}, `Source: ${m.rollSource.name}`),
-        el('div', { class: 'roll-source-content' },
-          el('div', { class: 'shared-source' }, m.rollSource.source),
-          el('strong', {}, m.rollSource.name), rich(m.rollSource.text))));
-    }
     if (e.kind === 'chat' && e.m.actionBenefits && rollActions) {
       const actions = rollActions(e.m);
       if (actions) card.append(actions);
@@ -278,14 +271,8 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
     return card;
   }
   card.append(e.kind === 'roll' ? rollContent(e.m) : e.m.sharedCard
-    ? renderSharedCard(e.m.sharedCard, onGrab, onError) : el('div', { class: 'message-text' }, e.m.text));
-  if (m.rollSource) {
-    card.append(el('details', { class: 'roll-source' },
-      el('summary', {}, `Source: ${m.rollSource.name}`),
-      el('div', { class: 'roll-source-content' },
-        el('div', { class: 'shared-source' }, m.rollSource.source),
-        el('strong', {}, m.rollSource.name), rich(m.rollSource.text))));
-  }
+    ? sourcePreview(renderSharedCard(e.m.sharedCard, onGrab, onError), m.rollSource)
+    : sourcePreview(el('div', { class: 'message-text' }, e.m.text), m.rollSource));
   if (rollActions && (e.kind === 'roll' || e.m.actionBenefits || e.m.reactionPrompt)) {
     const actions = rollActions(e.m);
     if (actions) card.append(actions);

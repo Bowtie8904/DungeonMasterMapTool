@@ -69,7 +69,7 @@ public final class ChatCards {
     public record ActionReport(String title, String character, List<String> lines) {
     }
 
-    record DisclosureState(boolean breakdownOpen, boolean sourceOpen, boolean actionsOpen) {
+    record DisclosureState(boolean breakdownOpen, boolean actionsOpen) {
     }
 
     private ChatCards() {
@@ -351,8 +351,7 @@ public final class ChatCards {
             return card;
         }
         if (action != null) {
-            card.getChildren().add(actionBody(action));
-            appendRollSource(card, m);
+            card.getChildren().add(actionBody(action, m.path("rollSource")));
             return card;
         }
         if (!reactionTrait.isEmpty()) {
@@ -363,6 +362,7 @@ public final class ChatCards {
             card.getChildren().add(rollBody(m));
         } else if (m.has("sharedCard")) {
             Node shared = sharedCard(m.path("sharedCard"), stock);
+            attachSourcePreview(shared, m.path("rollSource"), m.path("sharedCard").path("item").path("name").asText());
             card.getChildren().add(shared);
             Object actor = shared.getProperties().get(STOCK_ACTOR);
             if (actor != null) {
@@ -371,22 +371,25 @@ public final class ChatCards {
             }
         } else {
             Label body = wrapped(text, "chat-text");
+            attachSourcePreview(body, m.path("rollSource"), text);
             card.getChildren().add(body);
         }
-        appendRollSource(card, m);
         return card;
     }
 
-    private static void appendRollSource(VBox card, JsonNode m) {
-        JsonNode source = m.path("rollSource");
+    private static void attachSourcePreview(Node anchor, JsonNode source, String label) {
         if (source.isObject()) {
-            VBox content = new VBox(4, wrapped(source.path("source").asText(), "chat-shared-source"),
+            VBox preview = new VBox(4, wrapped(source.path("source").asText(), "chat-shared-source"),
                     wrapped(source.path("name").asText(), "chat-source-name"),
                     markdown(source.path("text").asText(), "chat-source-text"));
-            content.getStyleClass().add("chat-source-content");
-            Node details = disclosure("Source: " + source.path("name").asText(), content, "chat-roll-source");
-            VBox.setMargin(details, new Insets(0, 14, card.getStyleClass().contains("chat-roll") ? 4 : 12, 14));
-            card.getChildren().add(details);
+            preview.getStyleClass().add("chat-source-preview");
+            Tooltip tooltip = Icons.tooltip("");
+            tooltip.setMaxWidth(Region.USE_PREF_SIZE);
+            tooltip.getStyleClass().add("chat-source-tooltip");
+            tooltip.getScene().getStylesheets().add(Icons.STYLESHEET);
+            anchor.setFocusTraversable(true);
+            anchor.setAccessibleText(label + ". Source: " + source.path("name").asText());
+            Icons.sourcePreview(anchor, preview, tooltip);
         }
     }
 
@@ -401,10 +404,12 @@ public final class ChatCards {
         return new VBox(banner, wrapped(subtitle, "chat-rest-subtitle"), bullets(items));
     }
 
-    private static Node actionBody(ActionReport report) {
+    private static Node actionBody(ActionReport report, JsonNode source) {
         Label banner = new Label(report.title().startsWith("Death move - ") ? "DEATH MOVE" : "ACTION USED");
         banner.getStyleClass().add("chat-action-banner");
-        return new VBox(banner, wrapped(report.title(), "chat-action-title"), bullets(report.lines()));
+        Label title = wrapped(report.title(), "chat-action-title");
+        attachSourcePreview(title, source, report.title());
+        return new VBox(banner, title, bullets(report.lines()));
     }
 
     private static Node reactionBody(String trait, String text) {
@@ -822,6 +827,7 @@ public final class ChatCards {
                 : hidden || secretToPlayers ? "Secret roll" : duality ? "Duality roll" : "Dice roll";
         if (List.of(m.path("source").asText("").split(",")).contains("reaction")) title += " - Reaction roll";
         Label titleLabel = wrapped(title, "chat-roll-title");
+        attachSourcePreview(titleLabel, m.path("rollSource"), title);
         VBox body = new VBox(6, titleLabel, equation);
         body.setPadding(new Insets(8, 12, 6, 12));
         if (secretToPlayers) {
@@ -913,17 +919,7 @@ public final class ChatCards {
                     : fallbackSource.isObject() && (d.label().equals(fallbackSource.path("name").asText())
                     || d.label().startsWith(fallbackSource.path("name").asText() + " damage")) ? fallbackSource : null;
             if (description != null) {
-                VBox preview = new VBox(4, wrapped(description.path("source").asText(), "chat-shared-source"),
-                        wrapped(description.path("name").asText(), "chat-source-name"),
-                        markdown(description.path("text").asText(), "chat-source-text"));
-                preview.getStyleClass().add("chat-source-preview");
-                Tooltip tooltip = Icons.tooltip("");
-                tooltip.setMaxWidth(Region.USE_PREF_SIZE);
-                tooltip.getStyleClass().add("chat-source-tooltip");
-                tooltip.getScene().getStylesheets().add(Icons.STYLESHEET);
-                row.setFocusTraversable(true);
-                row.setAccessibleText(d.label() + ". Source: " + description.path("name").asText());
-                Icons.sourcePreview(row, preview, tooltip);
+                attachSourcePreview(row, description, d.label());
             }
             content.getChildren().add(row);
             for (Note note : d.notes()) {
@@ -986,14 +982,12 @@ public final class ChatCards {
 
     static DisclosureState disclosureState(Node card) {
         return new DisclosureState(disclosureOpen(card, ".chat-roll-breakdown"),
-                disclosureOpen(card, ".chat-roll-source"),
                 card.getProperties().get("dmActions") instanceof VBox footer
                         && footer.getChildren().size() == 3 && footer.getChildren().get(2).isVisible());
     }
 
     static void applyDisclosureState(Node card, DisclosureState state) {
         setDisclosureOpen(card, ".chat-roll-breakdown", state.breakdownOpen());
-        setDisclosureOpen(card, ".chat-roll-source", state.sourceOpen());
         if (card.getProperties().get("dmActions") instanceof VBox footer
                 && footer.getChildren().size() == 3) {
             footer.getChildren().get(2).setVisible(state.actionsOpen());

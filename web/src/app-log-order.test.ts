@@ -57,17 +57,17 @@ it.each(['rollUpdate', 'chatUpdate'] as const)('keeps %s in its original DOM pos
   expect(context.restoreChatScroll).toHaveBeenCalledOnce();
 });
 
-it.each(['rollUpdate', 'chatUpdate'] as const)('preserves independent disclosure states across repeated %s messages', type => {
+it.each(['rollUpdate', 'chatUpdate'] as const)('preserves breakdown state across repeated %s messages', type => {
   const kind = type === 'rollUpdate' ? 'roll' : 'chat';
   const entry = { kind, m: { id: 2, ts: 2, total: 1 } };
   const original = new Card('original');
-  original.details = { 'details.roll-breakdown': { open: true }, 'details.roll-source': { open: false } };
+  original.details = { 'details.roll-breakdown': { open: true } };
   const content = new Container();
   content.insertBefore(original, null);
   const cache = new WeakMap<object, Card>([[entry, original]]);
   const replacement = () => {
     const card = new Card('updated');
-    card.details = { 'details.roll-breakdown': { open: false }, 'details.roll-source': { open: false } };
+    card.details = { 'details.roll-breakdown': { open: false } };
     return card;
   };
   vi.mocked(renderLogEntry).mockImplementation(() => replacement() as unknown as HTMLElement);
@@ -83,10 +83,7 @@ it.each(['rollUpdate', 'chatUpdate'] as const)('preserves independent disclosure
     : { type, message: { id: 2, ts: 2, text: 'Updated' } });
   update();
   expect(content.children[0].details['details.roll-breakdown'].open).toBe(true);
-  expect(content.children[0].details['details.roll-source'].open).toBe(false);
   content.children[0].details['details.roll-breakdown'].open = false;
-  content.children[0].details['details.roll-source'].open = true;
   update();
   expect(content.children[0].details['details.roll-breakdown'].open).toBe(false);
-  expect(content.children[0].details['details.roll-source'].open).toBe(true);
 });

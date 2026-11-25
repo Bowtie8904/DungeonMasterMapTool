@@ -112,7 +112,13 @@ describe('roll breakdowns', () => {
         breakdown: [{ label: 'Combo Strike rolls', expression: '2d4', rolls: [4, 1], total: 5,
           rollSource: { name: 'Combo Strike', text: '**Combo rules**', source: 'Brawler' } }],
       } }, 'player') as unknown as Element;
-      const row = card.find('has-source-preview')!;
+      const title = card.find('roll-title')!;
+      const titlePanel = title.find('roll-source-preview')!;
+      expect(titlePanel.textContent).toBe('WeaponSwordWeapon rules');
+      expect(title.attrs.get('aria-describedby')).toBe(titlePanel.id);
+      expect(title.tabIndex).toBe(0);
+      expect(card.find('roll-source')).toBeUndefined();
+      const row = card.find('roll-detail')!;
       const panel = row.find('roll-source-preview')!;
       expect(panel.textContent).toBe('BrawlerCombo StrikeCombo rules');
       expect(row.tabIndex).toBe(0);
@@ -140,6 +146,23 @@ describe('roll breakdowns', () => {
       rowBounds = { left: 120, top: 650, bottom: 680 };
       row.listeners.get('focus')!();
       expect(panel.style.top).toBe('442px');
+      const source = { name: 'Feature', text: '**Feature rules**', source: 'Class' };
+      for (const [text, selector] of [
+        ['ACTION USED\nFeature - Action\nPlayer\n• Done', 'action-title'],
+        ['Rolled 1d4 [3]', 'message-text'],
+      ]) {
+        const action = renderLogEntry({ kind: 'chat', m: {
+          id: 2, ts: 0, fromId: 'player', from: 'Player', text, rollSource: source,
+        } }, 'player') as unknown as Element;
+        const anchor = action.find(selector)!;
+        const preview = anchor.find('roll-source-preview')!;
+        expect(preview.textContent).toBe('ClassFeatureFeature rules');
+        expect(anchor.attrs.get('aria-describedby')).toBe(preview.id);
+        expect(anchor.tabIndex).toBe(0);
+        expect(action.find('roll-source')).toBeUndefined();
+      }
+      const legacy = renderLogEntry({ kind: 'roll', m: message }, 'player') as unknown as Element;
+      expect(legacy.find('roll-title')!.find('roll-source-preview')).toBeUndefined();
     } finally { vi.unstubAllGlobals(); }
   });
   it.each([

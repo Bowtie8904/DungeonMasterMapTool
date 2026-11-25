@@ -572,7 +572,7 @@ class ChatPanelTest {
     }
 
     @Test
-    void dmRollCardsKeepCollapsedDisclosuresAndDiceCompact() throws Exception {
+    void dmRollCardsKeepCollapsedBreakdownAndDiceCompact() throws Exception {
         JsonNode message = MAPPER.readTree("""
                 {"type":"roll","from":"Alice","kind":"duality","expression":"2d12+3",
                  "rolls":[8,4],"total":15,"difficulty":12,
@@ -588,13 +588,14 @@ class ChatPanelTest {
             scene.getStylesheets().add(Icons.STYLESHEET);
             root.applyCss();
             VBox breakdown = (VBox) card.lookup(".chat-roll-breakdown");
-            VBox source = (VBox) card.lookup(".chat-roll-source");
+            assertNull(card.lookup(".chat-roll-source"));
+            assertTrue(card.lookup(".chat-roll-title").isFocusTraversable());
             for (double width : new double[]{260, 340}) {
                 root.resize(width, 900);
                 root.layout();
                 double collapsedHeight = card.getHeight();
                 assertTrue(collapsedHeight <= 220, "A collapsed duality roll with source fits within 220px");
-                for (VBox disclosure : List.of(breakdown, source)) {
+                for (VBox disclosure : List.of(breakdown)) {
                     assertFalse(disclosure.getChildren().get(1).isManaged());
                     assertEquals(javafx.scene.layout.Region.USE_PREF_SIZE, disclosure.getMaxHeight());
                     Label summary = (Label) disclosure.getChildren().get(0);
@@ -606,15 +607,12 @@ class ChatPanelTest {
                     assertEquals(44, die.getLayoutBounds().getHeight(), 1);
                 }
                 assertEquals("15", ((Label) card.lookup(".chat-total-value")).getText());
-                for (VBox disclosure : List.of(breakdown, source))
-                    ((Label) disclosure.getChildren().get(0)).getOnMouseClicked().handle(null);
+                ((Label) breakdown.getChildren().get(0)).getOnMouseClicked().handle(null);
                 root.applyCss();
                 root.layout();
-                assertTrue(card.getHeight() > collapsedHeight + 80, "Expanded rules remain fully laid out");
+                assertTrue(card.getHeight() > collapsedHeight, "Expanded breakdown remains fully laid out");
                 assertEquals(12, breakdown.getPadding().getBottom());
-                assertEquals(8, source.getPadding().getBottom());
-                for (VBox disclosure : List.of(breakdown, source))
-                    ((Label) disclosure.getChildren().get(0)).getOnMouseClicked().handle(null);
+                ((Label) breakdown.getChildren().get(0)).getOnMouseClicked().handle(null);
                 root.applyCss();
                 root.layout();
                 assertEquals(collapsedHeight, card.getHeight(), 1, "Collapsing removes all expanded space");
@@ -636,17 +634,14 @@ class ChatPanelTest {
             ChatPanel panel = new ChatPanel(new Backend(roll), AppSettings.load());
             Stage stage = showPanel(panel, 320, 900);
             var breakdown = (javafx.scene.layout.VBox) panel.lookup(".chat-roll-breakdown");
-            var source = (javafx.scene.layout.VBox) panel.lookup(".chat-roll-source");
             ((Label) breakdown.getChildren().get(0)).getOnMouseClicked().handle(null);
-            ((Label) source.getChildren().get(0)).getOnMouseClicked().handle(null);
             panel.onMessage(MAPPER.createObjectNode().put("type", "rollUpdate").put("id", 9).put("ts", 10).put("total", 7));
             var nextBreakdown = (javafx.scene.layout.VBox) panel.lookup(".chat-roll-breakdown");
-            var nextSource = (javafx.scene.layout.VBox) panel.lookup(".chat-roll-source");
             assertNotSame(breakdown, nextBreakdown);
             assertTrue(nextBreakdown.getChildren().get(1).isVisible());
             assertTrue(nextBreakdown.getChildren().get(1).isManaged());
             assertTrue(((Label) nextBreakdown.getChildren().get(0)).getText().startsWith("\u25BE"));
-            assertTrue(nextSource.getChildren().get(1).isVisible());
+            assertTrue(panel.lookup(".chat-roll-title").isFocusTraversable());
             assertEquals("7", ((Label) panel.lookup(".chat-total-value")).getText());
             ((Label) nextBreakdown.getChildren().get(0)).getOnMouseClicked().handle(null);
             panel.onMessage(MAPPER.createObjectNode().put("type", "rollUpdate").put("id", 9).put("ts", 10).put("total", 8));
@@ -656,16 +651,62 @@ class ChatPanelTest {
             ChatPanel chatPanel = new ChatPanel(new Backend(chat), AppSettings.load());
             Stage chatStage = showPanel(chatPanel, 320, 900);
             var chatCard = chatPanel.lookup(".chat-entry");
-            var chatSource = (javafx.scene.layout.VBox) chatCard.lookup(".chat-roll-source");
-            ((Label) chatSource.getChildren().get(0)).getOnMouseClicked().handle(null);
+            assertTrue(chatCard.lookup(".chat-text").isFocusTraversable());
             var updated = ((com.fasterxml.jackson.databind.node.ObjectNode) chat.deepCopy()).put("text", "Updated");
             chatPanel.onMessage(MAPPER.createObjectNode().put("type", "chatUpdate").set("message", updated));
             var updatedCard = chatPanel.lookup(".chat-entry");
             assertEquals(updated, updatedCard.getUserData());
-            var updatedSource = (javafx.scene.layout.VBox) updatedCard.lookup(".chat-roll-source");
-            assertTrue(updatedSource.getChildren().get(1).isVisible());
+            assertTrue(updatedCard.lookup(".chat-text").isFocusTraversable());
             assertEquals("Updated", ((Label) updatedCard.lookup(".chat-text")).getText());
             chatStage.close();
+        });
+    }
+
+    @Test
+    void sourcedTitlesAndPlainMessagesShowTheirSourcePreviewOnFocus() throws Exception {
+        JsonNode[] messages = {
+                MAPPER.readTree("""
+                    {"type":"roll","from":"Alice","label":"Attack - Sword","expression":"1d6","rolls":[4],"total":4,
+                     "rollSource":{"name":"Sword","source":"Weapon","text":"Sword rules"}}
+                    """),
+                MAPPER.readTree("""
+                    {"type":"chat","from":"Alice","text":"ACTION USED\\nFeature - Action\\nAlice\\n• Done",
+                     "rollSource":{"name":"Feature","source":"Class","text":"Feature rules"}}
+                    """),
+                MAPPER.readTree("""
+                    {"type":"chat","from":"Alice","text":"Rolled 1d4 [3]",
+                     "rollSource":{"name":"Feature","source":"Class","text":"Feature rules"}}
+                    """)
+        };
+        String[] selectors = {".chat-roll-title", ".chat-action-title", ".chat-text"};
+        String[] names = {"Sword", "Feature", "Feature"};
+        for (int i = 0; i < messages.length; i++) {
+            final int index = i;
+            Stage[] stage = new Stage[1];
+            onFx(() -> {
+                VBox card = (VBox) ChatCards.render(messages[index]);
+                var anchor = card.lookup(selectors[index]);
+                assertTrue(anchor.isFocusTraversable());
+                assertTrue(anchor.getAccessibleText().contains("Source: " + names[index]));
+                assertNull(card.lookup(".chat-roll-source"));
+                stage[0] = new Stage();
+                stage[0].setScene(new Scene(new StackPane(card), 600, 500));
+                stage[0].show();
+                stage[0].requestFocus();
+                anchor.requestFocus();
+                var popup = javafx.stage.Window.getWindows().stream()
+                        .filter(window -> window.isShowing() && window.getScene() != null
+                                && window.getScene().getRoot().lookup(".chat-source-preview") != null)
+                        .findFirst().orElseThrow();
+                var preview = (VBox) popup.getScene().getRoot().lookup(".chat-source-preview");
+                assertEquals(names[index], ((Label) preview.getChildren().get(1)).getText());
+                stage[0].close();
+            });
+        }
+        onFx(() -> {
+            var legacy = ChatCards.render(MAPPER.createObjectNode().put("type", "roll")
+                    .put("expression", "1d6").put("total", 3));
+            assertFalse(legacy.lookup(".chat-roll-title").isFocusTraversable());
         });
     }
 

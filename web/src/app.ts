@@ -1454,11 +1454,9 @@ export class App {
         const previous = card;
         card = renderLogEntry(e, this.playerId, (card, quantity) => this.grabCard(card, quantity), (message) => this.toast(message), (m) => this.rollActions(m));
         if (previous) {
-          for (const selector of ['details.roll-breakdown', 'details.roll-source']) {
-            const oldDetails = previous.querySelector<HTMLDetailsElement>(selector);
-            const newDetails = card.querySelector<HTMLDetailsElement>(selector);
-            if (oldDetails && newDetails) newDetails.open = oldDetails.open;
-          }
+          const oldDetails = previous.querySelector<HTMLDetailsElement>('details.roll-breakdown');
+          const newDetails = card.querySelector<HTMLDetailsElement>('details.roll-breakdown');
+          if (oldDetails && newDetails) newDetails.open = oldDetails.open;
         }
         this.logCards.set(e, card);
         card.dataset.messageId = String(e.m.id);

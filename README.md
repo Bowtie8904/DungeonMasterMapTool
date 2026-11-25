@@ -835,18 +835,20 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   Chat messages appear as individual sender-headed cards (the DM is shown as Gamemaster). Roll cards show styled dice, a combined bonus and a
   prominent total; criticals stand out with a warm glowing card border and matching glowing Hope/Fear dice.
   Desktop DM roll cards use smaller dice and tighter spacing so more rolls fit in chat;
-  collapsed breakdown and source sections take only their summary space.
+  the collapsed breakdown takes only its summary space.
   Expand **Roll breakdown** for individual dice and each applied trait, Experience,
   advantage/disadvantage, weapon feature and automated buff/debuff with its actual impact.
   Damage details separate the weapon's fixed bonus and explain changes to its Proficiency dice pool.
   Damage-adding features appear once with their own damage, including Combo Strike and First Strike;
   Wolf Form adds only one bonus die to spell damage. Proficiency attribution remains unchanged.
-  Hover or keyboard-focus a sourced breakdown row to preview its feature, card, equipment or effect
-  in browser/player and desktop DM chat. Descriptions are saved with the roll, not read from a later sheet.
+  Hover or keyboard-focus a roll or action title to preview its saved source; source-bearing plain action
+  messages use their text instead. Sourced breakdown rows also preview their individual feature, card,
+  equipment or effect in browser/player and desktop DM chat. Descriptions are saved with the message,
+  not read from a later sheet.
   DM previews use wider, content-sized panels anchored outside the hovered row. Ordinary descriptions
   need no scrollbar; unusually long descriptions scroll within the screen, and you can move into the panel.
   Press Escape to dismiss a preview.
-  Hope/Fear, criticals and difficulty outcomes have distinct badges. Breakdown and source sections stay open
+  Hope/Fear, criticals and difficulty outcomes have distinct badges. Breakdown sections stay open
   when messages arrive or the displayed message is updated, independently for each viewer.
   Historical rolls and older hosts show the formula and dice without inventing missing source names;
   conditional features without automation are not claimed as applied bonuses.
