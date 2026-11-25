@@ -101,6 +101,8 @@ public final class RuleRuntime {
                 .put("sourceInstanceId", context.path("source").path("instanceId").asText())
                 .put("revision", revision(context)).put("mode", binding.path("mode").asText())
                 .put("surface", binding.path("surface").asText());
+        if (context.path("source").path("name").isTextual())
+            description.put("sourceName", context.path("source").path("name").asText());
         if (eachId != null) description.put("eachId", eachId);
         if (binding.has("group")) description.set("group", binding.get("group"));
         if (binding.has("defaultOn")) description.set("defaultOn", binding.get("defaultOn"));
@@ -117,6 +119,23 @@ public final class RuleRuntime {
                 ? describeTargets(binding, context) : party.describe(binding, ruleId, context));
         description.put("audience", binding.path("audience").asText("self"));
         description.put("priority", binding.path("priority").asInt());
+        String cost = costText(program, rule, context);
+        if (!cost.isEmpty()) description.put("cost", cost);
+        unitCost(program, rule, context, description);
+        for (JsonNode step : rule.path("costs"))
+            if ("inventory.consume".equals(step.path("op").asText()) && context.path("source").path("quantity").isInt()) {
+                description.putObject("consumes").put("name", context.path("source").path("name").asText(""))
+                        .put("left", context.path("source").path("quantity").asInt());
+                break;
+            }
+        if (rule.has("limitRef")) {
+            String limit = rule.path("limitRef").asText();
+            int max = maxUses(program, context, limit);
+            ObjectNode uses = description.putObject("uses").put("limit", limit)
+                    .put("left", Math.max(0, max - context.path("usage").path(limit).asInt())).put("max", max);
+            JsonNode resetOn = program.limits().path(limit).path("resetOn");
+            if (resetOn.isArray()) uses.set("resetOn", resetOn.deepCopy());
+        }
         for (String text : List.of("label", "description")) if (rule.path("ui").has(text))
             description.put(text, awaitingRecipient
                     ? RuleTemplate.renderAwaitingRecipient(rule.path("ui").path(text).asText(), context)
@@ -778,6 +797,57 @@ public final class RuleRuntime {
 
     private static String unavailableText(ObjectNode rule, ObjectNode context, String fallback) {
         return rule.path("ui").has("unavailable") ? RuleTemplate.render(rule.path("ui").path("unavailable").asText(), context) : fallback;
+    }
+
+    private static final Map<String, String> CORE_COST_LABELS = Map.of("actor.hope", "Hope", "actor.stress", "Stress",
+            "actor.hp", "HP", "actor.armorTrack", "Armor Slot", "actor.gold", "gold coins");
+
+    /** Up-front costs in the legacy "1 Hope, 1 Stress" form; input-dependent amounts are omitted. */
+    /**
+     * For costs scaled by an integer {@code quantity} input: the cost of one unit ({@code unitCost}) and whether the unit
+     * is a use (Stress marks) or a token ({@code costPer}), as the format-1 roll dialog worded it.
+     */
+    private static void unitCost(RuleCompiler.Program program, ObjectNode rule, ObjectNode context, ObjectNode description) {
+        boolean quantity = false;
+        for (JsonNode input : rule.path("inputs"))
+            quantity |= "quantity".equals(input.path("id").asText()) && "integer".equals(input.path("kind").asText());
+        if (!quantity) return;
+        ObjectNode unit = context.deepCopy();
+        if (!unit.path("input").isObject()) unit.putObject("input");
+        ((ObjectNode) unit.get("input")).put("quantity", 1);
+        String text = costText(program, rule, unit, true);
+        if (text.isEmpty()) return;
+        boolean stress = false;
+        for (JsonNode cost : rule.path("costs"))
+            stress |= "track.mark".equals(cost.path("op").asText()) && "actor.stress".equals(cost.path("track").asText())
+                    && RuleExpression.references(cost.path("amount")).contains("input.quantity");
+        description.put("unitCost", text).put("costPer", stress ? "use" : "token");
+    }
+
+    static String costText(RuleCompiler.Program program, ObjectNode rule, ObjectNode context) {
+        return costText(program, rule, context, false);
+    }
+
+    private static String costText(RuleCompiler.Program program, ObjectNode rule, ObjectNode context, boolean withInputs) {
+        Map<String, Integer> parts = new java.util.LinkedHashMap<>();
+        for (JsonNode cost : rule.path("costs")) {
+            String op = cost.path("op").asText();
+            String target = switch (op) {
+                case "resource.spend", "pool.spend" -> cost.path("pool").asText();
+                case "track.mark" -> cost.path("track").asText();
+                default -> null;
+            };
+            if (target == null || !withInputs && RuleExpression.references(cost.path("amount")).stream().anyMatch(path -> path.startsWith("input."))) continue;
+            int amount;
+            try { amount = whole(cost.path("amount"), context, 0, 1_000_000); }
+            catch (RuntimeException ex) { continue; }
+            if (amount == 0) continue;
+            String label = "pool.spend".equals(op)
+                    ? program.pools().path(target).path("label").asText(target)
+                    : CORE_COST_LABELS.getOrDefault(target, target.substring(target.lastIndexOf('.') + 1));
+            parts.merge(label, amount, Integer::sum);
+        }
+        return String.join(", ", parts.entrySet().stream().map(part -> part.getValue() + " " + part.getKey()).toList());
     }
 
     private static boolean preflightCosts(RuleCompiler.Program program, ObjectNode rule, ObjectNode context) {

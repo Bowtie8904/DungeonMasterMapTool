@@ -125,17 +125,27 @@ interface RollReceipt {
   resultPublished?: boolean;
 }
 
+const SECTION: Record<NonNullable<RuleDescriptor['group']>, { name: string; className: string; label: string }> = {
+  result: { name: 'result', className: 'small primary', label: 'Roll result' },
+  sourceFeature: { name: 'feature', className: 'small', label: 'Feature effects' },
+  otherFeatures: { name: 'other', className: 'small related', label: 'Other features' },
+};
+
 /** Keep a chat card pinned to its original result. A sheet can follow a newly published revision instead. */
-function resultControls(actorId: string, resultId: string, initial?: DescribedActions) {
-  const list = el('div', { class: 'acts automation-actions' });
-  const status = el('div', { role: 'status' });
-  const root = el('div', { class: 'automation-result-actions' }, status, list);
+function resultControls(actorId: string, resultId: string, initial?: DescribedActions, quiet = false) {
+  // Same markup as the format-1 chat roll buttons: grouped sections inside div.roll-actions.
+  const list = el('div', { class: 'roll-actions', hidden: true });
+  const status = el('div', { class: 'muted', role: 'status', hidden: true });
+  const root = el('div', { class: 'automation-result-actions' }, list, status);
+  const setStatus = (text: string): void => { status.textContent = text; status.hidden = !text; };
+  const show = (nodes: HTMLElement[]): void => { list.replaceChildren(...nodes); list.hidden = nodes.length === 0; };
   let generation = 0;
   let retryId: string | undefined;
   let finished = false;
   const paint = (id: string, offer: DescribedActions): void => {
     const current = ++generation;
-    const controls = offer.actions.filter(button => button.mode === 'button').map(button => {
+    const buttons = offer.actions.filter(button => button.mode === 'button');
+    const controls = buttons.map(button => {
       const control = ruleControl({ ...button, revision: offer.revision }, async intent => {
         if (current !== generation) return;
         if (retryId && retryId !== intent.requestId) throw new Error('Finish the pending result action first.');
@@ -153,38 +163,44 @@ function resultControls(actorId: string, resultId: string, initial?: DescribedAc
         if (current !== generation) return;
         const reports = actionReports(receipt);
         if (receipt.resultPublished) {
-          status.textContent = [`Revised total: ${receipt.event.check.total}`, ...reports].join('\n');
+          setStatus([`Revised total: ${receipt.event.check.total}`, ...reports].join('\n'));
           if (initial && receipt.event.resultId && receipt.resultActions?.length) {
             if (receipt.resultActions.some(action => action.targetSelection))
-              void refresh(receipt.event.resultId, status.textContent);
+              void refresh(receipt.event.resultId, status.textContent ?? '');
             else paint(receipt.event.resultId, { revision: receipt.revision, actions: receipt.resultActions });
           }
-          else { finished = true; ++generation; list.replaceChildren(); }
+          else { finished = true; ++generation; show([]); }
         } else if (offer.actions.length === 1 && !button.repeatable) {
-          ++generation; list.replaceChildren();
+          ++generation; show([]);
           finished = true;
-          status.textContent = reports.join('\n') || 'Applied.';
+          setStatus(reports.join('\n') || 'Applied.');
         } else void refresh(id, reports.join('\n') || 'Applied.');
-      }, CONTROL_TEXT);
+      }, CONTROL_TEXT, { bare: true, className: SECTION[button.group ?? 'sourceFeature'].className,
+        onError: message => setStatus(message) });
       return control;
     });
-    list.replaceChildren(...controls);
+    const groups = (Object.keys(SECTION) as Array<keyof typeof SECTION>).map(group => {
+      const members = controls.filter((_, index) => (buttons[index].group ?? 'sourceFeature') === group);
+      return members.length ? el('div', { class: `roll-action-group ${SECTION[group].name}`, role: 'group',
+        ariaLabel: SECTION[group].label }, ...members) : undefined;
+    }).filter((group): group is HTMLDivElement => !!group);
+    show(groups);
   };
   const refresh = async (id: string, notice = ''): Promise<void> => {
     const current = ++generation;
-    list.replaceChildren();
-    status.textContent = notice || 'Loading result actions…';
+    show([]);
+    setStatus(notice || (quiet ? '' : 'Loading result actions…'));
     try {
       const offer = await fetchDescription(actorId, new URLSearchParams({ resultId: id }));
       if (current !== generation) return;
-      status.textContent = notice || (offer?.actions.length ? '' : 'No current actions for this result.');
+      setStatus(notice || (offer?.actions.length || quiet ? '' : 'No current actions for this result.'));
       if (offer) paint(id, offer);
     } catch (failure) {
       if (current !== generation) return;
-      status.textContent = failure instanceof Error ? failure.message : CONTROL_TEXT.failed;
-      const retry = el('button', { type: 'button' }, CONTROL_TEXT.retry);
+      setStatus(failure instanceof Error ? failure.message : CONTROL_TEXT.failed);
+      const retry = el('button', { type: 'button', class: 'small' }, CONTROL_TEXT.retry);
       retry.addEventListener('click', () => { void refresh(id, notice); });
-      list.replaceChildren(retry);
+      show([retry]);
     }
   };
   if (initial) {
@@ -198,10 +214,21 @@ function resultControls(actorId: string, resultId: string, initial?: DescribedAc
 export function historyResultControls(roll: RollMessage, playerId: string, session: string, ownsActor: boolean): HTMLElement | null {
   const { resultId, sessionId } = roll.automationEvent ?? {};
   if (!ownsActor || !session || session !== sessionId || !resultId || !roll.actorId || playerId !== roll.fromId) return null;
-  const actions = resultControls(roll.actorId, resultId);
-  const details = el('details', { class: 'dh private-result-actions' }, el('summary', {}, 'Result actions'), actions.root);
-  details.addEventListener('toggle', () => { if (details.open) actions.reopen(); });
-  return details;
+  const actions = resultControls(roll.actorId, resultId, undefined, true);
+  const node = el('div', { class: 'private-result-actions' }, actions.root);
+  // The buttons sit inline on the card. Their descriptors are fetched only once the card is actually on screen.
+  let loaded = false;
+  const load = (): void => { if (!loaded) { loaded = true; actions.reopen(); } };
+  node.addEventListener('toggle', () => actions.reopen());
+  if (typeof IntersectionObserver === 'function') {
+    const observer = new IntersectionObserver(entries => {
+      if (!entries.some(entry => entry.isIntersecting)) return;
+      observer.disconnect();
+      load();
+    });
+    observer.observe(node);
+  }
+  return node;
 }
 
 /**

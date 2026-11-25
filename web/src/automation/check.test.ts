@@ -12,6 +12,7 @@ class Element {
   disabled = false;
   checked = false;
   value = '';
+  type = '';
   closed = false;
   get valueAsNumber(): number { return Number(this.value); }
   constructor(readonly tagName: string) {}
@@ -27,10 +28,12 @@ class Element {
   }
   click(): void { if (!this.disabled) this.listeners.get('click')?.forEach(handler => handler()); }
   focus(): void {}
-  showModal(): void {}
-  close(): void { this.closed = true; this.listeners.get('close')?.forEach(handler => handler()); }
-  remove(): void {}
-  all(tag: string): Element[] { return [...(this.tagName === tag ? [this] : []), ...this.children.flatMap(child => child.all(tag))]; }
+  remove(): void { this.closed = true; }
+  // The roll dialog is the legacy backdrop div; tests address it as 'dialog'.
+  all(tag: string): Element[] {
+    const match = this.tagName === tag || tag === 'dialog' && this.className.includes('dh-rolldlg-backdrop');
+    return [...(match ? [this] : []), ...this.children.flatMap(child => child.all(tag))];
+  }
   get text(): string { return this.textContent + this.children.map(child => child.text).join(''); }
 }
 
@@ -44,11 +47,37 @@ const offer = { revision: 3, label: 'Agility Action', options: [option] };
 let body: Element;
 beforeEach(() => {
   body = new Element('body');
-  vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag) });
+  vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag),
+    addEventListener: () => {}, removeEventListener: () => {} });
 });
 afterEach(() => vi.unstubAllGlobals());
 
 describe('host-authored ordinary checks', () => {
+  it('shows the format-1 heading, applied bonuses, option values and the host preview', async () => {
+    const urls: string[] = [];
+    const manual: RuleDescriptor = { ...option, sourceId: 'ruleset:base', sourceInstanceId: 'base',
+      ruleId: 'manual-roll-mode', bindingId: 'use', label: 'Override roll mode', defaultOn: false, inputs: [] };
+    const boost = { ...option, sourceInstanceId: 'boost-1', ruleId: 'boost', label: 'Boost', cost: '1 Hope', inputs: [],
+      value: 2, dice: ['1d6'], suggestsMode: 'advantage' };
+    const base = { modifier: 3, mode: 'normal', dice: [], applied: ['Bless +1'] };
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      urls.push(url);
+      const selections = new URL(url, 'http://host').searchParams.get('selections');
+      return Response.json({ ...offer, options: [manual, boost], base,
+        ...(selections ? { preview: { modifier: 5, mode: 'advantage', dice: ['1d6'], applied: ['Bless +1', 'Boost +2'] } } : {}) });
+    }));
+    await openAutomationCheckDialog('hero', 'action', 'Agility', 'Agility', async () => {}, undefined, 'Agility (+2)');
+    const dialog = body.all('dialog')[0];
+    expect(dialog.all('h4')[0].text).toBe('Agility (+3)');
+    expect(dialog.text).toContain('Applied: Bless +1.');
+    expect(dialog.text).toContain('Boost (+2) +1d6; costs 1 Hope when selected');
+    expect(dialog.text).toContain('Modifier +3');
+    await new Promise(resolve => setTimeout(resolve, 200));
+    expect(JSON.parse(new URL(urls[1], 'http://host').searchParams.get('selections')!)).toEqual([
+      { sourceInstanceId: 'boost-1', ruleId: 'boost', bindingId: 'roll', inputs: {} }]);
+    expect(dialog.text).toContain('Modifier +5; extra dice 1d6');
+    expect(dialog.all('button').find(button => button.text === 'Advantage (+d6)')!.className).toContain(' on');
+  });
   it('flushes before fetching and submits host-described selections', async () => {
     const calls: string[] = [];
     let submitted: unknown;
@@ -65,7 +94,7 @@ describe('host-authored ordinary checks', () => {
     expect(calls).toEqual(['flush', 'get']);
     const dialog = body.all('dialog')[0];
     expect(dialog.text).toContain('Focus');
-    dialog.all('button').find(button => button.text === 'Roll')!.click();
+    dialog.all('button').find(button => button.text === 'Roll to chat')!.click();
     await settle();
     expect(submitted).toEqual({ request: {
       requestId: expect.any(String), expectedRevision: 3, checkRoll: { kind: 'action', trait: 'Agility' },
@@ -93,15 +122,65 @@ describe('host-authored ordinary checks', () => {
     await openAutomationCheckDialog('hero', 'action', 'Agility', 'Agility', async () => {});
     const dialog = body.all('dialog')[0];
     expect(dialog.text).toContain('Giant talk (+3)');
-    const [toggle, , selected] = dialog.all('input');
-    toggle.checked = true;
-    selected.checked = true;
-    dialog.all('button').find(button => button.text === 'Roll')!.click();
+    const select = dialog.all('select')[0];
+    select.value = '1';
+    dialog.all('button').find(button => button.text === 'Roll to chat')!.click();
     await settle();
     expect(submitted).toMatchObject({ request: { selections: [{
       sourceInstanceId: 'base', ruleId: 'experience', bindingId: 'use',
       inputs: { experience: { id: 'Giant talk', name: 'Giant talk', mod: 3 } },
     }] } });
+  });
+
+  it('shows Adept as a format-1 checkbox that doubles the Experience chosen in the dropdown', async () => {
+    let submitted: unknown;
+    const records = [{ label: 'Giant talk (+2)', value: { id: 'Giant talk', name: 'Giant talk', mod: 2 } }];
+    const experience: RuleDescriptor = { ...option, sourceId: 'ruleset:base', sourceInstanceId: 'base', ruleId: 'experience',
+      bindingId: 'use', label: 'Use an Experience', defaultOn: false, cost: '1 Hope', exclusiveGroup: 'core-experience',
+      inputs: [{ id: 'experience', kind: 'record.select', label: 'Choose an Experience', options: records }] };
+    const adept: RuleDescriptor = { ...experience, sourceId: 'feature:adept', sourceInstanceId: 'adept-1', ruleId: 'adept',
+      bindingId: 'roll', label: 'Adept', cost: '1 Stress', sourceName: 'Adept' };
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      if (!init.body) return Response.json({ ...offer, options: [experience, adept] });
+      submitted = JSON.parse(String(init.body));
+      return Response.json({});
+    }));
+    await openAutomationCheckDialog('hero', 'action', 'Agility', 'Agility', async () => {});
+    const dialog = body.all('dialog')[0];
+    expect(dialog.text).toContain('Experience (1 Hope, or 1 Stress with Adept)');
+    expect(dialog.all('fieldset').flatMap(set => set.all('fieldset'))).toHaveLength(1);
+    const box = dialog.all('input').find(input => input.type === 'checkbox')!;
+    box.checked = true;
+    box.listeners.get('change')?.forEach(handler => handler());
+    const roll = dialog.all('button').find(button => button.text === 'Roll to chat')!;
+    roll.click();
+    await settle();
+    expect(submitted).toBeUndefined();
+    expect(dialog.text).toContain('Select an Experience to use Adept');
+    dialog.all('select')[0].value = '0';
+    roll.disabled = false;
+    roll.click();
+    await settle();
+    expect(submitted).toMatchObject({ request: { selections: [{ sourceInstanceId: 'adept-1', ruleId: 'adept',
+      inputs: { experience: { id: 'Giant talk', name: 'Giant talk', mod: 2 } } }] } });
+  });
+
+  it('names options by source and shows per-token costs, quantities and consumed items like format 1', async () => {
+    const tide: RuleDescriptor = { ...option, sourceInstanceId: 'tide-1', ruleId: 'tide', label: 'Spend Tide token',
+      sourceName: 'Tidecaller', defaultOn: false, unitCost: '1 Tide', costPer: 'token',
+      inputs: [{ id: 'quantity', kind: 'integer', label: 'Tide tokens', min: 1, max: 3 }] };
+    const potion: RuleDescriptor = { ...option, sourceInstanceId: 'potion-1', ruleId: 'drink', label: 'Drink',
+      sourceName: 'Minor Stamina Potion', defaultOn: false, inputs: [], consumes: { name: 'Minor Stamina Potion', left: 2 } };
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ ...offer, options: [
+      { ...tide, value: 1 }, { ...potion, dice: ['1d4'] }] })));
+    await openAutomationCheckDialog('hero', 'action', 'Agility', 'Agility', async () => {}, undefined, 'Agility',
+      descriptor => `${descriptor.sourceName} - ${descriptor.label}`);
+    const dialog = body.all('dialog')[0];
+    expect(dialog.text).toContain('Tidecaller - Spend Tide token (+1 per token); costs 1 Tide per token when selected');
+    expect(dialog.text).toContain('Minor Stamina Potion - Drink +1d4; uses up 1 Minor Stamina Potion (2 left)');
+    const control = dialog.all('label').find(label => label.className === 'dh-roll-option-control')!;
+    expect(control.hidden).toBe(false);
+    expect(control.text).toContain('Tide tokens');
   });
 
   it('submits a manual roll mode through the generic choice control', async () => {
@@ -122,10 +201,8 @@ describe('host-authored ordinary checks', () => {
     await openAutomationCheckDialog('hero', 'action', 'Agility', 'Agility', async () => {});
     const dialog = body.all('dialog')[0];
     expect(dialog.text).toContain('Disadvantage (-d6)');
-    const [toggle, , , disadvantage] = dialog.all('input');
-    toggle.checked = true;
-    disadvantage.checked = true;
-    dialog.all('button').find(button => button.text === 'Roll')!.click();
+    dialog.all('button').find(button => button.text === 'Disadvantage (-d6)')!.click();
+    dialog.all('button').find(button => button.text === 'Roll to chat')!.click();
     await settle();
     expect(submitted).toMatchObject({ request: { selections: [{
       sourceInstanceId: 'base', ruleId: 'manual-roll-mode', bindingId: 'use', inputs: { mode: 'disadvantage' },
@@ -141,7 +218,7 @@ describe('host-authored ordinary checks', () => {
       return Response.json({});
     }));
     await openAutomationCheckDialog('hero', 'reaction', 'Finesse', 'Reaction', async () => {}, { id: 45, ts: 2000 });
-    const dialog = body.all('dialog')[0], go = dialog.all('button').find(button => button.text === 'Roll')!;
+    const dialog = body.all('dialog')[0], go = dialog.all('button').find(button => button.text === 'Roll to chat')!;
     expect(dialog.text).not.toContain('Roll type');
     go.click();
     await settle();
@@ -168,7 +245,7 @@ describe('host-authored ordinary checks', () => {
     }));
     await openAutomationCheckDialog('hero', 'action', 'Agility', 'Agility', async () => {});
     const dialog = body.all('dialog')[0];
-    const reaction = dialog.all('button').find(button => button.text === 'Reaction')!;
+    const reaction = dialog.all('button').find(button => button.text === 'Reaction roll')!;
     reaction.click();
     expect(reaction.disabled).toBe(true);
     await settle();
@@ -176,12 +253,11 @@ describe('host-authored ordinary checks', () => {
       `/api/automation/${AUTOMATION_COMPATIBILITY_VERSION}/hero/check?kind=action&trait=Agility`,
       `/api/automation/${AUTOMATION_COMPATIBILITY_VERSION}/hero/check?kind=reaction&trait=Agility`,
     ]);
-    expect(dialog.text).toContain('Agility Reaction');
     expect(dialog.text).not.toContain('Focus');
-    const go = dialog.all('button').find(button => button.text === 'Roll')!;
+    const go = dialog.all('button').find(button => button.text === 'Roll to chat')!;
     go.click();
     await settle();
-    const action = dialog.all('button').find(button => button.text === 'Action')!;
+    const action = dialog.all('button').find(button => button.text === 'Normal roll')!;
     expect(action.disabled).toBe(true);
     expect(reaction.disabled).toBe(true);
     action.click();

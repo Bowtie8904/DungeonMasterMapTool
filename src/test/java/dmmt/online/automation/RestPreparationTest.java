@@ -73,6 +73,25 @@ class RestPreparationTest {
     }
 
     @Test
+    void restOfferDryRunsSelectedPreparationOptionsWithoutChangingTheSheet() throws Exception {
+        var pack = pack();
+        ObjectNode sheet = sheet(), original = sheet.deepCopy();
+        ObjectNode offer = HOST.describeRest(pack, sheet, origin(), "short", "owner", "sheet-version", null,
+                choice("shelter", "rest"));
+        assertEquals(4, offer.at("/plan/moves").asInt(), offer.toString());
+        assertFalse(offer.has("previewError"));
+        assertEquals(original, sheet);
+        assertEquals(HOST.describeRest(pack, sheet, origin(), "short", "owner", "sheet-version")
+                .path("offerVersion"), offer.path("offerVersion"), "Dry-run selections do not change the offer version.");
+
+        ObjectNode denied = HOST.describeRest(pack, sheet, origin(), "short", "owner", "sheet-version", null,
+                choice("deny", "rest"));
+        assertEquals(3, denied.at("/plan/moves").asInt());
+        assertEquals("Rest is unavailable.", denied.path("previewError").asText());
+        assertEquals(original, sheet);
+    }
+
+    @Test
     void preparationUsesAuthoredBoundsAndStagesCostsAndEffectsInOrder() throws Exception {
         var pack = pack();
         ObjectNode sheet = sheet();

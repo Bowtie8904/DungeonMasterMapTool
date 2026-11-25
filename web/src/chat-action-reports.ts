@@ -8,7 +8,7 @@ export interface ChatActionLabel {
 export function chatActionLabels(card: HTMLElement): ChatActionLabel[] {
   return Array.from(card.querySelectorAll<HTMLButtonElement>('button'))
     .filter(button => {
-      const hidden = button.closest('[hidden], .hidden, .private-result-actions');
+      const hidden = button.closest('[hidden], .hidden');
       return !hidden || !card.contains(hidden);
     })
     .map(button => ({

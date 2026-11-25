@@ -1792,6 +1792,29 @@ class AutomationHostTest {
     }
 
     @Test
+    void damageDescriptionDryRunsSelectedMitigationWithoutTouchingTheSheet() throws Exception {
+        var pack = damagePack();
+        ObjectNode sheet = damageSheet();
+        ObjectNode origin = AutomationHost.event("action.request", "ada", 0);
+        JsonNode plain = HOST.describeDamage(pack, sheet, origin, "self", 9, "physical", 1, null, null);
+        ObjectNode before = sheet.deepCopy();
+        assertEquals(9, plain.at("/applied/amount").asInt());
+        assertTrue(plain.at("/armorTrack/capacity").isInt(), plain.toString());
+        ArrayNode selections = RuleJson.JSON.createArrayNode();
+        selections.addObject().put("sourceInstanceId", "f-brace").put("ruleId", "brace").put("bindingId", "prepare");
+        JsonNode braced = HOST.describeDamage(pack, sheet, origin, "self", 9, "physical", 1, null, selections);
+        assertFalse(braced.has("previewError"), braced.toString());
+        assertEquals(6, braced.at("/applied/amount").asInt(), "The preview reflects Brace");
+        assertEquals(1, braced.at("/applied/severity").asInt());
+        assertEquals("brace", braced.at("/stages/damage.prepare/actions/0/sourceName").asText());
+        assertEquals(before, sheet, "The dry run never changes the sheet");
+        ArrayNode unknown = RuleJson.JSON.createArrayNode();
+        unknown.addObject().put("sourceInstanceId", "f-missing").put("ruleId", "brace").put("bindingId", "prepare");
+        assertTrue(HOST.describeDamage(pack, sheet, origin, "self", 9, "physical", 1, null, unknown).has("previewError"));
+        assertEquals(before, sheet);
+    }
+
+    @Test
     void incomingDamageRunsPrepareMarksAndAppliedStagesAtomically() throws Exception {
         var pack = damagePack();
         ObjectNode sheet = damageSheet();

@@ -6260,8 +6260,19 @@ public final class OnlineSessionServer {
             }
             String original = store.loadSheet(campaign.getId(), actor.getId());
             ObjectNode sheet = original == null ? MAPPER.createObjectNode() : hydrateSheet(actor.getId(), original);
+            JsonNode selections = null;
+            String selectionText = ctx.queryParam("selections");
+            if (selectionText != null && !selectionText.isBlank()) {
+                if (selectionText.length() > 32_768) throw new IllegalArgumentException("Too many roll options.");
+                try {
+                    selections = MAPPER.readTree(selectionText);
+                } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                    throw new IllegalArgumentException("Roll options must be a JSON array.");
+                }
+                if (!selections.isArray()) throw new IllegalArgumentException("Roll options must be a JSON array.");
+            }
             ObjectNode response = automationHost.describeCheck(automationPack(), sheet, automationEvent("action.request", actor),
-                    ctx.queryParam("kind"), ctx.queryParam("trait"), relation);
+                    ctx.queryParam("kind"), ctx.queryParam("trait"), relation, selections);
             json(ctx, 200, response);
         } catch (dmmt.online.automation.AutomationHost.NotReady e) {
             json(ctx, 409, errorBody("Automation is unavailable: " + e.getMessage()));
@@ -6295,9 +6306,20 @@ public final class OnlineSessionServer {
             if (type != null && type.isBlank()) type = null;
             String original = store.loadSheet(campaign.getId(), actor.getId());
             ObjectNode sheet = original == null ? MAPPER.createObjectNode() : hydrateSheet(actor.getId(), original);
+            JsonNode selections = null;
+            String selectionText = ctx.queryParam("selections");
+            if (selectionText != null && !selectionText.isBlank()) {
+                if (selectionText.length() > 32_768) throw new IllegalArgumentException("Too many damage selections.");
+                try {
+                    selections = MAPPER.readTree(selectionText);
+                } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                    throw new IllegalArgumentException("Damage selections must be a JSON array.");
+                }
+                if (!selections.isArray()) throw new IllegalArgumentException("Damage selections must be a JSON array.");
+            }
             json(ctx, 200, automationHost.describeDamage(automationPack(), sheet,
                     automationEvent("action.request", actor), relation, amount, type, armor,
-                    automationSourceSheets(actor, sheet, new java.util.HashMap<>())));
+                    automationSourceSheets(actor, sheet, new java.util.HashMap<>()), selections));
         } catch (NumberFormatException e) {
             json(ctx, 400, errorBody("Damage amount and armor must be whole numbers."));
         } catch (dmmt.online.automation.AutomationHost.NotReady e) {
@@ -6930,9 +6952,20 @@ public final class OnlineSessionServer {
             String original = store.loadSheet(campaign.getId(), actor.getId());
             ObjectNode sheet = original == null ? MAPPER.createObjectNode() : hydrateSheet(actor.getId(), original);
             var pack = automationPack();
+            JsonNode preparation = null;
+            String preparationText = ctx.queryParam("preparation");
+            if (preparationText != null && !preparationText.isBlank()) {
+                if (preparationText.length() > 32_768) throw new IllegalArgumentException("Too many rest preparation options.");
+                try {
+                    preparation = MAPPER.readTree(preparationText);
+                } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                    throw new IllegalArgumentException("Rest preparation options must be a JSON array.");
+                }
+                if (!preparation.isArray()) throw new IllegalArgumentException("Rest preparation options must be a JSON array.");
+            }
             ObjectNode offer = automationHost.describeRest(pack, sheet, automationEvent("rest.prepare", actor),
                     ctx.queryParam("kind"), playerId, sheetVersion(original, actor),
-                    new AutomationRoster(pack, actor, original, sheet, true).party);
+                    new AutomationRoster(pack, actor, original, sheet, true).party, preparation);
             ctx.header("Cache-Control", "no-store");
             json(ctx, 200, offer);
         } catch (dmmt.online.automation.AutomationHost.NotReady e) {

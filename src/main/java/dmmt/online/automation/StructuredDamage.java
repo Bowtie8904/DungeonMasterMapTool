@@ -359,7 +359,7 @@ public final class StructuredDamage {
         return parts.length == 1 ? plan.path(field) : plan.path(parts[0]).path(parts[1]);
     }
 
-    private static int[] track(JsonNode spec, ObjectNode context, String path) {
+    static int[] track(JsonNode spec, ObjectNode context, String path) {
         ObjectNode track = RuleJson.object(RuleExpression.read(context, spec.path("track").asText()), path + "/track");
         int capacity = RuleJson.integer(track.get(spec.path("capacity").asText()), path + "/capacity", 0, MAX_AMOUNT);
         int marked = RuleJson.integer(track.get(spec.path("marked").asText()), path + "/marked", 0, capacity);

@@ -8,6 +8,7 @@ class Element {
   hidden = false;
   className = '';
   disabled = false;
+  title = '';
   checked = false;
   value = '';
   get valueAsNumber(): number { return Number(this.value); }
@@ -51,11 +52,10 @@ describe('saved roll controls', () => {
   const roll = { actorId: 'hero', fromId: 'owner', from: 'Player', id: 1, ts: 2, expression: '1d6', rolls: [5], total: 5,
     automationEvent: { type: 'roll.finished', sessionId: 'session', resultId: 'r1' } };
   const toggleOpen = (card: HTMLElement) => {
-    (card as HTMLDetailsElement).open = true;
     fake(card).listeners.get('toggle')!.forEach(listener => listener());
   };
 
-  it('loads no historical descriptors until the current owner opens one result', async () => {
+  it('loads no historical descriptors until the current owner result card becomes visible', async () => {
     const get = vi.fn(async () => new Response('{}', { status: 409 }));
     vi.stubGlobal('fetch', get);
     expect(historyResultControls(roll, 'viewer', 'session', true)).toBeNull();
@@ -67,7 +67,7 @@ describe('saved roll controls', () => {
     await settle();
     expect(get).toHaveBeenCalledTimes(1);
     expect(get).toHaveBeenCalledWith(`/api/automation/${AUTOMATION_COMPATIBILITY_VERSION}/hero?resultId=r1`, expect.objectContaining({ cache: 'no-store' }));
-    expect(fake(cards[3]).text).toContain('No current actions');
+    expect(fake(cards[3]).text).toBe('');
   });
 
   it('keeps a lost POST for retry and does not attach revised actions to the original roll', async () => {
@@ -298,7 +298,7 @@ describe('automation panel', () => {
     await settle();
     await settle();
     expect(calls.map(call => call.url)).toEqual([`/api/automation/${AUTOMATION_COMPATIBILITY_VERSION}/a1`, `/api/automation/${AUTOMATION_COMPATIBILITY_VERSION}/a1?resultId=r1`]);
-    expect(panel.text).toContain('Recipients: Bea');
+    expect(panel.all('button').find(button => button.text === 'Rally (2 Hope)')!.title).toBe('Recipients: Bea');
     panel.all('button').find(button => button.text === 'Rally (2 Hope)')!.click();
     await settle();
     expect(JSON.parse(calls[2].body!).request).toEqual({ requestId: expect.any(String), expectedRevision: 6,
@@ -330,7 +330,7 @@ describe('automation panel', () => {
     await settle();
     expect(calls).toEqual([`/api/automation/${AUTOMATION_COMPATIBILITY_VERSION}/a1`, `/api/automation/${AUTOMATION_COMPATIBILITY_VERSION}/a1`, `/api/automation/${AUTOMATION_COMPATIBILITY_VERSION}/a1?resultId=r2`]);
     expect(panel.text).toContain('Revised total: 19');
-    expect(panel.text).toContain('Recipients: Bea');
+    expect(panel.all('button').find(button => button.text === 'Rally (2 Hope)')!.title).toBe('Recipients: Bea');
   });
 
   it('maps an intent to a host selection without client-only fields', async () => {

@@ -11198,7 +11198,7 @@
               "id" : "adept-experience",
               "kind" : "flat",
               "role" : "modifier",
-              "label" : "Experience - {input.experience.name}",
+              "label" : "Experience - {input.experience.name} ({source.name}: doubled)",
               "value" : {
                 "multiply" : [ {
                   "read" : "input.experience.mod"

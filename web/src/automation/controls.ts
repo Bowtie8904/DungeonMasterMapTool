@@ -26,6 +26,15 @@ export interface RuleDescriptor {
   group?: 'result' | 'sourceFeature' | 'otherFeatures';
   label: string;
   description?: string;
+  /** Up-front cost in the format-1 "1 Hope, 1 Stress" form, shown as "Label (cost)". */
+  cost?: string;
+  /** For costs scaled by a quantity input: the cost of one unit and whether that unit is a use or a token. */
+  unitCost?: string;
+  costPer?: 'use' | 'token';
+  /** The consumed inventory item and how many are left. */
+  consumes?: { name: string; left: number };
+  sourceName?: string;
+  uses?: { limit: string; left: number; max: number; resetOn?: string[] };
   available: boolean;
   reason?: string;
   reasonCode?: string;
@@ -63,35 +72,54 @@ export interface ControlText {
 }
 
 /** Renders host-described buttons only; roll options belong to the enclosing roll transaction. */
-export function ruleControl(descriptor: RuleDescriptor, submit: (intent: RuleIntent) => Promise<void>, text: ControlText): HTMLElement {
+export function ruleControl(descriptor: RuleDescriptor, submit: (intent: RuleIntent) => Promise<void>, text: ControlText,
+                            display: Parameters<typeof intentControl>[3] = {}): HTMLElement {
   if (descriptor.mode !== 'button') throw new Error('Only button bindings are independent actions; options belong to the enclosing roll transaction.');
   return intentControl(descriptor, intent => submit({
     ...intent, sourceId: descriptor.sourceId, sourceInstanceId: descriptor.sourceInstanceId,
     ...(descriptor.eachId === undefined ? {} : { eachId: descriptor.eachId }),
     ruleId: descriptor.ruleId, bindingId: descriptor.bindingId,
-  }), text);
+  }), text, display);
 }
 
 export type RollSelection = Pick<RuleIntent, 'sourceInstanceId' | 'ruleId' | 'bindingId' | 'eachId' | 'inputs'>;
 type ButtonPayload = Pick<RuleIntent, 'inputs' | 'target'> & { selections?: RollSelection[] };
 type ButtonIntent = Pick<RuleIntent, 'requestId' | 'expectedRevision'> & ButtonPayload;
 type ButtonDescriptor = Pick<RuleDescriptor, 'revision' | 'label' | 'description' | 'available' | 'reason' | 'inputs' | 'targetSelection'>
-  & { options?: RuleDescriptor[] };
+  & { options?: RuleDescriptor[]; cost?: string };
 
-export function intentControl(descriptor: ButtonDescriptor, submit: (intent: ButtonIntent) => Promise<void>, text: ControlText): HTMLElement {
+/** The format-1 button caption: the configurable label followed by the cost indicator. */
+export function costLabel(descriptor: { label: string; cost?: string }): string {
+  return descriptor.cost ? `${descriptor.label} (${descriptor.cost})` : descriptor.label;
+}
+
+/** The format-1 usage counter text, e.g. "1/1 per long rest". */
+export function usesText(uses: NonNullable<RuleDescriptor['uses']>): string {
+  const reset = new Set(uses.resetOn ?? []);
+  const per = reset.has('session.start') ? 'session' : reset.has('scene.end') ? 'scene'
+    : reset.has('rest.short') && reset.has('rest.long') ? 'rest' : reset.has('rest.long') ? 'long rest'
+    : reset.has('rest.short') ? 'short rest' : '';
+  return per ? `${uses.left}/${uses.max} per ${per}` : `${uses.left}/${uses.max}`;
+}
+
+export function intentControl(descriptor: ButtonDescriptor, submit: (intent: ButtonIntent) => Promise<void>, text: ControlText,
+                              display: { bare?: boolean; className?: string; onError?: (message: string) => void } = {}): HTMLElement {
   const error = el('div', { class: 'error', role: 'alert' });
   const reason = el('span', { class: 'muted' }, descriptor.available ? '' : descriptor.reason ?? '');
-  const button = el('button', { type: 'button', class: 'small', disabled: !descriptor.available,
-    title: descriptor.description ?? descriptor.reason ?? '' }, descriptor.label);
-  const root = el('div', { class: 'dh' }, button, reason, error);
+  const button = el('button', { type: 'button', class: display.bare ? display.className ?? 'small primary' : 'small', disabled: !descriptor.available,
+    title: display.bare ? descriptor.available ? '' : descriptor.reason ?? '' : descriptor.description ?? descriptor.reason ?? '' },
+    costLabel(descriptor));
+  const root = display.bare ? button : el('div', { class: 'dh' }, button, reason, error);
   const selection = descriptor.targetSelection;
   const options = descriptor.options ?? [];
   const hasChoices = options.some(option => option.available);
-  if (!hasChoices) for (const option of options)
+  if (!hasChoices && !display.bare) for (const option of options)
     root.append(el('span', { class: 'muted' }, `${option.label}: ${option.reason ?? ''}`));
   const party = selection?.cardinality === 'all' ? { version: selection.version } : undefined;
-  if (selection?.cardinality === 'all') root.append(el('span', { class: 'muted' },
-    `${text.recipients}: ${selection.options.map(option => option.label).join(', ')}`));
+  const recipients = selection?.cardinality === 'all'
+    ? `${text.recipients}: ${selection.options.map(option => option.label).join(', ')}` : '';
+  if (recipients && !display.bare) root.append(el('span', { class: 'muted' }, recipients));
+  if (recipients && display.bare && descriptor.available) button.title = recipients;
   let pending = false;
   let completed = false;
   let retryIntent: ButtonIntent | undefined;
@@ -118,6 +146,7 @@ export function intentControl(descriptor: ButtonDescriptor, submit: (intent: But
       const message = failure instanceof Error ? failure.message : text.failed;
       error.textContent = message;
       if (dialogError) dialogError.textContent = message;
+      else display.onError?.(message);
       button.textContent = text.retry;
       if (go) { go.textContent = text.retry; go.disabled = false; }
       // An uncertain response must retry the identical intent, not spend again under a fresh ID.

@@ -27,7 +27,7 @@ import { rollSourceFor } from './roll-source';
 import { characterFeatureGroups } from './feature-groups';
 import { isManualOverride, removeManualOverride, setManualStat } from './engine';
 import { weaponAttackBlocker, weaponDamageRules, weaponProfiles, weaponWithProfile } from './engine';
-import { useConsumableUnit, withSelectedAmount } from './engine';
+import { featureRollOrigin, sourceActionLabel, useConsumableUnit, withSelectedAmount } from './engine';
 import { attachmentDef, attachItem, attachTargets, detachItem } from './attachments';
 import { isVitalityEffect, removeVitality } from './vitality';
 import { openDemiplaneImport } from './demiplane-view';
@@ -35,8 +35,9 @@ import { openDemiplaneImport } from './demiplane-view';
 import { openCompanionMancer, openLevelUp, openMancer, openTransformation } from './mancer';
 import { companionAvailable, companionFeatures, companionRules, companionWeapon, hasCompanionTraining, markCompanionDamage, resolveBonded } from './companion';
 import { rich, inline } from './rich';
-import { automationPanel } from '../automation/panel';
+import { derivedInstanceId, instanceOf, sourceActions, type SourceActions } from '../automation/source-actions';
 import { openAutomationCheckDialog, type ReactionPromptRef } from '../automation/check';
+import type { RuleDescriptor } from '../automation/controls';
 import { openAutomationDamageDialog } from '../automation/damage';
 import { openAutomationDeathDialog } from '../automation/death';
 import { openAutomationRestDialog } from '../automation/rest';
@@ -252,7 +253,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       await opts.onDeathMove(move, extras);
     }, opts.onDeathOptions, initial);
     if (!opts.actorId || !opts.beforeAutomationRoll) { legacy(); return; }
-    void openAutomationDeathDialog(opts.actorId, opts.beforeAutomationRoll).then(handled => { if (!handled) legacy(); });
+    void openAutomationDeathDialog(opts.actorId, opts.beforeAutomationRoll, c.name).then(handled => { if (!handled) legacy(); });
   };
   const openLegacyDamage = (host: HTMLElement = root) => openDamageDialog(host, c, (summary, severity, incomingDamage) => {
     opts.onLog?.(summary, undefined, undefined, incomingDamage);
@@ -519,8 +520,9 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const basic = !weapon && !rollSource && difficulty === undefined && targets.length === 1
       && (targets[0] === 'reaction' || targets[0] === `trait:${trait}`);
     if (!basic || !trait || !opts.actorId || !opts.beforeAutomationRoll) { legacy(); return; }
-    void openAutomationCheckDialog(opts.actorId, targets[0] === 'reaction' ? 'reaction' : 'action', trait, label, opts.beforeAutomationRoll, prompt)
-      .then(handled => { if (!handled) legacy(); });
+    void openAutomationCheckDialog(opts.actorId, targets[0] === 'reaction' ? 'reaction' : 'action',     trait, label, opts.beforeAutomationRoll, prompt,
+          `${label} (${signed(traitContributions(c, trait).reduce((n, s) => n + Number(s.expression), 0))})`, automationOptionLabel)
+          .then(handled => { if (!handled) legacy(); });
   };
   if (opts.bus) opts.bus.reactionRoll = (label, trait, prompt) => {
     rollDuality(label, trait, ['reaction'], undefined, undefined, undefined, prompt);
@@ -624,7 +626,21 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     actionRefreshers.push(refresh);
     return counter;
   }
-  function actionRow(key: string, a: Automation | undefined, label: string, hooks: { extraBlock?: () => string | null; after?: (action: ActionDef) => void } = {}): HTMLElement | null {
+  let hostActions: SourceActions | undefined;
+  /** Format-2 buttons for this source sit in the same action row as the format-1 buttons. */
+  function actionRow(key: string, a: Automation | undefined, label: string, hooks: { extraBlock?: () => string | null; after?: (action: ActionDef) => void } = {},
+    source?: unknown, extraIds: Array<string | undefined> = []): HTMLElement | null {
+    const legacy = legacyActionRow(key, a, label, hooks);
+    if (!opts.actorId || opts.readOnly?.()) return legacy;
+    const ids = [instanceOf(source), ...extraIds];
+    if (!ids.some(Boolean)) return legacy;
+    hostActions ??= sourceActions(opts.actorId, opts.onLog);
+    const host = hostActions.row(ids);
+    if (!legacy) return host;
+    legacy.append(host);
+    return legacy;
+  }
+  function legacyActionRow(key: string, a: Automation | undefined, label: string, hooks: { extraBlock?: () => string | null; after?: (action: ActionDef) => void } = {}): HTMLElement | null {
     const actions = sheetActions(a);
     if (!actions.length && (!a?.resources?.length || a.classResourceOnly) && !a?.effectCounters?.length && !a?.dicePool && !a?.uses) return null;
     const row = el('div', { class: 'row actions' });
@@ -1034,6 +1050,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       return;
     }
     actionRefreshers = [];
+    hostActions = undefined;
     const editControl = editSwitch();
     opts.onEditControl?.(editControl);
     root.classList.toggle('edit-mode', canEdit());
@@ -1527,7 +1544,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       const feature = featureCard(f);
       const count = pet.training.filter(t => companionRules(c)!.options.find(o => o.id === t.id)?.name === f.name).length;
       if (count > 1) feature.querySelector('.ft')?.append(tag(`x${count}`));
-      const actions = actionRow(`feat:${f.name}`, f.automation, f.name);
+      const actions = actionRow(`feat:${f.name}`, f.automation, f.name, {}, f);
       if (actions) feature.append(actions);
       return feature;
     });
@@ -1576,6 +1593,30 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     dialog.showModal();
   }
 
+  /** The format-1 roll option name "Origin - Source - Label" for a host-described option. */
+  function automationOptionLabel(option: RuleDescriptor): string {
+    const feature = [...c.features, ...c.heritage].find(f => (f as { instanceId?: string }).instanceId === option.sourceInstanceId);
+    const source = option.sourceName ?? automationSourceName(option.sourceInstanceId) ?? '';
+    return sourceActionLabel(feature ? featureRollOrigin(c, feature) : undefined, source, option.label);
+  }
+
+  function automationSourceName(instanceId: string | undefined): string | undefined {
+    if (!instanceId) return undefined;
+    const seen = new Set<object>();
+    const find = (node: unknown, depth: number): string | undefined => {
+      if (!node || typeof node !== 'object' || depth > 8 || seen.has(node)) return undefined;
+      seen.add(node);
+      const record = node as Record<string, unknown>;
+      if (record.instanceId === instanceId && typeof record.name === 'string') return record.name;
+      for (const value of Object.values(record)) {
+        const name = find(value, depth + 1);
+        if (name) return name;
+      }
+      return undefined;
+    };
+    return find(c, 0);
+  }
+
   function effectsPage(): HTMLElement {
     const untilText = (e: ActiveEffect) => isVitalityEffect(e) ? 'Permanent (edit mode removal)'
       : e.dmManaged && (!e.until || e.until === 'manual') ? 'Until removed by the DM'
@@ -1616,7 +1657,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         ...(mods.length ? [el('div', { class: 'badges' }, ...mods.map((m) => tag(m)))] : []),
         ...(e.beastform || !actorAutomationAvailable(e.sourceActorId) ? [] : e.features ?? []).map(f => {
           const node = featureCard(f);
-          const actions = actionRow(`feat:${f.name}`, f.automation, f.name);
+          const actions = actionRow(`feat:${f.name}`, f.automation, f.name, {}, f);
           if (actions) node.append(actions);
           return node;
         }),
@@ -1626,13 +1667,26 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
           })))] : []),
       );
     });
-    for (const effect of c.automationState?.effects ?? []) rows.push(el(
-      'div', { class: `feat${effect.kind === 'buff' ? ' hope' : ''}`,
-        style: effect.kind === 'debuff' ? 'border-left:3px solid var(--hp, #c55)' : '' },
-      el('div', { class: 'src' }, `${effect.kind === 'buff' ? 'Buff' : 'Debuff'} - managed by automation`),
-      el('div', { class: 'ft' }, effect.label),
-      rich(effect.text ?? ''),
-    ));
+    const automationUntil = (until: string[] = []) => {
+      const has = (event: string) => until.includes(event);
+      if (has('rest.short') && has('rest.long')) return 'Until your next rest';
+      if (has('rest.short')) return 'Until a short rest';
+      if (has('rest.long')) return 'Until a long rest';
+      if (has('scene.end')) return 'Until the end of the scene';
+      if (has('session.start')) return 'Until the end of the session';
+      return 'Until dismissed';
+    };
+    for (const effect of c.automationState?.effects ?? []) {
+      const dismiss = el('button', { class: 'small', type: 'button', disabled: true, title: 'This effect ends through its rules.' }, 'Remove');
+      const source = automationSourceName(effect.sourceInstanceId);
+      rows.push(el(
+        'div', { class: `feat${effect.kind === 'buff' ? ' hope' : ''}`,
+          style: effect.kind === 'debuff' ? 'border-left:3px solid var(--hp, #c55)' : '' },
+        el('div', { class: 'src' }, `${effect.kind === 'buff' ? 'Buff' : 'Debuff'} - ${automationUntil(effect.until)}${source ? ` - from ${source}` : ''}`),
+        el('div', { class: 'ft' }, effect.label, el('span', { style: 'float:right' }, dismiss)),
+        rich(effect.text ?? ''),
+      ));
+    }
     const name = el('input', { placeholder: 'Condition or effect name' });
     const kind = el('select', {}, el('option', { value: 'debuff' }, 'Debuff'), el('option', { value: 'buff' }, 'Buff'));
     const text = el('input', { placeholder: 'What it does (optional)' });
@@ -1662,9 +1716,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
 
   function charPage(): HTMLElement {
     featurePage = el('div', {}, featurePanel());
-    if (!opts.actorId || opts.readOnly?.()) return featurePage;
-    return el('div', {}, automationPanel(opts.actorId),
-      automationPanel(opts.actorId, 'downtime', 'Downtime', undefined, undefined, 'downtime.move'), featurePage);
+    return featurePage;
   }
 
   function characterFeatureCard(f: Feature, children: Feature[] = [], quick = false): HTMLElement {
@@ -1676,7 +1728,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const useButton = quick && use ? el('button', { type: 'button', class: 'small', disabled: c.hope.on < (f.cost ?? 0) }, `Use (${f.cost ?? 0} Hope)`) : undefined;
     if (useButton && use) useButton.addEventListener('click', use);
     const node = quick ? quickEntry('feature', f, f.source, [rich(f.text)], useButton ? [useButton] : []) : featureCard(f, use);
-    const actions = actionRow(`feat:${f.name}`, f.automation, f.name);
+    const actions = actionRow(`feat:${f.name}`, f.automation, f.name, {}, f);
     if (f.automation?.elementChoice && (c.element || c.mancer?.choices?.element)) {
       node.append(el('p', { class: 'muted' }, `Element: ${c.element || c.mancer?.choices?.element}`));
     } else if (f.automation?.elementChoice) {
@@ -1703,7 +1755,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       const section = el('div', { class: 'feature-section' },
         el('div', { class: 'src' }, el('span', { class: 'feature-section-name' }, child.name)),
         rich(child.text));
-      const childActions = actionRow(`feat:${child.name}`, child.automation, child.name);
+      const childActions = actionRow(`feat:${child.name}`, child.automation, child.name, {}, child);
       if (childActions) section.append(childActions);
       node.append(share(section, { category: 'feature', item: child }));
     }
@@ -1774,7 +1826,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     drop.addEventListener('click', () => { c.effects = c.effects.filter(e => e !== form); render(); });
     const rows = (form.features ?? []).map(f => {
       const node = featureCard(f);
-      const actions = actionRow(`feat:${f.name}`, f.automation, f.name);
+      const actions = actionRow(`feat:${f.name}`, f.automation, f.name, {}, f);
       if (actions) node.append(actions);
       return node;
     });
@@ -1812,7 +1864,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const unequip = el('button', { class: 'small', type: 'button' }, 'Unequip');
     unequip.hidden = !!w.generated;
     unequip.addEventListener('click', () => { c.activeWeapons.splice(c.activeWeapons.indexOf(w), 1); c.carriedWeapons.push(w); render(); });
-    const actions = actionRow(`weapon:${w.name}`, w.automation, w.feature?.name ?? w.name);
+    const actions = actionRow(`weapon:${w.name}`, w.automation, w.feature?.name ?? w.name, {}, w);
     const traitChoice = w.generated === 'brawler' ? el('select', { ariaLabel: "Brawler's Strike trait" }, ...TRAIT_ORDER.map(name => el('option', { value: name }, name))) : undefined;
     if (traitChoice) {
       traitChoice.value = w.trait;
@@ -1853,7 +1905,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       const a = c.activeArmor;
       const un = el('button', { class: 'small', type: 'button' }, 'Unequip');
       un.addEventListener('click', () => { c.carriedArmor.push(a); c.activeArmor = undefined; render(); });
-      const actions = actionRow(`armor:${a.name}`, a.automation, a.feature?.name ?? a.name);
+      const actions = actionRow(`armor:${a.name}`, a.automation, a.feature?.name ?? a.name, {}, a);
       armorBody.push(share(el('div', { class: 'slot' }, el('div', { class: 'top' }, el('span', { class: 'nm' }, a.name)), armorBadges(a), ...(a.feature ? [el('div', { class: 'feat', style: 'margin-top:6px' }, el('div', { class: 'ft' }, a.feature.name), rich(a.feature.text))] : []),
         ...(attachmentControls(a) ? [attachmentControls(a)!] : []),
         el('div', { class: 'inventory-controls' }, ...(actions ? [actions] : []), un)), { category: 'armor', item: a }));
@@ -1981,7 +2033,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       const actions = i.custom ? null : actionRow(`item:${i.name}`, i.automation, i.name, {
         extraBlock: () => (i.qty <= 0 ? 'None left' : null),
         after: (action) => { if (i.type === 'consumable') useConsumableUnit(c, i, action); },
-      });
+      }, i);
       const attachDef = quick ? undefined : attachmentDef(i);
       const attach = attachDef ? el('button', { class: 'small primary', type: 'button' }, 'Attach to\u2026') : null;
       if (attach && attachDef) {
@@ -2091,7 +2143,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     if (loadout) {
       const actions = actionRow(`${cardKey}/${s.name}`, s.automation, s.name, {
         extraBlock: () => canCastDomain(c) ? null : 'Cannot cast domain spells in Beastform',
-      });
+      }, undefined, [instanceOf(d) && s.id ? derivedInstanceId(instanceOf(d)!, 'spells', s.id) : undefined]);
       if (actions) acts.append(actions);
     }
     const description = quick ? quickDescription(`${cardKey}/${s.name}`, s.name, [rich(s.text)]) : undefined;
@@ -2116,7 +2168,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     if (loadout && !spells) {
       const actions = actionRow(cardKey, d.automation, d.name, {
         extraBlock: () => d.type === 'Ability' || canCastDomain(c) ? null : 'Cannot cast domain spells in Beastform',
-      });
+      }, d);
       if (actions) acts.append(actions);
     }
     if (d.automation?.banishDifficulty) {

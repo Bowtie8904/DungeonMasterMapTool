@@ -74,17 +74,19 @@ function setup(readOnly = false, configure?: (c: CharacterSheet) => void, visibl
   return { c, bus, changed, content: () => content, mini: () => mini, view: view as unknown as Element };
 }
 
-it('shows host-managed automation effects without a manual remove button', () => {
+it('shows host-managed automation effects in the format-1 effect layout with a locked remove button', () => {
   const test = setup(false, c => {
+    c.features = [...c.features, { name: 'Faint', source: 'Test', text: '', instanceId: 'faint-1' } as typeof c.features[number]];
     c.automationState = { effects: [{ id: 'e1', label: 'Unconscious', kind: 'debuff',
-      text: 'Wake after healing.', blocksMovement: true }] };
+      text: 'Wake after healing.', blocksMovement: true, until: ['rest.short', 'rest.long'], sourceInstanceId: 'faint-1' }] };
   }, true);
   const tab = test.view.all().find(node => node.tag === 'button' && node.text === 'Effects (1)')!;
   tab.click();
   expect(test.view.text).toContain('Unconscious');
-  expect(test.view.text).toContain('managed by automation');
+  expect(test.view.text).toContain('Debuff - Until your next rest - from Faint');
   expect(test.view.text).toContain('Wake after healing.');
-  expect(test.view.all().some(node => node.tag === 'button' && node.text === 'Remove')).toBe(false);
+  const remove = test.view.all().find(node => node.tag === 'button' && node.text === 'Remove') as unknown as { disabled: boolean };
+  expect(remove.disabled).toBe(true);
 });
 
 it('shows item artwork on carried equipment and loot with an accessible disclosure', () => {

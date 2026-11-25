@@ -445,6 +445,102 @@ public final class AutomationHost {
     /** Describes ordinary trait checks using the same pre-roll options as authored profiles. */
     public ObjectNode describeCheck(Pack pack, ObjectNode sheet, ObjectNode origin, String kind, String trait,
                                     String relation) {
+        return describeCheckOffer(pack, sheet, origin, kind, trait, relation);
+    }
+
+    /**
+     * As above, plus the format-1 dialog texts from dry-runs on copies with the lowest dice faces: the automatic
+     * modifier and bonus names ({@code base}), each input-free option's own value and dice, and with {@code selections}
+     * the combined {@code preview}. Nothing is spent or rolled.
+     */
+    public ObjectNode describeCheck(Pack pack, ObjectNode sheet, ObjectNode origin, String kind, String trait,
+                                    String relation, JsonNode selections) {
+        ObjectNode result = describeCheckOffer(pack, sheet, origin, kind, trait, relation);
+        ObjectNode base;
+        try {
+            base = checkSummary(pack, sheet, origin, kind, trait, RuleJson.JSON.createArrayNode());
+        } catch (RuleRuntime.Unavailable | IllegalArgumentException blocked) {
+            return result;
+        }
+        result.set("base", base);
+        int dryRuns = 0;
+        for (JsonNode option : result.path("options")) {
+            boolean perUnit = option.path("inputs").size() == 1
+                    && "quantity".equals(option.path("inputs").get(0).path("id").asText());
+            if (dryRuns >= 16 || !option.path("available").asBoolean() || !option.path("inputs").isEmpty() && !perUnit) continue;
+            dryRuns++;
+            ArrayNode single = RuleJson.JSON.createArrayNode();
+            ObjectNode selection = single.addObject().put("sourceInstanceId", option.path("sourceInstanceId").asText())
+                    .put("ruleId", option.path("ruleId").asText()).put("bindingId", option.path("bindingId").asText());
+            if (option.has("eachId")) selection.put("eachId", option.path("eachId").asText());
+            ObjectNode optionInputs = selection.putObject("inputs");
+            if (perUnit) optionInputs.put("quantity", 1);
+            try {
+                ObjectNode alone = checkSummary(pack, sheet, origin, kind, trait, single);
+                int value = alone.path("modifier").asInt() - base.path("modifier").asInt();
+                List<String> dice = new ArrayList<>();
+                alone.path("dice").forEach(die -> dice.add(die.asText()));
+                base.path("dice").forEach(die -> dice.remove(die.asText()));
+                if (value != 0) ((ObjectNode) option).put("value", value);
+                if (!alone.path("mode").asText().equals(base.path("mode").asText()))
+                    ((ObjectNode) option).put("suggestsMode", alone.path("mode").asText());
+                if (!dice.isEmpty()) {
+                    ArrayNode out = ((ObjectNode) option).putArray("dice");
+                    dice.forEach(out::add);
+                }
+            } catch (RuleRuntime.Unavailable | IllegalArgumentException ignored) {
+                // The option needs more context than a dry-run has; it is shown without a value.
+            }
+        }
+        if (selections != null && !selections.isEmpty()) {
+            try {
+                result.set("preview", checkSummary(pack, sheet, origin, kind, trait, selections));
+            } catch (RuleRuntime.Unavailable | IllegalArgumentException blocked) {
+                result.put("previewError", blocked.getMessage());
+            }
+        }
+        return result;
+    }
+
+    /** Dry-runs a check on a copy and reads its modifier, extra dice, automatic bonus names and resolved roll mode. */
+    private ObjectNode checkSummary(Pack pack, ObjectNode sheet, ObjectNode origin, String kind, String trait,
+                                    JsonNode selections) {
+        ObjectNode working = sheet.deepCopy();
+        ObjectNode request = RuleJson.JSON.createObjectNode();
+        request.putObject("checkRoll").put("kind", kind).put("trait", trait);
+        request.set("selections", selections.deepCopy());
+        ObjectNode response = profileRoll(pack, working, projection.state(working), origin, request, LOWEST_ROLL, null);
+        JsonNode roll = response.path("event").path("roll");
+        int modifier = 0;
+        String mode = "normal";
+        ObjectNode summary = RuleJson.JSON.createObjectNode();
+        ArrayNode dice = summary.putArray("dice"), applied = summary.putArray("applied");
+        for (JsonNode part : roll.path("contributions")) {
+            String role = part.path("role").asText();
+            if ("flat".equals(part.path("kind").asText())) {
+                if (!"modifier".equals(role)) continue;
+                int value = part.path("value").asInt();
+                modifier += value;
+                if (!"trait".equals(part.path("id").asText()))
+                    applied.add(part.path("label").asText() + " " + (value >= 0 ? "+" : "") + value);
+                continue;
+            }
+            if (!"dice".equals(part.path("kind").asText()) || "hope".equals(role) || "fear".equals(role)) continue;
+            int count = part.path("dice").size();
+            if (count == 0) continue;
+            if ("advantage".equals(role)) { mode = "advantage"; continue; }
+            if ("disadvantage".equals(role)) { mode = "disadvantage"; continue; }
+            int sides = part.path("dice").get(0).path("sides").asInt();
+            String text = count + "d" + sides;
+            boolean negative = part.path("sign").asInt(1) < 0;
+            dice.add((negative ? "-" : "") + text);
+            applied.add(part.path("label").asText() + " " + (negative ? "-" : "+") + text);
+        }
+        return summary.put("modifier", modifier).put("mode", mode);
+    }
+
+    private ObjectNode describeCheckOffer(Pack pack, ObjectNode sheet, ObjectNode origin, String kind, String trait,
+                                          String relation) {
         if (!"self".equals(relation)) throw new SecurityException("Only the character owner may roll a check.");
         ObjectNode profile = basicCheckProfile(RuleJson.JSON.createObjectNode().put("kind", kind).put("trait", trait), null);
         ObjectNode working = sheet.deepCopy();
@@ -557,6 +653,15 @@ public final class AutomationHost {
 
     public ObjectNode describeDamage(Pack pack, ObjectNode sheet, ObjectNode origin, String relation, int amount,
                                      String type, int armor, SourceSheets sourceSheets) {
+        return describeDamage(pack, sheet, origin, relation, amount, type, armor, sourceSheets, null);
+    }
+
+    /**
+     * As above; with selections the hit is also dry-run against copies so the preview reflects the chosen mitigation.
+     * Mitigation dice roll their lowest face in the preview; the real roll happens on apply.
+     */
+    public ObjectNode describeDamage(Pack pack, ObjectNode sheet, ObjectNode origin, String relation, int amount,
+                                     String type, int armor, SourceSheets sourceSheets, JsonNode selections) {
         RuleJson.integer(RuleJson.JSON.getNodeFactory().numberNode(amount), "/damage/amount", 0, MAX_DAMAGE);
         RuleJson.integer(RuleJson.JSON.getNodeFactory().numberNode(armor), "/damage/armor", 0, 1000);
         ObjectNode working = sheet.deepCopy();
@@ -570,6 +675,8 @@ public final class AutomationHost {
         result.putObject("damage").put("amount", amount).put("armor", armor).set("type",
                 type == null ? RuleJson.JSON.getNodeFactory().nullNode() : RuleJson.JSON.getNodeFactory().textNode(type));
         result.set("thresholds", prepare.get("thresholds")); 
+        int[] armorTrack = StructuredDamage.track(armorSpec(0), context, "/damage/armor");
+        result.putObject("armorTrack").put("marked", armorTrack[0]).put("capacity", armorTrack[1]);
         result.set("marks", plan);
         result.set("applied", preview);
         ObjectNode applied = damageFacts(origin, DAMAGE_STAGES[2], (ObjectNode) prepare.get("damage"), type);
@@ -581,8 +688,31 @@ public final class AutomationHost {
             ObjectNode described = describe(pack, sheet, events[i], "damage", relation, null, sourceSheets);
             stages.putObject(DAMAGE_STAGES[i]).set("actions", described.get("actions"));
         }
+        if (selections != null && !selections.isEmpty() && amount > 0) {
+            ObjectNode request = RuleJson.JSON.createObjectNode();
+            request.putObject("damage").put("amount", amount).put("armor", armor).set("type",
+                    type == null ? RuleJson.JSON.getNodeFactory().nullNode() : RuleJson.JSON.getNodeFactory().textNode(type));
+            request.set("selections", selections.deepCopy());
+            SourceSheets copies = null;
+            if (sourceSheets != null) {
+                Map<String, ObjectNode> sheets = new java.util.LinkedHashMap<>();
+                sourceSheets.sheets.forEach((id, value) -> sheets.put(id, value.deepCopy()));
+                copies = new SourceSheets(sheets);
+            }
+            try {
+                ObjectNode dry = damage(pack, sheet.deepCopy(), origin, request, relation, LOWEST_ROLL, copies);
+                JsonNode event = dry.path("event");
+                if (event.path("marks").isObject()) result.set("marks", event.get("marks").deepCopy());
+                if (event.path("applied").isObject()) result.set("applied", event.get("applied").deepCopy());
+            } catch (RuleRuntime.Unavailable | IllegalArgumentException blocked) {
+                result.put("previewError", blocked.getMessage());
+            }
+        }
         return result;
     }
+
+    /** Rolls the lowest face of every die; used only for previews. */
+    private static final RandomGenerator LOWEST_ROLL = () -> 0L;
 
     private String selectionStage(List<RuleDispatcher.Candidate> candidates, JsonNode selection) {
         for (RuleDispatcher.Candidate candidate : candidates) {
@@ -3002,6 +3132,16 @@ public final class AutomationHost {
 
     public ObjectNode describeRest(Pack pack, ObjectNode sheet, ObjectNode origin, String kind,
                                    String principalId, String sourceVersion, PartyTargets party) {
+        return describeRest(pack, sheet, origin, kind, principalId, sourceVersion, party, null);
+    }
+
+    /**
+     * Describes a rest; selected preparation options are dry-run on a copy (dice roll their lowest face)
+     * so the client can show the downtime slots they grant before submitting.
+     */
+    public ObjectNode describeRest(Pack pack, ObjectNode sheet, ObjectNode origin, String kind,
+                                   String principalId, String sourceVersion, PartyTargets party,
+                                   JsonNode preparationSelections) {
         String version = restOfferVersion(pack, sheet, origin, kind, principalId, sourceVersion);
         ObjectNode working = sheet.deepCopy();
         long revision = restRevision(working);
@@ -3047,10 +3187,28 @@ public final class AutomationHost {
             if (Set.of("effect.endElsewhere", "inventory.grant").contains(command.path("kind").asText()))
                 return restPreparationOffer(kind, revision, version, initialEvent, preparation);
         projection.state(preview).put("revision", revision);
+        String previewError = null;
+        if (preparationSelections != null && !preparationSelections.isEmpty()) {
+            if (!preparationSelections.isArray())
+                throw RuleJson.error("/preparation", "Expected preparation selections.");
+            try {
+                ObjectNode dryPreview = working.deepCopy();
+                ObjectNode dry = prepareRest(pack, dryPreview, preparedOrigin, kind, revision,
+                        (ArrayNode) preparationSelections.deepCopy(), LOWEST_ROLL, initial);
+                projection.state(dryPreview).put("revision", revision);
+                preview = dryPreview;
+                prepared = dry;
+            } catch (RuleRuntime.Unavailable | IllegalArgumentException failure) {
+                previewError = failure.getMessage();
+            }
+        }
         RestProgress progress = restProgress(pack, prepared);
         ObjectNode stagedOrigin = preparedOrigin.deepCopy();
         carryRestTable(stagedOrigin, prepared.required("event"));
-        return restPlanOffer(pack, preview, stagedOrigin, progress, prepared.path("event"), revision, version, preparation, party);
+        ObjectNode offer = restPlanOffer(pack, preview, stagedOrigin, progress, prepared.path("event"), revision, version,
+                preparation, party);
+        if (previewError != null) offer.put("previewError", previewError);
+        return offer;
     }
 
     private static ObjectNode restPreparationOffer(String kind, long revision, String version,
@@ -3062,6 +3220,15 @@ public final class AutomationHost {
         offer.putArray("moves");
         offer.putArray("completion");
         return offer;
+    }
+
+    /** True when the move's rule unconditionally frees its downtime slot (a format-1 "additional" move). */
+    private static boolean freesMoveSlot(JsonNode rule) {
+        for (JsonNode step : rule.path("do"))
+            if ("plan.adjust".equals(step.path("op").asText()) && "event.move".equals(step.path("plan").asText())
+                    && "slots".equals(step.path("field").asText()) && step.path("by").isInt() && step.path("by").asInt() < 0)
+                return true;
+        return false;
     }
 
     private ObjectNode restPlanOffer(Pack pack, ObjectNode preview, ObjectNode stagedOrigin, RestProgress progress,
@@ -3093,6 +3260,7 @@ public final class AutomationHost {
                         ? RuleRuntime.describeAwaitingRecipient(source.program(), ref.ruleId(), ref.bindingId(), source.context(), party)
                         : RuleRuntime.describe(source.program(), ref.ruleId(), ref.bindingId(), source.context(), party);
                 descriptor.put("sourceName", source.context().path("source").path("name").asText());
+                if (freesMoveSlot(source.program().rule(ref.ruleId()))) descriptor.put("freeSlot", true);
                 descriptor.set("options", RuleDispatcher.describeRecipientIndependentOptions(sources, "downtime",
                         audience -> allowed(audience, "self")));
                 if (binding.has("targetSelection")) {
@@ -3135,7 +3303,15 @@ public final class AutomationHost {
         }
         ObjectNode offer = RuleJson.JSON.createObjectNode().put("kind", progress.kind()).put("revision", revision)
                 .put("offerVersion", version).put("postOutcomeChoices", true);
-        offer.set("plan", progress.plan());
+        ObjectNode offeredPlan = progress.plan();
+        Map<String, String> sourceNames = new HashMap<>();
+        for (var candidate : initialCandidates)
+            sourceNames.put(candidate.instanceId(), candidate.context().path("source").path("name").asText(""));
+        for (JsonNode adjustment : offeredPlan.path("adjustments")) {
+            String name = sourceNames.get(adjustment.path("sourceInstanceId").asText());
+            if (adjustment.isObject() && name != null && !name.isBlank()) ((ObjectNode) adjustment).put("sourceName", name);
+        }
+        offer.set("plan", offeredPlan);
         offer.set("preparation", preparation);
         offer.set("moves", moves);
         offer.set("completion", completion);

@@ -1,5 +1,6 @@
 package dmmt.online.automation;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
@@ -71,6 +72,14 @@ class RestMoveTest {
         ArrayNode choices = RuleJson.JSON.createArrayNode();
         for (String rule : rules) choices.add(select(rule));
         return choices;
+    }
+
+    @Test
+    void restOfferMarksSlotFreeMovesAndNamesPlanAdjustments() throws Exception {
+        ObjectNode offer = HOST.describeRest(pack(2), sheet(), origin(), "short", "owner", "sheet-version");
+        for (JsonNode move : offer.path("moves"))
+            assertEquals("free".equals(move.path("ruleId").asText()), move.path("freeSlot").asBoolean(), move.toString());
+        assertEquals("Rest rules", offer.at("/plan/adjustments/0/sourceName").asText(), offer.toString());
     }
 
     @Test

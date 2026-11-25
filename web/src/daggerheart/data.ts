@@ -204,6 +204,7 @@ export interface AutomationEffect {
   kind?: 'buff' | 'debuff';
   text?: string;
   until?: string[];
+  sourceInstanceId?: string;
   blocksMovement?: boolean;
   blocksDeathMoves?: boolean;
 }

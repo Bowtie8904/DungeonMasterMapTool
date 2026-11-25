@@ -204,6 +204,30 @@ class RuleRuntimeTest {
     }
 
     @Test
+    void quantityAndConsumableOptionsDescribeTheirFormatOneCostNotes() throws Exception {
+        ObjectNode automation = (ObjectNode) RuleJson.parse("""
+                {"rules":[
+                  {"id":"push","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                   "inputs":[{"id":"quantity","kind":"integer","label":"Uses","min":1,"max":3}],
+                   "costs":[{"op":"track.mark","track":"actor.stress","amount":{"read":"input.quantity"}}],
+                   "do":[],"ui":{"label":"Push"}},
+                  {"id":"drink","bindings":[{"id":"sheet","event":"action.request","surface":"sheet","mode":"button"}],
+                   "costs":[{"op":"inventory.consume","amount":1}],"do":[],"ui":{"label":"Drink"}}
+                ]}
+                """);
+        RuleCompiler.Program program = RuleCompiler.compile("domain-cards:example", automation, fixture("rewrite/recipes"));
+        ObjectNode context = context("example", "Example");
+        ObjectNode push = RuleRuntime.describe(program, "push", "sheet", context);
+        assertFalse(push.has("cost"));
+        assertEquals("1 Stress", push.path("unitCost").asText());
+        assertEquals("use", push.path("costPer").asText());
+        assertFalse(context.path("input").has("quantity"));
+        ((ObjectNode) context.get("source")).put("quantity", 2);
+        assertEquals(RuleJson.parse("{\"name\":\"Example\",\"left\":2}"),
+                RuleRuntime.describe(program, "drink", "sheet", context).path("consumes"));
+    }
+
+    @Test
     void independentUseBudgetsResetOnlyOnDeclaredEventsAndAggregateCostsRollback() throws Exception {
         ObjectNode automation = (ObjectNode) RuleJson.parse("""
                 {"limits":{"recover":{"max":1,"resetOn":["rest.short","rest.long"]}},"rules":[
@@ -221,7 +245,9 @@ class RuleRuntimeTest {
         ((ObjectNode) before.path("actor").path("hope")).put("value", 3);
         ObjectNode copy = before.deepCopy();
         assertFalse(RuleRuntime.describe(program, "steady", "sheet", before).path("available").asBoolean());
-        assertThrows(RuleRuntime.Unavailable.class, () -> RuleRuntime.execute(program, intent("steady", "sheet", before, "{}"), before, noRandom()));
+        assertEquals("4 Hope", RuleRuntime.describe(program, "steady", "sheet", before).path("cost").asText());
+        assertEquals(RuleJson.parse("{\"limit\":\"recover\",\"left\":1,\"max\":1,\"resetOn\":[\"rest.short\",\"rest.long\"]}"),
+                RuleRuntime.describe(program, "steady", "sheet", before).path("uses"));
         assertEquals(copy, before);
         ((ObjectNode) before.path("actor").path("hope")).put("value", 6);
         ObjectNode next = RuleRuntime.execute(program, intent("steady", "sheet", before, "{}"), before, noRandom()).context();
@@ -236,6 +262,7 @@ class RuleRuntimeTest {
         corrupt.withObject("/source").put("id", "another:source");
         assertThrows(IllegalArgumentException.class, () -> RuleRuntime.resetLimits(program, corrupt, "rest.short"));
         assertFalse(RuleRuntime.describe(program, "steady", "sheet", next).path("available").asBoolean());
+        assertEquals(0, RuleRuntime.describe(program, "steady", "sheet", next).at("/uses/left").asInt());
         assertEquals(1, RuleRuntime.resetLimits(program, next, "scene.end").path("usage").path("recover").asInt());
         assertEquals(0, RuleRuntime.resetLimits(program, next, "rest.short").path("usage").path("recover").asInt());
         assertEquals(1, next.path("usage").path("recover").asInt());

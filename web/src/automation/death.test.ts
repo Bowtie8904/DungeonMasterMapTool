@@ -31,7 +31,8 @@ class Element {
   focus(): void {}
   showModal(): void {}
   close(): void { this.closed = true; this.listeners.get('close')?.forEach(handler => handler()); }
-  remove(): void {}
+  remove(): void { this.closed = true; }
+  fire(event: string): void { this.listeners.get(event)?.forEach(handler => handler()); }
   all(tag: string): Element[] { return [...(this.tagName === tag ? [this] : []), ...this.children.flatMap(child => child.all(tag))]; }
   get text(): string { return this.textContent + this.children.map(child => child.text).join(''); }
 }
@@ -42,6 +43,8 @@ const action: RuleDescriptor = {
   revision: 3, surface: 'death', mode: 'button', label: 'Renew', available: true,
 };
 let body: Element;
+const dialogOf = () => body.children.find(child => child.className.includes('dh-rolldlg-backdrop'))!;
+const confirmOf = (dialog: Element) => dialog.all('button').find(button => button.text === 'Confirm death move')!;
 beforeEach(() => {
   body = new Element('body');
   vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag) });
@@ -49,22 +52,26 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('host-authored death options', () => {
-  it('flushes before fetching and submits the host-described action', async () => {
+  it('renders the format-1 dialog, flushes before fetching and submits the selected death action', async () => {
     const calls: string[] = [];
     let submitted: unknown;
     vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
       calls.push(init.body ? 'post' : 'get');
       if (!init.body) {
         expect(url).toBe(`/api/automation/${AUTOMATION_COMPATIBILITY_VERSION}/hero/death`);
-        return Response.json({ revision: 3, actions: [action] });
+        return Response.json({ revision: 3, actions: [{ ...action, cost: '1 Hope', description: 'Renew yourself.' }] });
       }
       submitted = JSON.parse(String(init.body));
       return Response.json({});
     }));
-    expect(await openAutomationDeathDialog('hero', async () => { calls.push('flush'); })).toBe(true);
-    const dialog = body.all('dialog')[0];
-    expect(dialog.text).toContain('Renew');
-    dialog.all('button').find(button => button.text === 'Renew')!.click();
+    expect(await openAutomationDeathDialog('hero', async () => { calls.push('flush'); }, 'Ada')).toBe(true);
+    const dialog = dialogOf();
+    expect(dialog.children[0].className).toBe('dh-rolldlg dh-option-rolldlg');
+    expect(dialog.text).toContain('Ada - Death move');
+    expect(dialog.all('option')[0].text).toBe('Renew (1 Hope)');
+    expect(dialog.text).toContain('Renew yourself.');
+    expect(dialog.text).toContain('The result is shared publicly in chat.');
+    confirmOf(dialog).click();
     await settle();
     expect(submitted).toEqual({ request: {
       requestId: expect.any(String), expectedRevision: 3, deathAction: true,
@@ -83,62 +90,42 @@ describe('host-authored death options', () => {
       return Response.json({});
     }));
     await openAutomationDeathDialog('hero', async () => {});
-    const dialog = body.all('dialog')[0];
-    dialog.all('button').find(button => button.text === 'Renew')!.click();
+    const dialog = dialogOf();
+    confirmOf(dialog).click();
     await settle();
     expect(dialog.text).toContain('Connection lost.');
-    dialog.all('button').find(button => button.text === 'Retry')!.click();
+    confirmOf(dialog).click();
     await settle();
     expect(requests).toEqual([requests[0], requests[0]]);
     expect(dialog.closed).toBe(true);
   });
 
-  it('submits the host-described risk roll with selected options and retries exactly', async () => {
-    const option: RuleDescriptor = { ...action, surface: 'roll', mode: 'option', defaultOn: true, label: 'Bonus' };
-    const requests: string[] = [];
-    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
-      if (!init.body) return Response.json({ revision: 3, actions: [], rolls: {
-        risk: { label: 'Risk It All', description: 'Roll Hope and Fear.', options: [option] },
-      } });
-      requests.push(String(init.body));
-      if (requests.length === 1) throw new Error('Connection lost.');
-      return Response.json({});
-    }));
-    await openAutomationDeathDialog('hero', async () => {});
-    const dialog = body.all('dialog')[0];
-    expect(dialog.text).toContain('Risk It All');
-    dialog.all('button').find(button => button.text === 'Risk It All')!.click();
-    const choices = body.all('dialog')[1];
-    expect(choices.text).toContain('Bonus');
-    choices.all('button').find(button => button.text === 'Risk It All')!.click();
-    await settle();
-    expect(choices.text).toContain('Connection lost.');
-    choices.all('button').find(button => button.text === 'Retry')!.click();
-    await settle();
-    expect(requests).toEqual([requests[0], requests[0]]);
-    expect(JSON.parse(requests[0])).toEqual({ request: {
-      requestId: expect.any(String), expectedRevision: 3, deathRoll: { move: 'risk' },
-      selections: [{ sourceInstanceId: 'renewal-1', ruleId: 'renew', bindingId: 'choose', inputs: {} }],
-    } });
-    expect(dialog.closed).toBe(true);
-  });
-
-  it('uses the host-described Avoid Death roll without an extra confirmation', async () => {
+  it('submits the selected death roll with its options in the same dialog', async () => {
+    const option: RuleDescriptor = { ...action, surface: 'roll', mode: 'option', defaultOn: true, label: 'Bonus', sourceName: 'Blessed' };
     let submitted: unknown;
     vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
       if (!init.body) return Response.json({ revision: 3, actions: [action], rolls: {
         avoid: { label: 'Avoid Death', options: [] },
+        risk: { label: 'Risk It All', description: 'Roll Hope and Fear.', options: [option] },
       } });
       submitted = JSON.parse(String(init.body));
       return Response.json({});
     }));
     await openAutomationDeathDialog('hero', async () => {});
-    const dialog = body.all('dialog')[0];
-    dialog.all('button').find(button => button.text === 'Avoid Death')!.click();
+    const dialog = dialogOf();
+    expect(dialog.all('option').map(entry => entry.text)).toEqual(['Avoid Death', 'Risk It All', 'Renew']);
+    const select = dialog.all('select')[0];
+    select.value = '1';
+    select.fire('change');
+    expect(dialog.text).toContain('Roll Hope and Fear.');
+    expect(dialog.text).toContain('Bonus - Blessed');
+    expect(dialog.all('input')[0].checked).toBe(true);
+    confirmOf(dialog).click();
     await settle();
-    expect(body.all('dialog')).toHaveLength(1);
+    expect(body.children).toHaveLength(1);
     expect(submitted).toEqual({ request: {
-      requestId: expect.any(String), expectedRevision: 3, deathRoll: { move: 'avoid' }, selections: [],
+      requestId: expect.any(String), expectedRevision: 3, deathRoll: { move: 'risk' },
+      selections: [{ sourceInstanceId: 'renewal-1', ruleId: 'renew', bindingId: 'choose', inputs: {} }],
     } });
     expect(dialog.closed).toBe(true);
   });
@@ -150,12 +137,21 @@ describe('host-authored death options', () => {
       return Response.json({ error: 'The character changed.' }, { status: 409 });
     }));
     await openAutomationDeathDialog('hero', async () => {});
-    const dialog = body.all('dialog')[0];
-    dialog.all('button').find(button => button.text === 'Renew')!.click();
+    const dialog = dialogOf();
+    confirmOf(dialog).click();
     await settle();
     expect(loads).toBe(2);
     expect(dialog.text).toContain('The character changed.');
-    expect(dialog.all('button').find(button => button.text === 'Renew')?.disabled).toBe(false);
+    expect(confirmOf(dialog).disabled).toBe(false);
+  });
+
+  it('disables unavailable death actions with their reason', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ revision: 3,
+      actions: [{ ...action, available: false, reason: 'Already used.' }] })));
+    await openAutomationDeathDialog('hero', async () => {});
+    const dialog = dialogOf();
+    expect(dialog.all('option')[0].text).toBe('Renew — Already used.');
+    expect(confirmOf(dialog).disabled).toBe(true);
   });
 
   it('falls back only for an explicitly legacy or older host', async () => {
@@ -166,7 +162,7 @@ describe('host-authored death options', () => {
     vi.stubGlobal('fetch', vi.fn(async () => Response.json(
       { error: 'Client version 1 differs from host version 2.' }, { status: 409 })));
     expect(await openAutomationDeathDialog('hero', async () => {})).toBe(true);
-    expect(body.all('dialog')[2].text).toContain('Client version 1 differs from host version 2.');
+    expect(body.children[2].text).toContain('Client version 1 differs from host version 2.');
   });
 
   it('does not open a legacy dialog after the loading dialog is dismissed', async () => {

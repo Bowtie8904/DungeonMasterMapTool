@@ -7533,6 +7533,24 @@ class OnlineSessionServerTest {
         assertTrue(boost.path("defaultOn").asBoolean());
         assertTrue(boost.path("available").asBoolean());
         assertEquals(403, basicCheckHttp(other, "roller", "action", "Agility").statusCode());
+        assertEquals(3, offer.at("/base/modifier").asInt());
+        assertEquals("normal", offer.at("/base/mode").asText());
+        assertEquals(0, offer.at("/base/applied").size());
+        assertEquals(5, boost.path("value").asInt());
+        assertFalse(offer.has("preview"));
+        String boostSelection = MAPPER.createArrayNode().add(restSelection(boost)).toString();
+        var previewResponse = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/automation/"
+                        + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + "/roller/check?kind=action&trait=Agility&selections="
+                        + java.net.URLEncoder.encode(boostSelection, java.nio.charset.StandardCharsets.UTF_8)))
+                .header("Cookie", owner).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, previewResponse.statusCode(), previewResponse.body());
+        JsonNode preview = MAPPER.readTree(previewResponse.body()).path("preview");
+        assertEquals(8, preview.path("modifier").asInt());
+        assertEquals("Boost +5", preview.path("applied").get(0).asText());
+        var badPreview = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/automation/"
+                        + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + "/roller/check?kind=action&trait=Agility&selections=%7B%7D"))
+                .header("Cookie", owner).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(400, badPreview.statusCode());
         assertEquals(400, basicCheckHttp(owner, "roller", "action", "Bogus").statusCode());
         var wrongVersion = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port
                         + "/api/automation/0/roller/check?kind=action&trait=Agility"))
@@ -7618,6 +7636,15 @@ class OnlineSessionServerTest {
         ObjectNode selection = restSelection(experience);
         selection.withObject("/inputs").set("experience", experience.at("/inputs/0/options/1/value").deepCopy());
         ObjectNode body = MAPPER.createObjectNode();
+        JsonNode experiencePreview = MAPPER.readTree(http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port
+                        + "/api/automation/" + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION
+                        + "/roller/check?kind=action&trait=Agility&selections=" + java.net.URLEncoder.encode(
+                        MAPPER.createArrayNode().add(selection).toString(), java.nio.charset.StandardCharsets.UTF_8)))
+                .header("Cookie", owner).GET().build(), HttpResponse.BodyHandlers.ofString()).body());
+        assertEquals(experiencePreview.at("/base/modifier").asInt() + 3, experiencePreview.at("/preview/modifier").asInt(),
+                experiencePreview.toString());
+        assertTrue(experiencePreview.at("/preview/applied").toString().contains("Experience - Giant talk +3"));
+        assertEquals(sheet, MAPPER.readTree(store.loadSheet(campaign.getId(), "roller")));
         ObjectNode request = body.putObject("request").put("requestId", "experience-check")
                 .put("expectedRevision", offer.path("revision").asLong());
         request.putObject("checkRoll").put("kind", "action").put("trait", "Agility");

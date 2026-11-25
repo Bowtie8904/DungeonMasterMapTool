@@ -2906,7 +2906,8 @@ public final class LegacyCatalogConverter {
             ObjectNode value = RuleJson.JSON.createObjectNode();
             value.putArray("multiply").add(read("input.experience.mod")).add(experience.path("multiplier").asInt());
             parts.add((ObjectNode) contribution(id + "-experience", "flat", "modifier",
-                    "Experience - {input.experience.name}").set("value", value));
+                    "Experience - {input.experience.name}"
+                            + (experience.path("multiplier").asInt() == 2 ? " ({source.name}: doubled)" : "")).set("value", value));
         }
 
         if (option.has("value")) {
