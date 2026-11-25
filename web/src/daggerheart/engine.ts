@@ -11,6 +11,8 @@ import type { CompanionRules } from './companion';
 import { activeCards, activeCardSources, actorAutomationAvailable, clearBorrowedCard } from './copycat';
 import { migrateVitality } from './vitality';
 import { rollSourceFor } from './roll-source';
+import { applyReportLines, formatText } from './texts';
+import type { ActionTexts, TextVars } from './texts';
 
 export type Resource = string;
 export type Until = 'manual' | 'rest' | 'shortRest' | 'longRest' | 'scene' | 'session';
@@ -120,6 +122,7 @@ export interface EffectDef {
 }
 
 export interface ChatBenefit {
+  texts?: ActionTexts;
   cost?: ActionDef['cost'];
   sourceOnly?: boolean;
   report?: ActionDef['report'];
@@ -142,6 +145,8 @@ export interface Step {
 }
 
 export interface ActionDef {
+  /** Optional display wording; absent fields keep the generated text. Costs are always appended by the app. */
+  texts?: ActionTexts;
   /** Rolls `dice` once; the first outcome whose inclusive range contains the total is reported and its steps run. */
   table?: { dice: string; outcomes: Array<{ min: number; max?: number; text: string; steps?: Step[] }> };
   /** Requires at least this much Hope (Backsies Stone: spend all, minimum 1). */
@@ -188,7 +193,7 @@ export interface ActionDef {
   usesSource?: boolean;
   magicOnly?: boolean;
   channelRawPower?: EffectDef;
-  chooseEffects?: { count: number; options: Array<{ id: string; label: string; effect: EffectDef; chooseTrait?: boolean }> };
+  chooseEffects?: { count: number; options: Array<{ id: string; label: string; texts?: ActionTexts; effect: EffectDef; chooseTrait?: boolean }> };
   rollDicePool?: boolean;
   weaponRanges?: string[];
   requiresCompanion?: boolean;
@@ -350,7 +355,7 @@ export interface RollTrigger extends ActionDef {
   damageDice?: 'reroll' | 'double';
   /** Rerolls (`reroll: 'duality'`) with an added -d6 disadvantage die (Rebounding). */
   disadvantage?: boolean;
-  choices?: Array<{ id: string; label: string; addDice?: string; steps?: Step[] }>;
+  choices?: Array<{ id: string; label: string; texts?: ActionTexts; addDice?: string; steps?: Step[] }>;
   dualityDieBonus?: { die: 'hope' | 'fear'; value: number };
   advanceEffect?: string;
   swapDuality?: boolean;
@@ -383,6 +388,8 @@ export interface RollTrigger extends ActionDef {
 export type RollActionSection = 'result' | 'feature' | 'other';
 
 export interface Automation {
+  /** Optional wording for the feature's Hope button and the fallback report title of its actions. */
+  texts?: ActionTexts;
   /** Attachable item: while attached, the chosen weapon/armor gains this feature, automation and/or attack trait. */
   attach?: AttachmentDef;
   hideSpellcast?: boolean;
@@ -1051,6 +1058,36 @@ export function rollOptionLabel(s: Pick<AvailableRollOption, 'source' | 'origin'
   return sourceActionLabel(s.origin, s.source, s.option.label);
 }
 
+/** Variables available to action texts. Undefined values leave their placeholder literal. */
+export function actionTextVars(parts: { actor?: string; source?: string; origin?: string; action?: Pick<ActionDef, 'label' | 'toggleEffect' | 'endEffect' | 'selectedAmount' | 'actionRoll'> & { dice?: string } }): TextVars {
+  const action = parts.action;
+  return { actor: parts.actor, source: parts.source, origin: parts.origin, label: action?.label,
+    amount: action?.selectedAmount, dice: action?.dice, effect: action?.toggleEffect?.name ?? action?.endEffect };
+}
+
+/** Roll-dialog option row text: `texts.option` when configured, otherwise the generated source label. */
+export function rollOptionText(s: Pick<AvailableRollOption, 'source' | 'origin' | 'option'>): string {
+  const template = s.option.texts?.option;
+  return template ? formatText(template, actionTextVars({ source: s.source, origin: s.origin, action: s.option })) : rollOptionLabel(s);
+}
+
+/** Label of an applied roll contribution: `texts.applied` when configured, otherwise the generated source label. */
+export function rollOptionAppliedLabel(s: Pick<AvailableRollOption, 'source' | 'origin' | 'option'>): string {
+  const template = s.option.texts?.applied;
+  return template ? formatText(template, actionTextVars({ source: s.source, origin: s.origin, action: s.option })) : rollOptionLabel(s);
+}
+
+/** Sheet/chat button text: the configured template (or the default) followed by the automatic cost. */
+export function actionButtonText(template: string | undefined, fallback: string, vars: TextVars, cost: string): string {
+  const text = template ? formatText(template, vars) : fallback;
+  return cost ? `${text} (${cost})` : text;
+}
+
+/** Disabled-button tooltip: the configured prefix followed by the specific blocker. */
+export function blockedTitle(action: ActionDef, blocker: string, vars: TextVars): string {
+  return action.texts?.blocked ? `${formatText(action.texts.blocked, vars)} ${blocker}`.trim() : blocker;
+}
+
 export function sourceActionLabel(origin: string | undefined, source: string, action: string): string {
   const parts: string[] = [];
   for (const name of [origin, source, action]
@@ -1142,7 +1179,7 @@ export function rollOptionDice(c: CharacterSheet, option: RollOption): string | 
 export function damageRollFormula(expression: string, contributions: RollContribution[], selected: AvailableRollOption[]): { expression: string; contributions: RollContribution[] } {
   const doubling = selected.filter((s) => s.option.multiplier === 2);
   if (!doubling.length) return { expression, contributions };
-  const notes = doubling.map((s) => ({ label: rollOptionLabel(s), impact: 'Double the rolled damage total' }));
+  const notes = doubling.map((s) => ({ label: rollOptionAppliedLabel(s), impact: 'Double the rolled damage total' }));
   return {
     expression: `(${expression})*2`,
     contributions: contributions.map((part) => ({ ...part, expression: `(${part.expression})*2`, notes: [...(part.notes ?? []), ...notes] })),
@@ -1189,7 +1226,7 @@ export function selectedRollBonus(c: CharacterSheet, base: RollBonus, selected: 
       : option.traitValue ? traitTotal(c, option.traitValue)
       : option.derivedProficiency ? derivedStats(c).proficiency : evalValue(option.value, c);
     const dice = rollOptionDice(c, option);
-    const label = rollOptionLabel(selection).slice(0, 120);
+    const label = rollOptionAppliedLabel(selection).slice(0, 120);
     out.value += value;
     if (dice) out.dice.push(dice);
     out.names.push(label);
@@ -1677,10 +1714,12 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
     c.effects = c.effects.filter((e) => e.dmManaged || e.name !== action.endEffect);
     log.push(`ended ${action.endEffect}`);
   }
-  if (action.report) log.push(action.report.text.replace('{amount}', String(Math.max(0, reportAmount))));
+  if (action.report) log.push(formatText(action.report.text, { amount: Math.max(0, reportAmount) }));
   syncEffectDependencies(c);
   syncDeathState(c);
-  return log;
+  const origin = [...c.features, ...c.heritage].find(f => key === `feat:${f.name}`);
+  return applyReportLines(action.texts, log, actionTextVars({ actor: c.name, source: label, action,
+    origin: origin ? featureRollOrigin(c, origin) : undefined }), cost ? `spent ${cost}` : undefined);
 }
 
 /** Doomsday Potion: d12 per Hope slot (2d12 keep highest if marked); below 12 scars the slot, a 12 stops and grants `effect`. */

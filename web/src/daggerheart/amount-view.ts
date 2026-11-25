@@ -1,3 +1,4 @@
+import { formatText } from './texts';
 import { el } from '../login';
 import { amountAvailable, type ActionDef } from './engine';
 import type { CharacterSheet } from './data';
@@ -27,7 +28,7 @@ export function chooseActionAmount(c: CharacterSheet, action: ActionDef): Promis
       dialog.close();
     });
     dialog.addEventListener('close', () => { dialog.remove(); resolve(selected); }, { once: true });
-    dialog.append(el('h4', {}, action.label), el('label', {}, label, input), error, el('div', { class: 'acts' }, cancel, go));
+    dialog.append(el('h4', {}, action.texts?.button ? formatText(action.texts.button, { label: action.label }) : action.label), el('label', {}, label, input), error, el('div', { class: 'acts' }, cancel, go));
     document.body.append(dialog);
     dialog.showModal();
     input.focus();

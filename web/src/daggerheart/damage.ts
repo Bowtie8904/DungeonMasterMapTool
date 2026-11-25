@@ -54,6 +54,7 @@ export interface MitigationRoll {
 }
 
 export interface MitigationOption {
+  texts?: import('./texts').ActionTexts;
   protectionZone?: boolean;
   destroyResourceOnMax?: string;
   reportRoll?: boolean;

@@ -7,7 +7,8 @@ import { useSheetAction, type SheetSave } from './persist';
 import { openDeathRecovery } from './death-view';
 import type { ChatMessage, RollMessage, RollSource } from '../protocol';
 import type { CharacterSheet } from './data';
-import { actionBlocker, automationSources, availableRollTriggers, costText, evalValue, resourceDefinitions, rollTriggerSection, runAction, usesLeft } from './engine';
+import { formatText } from './texts';
+import { actionBlocker, actionButtonText, actionTextVars, automationSources, availableRollTriggers, costText, evalValue, resourceDefinitions, rollTriggerSection, runAction, usesLeft } from './engine';
 import { activeCardSources } from './copycat';
 import type { AvailableRollTrigger, RollActionSection, RollContext } from './engine';
 import type { RollRequest, SheetBus } from './view';
@@ -76,13 +77,17 @@ function newRef(): string {
   return Math.random().toString(36).slice(2, 12);
 }
 
+function triggerVars(t: AvailableRollTrigger) {
+  return actionTextVars({ source: t.source, action: t.trigger });
+}
+
 function openTokenGain(t: AvailableRollTrigger, cost: string, submit: (amount: number) => Promise<void>, onClose: () => void): void {
   const max = t.trigger.tokenGain!.max;
   const dialog = el('dialog', { class: 'dh dh-rolldlg', ariaLabel: t.trigger.label });
   const amount = el('input', { type: 'number', min: '1', max: String(max), step: '1', value: '1', ariaLabel: 'HP marked by the target' });
   const error = el('div', { class: 'error', role: 'alert' });
   const cancel = el('button', { type: 'button' }, 'Cancel');
-  const go = el('button', { type: 'button', class: 'primary' }, cost ? `${t.trigger.label} (${cost})` : t.trigger.label);
+  const go = el('button', { type: 'button', class: 'primary' }, actionButtonText(t.trigger.texts?.chatButton, t.trigger.label, triggerVars(t), cost));
   let pending = false;
   cancel.addEventListener('click', () => dialog.close());
   dialog.addEventListener('cancel', (event) => { if (pending) event.preventDefault(); });
@@ -101,7 +106,7 @@ function openTokenGain(t: AvailableRollTrigger, cost: string, submit: (amount: n
     catch (e) { error.textContent = (e as Error).message; }
     finally { pending = false; go.disabled = cancel.disabled = amount.disabled = false; }
   });
-  dialog.append(el('h4', {}, t.trigger.label),
+  dialog.append(el('h4', {}, actionButtonText(t.trigger.texts?.chatButton, t.trigger.label, triggerVars(t), '')),
     el('p', { class: 'muted' }, t.trigger.description ?? 'Enter the tokens gained.'),
     el('label', {}, `HP marked by the target (1-${max})`, amount), error, el('div', { class: 'acts' }, cancel, go));
   document.body.append(dialog);
@@ -134,7 +139,7 @@ function openHopeAmount(t: AvailableRollTrigger, c: CharacterSheet, submit: (amo
     catch (e) { error.textContent = (e as Error).message; }
     finally { pending = false; go.disabled = cancel.disabled = amount.disabled = false; }
   });
-  dialog.append(el('h4', {}, t.trigger.label), el('p', { class: 'muted' }, 'Spend 1 Hope for yourself and 1 additional Hope for each willing creature.'),
+  dialog.append(el('h4', {}, actionButtonText(t.trigger.texts?.chatButton, t.trigger.label, triggerVars(t), '')), el('p', { class: 'muted' }, 'Spend 1 Hope for yourself and 1 additional Hope for each willing creature.'),
     el('label', {}, 'Hope to spend', amount), error, el('div', { class: 'acts' }, cancel, go));
   document.body.append(dialog);
   dialog.showModal();
@@ -152,7 +157,7 @@ export function attackDamageContext(m: Pick<RollMessage, 'source'>): { profile?:
 
 /** Request repeating the roll (optionally with advantage) or rolling only the Hope Die again. */
 export function rerollRequest(m: RollMessage, t: AvailableRollTrigger, original?: RollRequest): RollRequest | null {
-  const label = `${m.label ?? 'Roll'} - ${t.trigger.label}`.slice(0, 80);
+  const label = `${m.label ?? 'Roll'} - ${t.trigger.texts?.roll ? formatText(t.trigger.texts.roll, triggerVars(t)) : t.trigger.label}`.slice(0, 80);
   const base = { ref: newRef(), actorId: m.actorId, weapon: m.weapon, rollSource: m.rollSource ?? original?.rollSource };
   if (t.trigger.reroll === 'hope') return { ...base, label, expression: m.expression.startsWith('1d20+') ? '1d20' : '1d12',
     source: m.source?.split(',').includes('reaction') ? 'reroll,reaction' : 'reroll' };
@@ -198,7 +203,7 @@ function benefitButtons(m: ChatMessage | RollMessage, host: RollButtonHost): HTM
           if ((benefit.sourceOnly || benefit.cost || benefit.steps.some(step => step.effect?.requiresSourceEffect))
               && !host.supportsBloodAutomation?.()) continue;
           if ((benefit.transferStress || benefit.steps.some(step => step.effect?.rest)) && !host.supportsDomainCardAutomation?.()) continue;
-          const button = el('button', { type: 'button', class: 'small' }, `${benefit.label} · ${sheet.character.name}`);
+          const button = el('button', { type: 'button', class: 'small' }, `${actionButtonText(benefit.texts?.chatButton, benefit.label, { source: sheet.character.name, label: benefit.label, actor: sheet.character.name }, '')} · ${sheet.character.name}`);
           const blocker = actionBlocker(sheet.character, '', {}, { id: benefit.id, label: benefit.label, cost: benefit.cost });
           button.disabled = pending || !!blocker;
           if (blocker) button.title = blocker;
@@ -289,7 +294,7 @@ function chatFollowUpButtons(m: ChatMessage, host: RollButtonHost): HTMLElement 
     const source = sheet && activeCardSources(sheet.character).find(source => source.name === action.name);
     const definition = source?.auto?.actions?.find(candidate => candidate.id === action.id && candidate.chatOnly && candidate.actionRoll);
     if (!sheet || !source?.auto || !definition) return;
-    const button = el('button', { type: 'button', class: 'small primary' }, action.label);
+    const button = el('button', { type: 'button', class: 'small primary' }, actionButtonText(definition.texts?.chatButton, action.label, actionTextVars({ actor: sheet.character.name, source: source.name, action: definition }), ''));
     const blocked = actionBlocker(sheet.character, source.key, source.auto, definition);
     button.disabled = !!blocked;
     button.title = blocked ?? '';
@@ -399,7 +404,7 @@ function incomingReactionButtons(m: ChatMessage, host: RollButtonHost): HTMLElem
       if (!sheet) continue;
       for (const t of availableRollTriggers(sheet.character, { source: 'incomingDamage', hope: 0, fear: 0, total: 0, kind: 'damage' })) {
         if (t.trigger.audience !== 'ally' || !t.trigger.actionRoll) continue;
-        const button = el('button', { type: 'button', class: 'small' }, `${t.trigger.label} · ${sheet.character.name}`);
+        const button = el('button', { type: 'button', class: 'small' }, `${actionButtonText(t.trigger.texts?.chatButton, t.trigger.label, triggerVars(t), '')} · ${sheet.character.name}`);
         const blocked = actionBlocker(sheet.character, t.key, t.automation, t.trigger);
         button.disabled = !!blocked;
         button.title = blocked ?? 'Use when this ally is within Close range and you can see the attacker.';
@@ -580,7 +585,7 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         const cost = costText(t.trigger.cost, c);
         const section = rollTriggerSection(t, m.source ?? '');
         const b = el('button', { class: SECTION_BUTTON_CLASS[section], type: 'button' },
-          `${t.trigger.label}${cost ? ` (${cost})` : ''}${featureActorId !== actorId ? ` · ${c.name}` : ''}`);
+          `${actionButtonText(t.trigger.texts?.chatButton, t.trigger.label, { ...triggerVars(t), actor: c.name }, cost)}${featureActorId !== actorId ? ` · ${c.name}` : ''}`);
         const blocked = actionBlocker(c, t.key, t.automation, t.trigger);
         const unsupported = t.trigger.splendorAction && !host.supportsSplendorAutomation?.()
           ? 'Update the host to use Splendor automation.'

@@ -2930,3 +2930,13 @@ Real character sheets and rules automation (other than the Daggerheart sheet abo
 
 - DM chat pop-out: the Chat section header has a pop-out button that moves the single ChatPanel into a separate Stage (placeholder with a dock button remains in the section); closing the window docks it back. No remote or settings change.
 - **Browser movement distance line:** while dragging an own token the browser draws a dashed ruler from the drag origin to the token (same label as the distance Measure tool: tiles + Daggerheart range, measure colour) and removes it on release. Local only, nothing is sent. Browser-local Settings toggle **Show movement distance line** (dmmt.moveLine, default on). No DM controls, local API, host settings or compatibility-version changes.
+
+## 3.42 Configurable automation texts (format 1)
+
+Every automation-generated text can be configured through an optional `texts` object (see README "Configurable automation texts") on format-1 catalog entries. The format-2 rewrite (`config-rewrite`) is abandoned; `master` is the pure format-1 UI.
+
+Constraints: UI is pixel-identical with unmodified catalogs; costs are never part of a template (the app appends them); formatting is a pure synchronous function (`web/src/daggerheart/texts.ts`, mirrored by `dmmt.online.TextTemplates`, shared cases in `src/test/resources/dmmt/text-template-cases.json`); no new host round trips; catalog `version` stays 1.
+
+Wired: sheet/Hope-feature buttons and blocked tooltips, "ACTION USED" titles and lines (browser `runActionDetailed`, host feature actions), roll-dialog option rows, applied labels, chat roll-card buttons, token/Hope dialogs, reroll labels, mitigation options, amount dialog title. Not yet wired: rest/downtime/death move labels, compendium option text, experience/Adept labels, other host `*Rules` reports, catalog editor fields and load-time validation (`validateTexts`). Global non-catalog wording ("Damage", "Not enough Hope", headings) is out of scope pending confirmation.
+
+Remote compatibility: additive catalog fields only; DM Link messages are unchanged, so `RemoteCompatibility.VERSION` is unchanged. No settings change.

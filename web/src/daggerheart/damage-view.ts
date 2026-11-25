@@ -1,3 +1,4 @@
+import { formatText } from './texts';
 import { el } from '../login';
 import { confirmDialog } from '../dialogs';
 import type { CharacterSheet } from './data';
@@ -103,7 +104,7 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
           draw();
         });
         const info = meta(m);
-        const text = el('span', {}, el('b', {}, m.option.label), el('span', { class: 'muted' }, ` - ${m.source}${info ? ` (${info})` : ''}`));
+        const text = el('span', {}, el('b', {}, mitigationLabel(m.option)), el('span', { class: 'muted' }, ` - ${m.source}${info ? ` (${info})` : ''}`));
         if (m.option.description) text.append(el('small', { class: 'muted' }, m.option.description));
         const faces = r.used[m.id];
         if (box.checked && faces?.length && !m.option.hiddenRoll) text.append(el('small', {}, `Rolled ${faces.join(', ')}`));
@@ -131,7 +132,7 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
         const faces = r.used[m.id];
         list.append(el(
           'div', { class: on ? 'on' : 'muted' },
-          `${on ? '\u2713' : '\u2013'} ${m.option.label} (${m.source})${info ? ` - ${info}` : ''}${on && faces?.length && !m.option.hiddenRoll ? ` - rolled ${faces.join(', ')}` : ''}${!on && why ? ` - ${why}` : ''}`,
+          `${on ? '\u2713' : '\u2013'} ${mitigationLabel(m.option)} (${m.source})${info ? ` - ${info}` : ''}${on && faces?.length && !m.option.hiddenRoll ? ` - rolled ${faces.join(', ')}` : ''}${!on && why ? ` - ${why}` : ''}`,
         ));
       }
       body.append(list);
@@ -211,4 +212,8 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
   host.append(backdrop);
   draw();
   amount.focus();
+}
+
+function mitigationLabel(option: { label: string; texts?: { button?: string } }): string {
+  return option.texts?.button ? formatText(option.texts.button, { label: option.label }) : option.label;
 }

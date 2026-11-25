@@ -2889,6 +2889,7 @@ public final class OnlineSessionServer {
                     featureUses.add(sourceActor.getId() + ":" + key + ":group:" + definition.path("exclusiveRollGroup").asText());
             }
 
+            applyConfiguredReport(definition, reportLines, actionLabel, reportSource, sourceActor);
             ArrayNode benefits = actionBenefits(sourceSheet, key, definition);
             ObjectNode benefitReport = null;
             if (utilityRoll != null) {
@@ -2908,13 +2909,13 @@ public final class OnlineSessionServer {
             }
             if (!benefits.isEmpty()) {
                 if (reportLines.isEmpty()) reportLines.add("Used " + actionLabel + ".");
-                benefitReport = actionReportMessage(sourceActor, source, actionReportTitle(sourceSheet, source, actionLabel), reportLines, null);
+                benefitReport = actionReportMessage(sourceActor, source, configuredReportTitle(sourceSheet, source, definition, actionLabel, sourceActor), reportLines, null);
                 benefitReport.put("actorId", sourceActor.getId());
                 attachActionBenefits(benefitReport, sourceActor, sourceSheet, definition, benefits);
             }
             if (definition.has("chatDamage") || fearGrant > 0) {
                 if (benefitReport == null)
-                    benefitReport = actionReportMessage(sourceActor, source, actionReportTitle(sourceSheet, source, actionLabel), reportLines, originalRoll);
+                    benefitReport = actionReportMessage(sourceActor, source, configuredReportTitle(sourceSheet, source, definition, actionLabel, sourceActor), reportLines, originalRoll);
                 benefitReport.put("actorId", sourceActor.getId());
                 if (definition.has("chatDamage")) {
                     ObjectNode button = benefitReport.putObject("actionDamage").put("label", "Damage");
@@ -2923,7 +2924,7 @@ public final class OnlineSessionServer {
             }
             if (benefitReport == null && banishRoll == null && (!definition.has("reroll") || definition.path("hostRollAction").asBoolean())) {
                 if (reportLines.isEmpty()) reportLines.add("Used " + actionLabel + ".");
-                benefitReport = actionReportMessage(sourceActor, source, actionReportTitle(sourceSheet, source, actionLabel), reportLines, originalRoll);
+                benefitReport = actionReportMessage(sourceActor, source, configuredReportTitle(sourceSheet, source, definition, actionLabel, sourceActor), reportLines, originalRoll);
             }
             if (benefitReport != null && followUpAction != null) {
                 benefitReport.put("actorId", sourceActor.getId());
@@ -2932,7 +2933,7 @@ public final class OnlineSessionServer {
             }
             if (fearGrant > 0 || fearRemoval > 0) {
                 if (benefitReport == null)
-                    benefitReport = actionReportMessage(sourceActor, source, actionReportTitle(sourceSheet, source, actionLabel), reportLines, originalRoll);
+                    benefitReport = actionReportMessage(sourceActor, source, configuredReportTitle(sourceSheet, source, definition, actionLabel, sourceActor), reportLines, originalRoll);
                 List<String> deathReports = normalizeDeathChanges(changedSheets);
                 for (ObjectNode sheet : changedSheets.values()) {
                     sheet.put("featureRevision", sheet.path("featureRevision").asLong() + 1);
@@ -2980,7 +2981,7 @@ public final class OnlineSessionServer {
                 if (reportLines.isEmpty()) reportLines.add("Used " + actionLabel + ".");
                 if (hasRoll && definition.has("outcome"))
                     reportLines.add(0, "Changed the original roll to " + ("hope".equals(definition.path("outcome").asText()) ? "Hope" : "Fear") + ".");
-                publishActionReport(sourceActor, source, actionReportTitle(sourceSheet, source, actionLabel), reportLines, originalRoll);
+                publishActionReport(sourceActor, source, configuredReportTitle(sourceSheet, source, definition, actionLabel, sourceActor), reportLines, originalRoll);
             }
             actionResponse(ctx, playerId, sourceActor);
         } catch (FeatureIoException e) {
@@ -5272,6 +5273,35 @@ public final class OnlineSessionServer {
                 && (client.dmActorId == null || client.dmActorId.equals(actor.getId()))).toList();
     }
 
+    private static Map<String, Object> textVars(Campaign.Actor actor, JsonNode source, String label) {
+        Map<String, Object> vars = new java.util.HashMap<>();
+        vars.put("actor", actor.getName());
+        vars.put("source", source.path("name").asText(""));
+        vars.put("label", label);
+        return vars;
+    }
+
+    /** Title from the action's optional texts.reportTitle, otherwise the generated title. */
+    private static String configuredReportTitle(JsonNode sheet, JsonNode source, JsonNode definition, String label, Campaign.Actor actor) {
+        String template = definition.path("texts").path("reportTitle").asText("");
+        String title = template.isBlank() ? "" : TextTemplates.format(template, textVars(actor, source, label)).strip();
+        return title.isEmpty() ? actionReportTitle(sheet, source, label) : title;
+    }
+
+    /** Replaces the generated report lines with the optional texts.report lines; "{effects}" keeps the generated ones. */
+    private static void applyConfiguredReport(JsonNode definition, List<String> reportLines, String label, String reportSource, Campaign.Actor actor) {
+        JsonNode configured = definition.path("texts").path("report");
+        if (!configured.isArray() || configured.isEmpty()) return;
+        List<String> templates = new ArrayList<>();
+        configured.forEach(line -> templates.add(line.asText("")));
+        Map<String, Object> vars = new java.util.HashMap<>();
+        vars.put("actor", actor.getName());
+        vars.put("source", reportSource);
+        vars.put("label", label);
+        List<String> applied = TextTemplates.applyReport(templates, new ArrayList<>(reportLines), vars, null);
+        reportLines.clear();
+        reportLines.addAll(applied);
+    }
     private static String actionReportTitle(JsonNode sheet, JsonNode source, String action) {
         String provenance = source.path("source").asText("");
         String origin;
