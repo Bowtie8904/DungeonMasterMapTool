@@ -487,25 +487,41 @@
         "long" : {
           "type" : "object",
           "properties" : {
-            "maxLongMoves" : {
-              "type" : "integer",
-              "minimum" : 0,
-              "maximum" : 32
+            "moves" : {
+              "anyOf" : [ {
+                "type" : "integer",
+                "minimum" : 0,
+                "maximum" : 32
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
             },
             "maxMoves" : {
-              "type" : "integer",
-              "minimum" : 0,
-              "maximum" : 32
+              "anyOf" : [ {
+                "type" : "integer",
+                "minimum" : 0,
+                "maximum" : 32
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "maxLongMoves" : {
+              "anyOf" : [ {
+                "type" : "integer",
+                "minimum" : 0,
+                "maximum" : 32
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
             },
             "consecutiveLimit" : {
-              "type" : "integer",
-              "minimum" : 1,
-              "maximum" : 1000
-            },
-            "moves" : {
-              "type" : "integer",
-              "minimum" : 0,
-              "maximum" : 32
+              "anyOf" : [ {
+                "type" : "integer",
+                "minimum" : 1,
+                "maximum" : 1000
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
             }
           },
           "additionalProperties" : false
@@ -513,25 +529,41 @@
         "short" : {
           "type" : "object",
           "properties" : {
-            "maxLongMoves" : {
-              "type" : "integer",
-              "minimum" : 0,
-              "maximum" : 32
+            "moves" : {
+              "anyOf" : [ {
+                "type" : "integer",
+                "minimum" : 0,
+                "maximum" : 32
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
             },
             "maxMoves" : {
-              "type" : "integer",
-              "minimum" : 0,
-              "maximum" : 32
+              "anyOf" : [ {
+                "type" : "integer",
+                "minimum" : 0,
+                "maximum" : 32
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
+            },
+            "maxLongMoves" : {
+              "anyOf" : [ {
+                "type" : "integer",
+                "minimum" : 0,
+                "maximum" : 32
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
             },
             "consecutiveLimit" : {
-              "type" : "integer",
-              "minimum" : 1,
-              "maximum" : 1000
-            },
-            "moves" : {
-              "type" : "integer",
-              "minimum" : 0,
-              "maximum" : 32
+              "anyOf" : [ {
+                "type" : "integer",
+                "minimum" : 1,
+                "maximum" : 1000
+              }, {
+                "$ref" : "#/$defs/substitution"
+              } ]
             }
           },
           "additionalProperties" : false
@@ -6220,59 +6252,75 @@
       "type" : "object",
       "properties" : {
         "id" : {
-          "$ref" : "#/$defs/id"
-        },
-        "ui" : {
-          "type" : "object",
-          "additionalProperties" : {
-            "$ref" : "#/$defs/template"
-          }
+          "anyOf" : [ {
+            "$ref" : "#/$defs/id"
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
         },
         "args" : {
-          "type" : "object",
-          "additionalProperties" : {
+          "anyOf" : [ {
             "type" : "object",
-            "properties" : {
-              "type" : {
-                "anyOf" : [ {
-                  "enum" : [ "costs", "integer", "string" ]
-                }, {
-                  "$ref" : "#/$defs/substitution"
-                } ]
+            "additionalProperties" : {
+              "type" : "object",
+              "properties" : {
+                "type" : {
+                  "anyOf" : [ {
+                    "enum" : [ "costs", "integer", "string" ]
+                  }, {
+                    "$ref" : "#/$defs/substitution"
+                  } ]
+                },
+                "min" : {
+                  "anyOf" : [ {
+                    "type" : "integer"
+                  }, {
+                    "$ref" : "#/$defs/substitution"
+                  } ]
+                },
+                "max" : {
+                  "anyOf" : [ {
+                    "type" : "integer"
+                  }, {
+                    "$ref" : "#/$defs/substitution"
+                  } ]
+                },
+                "default" : {
+                  "anyOf" : [ {
+                    "$ref" : "#/$defs/any"
+                  }, {
+                    "$ref" : "#/$defs/substitution"
+                  } ]
+                }
               },
-              "min" : {
-                "anyOf" : [ {
-                  "type" : "integer"
-                }, {
-                  "$ref" : "#/$defs/substitution"
-                } ]
-              },
-              "max" : {
-                "anyOf" : [ {
-                  "type" : "integer"
-                }, {
-                  "$ref" : "#/$defs/substitution"
-                } ]
-              },
-              "default" : {
-                "anyOf" : [ {
-                  "$ref" : "#/$defs/any"
-                }, {
-                  "$ref" : "#/$defs/substitution"
-                } ]
-              }
-            },
-            "additionalProperties" : false,
-            "required" : [ "type" ]
-          }
+              "additionalProperties" : false,
+              "required" : [ "type" ]
+            }
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
+        },
+        "ui" : {
+          "anyOf" : [ {
+            "type" : "object",
+            "additionalProperties" : {
+              "$ref" : "#/$defs/template"
+            }
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
         },
         "rules" : {
-          "type" : "array",
-          "items" : {
-            "$ref" : "#/$defs/ruleBody"
-          },
-          "minItems" : 1,
-          "maxItems" : 64
+          "anyOf" : [ {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/$defs/ruleBody"
+            },
+            "minItems" : 1,
+            "maxItems" : 64
+          }, {
+            "$ref" : "#/$defs/substitution"
+          } ]
         }
       },
       "additionalProperties" : false,

@@ -226,13 +226,13 @@ public final class RuleSchema {
         ObjectNode ruleBody = ruleBody();
         defs.set("ruleBody", ruleBody);
         defs.set("rule", recipe ? ref("ruleBody") : ruleDefinition());
-        defs.set("recipe", object(Map.of("id", ref("id"), "args", objectOf(object(p("type", strings(List.of("integer", "string", "costs")),
+        defs.set("recipe", object(p("id", ref("id"), "args", objectOf(object(p("type", strings(List.of("integer", "string", "costs")),
                 "min", type("integer"), "max", type("integer"), "default", ref("any")), "type")), "ui", objectOf(ref("template")),
                 "rules", arrayOf(ref("ruleBody"), 1, 64)), "id", "rules"));
     }
 
     private Map<String, ObjectNode> restProperties() {
-        ObjectNode limits = object(Map.of("moves", integer(0, 32), "maxMoves", integer(0, 32), "maxLongMoves", integer(0, 32),
+        ObjectNode limits = object(p("moves", integer(0, 32), "maxMoves", integer(0, 32), "maxLongMoves", integer(0, 32),
                 "consecutiveLimit", integer(1, 1000)));
         Map<String, ObjectNode> map = new TreeMap<>();
         map.put("short", limits);

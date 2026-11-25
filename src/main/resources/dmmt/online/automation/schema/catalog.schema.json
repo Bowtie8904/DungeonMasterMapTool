@@ -492,7 +492,7 @@
         "long" : {
           "type" : "object",
           "properties" : {
-            "maxLongMoves" : {
+            "moves" : {
               "type" : "integer",
               "minimum" : 0,
               "maximum" : 32
@@ -502,15 +502,15 @@
               "minimum" : 0,
               "maximum" : 32
             },
+            "maxLongMoves" : {
+              "type" : "integer",
+              "minimum" : 0,
+              "maximum" : 32
+            },
             "consecutiveLimit" : {
               "type" : "integer",
               "minimum" : 1,
               "maximum" : 1000
-            },
-            "moves" : {
-              "type" : "integer",
-              "minimum" : 0,
-              "maximum" : 32
             }
           },
           "additionalProperties" : false
@@ -518,7 +518,7 @@
         "short" : {
           "type" : "object",
           "properties" : {
-            "maxLongMoves" : {
+            "moves" : {
               "type" : "integer",
               "minimum" : 0,
               "maximum" : 32
@@ -528,15 +528,15 @@
               "minimum" : 0,
               "maximum" : 32
             },
+            "maxLongMoves" : {
+              "type" : "integer",
+              "minimum" : 0,
+              "maximum" : 32
+            },
             "consecutiveLimit" : {
               "type" : "integer",
               "minimum" : 1,
               "maximum" : 1000
-            },
-            "moves" : {
-              "type" : "integer",
-              "minimum" : 0,
-              "maximum" : 32
             }
           },
           "additionalProperties" : false
@@ -4084,12 +4084,6 @@
         "id" : {
           "$ref" : "#/$defs/id"
         },
-        "ui" : {
-          "type" : "object",
-          "additionalProperties" : {
-            "$ref" : "#/$defs/template"
-          }
-        },
         "args" : {
           "type" : "object",
           "additionalProperties" : {
@@ -4110,6 +4104,12 @@
             },
             "additionalProperties" : false,
             "required" : [ "type" ]
+          }
+        },
+        "ui" : {
+          "type" : "object",
+          "additionalProperties" : {
+            "$ref" : "#/$defs/template"
           }
         },
         "rules" : {
