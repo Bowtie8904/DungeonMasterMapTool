@@ -147,6 +147,8 @@ class ParityLedgerTest {
             String rollProblem = rollMismatch(pack, placed, expected.path("rolls"));
             if (rollProblem == null) rollProblem = weaponRollMismatch(pack, placed, expected.path("rolls"));
             if (rollProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("rolls: " + rollProblem);
+            String mitigationProblem = mitigationMismatch(pack, placed, expected.path("mitigation"));
+            if (mitigationProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("mitigation: " + mitigationProblem);
             String attachProblem = attachMismatch(pack, placed, expected.path("attach"));
             if (attachProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("attach: " + attachProblem);
             String triggerProblem = triggerMismatch(pack, placed, expected.path("triggers"));
@@ -181,7 +183,7 @@ class ParityLedgerTest {
 
     /** Automation fields whose behavior the harness replays against the legacy baseline. */
     private static final java.util.Set<String> PROBED = java.util.Set.of("actions", "uses", "rest", "modifiers", "rollOptions",
-            "conditionalRollOptions", "conditionalModifiers", "conditionalActions", "usesOverrides", "rollTriggers", "conditionalRollTriggers", "attach");
+            "conditionalRollOptions", "conditionalModifiers", "conditionalActions", "usesOverrides", "rollTriggers", "conditionalRollTriggers", "attach", "mitigation", "conditionalMitigation");
 
     private static void writeLedger(Map<String, List<String>> failures) throws Exception {
         Path file = Path.of("docs/automation-parity-ledger.csv");
@@ -696,6 +698,117 @@ class ParityLedgerTest {
         }
         return null;
     }
+
+    private static String slugOf(String id) {
+        return NON_SLUG.matcher(id.toLowerCase(java.util.Locale.ROOT)).replaceAll("-").replaceAll("^-+|-+$", "");
+    }
+
+    /** Pool values found anywhere in the engine state, keyed by pool id without punctuation. */
+    private static java.util.Map<String, Integer> poolValues(JsonNode node) {
+        java.util.Map<String, Integer> out = new java.util.HashMap<>();
+        collectPools(node.path("automationState"), out);
+        return out;
+    }
+
+    private static void collectPools(JsonNode node, java.util.Map<String, Integer> out) {
+        if (node.isObject()) {
+            for (var field : node.properties()) {
+                if ("pools".equals(field.getKey()) && field.getValue().isObject())
+                    for (var pool : field.getValue().properties()) {
+                        JsonNode value = pool.getValue().isObject() ? pool.getValue().path("value") : pool.getValue();
+                        if (value.isNumber()) out.merge(NON_SLUG.matcher(pool.getKey().toLowerCase(java.util.Locale.ROOT)).replaceAll(""), value.asInt(), Integer::sum);
+                    }
+                else collectPools(field.getValue(), out);
+            }
+        } else if (node.isArray()) node.forEach(child -> collectPools(child, out));
+    }
+
+    private static final java.util.regex.Pattern NON_SLUG = java.util.regex.Pattern.compile("[^a-z0-9]+");
+
+    /** Incoming damage: each own mitigation option chosen alone, against the legacy marks, costs and refusals. */
+    private static String mitigationMismatch(AutomationHost.Pack pack, Placed placed, JsonNode expected) {
+        if (expected.isMissingNode() || expected.isNull()) return null;
+        ObjectNode origin = AutomationHost.event("action.request", "parity", 0);
+        for (var scenario : expected.properties()) {
+            String[] key = scenario.getKey().split(":");
+            int amount = Integer.parseInt(key[1]);
+            int armor = "armor".equals(key[2]) ? 1 : 0;
+            for (var option : scenario.getValue().properties()) {
+                JsonNode legacy = option.getValue();
+                if (legacy.path("unavailable").asBoolean()) continue;
+                String label = scenario.getKey() + " " + option.getKey();
+                List<String> slugs = new ArrayList<>();
+                if ("-".equals(option.getKey())) legacy.path("passive").forEach(id -> slugs.add(slugOf(id.asText())));
+                else slugs.add(slugOf(option.getKey()));
+                int armorRequest = armor > 0 ? Math.max(1, legacy.path("armorUsed").asInt(1)) : 0;
+                ObjectNode sheet = placed.sheet().deepCopy();
+                if (legacy.path("blocker").asText("").startsWith("Resource unavailable: @")) continue; // the legacy mitigation cannot charge an inventory item; the new engine can
+                boolean refused = legacy.has("blocker") || legacy.has("error");
+                try {
+                    JsonNode described = HOST.describeDamage(pack, sheet, origin, "self", amount, key[0], armorRequest);
+                    ObjectNode request = RuleJson.JSON.createObjectNode().put("requestId", "m").put("expectedRevision", HOST.revision(sheet));
+                    ArrayNode selections = request.putArray("selections");
+                    boolean offeredBlocked = false;
+                    for (String slug : slugs)
+                        for (var stage : described.path("stages").properties())
+                            for (JsonNode action : stage.getValue().path("actions")) {
+                                String rule = norm(action.path("ruleId").asText());
+                                if (!placed.sourceId().equals(action.path("sourceId").asText())
+                                        || !(rule.equals(slug) || rule.startsWith(slug + "-") || rule.startsWith(slug + "."))) continue;
+                                if (!action.path("available").asBoolean(true)) { offeredBlocked = true; continue; }
+                                if (!"button".equals(action.path("mode").asText("button")) && !"option".equals(action.path("mode").asText())) continue;
+                                ObjectNode selection = selections.addObject().put("sourceInstanceId", action.path("sourceInstanceId").asText())
+                                        .put("ruleId", action.path("ruleId").asText()).put("bindingId", action.path("bindingId").asText());
+                                ObjectNode inputs = selection.putObject("inputs");
+                                for (JsonNode input : action.path("inputs")) {
+                                    String id = input.path("id").asText();
+                                    switch (input.path("kind").asText()) {
+                                        case "integer" -> inputs.put(id, Math.max(input.path("min").asInt(), 1));
+                                        case "choice" -> inputs.put(id, input.path("options").path(0).path("id").asText());
+                                        default -> { }
+                                    }
+                                }
+                            }
+                    request.putObject("damage").put("amount", amount).put("armor", armorRequest).put("type", key[0]);
+                    if (selections.isEmpty() && !slugs.isEmpty() && refused) continue;
+                    if (selections.isEmpty() && offeredBlocked && !"-".equals(option.getKey())) {
+                        if (refused) continue;
+                        return label + ": legacy applies the option but the new engine marks every offer unavailable";
+                    }
+                    ObjectNode before = sheet.deepCopy();
+                    ObjectNode working = sheet.deepCopy();
+                    try {
+                        HOST.execute(pack, working, origin, request, "self", "self", constantDice());
+                    } catch (RuntimeException rejected) {
+                        if (refused) continue;
+                        return label + ": rejected: " + rejected.getMessage() + " @ " + frames(rejected);
+                    }
+                    if (refused && !selections.isEmpty())
+                        return label + ": accepted although legacy refused (" + legacy.path("blocker").asText(legacy.path("error").asText()) + ")";
+                    if (refused) continue;
+                    JsonNode delta = legacy.path("delta");
+                    if (delta.isMissingNode()) continue;
+                    for (var field : Map.of("hope", "/hope/on", "hp", "/hp/on", "stress", "/stress/on", "armor", "/armorTrack/on").entrySet()) {
+                        int moved = working.at(field.getValue()).asInt() - before.at(field.getValue()).asInt();
+                        if (moved != delta.path(field.getKey()).asInt())
+                            return label + ": " + field.getKey() + " legacy=" + delta.path(field.getKey()).asInt() + " new=" + moved
+                                    + (selections.isEmpty() ? " (no selection)" : "");
+                    }
+                    java.util.Map<String, Integer> pools = poolValues(working);
+                    for (var res : delta.path("resourceValues").properties()) {
+                        Integer now = pools.get(NON_SLUG.matcher(res.getKey()).replaceAll(""));
+                        if (now == null || now != res.getValue().asInt())
+                            return label + ": resource " + res.getKey() + " legacy=" + res.getValue().asInt() + " new=" + now;
+                    }
+                } catch (RuntimeException e) {
+                    if (refused) continue;
+                    return label + ": describe failed: " + e.getMessage() + " @ " + frames(e);
+                }
+            }
+        }
+        return null;
+    }
+
     /** Check rolls: always-on contributions, offered options and each option's effect against the legacy scenario. */
     private static String rollMismatch(AutomationHost.Pack pack, Placed placed, JsonNode expected) {
         if (expected.isMissingNode() || expected.isNull()) return null;

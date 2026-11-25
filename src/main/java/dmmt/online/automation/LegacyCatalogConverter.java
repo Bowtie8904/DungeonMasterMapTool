@@ -4376,8 +4376,6 @@ public final class LegacyCatalogConverter {
             if ("prepare".equals(stage)) p.add(path + "/insteadOfArmor", "Replacing Armor needs a marks or applied stage.");
             else when.addObject().putArray("eq").add(read("marks".equals(stage) ? "event.marks.armor.requested" : "event.applied.armorSpent")).add(0);
         }
-        if (mitigation.path("markedHpOnly").asBoolean(false) && !mitigation.has("hp"))
-            when.addObject().putArray("gt").add(read("marks".equals(stage) ? "event.marks.hitPoints.wouldMark" : "event.applied.hitPoints")).add(0);
         if (mitigation.path("finalSevere").asBoolean(false)) {
             if (!"applied".equals(stage)) p.add(path + "/finalSevere", "Final severity is only known once damage is applied.");
             else when.addObject().putArray("gte").add(read("event.applied.severity")).add(3);

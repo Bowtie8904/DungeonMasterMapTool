@@ -7,6 +7,7 @@ import {
   withSelectedAmount,
 } from './engine';
 import { weaponAttackBlocker } from './engine';
+import { applyDamage, availableMitigations, computeDamage, mitigationBlocker } from './damage';
 import { attachBlocker, attachItem, detachItem } from './attachments';
 import { emptyCharacter } from './data';
 import { armorFrom, cardFrom, weaponFrom } from './compendium';
@@ -365,12 +366,50 @@ function probeAttach(row: Row) {
   }
   return { blocked, rolls };
 }
+/** Incoming damage: for each damage type, amount and armor choice, what each own mitigation option does when it is the only one chosen. */
+function probeMitigation(row: Row) {
+  const base = place(row);
+  if (!base || !(base.automation.mitigation?.length || base.automation.conditionalMitigation?.length)) return undefined;
+  const own = (c: CharacterSheet) => availableMitigations(c).filter(m => m.key === base.key || m.key.startsWith(`${base.key}/`));
+  const ids = own(base.sheet).map(m => m.option.id);
+  const out: Record<string, unknown> = {};
+  for (const type of ['physical', 'magic'] as const) for (const amount of [3, 8, 15]) for (const armor of [false, true]) {
+    const scenario: Record<string, unknown> = {};
+    for (const id of [null, ...new Set(ids)]) {
+      const fresh = place(row)!;
+      syncResources(fresh.sheet);
+      const c = fresh.sheet;
+      const options = own(c);
+      const chosen = id === null ? [] : options.filter(m => m.option.id === id);
+      if (id !== null && !chosen.length) { scenario[id] = { unavailable: true }; continue; }
+      const before = snapshot(c);
+      const blocker = chosen.map(m => mitigationBlocker(c, m, type)).find(Boolean);
+      const result = computeDamage(c, options, { damage: amount, type, armor, selected: new Set(chosen.map(m => m.id)) }, constantRoll);
+      const error = result.error ?? (id !== null && chosen.some(m => !result.applied.includes(m)) ? 'inactive' : null);
+      const entry: Record<string, unknown> = { incoming: result.incoming, final: result.final, negated: result.negated, damage: result.damage, armorUsed: result.armorUsed };
+      if (id === null) entry.passive = result.applied.filter(m => m.option.passive).map(m => m.option.id);
+      if (blocker) entry.blocker = blocker;
+      if (error) entry.error = error;
+      if (!blocker && !error && applyDamage(c, result, type, constantRoll) !== null) {
+        const after = snapshot(c);
+        entry.delta = { hope: after.hope - before.hope, hp: after.hp - before.hp, stress: after.stress - before.stress, armor: after.armor - before.armor,
+          resources: Object.fromEntries(Object.entries(after.resources).filter(([k, v]) => v !== (before.resources[k] ?? 0)).map(([k, v]) => [k, v - (before.resources[k] ?? 0)])),
+          resourceValues: Object.fromEntries(Object.entries(after.resources).filter(([k, v]) => v !== (before.resources[k] ?? 0)).map(([k, v]) => [k, v])),
+          effects: after.effects.join(','), inventory: after.inventory.join(',') };
+      }
+      scenario[id ?? '-'] = entry;
+    }
+    out[`${type}:${amount}:${armor ? 'armor' : 'none'}`] = scenario;
+  }
+  return out;
+}
+
 export function capture(): Record<string, unknown> {
   const rows = csv(readFileSync(new URL('docs/automation-parity-ledger.csv', ROOT), 'utf8'));
   const out: Record<string, unknown> = {};
   for (const row of rows) {
     const key = `${row.category}${row.pointer}`;
-    out[key] = { actions: probeActions(row), stats: probeStats(row), rest: probeRest(row), rolls: probeRolls(row), triggers: probeTriggers(row), attach: probeAttach(row) };
+    out[key] = { actions: probeActions(row), stats: probeStats(row), rest: probeRest(row), rolls: probeRolls(row), triggers: probeTriggers(row), attach: probeAttach(row), mitigation: probeMitigation(row) };
   }
   return out;
 }

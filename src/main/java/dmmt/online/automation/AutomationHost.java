@@ -564,7 +564,7 @@ public final class AutomationHost {
         ObjectNode prepare = damagePrepareFacts(origin, context, amount, type);
         ObjectNode plan = StructuredDamage.assess(prepare.get("damage"), type == null
                         ? RuleJson.JSON.getNodeFactory().nullNode() : RuleJson.JSON.getNodeFactory().textNode(type),
-                thresholdSpec(), RuleJson.JSON.getNodeFactory().booleanNode(false), armorSpec(armor), hitPointSpec(), context);
+                thresholdSpec(), RuleJson.JSON.getNodeFactory().booleanNode(true), armorSpec(armor), hitPointSpec(), context);
         ObjectNode preview = StructuredDamage.mark(plan, armorSpec(armor), hitPointSpec(), context.deepCopy());
         ObjectNode result = RuleJson.JSON.createObjectNode().put("revision", revision(sheet));
         result.putObject("damage").put("amount", amount).put("armor", armor).set("type",
@@ -633,7 +633,7 @@ public final class AutomationHost {
         ObjectNode context = damageContext(pack, working, origin);
         ObjectNode plan = StructuredDamage.assess(damage, type == null
                         ? RuleJson.JSON.getNodeFactory().nullNode() : RuleJson.JSON.getNodeFactory().textNode(type),
-                thresholdSpec(), RuleJson.JSON.getNodeFactory().booleanNode(false), armorSpec(armor), hitPointSpec(), context);
+                thresholdSpec(), RuleJson.JSON.getNodeFactory().booleanNode(true), armorSpec(armor), hitPointSpec(), context);
         result = damageStage(pack, working, damageMarksFacts(origin, damage, type, plan), request, relation, random, actions, outbox, sources);
         plan = StructuredDamage.validatePlan(result.path("event").path("marks"));
 
