@@ -560,6 +560,10 @@ public final class LegacyCatalogConverter {
                     rules.add(rule);
                 }
             }
+        } else if (cardOrigin != null && legacy.path("banishDifficulty").asBoolean(false)) {
+            // Legacy rolls Spellcast tagged with the card; the difficulty is what the card's own roll trigger produces.
+            castProfile = RuleJson.JSON.createObjectNode().put("id", "spellcast-roll").put("label", "Spellcast Roll")
+                    .put("rollKind", "spellcast").put("trait", "spellcast").put("origin", cardOrigin);
         } else for (String flag : List.of("automaticRestUse", "automaticRestUseOnAttempt"))
             if (legacy.has(flag)) p.add(path + "/" + flag, "Automatic use consumption needs a spellcast difficulty.");
         if (legacy.has("spellcastSuccessSteps")) {

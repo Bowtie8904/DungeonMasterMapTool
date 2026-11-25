@@ -169,6 +169,14 @@ class ParityLedgerTest {
             if (manualProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("manual: " + manualProblem);
             String builderProblem = builderMismatch(pack, placed, legacyAutomation(row));
             if (builderProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("builder: " + builderProblem);
+            String rewardProblem = hopeRewardMismatch(pack, placed, legacyAutomation(row));
+            if (rewardProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("reward: " + rewardProblem);
+            String banishProblem = banishMismatch(pack, placed, legacyAutomation(row));
+            if (banishProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("banish: " + banishProblem);
+            String restBenefitProblem = restBenefitMismatch(pack, placed, legacyAutomation(row));
+            if (restBenefitProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("restBenefit: " + restBenefitProblem);
+            String channelProblem = channelMismatch(pack, placed, legacyAutomation(row));
+            if (channelProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("channel: " + channelProblem);
             String armorProblem = armorMismatch(pack, placed, legacyAutomation(row));
             if (armorProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("armor: " + armorProblem);
             String triggerProblem = triggerMismatch(pack, placed, expected.path("triggers"));
@@ -205,7 +213,7 @@ class ParityLedgerTest {
     private static final java.util.Set<String> PROBED = java.util.Set.of("actions", "uses", "rest", "modifiers", "rollOptions",
             "conditionalRollOptions", "conditionalModifiers", "conditionalActions", "usesOverrides", "rollTriggers", "conditionalRollTriggers", "attach", "mitigation", "conditionalMitigation", "alternateProfiles", "damage", "spellcastDifficulty", "spellcastSuccessSteps", "hideSpellcast", "automaticRestUse", "automaticRestUseOnAttempt",
             "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "equipEffect", "zeroHopeClearArmor", "resources", "classResourceOnly",
-            "reloading", "requirement", "damageTypeChoice", "criticalMelee", "ignoreWeaponBurden", "unarmedWeapon", "conditionalDamageRewards", "dicePool", "deathMove", "manual", "creation", "companionTraining", "grantsFeatures", "groupGrantedFeatures", "beastformFree", "elementChoice", "overflowHope", "unarmoredBase");
+            "reloading", "requirement", "damageTypeChoice", "criticalMelee", "ignoreWeaponBurden", "unarmedWeapon", "conditionalDamageRewards", "dicePool", "deathMove", "manual", "creation", "companionTraining", "grantsFeatures", "groupGrantedFeatures", "beastformFree", "elementChoice", "overflowHope", "unarmoredBase", "hopeReward", "banishDifficulty", "restReroll", "experienceRefund", "actionBenefits", "channelBenefit");
 
     private static void writeLedger(Map<String, List<String>> failures) throws Exception {
         Path file = Path.of("docs/automation-parity-ledger.csv");
@@ -310,7 +318,7 @@ class ParityLedgerTest {
     private static JsonNode currentAutomation;
 
     private static final List<String> ARMOR_HOSTED = List.of("armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "equipEffect", "zeroHopeClearArmor", "resources", "classResourceOnly",
-            "reloading", "requirement", "damageTypeChoice", "criticalMelee", "ignoreWeaponBurden", "unarmedWeapon", "conditionalDamageRewards", "dicePool", "deathMove", "manual", "creation", "companionTraining", "grantsFeatures", "groupGrantedFeatures", "beastformFree", "elementChoice", "overflowHope", "unarmoredBase");
+            "reloading", "requirement", "damageTypeChoice", "criticalMelee", "ignoreWeaponBurden", "unarmedWeapon", "conditionalDamageRewards", "dicePool", "deathMove", "manual");
     private static final int[][] ARMOR_STEPS = {{0, 3}, {2, 3}, {4, 3}, {3, 3}, {4, 3}, {4, 0}, {4, 2}};
 
     private static JsonNode legacyAutomation(Row row) throws Exception {
@@ -723,6 +731,264 @@ class ParityLedgerTest {
             ObjectNode plain = armored.deepCopy();
             plain.withArray("loadout").removeAll();
             if (!statsOf(pack, armored).equals(statsOf(pack, plain))) return "level " + level + " unarmored base applied with armor equipped";
+        }
+        return null;
+    }
+
+    /** Hope-dominant, non-critical rolls offer the replacement reward (Slayer Dice, Favor or removing GM Fear) instead of Hope. */
+    private static String hopeRewardMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy) {
+        if (legacy == null || !legacy.path("hopeReward").isObject()) return null;
+        JsonNode reward = legacy.get("hopeReward");
+        ObjectNode event = AutomationHost.event("action.request", "parity", 1);
+        String trait = reward.path("roll").asText().startsWith("trait:") ? reward.path("roll").asText().substring(6) : "Agility";
+        for (String scenario : List.of("hope", "fear", "critical")) {
+            ObjectNode sheet = placed.sheet().deepCopy();
+            JsonNode rolled;
+            try {
+                rolled = HOST.execute(pack, sheet, event, checkRequest(sheet, "action", trait, null), "self", "self",
+                        "hope".equals(scenario) ? dualityDice(9, 3) : "fear".equals(scenario) ? dualityDice(3, 9) : dualityDice(5, 5));
+            } catch (RuntimeException e) {
+                return scenario + ": roll rejected: " + e.getMessage();
+            }
+            JsonNode claimed = null;
+            ObjectNode probe = sheet.deepCopy();
+            try {
+                claimed = claimResult(pack, probe, event, rolled, "hope-reward");
+            } catch (RuntimeException e) {
+                return scenario + ": reward rejected: " + e.getMessage();
+            }
+            boolean legacyOffered = "hope".equals(scenario);
+            if (legacyOffered != (claimed != null)) return scenario + ": legacy offers reward=" + legacyOffered + " new=" + (claimed != null);
+            if (claimed == null) continue;
+            if (reward.has("amount") && poolValues(probe).getOrDefault(NON_SLUG.matcher(reward.path("resource").asText()).replaceAll(""), 0) != reward.get("amount").asInt())
+                return reward.path("resource").asText() + " legacy +" + reward.get("amount") + " new " + poolValues(probe);
+            if (reward.has("favor") && poolValues(probe).getOrDefault("favor", 0) != 3 + reward.get("favor").asInt())
+                return "favor legacy +" + reward.get("favor") + " new " + poolValues(probe);
+            if (reward.has("removeFear") && !claimed.toString().contains("fear")) return "remove fear is not requested from the table: " + claimed;
+        }
+        return null;
+    }
+
+    /** Rest-die rerolls keep the higher die once per rest; Experience refunds discount one cost on a high enough d6. */
+    private static String restBenefitMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy) {
+        if (legacy == null) return null;
+        if (legacy.path("restReroll").asBoolean()) {
+            for (int[] faces : new int[][] {{2, 5}, {5, 2}, {4, 4}}) {
+                ObjectNode sheet = placed.sheet().deepCopy();
+                ObjectNode event = AutomationHost.event("rest.roll", "parity", 1);
+                event.set("roll", StructuredRoll.validate(MAPPER.createObjectNode().put("id", "rest").set("contributions", MAPPER.createArrayNode().add(
+                        MAPPER.createObjectNode().put("id", "d").put("kind", "dice").put("role", "downtime").put("sourceId", "core").put("label", "Downtime")
+                                .set("dice", MAPPER.createArrayNode().add(MAPPER.createObjectNode().put("id", "d1").put("sides", 12).put("face", faces[0]).put("kept", true).put("origin", "rolled")))))));
+                String instance = null;
+                for (var element : HOST.sources(pack, sheet)) if (element.sourceId().equals(placed.sourceId())) instance = element.instanceId();
+                if (instance == null) return "source is not active";
+                ObjectNode selection = MAPPER.createObjectNode().put("sourceInstanceId", instance).put("ruleId", "rest-reroll").put("bindingId", "use");
+                selection.putObject("inputs");
+                int rolled = faces[1];
+                Random dice = new Random(0) {
+                    @Override public int nextInt(int bound) { return Math.min(rolled, bound) - 1; }
+                };
+                int kept;
+                try {
+                    var result = HOST.stageRecoveryRoll(pack, sheet, event, selection, HOST.revision(sheet), dice);
+                    kept = StructuredRoll.validate(result.at("/event/roll")).path("total").asInt();
+                } catch (RuntimeException e) {
+                    return "reroll rejected: " + e.getMessage();
+                }
+                if (kept != Math.max(faces[0], rolled)) return "downtime die " + faces[0] + " rerolled to " + rolled + " legacy kept " + Math.max(faces[0], rolled) + " new " + kept;
+                try {
+                    HOST.stageRecoveryRoll(pack, sheet, event, selection, HOST.revision(sheet), dice);
+                    return "a second reroll in the same rest is accepted";
+                } catch (RuntimeException expectedLimit) {
+                    // legacy allows one reroll per rest
+                }
+            }
+        }
+        if (legacy.path("actionBenefits").isObject()) {
+            String problem = actionBenefitsMismatch(pack, placed, legacy.path("actionBenefits"));
+            if (problem != null) return problem;
+        }
+        if (legacy.path("experienceRefund").isObject()) {
+            int min = legacy.path("experienceRefund").path("min").asInt();
+            for (int face : new int[] {1, min - 1, min, 6}) {
+                ObjectNode event = AutomationHost.event("roll.costs", "parity", 1);
+                ObjectNode adjustments = event.putObject("costAdjustments");
+                adjustments.put("g_core-experience", 0);
+                adjustments.putObject("adjustable").putObject("g_core-experience").put("min", 0).put("max", 1000);
+                int rolled = face;
+                Random dice = new Random(0) {
+                    @Override public int nextInt(int bound) { return Math.min(rolled, bound) - 1; }
+                };
+                ObjectNode result;
+                try {
+                    result = HOST.automatic(pack, placed.sheet().deepCopy(), event, dice);
+                } catch (RuntimeException e) {
+                    return "cost roll rejected: " + e.getMessage();
+                }
+                int discount = result.at("/event/costAdjustments/g_core-experience").asInt();
+                if (discount != (face >= min ? 1 : 0)) return "d6 " + face + " legacy refund " + (face >= min ? 1 : 0) + " new " + discount;
+            }
+        }
+        return null;
+    }
+
+    /** Legacy chat benefits go to other players' characters, each gated on there being something to restore. */
+    private static String actionBenefitsMismatch(AutomationHost.Pack pack, Placed placed, JsonNode benefits) {
+        String instance = null;
+        for (var element : HOST.sources(pack, placed.sheet())) if (element.sourceId().equals(placed.sourceId())) instance = element.instanceId();
+        if (instance == null) return "source is not active";
+        String label = currentAutomation.at("/rules/0/when/and/0/eq/1").asText();
+        for (boolean ownEffect : new boolean[] {true, false}) {
+            ObjectNode started = AutomationHost.event("effect.started", "parity", 1);
+            started.putObject("effect").put("label", label).put("sourceActorId", ownEffect ? "parity" : "someone");
+            ObjectNode result = HOST.automatic(pack, placed.sheet().deepCopy(), started, new Random(0));
+            boolean offered = result.path("outbox").toString().contains("claim.offer");
+            if (offered != ownEffect) return "effect " + label + (ownEffect ? " started by the owner" : " started by someone else") + " offered=" + offered;
+        }
+        String group = "offer-rally-claims";
+        for (var entry : benefits.properties()) {
+            for (JsonNode benefit : entry.getValue()) {
+                String resource = benefit.path("steps").path(0).path("resource").asText();
+                boolean gain = "gain".equals(benefit.path("steps").path(0).path("op").asText());
+                String track = "hope".equals(resource) ? "hope" : "stress";
+                String ruleId = null;
+                for (JsonNode rule : currentAutomation.path("rules"))
+                    if (rule.path("ui").path("label").asText().equals(benefit.path("label").asText())) ruleId = rule.path("id").asText();
+                if (ruleId == null) return "no claim for " + benefit.path("label").asText();
+                for (int on : new int[] {0, 3, 6}) {
+                    ObjectNode recipient = standardSheet();
+                    recipient.withObject("/" + track).put("on", on).put("slots", 6);
+                    boolean canGain = gain ? on < 6 : on > 0;
+                    ObjectNode event = AutomationHost.event("claim.accept", "parity", 1);
+                    ObjectNode selection = MAPPER.createObjectNode().put("sourceInstanceId", instance).put("ruleId", ruleId).put("bindingId", "claim");
+                    selection.putObject("inputs");
+                    ObjectNode source = placed.sheet().deepCopy();
+                    try {
+                        HOST.stageClaim(pack, source, recipient, event, instance, group, "mira", "other", selection,
+                                HOST.revision(source), HOST.revision(recipient), 0, new RuleDispatcher.ClaimLedger(0, java.util.Set.of()), new Random(0));
+                        if (!canGain) return benefit.path("label").asText() + " is accepted with " + track + " " + on;
+                        int expected = gain ? on + 1 : on - 1;
+                        if (recipient.path(track).path("on").asInt() != expected) return benefit.path("label").asText() + " with " + track + " " + on + " legacy " + expected + " new " + recipient.path(track).path("on").asInt();
+                    } catch (RuntimeException e) {
+                        if (canGain) return benefit.path("label").asText() + " rejected with " + track + " " + on + ": " + e.getMessage();
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private static ObjectNode withEffects(ObjectNode sheet, String... names) {
+        ObjectNode copy = sheet.deepCopy();
+        ArrayNode effects = copy.withObject("/automationState").withArray("effects");
+        for (String name : names) effects.addObject().put("id", "held-" + effects.size()).put("sourceInstanceId", "owner").put("label", name).put("kind", "buff");
+        return copy;
+    }
+
+    /** A channel benefit is active exactly while its required effect is held; its modifiers, actions and rules follow that gate. */
+    private static String channelMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy) {
+        JsonNode benefit = legacy == null ? null : legacy.path("channelBenefit");
+        if (benefit == null || benefit.isMissingNode()) return null;
+        JsonNode effect = benefit.path("effect");
+        String name = effect.path("name").asText(), required = effect.path("requiresEffect").asText();
+        boolean aura = "aura".equals(benefit.path("element").asText());
+        String element = name.substring(name.indexOf(": ") + 2);
+        String[] held = aura ? new String[] {"Channeling: " + element, "Elemental Aura"} : new String[] {required};
+        ObjectNode channeled = withEffects(placed.sheet(), held), bare = withEffects(placed.sheet());
+        if (!effectLabels(pack, channeled).contains(name)) return "benefit " + name + " is not active while channeling " + effectLabels(pack, channeled);
+        if (effectLabels(pack, bare).contains(name)) return "benefit " + name + " is active without channeling";
+        String other = aura ? "Channeling: Spirit" : "Channeling: Spirit";
+        if (effectLabels(pack, withEffects(placed.sheet(), aura ? new String[] {other, "Elemental Aura"} : new String[] {other})).contains(name))
+            return "benefit " + name + " is active for another element";
+        if (aura && effectLabels(pack, withEffects(placed.sheet(), "Channeling: " + element)).contains(name))
+            return "aura " + name + " is active before the aura is activated";
+        for (JsonNode modifier : effect.path("modifiers")) {
+            if (!"evasion".equals(modifier.path("stat").asText())) continue;
+            int delta = statsOf(pack, channeled).path("evasion").asInt() - statsOf(pack, bare).path("evasion").asInt();
+            if (delta != modifier.path("value").asInt()) return "evasion legacy +" + modifier.path("value").asInt() + " new " + delta;
+        }
+        for (JsonNode action : legacy.path("actions")) {
+            String id = action.path("id").asText();
+            ObjectNode event = AutomationHost.event("action.request", "parity", 0);
+            boolean on = false, off = false;
+            for (JsonNode offered : HOST.describe(pack, channeled, event, "sheet", "self").path("actions"))
+                on |= id.equals(norm(offered.path("ruleId").asText())) && offered.path("available").asBoolean(true);
+            for (JsonNode offered : HOST.describe(pack, bare, event, "sheet", "self").path("actions"))
+                off |= id.equals(norm(offered.path("ruleId").asText())) && offered.path("available").asBoolean(true);
+            if (!on) return "action " + id + " is not offered while channeling";
+            if (off) return "action " + id + " is offered without channeling";
+        }
+        JsonNode extra = effect.at("/damage/extraDice");
+        if (!extra.isMissingNode() && !currentAutomation.toString().contains("\"count\":" + extra.asInt() + "}")) return "extra damage dice " + extra.asInt() + " missing";
+        JsonNode mitigation = effect.path("mitigation");
+        if (mitigation.size() > 0) {
+            JsonNode roll = mitigation.get(0).path("roll");
+            String text = currentAutomation.toString();
+            if (!text.contains("\"sides\":" + roll.path("sides").asInt()) || !text.contains("\"atLeast\":" + roll.path("success").asInt()))
+                return "mitigation roll d" + roll.path("sides").asInt() + " success " + roll.path("success").asInt() + " missing";
+        }
+        return null;
+    }
+
+    /** Banish stores the highest of one d20 per Spellcast point on the card, like the legacy server. */
+    private static String banishMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy) {
+        if (legacy == null || !legacy.path("banishDifficulty").asBoolean()) return null;
+        JsonNode profile = null;
+        for (JsonNode candidate : currentAutomation.path("profiles"))
+            if (candidate.path("id").asText().startsWith("spellcast-roll")) profile = candidate;
+        if (profile == null) return "no spellcast profile";
+        for (int spellcast : new int[] {1, 3}) {
+            ObjectNode sheet = placed.sheet().deepCopy();
+            for (JsonNode trait : sheet.withArray("traits")) ((ObjectNode) trait).put("mod", spellcast);
+            int count = dmmt.online.LegacyRulesBridge.spellcastTotal(sheet, 0);
+            int[] sequence = {7, 14, 3, 18, 11, 5};
+            int highest = 0;
+            for (int i = 0; i < count; i++) highest = Math.max(highest, sequence[i % sequence.length]);
+            Random dice = new Random(0) {
+                private int d20;
+                @Override public int nextInt(int bound) {
+                    if (bound == 20) return sequence[d20++ % sequence.length] - 1;
+                    return Math.min(3, bound) - 1;
+                }
+            };
+            JsonNode rolled = null;
+            ObjectNode event = AutomationHost.event("action.request", "parity", 1);
+            RuntimeException last = null;
+            for (var element : HOST.sources(pack, sheet)) {
+                if (!element.sourceId().equals(placed.sourceId())) continue;
+                ObjectNode copy = sheet.deepCopy();
+                ObjectNode request = RuleJson.JSON.createObjectNode().put("requestId", "r").put("expectedRevision", HOST.revision(copy));
+                request.putArray("selections");
+                request.putObject("profileRoll").put("sourceInstanceId", element.instanceId()).put("profileId", profile.path("id").asText()).put("kind", "spellcast");
+                try {
+                    rolled = HOST.execute(pack, copy, event, request, "self", "self", dualityDice(9, 3));
+                    sheet = copy;
+                    break;
+                } catch (RuntimeException e) {
+                    last = e;
+                }
+            }
+            if (rolled == null) return "spellcast roll rejected: " + (last == null ? "no source" : last.getMessage());
+            JsonNode claimed;
+            try {
+                claimed = claimResultWith(pack, sheet, event, rolled, "difficulty", dice);
+            } catch (RuntimeException e) {
+                return "difficulty rejected: " + e.getMessage();
+            }
+            if (claimed == null) return "banish difficulty is not offered";
+            if (!sheet.toString().contains("\"banishDifficulty\":" + highest)) return "spellcast " + count + " banish legacy " + highest + " new " + sheet.at("/loadout");
+        }
+        return null;
+    }
+
+    private static JsonNode claimResultWith(AutomationHost.Pack pack, ObjectNode sheet, ObjectNode event, JsonNode rolled, String ruleId, Random dice) {
+        for (JsonNode action : rolled.path("resultActions")) {
+            if (!ruleId.equals(norm(action.path("ruleId").asText())) || !ownOption(action)) continue;
+            ObjectNode claim = RuleJson.JSON.createObjectNode().put("requestId", "c" + REQUESTS.incrementAndGet()).put("expectedRevision", HOST.revision(sheet))
+                    .put("resultId", rolled.at("/event/resultId").asText());
+            claim.putArray("selections").addObject().put("sourceInstanceId", action.path("sourceInstanceId").asText())
+                    .put("ruleId", action.path("ruleId").asText()).put("bindingId", action.path("bindingId").asText());
+            return HOST.execute(pack, sheet, event, claim, "self", "self", dice);
         }
         return null;
     }
