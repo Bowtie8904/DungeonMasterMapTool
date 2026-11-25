@@ -24,6 +24,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -167,6 +170,9 @@
   "ancestries/entries/0/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -687,6 +693,9 @@
   "ancestries/entries/1/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -761,6 +770,9 @@
   "ancestries/entries/1/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -854,6 +866,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -1335,6 +1350,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -1409,6 +1427,9 @@
   "ancestries/entries/3/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -1876,6 +1897,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -2352,6 +2376,9 @@
     "major": 1,
     "severe": 1
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -2426,6 +2453,9 @@
   "ancestries/entries/5/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -2560,6 +2590,9 @@
   "ancestries/entries/5/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -2656,6 +2689,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -2760,6 +2796,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -2987,6 +3026,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -3061,6 +3103,9 @@
   "ancestries/entries/8/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -3163,6 +3208,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -3335,6 +3383,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -3426,6 +3477,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -3519,6 +3573,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -3595,6 +3652,9 @@
    "stats": {
     "major": 2,
     "severe": 2
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -3692,6 +3752,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -4008,6 +4071,9 @@
   "ancestries/entries/12/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -4082,6 +4148,9 @@
   "ancestries/entries/13/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -4222,6 +4291,9 @@
   "ancestries/entries/14/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -4336,6 +4408,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -4435,6 +4510,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -4517,6 +4595,9 @@
   "ancestries/entries/15/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -4633,6 +4714,9 @@
   "ancestries/entries/16/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -4707,6 +4791,9 @@
   "ancestries/entries/16/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -4979,6 +5066,9 @@
   "ancestries/entries/17/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -5147,6 +5237,9 @@
   "ancestries/entries/17/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -5277,6 +5370,9 @@
   "ancestries/entries/18/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -5446,6 +5542,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -5520,6 +5619,9 @@
   "ancestries/entries/19/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -5638,6 +5740,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -5712,6 +5817,9 @@
   "ancestries/entries/21/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -5810,6 +5918,9 @@
   "ancestries/entries/21/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -5903,6 +6014,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -5999,6 +6113,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -6095,6 +6212,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -6192,6 +6312,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -6640,6 +6763,9 @@
   "ancestries/entries/24/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -6749,6 +6875,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -6901,6 +7030,9 @@
   "ancestries/entries/25/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -6984,6 +7116,9 @@
   "ancestries/entries/26/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -7131,6 +7266,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -7209,6 +7347,9 @@
     "armorSlots": 3,
     "major": 5,
     "severe": 6
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -7289,6 +7430,9 @@
     "major": 7,
     "severe": 10
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -7367,6 +7511,9 @@
     "armorSlots": 4,
     "major": 8,
     "severe": 12
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -7447,6 +7594,9 @@
     "major": 7,
     "severe": 11
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -7525,6 +7675,9 @@
     "armorSlots": 5,
     "major": 11,
     "severe": 19
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -7605,6 +7758,9 @@
     "major": 13,
     "severe": 23
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -7682,6 +7838,9 @@
     "armorSlots": 4,
     "major": 9,
     "severe": 16
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -8171,6 +8330,9 @@
     "major": 9,
     "severe": 16
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -8587,6 +8749,9 @@
     "major": 9,
     "severe": 15
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -8684,6 +8849,9 @@
     "major": 9,
     "severe": 15
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -8761,6 +8929,9 @@
     "armorSlots": 5,
     "major": 8,
     "severe": 13
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -8883,6 +9054,9 @@
     "major": 9,
     "severe": 18
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -8961,6 +9135,9 @@
     "armorSlots": 6,
     "major": 13,
     "severe": 26
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -9041,6 +9218,9 @@
     "major": 15,
     "severe": 30
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -9119,6 +9299,9 @@
     "major": 11,
     "severe": 22
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -9196,6 +9379,9 @@
     "armorSlots": 5,
     "major": 11,
     "severe": 22
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -9613,6 +9799,9 @@
     "major": 10,
     "severe": 20
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -9697,6 +9886,9 @@
     "armorSlots": 6,
     "major": 16,
     "severe": 34
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -10186,6 +10378,9 @@
     "major": 16,
     "severe": 34
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -10673,6 +10868,9 @@
     "armorSlots": 6,
     "major": 17,
     "severe": 38
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -11223,6 +11421,9 @@
     "major": 11,
     "severe": 27
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -11302,6 +11503,9 @@
     "major": 15,
     "severe": 35
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -11380,6 +11584,9 @@
     "armorSlots": 7,
     "major": 17,
     "severe": 39
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -11478,6 +11685,9 @@
     "major": 13,
     "severe": 31
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -11556,6 +11766,9 @@
     "major": 13,
     "severe": 31
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -11633,6 +11846,9 @@
     "armorSlots": 4,
     "major": 15,
     "severe": 35
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -12183,6 +12399,9 @@
     "major": 18,
     "severe": 43
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -12260,6 +12479,9 @@
     "armorSlots": 4,
     "major": 8,
     "severe": 13
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -12737,6 +12959,9 @@
     "major": 9,
     "severe": 13
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -12814,6 +13039,9 @@
     "armorSlots": 5,
     "major": 8,
     "severe": 13
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -12944,6 +13172,9 @@
     "major": 13,
     "severe": 24
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -13021,6 +13252,9 @@
     "armorSlots": 4,
     "major": 7,
     "severe": 13
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -13173,6 +13407,9 @@
     "major": 11,
     "severe": 22
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -13250,6 +13487,9 @@
     "armorSlots": 7,
     "major": 15,
     "severe": 35
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -13732,6 +13972,9 @@
     "armorSlots": 5,
     "major": 11,
     "severe": 22
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -14276,6 +14519,9 @@
     "major": 9,
     "severe": 15
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -14372,6 +14618,9 @@
     "armorSlots": 7,
     "major": 13,
     "severe": 31
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -14861,6 +15110,9 @@
     "major": 13,
     "severe": 25
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -14939,6 +15191,9 @@
     "major": 15,
     "severe": 30
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -15016,6 +15271,9 @@
     "armorSlots": 5,
     "major": 10,
     "severe": 17
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -15101,6 +15359,9 @@
     "armorSlots": 5,
     "major": 11,
     "severe": 18
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -15271,6 +15532,9 @@
     "major": 14,
     "severe": 24
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -15348,6 +15612,9 @@
     "armorSlots": 7,
     "major": 15,
     "severe": 30
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -15855,6 +16122,9 @@
     "major": 11,
     "severe": 22
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -15932,6 +16202,9 @@
     "armorSlots": 5,
     "major": 14,
     "severe": 24
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -16415,6 +16688,9 @@
     "major": 8,
     "severe": 13
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -16559,6 +16835,9 @@
     "major": 11,
     "severe": 18
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -16636,6 +16915,9 @@
     "armorSlots": 6,
     "major": 11,
     "severe": 22
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -17087,6 +17369,9 @@
     "major": 11,
     "severe": 19
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -17185,6 +17470,9 @@
     "major": 14,
     "severe": 28
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -17263,6 +17551,9 @@
     "major": 15,
     "severe": 34
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -17340,6 +17631,9 @@
     "armorSlots": 5,
     "major": 13,
     "severe": 24
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -17834,6 +18128,9 @@
     "major": 8,
     "severe": 11
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -17915,6 +18212,9 @@
     "armorSlots": 5,
     "major": 7,
     "severe": 15
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -18388,6 +18688,9 @@
     "major": 9,
     "severe": 15
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -18489,6 +18792,9 @@
     "major": 12,
     "severe": 22
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -18570,6 +18876,9 @@
     "armorSlots": 5,
     "major": 11,
     "severe": 23
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -19041,6 +19350,9 @@
     "major": 6,
     "severe": 11
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -19118,6 +19430,9 @@
     "armorSlots": 6,
     "major": 16,
     "severe": 34
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -19197,6 +19512,9 @@
     "major": 10,
     "severe": 21
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -19274,6 +19592,9 @@
     "armorSlots": 5,
     "major": 9,
     "severe": 20
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -19371,6 +19692,9 @@
     "armorSlots": 7,
     "major": 13,
     "severe": 31
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -19860,6 +20184,9 @@
     "major": 5,
     "severe": 6
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -19937,6 +20264,9 @@
     "armorSlots": 3,
     "major": 6,
     "severe": 7
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -20426,6 +20756,9 @@
     "major": 7,
     "severe": 9
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -20504,6 +20837,9 @@
     "armorSlots": 4,
     "major": 8,
     "severe": 11
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -20921,6 +21257,9 @@
     "major": 7,
     "severe": 11
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -20998,6 +21337,9 @@
     "armorSlots": 4,
     "major": 9,
     "severe": 14
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -21487,6 +21829,9 @@
     "major": 11,
     "severe": 18
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -21565,6 +21910,9 @@
     "armorSlots": 5,
     "major": 13,
     "severe": 22
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -22001,6 +22349,9 @@
     "major": 9,
     "severe": 15
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -22083,6 +22434,9 @@
     "armorSlots": 4,
     "major": 9,
     "severe": 15
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -22183,6 +22537,9 @@
     "major": 9,
     "severe": 15
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -22264,6 +22621,9 @@
     "armorSlots": 5,
     "major": 11,
     "severe": 18
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -22364,6 +22724,9 @@
     "major": 12,
     "severe": 21
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -22446,6 +22809,9 @@
     "major": 9,
     "severe": 18
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -22523,6 +22889,9 @@
     "armorSlots": 5,
     "major": 11,
     "severe": 21
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -23048,6 +23417,9 @@
     "major": 13,
     "severe": 25
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -23126,6 +23498,9 @@
     "armorSlots": 6,
     "major": 15,
     "severe": 29
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -23543,6 +23918,9 @@
     "major": 11,
     "severe": 22
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -23621,6 +23999,9 @@
     "major": 11,
     "severe": 22
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -23698,6 +24079,9 @@
     "armorSlots": 5,
     "major": 11,
     "severe": 22
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -23872,6 +24256,9 @@
     "major": 11,
     "severe": 22
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -23949,6 +24336,9 @@
     "armorSlots": 6,
     "major": 13,
     "severe": 30
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -24074,6 +24464,9 @@
     "major": 13,
     "severe": 30
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -24176,6 +24569,9 @@
     "major": 11,
     "severe": 27
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -24253,6 +24649,9 @@
     "armorSlots": 6,
     "major": 13,
     "severe": 30
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -24778,6 +25177,9 @@
     "major": 15,
     "severe": 34
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -24856,6 +25258,9 @@
     "armorSlots": 7,
     "major": 17,
     "severe": 38
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -25294,6 +25699,9 @@
     "major": 13,
     "severe": 31
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -25375,6 +25783,9 @@
     "armorSlots": 6,
     "major": 13,
     "severe": 31
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -25857,6 +26268,9 @@
     "armorSlots": 6,
     "major": 14,
     "severe": 33
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -26341,6 +26755,9 @@
     "severe": 37,
     "loadoutMax": -1
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -26437,6 +26854,9 @@
     "major": 13,
     "severe": 30
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -26514,6 +26934,9 @@
     "armorSlots": 7,
     "major": 15,
     "severe": 35
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -26927,6 +27350,9 @@
   "classes/entries/0/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -27019,6 +27445,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -27551,6 +27980,9 @@
   "classes/entries/1/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -27625,6 +28057,9 @@
   "classes/entries/2/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -27741,6 +28176,9 @@
   "classes/entries/4/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -27815,6 +28253,9 @@
   "classes/entries/5/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -27981,6 +28422,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -28061,6 +28505,9 @@
   "classes/entries/6/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -28135,6 +28582,9 @@
   "classes/entries/7/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -28251,6 +28701,11 @@
   "classes/entries/8/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {
+     "slayer-dice": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -28339,6 +28794,9 @@
   "classes/entries/9/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -28421,6 +28879,9 @@
   "classes/entries/10/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -28495,6 +28956,9 @@
   "classes/entries/11/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -28664,6 +29128,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -28763,6 +29230,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -28862,6 +29332,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -28936,6 +29409,9 @@
   "classes/entries/14/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -29103,6 +29579,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -29256,6 +29735,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -29376,6 +29858,9 @@
   "classes/entries/17/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -29504,6 +29989,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "circle-of-power": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -29624,6 +30114,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "walk-between-worlds": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -29744,6 +30239,11 @@
   "classes/entries/19/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {
+     "walk-between-worlds": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -29852,6 +30352,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -29930,6 +30433,9 @@
   "classes/entries/21/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -30004,6 +30510,9 @@
   "classes/entries/21/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -30438,6 +30947,9 @@
   "classes/entries/22/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -30542,6 +31054,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -31050,6 +31565,9 @@
    "stats": {
     "severe": 3
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -31143,6 +31661,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -31293,6 +31814,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -31389,6 +31913,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -31497,6 +32024,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -31652,6 +32182,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "focus": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -31793,6 +32328,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "focus": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -31915,6 +32455,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -32022,6 +32565,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -32121,6 +32667,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -32239,6 +32788,9 @@
    "stats": {
     "evasion": 1
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -32332,6 +32884,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -32423,6 +32978,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -32497,6 +33055,9 @@
   "classes/entries/31/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -32597,6 +33158,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -32671,6 +33235,9 @@
   "classes/entries/33/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -32837,6 +33404,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -32929,6 +33499,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -33245,6 +33818,9 @@
   "classes/entries/37/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -33338,6 +33914,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -33412,6 +33991,9 @@
   "classes/entries/38/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -33542,6 +34124,9 @@
   "classes/entries/38/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -33616,6 +34201,9 @@
   "classes/entries/40/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -33713,6 +34301,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "favor": 3
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -34313,6 +34906,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "favor": 3
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -34412,6 +35010,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "favor": 3
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -34513,6 +35116,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "favor": 3
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -35113,6 +35721,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "favor": 3
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -35212,6 +35825,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "favor": 3
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -35315,6 +35933,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "favor": 3
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -35460,6 +36083,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "favor": 3
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -35562,6 +36190,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "favor": 3
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -35701,6 +36334,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "favor": 3
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -35873,6 +36511,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "favor": 3
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -35979,6 +36622,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "favor": 3
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -36525,6 +37173,9 @@
   "classes/entries/48/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -36645,6 +37296,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "poison": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -36827,6 +37483,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -37334,6 +37993,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -37475,6 +38137,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -37591,6 +38256,11 @@
   "classes/entries/54/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {
+     "strange-pattern": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -37690,6 +38360,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "strange-pattern": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -37772,6 +38447,11 @@
   "classes/entries/56/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {
+     "strange-pattern": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -37850,6 +38530,11 @@
   "classes/entries/56/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {
+     "strange-pattern": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -38047,6 +38732,11 @@
    "stats": {
     "evasion": 2
    },
+   "init": {
+    "resources": {
+     "strange-pattern": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -38125,6 +38815,11 @@
   "classes/entries/58/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {
+     "strange-pattern": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -38203,6 +38898,11 @@
   "classes/entries/58/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {
+     "strange-pattern": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -38309,6 +39009,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "strange-pattern": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -38436,6 +39141,9 @@
     "major": 3,
     "severe": 3
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -38529,6 +39237,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -38605,6 +39316,9 @@
    "stats": {
     "major": 2,
     "severe": 2
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -38699,6 +39413,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -38776,6 +39493,9 @@
     "major": 1,
     "severe": 1
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -38850,6 +39570,9 @@
   "classes/entries/62/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -39295,6 +40018,9 @@
   "classes/entries/63/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -39634,6 +40360,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -39716,6 +40445,9 @@
   "classes/entries/66/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -39790,6 +40522,9 @@
   "classes/entries/67/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -39864,6 +40599,9 @@
   "classes/entries/68/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -39959,6 +40697,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -40058,6 +40799,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -40159,6 +40903,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -40261,6 +41008,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -40377,6 +41127,9 @@
   "classes/entries/70/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -40459,6 +41212,9 @@
   "classes/entries/71/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -40552,6 +41308,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -40645,6 +41404,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -40741,6 +41503,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -40842,6 +41607,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -40942,6 +41710,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -41016,6 +41787,9 @@
   "classes/entries/75/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -41090,6 +41864,9 @@
   "classes/entries/75/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -41164,6 +41941,9 @@
   "classes/entries/75/features/2/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -41256,6 +42036,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -41330,6 +42113,9 @@
   "classes/entries/75/features/4/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -41422,6 +42208,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -41496,6 +42285,9 @@
   "classes/entries/76/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -41570,6 +42362,9 @@
   "classes/entries/76/features/2/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -41662,6 +42457,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -41754,6 +42552,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -41828,6 +42629,9 @@
   "classes/entries/77/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -41941,6 +42745,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -42037,6 +42844,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -42133,6 +42943,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -42229,6 +43042,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -42322,6 +43138,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -42415,6 +43234,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -42491,6 +43313,9 @@
    "stats": {
     "severe": 4
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -42565,6 +43390,9 @@
   "classes/entries/82/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -42674,6 +43502,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -42776,6 +43607,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -42869,6 +43703,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -42970,6 +43807,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -43050,6 +43890,9 @@
   "classes/entries/86/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -43269,6 +44112,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -43374,6 +44220,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -43521,6 +44370,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -43604,6 +44456,9 @@
   "classes/entries/88/features/2/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -43705,6 +44560,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -43803,6 +44661,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -43904,6 +44765,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -44037,6 +44901,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -44133,6 +45000,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -44233,6 +45103,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -44329,6 +45202,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -44476,6 +45352,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -44569,6 +45448,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -44662,6 +45544,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -44755,6 +45640,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -44854,6 +45742,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -44928,6 +45819,9 @@
   "classes/entries/93/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -45002,6 +45896,9 @@
   "classes/entries/93/features/2/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -45105,6 +46002,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -45202,6 +46102,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -45306,6 +46209,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -45402,6 +46308,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -45493,6 +46402,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -45628,6 +46540,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -45721,6 +46636,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -45817,6 +46735,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -45891,6 +46812,9 @@
   "classes/entries/97/features/2/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -45992,6 +46916,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -46089,6 +47016,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -46232,6 +47162,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "favor": 3
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -46508,6 +47443,11 @@
   "classes/entries/99/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {
+     "favor": 3
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -46635,6 +47575,11 @@
   "classes/entries/99/features/2/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {
+     "favor": 3
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -46734,6 +47679,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "strange-pattern": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -46812,6 +47762,11 @@
   "classes/entries/100/features/2/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {
+     "strange-pattern": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -46932,6 +47887,9 @@
   "communities/entries/0/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -47025,6 +47983,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -47201,6 +48162,9 @@
   "communities/entries/2/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -47297,6 +48261,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -47377,6 +48344,9 @@
   "communities/entries/4/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -47499,6 +48469,9 @@
   "communities/entries/5/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -47648,6 +48621,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -47775,6 +48751,9 @@
   "communities/entries/7/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -47912,6 +48891,9 @@
   "communities/entries/8/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -48042,6 +49024,11 @@
   "communities/entries/9/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {
+     "tide": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -48249,6 +49236,9 @@
   "communities/entries/10/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -48379,6 +49369,9 @@
   "communities/entries/11/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -48522,6 +49515,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -48625,6 +49621,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -48707,6 +49706,9 @@
   "communities/entries/14/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -48860,6 +49862,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -48978,6 +49983,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -49089,6 +50097,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -49200,6 +50211,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -49311,6 +50325,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -49422,6 +50439,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -49531,6 +50551,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -49626,6 +50649,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -49700,6 +50726,9 @@
   "consumables/entries/8/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -49802,6 +50831,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -49899,6 +50931,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -49996,6 +51031,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -50070,6 +51108,9 @@
   "consumables/entries/12/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -50144,6 +51185,9 @@
   "consumables/entries/13/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -50249,6 +51293,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -50342,6 +51389,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -50437,6 +51487,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -50533,6 +51586,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -50628,6 +51684,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -50723,6 +51782,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -50820,6 +51882,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -50917,6 +51982,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -51012,6 +52080,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -51109,6 +52180,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -51206,6 +52280,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -51303,6 +52380,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -51400,6 +52480,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -51497,6 +52580,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -51594,6 +52680,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -51691,6 +52780,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -51786,6 +52878,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -51883,6 +52978,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -51957,6 +53055,9 @@
   "consumables/entries/32/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -52059,6 +53160,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -52133,6 +53237,9 @@
   "consumables/entries/34/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -52235,6 +53342,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -52328,6 +53438,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -52425,6 +53538,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -52522,6 +53638,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -52620,6 +53739,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -52716,6 +53838,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -52809,6 +53934,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -52904,6 +54032,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -52999,6 +54130,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -53096,6 +54230,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -53193,6 +54330,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -53286,6 +54426,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -53383,6 +54526,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -53480,6 +54626,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -53554,6 +54703,9 @@
   "consumables/entries/49/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -53651,6 +54803,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -53746,6 +54901,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -53843,6 +55001,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -53940,6 +55101,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -54035,6 +55199,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -54109,6 +55276,9 @@
   "consumables/entries/55/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -54204,6 +55374,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -54301,6 +55474,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -54375,6 +55551,9 @@
   "consumables/entries/58/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -54914,6 +56093,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -55011,6 +56193,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -55108,6 +56293,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -55203,6 +56391,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -55277,6 +56468,9 @@
   "consumables/entries/63/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -55374,6 +56568,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -55469,6 +56666,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -55562,6 +56762,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -55659,6 +56862,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -55756,6 +56962,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -55851,6 +57060,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -55968,6 +57180,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "jam_portions": 5
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -56067,6 +57284,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -56165,6 +57385,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -56260,6 +57483,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -56354,6 +57580,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -56449,6 +57678,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -56542,6 +57774,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -56639,6 +57874,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -56740,6 +57978,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -56837,6 +58078,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -56932,6 +58176,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -57029,6 +58276,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -57126,6 +58376,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -57225,6 +58478,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -57299,6 +58555,9 @@
   "consumables/entries/84/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -57396,6 +58655,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -57493,6 +58755,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -57590,6 +58855,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -57687,6 +58955,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -57761,6 +59032,9 @@
   "consumables/entries/89/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -57835,6 +59109,9 @@
   "consumables/entries/90/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -57932,6 +59209,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -58065,6 +59345,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -58165,6 +59448,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "warmth_pastries": 4
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -58266,6 +59554,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -58361,6 +59652,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -58454,6 +59748,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -58551,6 +59848,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -58648,6 +59948,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -58741,6 +60044,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -58838,6 +60144,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -58935,6 +60244,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -59032,6 +60344,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -59125,6 +60440,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -59223,6 +60541,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -59297,6 +60618,9 @@
   "consumables/entries/105/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -59401,6 +60725,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -59498,6 +60825,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -59595,6 +60925,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -59692,6 +61025,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -59789,6 +61125,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -59884,6 +61223,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -59982,6 +61324,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -60099,6 +61444,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -60196,6 +61544,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -60295,6 +61646,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -60392,6 +61746,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -60485,6 +61842,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -60582,6 +61942,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -60680,6 +62043,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -60773,6 +62139,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -60870,6 +62239,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -60965,6 +62337,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -61060,6 +62435,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -61157,6 +62535,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -61254,6 +62635,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -61351,6 +62735,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -61448,6 +62835,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -61545,6 +62935,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -61640,6 +63033,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -61714,6 +63110,9 @@
   "consumables/entries/130/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -61809,6 +63208,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -61904,6 +63306,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -62001,6 +63406,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -62098,6 +63506,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -62172,6 +63583,9 @@
   "consumables/entries/135/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -62276,6 +63690,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -62373,6 +63790,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -62469,6 +63889,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -62564,6 +63987,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -62659,6 +64085,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -62754,6 +64183,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -62849,6 +64281,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -62946,6 +64381,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -63041,6 +64479,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -63156,6 +64597,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -63251,6 +64695,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -63348,6 +64795,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -63445,6 +64895,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -63519,6 +64972,9 @@
   "consumables/entries/149/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -63621,6 +65077,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -63716,6 +65175,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -63811,6 +65273,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -63906,6 +65371,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -64003,6 +65471,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -64096,6 +65567,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -64189,6 +65663,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -64282,6 +65759,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -64379,6 +65859,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -64474,6 +65957,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -64571,6 +66057,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -64668,6 +66157,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -64763,6 +66255,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -64860,6 +66355,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -64957,6 +66455,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -65054,6 +66555,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -65151,6 +66655,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -65248,6 +66755,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -65345,6 +66855,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -65442,6 +66955,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -65538,6 +67054,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -65633,6 +67152,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -65728,6 +67250,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -65823,6 +67348,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -65918,6 +67446,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -66013,6 +67544,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -66110,6 +67644,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -66207,6 +67744,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -66304,6 +67844,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -66401,6 +67944,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -66498,6 +68044,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -66615,6 +68164,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -66710,6 +68262,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -66805,6 +68360,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -66902,6 +68460,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -66997,6 +68558,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -67094,6 +68658,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -67186,6 +68753,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -67260,6 +68830,9 @@
   "domain-cards/entries/2/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -67399,6 +68972,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -67473,6 +69049,9 @@
   "domain-cards/entries/4/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -67568,6 +69147,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -67670,6 +69252,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -67744,6 +69329,9 @@
   "domain-cards/entries/7/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -67864,6 +69452,9 @@
     "major": 13,
     "severe": 26
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -67957,6 +69548,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -68055,6 +69649,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -68147,6 +69744,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -68221,6 +69821,9 @@
   "domain-cards/entries/12/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -68295,6 +69898,9 @@
   "domain-cards/entries/13/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -68411,6 +70017,9 @@
   "domain-cards/entries/14/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -68544,6 +70153,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -68693,6 +70305,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -68809,6 +70424,9 @@
   "domain-cards/entries/17/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -68925,6 +70543,9 @@
   "domain-cards/entries/18/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -69020,6 +70641,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -69098,6 +70722,9 @@
   "domain-cards/entries/20/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -69198,6 +70825,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -69294,6 +70924,9 @@
   "domain-cards/entries/22/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -69428,6 +71061,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -69502,6 +71138,9 @@
   "domain-cards/entries/24/spells/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -69641,6 +71280,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -69715,6 +71357,9 @@
   "domain-cards/entries/24/spells/2/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -69848,6 +71493,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -70020,6 +71668,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -70136,6 +71787,9 @@
   "domain-cards/entries/26/spells/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -70673,6 +72327,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -70789,6 +72446,9 @@
   "domain-cards/entries/27/spells/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -70863,6 +72523,9 @@
   "domain-cards/entries/27/spells/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -70959,6 +72622,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -71056,6 +72722,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -71150,6 +72819,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -71262,6 +72934,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -71336,6 +73011,9 @@
   "domain-cards/entries/30/spells/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -71452,6 +73130,9 @@
   "domain-cards/entries/31/spells/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -71547,6 +73228,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -71650,6 +73334,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -71724,6 +73411,9 @@
   "domain-cards/entries/32/spells/2/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -71798,6 +73488,9 @@
   "domain-cards/entries/33/spells/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -71914,6 +73607,9 @@
   "domain-cards/entries/33/spells/2/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -71988,6 +73684,9 @@
   "domain-cards/entries/34/spells/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -72062,6 +73761,9 @@
   "domain-cards/entries/34/spells/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -72199,6 +73901,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -72279,6 +73984,9 @@
   "domain-cards/entries/36/spells/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -72371,6 +74079,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -72486,6 +74197,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -72579,6 +74293,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -73045,6 +74762,9 @@
   "domain-cards/entries/39/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -73165,6 +74885,9 @@
   "domain-cards/entries/40/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -73297,6 +75020,9 @@
   "domain-cards/entries/41/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -73432,6 +75158,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -73567,6 +75296,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -73641,6 +75373,9 @@
   "domain-cards/entries/44/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -73786,6 +75521,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -73877,6 +75615,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -74015,6 +75756,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -74149,6 +75893,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -74243,6 +75990,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "aura-layers": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -74363,6 +76115,9 @@
   "domain-cards/entries/50/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -74459,6 +76214,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -74533,6 +76291,9 @@
   "domain-cards/entries/50/spells/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -74675,6 +76436,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -74771,6 +76535,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -74851,6 +76618,9 @@
   "domain-cards/entries/53/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -74984,6 +76754,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -75100,6 +76873,9 @@
   "domain-cards/entries/55/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -75549,6 +77325,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -75627,6 +77406,9 @@
   "domain-cards/entries/57/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -75709,6 +77491,9 @@
   "domain-cards/entries/58/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -75825,6 +77610,11 @@
   "domain-cards/entries/59/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {
+     "fiends": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -76307,6 +78097,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -76404,6 +78197,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -76505,6 +78301,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -76602,6 +78401,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -76698,6 +78500,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -76823,6 +78628,9 @@
   "domain-cards/entries/65/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -76988,6 +78796,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -77083,6 +78894,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -77199,6 +79013,9 @@
   "domain-cards/entries/68/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -77319,6 +79136,9 @@
   "domain-cards/entries/69/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -77456,6 +79276,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -77536,6 +79359,9 @@
   "domain-cards/entries/71/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -77652,6 +79478,9 @@
   "domain-cards/entries/72/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -77768,6 +79597,9 @@
   "domain-cards/entries/73/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -77907,6 +79739,9 @@
     "major": 3,
     "severe": 3
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -77981,6 +79816,9 @@
   "domain-cards/entries/76/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -78223,6 +80061,9 @@
   "domain-cards/entries/77/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -78339,6 +80180,9 @@
   "domain-cards/entries/78/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -78455,6 +80299,11 @@
   "domain-cards/entries/79/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {
+     "fane": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -78594,6 +80443,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -78668,6 +80520,9 @@
   "domain-cards/entries/81/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -78742,6 +80597,11 @@
   "domain-cards/entries/82/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {
+     "flight": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -78839,6 +80699,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -78913,6 +80776,9 @@
   "domain-cards/entries/84/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -79009,6 +80875,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -79102,6 +80971,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -79176,6 +81048,11 @@
   "domain-cards/entries/87/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {
+     "sprites": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -79296,6 +81173,9 @@
   "domain-cards/entries/88/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -79393,6 +81273,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -79497,6 +81380,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -79596,6 +81482,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -80064,6 +81953,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -80138,6 +82030,9 @@
   "domain-cards/entries/93/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -80262,6 +82157,9 @@
   "domain-cards/entries/94/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -80378,6 +82276,9 @@
   "domain-cards/entries/95/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -80511,6 +82412,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -80622,6 +82526,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -80696,6 +82603,9 @@
   "domain-cards/entries/98/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -80812,6 +82722,9 @@
   "domain-cards/entries/99/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -80947,6 +82860,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -81105,6 +83021,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -81185,6 +83104,9 @@
   "domain-cards/entries/102/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -81301,6 +83223,9 @@
   "domain-cards/entries/103/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -81438,6 +83363,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -81577,6 +83505,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -81651,6 +83582,9 @@
   "domain-cards/entries/106/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -81767,6 +83701,9 @@
   "domain-cards/entries/107/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -81902,6 +83839,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -82441,6 +84381,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -82515,6 +84458,9 @@
   "domain-cards/entries/110/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -82735,6 +84681,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "inspiration": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -82836,6 +84787,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -82952,6 +84906,11 @@
   "domain-cards/entries/113/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {
+     "invisibility": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -83091,6 +85050,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -83173,6 +85135,9 @@
   "domain-cards/entries/115/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -83306,6 +85271,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -83464,6 +85432,9 @@
   "domain-cards/entries/117/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -83605,6 +85576,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -83704,6 +85678,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -83800,6 +85777,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -83893,6 +85873,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -83967,6 +85950,9 @@
   "domain-cards/entries/122/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -84102,6 +86088,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -84195,6 +86184,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -84350,6 +86342,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -84463,6 +86458,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -84597,6 +86595,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -84688,6 +86689,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -84864,6 +86868,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -84955,6 +86962,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -85050,6 +87060,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "upstaged": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -85633,6 +87648,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -85713,6 +87731,9 @@
   "domain-cards/entries/134/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -85834,6 +87855,9 @@
    "actions": {},
    "stats": {
     "loadoutMax": 1
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -85972,6 +87996,9 @@
   "domain-cards/entries/136/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -86457,6 +88484,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -86573,6 +88603,9 @@
   "domain-cards/entries/138/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -87016,6 +89049,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -87109,6 +89145,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -87187,6 +89226,9 @@
   "domain-cards/entries/141/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -87280,6 +89322,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -87418,6 +89463,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -87492,6 +89540,9 @@
   "domain-cards/entries/144/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -87614,6 +89665,9 @@
   "domain-cards/entries/145/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -87730,6 +89784,9 @@
   "domain-cards/entries/146/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -87823,6 +89880,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -87903,6 +89963,9 @@
   "domain-cards/entries/148/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -88019,6 +90082,9 @@
   "domain-cards/entries/149/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -88121,6 +90187,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -88256,6 +90325,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -88330,6 +90402,9 @@
   "domain-cards/entries/152/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -88413,6 +90488,9 @@
   "domain-cards/entries/153/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -88592,6 +90670,9 @@
   "domain-cards/entries/154/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -88676,6 +90757,9 @@
   "domain-cards/entries/155/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -88767,6 +90851,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -88883,6 +90970,9 @@
   "domain-cards/entries/157/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -89057,6 +91147,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "restoration": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -89135,6 +91230,9 @@
   "domain-cards/entries/159/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -89251,6 +91349,9 @@
   "domain-cards/entries/160/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -89326,6 +91427,9 @@
    "actions": {},
    "stats": {
     "severe": 2
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -89849,6 +91953,9 @@
   "domain-cards/entries/162/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -89992,6 +92099,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -90070,6 +92180,9 @@
   "domain-cards/entries/164/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -90342,6 +92455,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -90416,6 +92532,9 @@
   "domain-cards/entries/166/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -90490,6 +92609,9 @@
   "domain-cards/entries/167/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -90606,6 +92728,9 @@
   "domain-cards/entries/168/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -90741,6 +92866,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -90834,6 +92962,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -90934,6 +93065,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -91066,6 +93200,9 @@
   "domain-cards/entries/172/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -91178,6 +93315,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -91271,6 +93411,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -91366,6 +93509,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -91463,6 +93609,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -91563,6 +93712,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -91656,6 +93808,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -92238,6 +94393,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "retribution": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -92321,6 +94481,9 @@
   "domain-cards/entries/181/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -92486,6 +94649,9 @@
   "domain-cards/entries/182/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -92626,6 +94792,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -92713,6 +94882,9 @@
   "domain-cards/entries/184/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -92809,6 +94981,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -92905,6 +95080,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -92979,6 +95157,11 @@
   "domain-cards/entries/187/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {
+     "spellcharge": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -93501,6 +95684,9 @@
   "domain-cards/entries/188/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -94054,6 +96240,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -94153,6 +96342,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -94313,6 +96505,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "strategic": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -94402,6 +96599,9 @@
   "domain-cards/entries/192/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -94539,6 +96739,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -94617,6 +96820,9 @@
   "domain-cards/entries/194/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -94926,6 +97132,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -95000,6 +97209,9 @@
   "domain-cards/entries/196/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -95123,6 +97335,9 @@
   "domain-cards/entries/197/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -95239,6 +97454,9 @@
   "domain-cards/entries/198/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -95362,6 +97580,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -95478,6 +97699,9 @@
   "domain-cards/entries/201/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -95621,6 +97845,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "thorns": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -96061,6 +98290,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -96172,6 +98404,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -96310,6 +98545,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -96401,6 +98639,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -96558,6 +98799,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "twilight": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -96686,6 +98932,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "veil": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -96786,6 +99037,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -96886,6 +99140,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "disguise": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -96987,6 +99246,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -97111,6 +99373,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "chaos": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -97233,6 +99500,9 @@
    "stats": {
     "evasion": 1
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -97307,6 +99577,9 @@
   "domain-cards/entries/215/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -97773,6 +100046,9 @@
   "domain-cards/entries/216/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -97886,6 +100162,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -97982,6 +100261,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -98056,6 +100338,9 @@
   "domain-cards/entries/219/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -98130,6 +100415,9 @@
   "domain-cards/entries/220/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -98221,6 +100509,9 @@
   "domain-cards/entries/221/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -98380,6 +100671,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -98471,6 +100765,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -98545,6 +100842,9 @@
   "domain-cards/entries/224/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -98661,6 +100961,9 @@
   "domain-cards/entries/226/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -98791,6 +101094,9 @@
   "domain-cards/entries/227/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -98929,6 +101235,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -99044,6 +101353,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -99122,6 +101434,9 @@
   "domain-cards/entries/230/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -99271,6 +101586,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "fortress": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -99419,6 +101739,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "wild-surge": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -99503,6 +101828,9 @@
   "domain-cards/entries/233/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -99594,6 +101922,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -99710,6 +102041,11 @@
   "domain-cards/entries/235/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {
+     "protection": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -99830,6 +102166,9 @@
   "items/entries/24/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -99904,6 +102243,9 @@
   "items/entries/26/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -100004,6 +102346,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -100099,6 +102444,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -100173,6 +102521,9 @@
   "items/entries/37/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -100254,6 +102605,9 @@
   "items/entries/38/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -100816,6 +103170,9 @@
   "items/entries/39/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -100927,6 +103284,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -101007,6 +103367,9 @@
   "items/entries/41/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -101081,6 +103444,9 @@
   "items/entries/42/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -101155,6 +103521,9 @@
   "items/entries/44/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -101237,6 +103606,9 @@
   "items/entries/46/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -101360,6 +103732,9 @@
   "items/entries/47/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -101434,6 +103809,9 @@
   "items/entries/48/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -102008,6 +104386,9 @@
   "items/entries/49/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -102603,6 +104984,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -102701,6 +105085,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -102794,6 +105181,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -102905,6 +105295,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -102979,6 +105372,9 @@
   "items/entries/55/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -103499,6 +105895,9 @@
   "items/entries/56/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -103596,6 +105995,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -103676,6 +106078,9 @@
   "items/entries/58/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -104256,6 +106661,9 @@
   "items/entries/60/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -104472,6 +106880,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -104574,6 +106985,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "hopekeeper_locket": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -104652,6 +107068,9 @@
   "items/entries/64/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -104726,6 +107145,9 @@
   "items/entries/65/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -104800,6 +107222,9 @@
   "items/entries/66/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -104874,6 +107299,9 @@
   "items/entries/67/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -104948,6 +107376,9 @@
   "items/entries/68/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -105022,6 +107453,9 @@
   "items/entries/69/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -105096,6 +107530,9 @@
   "items/entries/70/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -105261,6 +107698,9 @@
   "items/entries/74/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -105358,6 +107798,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -105438,6 +107881,9 @@
   "items/entries/76/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -106012,6 +108458,9 @@
   "items/entries/77/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -106586,6 +109035,9 @@
   "items/entries/78/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -107160,6 +109612,9 @@
   "items/entries/79/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -107734,6 +110189,9 @@
   "items/entries/80/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -108308,6 +110766,9 @@
   "items/entries/81/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -108902,6 +111363,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -108996,6 +111460,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -109070,6 +111537,11 @@
   "items/entries/84/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {
+     "alconite": 1
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -109148,6 +111620,9 @@
   "items/entries/85/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -109738,6 +112213,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -109833,6 +112311,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -109932,6 +112413,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -110035,6 +112519,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -110115,6 +112602,9 @@
   "items/entries/91/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -110212,6 +112702,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -110292,6 +112785,9 @@
   "items/entries/93/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -110783,6 +113279,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -110878,6 +113377,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -110952,6 +113454,9 @@
   "items/entries/96/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -111074,6 +113579,9 @@
   "items/entries/97/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -111835,6 +114343,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -111928,6 +114439,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -112027,6 +114541,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -112131,6 +114648,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "scarab_damage": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -112724,6 +115246,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -112802,6 +115327,9 @@
   "items/entries/104/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -113001,6 +115529,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -113098,6 +115629,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -113180,6 +115714,9 @@
   "items/entries/107/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -113254,6 +115791,9 @@
   "items/entries/108/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -113438,6 +115978,9 @@
   "items/entries/109/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -113589,6 +116132,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -113688,6 +116234,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -113791,6 +116340,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -113912,6 +116464,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -113986,6 +116541,9 @@
   "items/entries/114/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -114710,6 +117268,11 @@
   "items/entries/115/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {
+     "superior_alconite": 1
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -114788,6 +117351,9 @@
   "items/entries/116/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -115368,6 +117934,9 @@
   "items/entries/117/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -115479,6 +118048,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -115561,6 +118133,9 @@
   "items/entries/119/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -115635,6 +118210,9 @@
   "items/entries/120/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -116234,6 +118812,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -116331,6 +118912,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -116427,6 +119011,9 @@
   "items/entries/123/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -116647,6 +119234,9 @@
   "items/entries/124/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -117233,6 +119823,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -117307,6 +119900,9 @@
   "items/entries/126/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -117827,6 +120423,9 @@
   "items/entries/127/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -118070,6 +120669,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "wraith_spirits": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -118183,6 +120787,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -118703,6 +121310,9 @@
   "items/entries/130/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -118798,6 +121408,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -118902,6 +121515,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -118999,6 +121615,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -119081,6 +121700,9 @@
   "items/entries/135/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -119235,6 +121857,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -119328,6 +121953,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -119423,6 +122051,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -119524,6 +122155,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -119604,6 +122238,9 @@
   "items/entries/155/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -119707,6 +122344,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -119806,6 +122446,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -119907,6 +122550,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -119981,6 +122627,9 @@
   "items/entries/163/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -120078,6 +122727,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -120182,6 +122834,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -120281,6 +122936,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -120359,6 +123017,9 @@
   "items/entries/171/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -120454,6 +123115,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -120549,6 +123213,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -120654,6 +123321,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -120758,6 +123428,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -120857,6 +123530,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -120931,6 +123607,9 @@
   "items/entries/180/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -121028,6 +123707,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -121108,6 +123790,9 @@
   "items/entries/183/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -121182,6 +123867,9 @@
   "items/entries/184/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -121323,6 +124011,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -121446,6 +124137,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -121547,6 +124241,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -121648,6 +124345,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -121747,6 +124447,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -121827,6 +124530,9 @@
   "items/entries/194/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -122021,6 +124727,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -122114,6 +124823,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -122211,6 +124923,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "death-mask": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -122289,6 +125006,9 @@
   "items/entries/198/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -122713,6 +125433,9 @@
   "items/entries/199/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -123233,6 +125956,9 @@
   "items/entries/200/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -123699,6 +126425,9 @@
   "transformations/entries/0/features/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -123792,6 +126521,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -124444,6 +127176,9 @@
   "transformations/entries/2/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -124535,6 +127270,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -124626,6 +127364,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -124737,6 +127478,11 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {
+     "feedTokens": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -124815,6 +127561,11 @@
   "transformations/entries/4/features/1/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {
+     "feedTokens": 0
+    }
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -125089,6 +127840,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -125651,6 +128405,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -125725,6 +128482,9 @@
   "weapons/entries/0/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -125800,6 +128560,9 @@
    "actions": {},
    "stats": {
     "evasion": -1
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -125877,6 +128640,9 @@
    "stats": {
     "evasion": -1
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -125951,6 +128717,9 @@
   "weapons/entries/9/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -126034,6 +128803,9 @@
   "weapons/entries/10/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -126108,6 +128880,9 @@
   "weapons/entries/14/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -126182,6 +128957,9 @@
   "weapons/entries/22/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -126256,6 +129034,9 @@
   "weapons/entries/24/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -126330,6 +129111,9 @@
   "weapons/entries/25/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -126405,6 +129189,9 @@
    "actions": {},
    "stats": {
     "evasion": -1
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -126482,6 +129269,9 @@
    "stats": {
     "evasion": -1
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -126556,6 +129346,9 @@
   "weapons/entries/34/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -126639,6 +129432,9 @@
   "weapons/entries/35/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -126713,6 +129509,9 @@
   "weapons/entries/39/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -126787,6 +129586,9 @@
   "weapons/entries/40/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -126861,6 +129663,9 @@
   "weapons/entries/41/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -126935,6 +129740,9 @@
   "weapons/entries/43/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -127018,6 +129826,9 @@
   "weapons/entries/45/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -127092,6 +129903,9 @@
   "weapons/entries/46/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -127166,6 +129980,9 @@
   "weapons/entries/47/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -127240,6 +130057,9 @@
   "weapons/entries/48/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -127314,6 +130134,9 @@
   "weapons/entries/56/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -127388,6 +130211,9 @@
   "weapons/entries/58/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -127462,6 +130288,9 @@
   "weapons/entries/59/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -127537,6 +130366,9 @@
   "weapons/entries/60/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -127611,6 +130443,9 @@
   "weapons/entries/63/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -127685,6 +130520,9 @@
   "weapons/entries/64/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -127759,6 +130597,9 @@
   "weapons/entries/65/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -127887,6 +130728,9 @@
   "weapons/entries/66/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -127988,6 +130832,9 @@
   "weapons/entries/67/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -128062,6 +130909,9 @@
   "weapons/entries/68/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -128137,6 +130987,9 @@
    "actions": {},
    "stats": {
     "evasion": -1
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -128214,6 +131067,9 @@
    "stats": {
     "evasion": -1
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -128288,6 +131144,9 @@
   "weapons/entries/77/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -128371,6 +131230,9 @@
   "weapons/entries/78/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -128445,6 +131307,9 @@
   "weapons/entries/82/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -128519,6 +131384,9 @@
   "weapons/entries/83/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -128596,6 +131464,9 @@
     "evasion": -1,
     "severe": 3
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -128670,6 +131541,9 @@
   "weapons/entries/85/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -128755,6 +131629,9 @@
    "stats": {
     "armorSlots": 1
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -128829,6 +131706,9 @@
   "weapons/entries/87/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -128911,6 +131791,9 @@
   "weapons/entries/89/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -128985,6 +131868,9 @@
   "weapons/entries/90/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -129059,6 +131945,9 @@
   "weapons/entries/91/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -129133,6 +132022,9 @@
   "weapons/entries/92/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -129207,6 +132099,9 @@
   "weapons/entries/100/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -129281,6 +132176,9 @@
   "weapons/entries/102/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -129355,6 +132253,9 @@
   "weapons/entries/103/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -129483,6 +132384,9 @@
   "weapons/entries/104/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -129557,6 +132461,9 @@
   "weapons/entries/105/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -129631,6 +132538,9 @@
   "weapons/entries/106/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -129715,6 +132625,9 @@
   "weapons/entries/108/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -129789,6 +132702,9 @@
   "weapons/entries/110/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -129863,6 +132779,9 @@
   "weapons/entries/111/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -129937,6 +132856,9 @@
   "weapons/entries/112/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -130012,6 +132934,9 @@
    "actions": {},
    "stats": {
     "evasion": -1
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -130089,6 +133014,9 @@
    "stats": {
     "evasion": -1
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -130163,6 +133091,9 @@
   "weapons/entries/121/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -130246,6 +133177,9 @@
   "weapons/entries/122/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -130320,6 +133254,9 @@
   "weapons/entries/126/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -130394,6 +133331,9 @@
   "weapons/entries/127/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -130477,6 +133417,9 @@
   "weapons/entries/128/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -130605,6 +133548,9 @@
   "weapons/entries/129/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -130679,6 +133625,9 @@
   "weapons/entries/130/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -130753,6 +133702,9 @@
   "weapons/entries/132/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -130881,6 +133833,9 @@
   "weapons/entries/133/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -130964,6 +133919,9 @@
   "weapons/entries/134/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -131038,6 +133996,9 @@
   "weapons/entries/135/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -131112,6 +134073,9 @@
   "weapons/entries/143/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -131186,6 +134150,9 @@
   "weapons/entries/145/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -131260,6 +134227,9 @@
   "weapons/entries/147/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -131388,6 +134358,9 @@
   "weapons/entries/148/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -131472,6 +134445,9 @@
   "weapons/entries/149/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -131546,6 +134522,9 @@
   "weapons/entries/150/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -131630,6 +134609,9 @@
   "weapons/entries/151/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -131704,6 +134686,9 @@
   "weapons/entries/153/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -131778,6 +134763,9 @@
   "weapons/entries/154/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -131852,6 +134840,9 @@
   "weapons/entries/155/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -131935,6 +134926,9 @@
   "weapons/entries/156/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -132018,6 +135012,9 @@
   "weapons/entries/157/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -132101,6 +135098,9 @@
   "weapons/entries/158/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -132186,6 +135186,9 @@
    "stats": {
     "evasion": -1
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -132261,6 +135264,9 @@
    "actions": {},
    "stats": {
     "evasion": -1
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -132338,6 +135344,9 @@
    "stats": {
     "evasion": -1
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -132414,6 +135423,9 @@
    "stats": {
     "evasion": -1
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -132488,6 +135500,9 @@
   "weapons/entries/163/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -132562,6 +135577,9 @@
   "weapons/entries/164/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -132636,6 +135654,9 @@
   "weapons/entries/165/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -132710,6 +135731,9 @@
   "weapons/entries/166/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -132784,6 +135808,9 @@
   "weapons/entries/167/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -132859,6 +135886,9 @@
    "actions": {},
    "stats": {
     "armorSlots": 1
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -132937,6 +135967,9 @@
     "evasion": -1,
     "armorSlots": 2
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -133011,6 +136044,9 @@
   "weapons/entries/170/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -133104,6 +136140,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -133178,6 +136217,9 @@
   "weapons/entries/174/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -133253,6 +136295,9 @@
    "actions": {},
    "stats": {
     "armorSlots": 2
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -133331,6 +136376,9 @@
     "evasion": -1,
     "armorSlots": 3
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -133405,6 +136453,9 @@
   "weapons/entries/177/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -133498,6 +136549,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -133573,6 +136627,9 @@
    "actions": {},
    "stats": {
     "armorSlots": 1
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -133665,6 +136722,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -133739,6 +136799,9 @@
   "weapons/entries/184/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -133814,6 +136877,9 @@
    "actions": {},
    "stats": {
     "armorSlots": 3
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -133892,6 +136958,9 @@
     "evasion": -1,
     "armorSlots": 4
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -133966,6 +137035,9 @@
   "weapons/entries/187/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -134059,6 +137131,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -134152,6 +137227,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -134226,6 +137304,9 @@
   "weapons/entries/192/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -134300,6 +137381,9 @@
   "weapons/entries/193/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -134374,6 +137458,9 @@
   "weapons/entries/194/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -134449,6 +137536,9 @@
    "actions": {},
    "stats": {
     "armorSlots": 4
+   },
+   "init": {
+    "resources": {}
    },
    "rest": {
     "short": {
@@ -134527,6 +137617,9 @@
     "evasion": -1,
     "armorSlots": 5
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -134601,6 +137694,9 @@
   "weapons/entries/197/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -134694,6 +137790,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -134768,6 +137867,9 @@
   "weapons/entries/203/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -134917,6 +138019,9 @@
    "stats": {
     "armorSlots": 1
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -134991,6 +138096,9 @@
   "weapons/entries/208/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -135142,6 +138250,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {
@@ -135222,6 +138333,9 @@
   "weapons/entries/210/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -135694,6 +138808,9 @@
   "weapons/entries/211/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -135822,6 +138939,9 @@
   "weapons/entries/212/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -135913,6 +139033,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -135987,6 +139110,9 @@
   "weapons/entries/215/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -136070,6 +139196,9 @@
   "weapons/entries/219/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -136144,6 +139273,9 @@
   "weapons/entries/222/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -136218,6 +139350,9 @@
   "weapons/entries/223/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -136301,6 +139436,9 @@
   "weapons/entries/224/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -136375,6 +139513,9 @@
   "weapons/entries/225/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -136449,6 +139590,9 @@
   "weapons/entries/226/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -136539,6 +139683,9 @@
   "weapons/entries/227/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -136622,6 +139769,9 @@
   "weapons/entries/231/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -136713,6 +139863,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -136787,6 +139940,9 @@
   "weapons/entries/237/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -136861,6 +140017,9 @@
   "weapons/entries/238/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -136935,6 +140094,9 @@
   "weapons/entries/240/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -137009,6 +140171,9 @@
   "weapons/entries/241/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -137092,6 +140257,9 @@
   "weapons/entries/242/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -137166,6 +140334,9 @@
   "weapons/entries/243/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -137240,6 +140411,9 @@
   "weapons/entries/244/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -137332,6 +140506,9 @@
    "stats": {
     "armorSlots": 1
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -137406,6 +140583,9 @@
   "weapons/entries/246/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -137488,6 +140668,9 @@
   "weapons/entries/249/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -137616,6 +140799,9 @@
   "weapons/entries/250/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -137699,6 +140885,9 @@
   "weapons/entries/251/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -137782,6 +140971,9 @@
   "weapons/entries/255/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -137856,6 +141048,9 @@
   "weapons/entries/257/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -137940,6 +141135,9 @@
   "weapons/entries/259/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -138460,6 +141658,9 @@
   "weapons/entries/260/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -138543,6 +141744,9 @@
   "weapons/entries/261/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -138663,6 +141867,9 @@
   "weapons/entries/262/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -138791,6 +141998,9 @@
   "weapons/entries/264/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -138865,6 +142075,9 @@
   "weapons/entries/265/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -138948,6 +142161,9 @@
   "weapons/entries/266/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -139022,6 +142238,9 @@
   "weapons/entries/267/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -139096,6 +142315,9 @@
   "weapons/entries/268/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -139186,6 +142408,9 @@
   "weapons/entries/269/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -139314,6 +142539,9 @@
   "weapons/entries/271/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -139397,6 +142625,9 @@
   "weapons/entries/273/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -139471,6 +142702,9 @@
   "weapons/entries/274/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -139599,6 +142833,9 @@
   "weapons/entries/275/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -139682,6 +142919,9 @@
   "weapons/entries/279/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -139756,6 +142996,9 @@
   "weapons/entries/281/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -139830,6 +143073,9 @@
   "weapons/entries/282/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -139929,6 +143175,9 @@
   "weapons/entries/283/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -140012,6 +143261,9 @@
   "weapons/entries/284/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -140086,6 +143338,9 @@
   "weapons/entries/285/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -140169,6 +143424,9 @@
   "weapons/entries/286/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -140243,6 +143501,9 @@
   "weapons/entries/288/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -140317,6 +143578,9 @@
   "weapons/entries/289/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -140400,6 +143664,9 @@
   "weapons/entries/290/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -140474,6 +143741,9 @@
   "weapons/entries/291/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -140548,6 +143818,9 @@
   "weapons/entries/292/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -140638,6 +143911,9 @@
   "weapons/entries/293/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -140712,6 +143988,9 @@
   "weapons/entries/296/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -140817,6 +144096,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -140891,6 +144173,9 @@
   "weapons/entries/298/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -141019,6 +144304,9 @@
   "weapons/entries/299/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -141093,6 +144381,9 @@
   "weapons/entries/300/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -141167,6 +144458,9 @@
   "weapons/entries/301/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -141244,6 +144538,9 @@
     "major": 2,
     "severe": 2
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -141320,6 +144617,9 @@
    "stats": {
     "armorSlots": 1
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -141394,6 +144694,9 @@
   "weapons/entries/304/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -141468,6 +144771,9 @@
   "weapons/entries/305/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -141542,6 +144848,9 @@
   "weapons/entries/306/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -141616,6 +144925,9 @@
   "weapons/entries/307/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -141693,6 +145005,9 @@
     "major": 3,
     "severe": 3
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -141769,6 +145084,9 @@
    "stats": {
     "armorSlots": 2
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -141843,6 +145161,9 @@
   "weapons/entries/310/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -141936,6 +145257,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -142012,6 +145336,9 @@
    "stats": {
     "armorSlots": 1
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -142086,6 +145413,9 @@
   "weapons/entries/314/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -142202,6 +145532,9 @@
   "weapons/entries/315/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -142276,6 +145609,9 @@
   "weapons/entries/316/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -142350,6 +145686,9 @@
   "weapons/entries/317/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -142427,6 +145766,9 @@
     "major": 4,
     "severe": 4
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -142503,6 +145845,9 @@
    "stats": {
     "armorSlots": 3
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -142577,6 +145922,9 @@
   "weapons/entries/320/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -142651,6 +145999,9 @@
   "weapons/entries/321/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -142725,6 +146076,9 @@
   "weapons/entries/322/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -142853,6 +146207,9 @@
   "weapons/entries/323/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -142981,6 +146338,9 @@
   "weapons/entries/324/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -143055,6 +146415,9 @@
   "weapons/entries/325/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -143129,6 +146492,9 @@
   "weapons/entries/326/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -143203,6 +146569,9 @@
   "weapons/entries/327/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -143280,6 +146649,9 @@
     "major": 5,
     "severe": 5
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -143356,6 +146728,9 @@
    "stats": {
     "armorSlots": 4
    },
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -143430,6 +146805,9 @@
   "weapons/entries/330/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -143504,6 +146882,9 @@
   "weapons/entries/331/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -143624,6 +147005,9 @@
   "weapons/entries/333/automation": {
    "actions": {},
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},
@@ -143717,6 +147101,9 @@
     }
    },
    "stats": {},
+   "init": {
+    "resources": {}
+   },
    "rest": {
     "short": {
      "usageBefore": {},

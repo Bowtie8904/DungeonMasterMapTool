@@ -151,7 +151,9 @@ class ParityLedgerTest {
             if (mitigationProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("mitigation: " + mitigationProblem);
             String attachProblem = attachMismatch(pack, placed, expected.path("attach"));
             if (attachProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("attach: " + attachProblem);
-            String armorProblem = armorMismatch(pack, placed, legacyArmorAutomation(row));
+            String initProblem = initMismatch(pack, placed, expected.path("init"), legacyAutomation(row));
+            if (initProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("init: " + initProblem);
+            String armorProblem = armorMismatch(pack, placed, legacyAutomation(row));
             if (armorProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("armor: " + armorProblem);
             String triggerProblem = triggerMismatch(pack, placed, expected.path("triggers"));
             if (triggerProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("triggers: " + triggerProblem);
@@ -186,7 +188,7 @@ class ParityLedgerTest {
     /** Automation fields whose behavior the harness replays against the legacy baseline. */
     private static final java.util.Set<String> PROBED = java.util.Set.of("actions", "uses", "rest", "modifiers", "rollOptions",
             "conditionalRollOptions", "conditionalModifiers", "conditionalActions", "usesOverrides", "rollTriggers", "conditionalRollTriggers", "attach", "mitigation", "conditionalMitigation",
-            "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "equipEffect", "zeroHopeClearArmor");
+            "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "equipEffect", "zeroHopeClearArmor", "resources", "classResourceOnly");
 
     private static void writeLedger(Map<String, List<String>> failures) throws Exception {
         Path file = Path.of("docs/automation-parity-ledger.csv");
@@ -268,14 +270,33 @@ class ParityLedgerTest {
         return null;
     }
 
+    /** Compares the pools the source (or a sibling feature of the same entry, as in the legacy sheet) declares with the legacy synced resources. */
+    private static String initMismatch(AutomationHost.Pack pack, Placed placed, JsonNode expected, JsonNode legacyAutomation) {
+        JsonNode legacy = expected.path("resources");
+        if (!legacy.isObject() || legacy.isEmpty()) return null;
+        String entryId = placed.sourceId().contains(":features:") ? placed.sourceId().substring(0, placed.sourceId().indexOf(":features:")) : placed.sourceId();
+        java.util.Map<String, Integer> declared = new java.util.HashMap<>();
+        pack.programs().forEach((id, program) -> {
+            if (!id.equals(entryId) && !id.startsWith(entryId + ":")) return;
+            program.pools().properties().forEach(pool -> declared.put(NON_SLUG.matcher(pool.getKey().toLowerCase(java.util.Locale.ROOT)).replaceAll(""), pool.getValue().path("initial").asInt()));
+        });
+        for (var resource : legacy.properties()) {
+            String slug = NON_SLUG.matcher(resource.getKey().toLowerCase(java.util.Locale.ROOT)).replaceAll("");
+            if (!declared.containsKey(slug)) pack.programs().values().forEach(program -> program.pools().properties().forEach(pool -> {
+                if (NON_SLUG.matcher(pool.getKey().toLowerCase(java.util.Locale.ROOT)).replaceAll("").equals(slug)) declared.putIfAbsent(slug, pool.getValue().path("initial").asInt());
+            }));
+            if (!declared.containsKey(slug)) return "pool " + resource.getKey() + " is not declared; declared=" + declared.keySet();
+            if (declared.get(slug) != resource.getValue().asInt()) return "pool " + resource.getKey() + " legacy=" + resource.getValue().asInt() + " new initial=" + declared.get(slug);
+        }
+        return null;
+    }
     private static JsonNode currentAutomation;
 
-    private static final List<String> ARMOR_HOSTED = List.of("armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "equipEffect", "zeroHopeClearArmor");
+    private static final List<String> ARMOR_HOSTED = List.of("armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "equipEffect", "zeroHopeClearArmor", "resources", "classResourceOnly");
     private static final int[][] ARMOR_STEPS = {{0, 3}, {2, 3}, {4, 3}, {3, 3}, {4, 3}, {4, 0}, {4, 2}};
 
-    private static JsonNode legacyArmorAutomation(Row row) throws Exception {
-        if (!"armor".equals(row.category())) return null;
-        JsonNode legacy = new com.fasterxml.jackson.databind.ObjectMapper().readTree(Files.readString(Path.of("dmmap-daggerheart/armor.json")));
+    private static JsonNode legacyAutomation(Row row) throws Exception {
+        JsonNode legacy = new com.fasterxml.jackson.databind.ObjectMapper().readTree(Files.readString(Path.of("dmmap-daggerheart/" + row.category() + ".json")));
         return legacy.at(row.pointer());
     }
 

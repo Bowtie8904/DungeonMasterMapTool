@@ -196,6 +196,13 @@ function probeStats(row: Row) {
   return delta;
 }
 
+function probeInit(row: Row) {
+  const placed = place(row);
+  if (!placed) return undefined;
+  syncResources(placed.sheet);
+  return { resources: Object.fromEntries(Object.entries(placed.sheet.resources ?? {}).sort()) };
+}
+
 function probeRest(row: Row) {
   const placed = place(row);
   if (!placed) return undefined;
@@ -409,7 +416,7 @@ export function capture(): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const row of rows) {
     const key = `${row.category}${row.pointer}`;
-    out[key] = { actions: probeActions(row), stats: probeStats(row), rest: probeRest(row), rolls: probeRolls(row), triggers: probeTriggers(row), attach: probeAttach(row), mitigation: probeMitigation(row) };
+    out[key] = { actions: probeActions(row), stats: probeStats(row), init: probeInit(row), rest: probeRest(row), rolls: probeRolls(row), triggers: probeTriggers(row), attach: probeAttach(row), mitigation: probeMitigation(row) };
   }
   return out;
 }
