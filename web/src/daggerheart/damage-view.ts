@@ -1,8 +1,9 @@
+import { formatText } from './texts';
 import { el } from '../login';
 import { confirmDialog } from '../dialogs';
 import type { CharacterSheet } from './data';
 import type { FeatureRequest } from '../api';
-import { costText, usesLeft } from './engine';
+import { costText, optionRowParts, usesLeft } from './engine';
 import {
   AvailableMitigation, DamageInput, DamageType, SEVERITY_LABELS, applyDamage, availableMitigations, computeDamage, mitigationBlocker, quantityMax,
 } from './damage';
@@ -39,19 +40,24 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
   const cancel = el('button', { type: 'button' }, 'Cancel');
   cancel.addEventListener('click', close);
 
-  const meta = (m: AvailableMitigation): string => {
+  const meta = (m: AvailableMitigation, withLimits = false): string => {
     const bits: string[] = [];
     const cost = costText(m.option.cost ?? {}, c);
     if (cost) bits.push(m.option.quantity ? `${cost} each` : cost);
     const armorCost = costText(m.option.armorCost ?? {}, c);
     if (armorCost) bits.push(`${armorCost} per Armor Slot marked`);
+    if (withLimits) bits.push(...limits(m));
+    return bits.join(' - ');
+  };
+  const limits = (m: AvailableMitigation): string[] => {
+    const bits: string[] = [];
     const uses = m.option.uses === 'source' ? m.automation.uses : m.option.uses;
     if (uses) {
       const key = m.option.uses === 'source' ? m.key : `${m.key}:mitigation:${m.option.id}`;
       bits.push(`${usesLeft(c, key, { uses }) ?? 0}/${uses.max} left`);
     }
     if (m.option.consumeItem && m.item) bits.push(`${m.item.qty} owned`);
-    return bits.join(' - ');
+    return bits;
   };
 
   function draw(): void {
@@ -103,8 +109,10 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
           draw();
         });
         const info = meta(m);
-        const text = el('span', {}, el('b', {}, m.option.label), el('span', { class: 'muted' }, ` - ${m.source}${info ? ` (${info})` : ''}`));
-        if (m.option.description) text.append(el('small', { class: 'muted' }, m.option.description));
+        const parts = optionRowParts(m);
+        const text = el('span', {}, el('b', {}, parts.name), el('span', { class: 'muted' }, ` - ${mitigationLabel(m.option)}${info ? ` (${info})` : ''}`));
+        const detail = [m.option.description, limits(m).length ? `(${limits(m).join(' - ')})` : ''].filter(Boolean).join(' ');
+        if (detail) text.append(el('small', { class: 'muted' }, detail));
         const faces = r.used[m.id];
         if (box.checked && faces?.length && !m.option.hiddenRoll) text.append(el('small', {}, `Rolled ${faces.join(', ')}`));
         const why = box.checked ? r.inactive[m.id] : staticWhy;
@@ -127,11 +135,11 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
       for (const m of passives) {
         const on = r.applied.some((a) => a.id === m.id);
         const why = r.inactive[m.id];
-        const info = meta(m);
+        const info = meta(m, true);
         const faces = r.used[m.id];
         list.append(el(
           'div', { class: on ? 'on' : 'muted' },
-          `${on ? '\u2713' : '\u2013'} ${m.option.label} (${m.source})${info ? ` - ${info}` : ''}${on && faces?.length && !m.option.hiddenRoll ? ` - rolled ${faces.join(', ')}` : ''}${!on && why ? ` - ${why}` : ''}`,
+          `${on ? '\u2713' : '\u2013'} ${optionRowParts(m).name} - ${mitigationLabel(m.option)}${info ? ` (${info})` : ''}${on && faces?.length && !m.option.hiddenRoll ? ` - rolled ${faces.join(', ')}` : ''}${!on && why ? ` - ${why}` : ''}`,
         ));
       }
       body.append(list);
@@ -211,4 +219,9 @@ export function openDamageDialog(host: HTMLElement, c: CharacterSheet, onDone: (
   host.append(backdrop);
   draw();
   amount.focus();
+}
+
+function mitigationLabel(option: { label: string; texts?: { button?: string; option?: string } }): string {
+  if (option.texts?.option) return formatText(option.texts.option, { label: option.label });
+  return option.texts?.button ? formatText(option.texts.button, { label: option.label }) : option.label;
 }

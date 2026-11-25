@@ -1,6 +1,7 @@
 import { el } from './login';
 import { itemName } from './item-artwork';
 import { confirmDialog } from './dialogs';
+import { validateCatalogTexts } from './daggerheart/texts';
 import { markdownBlock } from './compendium';
 import {
   CatalogShapes, CATALOG_LABELS, cloneValue, entryTemplate, entryFieldTab, fieldHelp, fieldLabel, isCatalogObject,
@@ -108,7 +109,9 @@ export class CatalogEditor {
       this.original = JSON.stringify(this.draft);
       this.panels = [];
       this.shapes = new CatalogShapes([...this.documents.values()].map(d => d.file));
-      this.message = `Saved to ${this.category}.json. Linked sheets and compendiums now use these rules.`;
+      const textProblems = validateCatalogTexts(`${this.category}.json`, this.draft);
+      this.message = `Saved to ${this.category}.json. Linked sheets and compendiums now use these rules.`
+        + (textProblems.length ? ` Text warnings: ${textProblems.join('; ')}` : '');
       this.error = false;
       try { await this.saved(); }
       catch (error) { this.fail(new Error(`The JSON was saved, but the compendium could not refresh: ${(error as Error).message}`)); }

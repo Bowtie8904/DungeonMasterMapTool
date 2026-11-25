@@ -1,0 +1,11 @@
+[
+  { "template": "plain", "vars": {}, "expected": "plain" },
+  { "template": "{actor} uses {source}", "vars": { "actor": "Ayla", "source": "Rally" }, "expected": "Ayla uses Rally" },
+  { "template": "{{literal}} {amount}", "vars": { "amount": 3 }, "expected": "{literal} 3" },
+  { "template": "{unknown} stays", "vars": {}, "expected": "{unknown} stays" },
+  { "template": "{actor} missing", "vars": {}, "expected": "{actor} missing" },
+  { "template": "{a}{b}", "vars": { "a": "x", "b": "y" }, "expected": "xy" },
+  { "template": "Gain {amount} Hope", "vars": { "amount": 0 }, "expected": "Gain 0 Hope" },
+  { "template": "{ spaced }", "vars": { "spaced": "no" }, "expected": "{ spaced }" },
+  { "template": "}}{{", "vars": {}, "expected": "}{" }
+]

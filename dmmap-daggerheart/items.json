@@ -159,6 +159,12 @@
      {
       "id": "downtime",
       "label": "Downtime: clear Stress",
+      "texts": {
+       "button": "Downtime: clear Stress",
+       "chatButton": "Downtime: clear Stress",
+       "roll": "Downtime: clear Stress",
+       "reportTitle": "{source} - Downtime: clear Stress"
+      },
       "steps": [
        {
         "op": "clear",
@@ -207,7 +213,10 @@
       "label": "Charging Quiver",
       "roll": "damage",
       "value": "@tier",
-      "description": "Only a successful attack with an arrow stored in this quiver."
+      "description": "Only a successful attack with an arrow stored in this quiver.",
+      "texts": {
+       "option": "Add your tier to damage"
+      }
      }
     ]
    }
@@ -251,6 +260,12 @@
      {
       "id": "use",
       "label": "Trap a creature",
+      "texts": {
+       "button": "Trap a creature",
+       "chatButton": "Trap a creature",
+       "roll": "Trap a creature",
+       "reportTitle": "{source} - Trap a creature"
+      },
       "actionRoll": {
        "trait": "Finesse"
       }
@@ -283,6 +298,12 @@
      {
       "id": "use",
       "label": "Recreate a guise",
+      "texts": {
+       "button": "Recreate a guise",
+       "chatButton": "Recreate a guise",
+       "roll": "Recreate a guise",
+       "reportTitle": "{source} - Recreate a guise"
+      },
       "cost": {
        "hope": 1
       }
@@ -321,6 +342,9 @@
       "uses": {
        "max": 3,
        "per": "rest"
+      },
+      "texts": {
+       "option": "Add your Proficiency to damage"
       }
      }
     ]
@@ -355,7 +379,12 @@
          "sides": 6,
          "success": 6
         },
-        "saveArmor": 1
+        "saveArmor": 1,
+        "texts": {
+         "name": "Valorstone",
+         "option": "Resilient: on a 6 on a d6, reduce severity by one threshold"
+        },
+        "description": "Roll before you mark your last Armor Slot."
        }
       ]
      }
@@ -375,7 +404,9 @@
       "label": "Skeleton Key",
       "roll": "trait:Finesse",
       "advantage": "advantage",
-      "description": "When you use this key to open a locked door, you gain advantage on the Finesse Roll."
+      "texts": {
+       "option": "Advantage on Finesse Rolls to open a locked door"
+      }
      }
     ]
    }
@@ -395,6 +426,12 @@
      {
       "id": "activate",
       "label": "Activate prism",
+      "texts": {
+       "button": "Activate prism",
+       "chatButton": "Activate prism",
+       "roll": "Activate prism",
+       "reportTitle": "{source} - Activate prism"
+      },
       "allowSourceOwner": true,
       "chatBenefits": [
        {
@@ -415,7 +452,10 @@
              "roll": "spellcast",
              "value": 1,
              "defaultOn": true,
-             "description": "Only while within Close range of the activated prism."
+             "description": "Only while within Close range of the activated prism.",
+             "texts": {
+              "option": "+1 to Spellcast Rolls"
+             }
             }
            ]
           }
@@ -438,6 +478,12 @@
      {
       "id": "downtime-narrative",
       "label": "Craft a Minor Stamina Potion",
+      "texts": {
+       "button": "Craft a Minor Stamina Potion",
+       "chatButton": "Craft a Minor Stamina Potion",
+       "roll": "Craft a Minor Stamina Potion",
+       "reportTitle": "{source} - Craft a Minor Stamina Potion"
+      },
       "timing": "downtime",
       "downtime": {
        "craft": "minor-stamina-potion"
@@ -457,6 +503,12 @@
      {
       "id": "downtime-narrative",
       "label": "Craft a Minor Health Potion",
+      "texts": {
+       "button": "Craft a Minor Health Potion",
+       "chatButton": "Craft a Minor Health Potion",
+       "roll": "Craft a Minor Health Potion",
+       "reportTitle": "{source} - Craft a Minor Health Potion"
+      },
       "timing": "downtime",
       "downtime": {
        "craft": "minor-health-potion"
@@ -489,7 +541,10 @@
        "max": 1,
        "per": "shortRest"
       },
-      "description": "Once per short rest: the sprite’s whispered advice grants advantage on this attack roll."
+      "description": "Once per short rest.",
+      "texts": {
+       "option": "Advantage on an attack roll"
+      }
      }
     ]
    }
@@ -514,7 +569,10 @@
       "label": "Lorekeeper",
       "roll": "action",
       "value": 1,
-      "description": "Only against one of up to three hostile creatures recorded in the book."
+      "description": "Only against one of up to three hostile creatures recorded in the book.",
+      "texts": {
+       "option": "+1 to action rolls against recorded creatures"
+      }
      }
     ]
    }
@@ -530,6 +588,12 @@
      {
       "id": "use",
       "label": "Craft a Vial of Darksmoke",
+      "texts": {
+       "button": "Craft a Vial of Darksmoke",
+       "chatButton": "Craft a Vial of Darksmoke",
+       "roll": "Craft a Vial of Darksmoke",
+       "reportTitle": "{source} - Craft a Vial of Darksmoke"
+      },
       "cost": {
        "stress": 1
       },
@@ -604,6 +668,12 @@
      {
       "id": "use",
       "label": "Deploy glider",
+      "texts": {
+       "button": "Deploy glider",
+       "chatButton": "Deploy glider",
+       "roll": "Deploy glider",
+       "reportTitle": "{source} - Deploy glider"
+      },
       "cost": {
        "stress": 1
       }
@@ -622,6 +692,12 @@
      {
       "id": "use",
       "label": "Silence footsteps",
+      "texts": {
+       "button": "Silence footsteps",
+       "chatButton": "Silence footsteps",
+       "roll": "Silence footsteps",
+       "reportTitle": "{source} - Silence footsteps"
+      },
       "steps": [
        {
         "op": "effect",
@@ -651,6 +727,12 @@
      {
       "id": "roll",
       "label": "Last Stress: roll d6",
+      "texts": {
+       "button": "Last Stress: roll d6",
+       "chatButton": "Last Stress: roll d6",
+       "roll": "Last Stress: roll d6",
+       "reportTitle": "{source} - Last Stress: roll d6"
+      },
       "sendRoll": {
        "dice": "1d6",
        "label": "Calming Pendant: on 5 or higher, don’t mark your last Stress"
@@ -677,6 +759,12 @@
      {
       "id": "weight",
       "label": "Change weight (Presence 10)",
+      "texts": {
+       "button": "Change weight (Presence 10)",
+       "chatButton": "Change weight (Presence 10)",
+       "roll": "Change weight (Presence 10)",
+       "reportTitle": "{source} - Change weight (Presence 10)"
+      },
       "actionRoll": {
        "trait": "Presence",
        "difficulty": 10
@@ -685,6 +773,12 @@
      {
       "id": "sand",
       "label": "Blow sand: Vulnerable (Finesse 10)",
+      "texts": {
+       "button": "Blow sand: Vulnerable (Finesse 10)",
+       "chatButton": "Blow sand: Vulnerable (Finesse 10)",
+       "roll": "Blow sand: Vulnerable (Finesse 10)",
+       "reportTitle": "{source} - Blow sand: Vulnerable (Finesse 10)"
+      },
       "actionRoll": {
        "trait": "Finesse",
        "difficulty": 10
@@ -708,9 +802,12 @@
      {
       "id": "ring",
       "label": "Ring of Resistance",
-      "description": "After a successful attack against you: resistance to the incoming damage.",
+      "description": "Once per long rest, after a successful attack against you.",
       "halve": true,
-      "uses": "source"
+      "uses": "source",
+      "texts": {
+       "option": "Halve the incoming damage"
+      }
      }
     ]
    }
@@ -722,7 +819,13 @@
    "rarity": "Uncommon",
    "text": "If you have at least one Phoenix Feather on you when you fall unconscious, you gain a +1 bonus to the roll you make to determine whether you gain a scar.",
    "automation": {
-    "deathMove": { "kind": "hopeBonus", "moves": ["avoid"], "bonus": 1 }
+    "deathMove": {
+     "kind": "hopeBonus",
+     "moves": [
+      "avoid"
+     ],
+     "bonus": 1
+    }
    }
   },
   {
@@ -740,6 +843,12 @@
      {
       "id": "use",
       "label": "Open the box",
+      "texts": {
+       "button": "Open the box",
+       "chatButton": "Open the box",
+       "roll": "Open the box",
+       "reportTitle": "{source} - Open the box"
+      },
       "table": {
        "dice": "1d12",
        "outcomes": [
@@ -786,7 +895,10 @@
          "max": 3,
          "per": "rest"
         },
-        "description": "Activate the charm to attack a target within Close range."
+        "description": "Needs the Melee weapon the charm is attached to.",
+        "texts": {
+         "option": "Attack a target within Close range"
+        }
        }
       ]
      }
@@ -811,6 +923,12 @@
      {
       "id": "downtime-narrative",
       "label": "Meditate on your principle",
+      "texts": {
+       "button": "Meditate on your principle",
+       "chatButton": "Meditate on your principle",
+       "roll": "Meditate on your principle",
+       "reportTitle": "{source} - Meditate on your principle"
+      },
       "timing": "downtime"
      }
     ],
@@ -827,7 +945,10 @@
        "max": 1,
        "per": "longRest"
       },
-      "description": "Only for a roll that directly aligns with the principle focused into the chain."
+      "description": "Only for a roll that directly aligns with the principle focused into the chain.",
+      "texts": {
+       "option": "Hope die becomes a d20"
+      }
      }
     ]
    }
@@ -847,6 +968,12 @@
      {
       "id": "use",
       "label": "Become Hidden",
+      "texts": {
+       "button": "Become Hidden",
+       "chatButton": "Become Hidden",
+       "roll": "Become Hidden",
+       "reportTitle": "{source} - Become Hidden"
+      },
       "steps": [
        {
         "op": "effect",
@@ -902,6 +1029,12 @@
      {
       "id": "use",
       "label": "At 0 Hope: gain a Hope",
+      "texts": {
+       "button": "At 0 Hope: gain a Hope",
+       "chatButton": "At 0 Hope: gain a Hope",
+       "roll": "At 0 Hope: gain a Hope",
+       "reportTitle": "{source} - At 0 Hope: gain a Hope"
+      },
       "requiresZeroHope": true,
       "cost": {
        "hopekeeper_locket": 1
@@ -1027,7 +1160,10 @@
       "label": "Honing Relic",
       "roll": "duality",
       "value": 1,
-      "description": "Only when you utilize the Experience you chose for the relic."
+      "description": "Only when you utilize the Experience you chose for the relic.",
+      "texts": {
+       "option": "+1 to a chosen Experience"
+      }
      }
     ]
    }
@@ -1064,6 +1200,12 @@
      {
       "id": "downtime-narrative",
       "label": "Craft Mythic Dust",
+      "texts": {
+       "button": "Craft Mythic Dust",
+       "chatButton": "Craft Mythic Dust",
+       "roll": "Craft Mythic Dust",
+       "reportTitle": "{source} - Craft Mythic Dust"
+      },
       "timing": "downtime",
       "downtime": {
        "craft": "mythic-dust"
@@ -1087,6 +1229,12 @@
      {
       "id": "use",
       "label": "Recall a vault card",
+      "texts": {
+       "button": "Recall a vault card",
+       "chatButton": "Recall a vault card",
+       "roll": "Recall a vault card",
+       "reportTitle": "{source} - Recall a vault card"
+      },
       "cost": {
        "hope": 2
       }
@@ -1187,6 +1335,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      },
       "cost": {
        "hope": 4
       }
@@ -1209,6 +1363,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      },
       "cost": {
        "hope": 5
       }
@@ -1239,13 +1399,23 @@
       "dice": "1d4",
       "cost": {
        "alconite": 1
-      }
+      },
+      "texts": {
+       "option": "+1d4 to a Spellcast Roll"
+      },
+      "description": "Recharge by immersing it in salt water as a downtime move."
      }
     ],
     "actions": [
      {
       "id": "recharge",
       "label": "Downtime in salt water: recharge",
+      "texts": {
+       "button": "Downtime in salt water: recharge",
+       "chatButton": "Downtime in salt water: recharge",
+       "roll": "Downtime in salt water: recharge",
+       "reportTitle": "{source} - Downtime in salt water: recharge"
+      },
       "steps": [
        {
         "op": "gain",
@@ -1269,17 +1439,24 @@
      {
       "id": "anchor",
       "label": "Avoid forced movement",
+      "texts": {
+       "option": "Advantage on a reaction roll to avoid forced movement",
+       "applied": "{source} - Avoid forced movement"
+      },
       "roll": "reaction",
       "advantage": "advantage",
-      "description": "Use only to avoid being moved against your will. Resistance to damage from that movement is in the damage dialog."
+      "description": "Only to avoid being moved against your will."
      }
     ],
     "mitigation": [
      {
       "id": "anchor",
       "label": "Anchoring Hook: forced-movement damage",
-      "description": "Resistance to damage you take from being moved against your will while the anchor is deployed.",
-      "halve": true
+      "description": "While the anchor is deployed.",
+      "halve": true,
+      "texts": {
+       "option": "Resist damage from forced movement"
+      }
      }
     ]
    }
@@ -1295,6 +1472,12 @@
      {
       "id": "use",
       "label": "Trace the rune",
+      "texts": {
+       "button": "Trace the rune",
+       "chatButton": "Trace the rune",
+       "roll": "Trace the rune",
+       "reportTitle": "{source} - Trace the rune"
+      },
       "cost": {
        "hope": 1
       },
@@ -1333,10 +1516,16 @@
              {
               "id": "advantage",
               "label": "Runestone advantage",
+              "texts": {
+               "option": "Advantage on a Spellcast Roll",
+               "applied": "{source} - Runestone advantage",
+               "name": "Runestone"
+              },
               "roll": "spellcast",
               "advantage": "advantage",
               "defaultOn": true,
-              "endEffect": "Runestone: Spellcast Advantage"
+              "endEffect": "Runestone: Spellcast Advantage",
+              "description": "Your next Spellcast Roll."
              }
             ]
            }
@@ -1374,7 +1563,13 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      }
      }
     ]
    }
@@ -1393,7 +1588,13 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      }
      }
     ]
    }
@@ -1413,6 +1614,12 @@
      {
       "id": "use",
       "label": "Activate (Finesse 10)",
+      "texts": {
+       "button": "Activate (Finesse 10)",
+       "chatButton": "Activate (Finesse 10)",
+       "roll": "Activate (Finesse 10)",
+       "reportTitle": "{source} - Activate (Finesse 10)"
+      },
       "actionRoll": {
        "trait": "Finesse",
        "difficulty": 10
@@ -1429,6 +1636,12 @@
           {
            "id": "miss",
            "label": "Attack missed: gain a Hope",
+           "texts": {
+            "button": "Attack missed: gain a Hope",
+            "chatButton": "Attack missed: gain a Hope",
+            "roll": "Attack missed: gain a Hope",
+            "reportTitle": "{source} - Attack missed: gain a Hope"
+           },
            "steps": [
             {
              "op": "gain",
@@ -1464,6 +1677,12 @@
      {
       "id": "downtime-narrative",
       "label": "Meditate: ask the GM a question",
+      "texts": {
+       "button": "Meditate: ask the GM a question",
+       "chatButton": "Meditate: ask the GM a question",
+       "roll": "Meditate: ask the GM a question",
+       "reportTitle": "{source} - Meditate: ask the GM a question"
+      },
       "timing": "downtime",
       "steps": [
        {
@@ -1477,6 +1696,12 @@
           {
            "id": "damage",
            "label": "Insight roll with Fear: 1d6 magic damage",
+           "texts": {
+            "button": "Insight roll with Fear: 1d6 magic damage",
+            "chatButton": "Insight roll with Fear: 1d6 magic damage",
+            "roll": "Insight roll with Fear: 1d6 magic damage",
+            "reportTitle": "{source} - Insight roll with Fear: 1d6 magic damage"
+           },
            "sendRoll": {
             "dice": "1d6",
             "label": "Croakroot Pad: magic damage you take"
@@ -1505,6 +1730,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      },
       "cost": {
        "hope": 1
       }
@@ -1523,11 +1754,13 @@
      {
       "id": "ground",
       "label": "Dread-Weave Boots: ground-triggered magic",
-      "description": "Resistance to magic damage triggered by contact with the ground.",
       "when": {
        "type": "magic"
       },
-      "halve": true
+      "halve": true,
+      "texts": {
+       "option": "Resist magic damage triggered by contact with the ground"
+      }
      }
     ]
    }
@@ -1543,6 +1776,12 @@
      {
       "id": "dream",
       "label": "Prophetic dream (Instinct Reaction 14)",
+      "texts": {
+       "button": "Prophetic dream (Instinct Reaction 14)",
+       "chatButton": "Prophetic dream (Instinct Reaction 14)",
+       "roll": "Prophetic dream (Instinct Reaction 14)",
+       "reportTitle": "{source} - Prophetic dream (Instinct Reaction 14)"
+      },
       "actionRoll": {
        "trait": "Instinct",
        "reaction": true,
@@ -1563,6 +1802,12 @@
      {
       "id": "use",
       "label": "Succeed vs spatial distortion",
+      "texts": {
+       "button": "Succeed vs spatial distortion",
+       "chatButton": "Succeed vs spatial distortion",
+       "roll": "Succeed vs spatial distortion",
+       "reportTitle": "{source} - Succeed vs spatial distortion"
+      },
       "cost": {
        "stress": 2
       }
@@ -1583,7 +1828,10 @@
       "label": "Flickerbloom",
       "roll": "reaction",
       "advantage": "advantage",
-      "description": "Only against temporal anomalies. If you still fail, mark a Stress."
+      "description": "If you fail the roll, mark a Stress.",
+      "texts": {
+       "option": "Advantage on reaction rolls against temporal anomalies"
+      }
      }
     ]
    }
@@ -1599,14 +1847,18 @@
      {
       "id": "fall",
       "label": "Gravitic Tether: falling",
-      "description": "Half damage from falls.",
-      "halve": true
+      "halve": true,
+      "texts": {
+       "option": "Take half damage from falls"
+      }
      },
      {
       "id": "gravity",
       "label": "Gravitic Tether: gravitational anomaly",
-      "description": "No damage from the effects of gravitational anomalies.",
-      "negate": true
+      "negate": true,
+      "texts": {
+       "option": "No damage from gravitational anomalies"
+      }
      }
     ]
    }
@@ -1622,6 +1874,12 @@
      {
       "id": "attack",
       "label": "Throw a snowball",
+      "texts": {
+       "button": "Throw a snowball",
+       "chatButton": "Throw a snowball",
+       "roll": "Throw a snowball",
+       "reportTitle": "{source} - Throw a snowball"
+      },
       "actionRoll": {
        "trait": "Agility",
        "attack": true
@@ -1630,6 +1888,12 @@
      {
       "id": "damage",
       "label": "Snowball damage",
+      "texts": {
+       "button": "Snowball damage",
+       "chatButton": "Snowball damage",
+       "roll": "Snowball damage",
+       "reportTitle": "{source} - Snowball damage"
+      },
       "damage": {
        "dice": "d6+1",
        "type": "magic"
@@ -1649,6 +1913,12 @@
      {
       "id": "jam",
       "label": "Jam or remove (Finesse)",
+      "texts": {
+       "button": "Jam or remove (Finesse)",
+       "chatButton": "Jam or remove (Finesse)",
+       "roll": "Jam or remove (Finesse)",
+       "reportTitle": "{source} - Jam or remove (Finesse)"
+      },
       "actionRoll": {
        "trait": "Finesse"
       }
@@ -1671,6 +1941,12 @@
      {
       "id": "light",
       "label": "Light the lantern",
+      "texts": {
+       "button": "Light the lantern",
+       "chatButton": "Light the lantern",
+       "roll": "Light the lantern",
+       "reportTitle": "{source} - Light the lantern"
+      },
       "steps": [
        {
         "op": "effect",
@@ -1705,12 +1981,16 @@
      {
       "id": "divert",
       "label": "Divert into Lightning Scarab",
-      "description": "Electrical damage only: the brooch absorbs it. If the Duality total is less than the diverted damage, use Brooch explodes.",
+      "description": "Electrical damage only; if your Duality total is less than the diverted damage, the brooch explodes.",
       "negate": true,
       "storeDamage": "scarab_damage",
       "followUp": {
        "dice": "2d12",
        "text": "Duality Dice; if lower than the diverted damage, the brooch explodes"
+      },
+      "texts": {
+       "name": "Lightning Scarab",
+       "option": "Divert electrical damage into the brooch"
       }
      }
     ],
@@ -1718,6 +1998,12 @@
      {
       "id": "explode",
       "label": "Brooch explodes",
+      "texts": {
+       "button": "Brooch explodes",
+       "chatButton": "Brooch explodes",
+       "roll": "Brooch explodes",
+       "reportTitle": "{source} - Brooch explodes"
+      },
       "report": {
        "amount": "@scarab_damage",
        "text": "The brooch explodes: take {amount} damage (everything it absorbed)."
@@ -1754,7 +2040,13 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      }
      }
     ]
    }
@@ -1772,7 +2064,10 @@
       "label": "Pathfinder’s Ledger",
       "roll": "duality",
       "advantage": "advantage",
-      "description": "Only to navigate or avoid being disoriented while scribing your path. Failing with Fear loses a piece of information about the path."
+      "description": "While scribing your path; failing with Fear loses a piece of information.",
+      "texts": {
+       "option": "Advantage to navigate or avoid being disoriented"
+      }
      }
     ]
    }
@@ -1788,6 +2083,12 @@
      {
       "id": "land",
       "label": "Move beyond Very Close on land",
+      "texts": {
+       "button": "Move beyond Very Close on land",
+       "chatButton": "Move beyond Very Close on land",
+       "roll": "Move beyond Very Close on land",
+       "reportTitle": "{source} - Move beyond Very Close on land"
+      },
       "cost": {
        "stress": 1
       }
@@ -1813,6 +2114,12 @@
      {
       "id": "use",
       "label": "Restore 1 additional HP",
+      "texts": {
+       "button": "Restore 1 additional HP",
+       "chatButton": "Restore 1 additional HP",
+       "roll": "Restore 1 additional HP",
+       "reportTitle": "{source} - Restore 1 additional HP"
+      },
       "target": "actor",
       "steps": [
        {
@@ -1836,6 +2143,12 @@
      {
       "id": "downtime-narrative",
       "label": "Narrative downtime move",
+      "texts": {
+       "button": "Narrative downtime move",
+       "chatButton": "Narrative downtime move",
+       "roll": "Narrative downtime move",
+       "reportTitle": "{source} - Narrative downtime move"
+      },
       "timing": "downtime"
      }
     ]
@@ -1854,13 +2167,19 @@
       "label": "Red Nose of Hope",
       "roll": "trait:Presence",
       "advantage": "advantage",
-      "description": "While wearing the nose, entertaining an audience."
+      "description": "Presence Rolls only, while wearing the nose.",
+      "texts": {
+       "option": "Advantage to entertain an audience"
+      }
      }
     ],
     "rollTriggers": [
      {
       "id": "hope",
       "label": "Red Nose of Hope: change Fear into Hope",
+      "texts": {
+       "chatButton": "Red Nose of Hope: change Fear into Hope"
+      },
       "on": "duality",
       "when": "fear",
       "outcome": "hope",
@@ -1888,14 +2207,20 @@
       "label": "Rootslicer Gauntlet",
       "roll": "attack",
       "advantage": "advantage",
-      "description": "Only against plant-based creatures and hazards. If you still fail, the GM gains a Fear."
+      "description": "Attacks and Reaction Rolls; if you still fail, the GM gains a Fear.",
+      "texts": {
+       "option": "Advantage against plant-based creatures and hazards"
+      }
      },
      {
       "id": "reaction",
       "label": "Rootslicer Gauntlet",
       "roll": "reaction",
       "advantage": "advantage",
-      "description": "Only against plant-based creatures and hazards. If you still fail, the GM gains a Fear."
+      "description": "Attacks and Reaction Rolls; if you still fail, the GM gains a Fear.",
+      "texts": {
+       "option": "Advantage against plant-based creatures and hazards"
+      }
      }
     ]
    }
@@ -1914,7 +2239,13 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      }
      }
     ]
    }
@@ -1933,7 +2264,13 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      }
      }
     ]
    }
@@ -1953,6 +2290,12 @@
      {
       "id": "use",
       "label": "Become Incorporeal",
+      "texts": {
+       "button": "Become Incorporeal",
+       "chatButton": "Become Incorporeal",
+       "roll": "Become Incorporeal",
+       "reportTitle": "{source} - Become Incorporeal"
+      },
       "steps": [
        {
         "op": "effect",
@@ -1969,7 +2312,12 @@
            "when": {
             "type": "physical"
            },
-           "halve": true
+           "halve": true,
+           "texts": {
+            "name": "Soulweave Cloak",
+            "option": "Resist physical damage while incorporeal"
+           },
+           "description": "Until you end the condition or the scene ends."
           }
          ]
         }
@@ -1990,6 +2338,12 @@
      {
       "id": "sense",
       "label": "Sense the nearest dead",
+      "texts": {
+       "button": "Sense the nearest dead",
+       "chatButton": "Sense the nearest dead",
+       "roll": "Sense the nearest dead",
+       "reportTitle": "{source} - Sense the nearest dead"
+      },
       "cost": {
        "hope": 1
       }
@@ -1997,6 +2351,12 @@
      {
       "id": "exclude",
       "label": "Exclude a creature",
+      "texts": {
+       "button": "Exclude a creature",
+       "chatButton": "Exclude a creature",
+       "roll": "Exclude a creature",
+       "reportTitle": "{source} - Exclude a creature"
+      },
       "cost": {
        "stress": 1
       }
@@ -2015,14 +2375,20 @@
      {
       "id": "bee",
       "label": "Stingshield Robes: bee-sized attacker",
-      "description": "Only with no marked Armor Slots: immune to damage from creatures up to the size of a bee.",
-      "negate": true
+      "description": "Only with no marked Armor Slots.",
+      "negate": true,
+      "texts": {
+       "option": "Immune to damage from creatures up to the size of a bee"
+      }
      },
      {
       "id": "mouse",
       "label": "Stingshield Robes: mouse-sized attacker",
-      "description": "Only with no marked Armor Slots: resistance to damage from creatures up to the size of a mouse.",
-      "halve": true
+      "description": "Only with no marked Armor Slots.",
+      "halve": true,
+      "texts": {
+       "option": "Resist damage from creatures up to the size of a mouse"
+      }
      }
     ]
    }
@@ -2050,13 +2416,22 @@
       "dice": "1d4",
       "requiresResource": "superior_alconite",
       "expendOn": 4,
-      "description": "On a 4 the energy is expended until you recharge it in salt water as a downtime move."
+      "description": "On a 4 the energy is expended until you recharge it in salt water.",
+      "texts": {
+       "option": "+1d4 to a Spellcast Roll"
+      }
      }
     ],
     "actions": [
      {
       "id": "recharge",
       "label": "Downtime in salt water: recharge",
+      "texts": {
+       "button": "Downtime in salt water: recharge",
+       "chatButton": "Downtime in salt water: recharge",
+       "roll": "Downtime in salt water: recharge",
+       "reportTitle": "{source} - Downtime in salt water: recharge"
+      },
       "timing": "downtime",
       "steps": [
        {
@@ -2093,6 +2468,11 @@
        {
         "id": "titan-slayer",
         "label": "Titan-Slayer",
+        "texts": {
+         "option": "+1 Proficiency to damage",
+         "applied": "{source} - Titan-Slayer",
+         "name": "Tarrasque Sinew"
+        },
         "roll": "damage",
         "proficiency": 1,
         "description": "Only when you hit a creature more than twice your size."
@@ -2115,7 +2495,10 @@
       "label": "Ticket Master’s Pouch",
       "roll": "trait:Presence",
       "advantage": "advantage",
-      "description": "The pouch can hold a handful of gold. When you use the gold from inside it to pay for something up to a bag of gold in value, you have advantage on Presence Rolls to haggle for the price."
+      "description": "Presence Rolls when paying from the pouch, up to a bag of gold in value.",
+      "texts": {
+       "option": "Advantage to haggle for a price"
+      }
      }
     ]
    }
@@ -2134,7 +2517,13 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      }
      }
     ]
    }
@@ -2150,6 +2539,12 @@
      {
       "id": "downtime-narrative",
       "label": "Narrative downtime move",
+      "texts": {
+       "button": "Narrative downtime move",
+       "chatButton": "Narrative downtime move",
+       "roll": "Narrative downtime move",
+       "reportTitle": "{source} - Narrative downtime move"
+      },
       "timing": "downtime"
      }
     ]
@@ -2176,6 +2571,11 @@
        {
         "id": "concussive",
         "label": "Concussive",
+        "texts": {
+         "option": "+1 Proficiency on this attack",
+         "applied": "{source} - Concussive",
+         "name": "Tortoise Horn"
+        },
         "roll": "damage",
         "proficiency": 1,
         "cost": {
@@ -2199,6 +2599,12 @@
      {
       "id": "look",
       "label": "Look through (Presence Reaction 14)",
+      "texts": {
+       "button": "Look through (Presence Reaction 14)",
+       "chatButton": "Look through (Presence Reaction 14)",
+       "roll": "Look through (Presence Reaction 14)",
+       "reportTitle": "{source} - Look through (Presence Reaction 14)"
+      },
       "actionRoll": {
        "trait": "Presence",
        "reaction": true,
@@ -2219,6 +2625,12 @@
      {
       "id": "use",
       "label": "Shine dim light",
+      "texts": {
+       "button": "Shine dim light",
+       "chatButton": "Shine dim light",
+       "roll": "Shine dim light",
+       "reportTitle": "{source} - Shine dim light"
+      },
       "cost": {
        "hope": 1
       },
@@ -2234,7 +2646,9 @@
       "label": "Veilcloak",
       "roll": "trait:Finesse",
       "advantage": "advantage",
-      "description": "Only for Finesse Rolls made while in darkness."
+      "texts": {
+       "option": "Advantage on Finesse Rolls in darkness"
+      }
      }
     ]
    }
@@ -2252,14 +2666,20 @@
       "label": "Veilshroud Hood",
       "roll": "reaction",
       "advantage": "advantage",
-      "description": "Only against illusions and being magically spied on."
+      "description": "Reaction Rolls only.",
+      "texts": {
+       "option": "Advantage against illusions and being magically spied on"
+      }
      },
      {
       "id": "perceive",
       "label": "Veilshroud Hood: dulled senses",
       "roll": "duality",
       "advantage": "disadvantage",
-      "description": "Rolls to perceive normal sights and sounds."
+      "description": "While wearing the hood.",
+      "texts": {
+       "option": "Disadvantage to perceive normal sights and sounds"
+      }
      }
     ]
    }
@@ -2285,6 +2705,11 @@
        {
         "id": "herald",
         "label": "Herald of War",
+        "texts": {
+         "option": "Add your Presence to the attack roll",
+         "applied": "{source} - Herald of War",
+         "name": "War God's Sigil"
+        },
         "roll": "attack",
         "traitValue": "Presence",
         "uses": {
@@ -2309,6 +2734,12 @@
      {
       "id": "use",
       "label": "Evasion +1 until damaged",
+      "texts": {
+       "button": "Evasion +1 until damaged",
+       "chatButton": "Evasion +1 until damaged",
+       "roll": "Evasion +1 until damaged",
+       "reportTitle": "{source} - Evasion +1 until damaged"
+      },
       "cost": {
        "hope": 1
       },
@@ -2350,7 +2781,7 @@
      {
       "id": "psychic",
       "label": "Witherroot Charm: ignore psychic attack",
-      "description": "Ignore all damage from a psychic attack; afterwards you have disadvantage on Presence Reaction Rolls until you purge the charm.",
+      "description": "Afterwards you have disadvantage on Presence Reaction Rolls until you purge the charm.",
       "negate": true,
       "uses": "source",
       "effect": {
@@ -2362,11 +2793,17 @@
         {
          "id": "residue",
          "label": "Psychic Residue",
+         "texts": {
+          "option": "Disadvantage on Presence Reaction Rolls",
+          "applied": "{source} - Psychic Residue"
+         },
          "roll": "reaction",
-         "advantage": "disadvantage",
-         "description": "Presence Reaction Rolls only."
+         "advantage": "disadvantage"
         }
        ]
+      },
+      "texts": {
+       "option": "Ignore all damage from a psychic attack"
       }
      }
     ],
@@ -2374,6 +2811,12 @@
      {
       "id": "downtime-narrative",
       "label": "Purge the charm",
+      "texts": {
+       "button": "Purge the charm",
+       "chatButton": "Purge the charm",
+       "roll": "Purge the charm",
+       "reportTitle": "{source} - Purge the charm"
+      },
       "timing": "downtime",
       "endEffect": "Psychic Residue"
      }
@@ -2393,7 +2836,9 @@
       "label": "Wolffriend Pendant",
       "roll": "duality",
       "advantage": "advantage",
-      "description": "Only to befriend or influence dogs and wolves."
+      "texts": {
+       "option": "Advantage to befriend or influence dogs and wolves"
+      }
      }
     ]
    }
@@ -2417,6 +2862,12 @@
      {
       "id": "trap",
       "label": "Trap an undead (Finesse)",
+      "texts": {
+       "button": "Trap an undead (Finesse)",
+       "chatButton": "Trap an undead (Finesse)",
+       "roll": "Trap an undead (Finesse)",
+       "reportTitle": "{source} - Trap an undead (Finesse)"
+      },
       "actionRoll": {
        "trait": "Finesse"
       }
@@ -2424,6 +2875,12 @@
      {
       "id": "store",
       "label": "Spirit trapped",
+      "texts": {
+       "button": "Spirit trapped",
+       "chatButton": "Spirit trapped",
+       "roll": "Spirit trapped",
+       "reportTitle": "{source} - Spirit trapped"
+      },
       "steps": [
        {
         "op": "gain",
@@ -2435,6 +2892,12 @@
      {
       "id": "release",
       "label": "Release all spirits",
+      "texts": {
+       "button": "Release all spirits",
+       "chatButton": "Release all spirits",
+       "roll": "Release all spirits",
+       "reportTitle": "{source} - Release all spirits"
+      },
       "steps": [
        {
         "op": "clear",
@@ -2455,7 +2918,10 @@
        "min": 0,
        "max": 20
       },
-      "description": "Only when trapping an undead creature: +1 per HP it has marked."
+      "description": "Only when trapping an undead creature.",
+      "texts": {
+       "option": "+1 per marked HP to trap an undead creature"
+      }
      },
      {
       "id": "psychic",
@@ -2465,7 +2931,10 @@
        "resource": "wraith_spirits",
        "value": 1
       },
-      "description": "Only against psychic attacks: +1 per trapped spirit."
+      "description": "Only against psychic attacks.",
+      "texts": {
+       "option": "+1 per trapped spirit against psychic attacks"
+      }
      }
     ]
    }
@@ -2481,6 +2950,12 @@
      {
       "id": "use",
       "label": "Transform into a Yeti",
+      "texts": {
+       "button": "Transform into a Yeti",
+       "chatButton": "Transform into a Yeti",
+       "roll": "Transform into a Yeti",
+       "reportTitle": "{source} - Transform into a Yeti"
+      },
       "cost": {
        "stress": 3
       },
@@ -2494,8 +2969,10 @@
      {
       "id": "cold",
       "label": "Yeti Coat: cold exposure",
-      "description": "Half damage from exposure to cold.",
-      "halve": true
+      "halve": true,
+      "texts": {
+       "option": "Take half damage from exposure to cold"
+      }
      }
     ]
    }
@@ -2511,6 +2988,12 @@
      {
       "id": "ingredients",
       "label": "Forage for ingredients",
+      "texts": {
+       "button": "Forage for ingredients",
+       "chatButton": "Forage for ingredients",
+       "roll": "Forage for ingredients",
+       "reportTitle": "{source} - Forage for ingredients"
+      },
       "timing": "downtime",
       "downtime": {
        "table": {
@@ -2544,7 +3027,13 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      }
      }
     ]
    }
@@ -2560,6 +3049,12 @@
      {
       "id": "use",
       "label": "Project displacement",
+      "texts": {
+       "button": "Project displacement",
+       "chatButton": "Project displacement",
+       "roll": "Project displacement",
+       "reportTitle": "{source} - Project displacement"
+      },
       "cost": {
        "stress": 1
       },
@@ -2595,6 +3090,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      },
       "cost": {
        "stress": 2
       }
@@ -2622,7 +3123,9 @@
       "label": "Grapnel",
       "roll": "action",
       "advantage": "advantage",
-      "description": "Only to climb sheer surfaces."
+      "texts": {
+       "option": "Advantage to climb sheer surfaces"
+      }
      }
     ]
    }
@@ -2652,6 +3155,12 @@
      {
       "id": "use",
       "label": "Activate gemstone",
+      "texts": {
+       "button": "Activate gemstone",
+       "chatButton": "Activate gemstone",
+       "roll": "Activate gemstone",
+       "reportTitle": "{source} - Activate gemstone"
+      },
       "steps": [
        {
         "op": "effect",
@@ -2723,6 +3232,12 @@
      {
       "id": "roll",
       "label": "Choose the result (Finesse 14)",
+      "texts": {
+       "button": "Choose the result (Finesse 14)",
+       "chatButton": "Choose the result (Finesse 14)",
+       "roll": "Choose the result (Finesse 14)",
+       "reportTitle": "{source} - Choose the result (Finesse 14)"
+      },
       "actionRoll": {
        "trait": "Finesse",
        "difficulty": 14
@@ -2766,7 +3281,13 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      }
      }
     ]
    }
@@ -2813,7 +3334,13 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      }
      }
     ]
    }
@@ -2835,7 +3362,10 @@
        "max": 1,
        "per": "scene"
       },
-      "description": "+1 Proficiency for this attack’s damage."
+      "description": "Applies to this attack's damage.",
+      "texts": {
+       "option": "+1 Proficiency for your next attack"
+      }
      }
     ]
    }
@@ -2861,7 +3391,13 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      }
      }
     ]
    }
@@ -2894,7 +3430,13 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      }
      }
     ]
    }
@@ -2910,6 +3452,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      },
       "cost": {
        "hope": 1
       }
@@ -2931,7 +3479,13 @@
    "rarity": "Uncommon",
    "text": "You gain a +1 bonus to your Hope Die when you make the Risk It All death move.",
    "automation": {
-    "deathMove": { "kind": "hopeBonus", "moves": ["risk"], "bonus": 1 }
+    "deathMove": {
+     "kind": "hopeBonus",
+     "moves": [
+      "risk"
+     ],
+     "bonus": 1
+    }
    }
   },
   {
@@ -2963,6 +3517,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      },
       "cost": {
        "hope": 1
       }
@@ -2985,6 +3545,12 @@
      {
       "id": "use",
       "label": "Flip the coin",
+      "texts": {
+       "button": "Flip the coin",
+       "chatButton": "Flip the coin",
+       "roll": "Flip the coin",
+       "reportTitle": "{source} - Flip the coin"
+      },
       "table": {
        "dice": "1d2",
        "outcomes": [
@@ -3050,7 +3616,13 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      }
      }
     ]
    }
@@ -3127,6 +3699,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      },
       "cost": {
        "hope": 1
       }
@@ -3148,7 +3726,13 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      }
      }
     ]
    }
@@ -3168,6 +3752,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      },
       "cost": {
        "hope": 1
       }
@@ -3190,6 +3780,12 @@
      {
       "id": "use",
       "label": "Flip the coin",
+      "texts": {
+       "button": "Flip the coin",
+       "chatButton": "Flip the coin",
+       "roll": "Flip the coin",
+       "reportTitle": "{source} - Flip the coin"
+      },
       "table": {
        "dice": "1d2",
        "outcomes": [
@@ -3213,7 +3809,11 @@
                "type": "physical"
               },
               "negate": true,
-              "endEffect": "Aegis: Physical Immunity"
+              "endEffect": "Aegis: Physical Immunity",
+              "texts": {
+               "name": "Two-Faced Aegis Brooch",
+               "option": "Immune to the next physical damage"
+              }
              }
             ]
            }
@@ -3240,7 +3840,11 @@
                "type": "magic"
               },
               "negate": true,
-              "endEffect": "Aegis: Magic Immunity"
+              "endEffect": "Aegis: Magic Immunity",
+              "texts": {
+               "name": "Two-Faced Aegis Brooch",
+               "option": "Immune to the next magic damage"
+              }
              }
             ]
            }
@@ -3278,6 +3882,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      },
       "cost": {
        "hope": 1
       }
@@ -3312,6 +3922,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      },
       "cost": {
        "hope": 1
       }
@@ -3356,6 +3972,9 @@
      {
       "id": "helm",
       "label": "Hero’s Helm: allies gain a Hope",
+      "texts": {
+       "chatButton": "Hero’s Helm: allies gain a Hope"
+      },
       "on": "attack",
       "criticalOnly": true,
       "allowSourceOwner": true,
@@ -3404,7 +4023,13 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      }
      }
     ]
    }
@@ -3420,6 +4045,12 @@
      {
       "id": "roll",
       "label": "GM spent Fear: roll d4",
+      "texts": {
+       "button": "GM spent Fear: roll d4",
+       "chatButton": "GM spent Fear: roll d4",
+       "roll": "GM spent Fear: roll d4",
+       "reportTitle": "{source} - GM spent Fear: roll d4"
+      },
       "sendRoll": {
        "dice": "1d4",
        "label": "Phobophage’s Circlet: on a 4, clear a Stress (once per scene)"
@@ -3428,6 +4059,12 @@
      {
       "id": "clear",
       "label": "Rolled a 4: clear a Stress",
+      "texts": {
+       "button": "Rolled a 4: clear a Stress",
+       "chatButton": "Rolled a 4: clear a Stress",
+       "roll": "Rolled a 4: clear a Stress",
+       "reportTitle": "{source} - Rolled a 4: clear a Stress"
+      },
       "uses": {
        "max": 1,
        "per": "scene"
@@ -3465,6 +4102,12 @@
      {
       "id": "use",
       "label": "Teleport",
+      "texts": {
+       "button": "Teleport",
+       "chatButton": "Teleport",
+       "roll": "Teleport",
+       "reportTitle": "{source} - Teleport"
+      },
       "cost": {
        "stress": 1
       }
@@ -3494,6 +4137,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      },
       "cost": {
        "hope": 1
       }
@@ -3515,7 +4164,13 @@
     "actions": [
      {
       "id": "use",
-      "label": "Use"
+      "label": "Use",
+      "texts": {
+       "button": "Use",
+       "chatButton": "Use",
+       "roll": "Use",
+       "reportTitle": "{source} - Use"
+      }
      }
     ]
    }
@@ -3531,12 +4186,17 @@
      {
       "id": "carol",
       "label": "Cursed carol",
+      "texts": {
+       "option": "+2 to a roll to use fire or influence a mind",
+       "applied": "{source} - Cursed carol",
+       "name": "Cursed Carol"
+      },
       "roll": "action",
       "value": 2,
       "cost": {
        "hope": 1
       },
-      "description": "Only using fire or influencing a mind. For Codex effects roll refund d6 manually (4+ regains Hope)."
+      "description": "For Codex effects roll a d6 manually (4+ regains the Hope)."
      }
     ]
    }
@@ -3552,6 +4212,12 @@
      {
       "id": "agility",
       "label": "Throw (Agility 10)",
+      "texts": {
+       "button": "Throw (Agility 10)",
+       "chatButton": "Throw (Agility 10)",
+       "roll": "Throw (Agility 10)",
+       "reportTitle": "{source} - Throw (Agility 10)"
+      },
       "actionRoll": {
        "trait": "Agility",
        "difficulty": 10
@@ -3560,6 +4226,12 @@
      {
       "id": "presence",
       "label": "Throw (Presence 10)",
+      "texts": {
+       "button": "Throw (Presence 10)",
+       "chatButton": "Throw (Presence 10)",
+       "roll": "Throw (Presence 10)",
+       "reportTitle": "{source} - Throw (Presence 10)"
+      },
       "actionRoll": {
        "trait": "Presence",
        "difficulty": 10
@@ -3568,6 +4240,12 @@
      {
       "id": "hinder",
       "label": "Force disadvantage on a nearby roll",
+      "texts": {
+       "button": "Force disadvantage on a nearby roll",
+       "chatButton": "Force disadvantage on a nearby roll",
+       "roll": "Force disadvantage on a nearby roll",
+       "reportTitle": "{source} - Force disadvantage on a nearby roll"
+      },
       "cost": {
        "hope": 1
       }
@@ -3586,6 +4264,12 @@
      {
       "id": "resist",
       "label": "Hide your true nature (Presence Reaction)",
+      "texts": {
+       "button": "Hide your true nature (Presence Reaction)",
+       "chatButton": "Hide your true nature (Presence Reaction)",
+       "roll": "Hide your true nature (Presence Reaction)",
+       "reportTitle": "{source} - Hide your true nature (Presence Reaction)"
+      },
       "actionRoll": {
        "trait": "Presence",
        "reaction": true
@@ -3601,16 +4285,38 @@
    "rarity": "Rare",
    "text": "The mask gains a token when a living creature dies within Melee range of the mask (maximum four tokens). Spend a token while wearing the mask to gain a +1 to your Hope die on a Death Move, or on a roll to prevent or remove an affliction, contagion, or condition related to you health.",
    "automation": {
-    "deathMove": { "kind": "mask", "moves": ["risk", "avoid"], "bonus": 1 },
+    "deathMove": {
+     "kind": "mask",
+     "moves": [
+      "risk",
+      "avoid"
+     ],
+     "bonus": 1
+    },
     "resources": [
-     { "id": "death-mask", "label": "Mask tokens", "initial": 0, "max": 4 }
+     {
+      "id": "death-mask",
+      "label": "Mask tokens",
+      "initial": 0,
+      "max": 4
+     }
     ],
     "actions": [
      {
       "id": "gain-token",
       "label": "Gain Mask token (confirm nearby death)",
+      "texts": {
+       "button": "Gain Mask token (confirm nearby death)",
+       "chatButton": "Gain Mask token (confirm nearby death)",
+       "roll": "Gain Mask token (confirm nearby death)",
+       "reportTitle": "{source} - Gain Mask token (confirm nearby death)"
+      },
       "steps": [
-       { "op": "gain", "resource": "death-mask", "amount": 1 }
+       {
+        "op": "gain",
+        "resource": "death-mask",
+        "amount": 1
+       }
       ]
      }
     ],

@@ -154,7 +154,7 @@ describe('community catalog automation', () => {
       vi.stubGlobal('document', { body, createElement: (tag: string) => new DialogElement(tag), addEventListener: () => undefined, removeEventListener: () => undefined });
       const send = vi.fn((_request: RollRequest) => sent);
       openRollDialog(body as unknown as HTMLElement, c, 'Damage', [], rollBonus(c, ['damage']), send, () => undefined, ['damage'], weapon);
-      const check = body.find(e => e.tag === 'label' && e.text.includes('maximize a damage die')).find(e => e.tag === 'input');
+      const check = body.find(e => e.tag === 'label' && e.text.includes('maximum result of one damage die')).find(e => e.tag === 'input');
       check.checked = true;
       check.fire('change');
       body.find(e => e.tag === 'button' && e.text === 'Roll to chat').fire('click');

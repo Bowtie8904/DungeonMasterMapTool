@@ -1,11 +1,25 @@
 // Format of the automated "action used" report (consuming an item, using a feature) posted to the chat. It is plain
 // chat text (readable on any client); clients that know the format render it as a distinct card.
 import type { CharacterSheet } from './data';
-import { featureRollOrigin, sourceActionLabel } from './engine';
+import { actionTextVars, featureRollOrigin, sourceActionLabel } from './engine';
+import type { ActionDef } from './engine';
+import { formatText } from './texts';
+import type { ActionTexts } from './texts';
 
-export function actionReportTitle(c: CharacterSheet, key: string, source: string, action: string): string {
+export function actionReportTitle(c: CharacterSheet, key: string, source: string, action: string, texts?: ActionTexts, def?: ActionDef): string {
   const feature = [...c.features, ...c.heritage].find(f => key === `feat:${f.name}`);
-  return sourceActionLabel(feature ? featureRollOrigin(c, feature) : undefined, source, action);
+  const origin = feature ? featureRollOrigin(c, feature) : undefined;
+  return texts?.reportTitle
+    ? formatText(texts.reportTitle, actionTextVars({ actor: c.name, source, origin, action: def ?? { label: action } }))
+    : sourceActionLabel(origin, source, action);
+}
+
+/** Title for an action-used report built at one of the many action sites: `texts.reportTitle` or the given default. */
+export function configuredReportTitle(c: CharacterSheet, key: string, source: string, action: ActionDef, fallback: string, featureTexts?: ActionTexts): string {
+  const template = action.texts?.reportTitle ?? featureTexts?.reportTitle;
+  if (!template) return fallback;
+  const feature = [...c.features, ...c.heritage].find(f => key === `feat:${f.name}`);
+  return formatText(template, actionTextVars({ actor: c.name, source, origin: feature ? featureRollOrigin(c, feature) : undefined, action }));
 }
 
 export interface ActionReport {

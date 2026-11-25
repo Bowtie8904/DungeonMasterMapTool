@@ -11,7 +11,7 @@ import {
 import {
   ActionDef, ActiveEffect, Automation, RollBonus, StatSource, activeFeatures, activeWeapons, actionBlocker, actionCost, addEffect, asksSpellcastRoll, consumeBonus, costText,
   availableRollOptions, commitRollOptions, configuredRollOption, criticalBonus, damageContributions, damageRollFormula, derivedStats, deathrunProficiency, evalValue, experienceModifier, resourceDefinitions, rollBonus, rollExperienceRefund, rollOptionQuantityMax,
-  damagePool, effectCounterMax, effectCounterText, effectiveAdvantage, maximizeDamageDie, maximizableDamageDice, poolDice, rollLocal, rollOptionDice, rollOptionLabel, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, setTrackSlots, sheetActions, signedDice, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft, usesMax,
+  damagePool, effectCounterMax, effectCounterText, effectiveAdvantage, maximizeDamageDie, maximizableDamageDice, poolDice, rollLocal, rollOptionDice, rollOptionLabel, optionRowParts, actionButtonText, actionTextVars, blockedTitle, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, setTrackSlots, sheetActions, signedDice, statBreakdown, suggestedAdvantage, syncDerived, traitContributions, traitTotal, usesLeft, usesMax,
 } from './engine';
 import { comboDie, criticalMeleeBonus, refocus, shiftStance } from './brawler';
 import { chooseStance } from './brawler-view';
@@ -42,7 +42,8 @@ import { openRestDialog } from './rest-view';
 import { openDamageDialog } from './damage-view';
 import { canMakeDeathMove, hpHealingFloor, type DeathMove, type DeathMoveExtras, type DeathOptions } from './death';
 import { openDeathDialog, openScarsDialog } from './death-view';
-import { actionReportTitle, formatActionReport } from './action-summary';
+import { formatText } from './texts';
+import { actionReportTitle, configuredReportTitle, formatActionReport } from './action-summary';
 import { iconButton } from '../icons';
 import { mutagenEffectSource } from '../effects';
 import { INVENTORY_DRAG, prepareInventoryDrag, transferable, type SharedEntry } from '../shared-cards';
@@ -208,7 +209,7 @@ function armorBadges(a: Armor): HTMLElement {
 function featureCard(f: Feature, onUse?: () => void): HTMLElement {
   const name = el('div', { class: 'ft' }, el('span', { class: 'feature-name' }, f.name));
   if (onUse) {
-    const b = el('button', { class: 'small', type: 'button', textContent: `Use (${f.cost ?? 0} Hope)` });
+    const b = el('button', { class: 'small', type: 'button', textContent: actionButtonText(f.automation?.texts?.button, 'Use', { source: f.name }, `${f.cost ?? 0} Hope`) });
     b.addEventListener('click', onUse);
     name.append(b);
   }
@@ -646,28 +647,34 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     if (key.startsWith('card:') && !canCastDomain(c) && action.actionRoll?.trait === 'spellcast') {
       return el('button', { type: 'button', class: 'small', disabled: true, title: 'Cannot cast domain spells in Beastform' }, action.label);
     }
-    const cost = costText(actionCost(c, action), c);
-    const b = el('button', { class: 'small primary', type: 'button' }, cost ? `${action.label} (${cost})` : action.label);
-    if (action.actionRoll?.trait === 'highest') {
+    const textVars = actionTextVars({ actor: c.name, source: label, action });
+    const highest = () => {
       const trait = TRAIT_ORDER.reduce((best, name) => traitTotal(c, name) > traitTotal(c, best) ? name : best);
-      b.textContent = `Attack ${signed(traitTotal(c, trait))} (${trait})`;
-    }
+      return { trait, total: signed(traitTotal(c, trait)) };
+    };
+    const buttonText = () => {
+      const cost = costText(actionCost(c, action), c);
+      if (action.actionRoll?.trait !== 'highest') return actionButtonText(action.texts?.button, action.label, textVars, cost);
+      const best = highest();
+      return actionButtonText(action.texts?.button, `Attack ${best.total} (${best.trait})`, { ...textVars, trait: best.trait, traitValue: best.total }, '');
+    };
+    const b = el('button', { class: 'small primary', type: 'button' }, buttonText());
     const blocker = () => action.splendorAction && !opts.supportsSplendorAutomation?.()
       ? 'Update the host to use Splendor automation.' : action.bloodAutomation && !opts.supportsBloodAutomation?.()
       ? 'Update the host to use Blood automation.' : hooks.extraBlock?.() ?? actionBlocker(c, key, a, action);
     const block = blocker();
-    if (block) { b.disabled = true; b.title = block; }
+    if (block) { b.disabled = true; b.title = blockedTitle(action, block, textVars); }
     let busy = false;
     actionRefreshers.push(() => {
       if (busy || !b.isConnected) return;
       const current = blocker();
       b.disabled = !!current;
-      b.title = current ?? '';
-      const currentCost = costText(actionCost(c, action), c);
-      if (action.actionRoll?.trait !== 'highest') b.textContent = currentCost ? `${action.label} (${currentCost})` : action.label;
+      b.title = current ? blockedTitle(action, current, textVars) : '';
+      if (action.actionRoll?.trait !== 'highest') b.textContent = buttonText();
     });
     const setBusy = (value: boolean) => { busy = value; b.disabled = value; };
     const originalAction = action;
+    const titled = (fallback: string) => configuredReportTitle(c, key, label, originalAction, fallback, a.texts);
     b.addEventListener('click', async () => {
       let action = originalAction;
       const currentBlock = blocker();
@@ -775,7 +782,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
             const original = c.loadout[sourceIndex];
             c.loadout[sourceIndex] = card;
             c.vault[targetIndex] = original;
-            opts.onLog?.(formatActionReport({ title: action.label, character: c.name, lines: [`Replaced ${original.name} with ${card.name} without Recall cost.`] }), rollSourceFor(c, key));
+            opts.onLog?.(formatActionReport({ title: titled(action.label), character: c.name, lines: [`Replaced ${original.name} with ${card.name} without Recall cost.`] }), rollSourceFor(c, key));
             dialog.close();
             render();
           });
@@ -856,7 +863,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       }
       if (action.channelRawPower || action.chooseEffects) {
         const report = (lines: string[]) => {
-          opts.onLog?.(formatActionReport({ title: label, character: c.name, lines }), rollSourceFor(c, key));
+          opts.onLog?.(formatActionReport({ title: titled(label), character: c.name, lines }), rollSourceFor(c, key));
           hooks.after?.(action);
           render();
         };
@@ -870,7 +877,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         try {
           const catalog = catalogBeastforms(await fetchCompendiumCategory('classes'));
           const lines = assumeBeastform(c, key, a, action, catalog);
-          opts.onLog?.(formatActionReport({ title: label, character: c.name, lines }), rollSourceFor(c, key));
+          opts.onLog?.(formatActionReport({ title: titled(label), character: c.name, lines }), rollSourceFor(c, key));
           hooks.after?.(action);
           page = 'beastform';
         } catch (e) { opts.onLog?.(`Could not use ${label}: ${(e as Error).message}`); }
@@ -885,7 +892,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (action.beastform || action.evolution) {
         chooseBeastform(c, !!action.evolution, choice => {
           const lines = transformBeastform(c, key, a, action, choice);
-          opts.onLog?.(formatActionReport({ title: label, character: c.name, lines }), rollSourceFor(c, key));
+          opts.onLog?.(formatActionReport({ title: titled(label), character: c.name, lines }), rollSourceFor(c, key));
           page = 'beastform';
           render();
         });
@@ -894,7 +901,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (action.channel || action.aura) {
         try {
           const lines = action.channel ? channelElement(c, key, a, action) : activateAura(c, key, a, action);
-          opts.onLog?.(formatActionReport({ title: label, character: c.name, lines }), rollSourceFor(c, key));
+          opts.onLog?.(formatActionReport({ title: titled(label), character: c.name, lines }), rollSourceFor(c, key));
           render();
         } catch (e) { opts.onLog?.(`Could not use ${label}: ${(e as Error).message}`); }
         return;
@@ -902,7 +909,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (action.shiftStance) {
         chooseStance(c, (name, trait) => {
           const lines = shiftStance(c, key, a, action, name, trait);
-          opts.onLog?.(formatActionReport({ title: 'Stance Fighter', character: c.name, lines }), rollSourceFor(c, key));
+          opts.onLog?.(formatActionReport({ title: titled('Stance Fighter'), character: c.name, lines }), rollSourceFor(c, key));
           render();
         }, () => render());
         return;
@@ -910,7 +917,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (action.refocus) {
         try {
           const lines = refocus(c, key, a, action, rollLocal);
-          opts.onLog?.(formatActionReport({ title: 'Refocus', character: c.name, lines }), rollSourceFor(c, key));
+          opts.onLog?.(formatActionReport({ title: titled('Refocus'), character: c.name, lines }), rollSourceFor(c, key));
           render();
         } catch (e) { opts.onLog?.((e as Error).message); }
         return;
@@ -920,7 +927,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         void chooseAncestryFeature(root, c.ancestry, action.ancestryChoice === 'ancestry', c.ancestryFeature).then((picked) => {
           if (!picked) return;
           replaceAncestry(picked.entries, c, picked.choice.ancestry, picked.choice.feature);
-          opts.onLog?.(formatActionReport({ title: label, character: c.name, lines: [`Used a downtime move: ${c.ancestry} - ${c.ancestryFeature}`] }), rollSourceFor(c, key));
+          opts.onLog?.(formatActionReport({ title: titled(label), character: c.name, lines: [`Used a downtime move: ${c.ancestry} - ${c.ancestryFeature}`] }), rollSourceFor(c, key));
           render();
         }).catch((e: Error) => opts.onLog?.(`Could not use ${label}: ${e.message}`)).finally(() => { setBusy(false); });
         return;
@@ -981,7 +988,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         });
         if (!sent) { opts.onLog?.('Not connected. The roll was not sent and nothing was spent.'); return; }
       }
-      const title = actionReportTitle(c, key, label, action.label);
+      const title = titled(actionReportTitle(c, key, label, action.label));
       let effects: string[] | null;
       try { effects = runActionDetailed(c, key, a, action, label === action.label ? label : `${label} - ${action.label}`); }
       catch (e) { opts.onLog?.(`Could not use ${label}: ${(e as Error).message}`); return; }
@@ -1634,7 +1641,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       c.hope.on -= f.cost ?? 0;
       render();
     } : undefined;
-    const useButton = quick && use ? el('button', { type: 'button', class: 'small', disabled: c.hope.on < (f.cost ?? 0) }, `Use (${f.cost ?? 0} Hope)`) : undefined;
+    const useButton = quick && use ? el('button', { type: 'button', class: 'small', disabled: c.hope.on < (f.cost ?? 0) }, actionButtonText(f.automation?.texts?.button, 'Use', { actor: c.name, source: f.name }, `${f.cost ?? 0} Hope`)) : undefined;
     if (useButton && use) useButton.addEventListener('click', use);
     const node = quick ? quickEntry('feature', f, f.source, [rich(f.text)], useButton ? [useButton] : []) : featureCard(f, use);
     const actions = actionRow(`feat:${f.name}`, f.automation, f.name);
@@ -2577,11 +2584,19 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
       if (s.option.advantage) suggest();
       update();
     });
+    const optionNote = s.option.texts?.optionNote
+      ? formatText(s.option.texts.optionNote, actionTextVars({ actor: c.name, source: s.source, origin: s.origin, action: s.option })) : undefined;
+    const costPart = s.prepared || s.active || !cost ? '' : `${cost}${s.option.quantity ? s.option.quantity.resource === 'stress' ? ' per use' : ' per token' : ''}`;
     const note = s.prepared ? 'ready - already used up'
       : s.active ? 'active - no cost'
-      : [cost ? `costs ${cost}${s.option.quantity ? s.option.quantity.resource === 'stress' ? ' per use' : ' per token' : ''} when selected${s.option.effect ? ` (then stays active ${s.option.effect.until === 'scene' ? 'for the scene' : 'as an effect'})` : ''}` : '',
+      : [cost && s.option.effect && optionNote === undefined ? `then stays active ${s.option.effect.until === 'scene' ? 'for the scene' : 'as an effect'}` : '',
         s.option.consumeItem && s.item ? `uses up 1 ${s.item.name} (${s.item.qty} left)` : '',
-        s.option.required ? 'required' : ''].filter(Boolean).join('; ');
+        optionNote ?? (s.option.required ? 'required' : '')].filter(Boolean).join('; ');
+    const rowText = optionRowParts(s);
+    const custom = s.option.texts?.option !== undefined;
+    const left = s.automation.uses ? usesLeft(c, s.key, s.automation) : null;
+    const detail = [s.option.description, note && note[0].toUpperCase() + note.slice(1),
+      left !== null ? `(${left}/${usesMax(c, s.key, s.automation)} left)` : ''].filter(Boolean).join(' ');
     const initial = s.option.input?.source === 'attackFear' && typeof attackFear === 'number' && Number.isInteger(attackFear)
       && attackFear >= s.option.input.min && attackFear <= s.option.input.max ? attackFear : s.option.input?.default ?? 1;
     const amount = s.option.input || s.option.quantity ? el('input', { type: 'number', step: '1',
@@ -2609,8 +2624,8 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
       sizeSelect.addEventListener('change', () => { dieSizeChoices.set(i, Number(sizeSelect.value)); update(); });
     }
     const choice = el('label', { class: 'dh-roll-option' }, input,
-      el('span', {}, `${rollOptionLabel(s)}${value ? ` (${signed(value)}${s.option.quantity ? ' per token' : ''})` : ''}${dice ? ` ${signedDice(dice)}` : ''}${note ? `; ${note}` : ''}`,
-        ...(s.option.description ? [el('small', { class: 'muted' }, s.option.description)] : []),
+      el('span', {}, el('b', {}, rowText.name), ` - ${rowText.text}${value && !(custom && !s.option.quantity && rowText.text.includes(signed(value))) ? ` (${signed(value)}${s.option.quantity ? ' per token' : ''})` : ''}${dice && !(custom && rowText.text.includes(signedDice(dice).replace(/^[+-]1?/, ''))) ? ` ${signedDice(dice)}` : ''}${costPart ? ` (${costPart})` : ''}`,
+        ...(detail ? [el('small', { class: 'muted' }, detail)] : []),
         ...(block ? [el('small', { class: 'error' }, block)] : [])));
     const continuingRun = s.option.deathrun && !!runEffect();
     return el('div', { class: `dh-roll-option-row${continuingRun ? ' dh-deathrun-option-row' : ''}` },

@@ -101,9 +101,9 @@ describe('Guardian automation', () => {
     updateCharacterAutomation(c, [catalog]);
     const host = new Element('root');
     openDamageDialog(host as unknown as HTMLElement, c, () => {});
-    const row = host.all('label').find(e => e.text.includes('Severe to Major'))!;
+    const row = host.all('label').find(e => e.text.includes('Unstoppable'))!;
     expect(row).toBeDefined();
-    expect(row.text).toContain('Major to Minor, Minor to None');
+    expect(row.text).toContain('Reduce physical damage by one threshold');
     expect(row.text).toContain('Magic damage is unaffected');
     expect(row.all('input')[0].checked).toBe(true);
     expect(c.effects[0].counter!.value).toBe(3);

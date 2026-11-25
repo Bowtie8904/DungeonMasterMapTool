@@ -28,7 +28,7 @@ describe('Warlock catalog automation', () => {
   it('keeps the Boon reroll, adds its Hope action, and only shows Favor in class resources', () => {
     const c = warlock();
     const boon = c.features.find(f => f.name === 'Patron’s Boon')!.automation!;
-    expect(sheetActions(boon)).toEqual([{ id: 'use', label: 'Patron’s Boon', cost: { hope: 3 } }]);
+    expect(sheetActions(boon)).toMatchObject([{ id: 'use', label: 'Patron’s Boon', cost: { hope: 3 } }]);
     expect(boon.rollTriggers![0]).toMatchObject({ reroll: 'duality', advantage: true, cost: { hope: 3 } });
     const favor = c.features.find(f => f.name === 'Favor')!.automation!;
     expect(sheetActions(favor)).toEqual([]);

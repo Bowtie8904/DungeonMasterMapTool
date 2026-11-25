@@ -781,7 +781,7 @@ describe('domain-card cost and limit corrections', () => {
       cost: { hope: 2 },
       steps: [{ op: 'effect', effect: { rollOptions: [{
         roll: 'attack', defaultOn: true, endEffect: 'Parallela',
-        description: expect.stringContaining('no numerical attack bonus'),
+        description: expect.stringContaining('no numerical bonus'),
       }] } }],
       report: { text: expect.stringContaining('one additional target') },
     });

@@ -4,6 +4,7 @@ import {
   ActionDef, Automation, DiceRoll, RestBenefit, RestKind, actionBlocker, addEffect, applyRest, armorOverflowHope, evalValue, hasFeature, rollLocal, runAction, syncDerived,
 } from './engine';
 import { formatRestReport } from './rest-summary';
+import { formatText } from './texts';
 import type { CompendiumEntry } from './compendium';
 import type { AncestryChoice } from './ancestry-choice';
 import { replaceAncestry } from './rules';
@@ -119,7 +120,7 @@ export function moveBlocker(kind: RestKind, picks: RestPick[], index: number, id
 
 /** Passive benefits and optional extras of the sheet; each can be switched off before resting. */
 export function restPassives(c: CharacterSheet, kind: RestKind): RestPassive[] {
-  return benefits(c, kind).map(({ s, b, id }) => ({ id, label: `${s.name}: ${b.label}`, defaultOn: b.defaultOn }));
+  return benefits(c, kind).map(({ s, b, id }) => ({ id, label: `${s.name}: ${b.texts?.button ? formatText(b.texts.button, { source: s.name, label: b.label }) : b.label}`, defaultOn: b.defaultOn }));
 }
 
 function benefits(c: CharacterSheet, kind: RestKind): Array<{ s: Source; b: RestBenefit; id: string }> {
@@ -136,7 +137,7 @@ function downtimeActions(c: CharacterSheet, kind: RestKind, additional = false):
   return sources(c).flatMap((s) => (s.automation.actions ?? [])
     .filter((a) => a.timing === 'downtime' && !!a.downtime?.additional === additional
       && (!a.downtime?.rest || a.downtime.rest === kind) && !actionBlocker(c, s.key, s.automation, a, 'rest'))
-    .map((a) => ({ id: `act:${s.key}|${a.id}`, label: `${s.name}: ${a.label}`, ancestryChoice: a.ancestryChoice, mutagens: a.mutagens })));
+    .map((a) => ({ id: `act:${s.key}|${a.id}`, label: `${s.name}: ${a.texts?.button ? formatText(a.texts.button, { source: s.name, label: a.label }) : a.label}`, ancestryChoice: a.ancestryChoice, mutagens: a.mutagens })));
 }
 
 export function availableMoves(c: CharacterSheet, kind: RestKind): RestMove[] {

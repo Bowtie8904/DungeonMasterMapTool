@@ -2,6 +2,7 @@
 
 import { Armor, CharacterSheet, DomainCard, InventoryItem, Spell, Weapon } from './data';
 import type { Automation } from './engine';
+import { formatText } from './texts';
 import { dmSheetAuthorization, hostFetch } from '../api';
 
 export interface CompendiumFeature {
@@ -278,7 +279,7 @@ export function describeAutomation(a?: Automation): string[] {
   for (const option of a.rollOptions ?? []) {
     if (option.experience) out.push(`Experience required: ${option.label} costs 1 Stress instead of Hope and multiplies its modifier by ${option.experience.multiplier}`);
     const cost = Object.entries(option.cost ?? {}).map(([resource, amount]) => `${amount} ${resource}`).join(', ');
-    out.push(`Optional ${option.roll} bonus: ${option.label}${cost ? ` (cost: ${cost}${option.quantity ? ' per token' : ''})` : ''}${option.hopeDie ? `; Hope d${option.hopeDie}` : ''}${option.input ? `; ${option.input.label} (default +${option.input.default})` : ''}${option.quantity ? '; choose how many tokens to spend' : ''}`);
+    out.push(`Optional ${option.roll} bonus: ${option.texts?.option ? formatText(option.texts.option, { label: option.label }) : option.label}${cost ? ` (cost: ${cost}${option.quantity ? ' per token' : ''})` : ''}${option.hopeDie ? `; Hope d${option.hopeDie}` : ''}${option.input ? `; ${option.input.label} (default +${option.input.default})` : ''}${option.quantity ? '; choose how many tokens to spend' : ''}`);
   }
   if (a.damage) out.push(`Weapon damage: ${a.damage.extraDice} extra dice, discard ${a.damage.dropLowest} lowest`);
   return out;

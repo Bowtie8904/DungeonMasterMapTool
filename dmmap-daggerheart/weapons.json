@@ -267,11 +267,15 @@
      {
       "id": "quick",
       "label": "Quick: target another creature",
+      "texts": {
+       "option": "Target another creature with this attack",
+       "applied": "{source} - Quick: target another creature",
+       "name": "Quick"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
-      },
-      "description": "Also target another creature within range with this attack."
+      }
      }
     ]
    },
@@ -851,11 +855,15 @@
      {
       "id": "quick",
       "label": "Quick: target another creature",
+      "texts": {
+       "option": "Target another creature with this attack",
+       "applied": "{source} - Quick: target another creature",
+       "name": "Quick"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
-      },
-      "description": "Also target another creature within range with this attack."
+      }
      }
     ]
    }
@@ -1071,11 +1079,15 @@
      {
       "id": "quick",
       "label": "Quick: target another creature",
+      "texts": {
+       "option": "Target another creature with this attack",
+       "applied": "{source} - Quick: target another creature",
+       "name": "Quick"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
-      },
-      "description": "Also target another creature within range with this attack."
+      }
      }
     ]
    }
@@ -1592,6 +1604,9 @@
      {
       "id": "invigorating",
       "label": "Invigorating: roll a d4",
+      "texts": {
+       "chatButton": "Invigorating: roll a d4"
+      },
       "on": "attack",
       "description": "Use after a successful attack with this weapon. On a 4, clear a Stress.",
       "check": {
@@ -1634,11 +1649,17 @@
      {
       "id": "persuasive",
       "label": "Persuasive",
+      "texts": {
+       "option": "+2 to a Presence Roll",
+       "applied": "{source} - Persuasive",
+       "name": "Persuasive"
+      },
       "roll": "trait:Presence",
       "value": 2,
       "cost": {
        "stress": 1
-      }
+      },
+      "description": "Before you make the Presence Roll."
      }
     ]
    }
@@ -1924,11 +1945,15 @@
      {
       "id": "quick",
       "label": "Quick: target another creature",
+      "texts": {
+       "option": "Target another creature with this attack",
+       "applied": "{source} - Quick: target another creature",
+       "name": "Quick"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
-      },
-      "description": "Also target another creature within range with this attack."
+      }
      }
     ]
    }
@@ -2129,12 +2154,17 @@
      {
       "id": "devastating",
       "label": "Devastating: d20 damage die",
+      "texts": {
+       "option": "Use a d20 as your damage die",
+       "applied": "{source} - Devastating: d20 damage die",
+       "name": "Devastating"
+      },
       "roll": "attack",
       "damageDie": 20,
       "cost": {
        "stress": 1
       },
-      "description": "This attack's Damage button rolls d20s as the weapon's damage dice."
+      "description": "Before you make the attack roll."
      }
     ]
    }
@@ -2193,9 +2223,14 @@
      {
       "id": "dueling",
       "label": "Dueling: target is isolated",
+      "texts": {
+       "option": "Advantage on attacks against an isolated target",
+       "applied": "{source} - Dueling: target is isolated",
+       "name": "Dueling"
+      },
       "roll": "attack",
       "advantage": "advantage",
-      "description": "No other creatures are within Close range of the target."
+      "description": "No other creatures within Close range of the target."
      }
     ]
    }
@@ -2558,6 +2593,9 @@
      {
       "id": "lucky",
       "label": "Lucky: reroll the failed attack",
+      "texts": {
+       "chatButton": "Lucky: reroll the failed attack"
+      },
       "on": "attack",
       "when": "failure",
       "cost": {
@@ -2657,12 +2695,17 @@
      {
       "id": "painful",
       "label": "Painful: mark a Stress",
+      "texts": {
+       "option": "Mark a Stress on each successful attack",
+       "applied": "{source} - Painful: mark a Stress",
+       "name": "Painful"
+      },
       "roll": "damage",
       "cost": {
        "stress": 1
       },
       "required": true,
-      "description": "Each successful attack with this weapon marks a Stress."
+      "description": "Required for every successful attack."
      }
     ]
    }
@@ -3044,11 +3087,15 @@
      {
       "id": "quick",
       "label": "Quick: target another creature",
+      "texts": {
+       "option": "Target another creature with this attack",
+       "applied": "{source} - Quick: target another creature",
+       "name": "Quick"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
-      },
-      "description": "Also target another creature within range with this attack."
+      }
      }
     ]
    }
@@ -3187,11 +3234,15 @@
      {
       "id": "quick",
       "label": "Quick: target another creature",
+      "texts": {
+       "option": "Target another creature with this attack",
+       "applied": "{source} - Quick: target another creature",
+       "name": "Quick"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
-      },
-      "description": "Also target another creature within range with this attack."
+      }
      }
     ]
    }
@@ -3221,6 +3272,9 @@
      {
       "id": "concussive",
       "label": "Concussive: knock the target back to Far range",
+      "texts": {
+       "chatButton": "Concussive: knock the target back to Far range"
+      },
       "on": "attack",
       "cost": {
        "hope": 1
@@ -3334,6 +3388,9 @@
      {
       "id": "grappling",
       "label": "Grappling: Restrain the target or pull it into Melee range",
+      "texts": {
+       "chatButton": "Grappling: Restrain the target or pull it into Melee range"
+      },
       "on": "attack",
       "cost": {
        "hope": 1
@@ -3368,6 +3425,11 @@
      {
       "id": "bouncing",
       "label": "Bouncing: targets hit",
+      "texts": {
+       "option": "Hit one target per Stress marked",
+       "applied": "{source} - Bouncing: targets hit",
+       "name": "Bouncing"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
@@ -3376,7 +3438,7 @@
        "resource": "stress",
        "label": "Stress to mark (one per target)"
       },
-      "description": "Mark 1 or more Stress to hit that many targets in range of the attack."
+      "description": "Targets must be in range of the attack."
      }
     ]
    }
@@ -3681,6 +3743,9 @@
      {
       "id": "lifestealing",
       "label": "Lifestealing: roll a d6",
+      "texts": {
+       "chatButton": "Lifestealing: roll a d6"
+      },
       "on": "attack",
       "description": "Use after a successful attack with this weapon. Choose what a 6 clears, then roll.",
       "check": {
@@ -3740,12 +3805,16 @@
      {
       "id": "greedy",
       "label": "Greedy: spend a handful of gold, +1 Proficiency",
+      "texts": {
+       "option": "+1 Proficiency to a damage roll",
+       "applied": "{source} - Greedy: spend a handful of gold, +1 Proficiency",
+       "name": "Greedy"
+      },
       "roll": "damage",
       "proficiency": 1,
       "cost": {
        "gold": 10
-      },
-      "description": "Spends 10 gold coins (one handful) from your sheet."
+      }
      }
     ]
    }
@@ -3802,12 +3871,17 @@
      {
       "id": "painful",
       "label": "Painful: mark a Stress",
+      "texts": {
+       "option": "Mark a Stress on each successful attack",
+       "applied": "{source} - Painful: mark a Stress",
+       "name": "Painful"
+      },
       "roll": "damage",
       "cost": {
        "stress": 1
       },
       "required": true,
-      "description": "Each successful attack with this weapon marks a Stress."
+      "description": "Required for every successful attack."
      }
     ]
    }
@@ -3943,11 +4017,15 @@
      {
       "id": "quick",
       "label": "Quick: target another creature",
+      "texts": {
+       "option": "Target another creature with this attack",
+       "applied": "{source} - Quick: target another creature",
+       "name": "Quick"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
-      },
-      "description": "Also target another creature within range with this attack."
+      }
      }
     ]
    },
@@ -3978,11 +4056,15 @@
      {
       "id": "quick",
       "label": "Quick: target another creature",
+      "texts": {
+       "option": "Target another creature with this attack",
+       "applied": "{source} - Quick: target another creature",
+       "name": "Quick"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
-      },
-      "description": "Also target another creature within range with this attack."
+      }
      }
     ]
    }
@@ -4012,11 +4094,15 @@
      {
       "id": "quick",
       "label": "Quick: target another creature",
+      "texts": {
+       "option": "Target another creature with this attack",
+       "applied": "{source} - Quick: target another creature",
+       "name": "Quick"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
-      },
-      "description": "Also target another creature within range with this attack."
+      }
      }
     ]
    }
@@ -4046,11 +4132,15 @@
      {
       "id": "quick",
       "label": "Quick: target another creature",
+      "texts": {
+       "option": "Target another creature with this attack",
+       "applied": "{source} - Quick: target another creature",
+       "name": "Quick"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
-      },
-      "description": "Also target another creature within range with this attack."
+      }
      }
     ]
    }
@@ -4314,9 +4404,14 @@
      {
       "id": "primary-damage",
       "label": "Paired",
+      "texts": {
+       "option": "+2 to primary weapon damage",
+       "applied": "{source} - Paired",
+       "name": "Paired"
+      },
       "roll": "damage",
       "value": 2,
-      "description": "Primary weapon only; +2 to primary weapon damage to targets within Melee range",
+      "description": "Primary weapon only; targets within Melee range.",
       "weapon": "primary"
      }
     ]
@@ -4412,9 +4507,14 @@
      {
       "id": "primary-damage",
       "label": "Paired",
+      "texts": {
+       "option": "+2 to primary weapon damage",
+       "applied": "{source} - Paired",
+       "name": "Paired"
+      },
       "roll": "damage",
       "value": 2,
-      "description": "Primary weapon only; +2 to primary weapon damage to targets within Melee range",
+      "description": "Primary weapon only; targets within Melee range.",
       "weapon": "primary"
      }
     ]
@@ -4446,6 +4546,12 @@
      {
       "id": "use",
       "label": "Startling",
+      "texts": {
+       "button": "Startling",
+       "chatButton": "Startling",
+       "roll": "Startling",
+       "reportTitle": "{source} - Startling"
+      },
       "cost": {
        "stress": 1
       }
@@ -4519,9 +4625,14 @@
      {
       "id": "primary-damage",
       "label": "Paired",
+      "texts": {
+       "option": "+3 to primary weapon damage",
+       "applied": "{source} - Paired",
+       "name": "Paired"
+      },
       "roll": "damage",
       "value": 3,
-      "description": "Primary weapon only; +3 to primary weapon damage to targets within Melee range",
+      "description": "Primary weapon only; targets within Melee range.",
       "weapon": "primary"
      }
     ]
@@ -4614,9 +4725,14 @@
      {
       "id": "primary-damage",
       "label": "Paired",
+      "texts": {
+       "option": "+3 to primary weapon damage",
+       "applied": "{source} - Paired",
+       "name": "Paired"
+      },
       "roll": "damage",
       "value": 3,
-      "description": "Primary weapon only; +3 to primary weapon damage to targets within Melee range",
+      "description": "Primary weapon only; targets within Melee range.",
       "weapon": "primary"
      }
     ]
@@ -4647,6 +4763,12 @@
      {
       "id": "use",
       "label": "Startling",
+      "texts": {
+       "button": "Startling",
+       "chatButton": "Startling",
+       "roll": "Startling",
+       "reportTitle": "{source} - Startling"
+      },
       "cost": {
        "stress": 1
       }
@@ -4723,9 +4845,14 @@
      {
       "id": "primary-damage",
       "label": "Double Duty",
+      "texts": {
+       "option": "+1 to Armor Score and primary weapon damage",
+       "applied": "{source} - Double Duty",
+       "name": "Double Duty"
+      },
       "roll": "damage",
       "value": 1,
-      "description": "Primary weapon only; +1 to Armor Score; +1 to primary weapon damage within Melee range",
+      "description": "Primary weapon only; the damage bonus applies within Melee range.",
       "weapon": "primary"
      }
     ]
@@ -4756,6 +4883,12 @@
      {
       "id": "parry",
       "label": "Parry",
+      "texts": {
+       "button": "Parry",
+       "chatButton": "Parry",
+       "roll": "Parry",
+       "reportTitle": "{source} - Parry"
+      },
       "sendRoll": {
        "dice": "@total_proficiencyd6",
        "label": "Parry: discard matching attacker damage dice"
@@ -4810,9 +4943,14 @@
      {
       "id": "primary-damage",
       "label": "Paired",
+      "texts": {
+       "option": "+4 to primary weapon damage",
+       "applied": "{source} - Paired",
+       "name": "Paired"
+      },
       "roll": "damage",
       "value": 4,
-      "description": "Primary weapon only; +4 to primary weapon damage to targets within Melee range",
+      "description": "Primary weapon only; targets within Melee range.",
       "weapon": "primary"
      }
     ]
@@ -4905,9 +5043,14 @@
      {
       "id": "primary-damage",
       "label": "Paired",
+      "texts": {
+       "option": "+4 to primary weapon damage",
+       "applied": "{source} - Paired",
+       "name": "Paired"
+      },
       "roll": "damage",
       "value": 4,
-      "description": "Primary weapon only; +4 to primary weapon damage to targets within Melee range",
+      "description": "Primary weapon only; targets within Melee range.",
       "weapon": "primary"
      }
     ]
@@ -4938,6 +5081,12 @@
      {
       "id": "use",
       "label": "Startling",
+      "texts": {
+       "button": "Startling",
+       "chatButton": "Startling",
+       "roll": "Startling",
+       "reportTitle": "{source} - Startling"
+      },
       "cost": {
        "stress": 1
       }
@@ -5008,6 +5157,12 @@
      {
       "id": "use",
       "label": "Deflecting",
+      "texts": {
+       "button": "Deflecting",
+       "chatButton": "Deflecting",
+       "roll": "Deflecting",
+       "reportTitle": "{source} - Deflecting"
+      },
       "cost": {
        "armor": 1
       },
@@ -5045,13 +5200,18 @@
      {
       "id": "charged",
       "label": "Charged: +1 Proficiency",
+      "texts": {
+       "option": "+1 Proficiency on a primary weapon attack",
+       "applied": "{source} - Charged: +1 Proficiency",
+       "name": "Charged"
+      },
       "roll": "attack",
       "weapon": "primary",
       "proficiency": 1,
       "cost": {
        "stress": 1
       },
-      "description": "Primary weapon attack; the bonus applies to this attack's damage."
+      "description": "The bonus applies to this attack's damage."
      }
     ]
    }
@@ -5112,9 +5272,14 @@
      {
       "id": "primary-damage",
       "label": "Paired",
+      "texts": {
+       "option": "+5 to primary weapon damage",
+       "applied": "{source} - Paired",
+       "name": "Paired"
+      },
       "roll": "damage",
       "value": 5,
-      "description": "Primary weapon only; +5 to primary weapon damage to targets within Melee range",
+      "description": "Primary weapon only; targets within Melee range.",
       "weapon": "primary"
      }
     ]
@@ -5207,9 +5372,14 @@
      {
       "id": "primary-damage",
       "label": "Paired",
+      "texts": {
+       "option": "+5 to primary weapon damage",
+       "applied": "{source} - Paired",
+       "name": "Paired"
+      },
       "roll": "damage",
       "value": 5,
-      "description": "Primary weapon only; +5 to primary weapon damage to targets within Melee range",
+      "description": "Primary weapon only; targets within Melee range.",
       "weapon": "primary"
      }
     ]
@@ -5240,6 +5410,12 @@
      {
       "id": "use",
       "label": "Startling",
+      "texts": {
+       "button": "Startling",
+       "chatButton": "Startling",
+       "roll": "Startling",
+       "reportTitle": "{source} - Startling"
+      },
       "cost": {
        "stress": 1
       }
@@ -5352,6 +5528,9 @@
      {
       "id": "locked-on",
       "label": "Locked On: next primary attack succeeds",
+      "texts": {
+       "chatButton": "Locked On: next primary attack succeeds"
+      },
       "on": "attack",
       "description": "Use after a successful attack with this weapon.",
       "steps": [
@@ -5366,11 +5545,16 @@
           {
            "id": "success",
            "label": "Locked On: automatically succeeds against the same target",
+           "texts": {
+            "option": "Next attack against the same target automatically succeeds",
+            "applied": "{source} - Locked On: automatically succeeds against the same target",
+            "name": "Locked On"
+           },
            "roll": "attack",
            "weapon": "primary",
            "defaultOn": true,
            "endEffect": "Locked On",
-           "description": "Only against the target you locked on to."
+           "description": "Only the target you locked on to, with your primary weapon."
           }
          ]
         }
@@ -5474,6 +5658,12 @@
      {
       "id": "use",
       "label": "Swatter",
+      "texts": {
+       "button": "Swatter",
+       "chatButton": "Swatter",
+       "roll": "Swatter",
+       "reportTitle": "{source} - Swatter"
+      },
       "cost": {
        "stress": 1
       }
@@ -5506,6 +5696,9 @@
      {
       "id": "restraining",
       "label": "Restraining: temporarily Restrain the target",
+      "texts": {
+       "chatButton": "Restraining: temporarily Restrain the target"
+      },
       "on": "attack",
       "cost": {
        "hope": 1
@@ -5544,6 +5737,12 @@
      {
       "id": "use",
       "label": "Watchful: cast Floating Eye",
+      "texts": {
+       "button": "Watchful: cast Floating Eye",
+       "chatButton": "Watchful: cast Floating Eye",
+       "roll": "Watchful: cast Floating Eye",
+       "reportTitle": "{source} - Watchful: cast Floating Eye"
+      },
       "steps": [
        {
         "op": "effect",
@@ -5556,8 +5755,14 @@
           {
            "id": "watchful",
            "label": "Watchful: against mind reading or clairvoyance",
+           "texts": {
+            "option": "Floating Eye: disadvantage on Reaction Rolls against mind reading",
+            "applied": "{source} - Watchful: against mind reading or clairvoyance",
+            "name": "Watchful"
+           },
            "roll": "reaction",
-           "advantage": "disadvantage"
+           "advantage": "disadvantage",
+           "description": "Cast once per long rest; the disadvantage lasts for the scene."
           }
          ]
         }
@@ -5592,7 +5797,7 @@
      {
       "id": "channeling",
       "label": "Channeling",
-      "description": "Mark a Stress to halve magic damage and store the halved-away damage in the Claws until your next rest.",
+      "description": "Stored damage lasts until your next rest.",
       "when": {
        "type": "magic"
       },
@@ -5609,13 +5814,23 @@
         {
          "id": "stored",
          "label": "Channeling: stored damage",
+         "texts": {
+          "option": "Add the stored damage to your damage roll",
+          "applied": "{source} - Channeling: stored damage",
+          "name": "Channeling"
+         },
          "roll": "damage",
          "value": 0,
          "weaponName": "Claws of Yifang",
          "defaultOn": true,
-         "endEffect": "Claws of Yifang: Channeling"
+         "endEffect": "Claws of Yifang: Channeling",
+         "description": "Your next damage roll with this weapon."
         }
        ]
+      },
+      "texts": {
+       "name": "Channeling",
+       "option": "Halve magic damage and store the rest"
       }
      }
     ]
@@ -5646,6 +5861,9 @@
      {
       "id": "deforming",
       "label": "Deforming: deform the target's metal armor",
+      "texts": {
+       "chatButton": "Deforming: deform the target's metal armor"
+      },
       "on": "attack",
       "cost": {
        "stress": 1
@@ -5680,6 +5898,11 @@
      {
       "id": "undead",
       "label": "Life-Linked: against undead",
+      "texts": {
+       "option": "+2 to Spellcast Rolls against undead",
+       "applied": "{source} - Life-Linked: against undead",
+       "name": "Life-Linked"
+      },
       "roll": "spellcast",
       "value": 2,
       "description": "Spellcast Roll against an undead creature."
@@ -5733,6 +5956,12 @@
      {
       "id": "use",
       "label": "Webslinger: Restrain a target",
+      "texts": {
+       "button": "Webslinger: Restrain a target",
+       "chatButton": "Webslinger: Restrain a target",
+       "roll": "Webslinger: Restrain a target",
+       "reportTitle": "{source} - Webslinger: Restrain a target"
+      },
       "actionRoll": {
        "trait": "Finesse"
       }
@@ -5765,11 +5994,15 @@
      {
       "id": "quick",
       "label": "Quick: target another creature",
+      "texts": {
+       "option": "Target another creature with this attack",
+       "applied": "{source} - Quick: target another creature",
+       "name": "Quick"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
-      },
-      "description": "Also target another creature within range with this attack."
+      }
      }
     ]
    },
@@ -5951,11 +6184,16 @@
      {
       "id": "ricochet",
       "label": "Ricochet: target another creature",
+      "texts": {
+       "option": "Target another creature near the first target",
+       "applied": "{source} - Ricochet: target another creature",
+       "name": "Ricochet"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
       },
-      "description": "Also target another creature within Very Close range of the first target."
+      "description": "Within Very Close range of the first target."
      }
     ]
    },
@@ -6046,20 +6284,30 @@
      {
       "id": "penalty",
       "label": "Aimed: target is close or engaged",
+      "texts": {
+       "option": "Attack at disadvantage when the target is close",
+       "applied": "{source} - Aimed: target is close or engaged",
+       "name": "Aimed"
+      },
       "roll": "attack",
       "advantage": "disadvantage",
       "exclusive": "aimed",
-      "description": "The target is within Very Close range of you or within Melee range of one of your allies."
+      "description": "Target within Very Close range of you or within Melee range of an ally."
      },
      {
       "id": "ignore",
       "label": "Aimed: ignore the penalty",
+      "texts": {
+       "option": "Ignore the disadvantage",
+       "applied": "{source} - Aimed: ignore the penalty",
+       "name": "Aimed"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
       },
       "exclusive": "aimed",
-      "description": "Select instead of the penalty to mark a Stress and attack without disadvantage."
+      "description": "Attack without the close-range penalty."
      }
     ]
    },
@@ -6090,11 +6338,15 @@
      {
       "id": "quick",
       "label": "Quick: target another creature",
+      "texts": {
+       "option": "Target another creature with this attack",
+       "applied": "{source} - Quick: target another creature",
+       "name": "Quick"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
-      },
-      "description": "Also target another creature within range with this attack."
+      }
      }
     ]
    }
@@ -6290,6 +6542,12 @@
      {
       "id": "parry",
       "label": "Parry",
+      "texts": {
+       "button": "Parry",
+       "chatButton": "Parry",
+       "roll": "Parry",
+       "reportTitle": "{source} - Parry"
+      },
       "sendRoll": {
        "dice": "@total_proficiencyd8",
        "label": "Parry: discard matching attacker damage dice"
@@ -6445,11 +6703,16 @@
      {
       "id": "ricochet",
       "label": "Ricochet: target another creature",
+      "texts": {
+       "option": "Target another creature near the first target",
+       "applied": "{source} - Ricochet: target another creature",
+       "name": "Ricochet"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
       },
-      "description": "Also target another creature within Very Close range of the first target."
+      "description": "Within Very Close range of the first target."
      }
     ]
    }
@@ -6537,20 +6800,30 @@
      {
       "id": "penalty",
       "label": "Aimed: target is close or engaged",
+      "texts": {
+       "option": "Attack at disadvantage when the target is close",
+       "applied": "{source} - Aimed: target is close or engaged",
+       "name": "Aimed"
+      },
       "roll": "attack",
       "advantage": "disadvantage",
       "exclusive": "aimed",
-      "description": "The target is within Very Close range of you or within Melee range of one of your allies."
+      "description": "Target within Very Close range of you or within Melee range of an ally."
      },
      {
       "id": "ignore",
       "label": "Aimed: ignore the penalty",
+      "texts": {
+       "option": "Ignore the disadvantage",
+       "applied": "{source} - Aimed: ignore the penalty",
+       "name": "Aimed"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
       },
       "exclusive": "aimed",
-      "description": "Select instead of the penalty to mark a Stress and attack without disadvantage."
+      "description": "Attack without the close-range penalty."
      }
     ]
    }
@@ -6609,9 +6882,14 @@
      {
       "id": "omnipresent",
       "label": "Omnipresent: target within Very Far range",
+      "texts": {
+       "option": "Attack a target within Very Far range",
+       "applied": "{source} - Omnipresent: target within Very Far range",
+       "name": "Omnipresent"
+      },
       "roll": "attack",
       "advantage": "disadvantage",
-      "description": "Attack a target within Very Far range with disadvantage."
+      "description": "The attack is made with disadvantage."
      }
     ]
    }
@@ -6679,6 +6957,9 @@
      {
       "id": "invigorating",
       "label": "Invigorating: roll a d4",
+      "texts": {
+       "chatButton": "Invigorating: roll a d4"
+      },
       "on": "attack",
       "description": "Use after a successful attack with this weapon. On a 4, clear a Stress.",
       "check": {
@@ -6721,11 +7002,16 @@
      {
       "id": "volleyed",
       "label": "Volleyed: target a group",
+      "texts": {
+       "option": "Target a group of creatures within range",
+       "applied": "{source} - Volleyed: target a group",
+       "name": "Volleyed"
+      },
       "roll": "attack",
       "cost": {
        "hope": 1
       },
-      "description": "Target a group of creatures within range. Targets you succeed against take half damage."
+      "description": "Targets you succeed against take half damage."
      }
     ]
    }
@@ -6755,11 +7041,15 @@
      {
       "id": "quick",
       "label": "Quick: target another creature",
+      "texts": {
+       "option": "Target another creature with this attack",
+       "applied": "{source} - Quick: target another creature",
+       "name": "Quick"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
-      },
-      "description": "Also target another creature within range with this attack."
+      }
      }
     ]
    }
@@ -6896,12 +7186,17 @@
      {
       "id": "accelerator",
       "label": "Accelerator: move to Far range, +1 Proficiency",
+      "texts": {
+       "option": "Move to Far range, then attack with +1 Proficiency",
+       "applied": "{source} - Accelerator: move to Far range, +1 Proficiency",
+       "name": "Accelerator"
+      },
       "roll": "attack",
       "proficiency": 1,
       "cost": {
        "stress": 1
       },
-      "description": "Move to Far range, then make this attack. The bonus applies to its damage."
+      "description": "Once per scene; the bonus applies to its damage."
      }
     ]
    }
@@ -6955,7 +7250,11 @@
       "cost": {
        "stress": 2
       },
-      "description": "An adversary within this weapon's range dealt this damage. The GM marks its Hit Point."
+      "description": "An adversary within this weapon's range dealt the damage.",
+      "texts": {
+       "name": "Braced",
+       "option": "The attacker marks a Hit Point"
+      }
      }
     ]
    }
@@ -6985,11 +7284,15 @@
      {
       "id": "quick",
       "label": "Quick: target another creature",
+      "texts": {
+       "option": "Target another creature with this attack",
+       "applied": "{source} - Quick: target another creature",
+       "name": "Quick"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
-      },
-      "description": "Also target another creature within range with this attack."
+      }
      }
     ]
    }
@@ -7019,6 +7322,9 @@
      {
       "id": "bolstering",
       "label": "Bolstering: PCs within Close range gain a Hope",
+      "texts": {
+       "chatButton": "Bolstering: PCs within Close range gain a Hope"
+      },
       "on": "attack",
       "criticalOnly": true,
       "steps": [
@@ -7071,6 +7377,9 @@
      {
       "id": "rebounding",
       "label": "Rebounding: reroll with disadvantage",
+      "texts": {
+       "chatButton": "Rebounding: reroll with disadvantage"
+      },
       "on": "attack",
       "when": "failure",
       "reroll": "duality",
@@ -7146,11 +7455,16 @@
      {
       "id": "ricochet",
       "label": "Ricochet: target another creature",
+      "texts": {
+       "option": "Target another creature near the first target",
+       "applied": "{source} - Ricochet: target another creature",
+       "name": "Ricochet"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
       },
-      "description": "Also target another creature within Very Close range of the first target."
+      "description": "Within Very Close range of the first target."
      }
     ]
    }
@@ -7238,20 +7552,30 @@
      {
       "id": "penalty",
       "label": "Aimed: target is close or engaged",
+      "texts": {
+       "option": "Attack at disadvantage when the target is close",
+       "applied": "{source} - Aimed: target is close or engaged",
+       "name": "Aimed"
+      },
       "roll": "attack",
       "advantage": "disadvantage",
       "exclusive": "aimed",
-      "description": "The target is within Very Close range of you or within Melee range of one of your allies."
+      "description": "Target within Very Close range of you or within Melee range of an ally."
      },
      {
       "id": "ignore",
       "label": "Aimed: ignore the penalty",
+      "texts": {
+       "option": "Ignore the disadvantage",
+       "applied": "{source} - Aimed: ignore the penalty",
+       "name": "Aimed"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
       },
       "exclusive": "aimed",
-      "description": "Select instead of the penalty to mark a Stress and attack without disadvantage."
+      "description": "Attack without the close-range penalty."
      }
     ]
    }
@@ -7281,6 +7605,9 @@
      {
       "id": "concussive",
       "label": "Concussive: knock the target back to Far range",
+      "texts": {
+       "chatButton": "Concussive: knock the target back to Far range"
+      },
       "on": "attack",
       "cost": {
        "hope": 1
@@ -7336,6 +7663,11 @@
      {
       "id": "bouncing",
       "label": "Bouncing: additional targets",
+      "texts": {
+       "option": "Target additional creatures in range",
+       "applied": "{source} - Bouncing: additional targets",
+       "name": "Bouncing"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
@@ -7344,7 +7676,7 @@
        "resource": "stress",
        "label": "Stress to mark (one per target)"
       },
-      "description": "Mark any number of Stress to target that many additional creatures in range of the attack."
+      "description": "One additional target per Stress marked."
      }
     ]
    }
@@ -7427,6 +7759,9 @@
      {
       "id": "catalytic",
       "label": "Catalytic: ally gains +3 to next attack",
+      "texts": {
+       "chatButton": "Catalytic: ally gains +3 to next attack"
+      },
       "on": "attack",
       "cost": {
        "stress": 1
@@ -7486,11 +7821,15 @@
      {
       "id": "quick",
       "label": "Quick: target another creature",
+      "texts": {
+       "option": "Target another creature with this attack",
+       "applied": "{source} - Quick: target another creature",
+       "name": "Quick"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
-      },
-      "description": "Also target another creature within range with this attack."
+      }
      }
     ]
    }
@@ -7652,34 +7991,54 @@
      {
       "id": "extend-1",
       "label": "Extending: reach Very Close",
+      "texts": {
+       "option": "Increase the range by 1 step",
+       "applied": "{source} - Extending: reach Very Close",
+       "name": "Extending"
+      },
       "roll": "attack",
       "value": -1,
       "exclusive": "extending",
-      "description": "Increase the range by 1 step."
+      "description": "-1 to attack rolls per step increased."
      },
      {
       "id": "extend-2",
       "label": "Extending: reach Close",
+      "texts": {
+       "option": "Increase the range by 2 steps",
+       "applied": "{source} - Extending: reach Close",
+       "name": "Extending"
+      },
       "roll": "attack",
       "value": -2,
       "exclusive": "extending",
-      "description": "Increase the range by 2 steps."
+      "description": "-1 to attack rolls per step increased."
      },
      {
       "id": "extend-3",
       "label": "Extending: reach Far",
+      "texts": {
+       "option": "Increase the range by 3 steps",
+       "applied": "{source} - Extending: reach Far",
+       "name": "Extending"
+      },
       "roll": "attack",
       "value": -3,
       "exclusive": "extending",
-      "description": "Increase the range by 3 steps."
+      "description": "-1 to attack rolls per step increased."
      },
      {
       "id": "extend-4",
       "label": "Extending: reach Very Far",
+      "texts": {
+       "option": "Increase the range by 4 steps",
+       "applied": "{source} - Extending: reach Very Far",
+       "name": "Extending"
+      },
       "roll": "attack",
       "value": -4,
       "exclusive": "extending",
-      "description": "Increase the range by 4 steps."
+      "description": "-1 to attack rolls per step increased."
      }
     ]
    }
@@ -7709,12 +8068,17 @@
      {
       "id": "devastating",
       "label": "Devastating: d20 damage die",
+      "texts": {
+       "option": "Use a d20 as your damage die",
+       "applied": "{source} - Devastating: d20 damage die",
+       "name": "Devastating"
+      },
       "roll": "attack",
       "damageDie": 20,
       "cost": {
        "stress": 1
       },
-      "description": "This attack's Damage button rolls d20s as the weapon's damage dice."
+      "description": "Before you make the attack roll."
      }
     ]
    }
@@ -7773,11 +8137,15 @@
      {
       "id": "quick",
       "label": "Quick: target another creature",
+      "texts": {
+       "option": "Target another creature with this attack",
+       "applied": "{source} - Quick: target another creature",
+       "name": "Quick"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
-      },
-      "description": "Also target another creature within range with this attack."
+      }
      }
     ]
    }
@@ -7875,11 +8243,16 @@
      {
       "id": "ricochet",
       "label": "Ricochet: target another creature",
+      "texts": {
+       "option": "Target another creature near the first target",
+       "applied": "{source} - Ricochet: target another creature",
+       "name": "Ricochet"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
       },
-      "description": "Also target another creature within Very Close range of the first target."
+      "description": "Within Very Close range of the first target."
      }
     ]
    }
@@ -7967,20 +8340,30 @@
      {
       "id": "penalty",
       "label": "Aimed: target is close or engaged",
+      "texts": {
+       "option": "Attack at disadvantage when the target is close",
+       "applied": "{source} - Aimed: target is close or engaged",
+       "name": "Aimed"
+      },
       "roll": "attack",
       "advantage": "disadvantage",
       "exclusive": "aimed",
-      "description": "The target is within Very Close range of you or within Melee range of one of your allies."
+      "description": "Target within Very Close range of you or within Melee range of an ally."
      },
      {
       "id": "ignore",
       "label": "Aimed: ignore the penalty",
+      "texts": {
+       "option": "Ignore the disadvantage",
+       "applied": "{source} - Aimed: ignore the penalty",
+       "name": "Aimed"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
       },
       "exclusive": "aimed",
-      "description": "Select instead of the penalty to mark a Stress and attack without disadvantage."
+      "description": "Attack without the close-range penalty."
      }
     ]
    }
@@ -8081,6 +8464,11 @@
      {
       "id": "bouncing",
       "label": "Bouncing: additional targets",
+      "texts": {
+       "option": "Target additional creatures in range",
+       "applied": "{source} - Bouncing: additional targets",
+       "name": "Bouncing"
+      },
       "roll": "attack",
       "cost": {
        "stress": 1
@@ -8089,7 +8477,7 @@
        "resource": "stress",
        "label": "Stress to mark (one per target)"
       },
-      "description": "Mark any number of Stress to target that many additional creatures in range of the attack."
+      "description": "One additional target per Stress marked."
      }
     ]
    }
@@ -8119,6 +8507,12 @@
      {
       "id": "conjure",
       "label": "Conjure",
+      "texts": {
+       "button": "Conjure",
+       "chatButton": "Conjure",
+       "roll": "Conjure",
+       "reportTitle": "{source} - Conjure"
+      },
       "cost": {
        "stress": 1
       },
@@ -8162,6 +8556,9 @@
      {
       "id": "magnetic",
       "label": "Magnetic: pull adversaries near the target",
+      "texts": {
+       "chatButton": "Magnetic: pull adversaries near the target"
+      },
       "on": "attack",
       "cost": {
        "hope": 1
@@ -8196,6 +8593,11 @@
      {
       "id": "follow-up",
       "label": "Follow-Up: +1 Proficiency",
+      "texts": {
+       "option": "+1 Proficiency for this attack",
+       "applied": "{source} - Follow-Up: +1 Proficiency",
+       "name": "Follow-Up"
+      },
       "roll": "damage",
       "weapon": "primary",
       "proficiency": 1,
@@ -8233,9 +8635,14 @@
      {
       "id": "primary-damage",
       "label": "Paired",
+      "texts": {
+       "option": "+2 to primary weapon damage",
+       "applied": "{source} - Paired",
+       "name": "Paired"
+      },
       "roll": "damage",
       "value": 2,
-      "description": "Primary weapon only; +2 to primary weapon damage to targets within Melee range",
+      "description": "Primary weapon only; targets within Melee range.",
       "weapon": "primary"
      }
     ]
@@ -8359,9 +8766,14 @@
      {
       "id": "primary-damage",
       "label": "Focused",
+      "texts": {
+       "option": "+1 to primary weapon damage",
+       "applied": "{source} - Focused",
+       "name": "Focused"
+      },
       "roll": "damage",
       "value": 1,
-      "description": "Primary weapon only; +1 to primary weapon damage to targets within Very Close range",
+      "description": "Primary weapon only; targets within Very Close range.",
       "weapon": "primary"
      }
     ]
@@ -8393,6 +8805,11 @@
      {
       "id": "follow-up",
       "label": "Follow-Up: +1 Proficiency",
+      "texts": {
+       "option": "+1 Proficiency for this attack",
+       "applied": "{source} - Follow-Up: +1 Proficiency",
+       "name": "Follow-Up"
+      },
       "roll": "damage",
       "weapon": "primary",
       "proficiency": 1,
@@ -8429,9 +8846,14 @@
      {
       "id": "primary-damage",
       "label": "Paired",
+      "texts": {
+       "option": "+3 to primary weapon damage",
+       "applied": "{source} - Paired",
+       "name": "Paired"
+      },
       "roll": "damage",
       "value": 3,
-      "description": "Primary weapon only; +3 to primary weapon damage to targets within Melee range",
+      "description": "Primary weapon only; targets within Melee range.",
       "weapon": "primary"
      }
     ]
@@ -8551,9 +8973,14 @@
      {
       "id": "primary-damage",
       "label": "Focused",
+      "texts": {
+       "option": "+1 to primary weapon damage",
+       "applied": "{source} - Focused",
+       "name": "Focused"
+      },
       "roll": "damage",
       "value": 1,
-      "description": "Primary weapon only; +1 to primary weapon damage to targets within Very Close range",
+      "description": "Primary weapon only; targets within Very Close range.",
       "weapon": "primary"
      }
     ]
@@ -8605,6 +9032,12 @@
      {
       "id": "use",
       "label": "Deflecting",
+      "texts": {
+       "button": "Deflecting",
+       "chatButton": "Deflecting",
+       "roll": "Deflecting",
+       "reportTitle": "{source} - Deflecting"
+      },
       "cost": {
        "armor": 1
       },
@@ -8648,9 +9081,14 @@
      {
       "id": "primary-damage",
       "label": "Double Duty",
+      "texts": {
+       "option": "+1 to Armor Score and primary weapon damage",
+       "applied": "{source} - Double Duty",
+       "name": "Double Duty"
+      },
       "roll": "damage",
       "value": 1,
-      "description": "Primary weapon only; +1 to Armor Score; +1 to primary weapon damage within Melee range",
+      "description": "Primary weapon only; the damage bonus applies within Melee range.",
       "weapon": "primary"
      }
     ]
@@ -8681,6 +9119,9 @@
      {
       "id": "entangling",
       "label": "Entangling: target becomes temporarily Vulnerable",
+      "texts": {
+       "chatButton": "Entangling: target becomes temporarily Vulnerable"
+      },
       "on": "attack",
       "cost": {
        "hope": 1
@@ -8716,6 +9157,11 @@
      {
       "id": "follow-up",
       "label": "Follow-Up: +1 Proficiency",
+      "texts": {
+       "option": "+1 Proficiency for this attack",
+       "applied": "{source} - Follow-Up: +1 Proficiency",
+       "name": "Follow-Up"
+      },
       "roll": "damage",
       "weapon": "primary",
       "proficiency": 1,
@@ -8752,9 +9198,14 @@
      {
       "id": "primary-damage",
       "label": "Paired",
+      "texts": {
+       "option": "+4 to primary weapon damage",
+       "applied": "{source} - Paired",
+       "name": "Paired"
+      },
       "roll": "damage",
       "value": 4,
-      "description": "Primary weapon only; +4 to primary weapon damage to targets within Melee range",
+      "description": "Primary weapon only; targets within Melee range.",
       "weapon": "primary"
      }
     ]
@@ -8874,9 +9325,14 @@
      {
       "id": "primary-damage",
       "label": "Focused",
+      "texts": {
+       "option": "+1 to primary weapon damage",
+       "applied": "{source} - Focused",
+       "name": "Focused"
+      },
       "roll": "damage",
       "value": 1,
-      "description": "Primary weapon only; +1 to primary weapon damage to targets within Very Close range",
+      "description": "Primary weapon only; targets within Very Close range.",
       "weapon": "primary"
      }
     ]
@@ -8937,6 +9393,9 @@
      {
       "id": "targeted",
       "label": "Targeted: next weapon attack succeeds",
+      "texts": {
+       "chatButton": "Targeted: next weapon attack succeeds"
+      },
       "on": "attack",
       "when": "failure",
       "weaponAttack": true,
@@ -8957,11 +9416,16 @@
           {
            "id": "success",
            "label": "Targeted: this attack automatically succeeds",
+           "texts": {
+            "option": "This weapon attack automatically succeeds",
+            "applied": "{source} - Targeted: this attack automatically succeeds",
+            "name": "Targeted"
+           },
            "roll": "attack",
            "weapon": "any",
            "defaultOn": true,
            "endEffect": "Targeted",
-           "description": "Treat this weapon attack as a success."
+           "description": "Only after you failed a weapon attack."
           }
          ]
         }
@@ -8996,6 +9460,9 @@
      {
       "id": "draining",
       "label": "Draining: target marks a Stress, you clear a Stress",
+      "texts": {
+       "chatButton": "Draining: target marks a Stress, you clear a Stress"
+      },
       "on": "attack",
       "cost": {
        "hope": 1
@@ -9068,6 +9535,11 @@
      {
       "id": "follow-up",
       "label": "Follow-Up: +1 Proficiency",
+      "texts": {
+       "option": "+1 Proficiency for this attack",
+       "applied": "{source} - Follow-Up: +1 Proficiency",
+       "name": "Follow-Up"
+      },
       "roll": "damage",
       "weapon": "primary",
       "proficiency": 1,
@@ -9104,9 +9576,14 @@
      {
       "id": "primary-damage",
       "label": "Paired",
+      "texts": {
+       "option": "+5 to primary weapon damage",
+       "applied": "{source} - Paired",
+       "name": "Paired"
+      },
       "roll": "damage",
       "value": 5,
-      "description": "Primary weapon only; +5 to primary weapon damage to targets within Melee range",
+      "description": "Primary weapon only; targets within Melee range.",
       "weapon": "primary"
      }
     ]
@@ -9226,9 +9703,14 @@
      {
       "id": "primary-damage",
       "label": "Focused",
+      "texts": {
+       "option": "+1 to primary weapon damage",
+       "applied": "{source} - Focused",
+       "name": "Focused"
+      },
       "roll": "damage",
       "value": 1,
-      "description": "Primary weapon only; +1 to primary weapon damage to targets within Very Close range",
+      "description": "Primary weapon only; targets within Very Close range.",
       "weapon": "primary"
      }
     ]
@@ -9259,6 +9741,9 @@
      {
       "id": "inverted",
       "label": "Inverted: gain a Hope",
+      "texts": {
+       "chatButton": "Inverted: gain a Hope"
+      },
       "on": "attack",
       "when": "fear",
       "weaponAttack": true,
@@ -9371,6 +9856,12 @@
      {
       "id": "use",
       "label": "Make Them Dance",
+      "texts": {
+       "button": "Make Them Dance",
+       "chatButton": "Make Them Dance",
+       "roll": "Make Them Dance",
+       "reportTitle": "{source} - Make Them Dance"
+      },
       "cost": {
        "stress": 1
       },

@@ -990,6 +990,29 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   (see `plan.md` §3.41). Settings are documented in `docs/SETTINGS.md`; the browser client lives in `web/`
   (`npm install && npm run build` outputs to `src/main/resources/web`).
 
+### Configurable automation texts
+
+Shipped catalogs already carry their current wording as editable examples: the literal text (for example `"button": "Drink"`) and `{source} - Drink` for `reportTitle`/`option`/`applied` on items, consumables, weapons, armor and domain cards. Class, ancestry and community features have a dynamic origin prefix and omit `reportTitle`/`option`/`applied`; their default text applies until you add them.
+
+Format-1 catalog entries (`dmmap-daggerheart/*.json`) may carry an optional `texts` object on actions, roll options, roll triggers, chat benefits, mitigation options and feature `automation`. Every field only changes displayed wording; costs (`Label (2 Hope)`, `spent 2 Hope`, per-token notes) are always appended by the app and cannot be removed or reworded. Absent fields keep today's text, and catalogs stay `version` 1.
+
+| Field | Where it shows |
+|---|---|
+| `button` | Sheet button text and amount-dialog title (cost appended automatically) |
+| `blocked` | Prefix of the tooltip when the button is disabled |
+| `chatButton` | Chat roll-card button text (cost / actor suffixes stay automatic) |
+| `roll` | Label of the roll sent by a reroll trigger |
+| `reportTitle` | "ACTION USED" card title (browser and host) |
+| `report` | "ACTION USED" lines; `spent <cost>` stays first, a line `{effects}` inserts the generated lines, empty lines are dropped |
+| `name` / `option` | Roll-dialog and mitigation rows render as **name** - option (cost); `name` defaults to the feature name, `option` is the short description. The small line below is the option's `description` (limitation) plus the automatic "(n/max left)" |
+| `optionNote` | Extra non-cost note in the small line |
+| `applied` | Label in the chat roll breakdown |
+
+Placeholders are written `{name}`; `{{` and `}}` give literal braces. Unknown or unavailable placeholders stay literal. Available: `actor`, `target`, `source`, `origin`, `label`, `amount`, `dice`, `result`, `trait`, `traitValue`, `effect`, `item`, `qty`, `uses`, `usesMax`, and `effects` (report only).
+
+```json
+"texts": { "button": "Drink it", "reportTitle": "{actor} drinks {source}", "report": ["{actor} feels better", "{effects}"] }
+```
 ## LAN remote control (DM Link)
 
 Open the **DM Link** tab (formerly "Session") in the left sidebar (next to Tokens; hideable via Settings > DM controls tabs) to control a host PC (A) from another PC (B) running the
