@@ -14,7 +14,10 @@
      "text": "During a short rest, you or an ally can reroll a die used for a downtime move and take the higher result.",
      "automation": {
       "restReroll": true,
-      "uses": { "max": 1, "per": "rest" }
+      "uses": {
+       "max": 1,
+       "per": "rest"
+      }
      }
     }
    ]
@@ -33,12 +36,23 @@
        "per": "session"
       },
       "actions": [
-       { "id": "use", "label": "Unbound" }
+       {
+        "id": "use",
+        "label": "Unbound",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        }
+       }
       ],
       "rollTriggers": [
        {
         "id": "hope",
         "label": "Unbound: change Fear into Hope",
+        "texts": {
+         "chatButton": "{label}"
+        },
         "on": "duality",
         "when": "fear",
         "description": "The GM does not gain Fear.",
@@ -95,6 +109,11 @@
        {
         "id": "use",
         "label": "Close-Knit",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "target": "actor",
         "transferHope": true
        }
@@ -117,7 +136,9 @@
         "id": "advantage",
         "label": "Privilege",
         "roll": "action",
-        "excludeRolls": ["attack"],
+        "excludeRolls": [
+         "attack"
+        ],
         "advantage": "advantage",
         "description": "You have advantage on rolls to consort with nobles, negotiate prices, or leverage your reputation to get what you want."
        }
@@ -164,10 +185,15 @@
       "actions": [
        {
         "id": "use",
-        "label": "Dedicated"
+        "label": "Dedicated",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        }
        }
-       ],
-       "rollOptions": [
+      ],
+      "rollOptions": [
        {
         "id": "hope-die",
         "label": "Dedicated (Hope d20)",
@@ -198,7 +224,12 @@
         "id": "use",
         "label": "Found Family",
         "roll": "action",
-        "input": { "label": "Ally Experience bonus", "default": 2, "min": 0, "max": 20 },
+        "input": {
+         "label": "Ally Experience bonus",
+         "default": 2,
+         "min": 0,
+         "max": 20
+        },
         "cost": {
          "hope": 1
         }
@@ -252,6 +283,9 @@
        {
         "id": "gain",
         "label": "Gain Tide token",
+        "texts": {
+         "chatButton": "{label}"
+        },
         "on": "duality",
         "when": "fear",
         "steps": [
@@ -269,7 +303,10 @@
         "label": "Spend Tide token",
         "roll": "action",
         "value": 1,
-        "quantity": { "resource": "tide", "label": "Tide tokens" },
+        "quantity": {
+         "resource": "tide",
+         "label": "Tide tokens"
+        },
         "cost": {
          "tide": 1
         }
@@ -343,7 +380,14 @@
        {
         "id": "use",
         "label": "Nomadic Pack",
-        "cost": { "hope": 1 }
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
+        "cost": {
+         "hope": 1
+        }
        }
       ]
      }
@@ -367,7 +411,14 @@
        {
         "id": "use",
         "label": "Brave Face",
-        "cost": { "hope": 1 }
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
+        "cost": {
+         "hope": 1
+        }
        }
       ]
      }

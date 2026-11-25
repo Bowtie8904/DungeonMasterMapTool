@@ -15,6 +15,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -39,6 +45,10 @@
      {
       "id": "potion",
       "label": "Drink",
+      "texts": {
+       "option": "{source} - {label}",
+       "applied": "{source} - {label}"
+      },
       "roll": "trait:Agility",
       "value": 1,
       "description": "Drink it as part of this roll.",
@@ -58,6 +68,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -82,6 +98,10 @@
      {
       "id": "potion",
       "label": "Drink",
+      "texts": {
+       "option": "{source} - {label}",
+       "applied": "{source} - {label}"
+      },
       "roll": "trait:Strength",
       "value": 1,
       "description": "Drink it as part of this roll.",
@@ -101,6 +121,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -125,6 +151,10 @@
      {
       "id": "potion",
       "label": "Drink",
+      "texts": {
+       "option": "{source} - {label}",
+       "applied": "{source} - {label}"
+      },
       "roll": "trait:Finesse",
       "value": 1,
       "description": "Drink it as part of this roll.",
@@ -144,6 +174,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -168,6 +204,10 @@
      {
       "id": "potion",
       "label": "Drink",
+      "texts": {
+       "option": "{source} - {label}",
+       "applied": "{source} - {label}"
+      },
       "roll": "trait:Instinct",
       "value": 1,
       "description": "Drink it as part of this roll.",
@@ -187,6 +227,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -211,6 +257,10 @@
      {
       "id": "potion",
       "label": "Drink",
+      "texts": {
+       "option": "{source} - {label}",
+       "applied": "{source} - {label}"
+      },
       "roll": "trait:Presence",
       "value": 1,
       "description": "Drink it as part of this roll.",
@@ -230,6 +280,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -254,6 +310,10 @@
      {
       "id": "potion",
       "label": "Drink",
+      "texts": {
+       "option": "{source} - {label}",
+       "applied": "{source} - {label}"
+      },
       "roll": "trait:Knowledge",
       "value": 1,
       "description": "Drink it as part of this roll.",
@@ -273,6 +333,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "clear",
@@ -295,6 +361,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "clear",
@@ -336,6 +408,12 @@
      {
       "id": "use",
       "label": "Eat",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "gain",
@@ -358,6 +436,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -384,6 +468,12 @@
      {
       "id": "throw",
       "label": "Throw (Finesse)",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "actionRoll": {
        "trait": "Finesse",
        "attack": true
@@ -400,6 +490,12 @@
           {
            "id": "damage",
            "label": "Roll 1d20 magic damage",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "damage": {
             "dice": "1d20",
             "fixed": true,
@@ -465,6 +561,12 @@
      {
       "id": "use",
       "label": "Alter your face",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -494,6 +596,12 @@
      {
       "id": "use",
       "label": "Add to Evasion against this attack",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "sendRoll": {
        "dice": "@Agilityd6kh1",
        "base": "evasion",
@@ -514,6 +622,12 @@
      {
       "id": "use",
       "label": "Eat",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Leap up to Far range once without needing to roll."
       }
@@ -532,6 +646,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "cost": {
        "stress": 1
       },
@@ -557,6 +677,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "clear",
@@ -579,6 +705,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "clear",
@@ -601,6 +733,12 @@
      {
       "id": "use",
       "label": "Stitch armor",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "selectAmount": {
        "resource": "hope",
        "label": "Hope to spend"
@@ -630,6 +768,12 @@
      {
       "id": "use",
       "label": "Apply",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -656,6 +800,12 @@
      {
       "id": "use",
       "label": "Copy a parchment",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Copied the contents of another parchment; this one is now mundane paper."
       }
@@ -674,6 +824,12 @@
      {
       "id": "throw",
       "label": "Throw (Finesse)",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "actionRoll": {
        "trait": "Finesse",
        "attack": true
@@ -690,6 +846,12 @@
           {
            "id": "damage",
            "label": "Roll 2d20 magic damage",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "damage": {
             "dice": "2d20",
             "fixed": true,
@@ -716,6 +878,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -748,6 +916,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -780,6 +954,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -812,6 +992,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -844,6 +1030,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -876,6 +1068,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -908,6 +1106,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Disappeared and reappeared at a point you can see within Very Far range."
       }
@@ -926,6 +1130,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -972,6 +1182,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Took a spell or grimoire from the vault to use once; return it to the vault afterwards."
       }
@@ -1009,6 +1225,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "The paste eats away walls and other surfaces in bright flashes."
       }
@@ -1027,6 +1249,12 @@
      {
       "id": "use",
       "label": "Light the flare",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "allowSourceOwner": true,
       "chatBenefits": [
        {
@@ -1044,6 +1272,12 @@
             {
              "id": "roll",
              "label": "Spent a Hope: roll d6",
+             "texts": {
+              "button": "{label}",
+              "chatButton": "{label}",
+              "roll": "{label}",
+              "reportTitle": "{source} - {label}"
+             },
              "sendRoll": {
               "dice": "1d6",
               "label": "Hopehold Flare: on a 6, the Hope is not spent"
@@ -1070,6 +1304,12 @@
      {
       "id": "throw",
       "label": "Throw (Finesse)",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "actionRoll": {
        "trait": "Finesse",
        "attack": true
@@ -1086,6 +1326,12 @@
           {
            "id": "damage",
            "label": "Roll 4d20 magic damage",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "damage": {
             "dice": "4d20",
             "fixed": true,
@@ -1112,6 +1358,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -1138,6 +1390,12 @@
      {
       "id": "use",
       "label": "Create the void",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -1179,6 +1437,12 @@
      {
       "id": "use",
       "label": "Consume",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "table": {
        "dice": "1d6",
        "outcomes": [
@@ -1234,6 +1498,12 @@
      {
       "id": "use",
       "label": "Poison: 8d10 direct magic damage",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "damage": {
        "dice": "8d10",
        "fixed": true,
@@ -1254,6 +1524,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "clear",
@@ -1276,6 +1552,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "clear",
@@ -1298,6 +1580,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -1324,6 +1612,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -1350,6 +1644,12 @@
      {
       "id": "use",
       "label": "Open the jar: 6d8 magic damage",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "damage": {
        "dice": "6d8",
        "fixed": true,
@@ -1370,6 +1670,12 @@
      {
       "id": "throw",
       "label": "Breathe fire (Instinct)",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "actionRoll": {
        "trait": "Instinct",
        "attack": true
@@ -1386,6 +1692,12 @@
           {
            "id": "damage",
            "label": "Roll d20 physical damage",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "damage": {
             "dice": "d20",
             "type": "physical"
@@ -1411,6 +1723,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -1464,6 +1782,12 @@
      {
       "id": "use",
       "label": "Eat",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "clear",
@@ -1496,6 +1820,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Glued two objects together permanently."
       }
@@ -1514,6 +1844,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -1550,6 +1886,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -1586,6 +1928,12 @@
      {
       "id": "use",
       "label": "Pass on knowledge",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "An ally takes a card from the fallen holder’s loadout into their loadout or vault; the stone crumbles."
       }
@@ -1643,6 +1991,12 @@
      {
       "id": "use",
       "label": "Activate",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "A flash of bright light: all targets within Close range become Vulnerable until they mark HP."
       }
@@ -1661,6 +2015,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -1708,6 +2068,12 @@
      {
       "id": "use",
       "label": "Summon comets: 8d20 physical damage",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "damage": {
        "dice": "8d20",
        "fixed": true,
@@ -1728,6 +2094,12 @@
      {
       "id": "throw",
       "label": "Throw (Finesse)",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "actionRoll": {
        "trait": "Finesse",
        "attack": true
@@ -1744,6 +2116,12 @@
           {
            "id": "damage",
            "label": "Roll 1d8+1 physical damage",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "damage": {
             "dice": "1d8+1",
             "fixed": true,
@@ -1770,6 +2148,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -1796,6 +2180,12 @@
      {
       "id": "sense",
       "label": "Sense magic",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "keepItem": true,
       "report": {
        "text": "The flower points toward the strongest source of magic within Very Close range."
@@ -1815,6 +2205,12 @@
      {
       "id": "downtime-narrative",
       "label": "Narrative downtime move",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "timing": "downtime"
      }
     ]
@@ -1831,6 +2227,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -1867,6 +2269,12 @@
      {
       "id": "use",
       "label": "Chew a portal",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Chewed into a wall to create a portal to another wall within Far range."
       }
@@ -1885,6 +2293,12 @@
      {
       "id": "use",
       "label": "Swallow: unsay your last sentence",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "minimumHope": 1,
       "cost": {
        "hope": "@hope"
@@ -1904,6 +2318,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -1925,6 +2345,12 @@
           {
            "id": "end",
            "label": "Scene ends: mark all Stress",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "steps": [
             {
              "op": "mark",
@@ -1953,6 +2379,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -1989,6 +2421,12 @@
      {
       "id": "use",
       "label": "Remove a page",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Removed a page: those elements of your past are forgotten by everyone but you. The book burns to ash."
       }
@@ -2015,6 +2453,12 @@
      {
       "id": "eat",
       "label": "Eat a portion",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "portions": "jam_portions",
       "cost": {
        "jam_portions": 1
@@ -2023,6 +2467,12 @@
      {
       "id": "throw",
       "label": "Throw the jar",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "damage": {
        "dice": "@jam_portionsd8+4",
        "fixed": true,
@@ -2043,6 +2493,12 @@
      {
       "id": "eat",
       "label": "Eat",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "table": {
        "dice": "1d12",
        "outcomes": [
@@ -2084,6 +2540,12 @@
      {
       "id": "use",
       "label": "Activate (Countdown 4)",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "cost": {
        "hope": 1
       },
@@ -2099,6 +2561,12 @@
           {
            "id": "damage",
            "label": "Countdown triggers: 3d6 physical damage",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "damage": {
             "dice": "3d6",
             "fixed": true,
@@ -2125,6 +2593,12 @@
      {
       "id": "use",
       "label": "Open the bottle",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "allowSourceOwner": true,
       "steps": [
        {
@@ -2157,9 +2631,15 @@
    "rarity": "Legendary",
    "text": "As a death move, you can break this egg. You rise again in the form of an ancient, black-winged avian with all your memories, but your only desire is now to reside in the Sanctum Mortalis.",
    "automation": {
-    "deathMove": { "kind": "egg" },
+    "deathMove": {
+     "kind": "egg"
+    },
     "actions": [
-     { "id": "use", "label": "Break Cathartoid Egg (death move)", "deathMove": "egg" }
+     {
+      "id": "use",
+      "label": "Break Cathartoid Egg (death move)",
+      "deathMove": "egg"
+     }
     ]
    }
   },
@@ -2174,6 +2654,12 @@
      {
       "id": "use",
       "label": "Break with magic",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Plants and animals within Close range mutate into alien forms."
       }
@@ -2192,6 +2678,12 @@
      {
       "id": "use",
       "label": "Exposed to magical light: 2d6 magic damage",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "damage": {
        "dice": "2d6",
        "fixed": true,
@@ -2212,6 +2704,12 @@
      {
       "id": "use",
       "label": "Expose to air (Countdown 4)",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -2224,6 +2722,12 @@
           {
            "id": "damage",
            "label": "Countdown triggers: 2d6 physical damage",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "damage": {
             "dice": "2d6",
             "fixed": true,
@@ -2250,6 +2754,12 @@
      {
       "id": "drink",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "doomsday": {
        "effect": {
         "name": "Invincible",
@@ -2287,6 +2797,12 @@
      {
       "id": "use",
       "label": "Scatter",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -2313,6 +2829,12 @@
      {
       "id": "use",
       "label": "Unspool",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Unspooled up to 500 feet of spectral thread, leaving a trail visible only to you."
       }
@@ -2331,6 +2853,12 @@
      {
       "id": "use",
       "label": "Consume",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -2366,6 +2894,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -2392,6 +2926,12 @@
      {
       "id": "use",
       "label": "Inhale",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -2420,6 +2960,12 @@
           {
            "id": "resist",
            "label": "Resist the grief (Presence 14)",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "actionRoll": {
             "trait": "Presence",
             "difficulty": 14
@@ -2444,6 +2990,12 @@
      {
       "id": "downtime-narrative",
       "label": "Brew Gyre Cap tea",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "timing": "downtime",
       "steps": [
        {
@@ -2457,6 +3009,10 @@
           {
            "id": "instinct",
            "label": "Gyre Cap Tea",
+           "texts": {
+            "option": "{source} - {label}",
+            "applied": "{source} - {label}"
+           },
            "roll": "trait:Instinct",
            "advantage": "advantage",
            "defaultOn": true
@@ -2464,6 +3020,10 @@
           {
            "id": "presence",
            "label": "Gyre Cap Tea: clouded presence",
+           "texts": {
+            "option": "{source} - {label}",
+            "applied": "{source} - {label}"
+           },
            "roll": "trait:Presence",
            "advantage": "disadvantage",
            "defaultOn": true
@@ -2487,6 +3047,12 @@
      {
       "id": "use",
       "label": "Eat",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -2499,6 +3065,12 @@
           {
            "id": "see",
            "label": "See through an object",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "cost": {
             "stress": 1
            }
@@ -2522,6 +3094,12 @@
      {
       "id": "use",
       "label": "Inhale",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -2578,6 +3156,12 @@
      {
       "id": "use",
       "label": "Inscribe a spell",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -2590,6 +3174,12 @@
           {
            "id": "cast",
            "label": "Cast from the mark",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "cost": {
             "hope": 1
            },
@@ -2614,6 +3204,12 @@
      {
       "id": "use",
       "label": "Chew",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -2635,6 +3231,12 @@
           {
            "id": "deceive",
            "label": "Deceive someone",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "cost": {
             "stress": 1
            }
@@ -2658,6 +3260,12 @@
      {
       "id": "downtime-narrative",
       "label": "Plant the sprig",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "timing": "downtime",
       "steps": [
        {
@@ -2684,6 +3292,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "timing": "downtime",
       "steps": [
        {
@@ -2721,6 +3335,12 @@
      {
       "id": "embed",
       "label": "Embed the needle",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -2739,6 +3359,12 @@
           {
            "id": "morph",
            "label": "Morph a lock into a key",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "cost": {
             "stress": 1
            }
@@ -2762,6 +3388,12 @@
      {
       "id": "hp",
       "label": "Rub on: clear 1d4 HP",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "target": "actor",
       "steps": [
        {
@@ -2774,6 +3406,12 @@
      {
       "id": "stress",
       "label": "Rub on: clear 1d4 Stress",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "target": "actor",
       "steps": [
        {
@@ -2785,7 +3423,13 @@
      },
      {
       "id": "other",
-      "label": "Rub on: clear one condition"
+      "label": "Rub on: clear one condition",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      }
      }
     ]
    }
@@ -2809,6 +3453,12 @@
      {
       "id": "eat",
       "label": "Eat a pastry",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "portions": "warmth_pastries",
       "cost": {
        "warmth_pastries": 1
@@ -2847,6 +3497,12 @@
      {
       "id": "use",
       "label": "Eat raw",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -2873,6 +3529,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "The effect of most poisons is removed."
       }
@@ -2891,6 +3553,12 @@
      {
       "id": "craft",
       "label": "Craft a magic weapon (Finesse 15)",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "actionRoll": {
        "trait": "Finesse",
        "difficulty": 15
@@ -2910,6 +3578,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -2936,6 +3610,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -2948,6 +3628,12 @@
           {
            "id": "postpone",
            "label": "Postpone a Duality result",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "cost": {
             "stress": 1
            },
@@ -2975,6 +3661,12 @@
      {
       "id": "drink",
       "label": "Drink: roll Duality Dice",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "actionRoll": {}
      }
     ]
@@ -2991,6 +3683,12 @@
      {
       "id": "use",
       "label": "Shatter",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -3017,6 +3715,12 @@
      {
       "id": "use",
       "label": "Press onto a boat",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -3043,6 +3747,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -3079,6 +3789,12 @@
      {
       "id": "use",
       "label": "Open or break: 3d10+3 physical damage",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "damage": {
        "dice": "3d10+3",
        "fixed": true,
@@ -3099,6 +3815,12 @@
      {
       "id": "drink",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "clear",
@@ -3116,6 +3838,10 @@
           {
            "id": "mind",
            "label": "Fortified Thoughts",
+           "texts": {
+            "option": "{source} - {label}",
+            "applied": "{source} - {label}"
+           },
            "roll": "reaction",
            "advantage": "advantage",
            "description": "Only against effects that change your state of mind."
@@ -3125,6 +3851,12 @@
           {
            "id": "succeed",
            "label": "Failed: mark 2 Stress to succeed",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "cost": {
             "stress": 2
            },
@@ -3149,6 +3881,10 @@
      {
       "id": "cloves",
       "label": "Toxilily clove",
+      "texts": {
+       "option": "{source} - {label}",
+       "applied": "{source} - {label}"
+      },
       "roll": "damage",
       "value": "@proficiency",
       "description": "Smear on a weapon: adds your Proficiency to its damage until your next rest. One bulb gives 1d4 cloves; only the first use consumes the bulb.",
@@ -3174,6 +3910,12 @@
      {
       "id": "use",
       "label": "Brew and drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -3200,6 +3942,12 @@
      {
       "id": "use",
       "label": "Eat",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -3235,6 +3983,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -3247,6 +4001,10 @@
           {
            "id": "notice",
            "label": "True Vision",
+           "texts": {
+            "option": "{source} - {label}",
+            "applied": "{source} - {label}"
+           },
            "roll": "duality",
            "advantage": "advantage",
            "description": "Only to notice physical and magical traps."
@@ -3254,6 +4012,10 @@
           {
            "id": "lie",
            "label": "True Vision: lying",
+           "texts": {
+            "option": "{source} - {label}",
+            "applied": "{source} - {label}"
+           },
            "roll": "duality",
            "advantage": "disadvantage",
            "description": "Rolls to succeed with lying."
@@ -3263,6 +4025,12 @@
           {
            "id": "lie",
            "label": "Attempt to lie",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "cost": {
             "stress": 2
            }
@@ -3286,6 +4054,12 @@
      {
       "id": "use",
       "label": "Eat a petal",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -3298,6 +4072,12 @@
           {
            "id": "snuff",
            "label": "Snuff out a light",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "cost": {
             "hope": 1
            }
@@ -3321,6 +4101,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -3333,6 +4119,12 @@
           {
            "id": "snuff",
            "label": "Snuff out a light",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "cost": {
             "hope": 1
            }
@@ -3356,6 +4148,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Switched out a domain card in your vault without spending the Recall Cost."
       }
@@ -3374,6 +4172,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "clear",
@@ -3391,6 +4195,12 @@
           {
            "id": "roll",
            "label": "Marked Stress: Instinct Reaction (15)",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "actionRoll": {
             "trait": "Instinct",
             "reaction": true,
@@ -3417,6 +4227,12 @@
      {
       "id": "succeed",
       "label": "Automatically succeed vs a fear effect",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Automatically succeeded on a Reaction Roll against a fear-based effect; the charm disintegrates."
       }
@@ -3424,6 +4240,12 @@
      {
       "id": "crush",
       "label": "Crush: region of calm",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -3436,6 +4258,10 @@
           {
            "id": "calm",
            "label": "Region of Calm",
+           "texts": {
+            "option": "{source} - {label}",
+            "applied": "{source} - {label}"
+           },
            "roll": "reaction",
            "advantage": "advantage",
            "description": "Only against fear-based effects within the region."
@@ -3459,6 +4285,12 @@
      {
       "id": "use",
       "label": "Share the bottle",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -3501,6 +4333,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "mark",
@@ -3537,6 +4375,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -3549,6 +4393,12 @@
           {
            "id": "roll",
            "label": "Damaging spell: roll 1d4 extra HP",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "sendRoll": {
             "dice": "1d4",
             "label": "Witherroot Tonic: additional HP the target marks"
@@ -3574,6 +4424,12 @@
      {
       "id": "use",
       "label": "Ignite: 3d10 magic damage",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "damage": {
        "dice": "3d10",
        "fixed": true,
@@ -3594,6 +4450,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -3606,6 +4468,12 @@
           {
            "id": "spotlight",
            "label": "Spotlight at 0 Hope: gain a Hope",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "requiresZeroHope": true,
            "steps": [
             {
@@ -3618,6 +4486,12 @@
           {
            "id": "end",
            "label": "End early: gain 2 Hope",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "steps": [
             {
              "op": "gain",
@@ -3646,6 +4520,12 @@
      {
       "id": "use",
       "label": "Activate the orb",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -3675,6 +4555,12 @@
      {
       "id": "use",
       "label": "Prevent the collapse (Agility Reaction 14)",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "actionRoll": {
        "trait": "Agility",
        "reaction": true,
@@ -3695,6 +4581,12 @@
      {
       "id": "use",
       "label": "Light the candle",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -3721,6 +4613,12 @@
      {
       "id": "use",
       "label": "Throw",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Creatures covered in the dust can’t become Hidden."
       }
@@ -3739,6 +4637,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Instantly froze an area of water up to Close range."
       }
@@ -3757,6 +4661,12 @@
      {
       "id": "use",
       "label": "Swallow",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -3783,6 +4693,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -3809,6 +4725,12 @@
      {
       "id": "use",
       "label": "Dissolve",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -3835,6 +4757,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -3869,6 +4797,12 @@
      {
       "id": "use",
       "label": "Apply to a weapon",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -3895,6 +4829,12 @@
      {
       "id": "use",
       "label": "Use",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Covered things become lighter than air for an hour."
       }
@@ -3935,6 +4875,12 @@
      {
       "id": "use",
       "label": "Sprinkle",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Conjured a spectral reprise of the corpse’s final minute of life."
       }
@@ -3953,6 +4899,12 @@
      {
       "id": "use",
       "label": "Spread",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Created a line of salt that undead creatures can’t cross until it is broken."
       }
@@ -3971,6 +4923,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -3983,6 +4941,12 @@
           {
            "id": "heal",
            "label": "Cleared HP: clear 1 more",
+           "texts": {
+            "button": "{label}",
+            "chatButton": "{label}",
+            "roll": "{label}",
+            "reportTitle": "{source} - {label}"
+           },
            "steps": [
             {
              "op": "clear",
@@ -4011,6 +4975,12 @@
      {
       "id": "use",
       "label": "Break apart",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -4056,6 +5026,12 @@
      {
       "id": "use",
       "label": "Unfold",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -4082,6 +5058,12 @@
      {
       "id": "use",
       "label": "Eat",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -4108,6 +5090,12 @@
      {
       "id": "use",
       "label": "Break the bottle",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "allowSourceOwner": true,
       "steps": [
        {
@@ -4147,6 +5135,12 @@
      {
       "id": "use",
       "label": "Throw",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Binding vines temporarily Restrain all creatures within Close range of the point."
       }
@@ -4165,6 +5159,12 @@
      {
       "id": "shatter",
       "label": "Last HP marked: release the Sprite",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "clear",
@@ -4187,6 +5187,12 @@
      {
       "id": "use",
       "label": "Throw",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Pulled all creatures and objects within Close range of the point into Melee range with the bomb."
       }
@@ -4205,6 +5211,12 @@
      {
       "id": "use",
       "label": "Plant",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "The flower records everything it hears for up to one week; pluck it to hear the recording."
       }
@@ -4223,6 +5235,12 @@
      {
       "id": "use",
       "label": "Swallow",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -4249,6 +5267,12 @@
      {
       "id": "use",
       "label": "Blow in a face",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "The adversary can’t clear Stress until your next long rest."
       }
@@ -4267,6 +5291,12 @@
      {
       "id": "hp",
       "label": "Clear HP",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "clear",
@@ -4278,6 +5308,12 @@
      {
       "id": "armor",
       "label": "Clear Armor Slots",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "clear",
@@ -4300,6 +5336,12 @@
      {
       "id": "use",
       "label": "Throw",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "A 6-foot-tall, 10-foot-wide, 2-foot-deep wall of solid stone grows from the brick."
       }
@@ -4318,6 +5360,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -4344,6 +5392,12 @@
      {
       "id": "use",
       "label": "Apply",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -4389,6 +5443,12 @@
      {
       "id": "use",
       "label": "Shatter",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "The area within Very Far range appears sunlit for the next 24 hours."
       }
@@ -4407,6 +5467,12 @@
      {
       "id": "use",
       "label": "Shatter",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "The area within Very Far range appears moonlit for the next 24 hours."
       }
@@ -4425,6 +5491,12 @@
      {
       "id": "use",
       "label": "Pour",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Transmuted a mundane item into a handful of gold; add it to your gold."
       }
@@ -4443,6 +5515,12 @@
      {
       "id": "use",
       "label": "Break",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Reversed one magical transformation or effect within Far range."
       }
@@ -4461,6 +5539,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -4504,6 +5588,12 @@
      {
       "id": "use",
       "label": "Throw: 3d6 magic damage (Ablaze)",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "damage": {
        "dice": "3d6",
        "fixed": true,
@@ -4524,6 +5614,12 @@
      {
       "id": "use",
       "label": "Throw: 3d6 magic damage (Restrained)",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "damage": {
        "dice": "3d6",
        "fixed": true,
@@ -4544,6 +5640,12 @@
      {
       "id": "use",
       "label": "Throw: 3d6 magic damage (1d4 Stress)",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "damage": {
        "dice": "3d6",
        "fixed": true,
@@ -4564,6 +5666,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -4601,6 +5709,12 @@
      {
       "id": "drink",
       "label": "Drink: refresh features",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "refreshUses": "long"
      }
     ]
@@ -4617,6 +5731,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -4650,6 +5770,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -4676,6 +5802,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "You discover the deepest fear of the next person you make eye contact with; when you do, the GM gains a Fear."
       }
@@ -4694,6 +5826,12 @@
      {
       "id": "use",
       "label": "Hammer in and proclaim",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -4720,6 +5858,12 @@
      {
       "id": "use",
       "label": "Place over a corpse",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -4746,6 +5890,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -4772,6 +5922,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -4798,6 +5954,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -4825,6 +5987,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -4851,6 +6019,11 @@
      {
       "id": "use",
       "label": "Steelskin Salve",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -4883,6 +6056,12 @@
      {
       "id": "eat",
       "label": "Eat",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "clear",
@@ -4910,6 +6089,12 @@
      {
       "id": "drink",
       "label": "Drink: heal a scar",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "clear",
@@ -4932,6 +6117,12 @@
      {
       "id": "use",
       "label": "Release the soul",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Cast one spell from a card in your vault as if it were in your loadout."
       }
@@ -4950,6 +6141,12 @@
      {
       "id": "use",
       "label": "Cut a bond",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Cut one magical or metaphysical bond; the blade shatters."
       }
@@ -4968,6 +6165,12 @@
      {
       "id": "use",
       "label": "Wear at level up",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Swapped the values of your traits during this level up; the mask becomes your permanent face."
       }
@@ -4986,6 +6189,12 @@
      {
       "id": "use",
       "label": "Break",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "A skeletal steed climbs out of the earth and serves you until the next sunrise."
       }
@@ -5004,6 +6213,11 @@
      {
       "id": "use",
       "label": "Drakemantle",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -5040,6 +6254,12 @@
      {
       "id": "throw",
       "label": "Throw the jar",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "resourceRoll": {
        "resource": "gold",
        "sides": 20,
@@ -5060,6 +6280,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -5092,6 +6318,12 @@
      {
       "id": "use",
       "label": "Drink",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -5118,6 +6350,11 @@
      {
       "id": "use",
       "label": "Featherstep Potion",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -5150,6 +6387,12 @@
      {
       "id": "burn",
       "label": "Burn out instead of paying for fire magic",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "report": {
        "text": "Burned out the candle instead of spending a Hope or marking a Stress for fire magic."
       }
@@ -5157,6 +6400,12 @@
      {
       "id": "light",
       "label": "Light the candle",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -5193,6 +6442,12 @@
      {
       "id": "use",
       "label": "Consume food",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "clear",
@@ -5216,6 +6471,12 @@
      {
       "id": "use",
       "label": "Use relic",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "gain",
@@ -5239,6 +6500,12 @@
      {
       "id": "use",
       "label": "Use rune",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -5262,6 +6529,10 @@
      {
       "id": "use",
       "label": "Use foraged arcane rune",
+      "texts": {
+       "option": "{source} - {label}",
+       "applied": "{source} - {label}"
+      },
       "roll": "spellcast",
       "value": 2,
       "consumeItem": true
@@ -5281,6 +6552,12 @@
      {
       "id": "use",
       "label": "Drink vial",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "clear",
@@ -5304,6 +6581,12 @@
      {
       "id": "use",
       "label": "Prepare luck charm",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -5316,6 +6599,9 @@
           {
            "id": "reroll",
            "label": "Use foraged luck charm: reroll a die",
+           "texts": {
+            "chatButton": "{label}"
+           },
            "on": "any",
            "rerollAnyDie": true,
            "damageDice": "reroll",

@@ -992,6 +992,8 @@ The browser's simplified-lighting option still uses flat shapes for performance.
 
 ### Configurable automation texts
 
+Shipped catalogs already carry the default wording as templates (utton/chatButton/oll = {label}, and {source} - {label} for eportTitle/option/pplied on items, consumables, weapons, armor and domain cards), so you can edit them in place. Class, ancestry and community features have a dynamic origin prefix and omit eportTitle/option/pplied; their default text applies until you add them.
+
 Format-1 catalog entries (`dmmap-daggerheart/*.json`) may carry an optional `texts` object on actions, roll options, roll triggers, chat benefits, mitigation options and feature `automation`. Every field only changes displayed wording; costs (`Label (2 Hope)`, `spent 2 Hope`, per-token notes) are always appended by the app and cannot be removed or reworded. Absent fields keep today's text, and catalogs stay `version` 1.
 
 | Field | Where it shows |

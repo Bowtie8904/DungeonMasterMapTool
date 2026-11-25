@@ -20,13 +20,21 @@
       "actions": [
        {
         "id": "use",
-        "label": "Hallowed Aura"
+        "label": "Hallowed Aura",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        }
        }
       ],
       "rollTriggers": [
        {
         "id": "hope",
         "label": "Hallowed Aura: change Fear into Hope",
+        "texts": {
+         "chatButton": "{label}"
+        },
         "on": "action",
         "when": "fear",
         "outcome": "hope",
@@ -97,6 +105,11 @@
        {
         "id": "use",
         "label": "Scales",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "cost": {
          "stress": 1
         }
@@ -128,6 +141,11 @@
        {
         "id": "use",
         "label": "Attack",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "actionRoll": {
          "trait": "Instinct",
          "attack": true
@@ -136,6 +154,11 @@
        {
         "id": "damage",
         "label": "Damage",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "damage": {
          "dice": "d8",
          "type": "magic"
@@ -181,6 +204,11 @@
        {
         "id": "use",
         "label": "Increased Fortitude",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "cost": {
          "hope": 3
         }
@@ -246,7 +274,9 @@
         "label": "Quick Reactions (reaction roll)",
         "roll": "reaction",
         "advantage": "advantage",
-        "cost": { "stress": 1 },
+        "cost": {
+         "stress": 1
+        },
         "description": "Use only on a reaction roll: mark 1 Stress to gain advantage."
        }
       ]
@@ -280,6 +310,11 @@
        {
         "id": "use",
         "label": "Ignition",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "cost": {
          "stress": 1
         },
@@ -335,6 +370,9 @@
        {
         "id": "reroll",
         "label": "Luckbender: reroll Duality Dice",
+        "texts": {
+         "chatButton": "{label}"
+        },
         "on": "action",
         "cost": {
          "hope": 3
@@ -348,6 +386,11 @@
        {
         "id": "use",
         "label": "Luckbender: roll Duality Dice",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "actionRoll": {},
         "cost": {
          "hope": 3
@@ -364,6 +407,11 @@
        {
         "id": "use",
         "label": "Wings",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "cost": {
          "stress": 1
         }
@@ -415,6 +463,11 @@
        {
         "id": "use",
         "label": "Charge damage",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "cost": {
          "stress": 1
         },
@@ -429,6 +482,9 @@
        {
         "id": "charge",
         "label": "Charge: roll damage",
+        "texts": {
+         "chatButton": "{label}"
+        },
         "on": "trait:Agility",
         "description": "Successful Agility Roll moving from Far or Very Far into Melee. Damage all targets within Melee.",
         "cost": {
@@ -451,6 +507,11 @@
        {
         "id": "use",
         "label": "Unshakable",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "check": {
          "dice": "1d6",
          "unless": 6,
@@ -475,6 +536,11 @@
        {
         "id": "use",
         "label": "Fungril Network",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "actionRoll": {
          "trait": "Instinct",
          "difficulty": 12
@@ -491,6 +557,11 @@
        {
         "id": "use",
         "label": "Death Connection",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "cost": {
          "stress": 1
         }
@@ -525,6 +596,11 @@
        {
         "id": "use",
         "label": "Retract",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "cost": {
          "stress": 1
         },
@@ -603,6 +679,9 @@
        {
         "id": "reroll",
         "label": "Nimble Fingers: reroll Hope Die",
+        "texts": {
+         "chatButton": "{label}"
+        },
         "on": "trait:Finesse",
         "cost": {
          "hope": 2
@@ -650,7 +729,12 @@
       "actions": [
        {
         "id": "use",
-        "label": "Danger Sense"
+        "label": "Danger Sense",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        }
        }
       ]
      }
@@ -674,6 +758,11 @@
        {
         "id": "use",
         "label": "Luckbringer",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "target": "party",
         "steps": [
          {
@@ -694,6 +783,9 @@
        {
         "id": "reroll",
         "label": "Internal Compass: reroll Hope Die",
+        "texts": {
+         "chatButton": "{label}"
+        },
         "on": "duality",
         "when": "hopeDie",
         "die": 1,
@@ -726,6 +818,9 @@
        {
         "id": "reroll",
         "label": "Adaptability: reroll",
+        "texts": {
+         "chatButton": "{label}"
+        },
         "on": "duality",
         "when": "failure",
         "description": "Only when the failed roll used one of your Experiences.",
@@ -752,6 +847,9 @@
        {
         "id": "hope",
         "label": "Fearless: change Fear into Hope",
+        "texts": {
+         "chatButton": "{label}"
+        },
         "on": "duality",
         "when": "fear",
         "description": "The GM does not gain Fear.",
@@ -793,6 +891,9 @@
        {
         "id": "reroll",
         "label": "Feline Instincts: reroll Hope Die",
+        "texts": {
+         "chatButton": "{label}"
+        },
         "on": "trait:Agility",
         "cost": {
          "hope": 2
@@ -810,6 +911,11 @@
        {
         "id": "use",
         "label": "Retracting Claws",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "actionRoll": {
          "trait": "Agility",
          "attack": true
@@ -866,6 +972,11 @@
        {
         "id": "use",
         "label": "Attack",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "cost": {
          "stress": 1
         },
@@ -877,6 +988,11 @@
        {
         "id": "damage",
         "label": "Damage",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "damage": {
          "dice": "d12",
          "type": "physical"
@@ -931,6 +1047,11 @@
        {
         "id": "use",
         "label": "Gale Force",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "cost": {
          "stress": 1
         }
@@ -946,6 +1067,11 @@
        {
         "id": "use",
         "label": "Eye of the Storm",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "target": "actor",
         "cost": {
          "hope": 2
@@ -995,6 +1121,11 @@
        {
         "id": "use",
         "label": "Lifespring",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "cost": {
          "stress": 1
         },
@@ -1025,6 +1156,11 @@
        {
         "id": "use",
         "label": "Iron Skin",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "cost": {
          "stress": 1
         }
@@ -1077,6 +1213,11 @@
        {
         "id": "use",
         "label": "Charge damage",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "cost": {
          "stress": 1
         },
@@ -1091,6 +1232,9 @@
        {
         "id": "charge",
         "label": "Charge: roll damage",
+        "texts": {
+         "chatButton": "{label}"
+        },
         "on": "trait:Agility",
         "description": "Successful Agility Roll moving from Far or Very Far into Melee. Damage all targets within Melee.",
         "cost": {
@@ -1138,6 +1282,9 @@
        {
         "id": "reroll",
         "label": "Hawkeye: reroll Hope Die",
+        "texts": {
+         "chatButton": "{label}"
+        },
         "on": "attack",
         "description": "Attack Roll at Close range or further.",
         "cost": {
@@ -1156,6 +1303,11 @@
        {
         "id": "use",
         "label": "Sprint Flight",
+        "texts": {
+         "button": "{label}",
+         "chatButton": "{label}",
+         "roll": "{label}"
+        },
         "cost": {
          "stress": 1
         }

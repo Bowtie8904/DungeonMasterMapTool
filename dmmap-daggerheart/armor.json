@@ -317,6 +317,12 @@
      {
       "id": "use",
       "label": "Shifting",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "cost": {
        "armor": 1
       }
@@ -343,6 +349,10 @@
      {
       "id": "quiet",
       "label": "Move silently",
+      "texts": {
+       "option": "{source} - {label}",
+       "applied": "{source} - {label}"
+      },
       "roll": "action",
       "value": 2,
       "excludeRolls": [
@@ -529,6 +539,10 @@
      {
       "id": "sharp",
       "label": "Sharp",
+      "texts": {
+       "option": "{source} - {label}",
+       "applied": "{source} - {label}"
+      },
       "roll": "damage",
       "dice": "1d4",
       "description": "Successful attack against a target within Melee range.",
@@ -723,6 +737,12 @@
      {
       "id": "use",
       "label": "Timeslowing",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "hostOwned": true,
       "cost": {
        "armor": 1
@@ -881,6 +901,10 @@
         {
          "id": "stored",
          "label": "Capacitor: stored",
+         "texts": {
+          "option": "{source} - {label}",
+          "applied": "{source} - {label}"
+         },
          "roll": "damage",
          "value": 0,
          "magicOnly": true,
@@ -939,6 +963,9 @@
      {
       "id": "reroll",
       "label": "Trickster's Step: reroll with advantage",
+      "texts": {
+       "chatButton": "{label}"
+      },
       "on": "trait:Agility",
       "excludeRolls": [
        "action"
@@ -1011,6 +1038,9 @@
      {
       "id": "terrifying",
       "label": "Terrifying: drive the target back",
+      "texts": {
+       "chatButton": "{label}"
+      },
       "on": "attack",
       "weaponAttack": true,
       "weaponRange": "Melee",
@@ -1044,6 +1074,12 @@
      {
       "id": "use",
       "label": "Gravitic",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "cost": {
        "stress": 1
       }
@@ -1131,6 +1167,12 @@
      {
       "id": "use",
       "label": "Anchored",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "cost": {
        "armor": 1
       }
@@ -1168,6 +1210,12 @@
      {
       "id": "reflect",
       "label": "Mirrorwoven: Spellcast roll to reflect",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "cost": {
        "armor": 1
       },
@@ -1295,6 +1343,10 @@
      {
       "id": "grudge",
       "label": "Punishing Weight",
+      "texts": {
+       "option": "{source} - {label}",
+       "applied": "{source} - {label}"
+      },
       "roll": "damage",
       "value": 2,
       "description": "Successful Melee attack after marking Armor this scene.",
@@ -1322,12 +1374,20 @@
      {
       "id": "intimidate",
       "label": "Rattleclad: threaten or intimidate",
+      "texts": {
+       "option": "{source} - {label}",
+       "applied": "{source} - {label}"
+      },
       "roll": "action",
       "value": 2
      },
      {
       "id": "hidden",
       "label": "Rattleclad: stay hidden or unnoticed",
+      "texts": {
+       "option": "{source} - {label}",
+       "applied": "{source} - {label}"
+      },
       "roll": "action",
       "value": -2
      }
@@ -1428,6 +1488,12 @@
      {
       "id": "break",
       "label": "Break vow",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "requiresEffect": "Oathbound",
       "endEffect": "Oathbound",
       "steps": [
@@ -1504,6 +1570,9 @@
      {
       "id": "reroll-strength",
       "label": "Brace Point: reroll",
+      "texts": {
+       "chatButton": "{label}"
+      },
       "on": "trait:Strength",
       "excludeRolls": [
        "action"
@@ -1519,6 +1588,9 @@
      {
       "id": "reroll-agility",
       "label": "Brace Point: reroll",
+      "texts": {
+       "chatButton": "{label}"
+      },
       "on": "trait:Agility",
       "excludeRolls": [
        "action"
@@ -1534,6 +1606,9 @@
      {
       "id": "reroll-finesse",
       "label": "Brace Point: reroll",
+      "texts": {
+       "chatButton": "{label}"
+      },
       "on": "trait:Finesse",
       "excludeRolls": [
        "action"
@@ -1682,6 +1757,12 @@
      {
       "id": "use",
       "label": "Juggernaut",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "cost": {
        "armor": 1
       }
@@ -1775,6 +1856,12 @@
      {
       "id": "use",
       "label": "Helper: spent Hope to help an ally",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -1844,6 +1931,12 @@
      {
       "id": "use",
       "label": "Steady the Line",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "cost": {
        "armor": 1
       },
@@ -1882,6 +1975,12 @@
      {
       "id": "use",
       "label": "Tempered Spirit: began the scene with more Hope than Fear",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "effect",
@@ -2057,6 +2156,12 @@
      {
       "id": "reflect",
       "label": "Steelwoven: Spellcast roll to reflect",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "cost": {
        "armor": 1
       },
@@ -2316,7 +2421,13 @@
     "actions": [
      {
       "id": "use",
-      "label": "Mnemonic"
+      "label": "Mnemonic",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      }
      }
     ]
    }
@@ -2382,6 +2493,12 @@
      {
       "id": "use",
       "label": "Absorbing",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "clear",
@@ -2465,6 +2582,12 @@
      {
       "id": "use",
       "label": "Resplendent",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "steps": [
        {
         "op": "clear",
@@ -2630,6 +2753,10 @@
      {
       "id": "stellar",
       "label": "Stellar",
+      "texts": {
+       "option": "{source} - {label}",
+       "applied": "{source} - {label}"
+      },
       "roll": "spellcast",
       "advantage": "advantage",
       "cost": {
@@ -2662,6 +2789,9 @@
      {
       "id": "fortune",
       "label": "Fortune-Favored: failure with Hope becomes success with Fear",
+      "texts": {
+       "chatButton": "{label}"
+      },
       "on": "duality",
       "when": "hope",
       "failedOnly": true,
@@ -2715,6 +2845,9 @@
      {
       "id": "bloodthirsty",
       "label": "Bloodthirsty: clear 1 HP",
+      "texts": {
+       "chatButton": "{label}"
+      },
       "on": "attack",
       "criticalOnly": true,
       "weaponAttack": true,
@@ -2749,6 +2882,10 @@
      {
       "id": "advantage",
       "label": "Aquatic",
+      "texts": {
+       "option": "{source} - {label}",
+       "applied": "{source} - {label}"
+      },
       "roll": "trait:Agility",
       "advantage": "advantage",
       "description": "You can breathe underwater and gain advantage on Agility Rolls while submerged."
@@ -2890,6 +3027,12 @@
      {
       "id": "use",
       "label": "Ghostwalker",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "cost": {
        "stress": 1
       }
@@ -3036,6 +3179,12 @@
      {
       "id": "repair",
       "label": "Repair Vitreous armor",
+      "texts": {
+       "button": "{label}",
+       "chatButton": "{label}",
+       "roll": "{label}",
+       "reportTitle": "{source} - {label}"
+      },
       "timing": "downtime",
       "requiresEffect": "Vitreous Cracked",
       "endEffect": "Vitreous Cracked"
