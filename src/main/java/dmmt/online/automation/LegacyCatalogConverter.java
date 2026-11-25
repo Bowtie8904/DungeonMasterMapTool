@@ -442,7 +442,7 @@ public final class LegacyCatalogConverter {
                 p.nested().clear();
                 continue;
             }
-            boolean usesBudget = limited && legacyRule.path("usesSource").asBoolean(true);
+            boolean usesBudget = limited && legacyRule.path("usesSource").asBoolean(true) && !(next.path().contains("/effect/") && !"actions".equals(next.family()));
             if ("conditionalRollTriggers".equals(next.family()) && "zone".equals(legacyRule.path("splendorAction").asText()))
                 legacyRule = zone(legacyRule, next.path(), p, effects, pools);
             legacyRule = witch(legacyRule, next.path(), p, pools, grants);
@@ -1483,7 +1483,9 @@ public final class LegacyCatalogConverter {
                 ObjectNode entry = options.addObject().put("id", optionId).put("label", escape(option.path("label").asText() + (perTrait ? ": " + trait : "")));
                 if (perTrait) entry.put("group", id);
                 if (option.has("tier")) entry.putObject("when").putArray("gte").add(read("actor.stats.tier")).add(option.path("tier").asInt());
-                String declared = declareEffect(effect, at + "/effect", p, effects);
+                String declared = option.path("stance").asBoolean(false) ? declaredStance(effects, escape(effect.path("name").asText())) : null;
+                if (declared == null) declared = declareEffect(effect, at + "/effect", p, effects);
+                else if (!effects.has(declared)) declared = null;
                 if (declared == null) continue;
                 if (option.path("stance").asBoolean(false))
                     effects.with(declared).putObject("endWhen").putArray("gte").add(read("actor.hp.marked")).add(read("actor.hp.capacity"));
@@ -6469,6 +6471,16 @@ public final class LegacyCatalogConverter {
             if (effect.has("while")) { p.add(path + "/tokenResource", "A conditional effect cannot also end when its tokens run out."); return; }
             effect.putObject("endWhen").putArray("lte").add(poolValue(pools, pool)).add(0);
         });
+    }
+
+    /** A stance shared by several shift actions (such as Flow State) reuses the effect, and so the rules, declared for the first. */
+    private static String declaredStance(ObjectNode effects, String label) {
+        var names = effects.fieldNames();
+        while (names.hasNext()) {
+            String id = names.next();
+            if (label.equals(effects.path(id).path("label").asText()) && "stance".equals(effects.path(id).path("exclusiveGroup").asText())) return id;
+        }
+        return null;
     }
 
     private static String declareEffect(JsonNode effect, String path, Problems p, ObjectNode effects) {

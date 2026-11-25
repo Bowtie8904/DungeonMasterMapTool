@@ -177,6 +177,22 @@ class ParityLedgerTest {
             if (restBenefitProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("restBenefit: " + restBenefitProblem);
             String channelProblem = channelMismatch(pack, placed, legacyAutomation(row));
             if (channelProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("channel: " + channelProblem);
+            String partyProblem = partyDowntimeMismatch(pack, placed, legacyAutomation(row));
+            if (partyProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("party: " + partyProblem);
+            String companionProblem = companionMismatch(pack, placed, legacyAutomation(row));
+            if (companionProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("companion: " + companionProblem);
+            String stanceProblem = stancesMismatch(pack, placed, legacyAutomation(row));
+            if (stanceProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("stance: " + stanceProblem);
+            String wardenProblem = wardenMismatch(pack, placed, legacyAutomation(row));
+            if (wardenProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("warden: " + wardenProblem);
+            String handsProblem = healingHandsMismatch(pack, placed, legacyAutomation(row));
+            if (handsProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("healing hands: " + handsProblem);
+            String beastProblem = beastformMismatch(pack, placed, legacyAutomation(row));
+            if (beastProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("beastform: " + beastProblem);
+            String lunarProblem = lunarMismatch(pack, placed, legacyAutomation(row));
+            if (lunarProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("lunar: " + lunarProblem);
+            String counterProblem = counterEffectMismatch(pack, placed, legacyAutomation(row));
+            if (counterProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("counter: " + counterProblem);
             String armorProblem = armorMismatch(pack, placed, legacyAutomation(row));
             if (armorProblem != null) failures.computeIfAbsent(row.key(), k -> new ArrayList<>()).add("armor: " + armorProblem);
             String triggerProblem = triggerMismatch(pack, placed, expected.path("triggers"));
@@ -213,7 +229,7 @@ class ParityLedgerTest {
     private static final java.util.Set<String> PROBED = java.util.Set.of("actions", "uses", "rest", "modifiers", "rollOptions",
             "conditionalRollOptions", "conditionalModifiers", "conditionalActions", "usesOverrides", "rollTriggers", "conditionalRollTriggers", "attach", "mitigation", "conditionalMitigation", "alternateProfiles", "damage", "spellcastDifficulty", "spellcastSuccessSteps", "hideSpellcast", "automaticRestUse", "automaticRestUseOnAttempt",
             "armorHalfEffect", "armorFullHeldEffect", "armorFullEffect", "equipEffect", "zeroHopeClearArmor", "resources", "classResourceOnly",
-            "reloading", "requirement", "damageTypeChoice", "criticalMelee", "ignoreWeaponBurden", "unarmedWeapon", "conditionalDamageRewards", "dicePool", "deathMove", "manual", "creation", "companionTraining", "grantsFeatures", "groupGrantedFeatures", "beastformFree", "elementChoice", "overflowHope", "unarmoredBase", "hopeReward", "banishDifficulty", "restReroll", "experienceRefund", "actionBenefits", "channelBenefit");
+            "reloading", "requirement", "damageTypeChoice", "criticalMelee", "ignoreWeaponBurden", "unarmedWeapon", "conditionalDamageRewards", "dicePool", "deathMove", "manual", "creation", "companionTraining", "grantsFeatures", "groupGrantedFeatures", "beastformFree", "elementChoice", "overflowHope", "unarmoredBase", "hopeReward", "banishDifficulty", "restReroll", "experienceRefund", "actionBenefits", "channelBenefit", "partyDowntime", "lunarPhases", "effectCounters", "companion", "stances", "beastforms");
 
     private static void writeLedger(Map<String, List<String>> failures) throws Exception {
         Path file = Path.of("docs/automation-parity-ledger.csv");
@@ -223,7 +239,7 @@ class ParityLedgerTest {
             if (line.isBlank()) continue;
             String[] cells = line.substring(1, line.length() - 1).split("\",\"", -1);
             String key = cells[0] + cells[1];
-            if (!"gap".equals(cells[7])) {
+            {
                 List<String> unprobed = new ArrayList<>();
                 for (String field : cells[3].split(";")) if (!field.isEmpty() && !PROBED.contains(field)) unprobed.add(field);
                 if (!unprobed.isEmpty()) {
@@ -875,6 +891,474 @@ class ParityLedgerTest {
                 }
             }
         }
+        return null;
+    }
+
+    /** Runs one sheet action of the placed source; null when the engine accepts it. */
+    private static RuntimeException runSheetAction(AutomationHost.Pack pack, ObjectNode sheet, Placed placed, String ruleId, Random dice) {
+        for (var element : HOST.sources(pack, sheet)) {
+            if (!element.sourceId().equals(placed.sourceId())) continue;
+            ObjectNode request = RuleJson.JSON.createObjectNode().put("requestId", "a" + REQUESTS.incrementAndGet()).put("expectedRevision", HOST.revision(sheet));
+            request.putArray("selections").addObject().put("sourceInstanceId", element.instanceId()).put("ruleId", ruleId).put("bindingId", "sheet").putObject("inputs");
+            try {
+                HOST.execute(pack, sheet, AutomationHost.event("action.request", "parity", 1), request, "self", "self", dice);
+                return null;
+            } catch (RuntimeException e) {
+                return e;
+            }
+        }
+        return new IllegalStateException("source not on the sheet");
+    }
+
+    private static JsonNode heldEffect(ObjectNode sheet, String label) {
+        for (JsonNode effect : sheet.path("automationState").path("effects"))
+            if (label.equals(effect.path("label").asText())) return effect;
+        return null;
+    }
+
+    private static int effectValue(JsonNode effect) {
+        JsonNode value = effect.path("value");
+        return value.isObject() ? value.path("current").asInt(value.path("value").asInt(-1)) : value.asInt(-1);
+    }
+
+    private static RuntimeException runPick(AutomationHost.Pack pack, ObjectNode sheet, Placed placed, String ruleId, String pick, Random dice) {
+        for (var element : HOST.sources(pack, sheet)) {
+            if (!element.sourceId().equals(placed.sourceId())) continue;
+            ObjectNode request = RuleJson.JSON.createObjectNode().put("requestId", "p" + REQUESTS.incrementAndGet()).put("expectedRevision", HOST.revision(sheet));
+            request.putArray("selections").addObject().put("sourceInstanceId", element.instanceId()).put("ruleId", ruleId).put("bindingId", "sheet").putObject("inputs").put("pick", pick);
+            try {
+                HOST.execute(pack, sheet, AutomationHost.event("action.request", "parity", 1), request, "self", "self", dice);
+                return null;
+            } catch (RuntimeException e) {
+                return e;
+            }
+        }
+        return new IllegalStateException("source not on the sheet");
+    }
+
+    private static int damageDelta(AutomationHost.Pack pack, ObjectNode withEffect, ObjectNode without, String kind) throws Exception {
+        int[] totals = new int[2];
+        int i = 0;
+        for (ObjectNode target : List.of(withWeapon(without), withWeapon(withEffect))) {
+            String instance = target.withArray("activeWeapons").get(0).path("instanceId").asText();
+            totals[i++] = rollTotal(HOST.execute(pack, target, AutomationHost.event("action.request", "parity", 1), profileRequest(target, instance, kind, null), "self", "self", constantDice()));
+        }
+        return totals[1] - totals[0];
+    }
+
+    /** Stances: shifting needs a Focus (or a Stress with Flow State), offers each stance from its tier, replaces the previous stance and applies its modifiers. */
+    private static String stancesMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy) throws Exception {
+        if (legacy == null || !legacy.has("stances")) return null;
+        java.util.Set<String> ruleIds = new java.util.HashSet<>();
+        currentAutomation.path("rules").forEach(rule -> ruleIds.add(rule.path("id").asText()));
+        String[] levels = {"1", "2", "5", "8"};
+        for (String levelText : levels) {
+            int level = Integer.parseInt(levelText);
+            int tier = level <= 1 ? 1 : level <= 4 ? 2 : level <= 7 ? 3 : 4;
+            for (JsonNode stance : legacy.path("stances")) {
+                String name = stance.path("name").asText();
+                boolean chooses = stance.path("chooseTrait").asBoolean();
+                String pick = name.toLowerCase(java.util.Locale.ROOT) + (chooses ? "-agility" : "");
+                ObjectNode sheet = placed.sheet().deepCopy();
+                sheet.put("level", level);
+                sheet.withObject("/automationState").withObject("pools").putObject("focus").put("max", 6).put("value", 3);
+                ObjectNode bare = sheet.deepCopy();
+                RuntimeException error = runPick(pack, sheet, placed, "shift", pick, constantDice());
+                boolean allowed = stance.path("tier").asInt() <= tier;
+                if (!allowed) {
+                    if (error == null) return "level " + level + ": " + name + " (tier " + stance.path("tier").asInt() + ") accepted below its tier";
+                    continue;
+                }
+                if (error != null) return "level " + level + ": " + name + " rejected: " + error.getMessage();
+                if (poolValues(sheet).getOrDefault("focus", -1) != 2) return name + " did not spend 1 Focus: " + poolValues(sheet);
+                String label = chooses ? name + " (Agility)" : name;
+                if (!effectLabels(pack, sheet).contains(label)) return name + " effect " + label + " missing from " + effectLabels(pack, sheet);
+                for (JsonNode modifier : stance.path("effect").path("modifiers")) {
+                    String stat = modifier.path("stat").asText();
+                    if (stat.isEmpty()) continue;
+                    ObjectNode held = statsOf(pack, sheet), without = statsOf(pack, bare);
+                    for (String key : "thresholds".equals(stat) ? List.of("major", "severe") : List.of(stat))
+                        if (held.path(key).asInt() - without.path(key).asInt() != modifier.path("value").asInt()) return name + " " + key + " legacy " + modifier.path("value").asInt() + " new " + (held.path(key).asInt() - without.path(key).asInt());
+                    if (!"evasion".equals(stat) && !"thresholds".equals(stat)) return name + " unchecked stat " + stat;
+                }
+                for (JsonNode modifier : stance.path("effect").path("modifiers")) {
+                    if (!modifier.has("roll")) continue;
+                    int delta = damageDelta(pack, sheet, bare, modifier.path("roll").asText());
+                    if (delta != modifier.path("value").asInt()) return name + " " + modifier.path("roll").asText() + " roll legacy +" + modifier.path("value").asInt() + " new +" + delta;
+                }
+                if (chooses && damageDelta(pack, sheet, bare, "damage") != 1) return name + " trait damage bonus legacy +1 new +" + damageDelta(pack, sheet, bare, "damage");
+                for (String group : List.of("rollOptions", "mitigation", "actions"))
+                    for (JsonNode part : stance.path("effect").path(group))
+                        if (!ruleIds.contains(part.path("id").asText())) return name + " " + group + " " + part.path("id").asText() + " has no rule";
+                if (stance.path("effect").has("damage") && !ruleIds.contains(name.toLowerCase(java.util.Locale.ROOT) + "-damage")) return name + " extra damage dice have no rule";
+                for (JsonNode other : legacy.path("stances")) {
+                    if (other == stance || other.path("tier").asInt() > tier) continue;
+                    String second = other.path("name").asText().toLowerCase(java.util.Locale.ROOT) + (other.path("chooseTrait").asBoolean() ? "-agility" : "");
+                    ObjectNode shifted = sheet.deepCopy();
+                    if (runPick(pack, shifted, placed, "shift", second, constantDice()) != null) return "second shift into " + other.path("name").asText() + " rejected";
+                    String secondLabel = other.path("chooseTrait").asBoolean() ? other.path("name").asText() + " (Agility)" : other.path("name").asText();
+                    java.util.Set<String> held = effectLabels(pack, shifted);
+                    if (held.contains(label) || !held.contains(secondLabel)) return "shift " + name + " -> " + other.path("name").asText() + " leaves " + held;
+                    break;
+                }
+            }
+        }
+        for (JsonNode action : legacy.path("actions")) {
+            if (!action.path("shiftStance").asBoolean() || !action.has("requiresFeature")) continue;
+            String id = action.path("id").asText();
+            ObjectNode without = placed.sheet().deepCopy();
+            without.put("level", 5);
+            if (runPick(pack, without.deepCopy(), placed, id, "reliable", constantDice()) == null) return id + " accepted without " + action.path("requiresFeature").asText();
+            ObjectNode with = without.deepCopy();
+            with.withArray("features").addObject().put("name", action.path("requiresFeature").asText());
+            ObjectNode stressBefore = with.deepCopy();
+            RuntimeException error = runPick(pack, with, placed, id, "reliable", constantDice());
+            if (error != null) return id + " rejected with the feature: " + error.getMessage();
+            if (with.at("/stress/on").asInt() != stressBefore.at("/stress/on").asInt() + 1) return id + " did not mark 1 Stress";
+        }
+        return null;
+    }
+
+    /** Runs a rule with explicit inputs; returns the host result or the rejection. */
+    private static Object runInputs(AutomationHost.Pack pack, ObjectNode sheet, Placed placed, String ruleId, ObjectNode inputs) {
+        return runInputsWith(pack, sheet, placed, ruleId, inputs, constantDice());
+    }
+
+    private static Object runInputsWith(AutomationHost.Pack pack, ObjectNode sheet, Placed placed, String ruleId, ObjectNode inputs, Random dice) {
+        for (var element : HOST.sources(pack, sheet)) {
+            if (!element.sourceId().equals(placed.sourceId())) continue;
+            ObjectNode request = RuleJson.JSON.createObjectNode().put("requestId", "i" + REQUESTS.incrementAndGet()).put("expectedRevision", HOST.revision(sheet));
+            request.putArray("selections").addObject().put("sourceInstanceId", element.instanceId()).put("ruleId", ruleId).put("bindingId", "sheet").set("inputs", inputs);
+            try {
+                return HOST.execute(pack, sheet, AutomationHost.event("action.request", "parity", 1), request,                 "self", "self", dice);
+            } catch (RuntimeException e) {
+                return e;
+            }
+        }
+        return new IllegalStateException("source not on the sheet");
+    }
+
+    /** Warden's Protection replays the shared legacy fixture (warden-protection.json): rolled report, Hope cost, once per long rest. */
+    private static String wardenMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy) throws Exception {
+        if (!placed.sourceId().contains("warden-of-renewal-specialization")) return null;
+        if (legacy == null || !legacy.toString().contains("report")) return null;
+        JsonNode fixture = MAPPER.readTree(Files.readString(Path.of("src/test/resources/dmmt/automation/parity/warden-protection.json")));
+        for (JsonNode sample : fixture.path("cases")) {
+            ObjectNode sheet = placed.sheet().deepCopy();
+            sheet.withObject("/hope").put("on", fixture.at("/before/hope").asInt()).put("slots", fixture.at("/before/hopeSlots").asInt());
+            ObjectNode poor = sheet.deepCopy();
+            poor.withObject("/hope").put("on", fixture.at("/before/insufficientHope").asInt());
+            if (!(runInputs(pack, poor, placed, "use", RuleJson.JSON.createObjectNode()) instanceof RuntimeException)) return "an unaffordable use was accepted";
+            Object first = runInputsWith(pack, sheet, placed, "use", RuleJson.JSON.createObjectNode(), fixedDice(sample.path("face").asInt()));
+            if (first instanceof RuntimeException e) return "use rejected: " + e.getMessage();
+            if (!sample.path("report").asText().equals(((JsonNode) first).at("/actions/0/report").asText())) return "report " + ((JsonNode) first).at("/actions/0/report") + " legacy " + sample.path("report");
+            if (sheet.at("/hope/on").asInt() != fixture.at("/expected/hopeAfter").asInt()) return "hope " + sheet.at("/hope/on") + " legacy " + fixture.at("/expected/hopeAfter");
+            if (!(runInputs(pack, sheet, placed, "use", RuleJson.JSON.createObjectNode()) instanceof RuntimeException)) return "a second use before a long rest was accepted";
+            for (String kind : List.of("short", "long")) {
+                ObjectNode rested = sheet.deepCopy();
+                ObjectNode origin = AutomationHost.event("action.request", "parity", 1).put("sessionId", "session");
+                var snapshot = HOST.restEffectSnapshot(rested);
+                ObjectNode prepared = HOST.prepareRest(pack, rested, origin, kind, HOST.revision(rested), RuleJson.JSON.createArrayNode(), constantDice());
+                HOST.completeRest(pack, rested, origin, HOST.restProgress(pack, prepared), snapshot, RuleJson.JSON.createArrayNode(), constantDice());
+                boolean reset = !(runInputs(pack, rested, placed, "use", RuleJson.JSON.createObjectNode()) instanceof RuntimeException);
+                if (reset != fixture.at("/expected/" + kind + "RestResets").asBoolean()) return kind + " rest resets=" + reset;
+            }
+        }
+        return null;
+    }
+
+    /** Healing Hands: the offered recovery buttons follow the legacy success/failure/critical split, and the recipient lock ends on a long rest only. */
+    private static String healingHandsMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy) {
+        if (legacy == null || !legacy.toString().contains("\"splendorAction\":\"healingHands\"")) return null;
+        for (int[] dice : new int[][] {{12, 11}, {1, 2}, {5, 5}}) {
+            ObjectNode sheet = placed.sheet().deepCopy();
+            ObjectNode event = AutomationHost.event("action.request", "parity", 1);
+            JsonNode rolled = null;
+            for (var element : HOST.sources(pack, sheet)) {
+                if (!element.sourceId().equals(placed.sourceId())) continue;
+                ObjectNode request = RuleJson.JSON.createObjectNode().put("requestId", "h" + REQUESTS.incrementAndGet()).put("expectedRevision", HOST.revision(sheet));
+                request.putArray("selections");
+                request.putObject("profileRoll").put("sourceInstanceId", element.instanceId()).put("profileId", "spellcast-roll").put("kind", "spellcast");
+                try {
+                    rolled = HOST.execute(pack, sheet, event, request, "self", "self", dualityDice(dice[0], dice[1]));
+                } catch (RuntimeException e) {
+                    return "spellcast roll rejected: " + e.getMessage();
+                }
+            }
+            if (rolled == null) return "no source on the sheet";
+            JsonNode check = rolled.at("/event/check");
+            boolean success = check.path("critical").asBoolean() || check.path("total").asInt() >= 13;
+            java.util.TreeSet<String> offered = new java.util.TreeSet<>(), expected = new java.util.TreeSet<>();
+            for (JsonNode action : rolled.path("resultActions")) offered.add(norm(action.path("ruleId").asText()));
+            offered.retainAll(List.of("hp", "stress", "failed-hp", "failed-stress"));
+            expected.addAll(success ? List.of("hp", "stress") : List.of("failed-hp", "failed-stress"));
+            if (!offered.equals(expected)) return "roll " + check.path("total") + (check.path("critical").asBoolean() ? " critical" : "") + " offers " + offered + " legacy " + expected;
+        }
+        for (String kind : List.of("short", "long")) {
+            ObjectNode sheet = placed.sheet().deepCopy();
+            ObjectNode effect = sheet.withObject("/automationState").withArray("effects").addObject().put("id", "hh").put("label", "Healing Hands recovery").put("kind", "debuff");
+            effect.putArray("until").add("rest.long");
+            try {
+                ObjectNode origin = AutomationHost.event("action.request", "parity", 1).put("sessionId", "session");
+                var snapshot = HOST.restEffectSnapshot(sheet);
+                ObjectNode prepared = HOST.prepareRest(pack, sheet, origin, kind, HOST.revision(sheet), RuleJson.JSON.createArrayNode(), constantDice());
+                HOST.completeRest(pack, sheet, origin, HOST.restProgress(pack, prepared), snapshot, RuleJson.JSON.createArrayNode(), constantDice());
+            } catch (RuntimeException e) {
+                return kind + " rest rejected: " + e.getMessage();
+            }
+            boolean held = effectLabels(pack, sheet).contains("Healing Hands recovery");
+            if (held == "long".equals(kind)) return "the recovery lock " + (held ? "survives" : "ends on") + " a " + kind + " rest";
+        }
+        return null;
+    }
+
+    /** Beastforms: every assumed form is accepted and rejected like the legacy rules, pays the legacy Stress and sends a request the legacy rules build from. */
+    private static String beastformMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy) throws Exception {
+        if (legacy == null || !legacy.has("beastforms")) return null;
+        JsonNode classes = MAPPER.readTree(java.nio.file.Files.readString(java.nio.file.Path.of("dmmap-daggerheart", "classes.json")));
+        List<JsonNode> catalog = dmmt.online.LegacyRulesBridge.beastformCatalog(classes);
+        int baseStress = legacy.at("/actions/0/cost/stress").asInt(1);
+        int[] levels = {1, 2, 5, 8};
+        for (int level : levels) {
+            int tier = level >= 8 ? 4 : level >= 5 ? 3 : level >= 2 ? 2 : 1;
+            for (JsonNode form : catalog) {
+                boolean ordinary = !form.has("evolved") && !form.has("hybrid");
+                String name = form.path("name").asText();
+                ObjectNode choice = RuleJson.JSON.createObjectNode().put("form", name);
+                ObjectNode inputs = RuleJson.JSON.createObjectNode();
+                String ruleId = "use";
+                int expectedStress = baseStress;
+                if (ordinary) inputs.putObject("form").put("name", name).put("tier", form.path("tier").asInt());
+                else {
+                    ruleId = "use-" + slugOf(name);
+                    if (form.has("evolved")) {
+                        String base = null;
+                        for (JsonNode candidate : catalog)
+                            if (!candidate.has("evolved") && !candidate.has("hybrid") && candidate.path("tier").asInt() <= form.path("evolved").path("maxTier").asInt()) { base = candidate.path("name").asText(); break; }
+                        inputs.putObject("base").put("name", base).put("tier", 1);
+                        for (JsonNode candidate : catalog) if (candidate.path("name").asText().equals(base)) ((ObjectNode) inputs.get("base")).put("tier", candidate.path("tier").asInt());
+                        choice.put("base", base);
+                    } else {
+                        JsonNode hybrid = form.path("hybrid");
+                        expectedStress += hybrid.path("stress").asInt();
+                        List<JsonNode> parts = new ArrayList<>();
+                        for (JsonNode candidate : catalog)
+                            if (!candidate.has("evolved") && !candidate.has("hybrid") && candidate.path("tier").asInt() <= hybrid.path("maxTier").asInt() && parts.size() < hybrid.path("count").asInt()) parts.add(candidate);
+                        java.util.LinkedHashSet<String> advantages = new java.util.LinkedHashSet<>(), features = new java.util.LinkedHashSet<>(), names = new java.util.LinkedHashSet<>();
+                        for (JsonNode part : parts) {
+                            names.add(slugOf(part.path("name").asText()));
+                            part.path("advantages").forEach(a -> advantages.add(a.asText()));
+                            part.path("features").forEach(f -> features.add(f.path("name").asText()));
+                        }
+                        ArrayNode picks = choice.putArray("categories");
+                        names.forEach(picks::add);
+                        ArrayNode categoryInput = inputs.putArray("categories");
+                        names.forEach(categoryInput::add);
+                        ArrayNode advantageInput = inputs.putArray("advantages");
+                        advantages.stream().limit(hybrid.path("advantages").asInt()).forEach(a -> { advantageInput.add(slugOf(a)); });
+                        ArrayNode featureInput = inputs.putArray("features");
+                        features.stream().limit(hybrid.path("features").asInt()).forEach(f -> featureInput.add(slugOf(f)));
+                        choice.set("advantages", advantageInput.deepCopy());
+                        choice.set("features", featureInput.deepCopy());
+                    }
+                }
+                ObjectNode legacyEffect = dmmt.online.LegacyRulesBridge.beastformBuild(level, classes, choice, false, false);
+                ObjectNode sheet = placed.sheet().deepCopy();
+                sheet.put("level", level);
+                sheet.withObject("/stress").put("on", 0).put("max", 12);
+                Object outcome = runInputs(pack, sheet, placed, ruleId, inputs);
+                String at = "level " + level + " " + name + ": ";
+                if (outcome instanceof RuntimeException error) {
+                    if (legacyEffect != null) return at + "rejected but the legacy rules accept it: " + error.getMessage();
+                    continue;
+                }
+                if (legacyEffect == null) return at + "accepted but the legacy rules reject it";
+                JsonNode request = null;
+                for (JsonNode command : ((JsonNode) outcome).path("outbox")) if ("beastform.assume".equals(command.path("kind").asText())) request = command;
+                if (request == null) return at + "no beastform request: " + outcome;
+                if (!name.equals(request.path("form").asText())) return at + "requested form " + request.path("form").asText();
+                if (dmmt.online.LegacyRulesBridge.beastformBuild(level, classes, request, false, false) == null) return at + "the legacy rules reject the sent request " + request;
+                if (!legacyEffect.equals(dmmt.online.LegacyRulesBridge.beastformBuild(level, classes, request, false, false))) return at + "the sent request builds a different form";
+                int marked = sheet.at("/stress/on").asInt();
+                if (marked != expectedStress) return at + "marked " + marked + " Stress, legacy " + expectedStress;
+            }
+        }
+        return null;
+    }
+
+    /** Companion rest handling replays the legacy companion.ts rules: unavailable companions return on a long rest and clear 1 Stress, an available one clears the owner's net cleared Stress. */
+    private static String companionMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy) {
+        if (legacy == null || !legacy.has("companion")) return null;
+        int slots = legacy.at("/companion/maxStress").asInt(6);
+        for (String kind : List.of("short", "long")) {
+            for (boolean unavailable : new boolean[] {false, true}) {
+                for (int stressOn : new int[] {1, 3}) {
+                    ObjectNode sheet = placed.sheet().deepCopy();
+                    sheet.putObject("companion").put("name", "Fox").put("unavailable", unavailable).putObject("stress").put("slots", slots).put("on", stressOn);
+                    sheet.withObject("/automationState").withObject("pools").putObject("companion-stress-slots").put("max", slots).put("value", slots - stressOn);
+                    int ownerBefore = sheet.at("/stress/on").asInt();
+                    ObjectNode request = RuleJson.JSON.createObjectNode().put("kind", kind).put("expectedRevision", HOST.revision(sheet));
+                    request.putArray("preparation");
+                    ObjectNode move = request.putArray("moves").addObject();
+                    move.putObject("selection").put("sourceInstanceId", "ruleset:base").put("ruleId", "long".equals(kind) ? "rest-stress-all" : "rest-stress").put("bindingId", "move");
+                    move.putArray("options");
+                    request.putArray("completion");
+                    int companionOn = stressOn;
+                    boolean available = !unavailable;
+                    if ("long".equals(kind) && unavailable) { available = true; companionOn = Math.max(0, companionOn - 1); }
+                    try {
+                        HOST.stageSelfRest(pack, sheet, AutomationHost.event("action.request", "parity", 0).put("sessionId", "session"), request, StructuredRollTest.faces(1));
+                    } catch (RuntimeException e) {
+                        return kind + " unavailable=" + unavailable + " on=" + stressOn + " rejected: " + e.getMessage();
+                    }
+                    int net = Math.max(0, ownerBefore - sheet.at("/stress/on").asInt());
+                    if (available) companionOn = Math.max(0, companionOn - net);
+                    String where = kind + " unavailable=" + unavailable + " on=" + stressOn;
+                    if (sheet.at("/companion/stress/on").asInt() != companionOn) return where + " companion stress legacy " + companionOn + " new " + sheet.at("/companion/stress/on").asInt();
+                    boolean wantUnavailable = unavailable && !"long".equals(kind);
+                    if (sheet.at("/companion/unavailable").asBoolean() != wantUnavailable) return where + " unavailable legacy " + wantUnavailable + " new " + sheet.at("/companion/unavailable").asBoolean();
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Lunar Phases: the d6 roll or advance picks the phase effect of the face; the die wraps from 6 to 1 and advancing needs a rolled die. */
+    private static String lunarMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy) {
+        if (legacy == null || !legacy.has("lunarPhases")) return null;
+        ObjectNode base = placed.sheet().deepCopy();
+        String counterLabel = legacy.at("/effectCounters/0/label").asText();
+        String poolId = null;
+        for (var entry : currentAutomation.path("pools").properties())
+            if (counterLabel.equals(entry.getValue().path("label").asText())) poolId = entry.getKey();
+        if (poolId == null) return "no pool labelled " + counterLabel;
+        if (runSheetAction(pack, base.deepCopy(), placed, "advance", constantDice()) == null) return "advance accepted before the die was rolled";
+        for (int face = 1; face <= 6; face++) {
+            ObjectNode sheet = base.deepCopy();
+            int rolled = face;
+            RuntimeException error = runSheetAction(pack, sheet, placed, "roll", fixedDice(rolled));
+            if (error != null) return "roll rejected: " + error.getMessage();
+            String phase = lunarPhaseProblem(pack, placed, legacy, sheet, rolled, poolId, "rolled");
+            if (phase != null) return phase;
+            error = runSheetAction(pack, sheet, placed, "advance", constantDice());
+            if (error != null) return "advance rejected at " + face + ": " + error.getMessage();
+            phase = lunarPhaseProblem(pack, placed, legacy, sheet, face % 6 + 1, poolId, "advanced");
+            if (phase != null) return phase;
+        }
+        return null;
+    }
+
+    private static String lunarPhaseProblem(AutomationHost.Pack pack, Placed placed, JsonNode legacy, ObjectNode sheet, int face, String poolId, String how) {
+        if (poolValues(sheet).getOrDefault(poolId.replace("-", ""), -1) != face) return how + " die legacy " + face + " new " + poolValues(sheet);
+        JsonNode phase = null;
+        for (JsonNode candidate : legacy.path("lunarPhases"))
+            for (JsonNode f : candidate.path("faces")) if (f.asInt() == face) phase = candidate;
+        if (phase == null) return "legacy has no phase for " + face;
+        JsonNode effect = phase.path("effect");
+        ObjectNode bare = placed.sheet().deepCopy();
+        for (JsonNode modifier : effect.path("modifiers")) {
+            String stat = modifier.path("stat").asText();
+            if (stat.isEmpty()) continue;
+            ObjectNode held = statsOf(pack, sheet), without = statsOf(pack, bare);
+            for (String key : "thresholds".equals(stat) ? List.of("major", "severe") : List.of(stat)) {
+                int delta = held.path(key).asInt() - without.path(key).asInt();
+                if (delta != modifier.path("value").asInt()) return how + " " + face + " " + key + " legacy +" + modifier.path("value").asInt() + " new " + delta;
+            }
+        }
+        try {
+            for (JsonNode modifier : effect.path("modifiers")) {
+                if (!"damage".equals(modifier.path("roll").asText())) continue;
+                int[] totals = new int[2];
+                int i = 0;
+                for (ObjectNode target : List.of(withWeapon(bare), withWeapon(sheet))) {
+                    String instance = target.withArray("activeWeapons").get(0).path("instanceId").asText();
+                    totals[i++] = rollTotal(HOST.execute(pack, target, AutomationHost.event("action.request", "parity", 1), profileRequest(target, instance, "damage", null), "self", "self", constantDice()));
+                }
+                if (totals[1] - totals[0] != modifier.path("value").asInt()) return how + " " + face + " damage legacy +" + modifier.path("value").asInt() + " new " + (totals[1] - totals[0]);
+            }
+        } catch (Exception e) {
+            return "damage probe failed: " + e;
+        }
+        long active = effectLabels(pack, sheet).stream().filter(label -> label.startsWith("Lunar Phases")).count();
+        return active == 1 ? null : how + " " + face + " active phase effects " + active;
+    }
+
+    /** Unstoppable: a leveled counter effect adds its die to damage, reduces physical severity, advances after dealt damage and ends on overflow. */
+    private static String counterEffectMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy) throws Exception {
+        JsonNode action = legacy == null ? null : legacy.at("/actions/0");
+        JsonNode effect = action == null ? null : action.at("/steps/0/effect");
+        if (effect == null || !effect.path("counter").isObject() || !legacy.toString().contains("advanceEffect")) return null;
+        String name = effect.path("name").asText();
+        for (int level : new int[] {4, 5}) {
+            ObjectNode sheet = withWeapon(placed.sheet());
+            sheet.put("level", level);
+            int max = effect.at("/counter/max").asInt();
+            for (var entry : effect.at("/counter/maxByLevel").properties()) if (Integer.parseInt(entry.getKey()) <= level) max = entry.getValue().asInt();
+            ObjectNode without = sheet.deepCopy();
+            String instance = without.withArray("activeWeapons").get(0).path("instanceId").asText();
+            int plain = rollTotal(HOST.execute(pack, without, AutomationHost.event("action.request", "parity", 1), profileRequest(without, instance, "damage", null), "self", "self", constantDice()));
+            RuntimeException error = runSheetAction(pack, sheet, placed, action.path("id").asText(), constantDice());
+            if (error != null) return "use rejected: " + error.getMessage();
+            JsonNode held = heldEffect(sheet, name);
+            if (held == null) return name + " not started";
+            for (int value = effect.at("/counter/value").asInt(); value <= max + 1; value++) {
+                if (value > max) {
+                    if (heldEffect(sheet, name) != null) return "level " + level + " effect survives overflow past d" + max;
+                    break;
+                }
+                held = heldEffect(sheet, name);
+                if (held == null) return "level " + level + " effect ended early at " + value;
+                if (effectValue(held) != value) return "level " + level + " die legacy " + value + " new " + effectValue(held) + " " + held;
+                ObjectNode event = AutomationHost.event("action.request", "parity", 1);
+                JsonNode picked = null;
+                for (JsonNode option : weaponOptions(pack, sheet, event, instance, "damage")) if (ownOption(option) && "damage".equals(norm(option.path("ruleId").asText()))) picked = option;
+                if (picked == null) return "level " + level + " die " + value + " damage option not offered";
+                JsonNode rolled = HOST.execute(pack, sheet, event, profileRequest(sheet, instance, "damage", picked), "self", "self", constantDice());
+                if (rollTotal(rolled) != plain + value) return "level " + level + " die " + value + " damage legacy " + (plain + value) + " new " + rollTotal(rolled);
+                try {
+                    if (claimResultWith(pack, sheet, event, rolled, "advance", constantDice()) == null) return "advance is not offered after damage";
+                } catch (RuntimeException e) {
+                    return "advance rejected: " + e.getMessage();
+                }
+            }
+        }
+        return null;
+    }
+
+    /** The party shares the downtime move with the same members as the legacy sync; a grantee trains into the fallback effect. */
+    private static String partyDowntimeMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy) {
+        if (legacy == null || !legacy.path("partyDowntime").asBoolean()) return null;
+        Map<String, ObjectNode> legacySheets = new LinkedHashMap<>();
+        Map<String, ObjectNode> newSheets = new LinkedHashMap<>();
+        for (String id : List.of("owner", "ally", "third")) {
+            ObjectNode sheet = RuleJson.JSON.createObjectNode();
+            sheet.putArray("features");
+            if ("owner".equals(id)) sheet.withArray("features").addObject().put("name", "Martial Preparation").put("text", "").set("automation", legacy.deepCopy());
+            legacySheets.put(id, sheet);
+            newSheets.put(id, "owner".equals(id) ? placed.sheet().deepCopy() : standardSheet());
+        }
+        dmmt.online.LegacyRulesBridge.synchronizeDowntime(legacySheets);
+        HOST.synchronizePartyGrants(pack, newSheets, Map.of());
+        for (String id : legacySheets.keySet()) {
+            boolean legacyHas = legacySheets.get(id).path("effects").size() > 0, newHas = newSheets.get(id).path("partyGrants").size() > 0;
+            if (legacyHas != newHas) return id + " grant legacy " + legacyHas + " new " + newHas;
+        }
+        JsonNode fallback = legacy.at("/actions/0/steps/0/fallbackEffect");
+        ObjectNode ally = newSheets.get("ally");
+        String instance = ally.at("/partyGrants/0/instanceId").asText();
+        try {
+            ObjectNode origin = AutomationHost.event("action.request", "parity", 0).put("sessionId", "session");
+            ObjectNode prepared = HOST.prepareRest(pack, ally, origin, "short", 0, RuleJson.JSON.createArrayNode(), constantDice());
+            var progress = HOST.restProgress(pack, prepared);
+            ObjectNode selection = RuleJson.JSON.createObjectNode().put("sourceInstanceId", instance)
+                    .put("ruleId", legacy.at("/actions/0/id").asText()).put("bindingId", "downtime");
+            HOST.restMove(pack, ally, (ObjectNode) prepared.get("event"), progress, selection, RuleJson.JSON.createArrayNode(), constantDice());
+        } catch (RuntimeException e) {
+            return "grantee downtime rejected: " + e.getMessage();
+        }
+        if (!effectLabels(pack, ally).contains(fallback.path("name").asText())) return "grantee has no " + fallback.path("name").asText();
+        for (JsonNode option : fallback.path("rollOptions"))
+            if (!currentAutomation.toString().contains("\"id\":\"" + option.path("id").asText() + "\"")) return "roll option " + option.path("id").asText() + " missing";
         return null;
     }
 

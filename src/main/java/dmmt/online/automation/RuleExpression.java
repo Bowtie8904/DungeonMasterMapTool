@@ -152,6 +152,8 @@ public final class RuleExpression {
             return values[0].get(index).deepCopy();
         }
         if ("includes".equals(op)) {
+            // a single-count choice input is a bare id, which behaves as a one-element selection
+            if (values[0].isTextual()) return BooleanNode.valueOf(equal(values[0], values[1]));
             if (!values[0].isArray()) throw RuleJson.error(path, "includes requires a collection.");
             boolean found = false;
             for (JsonNode element : values[0]) if (equal(element, values[1])) found = true;
