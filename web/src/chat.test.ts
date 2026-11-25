@@ -72,6 +72,8 @@ describe('roll breakdowns', () => {
   });
 
   it('previews the row feature rather than the main weapon on hover and focus, with Escape dismissal', () => {
+    let rowBounds = { left: 570, top: 650, bottom: 680 };
+    let sidebarLeft = 540;
     class Element {
       id = '';
       role = '';
@@ -88,7 +90,13 @@ describe('roll breakdowns', () => {
       append(...children: Array<Element | string>) { this.children.push(...children); }
       setAttribute(key: string, value: string) { this.attrs.set(key, value); }
       addEventListener(type: string, handler: (event?: { key: string }) => void) { this.listeners.set(type, handler); }
-      getBoundingClientRect() { return { left: 100, top: 650, bottom: 680, height: 200 }; }
+      closest(selector: string) {
+        return selector === '.sidebar' ? { getBoundingClientRect: () => ({ left: sidebarLeft }) } : null;
+      }
+      getBoundingClientRect() {
+        return { ...rowBounds, height: this.className.includes('roll-source-preview')
+          ? Math.min(200, Number.parseFloat(this.style.maxHeight)) : rowBounds.bottom - rowBounds.top };
+      }
       get textContent(): string { return this.children.map(child => typeof child === 'string' ? child : child.textContent).join(''); }
       find(cls: string): Element | undefined {
         return this.className.split(' ').includes(cls) ? this : this.children.flatMap(child => typeof child === 'string' ? [] : [child])
@@ -111,11 +119,27 @@ describe('roll breakdowns', () => {
       expect(row.attrs.get('aria-describedby')).toBe(panel.id);
       expect(panel.role).toBe('tooltip');
       row.listeners.get('mouseenter')!();
-      expect(panel.style.top).toBe('446px');
+      expect(panel.style.width).toBe('400px');
+      expect(panel.style.left).toBe('132px');
+      expect(panel.style.top).toBe('488px');
       row.listeners.get('keydown')!({ key: 'Escape' });
       expect(row.className).toContain('source-preview-dismissed');
       row.listeners.get('focus')!();
       expect(row.className).not.toContain('source-preview-dismissed');
+      sidebarLeft = 220;
+      rowBounds = { left: 240, top: 30, bottom: 60 };
+      row.listeners.get('mouseenter')!();
+      expect(panel.style.width).toBe('200px');
+      expect(panel.style.left).toBe('12px');
+      expect(panel.style.top).toBe('30px');
+      sidebarLeft = 100;
+      rowBounds = { left: 120, top: 30, bottom: 60 };
+      row.listeners.get('mouseenter')!();
+      expect(panel.style.width).toBe('400px');
+      expect(panel.style.top).toBe('68px');
+      rowBounds = { left: 120, top: 650, bottom: 680 };
+      row.listeners.get('focus')!();
+      expect(panel.style.top).toBe('442px');
     } finally { vi.unstubAllGlobals(); }
   });
   it.each([

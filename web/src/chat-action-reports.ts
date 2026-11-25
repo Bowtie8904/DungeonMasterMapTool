@@ -14,7 +14,7 @@ export function chatActionLabels(card: HTMLElement): ChatActionLabel[] {
     .map(button => ({
       label: (button.textContent?.trim() || button.getAttribute('aria-label') || button.title).slice(0, 200),
       disabled: button.disabled,
-      detail: button.title.slice(0, 200),
+      detail: (button.getAttribute('data-chat-action-detail') ?? button.title).slice(0, 200),
     }))
     .filter(action => !!action.label)
     .slice(0, 128);

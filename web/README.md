@@ -522,7 +522,11 @@ Each damage-adding feature has one damage entry; Combo Strike replaces its selec
 First Strike has its own doubling contribution. Additive extra-die effects have separate damage rows,
 while Proficiency and keep/discard pool explanations remain on the weapon.
 Contributions and returned details may also include a bounded description-only
-`rollSource: {name, text, source}`. Hover or focus the row to open its themed source preview; Escape dismisses it.
+`rollSource: {name, text, source}`. Hover or focus the row to open its themed source preview to the left of chat
+when space permits, leaving the breakdown list unobstructed; Escape dismisses it. Narrow screens use an
+above-or-below fallback.
+Chat action buttons also show the full associated feature, card, effect or weapon description when available.
+Disabled actions remain inspectable and include their availability reason.
 The desktop DM chat uses the same saved descriptions. Older messages without row descriptions remain usable.
 These fields are additive; compatibility versions are unchanged. Older hosts/history fall back to formula
 and dice details. Open breakdown and source sections survive new messages and updates to their own message,

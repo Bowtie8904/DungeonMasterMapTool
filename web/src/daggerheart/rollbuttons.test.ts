@@ -13,9 +13,18 @@ class FakeElement {
   disabled = false;
   title = '';
   textContent = '';
+  id = '';
+  tabIndex = -1;
+  style: Record<string, string> = {};
+  attrs = new Map<string, string>();
+  classList = {
+    add: (value: string) => { this.className += ` ${value}`; },
+    remove: (value: string) => { this.className = this.className.split(' ').filter(name => name !== value).join(' '); },
+  };
   value = '';
   max = '';
-  setAttribute(): void {}
+  setAttribute(key: string, value: string): void { this.attrs.set(key, value); }
+  getAttribute(key: string): string | null { return this.attrs.get(key) ?? null; }
   open = false;
   removed = false;
   get valueAsNumber(): number { return this.value === '' ? NaN : Number(this.value); }
@@ -117,6 +126,51 @@ const original: RollMessage = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('cross-player roll buttons', () => {
+  it('shows the actual feature source and disabled reason without changing action reports', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Caster', undefined);
+    c.loadout = [{ name: 'Invigoration', domain: 'Splendor', level: 10, type: 'Spell', recall: 3,
+      text: '**Full feature rules**', automation: { conditionalRollTriggers: [{ id: 'renew', label: 'Restore one use',
+        on: 'card:Invigoration', containsDie: 6, splendorAction: 'invigoration' }] } }];
+    const { host } = hostFor({ 'actor-b': c });
+    const message = { ...original, source: 'card:Invigoration', kind: 'dice' as const, rolls: [2, 6], total: 8 };
+    const box = rollButtons(message, { ...host, supportsSplendorAutomation: () => false,
+      supportsDomainCardAutomation: () => true }) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const button = box.queryAll('button')[0];
+    const anchor = box.queryAll('div').find(node => node.className.includes('action-source-anchor'))!;
+    const preview = anchor.children.find(node => node.className.includes('roll-source-preview'))!;
+    expect(button.disabled).toBe(true);
+    expect(button.title).toBe('');
+    expect(button.getAttribute('data-chat-action-detail')).toContain('Update the host');
+    expect(anchor.tabIndex).toBe(0);
+    expect(anchor.getAttribute('aria-describedby')).toBe(preview.id);
+    expect(preview.text).toContain('Full feature rules');
+    expect(preview.text).toContain('Update the host');
+    expect(anchor.listeners.has('mouseenter')).toBe(true);
+    expect(anchor.listeners.has('focusin')).toBe(true);
+    const enabled = rollButtons(message, { ...host, supportsSplendorAutomation: () => true,
+      supportsDomainCardAutomation: () => true }) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const enabledButton = enabled.queryAll('button')[0];
+    const enabledAnchor = enabled.queryAll('div').find(node => node.className.includes('action-source-anchor'))!;
+    const enabledPreview = enabledAnchor.children.find(node => node.className.includes('roll-source-preview'))!;
+    expect(enabledButton.disabled).toBe(false);
+    expect(enabledButton.getAttribute('aria-describedby')).toBe(enabledPreview.id);
+    expect(enabledAnchor.tabIndex).toBe(-1);
+    expect(enabledAnchor.listeners.has('focusin')).toBe(true);
+    expect(enabledPreview.queryAll('strong').map(element => element.text)).toEqual(['Invigoration']);
+    expect(enabledPreview.children.some(element => element.className === 'source-preview-detail')).toBe(false);
+    expect(enabledButton.getAttribute('data-chat-action-detail')).toBe('Invigoration');
+
+    c.loadout[0].automation!.conditionalRollTriggers![0].description = 'Use on an ally in range.';
+    const guided = rollButtons(message, { ...host, supportsSplendorAutomation: () => true,
+      supportsDomainCardAutomation: () => true }) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const guidedPreview = guided.queryAll('div').find(node => node.className.includes('roll-source-preview'))!;
+    expect(guidedPreview.text).toContain('Use on an ally in range.');
+  });
+
   it('opens a paid chat follow-up only for its owner while the card remains active', async () => {
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
     const c = character('Caster', undefined);

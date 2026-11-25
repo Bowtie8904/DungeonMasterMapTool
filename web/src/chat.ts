@@ -10,27 +10,47 @@ import { rich } from './daggerheart/rich';
 export type LogEntry = { kind: 'chat'; m: ChatMessage } | { kind: 'roll'; m: RollMessage };
 let previewId = 0;
 
-function sourcePreview(row: HTMLElement, source: RollSource | undefined): HTMLElement {
+export function sourcePreview(row: HTMLElement, source: RollSource | undefined,
+                              control: HTMLElement = row, detail?: string): HTMLElement {
   if (!source) return row;
   const panel = el('div', { class: 'roll-source-preview', role: 'tooltip' },
     el('div', { class: 'shared-source' }, source.source),
-    el('strong', {}, source.name), rich(source.text));
-  row.tabIndex = 0;
+    el('strong', {}, source.name), ...(detail ? [el('p', { class: 'source-preview-detail' }, detail)] : []), rich(source.text));
+  if (control === row) {
+    row.tabIndex = 0;
+    row.setAttribute('aria-label', `${row.textContent}. Source: ${source.name}`);
+  }
   panel.id = `roll-source-preview-${++previewId}`;
-  row.setAttribute('aria-describedby', panel.id);
-  row.setAttribute('aria-label', `${row.textContent}. Source: ${source.name}`);
+  control.setAttribute('aria-describedby', panel.id);
   row.classList.add('has-source-preview');
   const position = () => {
     row.classList.remove('source-preview-dismissed');
     const bounds = row.getBoundingClientRect();
-    const width = Math.min(400, window.innerWidth - 24);
-    panel.style.width = `${width}px`;
-    panel.style.left = `${Math.max(12, Math.min(bounds.left, window.innerWidth - width - 12))}px`;
-    const height = panel.getBoundingClientRect().height;
-    panel.style.top = `${Math.max(12, bounds.bottom + height + 12 <= window.innerHeight ? bounds.bottom + 4 : bounds.top - height - 4)}px`;
+    const margin = 12;
+    const gap = 8;
+    const sidebarLeft = row.closest('.sidebar')?.getBoundingClientRect().left ?? bounds.left;
+    const availableLeft = sidebarLeft - gap - margin;
+    if (availableLeft >= 160) {
+      const width = Math.min(400, availableLeft);
+      panel.style.width = `${width}px`;
+      panel.style.maxHeight = `${Math.max(0, Math.min(380, window.innerHeight - 2 * margin))}px`;
+      panel.style.left = `${sidebarLeft - gap - width}px`;
+      const height = panel.getBoundingClientRect().height;
+      panel.style.top = `${Math.max(margin, Math.min(bounds.top, window.innerHeight - margin - height))}px`;
+    } else {
+      const width = Math.max(0, Math.min(400, window.innerWidth - 2 * margin));
+      const above = Math.max(0, bounds.top - gap - margin);
+      const below = Math.max(0, window.innerHeight - margin - bounds.bottom - gap);
+      const placeBelow = below >= above;
+      panel.style.width = `${width}px`;
+      panel.style.maxHeight = `${Math.min(380, placeBelow ? below : above)}px`;
+      panel.style.left = `${Math.max(margin, Math.min(bounds.left, window.innerWidth - width - margin))}px`;
+      const height = panel.getBoundingClientRect().height;
+      panel.style.top = `${placeBelow ? bounds.bottom + gap : bounds.top - gap - height}px`;
+    }
   };
   row.addEventListener('mouseenter', position);
-  row.addEventListener('focus', position);
+  row.addEventListener(control === row ? 'focus' : 'focusin', position);
   row.addEventListener('keydown', event => {
     if (event.key === 'Escape') row.classList.add('source-preview-dismissed');
   });

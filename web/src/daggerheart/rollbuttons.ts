@@ -2,15 +2,17 @@
 // roll results (Hope, weapon and feature damage), effects of the feature that made the roll, and other features' roll triggers.
 
 import { el } from '../login';
+import { sourcePreview } from '../chat';
 import { applyDeathRecovery, claimRollReward } from '../api';
 import { useSheetAction, type SheetSave } from './persist';
 import { openDeathRecovery } from './death-view';
 import type { ChatMessage, RollMessage, RollSource } from '../protocol';
 import type { CharacterSheet } from './data';
 import { formatText } from './texts';
-import { actionBlocker, actionButtonText, actionTextVars, automationSources, availableRollTriggers, costText, evalValue, resourceDefinitions, rollTriggerSection, runAction, usesLeft } from './engine';
+import { actionBlocker, actionButtonText, actionTextVars, activeFeatures, automationSources, availableRollTriggers, costText, evalValue, resourceDefinitions, rollTriggerSection, runAction, usesLeft } from './engine';
 import { activeCardSources } from './copycat';
-import type { AvailableRollTrigger, RollActionSection, RollContext } from './engine';
+import { rollSourceFor } from './roll-source';
+import type { Automation, AvailableRollTrigger, RollActionSection, RollContext } from './engine';
 import type { RollRequest, SheetBus } from './view';
 import { criticalMeleeBonus } from './brawler';
 import { chooseRollModification, damageDieChoices } from './sorcerer-view';
@@ -72,6 +74,26 @@ export function rollContext(m: RollMessage): RollContext | null {
 
 const SECTION_BUTTON_CLASS: Record<RollActionSection, string> = { result: 'small primary', feature: 'small', other: 'small related' };
 const SECTION_LABEL: Record<RollActionSection, string> = { result: 'Roll result', feature: 'Feature effects', other: 'Other features' };
+
+function actionPreview(button: HTMLButtonElement, source: RollSource | undefined): HTMLElement {
+  if (!source?.text?.trim()) return button;
+  const detail = button.title;
+  if (detail) button.setAttribute('data-chat-action-detail', detail);
+  button.title = '';
+  const anchor = el('div', { class: 'action-source-anchor' }, button);
+  sourcePreview(anchor, source, button, detail.trim() === source.name.trim() ? undefined : detail);
+  if (button.disabled) {
+    anchor.tabIndex = 0;
+    anchor.setAttribute('aria-label', `${button.textContent}. Unavailable`);
+    anchor.setAttribute('aria-describedby', button.getAttribute('aria-describedby')!);
+  }
+  return anchor;
+}
+
+function rewardSource(c: CharacterSheet, reward: NonNullable<Automation['hopeReward']>): RollSource | undefined {
+  const feature = [...activeFeatures(c), ...c.heritage].find(item => item.automation?.hopeReward === reward);
+  return feature ? rollSourceFor(c, `feat:${feature.name}`) : undefined;
+}
 
 function newRef(): string {
   return Math.random().toString(36).slice(2, 12);
@@ -190,6 +212,7 @@ function benefitButtons(m: ChatMessage | RollMessage, host: RollButtonHost): HTM
   let pending = false;
   const paint = async () => {
     const buttons: HTMLButtonElement[] = [];
+    const controls: HTMLElement[] = [];
     if ((!m.actorId || host.isActorActive?.(m.actorId) !== false)
         && !claims.claimedBy.includes(host.playerId!) && !(claims.options.some(o => o.exclusiveClaim) && claims.claimedBy.length)
         && (claims.maxClaims === undefined || claims.claimedBy.length < claims.maxClaims)) {
@@ -228,10 +251,11 @@ function benefitButtons(m: ChatMessage | RollMessage, host: RollButtonHost): HTM
             finally { pending = false; await paint(); }
           });
           buttons.push(button);
+          controls.push(actionPreview(button, m.rollSource));
         }
       }
     }
-    box.replaceChildren(...buttons);
+    box.replaceChildren(...controls);
     box.hidden = !buttons.length;
   };
   box.addEventListener('refresh-roll-actions', () => { void paint().catch((e: Error) => host.toast(e.message)); });
@@ -275,7 +299,7 @@ function chatDamageButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | 
         host.toast('Open this character sheet to roll spell damage.');
     } catch (e) { host.toast((e as Error).message); }
   });
-  box.append(button);
+  box.append(actionPreview(button, m.rollSource));
   const refresh = () => { box.hidden = host.isActorActive?.(m.actorId!) === false; };
   box.addEventListener('refresh-roll-actions', refresh);
   refresh();
@@ -302,7 +326,7 @@ function chatFollowUpButtons(m: ChatMessage, host: RollButtonHost): HTMLElement 
       if (!sheet.bus.featureAction?.(action.name, action.id))
         host.toast('This follow-up roll is no longer available.');
     });
-    box.append(button);
+    box.append(actionPreview(button, rollSourceFor(sheet.character, source.key)));
     box.hidden = false;
   };
   box.addEventListener('refresh-roll-actions', () => { void paint().catch((e: Error) => host.toast(e.message)); });
@@ -316,6 +340,7 @@ function restButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | null {
   let claiming = false;
   const paint = async () => {
     const buttons: HTMLButtonElement[] = [];
+    const controls: HTMLElement[] = [];
     for (const actorId of host.isActorActive?.(m.actorId!) === false ? [] : host.actorIds?.() ?? []) {
       const sheet = await host.sheet(actorId);
       if (!sheet) continue;
@@ -343,10 +368,11 @@ function restButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | null {
             }
           });
           buttons.push(button);
+          controls.push(actionPreview(button, rollSourceFor(sheet.character, key)));
         });
       }
     }
-    box.replaceChildren(...buttons);
+    box.replaceChildren(...controls);
     box.hidden = !buttons.length;
   };
   box.addEventListener('refresh-roll-actions', () => { void paint().catch((e: Error) => host.toast(e.message)); });
@@ -411,7 +437,7 @@ function incomingReactionButtons(m: ChatMessage, host: RollButtonHost): HTMLElem
         button.addEventListener('click', () => {
           if (!sheet.bus.featureAction?.(t.source, t.trigger.id)) host.toast('This reaction is no longer available.');
         });
-        buttons.push(button);
+        buttons.push(actionPreview(button, rollSourceFor(sheet.character, t.key)));
       }
     }
     box.replaceChildren(...buttons);
@@ -486,7 +512,7 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
           } catch (e) { host.toast((e as Error).message); }
           finally { claiming = false; await paintFor(); }
         });
-        buttons.push(gain);
+        buttons.push(actionPreview(gain, rewardSource(c, slayer)));
       }
       const alternative = !critical && (ctx!.difficulty === undefined || ctx!.total >= ctx!.difficulty) && automationSources(c).map(a => a.hopeReward)
         .find(r => r?.removeFear && ctx!.source.split(',').includes(r.roll));
@@ -505,7 +531,7 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
           } catch (e) { host.toast((e as Error).message); }
           finally { claiming = false; await paintFor(); }
         });
-        buttons.push(remove);
+        buttons.push(actionPreview(remove, rewardSource(c, alternative)));
       }
       const favor = !critical && (ctx!.difficulty === undefined || ctx!.total >= ctx!.difficulty) && automationSources(c).map(a => a.hopeReward)
         .find(r => r?.favor && ctx!.source.split(',').includes(r.roll));
@@ -524,7 +550,7 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
           } catch (e) { host.toast((e as Error).message); }
           finally { claiming = false; await paintFor(); }
         });
-        buttons.push(gain);
+        buttons.push(actionPreview(gain, rewardSource(c, favor)));
       }
     }
     if (rolledActor && isAttack && m.weapon) {
@@ -541,7 +567,7 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
           : rolledActor.sheet.bus.damage?.(m.weapon!, critical, fear, proficiency, undefined, undefined, outcome, ...extra);
         if (!opened) host.toast(`${m.weapon} is no longer equipped.`);
       });
-      buttons.push(damage);
+      buttons.push(actionPreview(damage, rollSourceFor(rolledActor.sheet.character, `weapon:${m.weapon}`)));
     }
 
     const canContinueDeathrun = (c: CharacterSheet) => !!m.deathrun && c.effects.some(effect =>
@@ -560,7 +586,7 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         } catch (error) { host.toast((error as Error).message); }
         finally { next.disabled = false; }
       });
-      buttons.push(next);
+      buttons.push(actionPreview(next, rollSourceFor(rolledActor.sheet.character, `effect:${m.deathrun!.effectId}`)));
     }
 
     for (const { actorId: featureActorId, sheet } of sheets) {
@@ -735,7 +761,7 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
             b.disabled = false;
           }
         });
-        sections[section].push(b);
+        sections[section].push(actionPreview(b, rollSourceFor(c, t.key)));
       }
     }
     const groups = (Object.keys(sections) as RollActionSection[]).filter(section => sections[section].length)

@@ -877,7 +877,9 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   Midnight's **Stealth Expertise** reaction is offered on non-attack Fear action rolls only, for yourself
   or an ally; moving unnoticed and the ally's range still require player confirmation.
   The DM has the same chat in a **Chat** tab at the top of the DM controls (only while hosting; hideable via
-  `online.chat`), with an unread dot, recipient dropdown and `/roll` (or `/r`). The **secret roll** toggle
+  `online.chat`), with an unread dot, recipient dropdown and `/roll` (or `/r`). Browser roll-breakdown source
+  previews appear to the left of chat when space permits, leaving the list visible. Chat action buttons also
+  preview their full associated feature descriptions when available, including disabled-action reasons. The **secret roll** toggle
   defaults to off and remembers its selection across restarts (`ui.chat.secretRoll`). Use `/roll` or `/r`
   with Send or Enter; there is no separate Roll button. When enabled, chat and adversary rolls show players only `?` instead of numbers
   while dice type and count stay visible; the DM sees the real result. Normal messages are unaffected.

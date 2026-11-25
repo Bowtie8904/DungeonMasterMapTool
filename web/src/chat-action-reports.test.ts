@@ -7,9 +7,10 @@ class Control {
   disabled = false;
   title = '';
   hidden: object | null = null;
+  detail: string | null = null;
   constructor(public textContent: string) {}
   closest() { return this.hidden; }
-  getAttribute() { return null; }
+  getAttribute(name: string) { return name === 'data-chat-action-detail' ? this.detail : null; }
 }
 
 class Card {
@@ -23,9 +24,10 @@ it('mirrors rewards, reactions and claims, including unavailable explanations bu
   const card = new Card();
   card.buttons[1].disabled = true;
   card.buttons[1].title = 'Not enough Hope';
+  card.buttons[0].detail = 'Feature usage guidance';
   card.buttons[2].hidden = card;
   expect(chatActionLabels(card as unknown as HTMLElement)).toEqual([
-    { label: 'Gain 1 Hope', disabled: false, detail: '' },
+    { label: 'Gain 1 Hope', disabled: false, detail: 'Feature usage guidance' },
     { label: 'Reroll · Ally', disabled: true, detail: 'Not enough Hope' },
   ]);
   // Collapsing the entire chat sidebar does not change the controls inside its cards.

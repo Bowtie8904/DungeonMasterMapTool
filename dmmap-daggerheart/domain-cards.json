@@ -9555,7 +9555,7 @@
      {
       "id": "damage",
       "successIfKnown": true,
-      "label": "Vicious Entangle: roll 1d8+1 damage",
+      "label": "Vicious Entangle damage",
       "on": "card:Vicious Entangle",
       "damage": {
        "dice": "1d8+1",
