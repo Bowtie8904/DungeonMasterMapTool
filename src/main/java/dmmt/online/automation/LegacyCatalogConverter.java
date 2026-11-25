@@ -7670,7 +7670,16 @@ public final class LegacyCatalogConverter {
     /** Converts every catalog in {@code legacyDir} into {@code stagingDir} and writes a coverage report. */
     public static void main(String[] args) throws IOException {
         if (args.length != 2) throw new IllegalArgumentException("Usage: LegacyCatalogConverter <legacy-catalog-dir> <staging-dir>");
-        Path source = Path.of(args[0]).toAbsolutePath().normalize(), staging = Path.of(args[1]).toAbsolutePath().normalize();
+        Path staging = Path.of(args[1]).toAbsolutePath().normalize();
+        ObjectNode report = convertDirectory(Path.of(args[0]), staging);
+        int blocks = report.path("blocks").asInt(), converted = report.path("converted").asInt();
+        System.out.printf("Converted %d of %d automation blocks (%.1f%%); report: %s%n", converted, blocks,
+                blocks == 0 ? 100.0 : converted * 100.0 / blocks, staging.resolve("conversion-report.json"));
+    }
+
+    /** Converts every catalog in {@code legacyDir} into {@code stagingDir}, writes the coverage report and returns it. */
+    public static ObjectNode convertDirectory(Path legacyDir, Path stagingDir) throws IOException {
+        Path source = legacyDir.toAbsolutePath().normalize(), staging = stagingDir.toAbsolutePath().normalize();
         if (staging.startsWith(source) || source.startsWith(staging))
             throw new IllegalArgumentException("The staging directory must be separate from the shipped catalogs.");
         Files.createDirectories(staging);
@@ -7737,7 +7746,6 @@ public final class LegacyCatalogConverter {
         ObjectNode summary = report.putObject("reasons");
         reasons.forEach(summary::put);
         Files.writeString(staging.resolve("conversion-report.json"), RuleJson.JSON.writerWithDefaultPrettyPrinter().writeValueAsString(report));
-        System.out.printf("Converted %d of %d automation blocks (%.1f%%); report: %s%n", converted, blocks,
-                blocks == 0 ? 100.0 : converted * 100.0 / blocks, staging.resolve("conversion-report.json"));
+        return report;
     }
 }
