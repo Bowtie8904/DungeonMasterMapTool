@@ -305,7 +305,8 @@ public final class ChatCards {
         boolean roll = "roll".equals(m.path("type").asText());
         String text = m.path("text").asText("");
         boolean whisper = !m.path("toId").asText("").isEmpty();
-        boolean plain = !roll && !whisper && !m.has("sharedCard");
+        boolean emote = !roll && m.path("emote").asBoolean(false);
+        boolean plain = !roll && !whisper && !m.has("sharedCard") && !emote;
         String system = plain && "dm".equals(m.path("fromId").asText()) ? m.path("system").asText("") : "";
         if (!"sceneEnd".equals(system) && !"newSession".equals(system)) system = "";
         RestReport rest = plain && system.isEmpty() ? parseRestReport(text) : null;
@@ -327,6 +328,7 @@ public final class ChatCards {
         if (damage != null) card.getStyleClass().add("chat-damage");
         if (action != null) card.getStyleClass().add("chat-action");
         if (whisper) card.getStyleClass().add("chat-whisper");
+        if (emote) card.getStyleClass().add("chat-emote");
         card.getChildren().add(header(m, delete, artwork));
         if (whisper) {
             Label label = new Label("Whisper to " + ("dm".equals(m.path("toId").asText()) ? "Gamemaster"

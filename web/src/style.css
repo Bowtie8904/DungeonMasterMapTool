@@ -127,6 +127,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, canvas:focus-vi
 .entry.roll { border-color: #66573b; background: radial-gradient(ellipse at top right, #ad81301a, transparent 70%), linear-gradient(145deg, #252b35, #191f29 70%); }
 .entry.roll.critical-roll { border-color: #d7a93e; background: radial-gradient(ellipse at top right, #e6b94f2b, transparent 72%), linear-gradient(145deg, #302a1d, #1d1e22 72%); box-shadow: 0 0 0 1px #e6b94f55, 0 0 18px #e6b94f38, 0 3px 12px #0005, inset 0 1px #fff2; }
 .entry.whisper { color: #edccf4; border-color: #785488; }
+.entry.emote { border-color: #538b91; background: linear-gradient(145deg, #21343a, #192329 70%); }
+.entry.emote .message-text { color: #a9e3dd; font-style: italic; }
 .entry.rest-report { border-color: #3f6b57; border-left: 4px solid #4fb58a; background: radial-gradient(ellipse at top right, #2f8f6a22, transparent 70%), linear-gradient(145deg, #1f2b29, #181f24 70%); }
 .rest-banner { display: flex; align-items: center; gap: 8px; padding: 8px 12px 0; text-transform: uppercase; letter-spacing: .06em; font-size: 12px; color: #7fd8b0; }
 .rest-banner .rest-tag { margin-left: auto; font-size: 10px; letter-spacing: .04em; padding: 1px 7px; border: 1px solid #3f6b57; border-radius: 999px; color: #9fb8ab; }

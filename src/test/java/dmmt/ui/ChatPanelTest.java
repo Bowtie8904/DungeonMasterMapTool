@@ -42,6 +42,20 @@ class ChatPanelTest {
     }
 
     @Test
+    void emoteCardsKeepTextAndWhisperLabelWithDistinctStyle() throws Exception {
+        for (String recipient : List.of("", ",\"toId\":\"dm\"")) {
+            JsonNode message = MAPPER.readTree("{\"type\":\"chat\",\"from\":\"Mara\",\"fromId\":\"player\","
+                    + "\"text\":\"Mara says hello.\",\"emote\":true" + recipient + "}");
+            onFx(() -> {
+                VBox card = (VBox) ChatCards.render(message);
+                assertTrue(card.getStyleClass().contains("chat-emote"));
+                assertEquals("Mara says hello.", ((Label) card.lookup(".chat-text")).getText());
+                assertEquals(!recipient.isEmpty(), card.getStyleClass().contains("chat-whisper"));
+            });
+        }
+    }
+
+    @Test
     void mixedDiceCardsLabelEachPoolIncludingLegacyAndSecretRolls() throws Exception {
         for (String message : List.of(
                 """

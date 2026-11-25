@@ -826,6 +826,8 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   Chat and dice keep working and are persisted per campaign. Choose Everyone, Gamemaster or
   another connected player in the chat recipient dropdown; whispers have purple text and a recipient label and
   are delivered only to sender and recipient. Roll with `/roll 2d6+3` or `/r 2d6+3` in chat, using the same recipient.
+  Players can use `/em says hello to the dogs.` to post an in-character action prefixed with their active
+  character's name in a distinct colored card; the selected recipient also applies to emotes.
   Chat messages appear as individual sender-headed cards (the DM is shown as Gamemaster). Roll cards show styled dice, a combined bonus and a
   prominent total; criticals stand out with a warm glowing card border and matching glowing Hope/Fear dice.
   Desktop DM roll cards use smaller dice and tighter spacing so more rolls fit in chat;

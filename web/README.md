@@ -612,6 +612,10 @@ reload and preserve this additive field. Both sheets are saved through a replaya
 interrupted write cannot leave only half a transfer. Online protocol and DM Link compatibility are unchanged.
 Use `/roll 2d6+3` or `/r 2d6+3` in chat (no separate dice composer). Optional `toId` targets a player or `dm`;
 legacy `whisper:true` remains DM-only. Recipient names are included as additive `to` fields by the host.
+`/em <action>` posts an italic, colored in-character message prefixed by the first enabled character's name.
+An active character and nonempty action are required, and the selected recipient is respected. The browser
+sends prefixed text and additive `emoteText`; newer hosts derive the name and persist `emote:true`, while older
+hosts and clients display the prefixed text as ordinary chat. No compatibility version changes.
 Player recipients require `hello.playerWhispers:true`; older hosts offer only Everyone/Gamemaster, with the
 legacy whisper flag retained for DM chat and rolls so private rolls cannot accidentally become public.
 With `hello.chatActionReports:true`, browsers coalesce changes to their rendered chat controls and send

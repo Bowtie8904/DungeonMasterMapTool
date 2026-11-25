@@ -1580,6 +1580,8 @@
 .chat-delete:hover .ikonli-font-icon, .chat-delete:focused .ikonli-font-icon { -fx-icon-color: -dm-danger; }
 .chat-whisper-label { -fx-background-color: #482852; -fx-border-color: #9255a0; -fx-border-radius: 6; -fx-background-radius: 6; -fx-text-fill: #edbdf5; -fx-font-size: 10px; -fx-padding: 1 6; }
 .chat-text { -fx-padding: 12; -fx-text-fill: -dm-text; }
+.chat-entry.chat-emote { -fx-background-color: linear-gradient(to bottom right, #21343a, #192329); -fx-border-color: #538b91; }
+.chat-entry.chat-emote .chat-text { -fx-text-fill: #a9e3dd; -fx-font-style: italic; }
 .chat-die { -fx-background-color: linear-gradient(to bottom, #3e5068, #263241); -fx-border-color: #52667d; -fx-border-radius: 8; -fx-background-radius: 8; }
 .chat-die-name { -fx-font-size: 9px; -fx-text-fill: #aab6c6; }
 .chat-die-value { -fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: white; }

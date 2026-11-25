@@ -6572,7 +6572,18 @@ public final class OnlineSessionServer {
         }
         try {
             String to = chatRecipient(msg);
+            boolean emote = msg.has("emoteText");
+            if (emote) {
+                if (!msg.path("emoteText").isTextual())
+                    throw new IllegalArgumentException("Invalid emote text.");
+                String action = clip(msg.path("emoteText").asText());
+                if (action.isBlank()) throw new IllegalArgumentException("Use /em followed by an action.");
+                Campaign.Actor actor = chatActor(client.playerId);
+                if (actor == null) throw new IllegalArgumentException("An active character is required to use /em.");
+                text = clip(actor.getName() + " " + action);
+            }
             ObjectNode out = chatMessage(client.playerId, client.playerName, to, text);
+            if (emote) out.put("emote", true);
             ObjectNode rollSource = rollSource(msg);
             if (rollSource != null) out.set("rollSource", rollSource);
             if (msg.path("incomingDamage").asBoolean()) {

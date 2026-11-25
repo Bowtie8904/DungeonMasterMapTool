@@ -185,12 +185,13 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
     el('strong', { class: 'message-sender' }, sender),
     el('time', { dateTime: new Date(m.ts).toISOString(), title: new Date(m.ts).toLocaleString() }, time));
   const system = e.kind === 'chat' && !m.toId && m.fromId === 'dm' && (e.m.system === 'sceneEnd' || e.m.system === 'newSession') ? e.m.system : null;
-  const plainChat = e.kind === 'chat' && !m.toId && !e.m.sharedCard && !system;
+  const emote = e.kind === 'chat' && e.m.emote === true;
+  const plainChat = e.kind === 'chat' && !m.toId && !e.m.sharedCard && !system && !emote;
   const report = plainChat ? parseRestReport(e.m.text) : null;
   const damage = plainChat && !report ? parseDamageReport(e.m.text) : null;
   const action = plainChat && !report && !damage ? parseActionReport(e.m.text) : null;
   const reaction = e.kind === 'chat' && plainChat && !report && !damage && !action && e.m.reactionPrompt ? e.m.reactionPrompt : null;
-  const card = el('article', { class: `entry${e.kind === 'roll' ? ' roll' : ''}${e.kind === 'roll' && isCriticalRoll(e.m) ? ' critical-roll' : ''}${report ? ' rest-report' : ''}${damage ? ' damage-report' : ''}${action ? ' action-report' : ''}${reaction ? ' reaction-report' : ''}${system ? ' system-report' : ''}${m.toId ? ' whisper' : ''}` }, header);
+  const card = el('article', { class: `entry${e.kind === 'roll' ? ' roll' : ''}${e.kind === 'roll' && isCriticalRoll(e.m) ? ' critical-roll' : ''}${report ? ' rest-report' : ''}${damage ? ' damage-report' : ''}${action ? ' action-report' : ''}${reaction ? ' reaction-report' : ''}${system ? ' system-report' : ''}${m.toId ? ' whisper' : ''}${emote ? ' emote' : ''}` }, header);
   if (m.toId) {
     card.append(el('div', { class: 'message-recipient' }, el('span', { class: 'whisper-label' },
       `Whisper to ${m.toId === 'dm' ? 'Gamemaster' : m.to ?? (m.toId === playerId ? 'you' : m.toId)}`)));

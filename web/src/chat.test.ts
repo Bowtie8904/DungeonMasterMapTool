@@ -7,6 +7,34 @@ const message: RollMessage = {
   expression: '2d12-1d6+3', rolls: [9, 4, -2], total: 14,
 };
 
+it('renders public and whispered emotes distinctly without interpreting their text as reports', () => {
+  class Element {
+    className = '';
+    children: Array<Element | string> = [];
+    append(...children: Array<Element | string>) { this.children.push(...children); }
+    setAttribute() {}
+    find(cls: string): Element | undefined {
+      return this.className.split(' ').includes(cls) ? this : this.children.flatMap(child => typeof child === 'string' ? [] : [child])
+        .map(child => child.find(cls)).find(Boolean);
+    }
+  }
+  vi.stubGlobal('document', { createElement: () => new Element() });
+  try {
+    for (const toId of [undefined, 'dm']) {
+      const m: ChatMessage = { id: 1, ts: 0, fromId: 'player', from: 'Mara', text: 'Mara says hello.', emote: true, toId };
+      const card = renderLogEntry({ kind: 'chat', m }, 'player') as unknown as Element;
+      expect(card.className).toContain('emote');
+      expect(card.find('message-text')!.children).toEqual(['Mara says hello.']);
+      expect(!!card.find('whisper-label')).toBe(!!toId);
+      expect(card.className).not.toContain('action-report');
+    }
+    const regular = renderLogEntry({ kind: 'chat', m: {
+      id: 2, ts: 0, fromId: 'player', from: 'Mara', text: 'Mara says hello.',
+    } }, 'player') as unknown as Element;
+    expect(regular.className).not.toContain('emote');
+  } finally { vi.unstubAllGlobals(); }
+});
+
 describe('roll breakdowns', () => {
   it('labels each mixed-pool die in attributed, legacy, doubled and secret rolls', () => {
     class Element {

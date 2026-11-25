@@ -36,6 +36,38 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OnlineSessionServerTest {
     @Test
+    void emotesUseHostCharacterIdentityAndPersistWithWhisperRouting() throws Exception {
+        Campaign.Actor first = Campaign.Actor.builder().id("mara").name("Mara").ownerId(playerId()).build();
+        Campaign.Actor second = Campaign.Actor.builder().id("rook").name("Rook").ownerId(playerId()).build();
+        campaign.getActors().add(first);
+        campaign.getActors().add(second);
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie(), inbox);
+        inbox.next("hello");
+        try {
+            ws.sendText("{\"type\":\"chat\",\"text\":\"Old name waves.\",\"emoteText\":\"waves.\"}", true).join();
+            JsonNode publicEmote = inbox.next("chat");
+            assertEquals("Mara waves.", publicEmote.path("text").asText());
+            assertTrue(publicEmote.path("emote").asBoolean());
+            assertTrue(store.historyTail(campaign.getId(), 20).stream()
+                    .anyMatch(entry -> entry.path("id").equals(publicEmote.path("id")) && entry.path("emote").asBoolean()));
+            first.setDisabled(true);
+            ws.sendText("{\"type\":\"chat\",\"text\":\"Mara bows.\",\"emoteText\":\"bows.\",\"toId\":\"dm\",\"whisper\":true}", true).join();
+            JsonNode privateEmote = inbox.next("chat");
+            assertEquals("Rook bows.", privateEmote.path("text").asText());
+            assertEquals("dm", privateEmote.path("toId").asText());
+            assertTrue(privateEmote.path("emote").asBoolean());
+            ws.sendText("{\"type\":\"chat\",\"text\":\"x\",\"emoteText\":\"  \"}", true).join();
+            assertTrue(inbox.next("error").path("message").asText().contains("followed by an action"));
+            second.setDisabled(true);
+            ws.sendText("{\"type\":\"chat\",\"text\":\"x\",\"emoteText\":\"waves\"}", true).join();
+            assertTrue(inbox.next("error").path("message").asText().contains("active character"));
+        } finally {
+            ws.abort();
+        }
+    }
+
+    @Test
     void servesBundledItemArtworkToPlayerBrowsersWithoutExternalRequests() throws Exception {
         JsonNode entry = MAPPER.readTree(Path.of("dmmap-daggerheart", "items.json").toFile()).path("entries").get(0);
         String image = entry.path("image").asText();

@@ -2,6 +2,7 @@ import { cardRequest, logout, damageTaken, takeDeathMove, getDeathOptions } from
 import { decodeBitset, encodeBitset } from './bitset';
 import { Connection } from './net';
 import { ChatMessage, Actor, GameState, Overlay, RollMessage, ServerMessage } from './protocol';
+import { emoteCommand } from './chat-command';
 import { iconButton } from './icons';
 import { LogEntry, renderLogEntry } from './chat';
 import { applyFeatureState, applyInventory, autosave, featureTarget, isLifeWard, loadCharacter, saveImportedCharacter, useSheetAction, type SheetSave } from './daggerheart/persist';
@@ -408,7 +409,7 @@ export class App {
     this.chatResize.observe(this.logEl);
     this.chatResize.observe(this.logContent);
     this.chatRecipient.setAttribute('aria-label', 'Message recipient');
-    const input = el('input', { type: 'text', placeholder: 'Message, /roll or /r 2d6+3', maxLength: 500 });
+    const input = el('input', { type: 'text', placeholder: 'Message, /em action or /roll 2d6+3', maxLength: 500 });
     const send = el('button', { class: 'primary' }, 'Send');
     let submitting = false;
     const submit = async () => {
@@ -426,6 +427,11 @@ export class App {
       }
       const whisper = toId === 'dm';
       const identity = this.myActors.find(actor => !actor.disabled);
+      const emote = emoteCommand(text, this.myActors);
+      if (emote && 'error' in emote) {
+        this.toast(emote.error);
+        return;
+      }
       const handle = identity && this.sheetHandles.get(identity.id);
       if (handle && handle.character.name !== identity.name) {
         submitting = true;
@@ -439,7 +445,7 @@ export class App {
       }
       const roll = /^\/(?:roll|r)\s+(.+)$/i.exec(text);
       const sent = roll ? this.conn.send({ type: 'roll', expression: roll[1], toId, whisper })
-        : this.conn.send({ type: 'chat', text, toId, whisper });
+        : this.conn.send({ type: 'chat', ...(emote ?? { text }), toId, whisper });
       if (sent && input.value.trim() === text) input.value = '';
       else this.toast('Not connected. Your message was not sent.');
     };

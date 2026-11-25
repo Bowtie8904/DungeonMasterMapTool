@@ -206,6 +206,7 @@ export interface ChatMessage {
   toId?: string;
   to?: string;
   text: string;
+  emote?: boolean;
   sharedCard?: import('./shared-cards').SharedCard;
   actorId?: string;
   restDice?: import('./daggerheart/rest').RestDie[];
