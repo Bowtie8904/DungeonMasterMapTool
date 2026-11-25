@@ -87,6 +87,8 @@ unique. Names must be unique within a category (subclass stages may share a name
 **Reload file**, navigation and closing protect unsaved work. Player cookies and character-sheet DM grants cannot
 authorize catalog edits: `GET/PUT /api/dm/catalog/{category}` requires the loopback DM-compendium capability.
 
+After each save the host compiles the rules and the editor shows an **Automation rules** status under the draft status. **active** means the new revision compiled and takes effect for previews and actions without a restart; **last valid revision kept** means the edit was written but rejected, with the error at its exact JSON path (for example `/recipes/<id>/rules/<n>/do/0/value`), and the previous revision keeps serving until it is fixed; **previews unavailable** means no valid revision exists yet. Format-2 files can be checked in any editor against the published schemas `catalog.schema.json`, `recipes.schema.json` and `ruleset.schema.json` (under `src/main/resources/dmmt/online/automation/schema/`). The schemas check structure, operation names and keys; operation field values and references are validated only by the host, so a file can pass the schema and still be rejected. Unused recipes are linked too, but rules that read a `string` recipe argument are only shape-checked until a source uses the recipe. Keys beginning with `_` are ignored. The status is an additive response field; compatibility versions do not change.
+
 Catalog writes emit an additive `catalogChanged` notification. Browser/DM compendiums reload their caches;
 open sheets flush pending player edits and request current rules. The host also resolves rules on sheet reads,
 saves and authoritative feature actions, so closed/offline sheets use current JSON after reopening/restarting.

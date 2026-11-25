@@ -20,6 +20,8 @@ The **Online Play** tab (next to DM Link) lets you host an optional, DM-controll
 who join from a browser. **It is not DM control** (that is DM Link below); players get restricted access.
 Nothing starts until you click **Start online session**, so offline play and the second-screen view are unchanged.
 
+The DM catalog editor now compiles rules after every save and shows whether they are active, whether the last valid revision was kept after a rejected edit (with the exact JSON path of the error), or whether previews are unavailable. JSON Schemas for format-2 catalogs, recipes and rulesets are published under `src/main/resources/dmmt/online/automation/schema/`; see `docs/DAGGERHEART_DATA.md`.
+
 **Automation rewrite (in development, available with format-2 catalogs):** The replacement now has a generic
 rule compiler, isolated host resolver, configurable text/choice controls, structured saved-roll calculations,
 numeric and individually identified dice pools with per-die controls. Executable JSON examples cover Deathrun,
