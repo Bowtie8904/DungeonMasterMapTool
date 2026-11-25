@@ -376,10 +376,14 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const header = (node.classList.contains('slot') ? node.querySelector('.top') : node.querySelector('.inventory-row-tools') ?? node.querySelector('.inventory-controls')) ?? (entry.category === 'feature'
       ? node.querySelector('.src') ?? node
       : node.querySelector('td, .ft, .top, .hd') ?? node);
-    const remove = offer ? iconButton('delete', `Delete ${entry.item.name}`, () => {
+    const remove = offer ? iconButton('delete', `Delete ${entry.item.name}`, async () => {
+      const quantity = entry.category === 'item' && entry.item.qty > 1 ? ` (all ${entry.item.qty})` : '';
+      if (!await confirmDialog(`Delete ${entry.item.name}${quantity} from this character's inventory?`, 'Delete item', 'Delete')) return;
+      if (opts.readOnly?.() || !root.isConnected) return;
       const list = (entry.category === 'item' ? c.inventory : entry.category === 'weapon' ? c.carriedWeapons : c.carriedArmor) as unknown[];
       const index = list.indexOf(entry.item);
-      if (index >= 0) list.splice(index, 1);
+      if (index < 0) return;
+      list.splice(index, 1);
       render();
     }) : undefined;
     remove?.classList.add('share-icon', 'delete-item');

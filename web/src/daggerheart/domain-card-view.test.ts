@@ -20,6 +20,7 @@ class Element {
   files?: File[];
   disabled = false;
   hidden = false;
+  isConnected = true;
   open = false;
   ariaLabel = '';
   src = '';
@@ -87,6 +88,7 @@ it('separates loot tools from limited actions while preserving sharing, usage an
     createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
   vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
   vi.stubGlobal('requestAnimationFrame', () => {});
+  vi.stubGlobal('HTMLElement', Element);
   const find = (node: Element, className: string): Element | null => {
     for (const child of node.children) {
       if (typeof child === 'string') continue;
@@ -145,7 +147,12 @@ it('separates loot tools from limited actions while preserving sharing, usage an
   expect(find(root, 'loot-description')!.hidden).toBe(false);
   await find(root, 'loot-description-toggle')!.click();
   expect(find(root, 'loot-description')!.hidden).toBe(true);
-  await tools.querySelectorAll('button')[3].click();
+  const deletion = tools.querySelectorAll('button')[3].click();
+  const dialog = (document.body as unknown as Element).querySelectorAll('dialog').at(-1)!;
+  expect(dialog.text()).toContain('Delete Wondrous item');
+  expect(c.inventory).toHaveLength(1);
+  await dialog.querySelectorAll('button').find(button => button.text() === 'Delete')!.click();
+  await deletion;
   expect(c.inventory).toHaveLength(0);
 });
 

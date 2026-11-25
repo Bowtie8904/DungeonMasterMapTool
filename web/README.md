@@ -587,8 +587,10 @@ Host-only `transferClaims` counters live on the source sheet and are persisted i
 as both inventories; sheet PUTs cannot change or delete them. Restarting cannot replenish an exhausted offer.
 Loot uses Item (including an inline type badge), Qty, Usage & actions and Tools columns. Usage counters stack above
 full-width, wrapping action buttons; link-in-chat, transfer and delete icons form a separate top-aligned row
-in the far-right Tools column. Equipment keeps its compact trailing action groups. This is presentation-only;
-settings, sharing/transfer contracts and compatibility versions are unchanged. Search filters name/description in place and retains
+in the far-right Tools column. Equipment keeps its compact trailing action groups. Deleting loot or carried,
+unequipped weapons and armor opens a themed confirmation naming the entry; cancel or Escape leaves it untouched.
+Confirmation removes the whole selected entry, while normal consumption, transfers and quantity adjustments are unchanged.
+Settings, sharing/transfer contracts and compatibility versions are unchanged. Search filters name/description in place and retains
 queries across rerenders. Loot descriptions start fully hidden; clicking a row's non-interactive area or its
 keyboard-accessible item-name disclosure button toggles the full text. Other controls never toggle expansion.
 Expandable names have no plus/minus icon. Expanded state survives sheet refreshes, and read-only viewers can also expand descriptions.

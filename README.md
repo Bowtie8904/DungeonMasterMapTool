@@ -410,6 +410,8 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   retain their modifier badges.
   Domain cards gain a character-local delete button beside their chat links in Card and List views.
   Outside edit mode, normal rolls, Hope and resource marking still work; disabled sheets remain read-only.
+  Deleting loot or carried, unequipped weapons and armor asks for confirmation; using items and adjusting
+  quantities do not.
   The sheet opens as a draggable window over the map (Character, Domain Cards, Equipment, Loot,
   Background tabs) and can be popped out to its own browser window. Trait, Hope-feature and Experience rolls open
   a duality roll popup (advantage, Experience, difficulty) and appear in the chat with Hope/Fear dice and outcome.
