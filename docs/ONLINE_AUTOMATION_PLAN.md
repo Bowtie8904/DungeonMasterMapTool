@@ -10,13 +10,29 @@ Start with the [Deathrun and homebrew example](#example-2-deathrun-and-a-mechani
 
 ## Implementation status
 
+**Cutover (session 9).** All nine shipped catalogs in `dmmap-daggerheart` are format 2 (`version: 2`, 1087/1087
+blocks) next to `rules\recipes.json` and `rules\ruleset.json`; `packaging\verify-package.ps1` now fails a package
+whose catalogs are not version 2. **Online Play contract version 2** (`OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION`,
+browser `ONLINE_CONTRACT_VERSION`) is negotiated beyond the automation route: every `/api/*` request except
+`/api/login`, `/api/logout`, `/api/session` and the path-versioned `/api/automation/{version}/...` carries
+`X-Online-Contract` (or a `contract` query parameter), checked for every mutating method and for GET/HEAD/OPTIONS on
+sheet load, copycat, splendor, death-move, chat-card and DM catalog reads. The WebSocket requires `contract=<version>`.
+A missing or different value (an old browser) receives 409 / a WS `automationCompatibilityMismatch` error carrying both
+versions and an update-and-reload instruction. `/api/session` and the WS hello advertise `automationContract`, so a new
+browser refuses an old host (`CompatibilityError` at login, on reconnect and in the sheet, compendium popout and app).
+`RemoteCompatibility.VERSION` is unchanged: DM Link messages, snapshots, settings and asset transfer did not change.
+Decisions: format-1 fixtures needed by the legacy engine until its removal are frozen under
+`src\test\resources\dmmt\legacy-catalogs` (test scope only, not packaged); `CatalogEditor` accepts format 1 or 2;
+a rejected or deleted rules revision keeps the last good compiled pack serving, so four tests that expected 409 after
+deleting `rules.json` now expect 200. Not done: deleting the legacy engine and frozen fixtures (session 10);
+`parity-capture.test.ts` still has pre-existing `tsc` errors (excluded from the vite build).
 **Development API compatibility.** The unfinished format-2 endpoint uses
 `/api/automation/{version}/{actorId}`, with compatibility version 1 shared by the browser and host. An
 authenticated request with an absent or different version receives a 409 with both versions; it cannot read
 actions or mutate a sheet. The browser does not fall back to the unversioned endpoint, and an older host that
 lacks the versioned route is treated as unavailable for optional action descriptions. This adds no request to a
 profile roll and leaves existing format-1 gameplay and DM Link unchanged. Ordinary checks fetch their own
-pre-roll offer. This does not negotiate all sheet and gameplay traffic; that remains a cutover prerequisite.
+pre-roll offer. Superseded at cutover: contract version 2 (below) negotiates all sheet and gameplay traffic.
 
 **Ordinary checks (format 2).** Trait tiles and prompted reactions fetch an owner-only
 `GET /api/automation/{version}/{actorId}/check?kind=action|reaction&trait=...` offer, then submit

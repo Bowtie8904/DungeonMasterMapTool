@@ -39,7 +39,7 @@ foreach ($category in $categories) {
         throw "Packaged catalog differs from source: $relative"
     }
     $catalog = Get-Content -LiteralPath $packaged -Raw -Encoding UTF8 | ConvertFrom-Json
-    if ($catalog.format -ne 'dmmap-daggerheart' -or $catalog.category -ne $category -or
+    if ($catalog.format -ne 'dmmap-daggerheart' -or $catalog.category -ne $category -or $catalog.version -ne 2 -or
         @($catalog.entries).Count -eq 0) {
         throw "Packaged catalog is invalid or empty: $relative"
     }
