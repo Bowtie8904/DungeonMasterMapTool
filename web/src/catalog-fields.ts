@@ -91,6 +91,7 @@ export const FIELD_HELP: Record<string, string> = {
   evasion: 'Evasion value/bonus. Passive additions are separate from a character’s base Evasion.',
   domainCards: 'Additional domain cards selected at character creation.',
   experienceBonus: 'Creation-time Experience bonus, not a retroactive change to existing Experiences.',
+  texts: 'Optional display texts: button, blocked, chatButton, roll, reportTitle, report (lines; {effects} keeps the generated lines), option, optionNote, applied. Placeholders: {actor} {target} {source} {origin} {label} {amount} {dice} {result} {trait} {traitValue} {effect} {item} {qty} {uses} {usesMax}; {{ }} for literal braces. Costs are always appended automatically.',
   rollOptions: 'Optional bonuses in roll dialogs. Each can have its own cost, use limit and prerequisite.',
   defaultOn: 'Preselect this option in matching roll dialogs; players can still untick it.',
   diceByLevel: 'Level-to-dice map. The highest applicable character-level threshold selects the dice.',
@@ -330,7 +331,7 @@ export function fieldLabel(key: string): string {
     actions: 'Activated actions', steps: 'Effects', modifiers: 'Passive bonuses', resources: 'Resource pools',
     uses: 'Use limit', rollOptions: 'Optional roll bonuses', rollTriggers: 'After-roll reactions',
     mitigation: 'Damage mitigation', cost: 'Activation cost', rest: 'Rest benefits',
-    clear: 'Restore / unmark', mark: 'Spend / mark', effect: 'Apply effect',
+    texts: 'Custom texts', clear: 'Restore / unmark', mark: 'Spend / mark', effect: 'Apply effect',
   };
   return labels[key] ?? key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]/g, ' ').replace(/^./, c => c.toUpperCase());
 }

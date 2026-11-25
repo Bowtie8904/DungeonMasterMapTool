@@ -68,6 +68,15 @@ export function validateTexts(texts: unknown, where: string): string[] {
   return problems;
 }
 
+/** Diagnostics for every `texts` object found anywhere in a catalog document, naming the entry and field path. */
+export function validateCatalogTexts(file: string, value: unknown, path = ''): string[] {
+  if (Array.isArray(value)) return value.flatMap((v, i) => validateCatalogTexts(file, v, `${path}[${i}]`));
+  if (!value || typeof value !== 'object') return [];
+  return Object.entries(value).flatMap(([key, child]) => key === 'texts'
+    ? validateTexts(child, `${file} ${path}.texts`.trim())
+    : validateCatalogTexts(file, child, path ? `${path}.${key}` : key));
+}
+
 /**
  * Applies `texts.report` to generated action lines. "spent <cost>" stays first; empty results are dropped.
  * Returns the generated lines unchanged without a configured report.

@@ -1,0 +1,6811 @@
+{
+ "ancestries.json/Hallowed Aura": {
+  "action:use": {
+   "button": "Hallowed Aura",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nHallowed Aura\nMira Ashvale"
+  },
+  "trigger:hope": {
+   "button": "Hallowed Aura: change Fear into Hope",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "ancestries.json/Celestial Wings": {
+  "mitigation:wings": "Spend Hope instead of an Armor Slot"
+ },
+ "ancestries.json/Scales": {
+  "action:use": {
+   "button": "Scales (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nScales\nMira Ashvale\n• spent 1 Stress"
+  },
+  "mitigation:scales": "Scales"
+ },
+ "ancestries.json/Elemental Breath": {
+  "action:use": {
+   "button": "Attack",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nElemental Breath - Attack\nMira Ashvale"
+  },
+  "action:damage": {
+   "button": "Damage",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nElemental Breath - Damage\nMira Ashvale"
+  }
+ },
+ "ancestries.json/Thick Skin": {
+  "mitigation:thick-skin": "Thick Skin"
+ },
+ "ancestries.json/Increased Fortitude": {
+  "action:use": {
+   "button": "Increased Fortitude (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope"
+   ],
+   "report": "ACTION USED\nIncreased Fortitude\nMira Ashvale\n• spent 3 Hope"
+  },
+  "mitigation:fortitude": "Increased Fortitude"
+ },
+ "ancestries.json/Quick Reactions": {
+  "option:reaction": "Quick Reactions (reaction roll)"
+ },
+ "ancestries.json/Ignition": {
+  "action:use": {
+   "button": "Ignition (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress",
+    "gained Ignition"
+   ],
+   "report": "ACTION USED\nIgnition\nMira Ashvale\n• spent 1 Stress\n• gained Ignition"
+  },
+  "option:ignition": "Ignition"
+ },
+ "ancestries.json/Luckbender": {
+  "action:use": {
+   "button": "Luckbender: roll Duality Dice (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope"
+   ],
+   "report": "ACTION USED\nLuckbender: roll Duality Dice\nMira Ashvale\n• spent 3 Hope"
+  },
+  "trigger:reroll": {
+   "button": "Luckbender: reroll Duality Dice",
+   "cost": "3 Hope",
+   "choices": []
+  }
+ },
+ "ancestries.json/Wings": {
+  "action:use": {
+   "button": "Wings (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nWings\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "ancestries.json/Kick": {
+  "option:kick": "Kick"
+ },
+ "ancestries.json/Charge": {
+  "action:use": {
+   "button": "Charge damage (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nCharge - Charge damage\nMira Ashvale\n• spent 1 Stress"
+  },
+  "trigger:charge": {
+   "button": "Charge: roll damage",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "ancestries.json/Unshakable": {
+  "action:use": {
+   "button": "Unshakable",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nUnshakable\nMira Ashvale"
+  }
+ },
+ "ancestries.json/Fungril Network": {
+  "action:use": {
+   "button": "Fungril Network",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nFungril Network\nMira Ashvale"
+  }
+ },
+ "ancestries.json/Death Connection": {
+  "action:use": {
+   "button": "Death Connection (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nDeath Connection\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "ancestries.json/Retract": {
+  "action:use": {
+   "button": "Retract (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress",
+    "gained Retracted"
+   ],
+   "report": "ACTION USED\nRetract\nMira Ashvale\n• spent 1 Stress\n• gained Retracted"
+  },
+  "option:retracted": "Retract - Retracted",
+  "mitigation:retracted": "Retracted"
+ },
+ "ancestries.json/Nimble Fingers": {
+  "trigger:reroll": {
+   "button": "Nimble Fingers: reroll Hope Die",
+   "cost": "2 Hope",
+   "choices": []
+  }
+ },
+ "ancestries.json/Surefooted": {
+  "option:surefooted": "Surefooted"
+ },
+ "ancestries.json/Danger Sense": {
+  "action:use": {
+   "button": "Danger Sense",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nDanger Sense\nMira Ashvale"
+  }
+ },
+ "ancestries.json/Luckbringer": {
+  "action:use": {
+   "button": "Luckbringer",
+   "blocker": null,
+   "lines": [
+    "gained 0 Hope"
+   ],
+   "report": "ACTION USED\nLuckbringer\nMira Ashvale\n• gained 0 Hope"
+  }
+ },
+ "ancestries.json/Internal Compass": {
+  "trigger:reroll": {
+   "button": "Internal Compass: reroll Hope Die",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "ancestries.json/Adaptability": {
+  "trigger:reroll": {
+   "button": "Adaptability: reroll",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "ancestries.json/Fearless": {
+  "trigger:hope": {
+   "button": "Fearless: change Fear into Hope",
+   "cost": "2 Stress",
+   "choices": []
+  }
+ },
+ "ancestries.json/Dread Visage": {
+  "option:advantage": "Dread Visage"
+ },
+ "ancestries.json/Feline Instincts": {
+  "trigger:reroll": {
+   "button": "Feline Instincts: reroll Hope Die",
+   "cost": "2 Hope",
+   "choices": []
+  }
+ },
+ "ancestries.json/Retracting Claws": {
+  "action:use": {
+   "button": "Retracting Claws",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nRetracting Claws\nMira Ashvale"
+  }
+ },
+ "ancestries.json/Tusks": {
+  "option:tusks": "Tusks"
+ },
+ "ancestries.json/Long Tongue": {
+  "action:use": {
+   "button": "Attack (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nLong Tongue - Attack\nMira Ashvale\n• spent 1 Stress"
+  },
+  "action:damage": {
+   "button": "Damage",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nLong Tongue - Damage\nMira Ashvale"
+  }
+ },
+ "ancestries.json/Natural Climber": {
+  "option:climber": "Natural Climber"
+ },
+ "ancestries.json/Gale Force": {
+  "action:use": {
+   "button": "Gale Force (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nGale Force\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "ancestries.json/Eye of the Storm": {
+  "action:use": {
+   "button": "Eye of the Storm (2 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Hope",
+    "gained Eye of the Storm"
+   ],
+   "report": "ACTION USED\nEye of the Storm\nMira Ashvale\n• spent 2 Hope\n• gained Eye of the Storm"
+  }
+ },
+ "ancestries.json/Lifespring": {
+  "action:use": {
+   "button": "Lifespring (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress",
+    "cleared 1 HP"
+   ],
+   "report": "ACTION USED\nLifespring\nMira Ashvale\n• spent 1 Stress\n• cleared 1 HP"
+  }
+ },
+ "ancestries.json/Iron Skin": {
+  "action:use": {
+   "button": "Iron Skin (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nIron Skin\nMira Ashvale\n• spent 1 Stress"
+  },
+  "mitigation:iron-skin": "Iron Skin"
+ },
+ "ancestries.json/Hunter's Nose": {
+  "option:nose": "Hunter's Nose"
+ },
+ "ancestries.json/Hawkeye": {
+  "trigger:reroll": {
+   "button": "Hawkeye: reroll Hope Die",
+   "cost": "2 Hope",
+   "choices": []
+  }
+ },
+ "ancestries.json/Sprint Flight": {
+  "action:use": {
+   "button": "Sprint Flight (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nSprint Flight\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "armor.json/Elundrian Chain Armor": {
+  "mitigation:warded": "Warded"
+ },
+ "armor.json/Harrowbone Armor": {
+  "mitigation:resilient": "Resilient"
+ },
+ "armor.json/Runetan Floating Armor": {
+  "action:use": {
+   "button": "Shifting (1 Armor Slot)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Armor Slot"
+   ],
+   "report": "ACTION USED\nRunetan Floating Armor - Shifting\nMira Ashvale\n• spent 1 Armor Slot"
+  }
+ },
+ "armor.json/Tyris Soft Armor": {
+  "option:quiet": "Tyris Soft Armor - Move silently"
+ },
+ "armor.json/Dragonscale Armor": {
+  "mitigation:impenetrable": "Impenetrable"
+ },
+ "armor.json/Spiked Plate Armor": {
+  "option:sharp": "Spiked Plate Armor - Sharp"
+ },
+ "armor.json/Bladefare Armor": {
+  "mitigation:physical": "Physical: no Armor Slots against magic damage"
+ },
+ "armor.json/Monett’s Cloak": {
+  "mitigation:magic": "Magic: no Armor Slots against physical damage"
+ },
+ "armor.json/Runes of Fortification": {
+  "mitigation:painful": "Painful"
+ },
+ "armor.json/Dunamis Silkchain": {
+  "action:use": {
+   "button": "Timeslowing (1 Armor Slot)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Armor Slot"
+   ],
+   "report": "ACTION USED\nDunamis Silkchain - Timeslowing\nMira Ashvale\n• spent 1 Armor Slot"
+  }
+ },
+ "armor.json/Full Fortified Armor": {
+  "mitigation:fortified": "Fortified"
+ },
+ "armor.json/Sparkleweave": {
+  "mitigation:capacitor": "Capacitor"
+ },
+ "armor.json/Fairy-Silk Robes": {
+  "trigger:reroll": {
+   "button": "Trickster's Step: reroll with advantage",
+   "cost": "1 Armor Slot",
+   "choices": []
+  }
+ },
+ "armor.json/Terrorscale Armor": {
+  "trigger:terrifying": {
+   "button": "Terrifying: drive the target back",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "armor.json/Voidweight Harness": {
+  "action:use": {
+   "button": "Gravitic (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nVoidweight Harness - Gravitic\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "armor.json/Resonant Aegis": {
+  "mitigation:echoing": "Echoing Plate"
+ },
+ "armor.json/Slipphase Carapace": {
+  "mitigation:phase": "Phasebound"
+ },
+ "armor.json/Stonebound Mail": {
+  "action:use": {
+   "button": "Anchored (1 Armor Slot)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Armor Slot"
+   ],
+   "report": "ACTION USED\nStonebound Mail - Anchored\nMira Ashvale\n• spent 1 Armor Slot"
+  }
+ },
+ "armor.json/Spellglass Mantle": {
+  "action:reflect": {
+   "button": "Mirrorwoven: Spellcast roll to reflect (1 Armor Slot)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Armor Slot"
+   ],
+   "report": "ACTION USED\nSpellglass Mantle - Mirrorwoven: Spellcast roll to reflect\nMira Ashvale\n• spent 1 Armor Slot"
+  },
+  "mitigation:mirror": "Mirrorwoven"
+ },
+ "armor.json/Grudgeplate": {
+  "option:grudge": "Grudgeplate - Punishing Weight"
+ },
+ "armor.json/Dreadclatter Harness": {
+  "option:intimidate": "Dreadclatter Harness - Rattleclad: threaten or intimidate",
+  "option:hidden": "Dreadclatter Harness - Rattleclad: stay hidden or unnoticed"
+ },
+ "armor.json/Voracious Wardplate": {
+  "mitigation:sigils": "Hungry Sigils"
+ },
+ "armor.json/Vowkeeper’s Panoply": {
+  "action:break": {
+   "button": "Break vow",
+   "blocker": "Required effect is not active",
+   "lines": null,
+   "report": null
+  }
+ },
+ "armor.json/Prismhide Armor": {
+  "mitigation:glasslight": "Glasslight"
+ },
+ "armor.json/Failsafe Brigandine": {
+  "trigger:reroll-strength": {
+   "button": "Brace Point: reroll",
+   "cost": "1 Armor Slot",
+   "choices": []
+  },
+  "trigger:reroll-agility": {
+   "button": "Brace Point: reroll",
+   "cost": "1 Armor Slot",
+   "choices": []
+  },
+  "trigger:reroll-finesse": {
+   "button": "Brace Point: reroll",
+   "cost": "1 Armor Slot",
+   "choices": []
+  }
+ },
+ "armor.json/Briarforged Armor": {
+  "mitigation:thornmail": "Thornmail"
+ },
+ "armor.json/Colossus Frame": {
+  "action:use": {
+   "button": "Juggernaut (1 Armor Slot)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Armor Slot"
+   ],
+   "report": "ACTION USED\nColossus Frame - Juggernaut\nMira Ashvale\n• spent 1 Armor Slot"
+  }
+ },
+ "armor.json/Ruinwake Aegis": {
+  "mitigation:cataclysm": "Cataclysm Plate"
+ },
+ "armor.json/Love Guard": {
+  "action:use": {
+   "button": "Helper: spent Hope to help an ally",
+   "blocker": null,
+   "lines": [
+    "gained Helper"
+   ],
+   "report": "ACTION USED\nLove Guard - Helper: spent Hope to help an ally\nMira Ashvale\n• gained Helper"
+  }
+ },
+ "armor.json/Brightnerv Vest": {
+  "mitigation:flicker": "Flicker of Courage"
+ },
+ "armor.json/Bannerbound Mail": {
+  "action:use": {
+   "button": "Steady the Line (1 Armor Slot)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Armor Slot",
+    "gained 0 Hope"
+   ],
+   "report": "ACTION USED\nBannerbound Mail - Steady the Line\nMira Ashvale\n• spent 1 Armor Slot\n• gained 0 Hope"
+  }
+ },
+ "armor.json/Heartsteel Armor": {
+  "action:use": {
+   "button": "Tempered Spirit: began the scene with more Hope than Fear",
+   "blocker": null,
+   "lines": [
+    "gained Tempered Spirit"
+   ],
+   "report": "ACTION USED\nHeartsteel Armor - Tempered Spirit: began the scene with more Hope than Fear\nMira Ashvale\n• gained Tempered Spirit"
+  }
+ },
+ "armor.json/Gravefaith Harness": {
+  "mitigation:grim": "Grim Confidence"
+ },
+ "armor.json/Bladebarrier Mantle": {
+  "action:reflect": {
+   "button": "Steelwoven: Spellcast roll to reflect (1 Armor Slot)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Armor Slot"
+   ],
+   "report": "ACTION USED\nBladebarrier Mantle - Steelwoven: Spellcast roll to reflect\nMira Ashvale\n• spent 1 Armor Slot"
+  },
+  "mitigation:steel": "Steelwoven"
+ },
+ "armor.json/Brigandine Armor": {
+  "mitigation:lined": "Lined"
+ },
+ "armor.json/Banded Armor": {
+  "mitigation:bulky": "Bulky"
+ },
+ "armor.json/Improved Brigandine Armor": {
+  "mitigation:lined": "Lined"
+ },
+ "armor.json/Improved Banded Armor": {
+  "mitigation:bulky": "Bulky"
+ },
+ "armor.json/Enchanter’s Robes": {
+  "action:use": {
+   "button": "Mnemonic",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nEnchanter’s Robes - Mnemonic\nMira Ashvale"
+  }
+ },
+ "armor.json/Stormthread Habit": {
+  "action:use": {
+   "button": "Absorbing",
+   "blocker": null,
+   "lines": [
+    "cleared 1 Armor Slots"
+   ],
+   "report": "ACTION USED\nStormthread Habit - Absorbing\nMira Ashvale\n• cleared 1 Armor Slots"
+  }
+ },
+ "armor.json/Gilded Sunplate": {
+  "action:use": {
+   "button": "Resplendent",
+   "blocker": null,
+   "lines": [
+    "cleared 1 Armor Slots"
+   ],
+   "report": "ACTION USED\nGilded Sunplate - Resplendent\nMira Ashvale\n• cleared 1 Armor Slots"
+  }
+ },
+ "armor.json/Advanced Brigandine Armor": {
+  "mitigation:lined": "Lined"
+ },
+ "armor.json/Advanced Banded Armor": {
+  "mitigation:bulky": "Bulky"
+ },
+ "armor.json/Astral Raiment": {
+  "option:stellar": "Astral Raiment - Stellar"
+ },
+ "armor.json/Cloverweave Cloak": {
+  "trigger:fortune": {
+   "button": "Fortune-Favored: failure with Hope becomes success with Fear",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "armor.json/Bloodstone Plate Armor": {
+  "trigger:bloodthirsty": {
+   "button": "Bloodthirsty: clear 1 HP",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "armor.json/Deep-Forged Coral Armor": {
+  "option:advantage": "Deep-Forged Coral Armor - Aquatic"
+ },
+ "armor.json/Legendary Brigandine Armor": {
+  "mitigation:lined": "Lined"
+ },
+ "armor.json/Legendary Banded Armor": {
+  "mitigation:bulky": "Bulky"
+ },
+ "armor.json/Darkweave Shroud": {
+  "action:use": {
+   "button": "Ghostwalker (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nDarkweave Shroud - Ghostwalker\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "armor.json/Godbound Laminar": {
+  "mitigation:divine": "Divine"
+ },
+ "armor.json/Circle-Forged Dreadplate": {
+  "mitigation:accursed": "Accursed"
+ },
+ "armor.json/Hallowed Heroplate": {
+  "action:use": {
+   "button": "Blessed",
+   "blocker": "Requires all HP marked and no pending death recovery",
+   "lines": null,
+   "report": null
+  }
+ },
+ "armor.json/Resonant Harness": {
+  "action:repair": {
+   "button": "Repair Vitreous armor",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  },
+  "mitigation:vitreous": "Vitreous"
+ },
+ "classes.json/Loyal Friend": {
+  "action:use": {
+   "button": "Loyal Friend",
+   "blocker": "Your companion is unavailable",
+   "lines": null,
+   "report": null
+  },
+  "mitigation:loyal-friend": "Loyal Friend: companion intercepts",
+  "mitigation:loyal-friend-armored": "Loyal Friend: Armored companion intercepts"
+ },
+ "classes.json/Companion": {
+  "trigger:build-on-companion": {
+   "button": "Build on companion success",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "classes.json/Rise to the Challenge": {
+  "option:challenge": "Rise to the Challenge (Hope d20)"
+ },
+ "classes.json/Courage": {
+  "trigger:gain": {
+   "button": "Failed roll with Fear: gain Hope",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "classes.json/Battle Ritual": {
+  "action:use": {
+   "button": "Perform battle ritual",
+   "blocker": null,
+   "lines": [
+    "cleared 0 Stress",
+    "gained 0 Hope"
+   ],
+   "report": "ACTION USED\nBattle Ritual - Perform battle ritual\nMira Ashvale\n• cleared 0 Stress\n• gained 0 Hope"
+  }
+ },
+ "classes.json/Martial Preparation": {
+  "action:train": {
+   "button": "Train together: gain a d6 Slayer Die",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  }
+ },
+ "classes.json/Weapon Specialist": {
+  "option:secondary": "Weapon Specialist - Add a secondary weapon die (successful attack)",
+  "trigger:reroll": {
+   "button": "Reroll Slayer Dice showing 1",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "classes.json/Slayer": {
+  "option:slayer-attack": "Slayer - Slayer Dice",
+  "option:slayer-damage": "Slayer - Slayer Dice"
+ },
+ "classes.json/Sacred Resonance": {
+  "option:resonance": "Sacred Resonance"
+ },
+ "classes.json/Spirit Weapon": {
+  "trigger:use": {
+   "button": "Spirit Weapon: target an additional adversary",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "classes.json/Sparing Touch": {
+  "action:hp": {
+   "button": "Sparing Touch: clear 2 HP",
+   "blocker": null,
+   "lines": [
+    "cleared 2 HP"
+   ],
+   "report": "ACTION USED\nSparing Touch: clear 2 HP\nMira Ashvale\n• cleared 2 HP"
+  },
+  "action:stress": {
+   "button": "Sparing Touch: clear 2 Stress",
+   "blocker": null,
+   "lines": [
+    "cleared 0 Stress"
+   ],
+   "report": "ACTION USED\nSparing Touch: clear 2 Stress\nMira Ashvale\n• cleared 0 Stress"
+  }
+ },
+ "classes.json/Transcendence": {
+  "action:use": {
+   "button": "Transcendence",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nTranscendence\nMira Ashvale"
+  }
+ },
+ "classes.json/Natural Evasion": {
+  "action:use": {
+   "button": "Natural Evasion (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nNatural Evasion\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "classes.json/Elementalist": {
+  "option:elemental-action": "Elementalist - Elemental aid: action",
+  "option:elemental-damage": "Elementalist - Elemental aid: damage"
+ },
+ "classes.json/True Strike": {
+  "action:use": {
+   "button": "True Strike (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nTrue Strike\nMira Ashvale\n• spent 1 Hope"
+  },
+  "trigger:use": {
+   "button": "True Strike",
+   "cost": "1 Hope",
+   "choices": []
+  }
+ },
+ "classes.json/Death Strike": {
+  "action:use": {
+   "button": "Death Strike (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nDeath Strike\nMira Ashvale\n• spent 1 Stress"
+  },
+  "trigger:use": {
+   "button": "Death Strike",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "classes.json/First Strike": {
+  "option:first-strike": "First Strike (double damage)"
+ },
+ "classes.json/Circle of Power": {
+  "action:use": {
+   "button": "Circle of Power",
+   "blocker": "Resource unavailable: circle-of-power",
+   "lines": null,
+   "report": null
+  },
+  "action:spend": {
+   "button": "Spend a circle token (1 circle-of-power)",
+   "blocker": "Required effect is not active",
+   "lines": null,
+   "report": null
+  }
+ },
+ "classes.json/Walk Between Worlds": {
+  "action:use": {
+   "button": "Walk Between Worlds (13)",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nWalk Between Worlds (13)\nMira Ashvale"
+  },
+  "action:spend": {
+   "button": "Spirit answers: spend a token (1 walk-between-worlds)",
+   "blocker": "Required effect is not active",
+   "lines": null,
+   "report": null
+  },
+  "trigger:enter": {
+   "button": "Step beyond the veil",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "classes.json/Vexing Malison": {
+  "option:hexed": "Vexing Malison: Hexed target"
+ },
+ "classes.json/Enchanted Talisman": {
+  "action:use": {
+   "button": "Imbue talisman",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nEnchanted Talisman - Imbue talisman\nMira Ashvale"
+  }
+ },
+ "classes.json/Not Done Yet": {
+  "mitigation:recover": "Not Done Yet"
+ },
+ "classes.json/Surrounded": {
+  "option:targets": "Surrounded - Target additional creatures"
+ },
+ "classes.json/Eye for an Eye": {
+  "action:use": {
+   "button": "Eye for an Eye (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nEye for an Eye\nMira Ashvale\n• spent 1 Stress"
+  },
+  "mitigation:retaliate": "Eye for an Eye"
+ },
+ "classes.json/Overwhelm": {
+  "action:use": {
+   "button": "Overwhelm (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nOverwhelm\nMira Ashvale\n• spent 1 Hope"
+  },
+  "trigger:overwhelm": {
+   "button": "Overwhelm: throw or mark Stress",
+   "cost": "1 Hope",
+   "choices": []
+  }
+ },
+ "classes.json/Limit Breaker": {
+  "action:use": {
+   "button": "Perform athletic feat",
+   "blocker": null,
+   "lines": [
+    "gained 0 Hope",
+    "cleared 0 Stress"
+   ],
+   "report": "ACTION USED\nLimit Breaker - Perform athletic feat\nMira Ashvale\n• gained 0 Hope\n• cleared 0 Stress"
+  }
+ },
+ "classes.json/Keen Defenses": {
+  "action:defend": {
+   "button": "Keen Defenses (1 focus)",
+   "blocker": "Resource unavailable: focus",
+   "lines": null,
+   "report": null
+  }
+ },
+ "classes.json/Focus Cannon": {
+  "action:attack": {
+   "button": "Focus Cannon: Instinct roll (1 focus)",
+   "blocker": "Resource unavailable: focus",
+   "lines": null,
+   "report": null
+  },
+  "action:damage": {
+   "button": "Focus Cannon: damage",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nFocus Cannon: damage\nMira Ashvale"
+  },
+  "trigger:damage": {
+   "button": "Focus Cannon: damage (on success)",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "classes.json/Stance Fighter": {
+  "action:shift": {
+   "button": "Shift stance (1 focus)",
+   "blocker": "Resource unavailable: focus",
+   "lines": null,
+   "report": null
+  },
+  "action:flow-shift": {
+   "button": "Flow State: shift stance (1 Stress)",
+   "blocker": "Required feature is not available",
+   "lines": null,
+   "report": null
+  },
+  "trigger:invigorating": {
+   "button": "Invigorating: successful attack",
+   "cost": "",
+   "choices": []
+  },
+  "trigger:grapple-focus": {
+   "button": "Grappling: Restrain or throw (successful Melee hit)",
+   "cost": "1 focus",
+   "choices": []
+  },
+  "trigger:grapple-stress": {
+   "button": "Grappling: Restrain or throw (successful Melee hit)",
+   "cost": "1 Stress",
+   "choices": []
+  },
+  "trigger:scary": {
+   "button": "Scary: target marks a Stress (on success)",
+   "cost": "",
+   "choices": []
+  },
+  "trigger:crushing": {
+   "button": "Crushing: target marks +1 HP (Severe damage)",
+   "cost": "1 Hope",
+   "choices": []
+  }
+ },
+ "classes.json/Focus": {
+  "action:refocus": {
+   "button": "Refocus (moment of calm)",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nFocus - Refocus (moment of calm)\nMira Ashvale"
+  }
+ },
+ "classes.json/Lunar Phases": {
+  "action:roll": {
+   "button": "Roll Lunar Phases d6",
+   "blocker": null,
+   "lines": [
+    "Lunar Phases: rolled 4. +3 to Major and Severe damage thresholds."
+   ],
+   "report": "ACTION USED\nLunar Phases - Roll Lunar Phases d6\nMira Ashvale\n• Lunar Phases: rolled 4. +3 to Major and Severe damage thresholds."
+  },
+  "action:advance": {
+   "button": "Increase lunar die (1 Hope)",
+   "blocker": "Roll your Lunar Phases die first",
+   "lines": null,
+   "report": null
+  }
+ },
+ "classes.json/Moonbeam": {
+  "action:use": {
+   "button": "Moonbeam",
+   "blocker": null,
+   "lines": [
+    "gained Moonbeam source"
+   ],
+   "report": "ACTION USED\nMoonbeam\nMira Ashvale\n• gained Moonbeam source"
+  }
+ },
+ "classes.json/Night’s Glamour": {
+  "action:roll": {
+   "button": "Night's Glamour (13)",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nNight’s Glamour - Night's Glamour (13)\nMira Ashvale"
+  },
+  "trigger:glamour": {
+   "button": "Become Glamoured",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "classes.json/Vanishing Act": {
+  "action:use": {
+   "button": "Vanishing Act (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nVanishing Act\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "classes.json/Dark Cloud": {
+  "action:cast": {
+   "button": "Dark Cloud",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nDark Cloud\nMira Ashvale"
+  }
+ },
+ "classes.json/Adrenaline": {
+  "option:adrenaline": "Adrenaline"
+ },
+ "classes.json/Shadow Stepper": {
+  "action:use": {
+   "button": "Shadow Stepper (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nShadow Stepper\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "classes.json/Shadowed Grit": {
+  "trigger:hope": {
+   "button": "Shadowed Grit: gain a Hope",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "classes.json/Veilwalker": {
+  "action:use": {
+   "button": "Veilwalker (2 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Hope",
+    "gained Veilwalker"
+   ],
+   "report": "ACTION USED\nVeilwalker\nMira Ashvale\n• spent 2 Hope\n• gained Veilwalker"
+  }
+ },
+ "classes.json/Spectral Form": {
+  "action:use": {
+   "button": "Spectral Form death move",
+   "blocker": "Requires all HP marked and no pending death recovery",
+   "lines": null,
+   "report": null
+  },
+  "mitigation:spectral": "Spectral Form"
+ },
+ "classes.json/Lycan Regeneration": {
+  "action:use": {
+   "button": "Lycan Regeneration (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nLycan Regeneration\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "classes.json/Werewolf": {
+  "option:hearing-scent": "Werewolf - Hearing or scent"
+ },
+ "classes.json/Control the Beast": {
+  "option:agility": "Control the Beast - Wolf Form bonus",
+  "option:strength": "Control the Beast - Wolf Form bonus"
+ },
+ "classes.json/Mutagens": {
+  "action:use": {
+   "button": "Mutagens",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  }
+ },
+ "classes.json/Dark Aegis": {
+  "action:use": {
+   "button": "Prevent damage (1 favor)",
+   "blocker": "Resource unavailable: favor",
+   "lines": null,
+   "report": null
+  },
+  "mitigation:aegis": "Dark Aegis"
+ },
+ "classes.json/Draining Bane": {
+  "action:drain": {
+   "button": "Drain attacker; clear own Stress (1 favor)",
+   "blocker": "Resource unavailable: favor",
+   "lines": null,
+   "report": null
+  }
+ },
+ "classes.json/Harrowing Invocation": {
+  "action:use": {
+   "button": "Harrowing Invocation (1 favor)",
+   "blocker": "Resource unavailable: favor",
+   "lines": null,
+   "report": null
+  }
+ },
+ "classes.json/Damage Sink": {
+  "action:use": {
+   "button": "Halve incoming damage (1 favor)",
+   "blocker": "Resource unavailable: favor",
+   "lines": null,
+   "report": null
+  },
+  "mitigation:sink": "Damage Sink"
+ },
+ "classes.json/Patron’s Mantle": {
+  "action:use": {
+   "button": "Patron’s Mantle (1 favor)",
+   "blocker": "Resource unavailable: favor",
+   "lines": null,
+   "report": null
+  },
+  "option:intimidate": "Patron’s Mantle"
+ },
+ "classes.json/Deathless Embrace": {
+  "action:use": {
+   "button": "Deathless Embrace",
+   "blocker": "Not enough Favor",
+   "lines": null,
+   "report": null
+  }
+ },
+ "classes.json/Fearsome Attack": {
+  "action:use": {
+   "button": "Reroll damage dice (1 favor)",
+   "blocker": "Resource unavailable: favor",
+   "lines": null,
+   "report": null
+  },
+  "trigger:reroll": {
+   "button": "Fearsome Attack",
+   "cost": "1 favor",
+   "choices": []
+  }
+ },
+ "classes.json/Otherworldly Ire": {
+  "action:use": {
+   "button": "Otherworldly Ire",
+   "blocker": "Not enough Favor",
+   "lines": null,
+   "report": null
+  }
+ },
+ "classes.json/Menacing Reach": {
+  "action:use": {
+   "button": "Increase weapon range (1 favor)",
+   "blocker": "Resource unavailable: favor",
+   "lines": null,
+   "report": null
+  },
+  "trigger:end": {
+   "button": "Menacing Reach: end after successful attack",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "classes.json/Diminish My Foes": {
+  "action:use": {
+   "button": "Diminish My Foes",
+   "blocker": "Not enough Favor",
+   "lines": null,
+   "report": null
+  },
+  "trigger:use": {
+   "button": "Diminish My Foes",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "classes.json/Patron’s Fury": {
+  "action:activate": {
+   "button": "Patron’s Fury (1 favor)",
+   "blocker": "Resource unavailable: favor",
+   "lines": null,
+   "report": null
+  },
+  "option:patrons-fury": "Patron’s Fury"
+ },
+ "classes.json/Deadly Vengeance": {
+  "action:use": {
+   "button": "Deadly Vengeance (1 favor)",
+   "blocker": "Not enough Favor",
+   "lines": null,
+   "report": null
+  },
+  "mitigation:vengeance": "Deadly Vengeance"
+ },
+ "classes.json/Venomancer": {
+  "option:fear-leaf": "Venomancer - Fear Leaf"
+ },
+ "classes.json/Toxic Concoctions": {
+  "action:brew": {
+   "button": "Brew toxic concoctions (1 Stress)",
+   "blocker": "Resource unavailable: poison",
+   "lines": null,
+   "report": null
+  },
+  "action:poison": {
+   "button": "Afflict with poison (1 poison)",
+   "blocker": "Resource unavailable: poison",
+   "lines": null,
+   "report": null
+  },
+  "option:leech-weed": "Toxic Concoctions - Leech Weed",
+  "trigger:poison": {
+   "button": "Afflict with poison",
+   "cost": "1 poison",
+   "choices": []
+  }
+ },
+ "classes.json/Arcane Charge": {
+  "action:use": {
+   "button": "Arcane Charge (2 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Hope",
+    "gained Charged"
+   ],
+   "report": "ACTION USED\nArcane Charge\nMira Ashvale\n• spent 2 Hope\n• gained Charged"
+  },
+  "action:magic-damage": {
+   "button": "Charged by magic damage",
+   "blocker": null,
+   "lines": [
+    "gained Charged"
+   ],
+   "report": "ACTION USED\nArcane Charge - Charged by magic damage\nMira Ashvale\n• gained Charged"
+  },
+  "option:damage": "Arcane Charge - Spend Charge",
+  "mitigation:charge": "Arcane Charge: become Charged"
+ },
+ "classes.json/Enchanted Aid": {
+  "action:use": {
+   "button": "Help an Ally: d8",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nEnchanted Aid - Help an Ally: d8\nMira Ashvale"
+  },
+  "action:manual-swap": {
+   "button": "Swap Duality dice",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nEnchanted Aid - Swap Duality dice\nMira Ashvale"
+  },
+  "trigger:swap": {
+   "button": "Enchanted Aid: swap Duality dice",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "classes.json/Manipulate Magic": {
+  "action:use": {
+   "button": "Manipulate Magic (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nManipulate Magic\nMira Ashvale\n• spent 1 Stress"
+  },
+  "trigger:action": {
+   "button": "Manipulate Magic",
+   "cost": "1 Stress",
+   "choices": [
+    "Extend reach by one range",
+    "+2 to this roll",
+    "Hit an additional target within range"
+   ]
+  },
+  "trigger:damage": {
+   "button": "Manipulate Magic: double a die",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "classes.json/Perfect Recall": {
+  "action:use": {
+   "button": "Perfect Recall",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nPerfect Recall\nMira Ashvale"
+  }
+ },
+ "classes.json/Adept": {
+  "option:adept": "Adept"
+ },
+ "classes.json/Face Your Fear": {
+  "option:fear": "Face Your Fear"
+ },
+ "classes.json/Thrive in Chaos": {
+  "action:use": {
+   "button": "Thrive in Chaos (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nThrive in Chaos\nMira Ashvale\n• spent 1 Stress"
+  },
+  "trigger:use": {
+   "button": "Thrive in Chaos",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "classes.json/Loyal Protector": {
+  "action:use": {
+   "button": "Loyal Protector (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nLoyal Protector\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "classes.json/Partners-in-Arms": {
+  "action:use": {
+   "button": "Partners-in-Arms (1 Armor Slot)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Armor Slot"
+   ],
+   "report": "ACTION USED\nPartners-in-Arms\nMira Ashvale\n• spent 1 Armor Slot"
+  }
+ },
+ "classes.json/Iron Will": {
+  "mitigation:iron-will": "Iron Will"
+ },
+ "classes.json/Reliable Backup": {
+  "option:presence": "Reliable Backup: Hope d20",
+  "mitigation:shield": "Reliable Backup: reduce HP marked by 1"
+ },
+ "classes.json/Contacts Everywhere": {
+  "action:use": {
+   "button": "Contacts Everywhere",
+   "blocker": null,
+   "lines": [
+    "gained Contacts Everywhere"
+   ],
+   "report": "ACTION USED\nContacts Everywhere\nMira Ashvale\n• gained Contacts Everywhere"
+  }
+ },
+ "classes.json/Relaxing Song": {
+  "action:use": {
+   "button": "Relaxing Song",
+   "blocker": null,
+   "lines": [
+    "cleared 1 HP"
+   ],
+   "report": "ACTION USED\nRelaxing Song\nMira Ashvale\n• cleared 1 HP"
+  }
+ },
+ "classes.json/Epic Song": {
+  "action:use": {
+   "button": "Epic Song",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nEpic Song\nMira Ashvale"
+  }
+ },
+ "classes.json/Heartbreaking Song": {
+  "action:use": {
+   "button": "Heartbreaking Song",
+   "blocker": null,
+   "lines": [
+    "gained 0 Hope"
+   ],
+   "report": "ACTION USED\nHeartbreaking Song\nMira Ashvale\n• gained 0 Hope"
+  }
+ },
+ "classes.json/Nemesis": {
+  "action:use": {
+   "button": "Nemesis (2 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Hope",
+    "gained Prioritized"
+   ],
+   "report": "ACTION USED\nNemesis\nMira Ashvale\n• spent 2 Hope\n• gained Prioritized"
+  },
+  "trigger:swap": {
+   "button": "Nemesis: swap Hope and Fear",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "classes.json/Act of Reprisal": {
+  "option:reprisal": "Act of Reprisal - +1 Proficiency"
+ },
+ "classes.json/Revenge": {
+  "action:use": {
+   "button": "Revenge (2 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Stress"
+   ],
+   "report": "ACTION USED\nRevenge\nMira Ashvale\n• spent 2 Stress"
+  }
+ },
+ "classes.json/Defender": {
+  "action:use": {
+   "button": "Defender (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nDefender\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "classes.json/Warden’s Protection": {
+  "action:use": {
+   "button": "Warden’s Protection (2 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Hope",
+    "Clear 2 HP on each of up to 4 allies within Close range."
+   ],
+   "report": "ACTION USED\nWarden’s Protection\nMira Ashvale\n• spent 2 Hope\n• Clear 2 HP on each of up to 4 allies within Close range."
+  }
+ },
+ "classes.json/Clarity of Nature": {
+  "action:use": {
+   "button": "Clarity of Nature",
+   "blocker": null,
+   "lines": [
+    "Clear 1 Stress in total, distributed between you and your allies after resting in the space."
+   ],
+   "report": "ACTION USED\nClarity of Nature\nMira Ashvale\n• Clear 1 Stress in total, distributed between you and your allies after resting in the space."
+  }
+ },
+ "classes.json/Regeneration": {
+  "action:use": {
+   "button": "Regeneration (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope",
+    "cleared 2 HP (1d4)"
+   ],
+   "report": "ACTION USED\nRegeneration\nMira Ashvale\n• spent 3 Hope\n• cleared 2 HP (1d4)"
+  }
+ },
+ "classes.json/Elemental Dominion: Water": {
+  "action:vulnerable": {
+   "button": "Make attacker Vulnerable (1 Stress)",
+   "blocker": "Required effect is not active",
+   "lines": null,
+   "report": null
+  }
+ },
+ "classes.json/Elemental Aura": {
+  "action:use": {
+   "button": "Elemental Aura",
+   "blocker": "Channel an element first",
+   "lines": null,
+   "report": null
+  }
+ },
+ "classes.json/Elemental Aura: Water": {
+  "action:move": {
+   "button": "Move attacker (1 Stress)",
+   "blocker": "Required effect is not active",
+   "lines": null,
+   "report": null
+  }
+ },
+ "classes.json/Elemental Aura: Air": {
+  "action:reduce": {
+   "button": "Roll damage reduction",
+   "blocker": "Required effect is not active",
+   "lines": null,
+   "report": null
+  }
+ },
+ "classes.json/Elemental Incarnation: Fire": {
+  "action:channel": {
+   "button": "Channel Fire (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress",
+    "gained Channeling: Fire"
+   ],
+   "report": "ACTION USED\nElemental Incarnation: Fire - Channel Fire\nMira Ashvale\n• spent 1 Stress\n• gained Channeling: Fire"
+  },
+  "action:retaliate": {
+   "button": "Fire retaliation",
+   "blocker": "Required effect is not active",
+   "lines": null,
+   "report": null
+  }
+ },
+ "classes.json/Elemental Incarnation: Earth": {
+  "action:channel": {
+   "button": "Channel Earth (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress",
+    "gained Channeling: Earth"
+   ],
+   "report": "ACTION USED\nElemental Incarnation: Earth - Channel Earth\nMira Ashvale\n• spent 1 Stress\n• gained Channeling: Earth"
+  }
+ },
+ "classes.json/Elemental Incarnation: Water": {
+  "action:channel": {
+   "button": "Channel Water (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress",
+    "gained Channeling: Water"
+   ],
+   "report": "ACTION USED\nElemental Incarnation: Water - Channel Water\nMira Ashvale\n• spent 1 Stress\n• gained Channeling: Water"
+  }
+ },
+ "classes.json/Elemental Incarnation: Air": {
+  "action:channel": {
+   "button": "Channel Air (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress",
+    "gained Channeling: Air"
+   ],
+   "report": "ACTION USED\nElemental Incarnation: Air - Channel Air\nMira Ashvale\n• spent 1 Stress\n• gained Channeling: Air"
+  }
+ },
+ "classes.json/Apex Predator": {
+  "action:use": {
+   "button": "Apex Predator (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nApex Predator\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "classes.json/Ruthless Predator": {
+  "action:use": {
+   "button": "Ruthless Predator (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nRuthless Predator\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "classes.json/Ethereal Visage": {
+  "option:advantage": "Ethereal Visage"
+ },
+ "classes.json/Wings of Light": {
+  "action:carry": {
+   "button": "Carry willing creature while flying (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nWings of Light - Carry willing creature while flying\nMira Ashvale\n• spent 1 Stress"
+  },
+  "option:wings": "Wings of Light"
+ },
+ "classes.json/Epic Poetry": {
+  "action:help": {
+   "button": "Help an Ally: roll d10 advantage (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nEpic Poetry - Help an Ally: roll d10 advantage\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "classes.json/Eloquent": {
+  "action:use": {
+   "button": "Eloquent",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nEloquent\nMira Ashvale"
+  }
+ },
+ "classes.json/Rousing Speech": {
+  "action:use": {
+   "button": "Rousing Speech",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nRousing Speech\nMira Ashvale"
+  }
+ },
+ "classes.json/Heart of a Poet": {
+  "trigger:poet": {
+   "button": "Heart of a Poet",
+   "cost": "1 Hope",
+   "choices": []
+  }
+ },
+ "classes.json/Hold Them Off": {
+  "action:use": {
+   "button": "Hold Them Off (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope"
+   ],
+   "report": "ACTION USED\nHold Them Off\nMira Ashvale\n• spent 3 Hope"
+  },
+  "option:use": "Hold Them Off"
+ },
+ "classes.json/Ranger’s Focus": {
+  "action:activate": {
+   "button": "Ranger’s Focus (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "gained Ranger’s Focus"
+   ],
+   "report": "ACTION USED\nRanger’s Focus\nMira Ashvale\n• spent 1 Hope\n• gained Ranger’s Focus"
+  },
+  "option:rangers-focus": "Ranger’s Focus",
+  "trigger:reroll": {
+   "button": "Ranger’s Focus: reroll (ends the feature)",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "classes.json/No Mercy": {
+  "action:activate": {
+   "button": "No Mercy (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope",
+    "gained No Mercy"
+   ],
+   "report": "ACTION USED\nNo Mercy\nMira Ashvale\n• spent 3 Hope\n• gained No Mercy"
+  },
+  "option:no-mercy": "No Mercy"
+ },
+ "classes.json/Combat Training": {
+  "option:training": "Combat Training"
+ },
+ "classes.json/Life Support": {
+  "action:use": {
+   "button": "Life Support (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope",
+    "cleared 1 HP"
+   ],
+   "report": "ACTION USED\nLife Support\nMira Ashvale\n• spent 3 Hope\n• cleared 1 HP"
+  }
+ },
+ "classes.json/Prayer Dice": {
+  "action:roll": {
+   "button": "Roll Prayer Dice",
+   "blocker": null,
+   "lines": [
+    "Rolled 1d4: 4.",
+    "Available Prayer Dice: 4."
+   ],
+   "report": "ACTION USED\nPrayer Dice - Roll Prayer Dice\nMira Ashvale\n• Rolled 1d4: 4.\n• Available Prayer Dice: 4."
+  }
+ },
+ "classes.json/Volatile Magic": {
+  "action:use": {
+   "button": "Volatile Magic (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope"
+   ],
+   "report": "ACTION USED\nVolatile Magic\nMira Ashvale\n• spent 3 Hope"
+  },
+  "trigger:reroll": {
+   "button": "Volatile Magic",
+   "cost": "3 Hope",
+   "choices": []
+  }
+ },
+ "classes.json/Minor Illusion": {
+  "action:spellcast": {
+   "button": "Spellcast (10)",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nMinor Illusion - Spellcast (10)\nMira Ashvale"
+  }
+ },
+ "classes.json/Channel Raw Power": {
+  "action:use": {
+   "button": "Channel Raw Power",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nChannel Raw Power\nMira Ashvale"
+  }
+ },
+ "classes.json/Deadly Determination": {
+  "action:use": {
+   "button": "Clear 2 Stress (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope",
+    "cleared 0 Stress"
+   ],
+   "report": "ACTION USED\nDeadly Determination - Clear 2 Stress\nMira Ashvale\n• spent 3 Hope\n• cleared 0 Stress"
+  }
+ },
+ "classes.json/Marked For Death": {
+  "action:use": {
+   "button": "Marked For Death (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress",
+    "gained Marked for Death"
+   ],
+   "report": "ACTION USED\nMarked For Death\nMira Ashvale\n• spent 1 Stress\n• gained Marked for Death"
+  },
+  "option:marked-for-death": "Marked For Death - Marked for Death",
+  "trigger:use": {
+   "button": "Marked For Death",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "classes.json/Get In & Get Out": {
+  "action:use": {
+   "button": "Get In & Get Out (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nGet In & Get Out\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "classes.json/Witch’s Charm": {
+  "action:use": {
+   "button": "Witch’s Charm (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope"
+   ],
+   "report": "ACTION USED\nWitch’s Charm\nMira Ashvale\n• spent 3 Hope"
+  }
+ },
+ "classes.json/Hex": {
+  "action:use": {
+   "button": "Hex (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nHex\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "classes.json/Commune": {
+  "action:use": {
+   "button": "Commune",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nCommune\nMira Ashvale"
+  }
+ },
+ "classes.json/Square Up": {
+  "action:use": {
+   "button": "Square Up (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope"
+   ],
+   "report": "ACTION USED\nSquare Up\nMira Ashvale\n• spent 3 Hope"
+  }
+ },
+ "classes.json/Combo Strike": {
+  "option:stress": "Combo Strike",
+  "option:focus": "Combo Strike - Flow State: Combo Strike"
+ },
+ "classes.json/Make a Scene": {
+  "action:use": {
+   "button": "Make a Scene (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope"
+   ],
+   "report": "ACTION USED\nMake a Scene\nMira Ashvale\n• spent 3 Hope"
+  }
+ },
+ "classes.json/Rally": {
+  "action:use": {
+   "button": "Rally",
+   "blocker": null,
+   "lines": [
+    "gained Rally Die"
+   ],
+   "report": "ACTION USED\nRally\nMira Ashvale\n• gained Rally Die"
+  }
+ },
+ "classes.json/Blood Maledict": {
+  "action:use": {
+   "button": "Blood Maledict (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope",
+    "gained Blood Maledict"
+   ],
+   "report": "ACTION USED\nBlood Maledict\nMira Ashvale\n• spent 3 Hope\n• gained Blood Maledict"
+  }
+ },
+ "classes.json/Crimson Rite": {
+  "action:use": {
+   "button": "Crimson Rite (1 HP)",
+   "blocker": null,
+   "lines": [
+    "spent 1 HP",
+    "gained Crimson Rite"
+   ],
+   "report": "ACTION USED\nCrimson Rite\nMira Ashvale\n• spent 1 HP\n• gained Crimson Rite"
+  }
+ },
+ "classes.json/Grim Psychometry": {
+  "action:spellcast": {
+   "button": "Spellcast (12)",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nGrim Psychometry - Spellcast (12)\nMira Ashvale"
+  },
+  "trigger:vision": {
+   "button": "Grim Psychometry: mark Stress for a vision",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "classes.json/Evolution": {
+  "action:use": {
+   "button": "Evolution (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope"
+   ],
+   "report": "ACTION USED\nEvolution\nMira Ashvale\n• spent 3 Hope"
+  }
+ },
+ "classes.json/Beastform": {
+  "action:use": {
+   "button": "Beastform (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nBeastform\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "classes.json/Rogue’s Dodge": {
+  "action:use": {
+   "button": "Rogue’s Dodge (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope",
+    "gained Rogue’s Dodge"
+   ],
+   "report": "ACTION USED\nRogue’s Dodge\nMira Ashvale\n• spent 3 Hope\n• gained Rogue’s Dodge"
+  }
+ },
+ "classes.json/Sneak Attack": {
+  "option:sneak": "Sneak Attack"
+ },
+ "classes.json/Frontline Tank": {
+  "action:use": {
+   "button": "Clear 2 Armor Slots (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope",
+    "cleared 1 Armor Slots"
+   ],
+   "report": "ACTION USED\nFrontline Tank - Clear 2 Armor Slots\nMira Ashvale\n• spent 3 Hope\n• cleared 1 Armor Slots"
+  }
+ },
+ "classes.json/Unstoppable": {
+  "action:use": {
+   "button": "Unstoppable",
+   "blocker": null,
+   "lines": [
+    "gained Unstoppable"
+   ],
+   "report": "ACTION USED\nUnstoppable\nMira Ashvale\n• gained Unstoppable"
+  },
+  "trigger:advance": {
+   "button": "Unstoppable: dealt HP - increase die",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "classes.json/Patron’s Boon": {
+  "action:use": {
+   "button": "Patron’s Boon (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope"
+   ],
+   "report": "ACTION USED\nPatron’s Boon\nMira Ashvale\n• spent 3 Hope"
+  },
+  "trigger:reroll": {
+   "button": "Patron’s Boon: reroll with advantage",
+   "cost": "3 Hope",
+   "choices": []
+  }
+ },
+ "classes.json/Patron’s Pact": {
+  "option:patron-die": "Patron’s Pact - Patron Die"
+ },
+ "classes.json/Favor": {
+  "action:tribute": {
+   "button": "Downtime tribute",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  }
+ },
+ "classes.json/Not This Time": {
+  "action:use": {
+   "button": "Not This Time (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope"
+   ],
+   "report": "ACTION USED\nNot This Time\nMira Ashvale\n• spent 3 Hope"
+  }
+ },
+ "classes.json/Strange Patterns": {
+  "trigger:hope": {
+   "button": "Strange Patterns: gain a Hope",
+   "cost": "",
+   "choices": []
+  },
+  "trigger:stress": {
+   "button": "Strange Patterns: clear a Stress",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "communities.json/Unbound": {
+  "action:use": {
+   "button": "Unbound",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nUnbound\nMira Ashvale"
+  },
+  "trigger:hope": {
+   "button": "Unbound: change Fear into Hope",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "communities.json/Close-Knit": {
+  "action:use": {
+   "button": "Close-Knit",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nClose-Knit\nMira Ashvale"
+  }
+ },
+ "communities.json/Privilege": {
+  "option:advantage": "Privilege"
+ },
+ "communities.json/Well-Read": {
+  "option:advantage": "Well-Read"
+ },
+ "communities.json/Dedicated": {
+  "action:use": {
+   "button": "Dedicated",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nDedicated\nMira Ashvale"
+  },
+  "option:hope-die": "Dedicated (Hope d20)"
+ },
+ "communities.json/Found Family": {
+  "option:use": "Found Family"
+ },
+ "communities.json/Steady": {
+  "option:advantage": "Steady"
+ },
+ "communities.json/Know the Tide": {
+  "option:tide": "Know the Tide - Spend Tide token",
+  "trigger:gain": {
+   "button": "Gain Tide token",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "communities.json/Scoundrel": {
+  "option:advantage": "Scoundrel"
+ },
+ "communities.json/Low-Light Living": {
+  "option:advantage": "Low-Light Living"
+ },
+ "communities.json/Nomadic Pack": {
+  "action:use": {
+   "button": "Nomadic Pack (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nNomadic Pack\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "communities.json/Brave Face": {
+  "action:use": {
+   "button": "Brave Face (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nBrave Face\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "communities.json/Lightfoot": {
+  "option:advantage": "Lightfoot"
+ },
+ "consumables.json/Stride Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Next Agility Roll +1"
+   ],
+   "report": "ACTION USED\nStride Potion - Drink\nMira Ashvale\n• gained Next Agility Roll +1"
+  },
+  "option:potion": "Stride Potion - Drink"
+ },
+ "consumables.json/Bolster Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Next Strength Roll +1"
+   ],
+   "report": "ACTION USED\nBolster Potion - Drink\nMira Ashvale\n• gained Next Strength Roll +1"
+  },
+  "option:potion": "Bolster Potion - Drink"
+ },
+ "consumables.json/Control Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Next Finesse Roll +1"
+   ],
+   "report": "ACTION USED\nControl Potion - Drink\nMira Ashvale\n• gained Next Finesse Roll +1"
+  },
+  "option:potion": "Control Potion - Drink"
+ },
+ "consumables.json/Attune Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Next Instinct Roll +1"
+   ],
+   "report": "ACTION USED\nAttune Potion - Drink\nMira Ashvale\n• gained Next Instinct Roll +1"
+  },
+  "option:potion": "Attune Potion - Drink"
+ },
+ "consumables.json/Charm Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Next Presence Roll +1"
+   ],
+   "report": "ACTION USED\nCharm Potion - Drink\nMira Ashvale\n• gained Next Presence Roll +1"
+  },
+  "option:potion": "Charm Potion - Drink"
+ },
+ "consumables.json/Enlighten Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Next Knowledge Roll +1"
+   ],
+   "report": "ACTION USED\nEnlighten Potion - Drink\nMira Ashvale\n• gained Next Knowledge Roll +1"
+  },
+  "option:potion": "Enlighten Potion - Drink"
+ },
+ "consumables.json/Minor Health Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "cleared 2 HP (1d4)"
+   ],
+   "report": "ACTION USED\nMinor Health Potion - Drink\nMira Ashvale\n• cleared 2 HP (1d4)"
+  }
+ },
+ "consumables.json/Minor Stamina Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "cleared 0 Stress (1d4)"
+   ],
+   "report": "ACTION USED\nMinor Stamina Potion - Drink\nMira Ashvale\n• cleared 0 Stress (1d4)"
+  }
+ },
+ "consumables.json/Grindletooth Venom": {
+  "option:coating": "Grindletooth Venom"
+ },
+ "consumables.json/Varik Leaves": {
+  "action:use": {
+   "button": "Eat",
+   "blocker": null,
+   "lines": [
+    "gained 0 Hope"
+   ],
+   "report": "ACTION USED\nVarik Leaves - Eat\nMira Ashvale\n• gained 0 Hope"
+  }
+ },
+ "consumables.json/Vial of Moondrip": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Darkvision"
+   ],
+   "report": "ACTION USED\nVial of Moondrip - Drink\nMira Ashvale\n• gained Darkvision"
+  }
+ },
+ "consumables.json/Unstable Arcane Shard": {
+  "action:throw": {
+   "button": "Throw (Finesse)",
+   "blocker": null,
+   "lines": [
+    "gained Unstable Arcane Shard: damage"
+   ],
+   "report": "ACTION USED\nUnstable Arcane Shard - Throw (Finesse)\nMira Ashvale\n• gained Unstable Arcane Shard: damage"
+  }
+ },
+ "consumables.json/Improved Grindletooth Venom": {
+  "option:coating": "Improved Grindletooth Venom"
+ },
+ "consumables.json/Morphing Clay": {
+  "action:use": {
+   "button": "Alter your face (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "gained Unrecognizable"
+   ],
+   "report": "ACTION USED\nMorphing Clay - Alter your face\nMira Ashvale\n• spent 1 Hope\n• gained Unrecognizable"
+  }
+ },
+ "consumables.json/Vial of Darksmoke": {
+  "action:use": {
+   "button": "Add to Evasion against this attack",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nVial of Darksmoke - Add to Evasion against this attack\nMira Ashvale"
+  }
+ },
+ "consumables.json/Jumping Root": {
+  "action:use": {
+   "button": "Eat",
+   "blocker": null,
+   "lines": [
+    "Leap up to Far range once without needing to roll."
+   ],
+   "report": "ACTION USED\nJumping Root - Eat\nMira Ashvale\n• Leap up to Far range once without needing to roll."
+  }
+ },
+ "consumables.json/Snap Powder": {
+  "action:use": {
+   "button": "Use (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress",
+    "cleared 1 HP"
+   ],
+   "report": "ACTION USED\nSnap Powder - Use\nMira Ashvale\n• spent 1 Stress\n• cleared 1 HP"
+  }
+ },
+ "consumables.json/Health Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "cleared 2 HP (1d4+1)"
+   ],
+   "report": "ACTION USED\nHealth Potion - Drink\nMira Ashvale\n• cleared 2 HP (1d4+1)"
+  }
+ },
+ "consumables.json/Stamina Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "cleared 0 Stress (1d4+1)"
+   ],
+   "report": "ACTION USED\nStamina Potion - Drink\nMira Ashvale\n• cleared 0 Stress (1d4+1)"
+  }
+ },
+ "consumables.json/Armor Stitcher": {
+  "action:use": {
+   "button": "Stitch armor",
+   "blocker": null,
+   "lines": [
+    "cleared 0 Armor Slots (@amount)"
+   ],
+   "report": "ACTION USED\nArmor Stitcher - Stitch armor\nMira Ashvale\n• cleared 0 Armor Slots (@amount)"
+  }
+ },
+ "consumables.json/Gill Salve": {
+  "action:use": {
+   "button": "Apply",
+   "blocker": null,
+   "lines": [
+    "gained Water Breathing"
+   ],
+   "report": "ACTION USED\nGill Salve - Apply\nMira Ashvale\n• gained Water Breathing"
+  }
+ },
+ "consumables.json/Replication Parchment": {
+  "action:use": {
+   "button": "Copy a parchment",
+   "blocker": null,
+   "lines": [
+    "Copied the contents of another parchment; this one is now mundane paper."
+   ],
+   "report": "ACTION USED\nReplication Parchment - Copy a parchment\nMira Ashvale\n• Copied the contents of another parchment; this one is now mundane paper."
+  }
+ },
+ "consumables.json/Improved Arcane Shard": {
+  "action:throw": {
+   "button": "Throw (Finesse)",
+   "blocker": null,
+   "lines": [
+    "gained Improved Arcane Shard: damage"
+   ],
+   "report": "ACTION USED\nImproved Arcane Shard - Throw (Finesse)\nMira Ashvale\n• gained Improved Arcane Shard: damage"
+  }
+ },
+ "consumables.json/Major Stride Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained +1 Agility Until Rest"
+   ],
+   "report": "ACTION USED\nMajor Stride Potion - Drink\nMira Ashvale\n• gained +1 Agility Until Rest"
+  }
+ },
+ "consumables.json/Major Bolster Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained +1 Strength Until Rest"
+   ],
+   "report": "ACTION USED\nMajor Bolster Potion - Drink\nMira Ashvale\n• gained +1 Strength Until Rest"
+  }
+ },
+ "consumables.json/Major Control Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained +1 Finesse Until Rest"
+   ],
+   "report": "ACTION USED\nMajor Control Potion - Drink\nMira Ashvale\n• gained +1 Finesse Until Rest"
+  }
+ },
+ "consumables.json/Major Attune Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained +1 Instinct Until Rest"
+   ],
+   "report": "ACTION USED\nMajor Attune Potion - Drink\nMira Ashvale\n• gained +1 Instinct Until Rest"
+  }
+ },
+ "consumables.json/Major Charm Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained +1 Presence Until Rest"
+   ],
+   "report": "ACTION USED\nMajor Charm Potion - Drink\nMira Ashvale\n• gained +1 Presence Until Rest"
+  }
+ },
+ "consumables.json/Major Enlighten Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained +1 Knowledge Until Rest"
+   ],
+   "report": "ACTION USED\nMajor Enlighten Potion - Drink\nMira Ashvale\n• gained +1 Knowledge Until Rest"
+  }
+ },
+ "consumables.json/Blood of the Yorgi": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "Disappeared and reappeared at a point you can see within Very Far range."
+   ],
+   "report": "ACTION USED\nBlood of the Yorgi - Drink\nMira Ashvale\n• Disappeared and reappeared at a point you can see within Very Far range."
+  }
+ },
+ "consumables.json/Homet’s Secret Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Next Successful Attack: Critical"
+   ],
+   "report": "ACTION USED\nHomet’s Secret Potion - Drink\nMira Ashvale\n• gained Next Successful Attack: Critical"
+  }
+ },
+ "consumables.json/Redthorn Saliva": {
+  "option:coating": "Redthorn Saliva"
+ },
+ "consumables.json/Channelstone": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [
+    "Took a spell or grimoire from the vault to use once; return it to the vault afterwards."
+   ],
+   "report": "ACTION USED\nChannelstone - Use\nMira Ashvale\n• Took a spell or grimoire from the vault to use once; return it to the vault afterwards."
+  }
+ },
+ "consumables.json/Mythic Dust": {
+  "option:coating": "Mythic Dust"
+ },
+ "consumables.json/Acidpaste": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [
+    "The paste eats away walls and other surfaces in bright flashes."
+   ],
+   "report": "ACTION USED\nAcidpaste - Use\nMira Ashvale\n• The paste eats away walls and other surfaces in bright flashes."
+  }
+ },
+ "consumables.json/Hopehold Flare": {
+  "action:use": {
+   "button": "Light the flare",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nHopehold Flare - Light the flare\nMira Ashvale"
+  }
+ },
+ "consumables.json/Major Arcane Shard": {
+  "action:throw": {
+   "button": "Throw (Finesse)",
+   "blocker": null,
+   "lines": [
+    "gained Major Arcane Shard: damage"
+   ],
+   "report": "ACTION USED\nMajor Arcane Shard - Throw (Finesse)\nMira Ashvale\n• gained Major Arcane Shard: damage"
+  }
+ },
+ "consumables.json/Featherbone": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [
+    "gained Featherbone"
+   ],
+   "report": "ACTION USED\nFeatherbone - Use\nMira Ashvale\n• gained Featherbone"
+  }
+ },
+ "consumables.json/Circle of the Void": {
+  "action:use": {
+   "button": "Create the void (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress",
+    "gained Circle of the Void"
+   ],
+   "report": "ACTION USED\nCircle of the Void - Create the void\nMira Ashvale\n• spent 1 Stress\n• gained Circle of the Void"
+  }
+ },
+ "consumables.json/Sun Tree Sap": {
+  "action:use": {
+   "button": "Consume",
+   "blocker": null,
+   "lines": [
+    "rolled 1d6 = 4: Clear 3 Stress.",
+    "cleared 0 Stress"
+   ],
+   "report": "ACTION USED\nSun Tree Sap - Consume\nMira Ashvale\n• rolled 1d6 = 4: Clear 3 Stress.\n• cleared 0 Stress"
+  }
+ },
+ "consumables.json/Dripfang Poison": {
+  "action:use": {
+   "button": "Poison: 8d10 direct magic damage",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nDripfang Poison - Poison: 8d10 direct magic damage\nMira Ashvale"
+  }
+ },
+ "consumables.json/Major Health Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "cleared 2 HP (1d4+2)"
+   ],
+   "report": "ACTION USED\nMajor Health Potion - Drink\nMira Ashvale\n• cleared 2 HP (1d4+2)"
+  }
+ },
+ "consumables.json/Major Stamina Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "cleared 0 Stress (1d4+2)"
+   ],
+   "report": "ACTION USED\nMajor Stamina Potion - Drink\nMira Ashvale\n• cleared 0 Stress (1d4+2)"
+  }
+ },
+ "consumables.json/Ogre Musk": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [
+    "gained Untrackable"
+   ],
+   "report": "ACTION USED\nOgre Musk - Use\nMira Ashvale\n• gained Untrackable"
+  }
+ },
+ "consumables.json/Wingsprout": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [
+    "gained Wingsprout Wings"
+   ],
+   "report": "ACTION USED\nWingsprout - Use\nMira Ashvale\n• gained Wingsprout Wings"
+  }
+ },
+ "consumables.json/Jar of Lost Voices": {
+  "action:use": {
+   "button": "Open the jar: 6d8 magic damage",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nJar of Lost Voices - Open the jar: 6d8 magic damage\nMira Ashvale"
+  }
+ },
+ "consumables.json/Dragonbloom Tea": {
+  "action:throw": {
+   "button": "Breathe fire (Instinct)",
+   "blocker": null,
+   "lines": [
+    "gained Dragonbloom Breath: damage"
+   ],
+   "report": "ACTION USED\nDragonbloom Tea - Breathe fire (Instinct)\nMira Ashvale\n• gained Dragonbloom Breath: damage"
+  }
+ },
+ "consumables.json/Bridge Seed": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [
+    "gained Bridge Vines"
+   ],
+   "report": "ACTION USED\nBridge Seed - Use\nMira Ashvale\n• gained Bridge Vines"
+  }
+ },
+ "consumables.json/Feast of Xuria": {
+  "action:use": {
+   "button": "Eat",
+   "blocker": null,
+   "lines": [
+    "cleared 2 HP",
+    "cleared 0 Stress",
+    "gained 0 Hope"
+   ],
+   "report": "ACTION USED\nFeast of Xuria - Eat\nMira Ashvale\n• cleared 2 HP\n• cleared 0 Stress\n• gained 0 Hope"
+  }
+ },
+ "consumables.json/Bonding Honey": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [
+    "Glued two objects together permanently."
+   ],
+   "report": "ACTION USED\nBonding Honey - Use\nMira Ashvale\n• Glued two objects together permanently."
+  }
+ },
+ "consumables.json/Shrinking Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Shrunken Form"
+   ],
+   "report": "ACTION USED\nShrinking Potion - Drink\nMira Ashvale\n• gained Shrunken Form"
+  }
+ },
+ "consumables.json/Growing Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Giant Form"
+   ],
+   "report": "ACTION USED\nGrowing Potion - Drink\nMira Ashvale\n• gained Giant Form"
+  }
+ },
+ "consumables.json/Knowledge Stone": {
+  "action:use": {
+   "button": "Pass on knowledge",
+   "blocker": null,
+   "lines": [
+    "An ally takes a card from the fallen holder’s loadout into their loadout or vault; the stone crumbles."
+   ],
+   "report": "ACTION USED\nKnowledge Stone - Pass on knowledge\nMira Ashvale\n• An ally takes a card from the fallen holder’s loadout into their loadout or vault; the stone crumbles."
+  }
+ },
+ "consumables.json/Blinding Orb": {
+  "action:use": {
+   "button": "Activate",
+   "blocker": null,
+   "lines": [
+    "A flash of bright light: all targets within Close range become Vulnerable until they mark HP."
+   ],
+   "report": "ACTION USED\nBlinding Orb - Activate\nMira Ashvale\n• A flash of bright light: all targets within Close range become Vulnerable until they mark HP."
+  }
+ },
+ "consumables.json/Death Tea": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Death Tea"
+   ],
+   "report": "ACTION USED\nDeath Tea - Drink\nMira Ashvale\n• gained Death Tea"
+  }
+ },
+ "consumables.json/Mirror of Marigold": {
+  "mitigation:mirror": "Mirror of Marigold"
+ },
+ "consumables.json/Stardrop": {
+  "action:use": {
+   "button": "Summon comets: 8d20 physical damage",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nStardrop - Summon comets: 8d20 physical damage\nMira Ashvale"
+  }
+ },
+ "consumables.json/Abyssal Sap": {
+  "action:throw": {
+   "button": "Throw (Finesse)",
+   "blocker": null,
+   "lines": [
+    "gained Abyssal Sap: Vicious Entangle"
+   ],
+   "report": "ACTION USED\nAbyssal Sap - Throw (Finesse)\nMira Ashvale\n• gained Abyssal Sap: Vicious Entangle"
+  }
+ },
+ "consumables.json/Aetherflower Tea": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Magic Sense"
+   ],
+   "report": "ACTION USED\nAetherflower Tea - Drink\nMira Ashvale\n• gained Magic Sense"
+  }
+ },
+ "consumables.json/Aetherflower": {
+  "action:sense": {
+   "button": "Sense magic",
+   "blocker": null,
+   "lines": [
+    "The flower points toward the strongest source of magic within Very Close range."
+   ],
+   "report": "ACTION USED\nAetherflower - Sense magic\nMira Ashvale\n• The flower points toward the strongest source of magic within Very Close range."
+  }
+ },
+ "consumables.json/Arcane Stuffing": {
+  "action:downtime-narrative": {
+   "button": "Narrative downtime move",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  }
+ },
+ "consumables.json/Archivist’s Rot": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [
+    "gained Archivist’s Rot"
+   ],
+   "report": "ACTION USED\nArchivist’s Rot - Use\nMira Ashvale\n• gained Archivist’s Rot"
+  }
+ },
+ "consumables.json/Astral Termite Jaws": {
+  "action:use": {
+   "button": "Chew a portal",
+   "blocker": null,
+   "lines": [
+    "Chewed into a wall to create a portal to another wall within Far range."
+   ],
+   "report": "ACTION USED\nAstral Termite Jaws - Chew a portal\nMira Ashvale\n• Chewed into a wall to create a portal to another wall within Far range."
+  }
+ },
+ "consumables.json/Backsies Stone": {
+  "action:use": {
+   "button": "Swallow: unsay your last sentence (6 Hope)",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nBacksies Stone - Swallow: unsay your last sentence\nMira Ashvale"
+  }
+ },
+ "consumables.json/Blood of the Kaiju": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Blood of the Kaiju"
+   ],
+   "report": "ACTION USED\nBlood of the Kaiju - Drink\nMira Ashvale\n• gained Blood of the Kaiju"
+  }
+ },
+ "consumables.json/Blossomveil Petal": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [
+    "gained Blossomveil Petal"
+   ],
+   "report": "ACTION USED\nBlossomveil Petal - Use\nMira Ashvale\n• gained Blossomveil Petal"
+  }
+ },
+ "consumables.json/Book of No History": {
+  "action:use": {
+   "button": "Remove a page",
+   "blocker": null,
+   "lines": [
+    "Removed a page: those elements of your past are forgotten by everyone but you. The book burns to ash."
+   ],
+   "report": "ACTION USED\nBook of No History - Remove a page\nMira Ashvale\n• Removed a page: those elements of your past are forgotten by everyone but you. The book burns to ash."
+  }
+ },
+ "consumables.json/Boomberry Jam": {
+  "action:eat": {
+   "button": "Eat a portion (1 jam_portions)",
+   "blocker": "Resource unavailable: jam_portions",
+   "lines": null,
+   "report": null
+  },
+  "action:throw": {
+   "button": "Throw the jar",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nBoomberry Jam - Throw the jar\nMira Ashvale"
+  }
+ },
+ "consumables.json/Boomberry": {
+  "action:eat": {
+   "button": "Eat",
+   "blocker": null,
+   "lines": [
+    "rolled 1d12 = 4: A safe, filling meal."
+   ],
+   "report": "ACTION USED\nBoomberry - Eat\nMira Ashvale\n• rolled 1d12 = 4: A safe, filling meal."
+  }
+ },
+ "consumables.json/Boomcoin": {
+  "action:use": {
+   "button": "Activate (Countdown 4) (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "gained Boomcoin Countdown"
+   ],
+   "report": "ACTION USED\nBoomcoin - Activate (Countdown 4)\nMira Ashvale\n• spent 1 Hope\n• gained Boomcoin Countdown"
+  }
+ },
+ "consumables.json/Bottled Song": {
+  "action:use": {
+   "button": "Open the bottle",
+   "blocker": null,
+   "lines": [
+    "cleared 0 Stress"
+   ],
+   "report": "ACTION USED\nBottled Song - Open the bottle\nMira Ashvale\n• cleared 0 Stress"
+  }
+ },
+ "consumables.json/Cathartoid Egg": {
+  "action:use": {
+   "button": "Break Cathartoid Egg (death move)",
+   "blocker": "Requires all HP marked and no pending death recovery",
+   "lines": null,
+   "report": null
+  }
+ },
+ "consumables.json/Crystals from Beyond": {
+  "action:use": {
+   "button": "Break with magic",
+   "blocker": null,
+   "lines": [
+    "Plants and animals within Close range mutate into alien forms."
+   ],
+   "report": "ACTION USED\nCrystals from Beyond - Break with magic\nMira Ashvale\n• Plants and animals within Close range mutate into alien forms."
+  }
+ },
+ "consumables.json/Darkstone": {
+  "action:use": {
+   "button": "Exposed to magical light: 2d6 magic damage",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nDarkstone - Exposed to magical light: 2d6 magic damage\nMira Ashvale"
+  }
+ },
+ "consumables.json/Demon Toad Bile": {
+  "action:use": {
+   "button": "Expose to air (Countdown 4)",
+   "blocker": null,
+   "lines": [
+    "gained Demon Toad Bile Countdown"
+   ],
+   "report": "ACTION USED\nDemon Toad Bile - Expose to air (Countdown 4)\nMira Ashvale\n• gained Demon Toad Bile Countdown"
+  }
+ },
+ "consumables.json/Doomsday Potion": {
+  "action:drink": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "Hope slot 1 (marked, 2d12 keep highest): 4: crossed out (scar)",
+    "Hope slot 2 (marked, 2d12 keep highest): 4: crossed out (scar)",
+    "Hope slot 3 (marked, 2d12 keep highest): 4: crossed out (scar)",
+    "Hope slot 4 (marked, 2d12 keep highest): 4: crossed out (scar)",
+    "Hope slot 5 (marked, 2d12 keep highest): 4: crossed out (scar)",
+    "Hope slot 6 (marked, 2d12 keep highest): 4: crossed out (scar)",
+    "gained 6 scars"
+   ],
+   "report": "ACTION USED\nDoomsday Potion - Drink\nMira Ashvale\n• Hope slot 1 (marked, 2d12 keep highest): 4: crossed out (scar)\n• Hope slot 2 (marked, 2d12 keep highest): 4: crossed out (scar)\n• Hope slot 3 (marked, 2d12 keep highest): 4: crossed out (scar)\n• Hope slot 4 (marked, 2d12 keep highest): 4: crossed out (scar)\n• Hope slot 5 (marked, 2d12 keep highest): 4: crossed out (scar)\n• Hope slot 6 (marked, 2d12 keep highest): 4: crossed out (scar)\n• gained 6 scars"
+  }
+ },
+ "consumables.json/Dust of Echoed Silence": {
+  "action:use": {
+   "button": "Scatter",
+   "blocker": null,
+   "lines": [
+    "gained Echoed Silence"
+   ],
+   "report": "ACTION USED\nDust of Echoed Silence - Scatter\nMira Ashvale\n• gained Echoed Silence"
+  }
+ },
+ "consumables.json/Ebony Thread": {
+  "action:use": {
+   "button": "Unspool",
+   "blocker": null,
+   "lines": [
+    "Unspooled up to 500 feet of spectral thread, leaving a trail visible only to you."
+   ],
+   "report": "ACTION USED\nEbony Thread - Unspool\nMira Ashvale\n• Unspooled up to 500 feet of spectral thread, leaving a trail visible only to you."
+  }
+ },
+ "consumables.json/Echo Orchid Petal": {
+  "action:use": {
+   "button": "Consume",
+   "blocker": null,
+   "lines": [
+    "gained Echo Orchid Insight"
+   ],
+   "report": "ACTION USED\nEcho Orchid Petal - Consume\nMira Ashvale\n• gained Echo Orchid Insight"
+  }
+ },
+ "consumables.json/Flare Tuber": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [
+    "gained Flare Tuber"
+   ],
+   "report": "ACTION USED\nFlare Tuber - Use\nMira Ashvale\n• gained Flare Tuber"
+  }
+ },
+ "consumables.json/Griefroot Powder": {
+  "action:use": {
+   "button": "Inhale",
+   "blocker": null,
+   "lines": [
+    "gained Griefroot Powder: d8",
+    "afflicted by Griefroot Grief"
+   ],
+   "report": "ACTION USED\nGriefroot Powder - Inhale\nMira Ashvale\n• gained Griefroot Powder: d8\n• afflicted by Griefroot Grief"
+  }
+ },
+ "consumables.json/Gyre Cap": {
+  "action:downtime-narrative": {
+   "button": "Brew Gyre Cap tea",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  }
+ },
+ "consumables.json/Henry’s Sugar": {
+  "action:use": {
+   "button": "Eat",
+   "blocker": null,
+   "lines": [
+    "gained Henry’s Sugar"
+   ],
+   "report": "ACTION USED\nHenry’s Sugar - Eat\nMira Ashvale\n• gained Henry’s Sugar"
+  }
+ },
+ "consumables.json/Hero’s Powder": {
+  "action:use": {
+   "button": "Inhale",
+   "blocker": null,
+   "lines": [
+    "gained Hero’s Powder"
+   ],
+   "report": "ACTION USED\nHero’s Powder - Inhale\nMira Ashvale\n• gained Hero’s Powder"
+  }
+ },
+ "consumables.json/Incantor’s Chalk": {
+  "action:use": {
+   "button": "Inscribe a spell",
+   "blocker": null,
+   "lines": [
+    "gained Incantor’s Chalk Mark"
+   ],
+   "report": "ACTION USED\nIncantor’s Chalk - Inscribe a spell\nMira Ashvale\n• gained Incantor’s Chalk Mark"
+  }
+ },
+ "consumables.json/Liar’s Bane": {
+  "action:use": {
+   "button": "Chew",
+   "blocker": null,
+   "lines": [
+    "gained Liar’s Bane"
+   ],
+   "report": "ACTION USED\nLiar’s Bane - Chew\nMira Ashvale\n• gained Liar’s Bane"
+  }
+ },
+ "consumables.json/Martyr’s Grass": {
+  "action:downtime-narrative": {
+   "button": "Plant the sprig",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  }
+ },
+ "consumables.json/Mucin of Slipperiness": {
+  "action:use": {
+   "button": "Use",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  }
+ },
+ "consumables.json/Needle Key": {
+  "action:embed": {
+   "button": "Embed the needle",
+   "blocker": null,
+   "lines": [
+    "gained Finesse -1 (Needle Key)"
+   ],
+   "report": "ACTION USED\nNeedle Key - Embed the needle\nMira Ashvale\n• gained Finesse -1 (Needle Key)"
+  }
+ },
+ "consumables.json/Nursewood Sap": {
+  "action:hp": {
+   "button": "Rub on: clear 1d4 HP",
+   "blocker": null,
+   "lines": [
+    "cleared 2 HP (1d4)"
+   ],
+   "report": "ACTION USED\nNursewood Sap - Rub on: clear 1d4 HP\nMira Ashvale\n• cleared 2 HP (1d4)"
+  },
+  "action:stress": {
+   "button": "Rub on: clear 1d4 Stress",
+   "blocker": null,
+   "lines": [
+    "cleared 0 Stress (1d4)"
+   ],
+   "report": "ACTION USED\nNursewood Sap - Rub on: clear 1d4 Stress\nMira Ashvale\n• cleared 0 Stress (1d4)"
+  },
+  "action:other": {
+   "button": "Rub on: clear one condition",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nNursewood Sap - Rub on: clear one condition\nMira Ashvale"
+  }
+ },
+ "consumables.json/Pastries of Warmth": {
+  "action:eat": {
+   "button": "Eat a pastry (1 warmth_pastries)",
+   "blocker": "Resource unavailable: warmth_pastries",
+   "lines": null,
+   "report": null
+  }
+ },
+ "consumables.json/Phantom Fern Shoots": {
+  "action:use": {
+   "button": "Eat raw",
+   "blocker": null,
+   "lines": [
+    "afflicted by Lightheaded"
+   ],
+   "report": "ACTION USED\nPhantom Fern Shoots - Eat raw\nMira Ashvale\n• afflicted by Lightheaded"
+  }
+ },
+ "consumables.json/Phantom Fern Tea": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "The effect of most poisons is removed."
+   ],
+   "report": "ACTION USED\nPhantom Fern Tea - Drink\nMira Ashvale\n• The effect of most poisons is removed."
+  }
+ },
+ "consumables.json/Planar Wood": {
+  "action:craft": {
+   "button": "Craft a magic weapon (Finesse 15)",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nPlanar Wood - Craft a magic weapon (Finesse 15)\nMira Ashvale"
+  }
+ },
+ "consumables.json/Potion of Revealed Paths": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Revealed Paths"
+   ],
+   "report": "ACTION USED\nPotion of Revealed Paths - Drink\nMira Ashvale\n• gained Revealed Paths"
+  }
+ },
+ "consumables.json/Potion of Spiraling Vision": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Spiraling Vision"
+   ],
+   "report": "ACTION USED\nPotion of Spiraling Vision - Drink\nMira Ashvale\n• gained Spiraling Vision"
+  }
+ },
+ "consumables.json/Prismatic Water": {
+  "action:drink": {
+   "button": "Drink: roll Duality Dice",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nPrismatic Water - Drink: roll Duality Dice\nMira Ashvale"
+  }
+ },
+ "consumables.json/Radiant Shard": {
+  "action:use": {
+   "button": "Shatter",
+   "blocker": null,
+   "lines": [
+    "gained Radiant Ward"
+   ],
+   "report": "ACTION USED\nRadiant Shard - Shatter\nMira Ashvale\n• gained Radiant Ward"
+  }
+ },
+ "consumables.json/Seaworthy Charm": {
+  "action:use": {
+   "button": "Press onto a boat",
+   "blocker": null,
+   "lines": [
+    "gained Seaworthy Charm"
+   ],
+   "report": "ACTION USED\nSeaworthy Charm - Press onto a boat\nMira Ashvale\n• gained Seaworthy Charm"
+  }
+ },
+ "consumables.json/Sporemind Tonic": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Sporemind Tonic"
+   ],
+   "report": "ACTION USED\nSporemind Tonic - Drink\nMira Ashvale\n• gained Sporemind Tonic"
+  }
+ },
+ "consumables.json/Storm in a Bottle": {
+  "action:use": {
+   "button": "Open or break: 3d10+3 physical damage",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nStorm in a Bottle - Open or break: 3d10+3 physical damage\nMira Ashvale"
+  }
+ },
+ "consumables.json/Tincture of Fortified Thoughts": {
+  "action:drink": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "cleared 0 Stress (1d4)",
+    "gained Fortified Thoughts"
+   ],
+   "report": "ACTION USED\nTincture of Fortified Thoughts - Drink\nMira Ashvale\n• cleared 0 Stress (1d4)\n• gained Fortified Thoughts"
+  }
+ },
+ "consumables.json/Toxilily Bulb": {
+  "option:cloves": "Toxilily Bulb - Toxilily clove"
+ },
+ "consumables.json/Trinity Flower Petals": {
+  "action:use": {
+   "button": "Brew and drink",
+   "blocker": null,
+   "lines": [
+    "gained Trinity Confidence"
+   ],
+   "report": "ACTION USED\nTrinity Flower Petals - Brew and drink\nMira Ashvale\n• gained Trinity Confidence"
+  }
+ },
+ "consumables.json/Trinity Flower Seed": {
+  "action:use": {
+   "button": "Eat",
+   "blocker": null,
+   "lines": [
+    "gained Wisdom of the Triple Goddess"
+   ],
+   "report": "ACTION USED\nTrinity Flower Seed - Eat\nMira Ashvale\n• gained Wisdom of the Triple Goddess"
+  }
+ },
+ "consumables.json/True Vision Serum": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained True Vision"
+   ],
+   "report": "ACTION USED\nTrue Vision Serum - Drink\nMira Ashvale\n• gained True Vision"
+  }
+ },
+ "consumables.json/Umbra Lily Petals": {
+  "action:use": {
+   "button": "Eat a petal",
+   "blocker": null,
+   "lines": [
+    "gained Umbra Lily"
+   ],
+   "report": "ACTION USED\nUmbra Lily Petals - Eat a petal\nMira Ashvale\n• gained Umbra Lily"
+  }
+ },
+ "consumables.json/Umbral Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Umbral Potion"
+   ],
+   "report": "ACTION USED\nUmbral Potion - Drink\nMira Ashvale\n• gained Umbral Potion"
+  }
+ },
+ "consumables.json/Vial of Crystal Waters": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "Switched out a domain card in your vault without spending the Recall Cost."
+   ],
+   "report": "ACTION USED\nVial of Crystal Waters - Drink\nMira Ashvale\n• Switched out a domain card in your vault without spending the Recall Cost."
+  }
+ },
+ "consumables.json/Votive Bloom Nectar": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "cleared 0 Stress (1d4)",
+    "afflicted by Votive Bloom Devotion"
+   ],
+   "report": "ACTION USED\nVotive Bloom Nectar - Drink\nMira Ashvale\n• cleared 0 Stress (1d4)\n• afflicted by Votive Bloom Devotion"
+  }
+ },
+ "consumables.json/Wardstone Charm": {
+  "action:succeed": {
+   "button": "Automatically succeed vs a fear effect",
+   "blocker": null,
+   "lines": [
+    "Automatically succeeded on a Reaction Roll against a fear-based effect; the charm disintegrates."
+   ],
+   "report": "ACTION USED\nWardstone Charm - Automatically succeed vs a fear effect\nMira Ashvale\n• Automatically succeeded on a Reaction Roll against a fear-based effect; the charm disintegrates."
+  },
+  "action:crush": {
+   "button": "Crush: region of calm",
+   "blocker": null,
+   "lines": [
+    "gained Region of Calm"
+   ],
+   "report": "ACTION USED\nWardstone Charm - Crush: region of calm\nMira Ashvale\n• gained Region of Calm"
+  }
+ },
+ "consumables.json/Wine of Discourse": {
+  "action:use": {
+   "button": "Share the bottle",
+   "blocker": null,
+   "lines": [
+    "gained Wine of Discourse"
+   ],
+   "report": "ACTION USED\nWine of Discourse - Share the bottle\nMira Ashvale\n• gained Wine of Discourse"
+  }
+ },
+ "consumables.json/Witherroot Ichor": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "marked 4 HP",
+    "permanently lost 1 HP slot",
+    "gained Witherroot Ichor"
+   ],
+   "report": "ACTION USED\nWitherroot Ichor - Drink\nMira Ashvale\n• marked 4 HP\n• permanently lost 1 HP slot\n• gained Witherroot Ichor"
+  }
+ },
+ "consumables.json/Witherroot Tonic": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Witherroot Tonic"
+   ],
+   "report": "ACTION USED\nWitherroot Tonic - Drink\nMira Ashvale\n• gained Witherroot Tonic"
+  }
+ },
+ "consumables.json/Yifang Sands": {
+  "action:use": {
+   "button": "Ignite: 3d10 magic damage",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nYifang Sands - Ignite: 3d10 magic damage\nMira Ashvale"
+  }
+ },
+ "consumables.json/Elixir of Eternal Hope": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Eternal Hope"
+   ],
+   "report": "ACTION USED\nElixir of Eternal Hope - Drink\nMira Ashvale\n• gained Eternal Hope"
+  }
+ },
+ "consumables.json/Life Force Beacon": {
+  "action:use": {
+   "button": "Activate the orb (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "gained Life Force Beacon"
+   ],
+   "report": "ACTION USED\nLife Force Beacon - Activate the orb\nMira Ashvale\n• spent 1 Hope\n• gained Life Force Beacon"
+  }
+ },
+ "consumables.json/Scaffold Web": {
+  "action:use": {
+   "button": "Prevent the collapse (Agility Reaction 14)",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nScaffold Web - Prevent the collapse (Agility Reaction 14)\nMira Ashvale"
+  }
+ },
+ "consumables.json/Warding Candle": {
+  "action:use": {
+   "button": "Light the candle",
+   "blocker": null,
+   "lines": [
+    "gained Warding Candle"
+   ],
+   "report": "ACTION USED\nWarding Candle - Light the candle\nMira Ashvale\n• gained Warding Candle"
+  }
+ },
+ "consumables.json/Iridian Dust": {
+  "action:use": {
+   "button": "Throw",
+   "blocker": null,
+   "lines": [
+    "Creatures covered in the dust can’t become Hidden."
+   ],
+   "report": "ACTION USED\nIridian Dust - Throw\nMira Ashvale\n• Creatures covered in the dust can’t become Hidden."
+  }
+ },
+ "consumables.json/Verglasian Seed": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [
+    "Instantly froze an area of water up to Close range."
+   ],
+   "report": "ACTION USED\nVerglasian Seed - Use\nMira Ashvale\n• Instantly froze an area of water up to Close range."
+  }
+ },
+ "consumables.json/Cupbearer’s Bezoar": {
+  "action:use": {
+   "button": "Swallow",
+   "blocker": null,
+   "lines": [
+    "gained Poison Immunity"
+   ],
+   "report": "ACTION USED\nCupbearer’s Bezoar - Swallow\nMira Ashvale\n• gained Poison Immunity"
+  }
+ },
+ "consumables.json/Mossmantle Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Mossmantle"
+   ],
+   "report": "ACTION USED\nMossmantle Potion - Drink\nMira Ashvale\n• gained Mossmantle"
+  }
+ },
+ "consumables.json/Lyrebird Lozenge": {
+  "action:use": {
+   "button": "Dissolve",
+   "blocker": null,
+   "lines": [
+    "gained Lyrebird Voice"
+   ],
+   "report": "ACTION USED\nLyrebird Lozenge - Dissolve\nMira Ashvale\n• gained Lyrebird Voice"
+  }
+ },
+ "consumables.json/Vial of Featherfall": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Featherfall"
+   ],
+   "report": "ACTION USED\nVial of Featherfall - Drink\nMira Ashvale\n• gained Featherfall"
+  }
+ },
+ "consumables.json/Chimeric Saliva": {
+  "action:use": {
+   "button": "Apply to a weapon",
+   "blocker": null,
+   "lines": [
+    "gained Chimeric Saliva"
+   ],
+   "report": "ACTION USED\nChimeric Saliva - Apply to a weapon\nMira Ashvale\n• gained Chimeric Saliva"
+  }
+ },
+ "consumables.json/Packet of Space Dust": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [
+    "Covered things become lighter than air for an hour."
+   ],
+   "report": "ACTION USED\nPacket of Space Dust - Use\nMira Ashvale\n• Covered things become lighter than air for an hour."
+  }
+ },
+ "consumables.json/Deathseer’s Powder": {
+  "action:use": {
+   "button": "Sprinkle",
+   "blocker": null,
+   "lines": [
+    "Conjured a spectral reprise of the corpse’s final minute of life."
+   ],
+   "report": "ACTION USED\nDeathseer’s Powder - Sprinkle\nMira Ashvale\n• Conjured a spectral reprise of the corpse’s final minute of life."
+  }
+ },
+ "consumables.json/Slayer’s Salt": {
+  "action:use": {
+   "button": "Spread",
+   "blocker": null,
+   "lines": [
+    "Created a line of salt that undead creatures can’t cross until it is broken."
+   ],
+   "report": "ACTION USED\nSlayer’s Salt - Spread\nMira Ashvale\n• Created a line of salt that undead creatures can’t cross until it is broken."
+  }
+ },
+ "consumables.json/Yakamel Milk": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Yakamel Milk"
+   ],
+   "report": "ACTION USED\nYakamel Milk - Drink\nMira Ashvale\n• gained Yakamel Milk"
+  }
+ },
+ "consumables.json/Glowmoss Mushroom": {
+  "action:use": {
+   "button": "Break apart",
+   "blocker": null,
+   "lines": [
+    "gained Glowmoss Light"
+   ],
+   "report": "ACTION USED\nGlowmoss Mushroom - Break apart\nMira Ashvale\n• gained Glowmoss Light"
+  }
+ },
+ "consumables.json/Red Ooze Oil": {
+  "option:coating": "Red Ooze Oil"
+ },
+ "consumables.json/Instant Camp": {
+  "action:use": {
+   "button": "Unfold",
+   "blocker": null,
+   "lines": [
+    "gained Instant Camp"
+   ],
+   "report": "ACTION USED\nInstant Camp - Unfold\nMira Ashvale\n• gained Instant Camp"
+  }
+ },
+ "consumables.json/Bundle of Spiderlegs": {
+  "action:use": {
+   "button": "Eat",
+   "blocker": null,
+   "lines": [
+    "gained Spider Climb"
+   ],
+   "report": "ACTION USED\nBundle of Spiderlegs - Eat\nMira Ashvale\n• gained Spider Climb"
+  }
+ },
+ "consumables.json/Ciscan Fog Bottle": {
+  "action:use": {
+   "button": "Break the bottle",
+   "blocker": null,
+   "lines": [
+    "cleared 0 Stress",
+    "Magical mist fills the area within Close range; a creature who enters it clears a Stress and becomes Hidden."
+   ],
+   "report": "ACTION USED\nCiscan Fog Bottle - Break the bottle\nMira Ashvale\n• cleared 0 Stress\n• Magical mist fills the area within Close range; a creature who enters it clears a Stress and becomes Hidden."
+  }
+ },
+ "consumables.json/Snapthorn Seed": {
+  "action:use": {
+   "button": "Throw",
+   "blocker": null,
+   "lines": [
+    "Binding vines temporarily Restrain all creatures within Close range of the point."
+   ],
+   "report": "ACTION USED\nSnapthorn Seed - Throw\nMira Ashvale\n• Binding vines temporarily Restrain all creatures within Close range of the point."
+  }
+ },
+ "consumables.json/Sprite Bottle": {
+  "action:shatter": {
+   "button": "Last HP marked: release the Sprite",
+   "blocker": null,
+   "lines": [
+    "cleared 2 HP"
+   ],
+   "report": "ACTION USED\nSprite Bottle - Last HP marked: release the Sprite\nMira Ashvale\n• cleared 2 HP"
+  }
+ },
+ "consumables.json/Gravity Bomb": {
+  "action:use": {
+   "button": "Throw",
+   "blocker": null,
+   "lines": [
+    "Pulled all creatures and objects within Close range of the point into Melee range with the bomb."
+   ],
+   "report": "ACTION USED\nGravity Bomb - Throw\nMira Ashvale\n• Pulled all creatures and objects within Close range of the point into Melee range with the bomb."
+  }
+ },
+ "consumables.json/Gossip Flower": {
+  "action:use": {
+   "button": "Plant",
+   "blocker": null,
+   "lines": [
+    "The flower records everything it hears for up to one week; pluck it to hear the recording."
+   ],
+   "report": "ACTION USED\nGossip Flower - Plant\nMira Ashvale\n• The flower records everything it hears for up to one week; pluck it to hear the recording."
+  }
+ },
+ "consumables.json/Displacement Token": {
+  "action:use": {
+   "button": "Swallow",
+   "blocker": null,
+   "lines": [
+    "gained Illusory Duplicates"
+   ],
+   "report": "ACTION USED\nDisplacement Token - Swallow\nMira Ashvale\n• gained Illusory Duplicates"
+  }
+ },
+ "consumables.json/Night Hag’s Dust": {
+  "action:use": {
+   "button": "Blow in a face",
+   "blocker": null,
+   "lines": [
+    "The adversary can’t clear Stress until your next long rest."
+   ],
+   "report": "ACTION USED\nNight Hag’s Dust - Blow in a face\nMira Ashvale\n• The adversary can’t clear Stress until your next long rest."
+  }
+ },
+ "consumables.json/Self-Sewing Thread": {
+  "action:hp": {
+   "button": "Clear HP",
+   "blocker": null,
+   "lines": [
+    "cleared 1 HP"
+   ],
+   "report": "ACTION USED\nSelf-Sewing Thread - Clear HP\nMira Ashvale\n• cleared 1 HP"
+  },
+  "action:armor": {
+   "button": "Clear Armor Slots",
+   "blocker": null,
+   "lines": [
+    "cleared 1 Armor Slots"
+   ],
+   "report": "ACTION USED\nSelf-Sewing Thread - Clear Armor Slots\nMira Ashvale\n• cleared 1 Armor Slots"
+  }
+ },
+ "consumables.json/Stonemason’s Fortune": {
+  "action:use": {
+   "button": "Throw",
+   "blocker": null,
+   "lines": [
+    "A 6-foot-tall, 10-foot-wide, 2-foot-deep wall of solid stone grows from the brick."
+   ],
+   "report": "ACTION USED\nStonemason’s Fortune - Throw\nMira Ashvale\n• A 6-foot-tall, 10-foot-wide, 2-foot-deep wall of solid stone grows from the brick."
+  }
+ },
+ "consumables.json/Mnemonic Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Mnemonic Potion"
+   ],
+   "report": "ACTION USED\nMnemonic Potion - Drink\nMira Ashvale\n• gained Mnemonic Potion"
+  }
+ },
+ "consumables.json/Salamander Salve": {
+  "action:use": {
+   "button": "Apply",
+   "blocker": null,
+   "lines": [
+    "gained Heat Immunity"
+   ],
+   "report": "ACTION USED\nSalamander Salve - Apply\nMira Ashvale\n• gained Heat Immunity"
+  }
+ },
+ "consumables.json/Green Ooze Oil": {
+  "option:coating": "Green Ooze Oil"
+ },
+ "consumables.json/Sunlight Orb": {
+  "action:use": {
+   "button": "Shatter",
+   "blocker": null,
+   "lines": [
+    "The area within Very Far range appears sunlit for the next 24 hours."
+   ],
+   "report": "ACTION USED\nSunlight Orb - Shatter\nMira Ashvale\n• The area within Very Far range appears sunlit for the next 24 hours."
+  }
+ },
+ "consumables.json/Moonlight Orb": {
+  "action:use": {
+   "button": "Shatter",
+   "blocker": null,
+   "lines": [
+    "The area within Very Far range appears moonlit for the next 24 hours."
+   ],
+   "report": "ACTION USED\nMoonlight Orb - Shatter\nMira Ashvale\n• The area within Very Far range appears moonlit for the next 24 hours."
+  }
+ },
+ "consumables.json/Midas Flask": {
+  "action:use": {
+   "button": "Pour",
+   "blocker": null,
+   "lines": [
+    "Transmuted a mundane item into a handful of gold; add it to your gold."
+   ],
+   "report": "ACTION USED\nMidas Flask - Pour\nMira Ashvale\n• Transmuted a mundane item into a handful of gold; add it to your gold."
+  }
+ },
+ "consumables.json/Staff of Reversal": {
+  "action:use": {
+   "button": "Break",
+   "blocker": null,
+   "lines": [
+    "Reversed one magical transformation or effect within Far range."
+   ],
+   "report": "ACTION USED\nStaff of Reversal - Break\nMira Ashvale\n• Reversed one magical transformation or effect within Far range."
+  }
+ },
+ "consumables.json/Berserker’s Brew": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Berserker’s Brew"
+   ],
+   "report": "ACTION USED\nBerserker’s Brew - Drink\nMira Ashvale\n• gained Berserker’s Brew"
+  }
+ },
+ "consumables.json/Emberite Shard": {
+  "action:use": {
+   "button": "Throw: 3d6 magic damage (Ablaze)",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nEmberite Shard - Throw: 3d6 magic damage (Ablaze)\nMira Ashvale"
+  }
+ },
+ "consumables.json/Arcticite Shard": {
+  "action:use": {
+   "button": "Throw: 3d6 magic damage (Restrained)",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nArcticite Shard - Throw: 3d6 magic damage (Restrained)\nMira Ashvale"
+  }
+ },
+ "consumables.json/Fulgurite Shard": {
+  "action:use": {
+   "button": "Throw: 3d6 magic damage (1d4 Stress)",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nFulgurite Shard - Throw: 3d6 magic damage (1d4 Stress)\nMira Ashvale"
+  }
+ },
+ "consumables.json/Demiurge’s Draught": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Demiurge’s Draught"
+   ],
+   "report": "ACTION USED\nDemiurge’s Draught - Drink\nMira Ashvale\n• gained Demiurge’s Draught"
+  }
+ },
+ "consumables.json/Cockerel Claw Tea": {
+  "action:drink": {
+   "button": "Drink: refresh features",
+   "blocker": null,
+   "lines": [
+    "refreshed 0 limited feature uses as if after a long rest"
+   ],
+   "report": "ACTION USED\nCockerel Claw Tea - Drink: refresh features\nMira Ashvale\n• refreshed 0 limited feature uses as if after a long rest"
+  }
+ },
+ "consumables.json/Potion of Vigilance": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Potion of Vigilance"
+   ],
+   "report": "ACTION USED\nPotion of Vigilance - Drink\nMira Ashvale\n• gained Potion of Vigilance"
+  }
+ },
+ "consumables.json/Cacophonous Concoction": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Cacophonous Concoction"
+   ],
+   "report": "ACTION USED\nCacophonous Concoction - Drink\nMira Ashvale\n• gained Cacophonous Concoction"
+  }
+ },
+ "consumables.json/Nightmare Mead": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "You discover the deepest fear of the next person you make eye contact with; when you do, the GM gains a Fear."
+   ],
+   "report": "ACTION USED\nNightmare Mead - Drink\nMira Ashvale\n• You discover the deepest fear of the next person you make eye contact with; when you do, the GM gains a Fear."
+  }
+ },
+ "consumables.json/Stake of Abjuration": {
+  "action:use": {
+   "button": "Hammer in and proclaim",
+   "blocker": null,
+   "lines": [
+    "gained Stake of Abjuration"
+   ],
+   "report": "ACTION USED\nStake of Abjuration - Hammer in and proclaim\nMira Ashvale\n• gained Stake of Abjuration"
+  }
+ },
+ "consumables.json/Psychopomp’s Shroud": {
+  "action:use": {
+   "button": "Place over a corpse",
+   "blocker": null,
+   "lines": [
+    "gained Spectral Assistant"
+   ],
+   "report": "ACTION USED\nPsychopomp’s Shroud - Place over a corpse\nMira Ashvale\n• gained Spectral Assistant"
+  }
+ },
+ "consumables.json/Phial of Deep Ink": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Cephalopod Form"
+   ],
+   "report": "ACTION USED\nPhial of Deep Ink - Drink\nMira Ashvale\n• gained Cephalopod Form"
+  }
+ },
+ "consumables.json/Mesmer’s Tonic": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Mesmer’s Tonic"
+   ],
+   "report": "ACTION USED\nMesmer’s Tonic - Drink\nMira Ashvale\n• gained Mesmer’s Tonic"
+  }
+ },
+ "consumables.json/Invisibility Potion": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Invisible"
+   ],
+   "report": "ACTION USED\nInvisibility Potion - Drink\nMira Ashvale\n• gained Invisible"
+  }
+ },
+ "consumables.json/Formoid Serum": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Ant Swarm"
+   ],
+   "report": "ACTION USED\nFormoid Serum - Drink\nMira Ashvale\n• gained Ant Swarm"
+  }
+ },
+ "consumables.json/Steelskin Salve": {
+  "action:use": {
+   "button": "Steelskin Salve",
+   "blocker": null,
+   "lines": [
+    "gained Damage Thresholds +Tier"
+   ],
+   "report": "ACTION USED\nSteelskin Salve\nMira Ashvale\n• gained Damage Thresholds +Tier"
+  }
+ },
+ "consumables.json/Godling’s Pomelo": {
+  "action:eat": {
+   "button": "Eat",
+   "blocker": null,
+   "lines": [
+    "cleared 2 HP",
+    "cleared 0 Stress"
+   ],
+   "report": "ACTION USED\nGodling’s Pomelo - Eat\nMira Ashvale\n• cleared 2 HP\n• cleared 0 Stress"
+  }
+ },
+ "consumables.json/Snakeskin Spirit": {
+  "action:drink": {
+   "button": "Drink: heal a scar",
+   "blocker": null,
+   "lines": [
+    "healed 0 scars"
+   ],
+   "report": "ACTION USED\nSnakeskin Spirit - Drink: heal a scar\nMira Ashvale\n• healed 0 scars"
+  }
+ },
+ "consumables.json/Magic-User’s Malison": {
+  "action:use": {
+   "button": "Release the soul",
+   "blocker": null,
+   "lines": [
+    "Cast one spell from a card in your vault as if it were in your loadout."
+   ],
+   "report": "ACTION USED\nMagic-User’s Malison - Release the soul\nMira Ashvale\n• Cast one spell from a card in your vault as if it were in your loadout."
+  }
+ },
+ "consumables.json/Quintessential Severant": {
+  "action:use": {
+   "button": "Cut a bond",
+   "blocker": null,
+   "lines": [
+    "Cut one magical or metaphysical bond; the blade shatters."
+   ],
+   "report": "ACTION USED\nQuintessential Severant - Cut a bond\nMira Ashvale\n• Cut one magical or metaphysical bond; the blade shatters."
+  }
+ },
+ "consumables.json/Mask of the Echoed Self": {
+  "action:use": {
+   "button": "Wear at level up",
+   "blocker": null,
+   "lines": [
+    "Swapped the values of your traits during this level up; the mask becomes your permanent face."
+   ],
+   "report": "ACTION USED\nMask of the Echoed Self - Wear at level up\nMira Ashvale\n• Swapped the values of your traits during this level up; the mask becomes your permanent face."
+  }
+ },
+ "consumables.json/Necroprancer’s Bell": {
+  "action:use": {
+   "button": "Break",
+   "blocker": null,
+   "lines": [
+    "A skeletal steed climbs out of the earth and serves you until the next sunrise."
+   ],
+   "report": "ACTION USED\nNecroprancer’s Bell - Break\nMira Ashvale\n• A skeletal steed climbs out of the earth and serves you until the next sunrise."
+  }
+ },
+ "consumables.json/Drakemantle": {
+  "action:use": {
+   "button": "Drakemantle",
+   "blocker": null,
+   "lines": [
+    "gained Damage Thresholds +5, Proficiency +1"
+   ],
+   "report": "ACTION USED\nDrakemantle\nMira Ashvale\n• gained Damage Thresholds +5, Proficiency +1"
+  }
+ },
+ "consumables.json/Gambler’s Fallacy": {
+  "action:throw": {
+   "button": "Throw the jar",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nGambler’s Fallacy - Throw the jar\nMira Ashvale"
+  }
+ },
+ "consumables.json/Lionheart Tonic": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Lionheart Tonic"
+   ],
+   "report": "ACTION USED\nLionheart Tonic - Drink\nMira Ashvale\n• gained Lionheart Tonic"
+  }
+ },
+ "consumables.json/Tears of the Undying Hero": {
+  "action:use": {
+   "button": "Drink",
+   "blocker": null,
+   "lines": [
+    "gained Tears of the Undying Hero"
+   ],
+   "report": "ACTION USED\nTears of the Undying Hero - Drink\nMira Ashvale\n• gained Tears of the Undying Hero"
+  }
+ },
+ "consumables.json/Featherstep Potion": {
+  "action:use": {
+   "button": "Featherstep Potion",
+   "blocker": null,
+   "lines": [
+    "gained Evasion +Tier"
+   ],
+   "report": "ACTION USED\nFeatherstep Potion\nMira Ashvale\n• gained Evasion +Tier"
+  }
+ },
+ "consumables.json/Chanting Candle": {
+  "action:burn": {
+   "button": "Burn out instead of paying for fire magic",
+   "blocker": null,
+   "lines": [
+    "Burned out the candle instead of spending a Hope or marking a Stress for fire magic."
+   ],
+   "report": "ACTION USED\nChanting Candle - Burn out instead of paying for fire magic\nMira Ashvale\n• Burned out the candle instead of spending a Hope or marking a Stress for fire magic."
+  },
+  "action:light": {
+   "button": "Light the candle",
+   "blocker": null,
+   "lines": [
+    "gained Chanting Candle"
+   ],
+   "report": "ACTION USED\nChanting Candle - Light the candle\nMira Ashvale\n• gained Chanting Candle"
+  }
+ },
+ "consumables.json/Foraged Unique Food": {
+  "action:use": {
+   "button": "Consume food",
+   "blocker": null,
+   "lines": [
+    "cleared 0 Stress"
+   ],
+   "report": "ACTION USED\nForaged Unique Food - Consume food\nMira Ashvale\n• cleared 0 Stress"
+  }
+ },
+ "consumables.json/Foraged Beautiful Relic": {
+  "action:use": {
+   "button": "Use relic",
+   "blocker": null,
+   "lines": [
+    "gained 0 Hope"
+   ],
+   "report": "ACTION USED\nForaged Beautiful Relic - Use relic\nMira Ashvale\n• gained 0 Hope"
+  }
+ },
+ "consumables.json/Foraged Arcane Rune": {
+  "action:use": {
+   "button": "Use rune",
+   "blocker": null,
+   "lines": [
+    "gained Foraged Arcane Rune"
+   ],
+   "report": "ACTION USED\nForaged Arcane Rune - Use rune\nMira Ashvale\n• gained Foraged Arcane Rune"
+  },
+  "option:use": "Foraged Arcane Rune - Use foraged arcane rune"
+ },
+ "consumables.json/Foraged Healing Vial": {
+  "action:use": {
+   "button": "Drink vial",
+   "blocker": null,
+   "lines": [
+    "cleared 2 HP"
+   ],
+   "report": "ACTION USED\nForaged Healing Vial - Drink vial\nMira Ashvale\n• cleared 2 HP"
+  }
+ },
+ "consumables.json/Foraged Luck Charm": {
+  "action:use": {
+   "button": "Prepare luck charm",
+   "blocker": null,
+   "lines": [
+    "gained Foraged Luck Charm"
+   ],
+   "report": "ACTION USED\nForaged Luck Charm - Prepare luck charm\nMira Ashvale\n• gained Foraged Luck Charm"
+  }
+ },
+ "domain-cards.json/Adjust Reality": {
+  "action:use": {
+   "button": "Adjust Reality (5 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 5 Hope"
+   ],
+   "report": "ACTION USED\nAdjust Reality\nMira Ashvale\n• spent 5 Hope"
+  }
+ },
+ "domain-cards.json/Arcane Reflection": {
+  "action:reflect": {
+   "button": "Arcane Reflection: roll Hope dice",
+   "blocker": null,
+   "lines": [
+    "If any die shows 6, the GM reflects the incoming magic attack to its caster instead."
+   ],
+   "report": "ACTION USED\nArcane Reflection: roll Hope dice\nMira Ashvale\n• If any die shows 6, the GM reflects the incoming magic attack to its caster instead."
+  }
+ },
+ "domain-cards.json/Astral Projection": {
+  "action:use": {
+   "button": "Astral Projection (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nAstral Projection\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "domain-cards.json/Avatar of Terror": {
+  "action:use": {
+   "button": "Avatar of Terror (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress",
+    "gained Avatar of Terror"
+   ],
+   "report": "ACTION USED\nAvatar of Terror\nMira Ashvale\n• spent 1 Stress\n• gained Avatar of Terror"
+  }
+ },
+ "domain-cards.json/Battle Cry": {
+  "action:use": {
+   "button": "Battle Cry",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nBattle Cry\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Battle Monster": {
+  "action:use": {
+   "button": "Battle Monster (4 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 4 Stress"
+   ],
+   "report": "ACTION USED\nBattle Monster\nMira Ashvale\n• spent 4 Stress"
+  }
+ },
+ "domain-cards.json/Battle-Hardened": {
+  "action:use": {
+   "button": "Instead of death move: clear HP",
+   "blocker": "Requires all HP marked and no pending death recovery",
+   "lines": null,
+   "report": null
+  }
+ },
+ "domain-cards.json/Blood Bind": {
+  "action:spotlight": {
+   "button": "Bound target spotlighted: damage",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nBlood Bind - Bound target spotlighted: damage\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Blood Puppet": {
+  "action:control": {
+   "button": "Blood Puppet: control Spellcast roll",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nBlood Puppet: control Spellcast roll\nMira Ashvale"
+  },
+  "action:attack": {
+   "button": "Blood Puppet: puppet attack Spellcast roll",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nBlood Puppet: puppet attack Spellcast roll\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Bloodbath": {
+  "action:use": {
+   "button": "Bloodbath (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nBloodbath\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "domain-cards.json/Body Basher": {
+  "option:basher": "Body Basher"
+ },
+ "domain-cards.json/Bold Presence": {
+  "action:avoid": {
+   "button": "Once per rest: avoid condition",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nBold Presence - Once per rest: avoid condition\nMira Ashvale"
+  },
+  "option:presence": "Bold Presence"
+ },
+ "domain-cards.json/Bone-Touched": {
+  "action:use": {
+   "button": "Bone-Touched (3 Hope)",
+   "blocker": "Requires more matching domain cards in the active loadout",
+   "lines": null,
+   "report": null
+  }
+ },
+ "domain-cards.json/Tava’s Armor": {
+  "action:armor": {
+   "button": "Tava's Armor (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "gained Tava's Armor",
+    "The chosen actor gains +1 Armor Score until their next rest or this card is cast on them again."
+   ],
+   "report": "ACTION USED\nTava’s Armor - Tava's Armor\nMira Ashvale\n• spent 1 Hope\n• gained Tava's Armor\n• The chosen actor gains +1 Armor Score until their next rest or this card is cast on them again."
+  }
+ },
+ "domain-cards.json/Repudiate": {
+  "action:reaction": {
+   "button": "Repudiate: Spellcast Reaction",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nRepudiate: Spellcast Reaction\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Create Construct": {
+  "action:summon": {
+   "button": "Create Construct (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "gained Create Construct"
+   ],
+   "report": "ACTION USED\nCreate Construct\nMira Ashvale\n• spent 1 Hope\n• gained Create Construct"
+  },
+  "action:command": {
+   "button": "Construct command: Spellcast",
+   "blocker": "Required effect is not active",
+   "lines": null,
+   "report": null
+  },
+  "action:end": {
+   "button": "Construct damaged or dismissed",
+   "blocker": "Required effect is not active",
+   "lines": null,
+   "report": null
+  }
+ },
+ "domain-cards.json/Arcane Deflection": {
+  "mitigation:deflect": "Arcane Deflection: negate attack damage"
+ },
+ "domain-cards.json/Wall of Flame": {
+  "action:damage": {
+   "button": "Creature passes through wall: damage",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nWall of Flame - Creature passes through wall: damage\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Arcane Barrage": {
+  "action:use": {
+   "button": "Arcane Barrage",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nArcane Barrage\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Telepathy": {
+  "action:use": {
+   "button": "Telepathy (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nTelepathy\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "domain-cards.json/Recant": {
+  "action:use": {
+   "button": "Recant: target makes Reaction (15) (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "The target makes Reaction (15); on failure, the GM removes their memory of the last minute of conversation."
+   ],
+   "report": "ACTION USED\nRecant: target makes Reaction (15)\nMira Ashvale\n• spent 1 Hope\n• The target makes Reaction (15); on failure, the GM removes their memory of the last minute of conversation."
+  }
+ },
+ "domain-cards.json/Rune Circle": {
+  "action:use": {
+   "button": "Rune Circle (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress",
+    "The temporary circle is active. Adversaries in or entering Melee range take 2d12+4 magic damage and are knocked back to Very Close range."
+   ],
+   "report": "ACTION USED\nRune Circle\nMira Ashvale\n• spent 1 Stress\n• The temporary circle is active. Adversaries in or entering Melee range take 2d12+4 magic damage and are knocked back to Very Close range."
+  },
+  "action:enter": {
+   "button": "Adversary in or enters circle: damage",
+   "blocker": null,
+   "lines": [
+    "The adversary takes the circle's magic damage and is knocked back to Very Close range."
+   ],
+   "report": "ACTION USED\nRune Circle - Adversary in or enters circle: damage\nMira Ashvale\n• The adversary takes the circle's magic damage and is knocked back to Very Close range."
+  }
+ },
+ "domain-cards.json/Eternal Enervation": {
+  "action:cast": {
+   "button": "Eternal Enervation: Spellcast",
+   "blocker": null,
+   "lines": [
+    "On success, the GM makes the chosen adversary permanently Vulnerable."
+   ],
+   "report": "ACTION USED\nEternal Enervation: Spellcast\nMira Ashvale\n• On success, the GM makes the chosen adversary permanently Vulnerable."
+  }
+ },
+ "domain-cards.json/Parallela": {
+  "action:use": {
+   "button": "Parallela (2 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Hope",
+    "gained Parallela",
+    "The chosen actor's next attack may hit one additional target within range whose Difficulty the attack roll meets."
+   ],
+   "report": "ACTION USED\nParallela\nMira Ashvale\n• spent 2 Hope\n• gained Parallela\n• The chosen actor's next attack may hit one additional target within range whose Difficulty the attack roll meets."
+  }
+ },
+ "domain-cards.json/Shared Clarity": {
+  "action:use": {
+   "button": "Shared Clarity (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nShared Clarity\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "domain-cards.json/Magic Immunity": {
+  "action:use": {
+   "button": "Magic Immunity (5 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 5 Hope",
+    "gained Magic Immunity"
+   ],
+   "report": "ACTION USED\nMagic Immunity\nMira Ashvale\n• spent 5 Hope\n• gained Magic Immunity"
+  }
+ },
+ "domain-cards.json/Boost": {
+  "action:boost": {
+   "button": "Boost: prepare aerial attack (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress",
+    "gained Boost attack",
+    "gained Boost damage"
+   ],
+   "report": "ACTION USED\nBoost: prepare aerial attack\nMira Ashvale\n• spent 1 Stress\n• gained Boost attack\n• gained Boost damage"
+  },
+  "action:miss": {
+   "button": "Boosted attack missed: discard damage",
+   "blocker": "Required effect is not active",
+   "lines": null,
+   "report": null
+  }
+ },
+ "domain-cards.json/Brace": {
+  "action:use": {
+   "button": "Brace (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nBrace\nMira Ashvale\n• spent 1 Stress"
+  },
+  "mitigation:brace": "Brace"
+ },
+ "domain-cards.json/Breaking Blow": {
+  "trigger:use": {
+   "button": "Breaking Blow",
+   "cost": "1 Stress",
+   "choices": []
+  },
+  "trigger:damage": {
+   "button": "Breaking Blow",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "domain-cards.json/Chain Lightning": {
+  "action:cast": {
+   "button": "Spellcast Roll (2 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Stress"
+   ],
+   "report": "ACTION USED\nChain Lightning - Spellcast Roll\nMira Ashvale\n• spent 2 Stress"
+  }
+ },
+ "domain-cards.json/Chains of Affliction": {
+  "action:use": {
+   "button": "Chains of Affliction (2 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Stress"
+   ],
+   "report": "ACTION USED\nChains of Affliction\nMira Ashvale\n• spent 2 Stress"
+  }
+ },
+ "domain-cards.json/Chokehold": {
+  "action:use": {
+   "button": "Chokehold (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nChokehold\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "domain-cards.json/Cinder Grasp": {
+  "action:ongoing": {
+   "button": "Ongoing flames: 2d6 damage",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nCinder Grasp - Ongoing flames: 2d6 damage\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Cloaking Blast": {
+  "action:use": {
+   "button": "Become Cloaked (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "gained Cloaked"
+   ],
+   "report": "ACTION USED\nCloaking Blast - Become Cloaked\nMira Ashvale\n• spent 1 Hope\n• gained Cloaked"
+  }
+ },
+ "domain-cards.json/Codex-Touched": {
+  "action:swap": {
+   "button": "Codex-Touched: swap with vault",
+   "blocker": "Requires more matching domain cards in the active loadout",
+   "lines": null,
+   "report": null
+  }
+ },
+ "domain-cards.json/Confusing Aura": {
+  "action:defend": {
+   "button": "Roll Confusing Aura layers",
+   "blocker": "Required effect is not active",
+   "lines": null,
+   "report": null
+  }
+ },
+ "domain-cards.json/Tekaira Armored Beetles": {
+  "action:beetles": {
+   "button": "Conjure Tekaira Armored Beetles (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress",
+    "gained Tekaira Armored Beetles"
+   ],
+   "report": "ACTION USED\nTekaira Armored Beetles - Conjure Tekaira Armored Beetles\nMira Ashvale\n• spent 1 Stress\n• gained Tekaira Armored Beetles"
+  }
+ },
+ "domain-cards.json/Conjured Steeds": {
+  "action:conjure": {
+   "button": "Conjure Steeds",
+   "blocker": null,
+   "lines": [
+    "gained Conjured Steed",
+    "Conjured one steed per Hope spent. Claim a steed only while one is available."
+   ],
+   "report": "ACTION USED\nConjured Steeds - Conjure Steeds\nMira Ashvale\n• gained Conjured Steed\n• Conjured one steed per Hope spent. Claim a steed only while one is available."
+  }
+ },
+ "domain-cards.json/Copycat": {
+  "action:use": {
+   "button": "Copycat",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nCopycat\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Counterspell": {
+  "action:reaction": {
+   "button": "Counterspell: Spellcast Reaction",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nCounterspell: Spellcast Reaction\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Crimson Adamance": {
+  "mitigation:adamance": "Crimson Adamance"
+ },
+ "domain-cards.json/Critical Inspiration": {
+  "action:use": {
+   "button": "Critical Inspiration: critical attack",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nCritical Inspiration: critical attack\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Cruel Precision": {
+  "option:finesse": "Cruel Precision"
+ },
+ "domain-cards.json/Dark Army": {
+  "option:fiend": "Dark Army - Dark Army fiend",
+  "mitigation:fiends": "Dark Army fiends"
+ },
+ "domain-cards.json/Dark Whispers": {
+  "action:use": {
+   "button": "Dark Whispers (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nDark Whispers\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "domain-cards.json/Darkfire": {
+  "action:use": {
+   "button": "Darkfire",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nDarkfire\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Deadly Focus": {
+  "action:use": {
+   "button": "Deadly Focus",
+   "blocker": null,
+   "lines": [
+    "gained Deadly Focus"
+   ],
+   "report": "ACTION USED\nDeadly Focus\nMira Ashvale\n• gained Deadly Focus"
+  }
+ },
+ "domain-cards.json/Death Grip": {
+  "action:vines": {
+   "button": "Successful Death Grip: vines damage",
+   "blocker": null,
+   "lines": [
+    "Apply only to intervening adversaries who fail their Reaction Roll (13)."
+   ],
+   "report": "ACTION USED\nDeath Grip - Successful Death Grip: vines damage\nMira Ashvale\n• Apply only to intervening adversaries who fail their Reaction Roll (13)."
+  }
+ },
+ "domain-cards.json/Deathrun": {
+  "action:use": {
+   "button": "Deathrun (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope",
+    "gained Deathrun"
+   ],
+   "report": "ACTION USED\nDeathrun\nMira Ashvale\n• spent 3 Hope\n• gained Deathrun"
+  },
+  "option:run": "Deathrun",
+  "trigger:end": {
+   "button": "End Deathrun",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "domain-cards.json/Deft Deceiver": {
+  "option:use": "Deft Deceiver"
+ },
+ "domain-cards.json/Deft Maneuvers": {
+  "action:use": {
+   "button": "Deft Maneuvers (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nDeft Maneuvers\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "domain-cards.json/Delerium Grasp": {
+  "action:ongoing": {
+   "button": "Ongoing flames: 2d6 damage",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nDelerium Grasp - Ongoing flames: 2d6 damage\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Dire Strike": {
+  "trigger:use": {
+   "button": "Dire Strike",
+   "cost": "1 Hope",
+   "choices": []
+  }
+ },
+ "domain-cards.json/Divination": {
+  "action:use": {
+   "button": "Divination (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope"
+   ],
+   "report": "ACTION USED\nDivination\nMira Ashvale\n• spent 3 Hope"
+  }
+ },
+ "domain-cards.json/Eldritch Flesh": {
+  "action:clear": {
+   "button": "Roll with Fear: clear Armor (2 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Hope",
+    "cleared 1 Armor Slots"
+   ],
+   "report": "ACTION USED\nEldritch Flesh - Roll with Fear: clear Armor\nMira Ashvale\n• spent 2 Hope\n• cleared 1 Armor Slots"
+  }
+ },
+ "domain-cards.json/Ferocity": {
+  "action:use": {
+   "button": "Ferocity (2 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Hope"
+   ],
+   "report": "ACTION USED\nFerocity\nMira Ashvale\n• spent 2 Hope"
+  }
+ },
+ "domain-cards.json/Floating Eye": {
+  "action:use": {
+   "button": "Floating Eye (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nFloating Eye\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "domain-cards.json/Forager": {
+  "action:forage": {
+   "button": "Forage: roll a d6",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  }
+ },
+ "domain-cards.json/Force of Nature": {
+  "action:use": {
+   "button": "Force of Nature (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress",
+    "gained Force of Nature"
+   ],
+   "report": "ACTION USED\nForce of Nature\nMira Ashvale\n• spent 1 Stress\n• gained Force of Nature"
+  }
+ },
+ "domain-cards.json/Forceful Push": {
+  "action:vulnerable": {
+   "button": "Make target Vulnerable (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nForceful Push - Make target Vulnerable\nMira Ashvale\n• spent 1 Hope"
+  },
+  "option:push": "Forceful Push"
+ },
+ "domain-cards.json/Frenzy": {
+  "action:use": {
+   "button": "Frenzy",
+   "blocker": null,
+   "lines": [
+    "gained Frenzied"
+   ],
+   "report": "ACTION USED\nFrenzy\nMira Ashvale\n• gained Frenzied"
+  }
+ },
+ "domain-cards.json/Full Surge": {
+  "action:use": {
+   "button": "Full Surge (3 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Stress",
+    "gained Full Surge"
+   ],
+   "report": "ACTION USED\nFull Surge\nMira Ashvale\n• spent 3 Stress\n• gained Full Surge"
+  }
+ },
+ "domain-cards.json/Get Back Up": {
+  "action:use": {
+   "button": "Get Back Up (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nGet Back Up\nMira Ashvale\n• spent 1 Stress"
+  },
+  "mitigation:get-back-up": "Get Back Up"
+ },
+ "domain-cards.json/Gifted Tracker": {
+  "action:question": {
+   "button": "Gifted Tracker: ask one question (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "Ask one listed tracking question. Evasion is +1 only against creatures tracked this way."
+   ],
+   "report": "ACTION USED\nGifted Tracker: ask one question\nMira Ashvale\n• spent 1 Hope\n• Ask one listed tracking question. Evasion is +1 only against creatures tracked this way."
+  }
+ },
+ "domain-cards.json/Goad Them On": {
+  "action:use": {
+   "button": "Goad Them On",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nGoad Them On\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Gore and Glory": {
+  "action:hope": {
+   "button": "Qualifying critical or defeat: gain Hope",
+   "blocker": null,
+   "lines": [
+    "gained 0 Hope"
+   ],
+   "report": "ACTION USED\nGore and Glory - Qualifying critical or defeat: gain Hope\nMira Ashvale\n• gained 0 Hope"
+  },
+  "action:stress": {
+   "button": "Qualifying critical or defeat: clear Stress",
+   "blocker": null,
+   "lines": [
+    "cleared 0 Stress"
+   ],
+   "report": "ACTION USED\nGore and Glory - Qualifying critical or defeat: clear Stress\nMira Ashvale\n• cleared 0 Stress"
+  }
+ },
+ "domain-cards.json/Ground Pound": {
+  "action:use": {
+   "button": "Ground Pound (2 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Hope"
+   ],
+   "report": "ACTION USED\nGround Pound\nMira Ashvale\n• spent 2 Hope"
+  },
+  "trigger:damage": {
+   "button": "Damage (half if Reaction succeeds)",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "domain-cards.json/Healing Field": {
+  "action:base": {
+   "button": "Healing Field: clear 1 HP",
+   "blocker": null,
+   "lines": [
+    "cleared 1 HP"
+   ],
+   "report": "ACTION USED\nHealing Field: clear 1 HP\nMira Ashvale\n• cleared 1 HP"
+  },
+  "action:upgrade": {
+   "button": "Healing Field: clear 2 HP (2 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Hope",
+    "cleared 2 HP"
+   ],
+   "report": "ACTION USED\nHealing Field: clear 2 HP\nMira Ashvale\n• spent 2 Hope\n• cleared 2 HP"
+  }
+ },
+ "domain-cards.json/Healing Strike": {
+  "trigger:use": {
+   "button": "Healing Strike",
+   "cost": "2 Hope",
+   "choices": []
+  }
+ },
+ "domain-cards.json/Hideous Retribution": {
+  "action:reaction": {
+   "button": "Hideous Retribution reaction",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nHideous Retribution - Hideous Retribution reaction\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Hold the Line": {
+  "action:use": {
+   "button": "Hold the Line (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "gained Hold the Line",
+    "Track your stance and affected enemies. Ends on movement, failed Fear roll or the GM spending 2 Fear."
+   ],
+   "report": "ACTION USED\nHold the Line\nMira Ashvale\n• spent 1 Hope\n• gained Hold the Line\n• Track your stance and affected enemies. Ends on movement, failed Fear roll or the GM spending 2 Fear."
+  }
+ },
+ "domain-cards.json/I Am Your Shield": {
+  "action:use": {
+   "button": "I Am Your Shield (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nI Am Your Shield\nMira Ashvale\n• spent 1 Stress"
+  },
+  "mitigation:shield": "I Am Your Shield"
+ },
+ "domain-cards.json/I See It Coming": {
+  "action:use": {
+   "button": "Roll d4 against this attack (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nI See It Coming - Roll d4 against this attack\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "domain-cards.json/Inevitable": {
+  "trigger:prepare": {
+   "button": "Failed action: prepare Inevitable",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "domain-cards.json/Inspirational Words": {
+  "action:give": {
+   "button": "Give ally a benefit (1 inspiration)",
+   "blocker": "Resource unavailable: inspiration",
+   "lines": null,
+   "report": null
+  }
+ },
+ "domain-cards.json/Invigoration": {
+  "action:restore": {
+   "button": "Invigoration: roll Hope dice",
+   "blocker": null,
+   "lines": [
+    "If any die shows 6, restore one spent limited feature use."
+   ],
+   "report": "ACTION USED\nInvigoration: roll Hope dice\nMira Ashvale\n• If any die shows 6, restore one spent limited feature use."
+  }
+ },
+ "domain-cards.json/Invisibility": {
+  "trigger:cast": {
+   "button": "Choose Invisibility recipient",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "domain-cards.json/Invoke Torment": {
+  "action:defeat": {
+   "button": "Close adversary defeated with full Stress: gain Hope",
+   "blocker": null,
+   "lines": [
+    "gained 0 Hope"
+   ],
+   "report": "ACTION USED\nInvoke Torment - Close adversary defeated with full Stress: gain Hope\nMira Ashvale\n• gained 0 Hope"
+  },
+  "option:double": "Invoke Torment: target has full Stress"
+ },
+ "domain-cards.json/Jump Scare": {
+  "trigger:use": {
+   "button": "Jump Scare",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "domain-cards.json/Know Thy Enemy": {
+  "action:observe": {
+   "button": "Observe creature",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nKnow Thy Enemy - Observe creature\nMira Ashvale"
+  },
+  "trigger:information": {
+   "button": "Successful Instinct roll: ask for information",
+   "cost": "1 Hope",
+   "choices": []
+  },
+  "trigger:use": {
+   "button": "Successful Instinct roll: remove GM Fear",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "domain-cards.json/Lead by Example": {
+  "trigger:use": {
+   "button": "Lead by Example",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "domain-cards.json/Lean on Me": {
+  "action:use": {
+   "button": "Lean on Me: console or inspire an ally",
+   "blocker": null,
+   "lines": [
+    "cleared 0 Stress"
+   ],
+   "report": "ACTION USED\nLean on Me: console or inspire an ally\nMira Ashvale\n• cleared 0 Stress"
+  }
+ },
+ "domain-cards.json/Life Leash": {
+  "action:use": {
+   "button": "Life Leash (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nLife Leash\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "domain-cards.json/Life Ward": {
+  "action:use": {
+   "button": "Life Ward (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope",
+    "gained Life Ward"
+   ],
+   "report": "ACTION USED\nLife Ward\nMira Ashvale\n• spent 3 Hope\n• gained Life Ward"
+  }
+ },
+ "domain-cards.json/Lifeblood Talisman": {
+  "action:use": {
+   "button": "Lifeblood Talisman (1 HP)",
+   "blocker": null,
+   "lines": [
+    "spent 1 HP"
+   ],
+   "report": "ACTION USED\nLifeblood Talisman\nMira Ashvale\n• spent 1 HP"
+  }
+ },
+ "domain-cards.json/Mass Disguise": {
+  "action:use": {
+   "button": "Mass Disguise (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nMass Disguise\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "domain-cards.json/Mass Enrapture": {
+  "action:use": {
+   "button": "Mass Enrapture (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nMass Enrapture\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "domain-cards.json/Mending Touch": {
+  "action:hp": {
+   "button": "Clear 1 HP (2 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Hope",
+    "cleared 1 HP"
+   ],
+   "report": "ACTION USED\nMending Touch - Clear 1 HP\nMira Ashvale\n• spent 2 Hope\n• cleared 1 HP"
+  },
+  "action:stress": {
+   "button": "Clear 1 Stress (2 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Hope",
+    "cleared 0 Stress"
+   ],
+   "report": "ACTION USED\nMending Touch - Clear 1 Stress\nMira Ashvale\n• spent 2 Hope\n• cleared 0 Stress"
+  },
+  "action:greater-hp": {
+   "button": "Clear 2 HP (once per long rest) (2 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Hope",
+    "cleared 2 HP"
+   ],
+   "report": "ACTION USED\nMending Touch - Clear 2 HP (once per long rest)\nMira Ashvale\n• spent 2 Hope\n• cleared 2 HP"
+  },
+  "action:greater-stress": {
+   "button": "Clear 2 Stress (once per long rest) (2 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Hope",
+    "cleared 0 Stress"
+   ],
+   "report": "ACTION USED\nMending Touch - Clear 2 Stress (once per long rest)\nMira Ashvale\n• spent 2 Hope\n• cleared 0 Stress"
+  }
+ },
+ "domain-cards.json/Midnight Spirit": {
+  "action:use": {
+   "button": "Midnight Spirit (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "gained Midnight Spirit"
+   ],
+   "report": "ACTION USED\nMidnight Spirit\nMira Ashvale\n• spent 1 Hope\n• gained Midnight Spirit"
+  },
+  "action:attack": {
+   "button": "Midnight Spirit: attack Spellcast",
+   "blocker": "Required effect is not active",
+   "lines": null,
+   "report": null
+  }
+ },
+ "domain-cards.json/Midnight-Touched": {
+  "action:hope": {
+   "button": "Midnight-Touched: gain Hope instead of GM Fear",
+   "blocker": "Requires more matching domain cards in the active loadout",
+   "lines": null,
+   "report": null
+  }
+ },
+ "domain-cards.json/Mutual Suffering": {
+  "action:react": {
+   "button": "Mutual Suffering: Reaction",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nMutual Suffering: Reaction\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Natural Familiar": {
+  "action:summon": {
+   "button": "Summon familiar (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "gained Natural Familiar"
+   ],
+   "report": "ACTION USED\nNatural Familiar - Summon familiar\nMira Ashvale\n• spent 1 Hope\n• gained Natural Familiar"
+  },
+  "action:flying": {
+   "button": "Summon flying familiar (2 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Hope",
+    "gained Natural Familiar"
+   ],
+   "report": "ACTION USED\nNatural Familiar - Summon flying familiar\nMira Ashvale\n• spent 2 Hope\n• gained Natural Familiar"
+  },
+  "action:eyes": {
+   "button": "See through familiar’s eyes (1 Stress)",
+   "blocker": "Required effect is not active",
+   "lines": null,
+   "report": null
+  }
+ },
+ "domain-cards.json/Nature’s Tongue": {
+  "action:use": {
+   "button": "Speak to plants and animals",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nNature’s Tongue - Speak to plants and animals\nMira Ashvale"
+  },
+  "option:nature": "Nature’s Tongue"
+ },
+ "domain-cards.json/Never Upstaged": {
+  "action:clear": {
+   "button": "Clear tokens",
+   "blocker": "Resource unavailable: upstaged",
+   "lines": null,
+   "report": null
+  },
+  "option:upstaged": "Never Upstaged: spend ALL tokens",
+  "mitigation:tokens": "When marking HP from an attack: gain tokens"
+ },
+ "domain-cards.json/Night Terror": {
+  "action:use": {
+   "button": "Night Terror",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nNight Terror\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Notorious": {
+  "option:notoriety": "Notorious - Leverage notoriety"
+ },
+ "domain-cards.json/Octarine Brace": {
+  "mitigation:octarine": "Octarine Brace"
+ },
+ "domain-cards.json/Octarine Wall": {
+  "action:damage": {
+   "button": "Creature touches Octarine Wall: damage",
+   "blocker": null,
+   "lines": [
+    "The creature makes Reaction (14); on failure, it takes this magic damage."
+   ],
+   "report": "ACTION USED\nOctarine Wall - Creature touches Octarine Wall: damage\nMira Ashvale\n• The creature makes Reaction (14); on failure, it takes this magic damage."
+  }
+ },
+ "domain-cards.json/On the Brink": {
+  "mitigation:brink": "On the Brink"
+ },
+ "domain-cards.json/Onslaught": {
+  "action:use": {
+   "button": "Onslaught (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nOnslaught\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "domain-cards.json/Otherworldly Shimmer": {
+  "action:use": {
+   "button": "Otherworldly Shimmer",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nOtherworldly Shimmer\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Parasite of the Will": {
+  "action:use": {
+   "button": "Bloodworm target rolls: give disadvantage (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nParasite of the Will - Bloodworm target rolls: give disadvantage\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "domain-cards.json/Phantom Retreat": {
+  "action:use": {
+   "button": "Phantom Retreat (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "gained Phantom Retreat"
+   ],
+   "report": "ACTION USED\nPhantom Retreat\nMira Ashvale\n• spent 1 Hope\n• gained Phantom Retreat"
+  }
+ },
+ "domain-cards.json/Pick and Pull": {
+  "option:advantage": "Pick and Pull"
+ },
+ "domain-cards.json/Premonition": {
+  "action:use": {
+   "button": "Premonition",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nPremonition\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Rage Up": {
+  "option:rage1": "Rage Up"
+ },
+ "domain-cards.json/Rain of Blades": {
+  "action:cast": {
+   "button": "Rain of Blades: Spellcast roll (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nRain of Blades: Spellcast roll\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "domain-cards.json/Rapid Riposte": {
+  "action:use": {
+   "button": "Rapid Riposte (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nRapid Riposte\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "domain-cards.json/Reaper’s Strike": {
+  "option:use": "Reaper’s Strike"
+ },
+ "domain-cards.json/Reassurance": {
+  "trigger:use": {
+   "button": "Reassurance",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "domain-cards.json/Reckless": {
+  "option:use": "Reckless"
+ },
+ "domain-cards.json/Redirect": {
+  "action:use": {
+   "button": "Redirect: roll Proficiency d6s",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nRedirect: roll Proficiency d6s\nMira Ashvale"
+  },
+  "trigger:redirect": {
+   "button": "Redirect attack to adversary within Very Close range",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "domain-cards.json/Restoration": {
+  "action:hp": {
+   "button": "Clear 2 HP (1 restoration)",
+   "blocker": "Resource unavailable: restoration",
+   "lines": null,
+   "report": null
+  },
+  "action:stress": {
+   "button": "Clear 2 Stress (1 restoration)",
+   "blocker": "Resource unavailable: restoration",
+   "lines": null,
+   "report": null
+  },
+  "action:other": {
+   "button": "Heal or clear condition (1 restoration)",
+   "blocker": "Resource unavailable: restoration",
+   "lines": null,
+   "report": null
+  }
+ },
+ "domain-cards.json/Rise Up": {
+  "mitigation:rise": "Rise Up"
+ },
+ "domain-cards.json/Rousing Strike": {
+  "trigger:use": {
+   "button": "Rousing Strike: after critical attack",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "domain-cards.json/Rune Ward": {
+  "action:infuse": {
+   "button": "Infuse Rune Ward trinket",
+   "blocker": "Resource unavailable: rune-ward",
+   "lines": null,
+   "report": null
+  }
+ },
+ "domain-cards.json/Safe Haven": {
+  "action:use": {
+   "button": "Safe Haven (2 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Hope",
+    "gained Safe Haven",
+    "Summoned Safe Haven for 2 Hope. Eligible allies can enter using this message and gain one additional downtime move for their next rest."
+   ],
+   "report": "ACTION USED\nSafe Haven\nMira Ashvale\n• spent 2 Hope\n• gained Safe Haven\n• Summoned Safe Haven for 2 Hope. Eligible allies can enter using this message and gain one additional downtime move for their next rest."
+  }
+ },
+ "domain-cards.json/Savor the Anguish": {
+  "action:use": {
+   "button": "Nearby adversary takes Severe damage: clear Stress",
+   "blocker": null,
+   "lines": [
+    "cleared 0 Stress"
+   ],
+   "report": "ACTION USED\nSavor the Anguish - Nearby adversary takes Severe damage: clear Stress\nMira Ashvale\n• cleared 0 Stress"
+  }
+ },
+ "domain-cards.json/Scramble": {
+  "action:use": {
+   "button": "Scramble",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nScramble\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Second Wind": {
+  "action:use": {
+   "button": "Second Wind",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nSecond Wind\nMira Ashvale"
+  },
+  "trigger:use": {
+   "button": "Second Wind",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "domain-cards.json/Shadowhunter": {
+  "action:enter": {
+   "button": "Shadowhunter: enter low light or darkness",
+   "blocker": null,
+   "lines": [
+    "gained Shadowhunter: shrouded"
+   ],
+   "report": "ACTION USED\nShadowhunter: enter low light or darkness\nMira Ashvale\n• gained Shadowhunter: shrouded"
+  },
+  "action:leave": {
+   "button": "Shadowhunter: leave shadow",
+   "blocker": "Required effect is not active",
+   "lines": null,
+   "report": null
+  }
+ },
+ "domain-cards.json/Shape Material": {
+  "action:use": {
+   "button": "Shape Material (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nShape Material\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "domain-cards.json/Share the Burden": {
+  "action:use": {
+   "button": "Share the Burden",
+   "blocker": null,
+   "lines": [
+    "One willing creature within Melee range can transfer marked Stress to you. Gain 1 Hope for each Stress received."
+   ],
+   "report": "ACTION USED\nShare the Burden\nMira Ashvale\n• One willing creature within Melee range can transfer marked Stress to you. Gain 1 Hope for each Stress received."
+  }
+ },
+ "domain-cards.json/Shared Trauma": {
+  "action:use": {
+   "button": "Shared Trauma",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nShared Trauma\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Shield Aura": {
+  "action:use": {
+   "button": "Shield Aura (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress",
+    "gained Shield Aura"
+   ],
+   "report": "ACTION USED\nShield Aura\nMira Ashvale\n• spent 1 Stress\n• gained Shield Aura"
+  }
+ },
+ "domain-cards.json/Shrug It Off": {
+  "action:use": {
+   "button": "Shrug It Off (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nShrug It Off\nMira Ashvale\n• spent 1 Stress"
+  },
+  "mitigation:shrug": "Shrug It Off"
+ },
+ "domain-cards.json/Sigil of Retribution": {
+  "action:cast": {
+   "button": "Mark adversary: reset Sigil dice",
+   "blocker": "Resource unavailable: retribution",
+   "lines": null,
+   "report": null
+  },
+  "action:gain": {
+   "button": "Marked adversary dealt damage: add d8",
+   "blocker": "Resource unavailable: retribution",
+   "lines": null,
+   "report": null
+  },
+  "action:end": {
+   "button": "End Sigil: clear dice",
+   "blocker": "Resource unavailable: retribution",
+   "lines": null,
+   "report": null
+  },
+  "option:damage": "Sigil of Retribution - Sigil: roll ALL d8s"
+ },
+ "domain-cards.json/Signature Move": {
+  "option:signature": "Signature Move"
+ },
+ "domain-cards.json/Smite": {
+  "action:use": {
+   "button": "Smite (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope",
+    "gained Smite"
+   ],
+   "report": "ACTION USED\nSmite\nMira Ashvale\n• spent 3 Hope\n• gained Smite"
+  },
+  "option:charge": "Smite: charge next successful weapon attack"
+ },
+ "domain-cards.json/Specter of the Dark": {
+  "action:use": {
+   "button": "Specter of the Dark (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress",
+    "gained Specter of the Dark"
+   ],
+   "report": "ACTION USED\nSpecter of the Dark\nMira Ashvale\n• spent 1 Stress\n• gained Specter of the Dark"
+  }
+ },
+ "domain-cards.json/Spectral Mist": {
+  "action:use": {
+   "button": "Spectral Mist (2 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Hope",
+    "gained Spectral Mist"
+   ],
+   "report": "ACTION USED\nSpectral Mist\nMira Ashvale\n• spent 2 Hope\n• gained Spectral Mist"
+  }
+ },
+ "domain-cards.json/Spellcharge": {
+  "option:charge": "Spellcharge - Spellcharge token",
+  "mitigation:charge": "Spellcharge"
+ },
+ "domain-cards.json/Splintering Strike": {
+  "action:use": {
+   "button": "Splintering Strike (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nSplintering Strike\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "domain-cards.json/Stealth Expertise": {
+  "action:use": {
+   "button": "Stealth Expertise (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nStealth Expertise\nMira Ashvale\n• spent 1 Stress"
+  },
+  "trigger:hope": {
+   "button": "Stealth Expertise: change Fear into Hope",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "domain-cards.json/Strategic Approach": {
+  "action:spend": {
+   "button": "First Close attack: clear eligible ally Stress (1 strategic)",
+   "blocker": "Resource unavailable: strategic",
+   "lines": null,
+   "report": null
+  },
+  "option:strategic-advantage": "Strategic Approach: first Close attack advantage",
+  "option:strategic-d8": "Strategic Approach: +d8 damage"
+ },
+ "domain-cards.json/Summon Horror": {
+  "action:use": {
+   "button": "Summon Horror (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nSummon Horror\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "domain-cards.json/Support Tank": {
+  "trigger:use": {
+   "button": "Support Tank: reroll Hope",
+   "cost": "2 Hope",
+   "choices": []
+  },
+  "trigger:fear": {
+   "button": "Support Tank: reroll Fear",
+   "cost": "2 Hope",
+   "choices": []
+  }
+ },
+ "domain-cards.json/Swift Step": {
+  "action:stress": {
+   "button": "Attack fails: clear Stress",
+   "blocker": null,
+   "lines": [
+    "cleared 0 Stress"
+   ],
+   "report": "ACTION USED\nSwift Step - Attack fails: clear Stress\nMira Ashvale\n• cleared 0 Stress"
+  },
+  "action:hope": {
+   "button": "Attack fails and no Stress to clear: gain Hope",
+   "blocker": null,
+   "lines": [
+    "gained 0 Hope"
+   ],
+   "report": "ACTION USED\nSwift Step - Attack fails and no Stress to clear: gain Hope\nMira Ashvale\n• gained 0 Hope"
+  }
+ },
+ "domain-cards.json/Tactician": {
+  "option:tag-team": "Tactician: Tag Team Hope d20"
+ },
+ "domain-cards.json/Teleport": {
+  "option:familiar": "Teleport: know it very well",
+  "option:frequent": "Teleport: frequent visits",
+  "option:once": "Teleport: visited only once"
+ },
+ "domain-cards.json/Tempest": {
+  "action:blizzard": {
+   "button": "Blizzard: Spellcast roll",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nTempest - Blizzard: Spellcast roll\nMira Ashvale"
+  },
+  "action:hurricane": {
+   "button": "Hurricane: Spellcast roll",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nTempest - Hurricane: Spellcast roll\nMira Ashvale"
+  },
+  "action:sandstorm": {
+   "button": "Sandstorm: Spellcast roll",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nTempest - Sandstorm: Spellcast roll\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Thorn Skin": {
+  "action:cast": {
+   "button": "Once per rest: sprout thorns (1 Hope)",
+   "blocker": "Resource unavailable: thorns",
+   "lines": null,
+   "report": null
+  },
+  "mitigation:thorns": "Thorn Skin"
+ },
+ "domain-cards.json/Thought Delver": {
+  "action:use": {
+   "button": "Thought Delver: read surface thoughts (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "Read the target's vague surface thoughts. You may make a Spellcast Roll from this message to delve deeper."
+   ],
+   "report": "ACTION USED\nThought Delver: read surface thoughts\nMira Ashvale\n• spent 1 Hope\n• Read the target's vague surface thoughts. You may make a Spellcast Roll from this message to delve deeper."
+  },
+  "action:delve": {
+   "button": "Thought Delver: deeper thoughts Spellcast",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nThought Delver: deeper thoughts Spellcast\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Towering Stalk": {
+  "action:climb": {
+   "button": "Conjure climbing stalk",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nTowering Stalk - Conjure climbing stalk\nMira Ashvale"
+  },
+  "action:attack": {
+   "button": "Towering Stalk: attack Spellcast roll (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nTowering Stalk: attack Spellcast roll\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "domain-cards.json/Transcendent Union": {
+  "action:use": {
+   "button": "Transcendent Union (5 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 5 Hope"
+   ],
+   "report": "ACTION USED\nTranscendent Union\nMira Ashvale\n• spent 5 Hope"
+  }
+ },
+ "domain-cards.json/Troublemaker": {
+  "action:use": {
+   "button": "Troublemaker: Presence Roll",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nTroublemaker: Presence Roll\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Twilight Toll": {
+  "action:gain": {
+   "button": "Successful non-damaging action against chosen target: gain token",
+   "blocker": "Resource unavailable: twilight",
+   "lines": null,
+   "report": null
+  },
+  "action:clear": {
+   "button": "New target or rest: clear tokens",
+   "blocker": "Resource unavailable: twilight",
+   "lines": null,
+   "report": null
+  },
+  "option:toll": "Twilight Toll - Twilight Toll token"
+ },
+ "domain-cards.json/Umbral Veil": {
+  "action:cast": {
+   "button": "Encase in shadow (1 Stress)",
+   "blocker": "Resource unavailable: veil",
+   "lines": null,
+   "report": null
+  },
+  "action:spend": {
+   "button": "Spend token: -1 to an attack roll (1 veil)",
+   "blocker": "Resource unavailable: veil",
+   "lines": null,
+   "report": null
+  }
+ },
+ "domain-cards.json/Unbreakable": {
+  "action:use": {
+   "button": "At last HP: clear HP",
+   "blocker": "Requires all HP marked and no pending death recovery",
+   "lines": null,
+   "report": null
+  }
+ },
+ "domain-cards.json/Uncanny Disguise": {
+  "action:cast": {
+   "button": "Disguise (1 Stress)",
+   "blocker": "Resource unavailable: disguise",
+   "lines": null,
+   "report": null
+  }
+ },
+ "domain-cards.json/Uncanny Focus": {
+  "action:use": {
+   "button": "Uncanny Focus",
+   "blocker": null,
+   "lines": [
+    "gained Uncanny Focus"
+   ],
+   "report": "ACTION USED\nUncanny Focus\nMira Ashvale\n• gained Uncanny Focus"
+  }
+ },
+ "domain-cards.json/Unleash Chaos": {
+  "action:cast": {
+   "button": "Spellcast Roll",
+   "blocker": "Not enough chaos",
+   "lines": null,
+   "report": null
+  },
+  "action:replenish": {
+   "button": "Replenish chaos (1 Stress)",
+   "blocker": "Resource unavailable: chaos",
+   "lines": null,
+   "report": null
+  }
+ },
+ "domain-cards.json/Unyielding Armor": {
+  "mitigation:unyielding": "Unyielding Armor"
+ },
+ "domain-cards.json/Vampiric Strike": {
+  "action:hp": {
+   "button": "Clear own HP (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "cleared 1 HP"
+   ],
+   "report": "ACTION USED\nVampiric Strike - Clear own HP\nMira Ashvale\n• spent 1 Hope\n• cleared 1 HP"
+  },
+  "action:stress": {
+   "button": "Clear own Stress (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "cleared 0 Stress"
+   ],
+   "report": "ACTION USED\nVampiric Strike - Clear own Stress\nMira Ashvale\n• spent 1 Hope\n• cleared 0 Stress"
+  }
+ },
+ "domain-cards.json/Vanishing Dodge": {
+  "action:use": {
+   "button": "Vanishing Dodge (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "gained Hidden"
+   ],
+   "report": "ACTION USED\nVanishing Dodge\nMira Ashvale\n• spent 1 Hope\n• gained Hidden"
+  }
+ },
+ "domain-cards.json/Versatile Fighter": {
+  "option:trait": "Versatile Fighter: choose weapon trait",
+  "option:maximum": "Versatile Fighter: maximize a damage die"
+ },
+ "domain-cards.json/Vital Ward": {
+  "action:physical": {
+   "button": "Vital Ward: physical resistance (1 HP)",
+   "blocker": null,
+   "lines": [
+    "spent 1 HP",
+    "gained Vital Ward"
+   ],
+   "report": "ACTION USED\nVital Ward: physical resistance\nMira Ashvale\n• spent 1 HP\n• gained Vital Ward"
+  },
+  "action:magic": {
+   "button": "Vital Ward: magic resistance (1 HP)",
+   "blocker": null,
+   "lines": [
+    "spent 1 HP",
+    "gained Vital Ward"
+   ],
+   "report": "ACTION USED\nVital Ward: magic resistance\nMira Ashvale\n• spent 1 HP\n• gained Vital Ward"
+  }
+ },
+ "domain-cards.json/Vitality": {
+  "action:choose": {
+   "button": "Choose two permanent benefits",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nVitality - Choose two permanent benefits\nMira Ashvale"
+  }
+ },
+ "domain-cards.json/Wall Walk": {
+  "action:use": {
+   "button": "Wall Walk (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "gained Wall Walk"
+   ],
+   "report": "ACTION USED\nWall Walk\nMira Ashvale\n• spent 1 Hope\n• gained Wall Walk"
+  }
+ },
+ "domain-cards.json/Weave the Flesh": {
+  "action:base": {
+   "button": "Weave the Flesh: allies clear HP or Stress (1 HP)",
+   "blocker": null,
+   "lines": [
+    "spent 1 HP"
+   ],
+   "report": "ACTION USED\nWeave the Flesh: allies clear HP or Stress\nMira Ashvale\n• spent 1 HP"
+  },
+  "action:upgrade": {
+   "button": "Weave the Flesh: allies clear HP and Stress (1 HP, 1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 HP, 1 Stress"
+   ],
+   "report": "ACTION USED\nWeave the Flesh: allies clear HP and Stress\nMira Ashvale\n• spent 1 HP, 1 Stress"
+  }
+ },
+ "domain-cards.json/Wild Fortress": {
+  "action:hit": {
+   "button": "Fortress marks a Hit Point",
+   "blocker": "Resource unavailable: fortress",
+   "lines": null,
+   "report": null
+  }
+ },
+ "domain-cards.json/Wild Surge": {
+  "action:use": {
+   "button": "Wild Surge (1 Stress)",
+   "blocker": "Resource unavailable: wild-surge",
+   "lines": null,
+   "report": null
+  }
+ },
+ "domain-cards.json/Words of Discord": {
+  "option:repeat": "Words of Discord: repeat target"
+ },
+ "domain-cards.json/Wrangle": {
+  "action:use": {
+   "button": "Wrangle",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nWrangle\nMira Ashvale"
+  },
+  "trigger:move": {
+   "button": "Wrangle: move successful targets and willing allies",
+   "cost": "1 Hope",
+   "choices": []
+  }
+ },
+ "items.json/Premium Bedroll": {
+  "action:downtime": {
+   "button": "Downtime: clear Stress",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  }
+ },
+ "items.json/Charging Quiver": {
+  "option:quiver": "Charging Quiver"
+ },
+ "items.json/Woven Net": {
+  "action:use": {
+   "button": "Trap a creature",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nWoven Net - Trap a creature\nMira Ashvale"
+  }
+ },
+ "items.json/Glamour Stone": {
+  "action:use": {
+   "button": "Recreate a guise (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nGlamour Stone - Recreate a guise\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "items.json/Piercing Arrows": {
+  "option:piercing": "Piercing Arrows"
+ },
+ "items.json/Skeleton Key": {
+  "option:advantage": "Skeleton Key"
+ },
+ "items.json/Arcane Prism": {
+  "action:activate": {
+   "button": "Activate prism",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nArcane Prism - Activate prism\nMira Ashvale"
+  }
+ },
+ "items.json/Minor Stamina Potion Recipe": {
+  "action:downtime-narrative": {
+   "button": "Craft a Minor Stamina Potion",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  }
+ },
+ "items.json/Minor Health Potion Recipe": {
+  "action:downtime-narrative": {
+   "button": "Craft a Minor Health Potion",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  }
+ },
+ "items.json/Corrector Sprite": {
+  "option:advantage": "Corrector Sprite"
+ },
+ "items.json/Lorekeeper": {
+  "option:lorekeeper": "Lorekeeper"
+ },
+ "items.json/Vial of Darksmoke Recipe": {
+  "action:use": {
+   "button": "Craft a Vial of Darksmoke (1 Stress)",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  }
+ },
+ "items.json/Glider": {
+  "action:use": {
+   "button": "Deploy glider (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nGlider - Deploy glider\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "items.json/Ring of Silence": {
+  "action:use": {
+   "button": "Silence footsteps (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "gained Silent Footsteps"
+   ],
+   "report": "ACTION USED\nRing of Silence - Silence footsteps\nMira Ashvale\n• spent 1 Hope\n• gained Silent Footsteps"
+  }
+ },
+ "items.json/Calming Pendant": {
+  "action:roll": {
+   "button": "Last Stress: roll d6",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nCalming Pendant - Last Stress: roll d6\nMira Ashvale"
+  }
+ },
+ "items.json/Bag of Ficklesand": {
+  "action:weight": {
+   "button": "Change weight (Presence 10)",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nBag of Ficklesand - Change weight (Presence 10)\nMira Ashvale"
+  },
+  "action:sand": {
+   "button": "Blow sand: Vulnerable (Finesse 10)",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nBag of Ficklesand - Blow sand: Vulnerable (Finesse 10)\nMira Ashvale"
+  }
+ },
+ "items.json/Ring of Resistance": {
+  "mitigation:ring": "Ring of Resistance"
+ },
+ "items.json/Box of Many Goods": {
+  "action:use": {
+   "button": "Open the box",
+   "blocker": null,
+   "lines": [
+    "rolled 1d12 = 4: It’s empty."
+   ],
+   "report": "ACTION USED\nBox of Many Goods - Open the box\nMira Ashvale\n• rolled 1d12 = 4: It’s empty."
+  }
+ },
+ "items.json/Paragon’s Chain": {
+  "action:downtime-narrative": {
+   "button": "Meditate on your principle",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  },
+  "option:principle": "Paragon’s Chain (Hope d20)"
+ },
+ "items.json/Elusive Amulet": {
+  "action:use": {
+   "button": "Become Hidden",
+   "blocker": null,
+   "lines": [
+    "gained Hidden (Elusive Amulet)"
+   ],
+   "report": "ACTION USED\nElusive Amulet - Become Hidden\nMira Ashvale\n• gained Hidden (Elusive Amulet)"
+  }
+ },
+ "items.json/Hopekeeper Locket": {
+  "action:use": {
+   "button": "At 0 Hope: gain a Hope (1 hopekeeper_locket)",
+   "blocker": "Requires zero Hope",
+   "lines": null,
+   "report": null
+  }
+ },
+ "items.json/Honing Relic": {
+  "option:experience": "Honing Relic"
+ },
+ "items.json/Mythic Dust Recipe": {
+  "action:downtime-narrative": {
+   "button": "Craft Mythic Dust",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  }
+ },
+ "items.json/Shard of Memory": {
+  "action:use": {
+   "button": "Recall a vault card (2 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Hope"
+   ],
+   "report": "ACTION USED\nShard of Memory - Recall a vault card\nMira Ashvale\n• spent 2 Hope"
+  }
+ },
+ "items.json/Ring of Unbreakable Resolve": {
+  "action:use": {
+   "button": "Use (4 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 4 Hope"
+   ],
+   "report": "ACTION USED\nRing of Unbreakable Resolve - Use\nMira Ashvale\n• spent 4 Hope"
+  }
+ },
+ "items.json/Belt of Unity": {
+  "action:use": {
+   "button": "Use (5 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 5 Hope"
+   ],
+   "report": "ACTION USED\nBelt of Unity - Use\nMira Ashvale\n• spent 5 Hope"
+  }
+ },
+ "items.json/Alconite Crystal": {
+  "action:recharge": {
+   "button": "Downtime in salt water: recharge",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  },
+  "option:crystal": "Alconite Crystal"
+ },
+ "items.json/Anchoring Hook": {
+  "option:anchor": "Anchoring Hook - Avoid forced movement",
+  "mitigation:anchor": "Anchoring Hook: forced-movement damage"
+ },
+ "items.json/Ancient Runestone": {
+  "action:use": {
+   "button": "Trace the rune (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "rolled 1d6 = 4: Advantage on your next Spellcast Roll.",
+    "gained Runestone: Spellcast Advantage"
+   ],
+   "report": "ACTION USED\nAncient Runestone - Trace the rune\nMira Ashvale\n• spent 1 Hope\n• rolled 1d6 = 4: Advantage on your next Spellcast Roll.\n• gained Runestone: Spellcast Advantage"
+  }
+ },
+ "items.json/Big Bug Begone": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nBig Bug Begone - Use\nMira Ashvale"
+  }
+ },
+ "items.json/Bogglass Reed": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nBogglass Reed - Use\nMira Ashvale"
+  }
+ },
+ "items.json/Bubble Wand": {
+  "action:use": {
+   "button": "Activate (Finesse 10)",
+   "blocker": null,
+   "lines": [
+    "gained Bubble Stream"
+   ],
+   "report": "ACTION USED\nBubble Wand - Activate (Finesse 10)\nMira Ashvale\n• gained Bubble Stream"
+  }
+ },
+ "items.json/Croakroot Pad": {
+  "action:downtime-narrative": {
+   "button": "Meditate: ask the GM a question",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  }
+ },
+ "items.json/Detuner": {
+  "action:use": {
+   "button": "Use (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nDetuner - Use\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "items.json/Dread-Weave Boots": {
+  "mitigation:ground": "Dread-Weave Boots: ground-triggered magic"
+ },
+ "items.json/Dreamer’s Shard": {
+  "action:dream": {
+   "button": "Prophetic dream (Instinct Reaction 14)",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nDreamer’s Shard - Prophetic dream (Instinct Reaction 14)\nMira Ashvale"
+  }
+ },
+ "items.json/Etheric Anchor": {
+  "action:use": {
+   "button": "Succeed vs spatial distortion (2 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Stress"
+   ],
+   "report": "ACTION USED\nEtheric Anchor - Succeed vs spatial distortion\nMira Ashvale\n• spent 2 Stress"
+  }
+ },
+ "items.json/Flickerbloom": {
+  "option:temporal": "Flickerbloom"
+ },
+ "items.json/Gravitic Tether": {
+  "mitigation:fall": "Gravitic Tether: falling",
+  "mitigation:gravity": "Gravitic Tether: gravitational anomaly"
+ },
+ "items.json/Ice Gloves": {
+  "action:attack": {
+   "button": "Throw a snowball",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nIce Gloves - Throw a snowball\nMira Ashvale"
+  },
+  "action:damage": {
+   "button": "Snowball damage",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nIce Gloves - Snowball damage\nMira Ashvale"
+  }
+ },
+ "items.json/Jamming Spanner": {
+  "action:jam": {
+   "button": "Jam or remove (Finesse)",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nJamming Spanner - Jam or remove (Finesse)\nMira Ashvale"
+  }
+ },
+ "items.json/Lantern of Shadows": {
+  "action:light": {
+   "button": "Light the lantern",
+   "blocker": null,
+   "lines": [
+    "gained Lantern of Shadows"
+   ],
+   "report": "ACTION USED\nLantern of Shadows - Light the lantern\nMira Ashvale\n• gained Lantern of Shadows"
+  }
+ },
+ "items.json/Lightning Scarab": {
+  "action:explode": {
+   "button": "Brooch explodes",
+   "blocker": "Resource unavailable: scarab_damage",
+   "lines": null,
+   "report": null
+  },
+  "mitigation:divert": "Divert into Lightning Scarab"
+ },
+ "items.json/Mimicry Mask": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nMimicry Mask - Use\nMira Ashvale"
+  }
+ },
+ "items.json/Pathfinder’s Ledger": {
+  "option:navigate": "Pathfinder’s Ledger"
+ },
+ "items.json/Puddleduck’s Fins": {
+  "action:land": {
+   "button": "Move beyond Very Close on land (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nPuddleduck’s Fins - Move beyond Very Close on land\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "items.json/Pure Crystal": {
+  "action:use": {
+   "button": "Restore 1 additional HP",
+   "blocker": null,
+   "lines": [
+    "cleared 1 HP"
+   ],
+   "report": "ACTION USED\nPure Crystal - Restore 1 additional HP\nMira Ashvale\n• cleared 1 HP"
+  }
+ },
+ "items.json/Quill of Memory": {
+  "action:downtime-narrative": {
+   "button": "Narrative downtime move",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  }
+ },
+ "items.json/Red Nose of Hope": {
+  "option:entertain": "Red Nose of Hope",
+  "trigger:hope": {
+   "button": "Red Nose of Hope: change Fear into Hope",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "items.json/Rootslicer Gauntlet": {
+  "option:attack": "Rootslicer Gauntlet",
+  "option:reaction": "Rootslicer Gauntlet"
+ },
+ "items.json/Shadowangler Lure": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nShadowangler Lure - Use\nMira Ashvale"
+  }
+ },
+ "items.json/Siren’s Rock": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nSiren’s Rock - Use\nMira Ashvale"
+  }
+ },
+ "items.json/Soulweave Cloak": {
+  "action:use": {
+   "button": "Become Incorporeal",
+   "blocker": null,
+   "lines": [
+    "gained Incorporeal (Soulweave Cloak)"
+   ],
+   "report": "ACTION USED\nSoulweave Cloak - Become Incorporeal\nMira Ashvale\n• gained Incorporeal (Soulweave Cloak)"
+  }
+ },
+ "items.json/Spirit Seeker": {
+  "action:sense": {
+   "button": "Sense the nearest dead (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nSpirit Seeker - Sense the nearest dead\nMira Ashvale\n• spent 1 Hope"
+  },
+  "action:exclude": {
+   "button": "Exclude a creature (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nSpirit Seeker - Exclude a creature\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "items.json/Stingshield Robes": {
+  "mitigation:bee": "Stingshield Robes: bee-sized attacker",
+  "mitigation:mouse": "Stingshield Robes: mouse-sized attacker"
+ },
+ "items.json/Superior Alconite Crystal": {
+  "action:recharge": {
+   "button": "Downtime in salt water: recharge",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  },
+  "option:crystal": "Superior Alconite Crystal"
+ },
+ "items.json/Ticket Master’s Pouch": {
+  "option:advantage": "Ticket Master’s Pouch"
+ },
+ "items.json/Timeglass": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nTimeglass - Use\nMira Ashvale"
+  }
+ },
+ "items.json/Tome of Ancient Knowledge": {
+  "action:downtime-narrative": {
+   "button": "Narrative downtime move",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  }
+ },
+ "items.json/Twisted Lens": {
+  "action:look": {
+   "button": "Look through (Presence Reaction 14)",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nTwisted Lens - Look through (Presence Reaction 14)\nMira Ashvale"
+  }
+ },
+ "items.json/Veilcloak": {
+  "action:use": {
+   "button": "Shine dim light (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nVeilcloak - Shine dim light\nMira Ashvale\n• spent 1 Hope"
+  },
+  "option:advantage": "Veilcloak"
+ },
+ "items.json/Veilshroud Hood": {
+  "option:illusion": "Veilshroud Hood",
+  "option:perceive": "Veilshroud Hood: dulled senses"
+ },
+ "items.json/Winter Wolf Cloak": {
+  "action:use": {
+   "button": "Evasion +1 until damaged (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "gained Winter Wolf Cloak"
+   ],
+   "report": "ACTION USED\nWinter Wolf Cloak - Evasion +1 until damaged\nMira Ashvale\n• spent 1 Hope\n• gained Winter Wolf Cloak"
+  }
+ },
+ "items.json/Witherroot Charm": {
+  "action:downtime-narrative": {
+   "button": "Purge the charm",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  },
+  "mitigation:psychic": "Witherroot Charm: ignore psychic attack"
+ },
+ "items.json/Wolffriend Pendant": {
+  "option:befriend": "Wolffriend Pendant"
+ },
+ "items.json/Wraith Trap": {
+  "action:trap": {
+   "button": "Trap an undead (Finesse)",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nWraith Trap - Trap an undead (Finesse)\nMira Ashvale"
+  },
+  "action:store": {
+   "button": "Spirit trapped",
+   "blocker": "Resource unavailable: wraith_spirits",
+   "lines": null,
+   "report": null
+  },
+  "action:release": {
+   "button": "Release all spirits",
+   "blocker": "Resource unavailable: wraith_spirits",
+   "lines": null,
+   "report": null
+  },
+  "option:marked": "Wraith Trap: target’s marked HP",
+  "option:psychic": "Wraith Trap: trapped spirits"
+ },
+ "items.json/Yeti Coat": {
+  "action:use": {
+   "button": "Transform into a Yeti (3 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Stress"
+   ],
+   "report": "ACTION USED\nYeti Coat - Transform into a Yeti\nMira Ashvale\n• spent 3 Stress"
+  },
+  "mitigation:cold": "Yeti Coat: cold exposure"
+ },
+ "items.json/Potioncraft Kit": {
+  "action:ingredients": {
+   "button": "Forage for ingredients",
+   "blocker": "Choose this move in the rest dialog",
+   "lines": null,
+   "report": null
+  }
+ },
+ "items.json/Alchemy Jug": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nAlchemy Jug - Use\nMira Ashvale"
+  }
+ },
+ "items.json/Cloak of Displacement": {
+  "action:use": {
+   "button": "Project displacement (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress",
+    "gained Displacement"
+   ],
+   "report": "ACTION USED\nCloak of Displacement - Project displacement\nMira Ashvale\n• spent 1 Stress\n• gained Displacement"
+  }
+ },
+ "items.json/Blood Scrying Crystal": {
+  "action:use": {
+   "button": "Use (2 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Stress"
+   ],
+   "report": "ACTION USED\nBlood Scrying Crystal - Use\nMira Ashvale\n• spent 2 Stress"
+  }
+ },
+ "items.json/Grapnel": {
+  "option:climb": "Grapnel"
+ },
+ "items.json/Nighthawker’s Ring": {
+  "action:use": {
+   "button": "Activate gemstone (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope",
+    "gained Treasure Sense"
+   ],
+   "report": "ACTION USED\nNighthawker’s Ring - Activate gemstone\nMira Ashvale\n• spent 1 Hope\n• gained Treasure Sense"
+  }
+ },
+ "items.json/Loaded Dice": {
+  "action:roll": {
+   "button": "Choose the result (Finesse 14)",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nLoaded Dice - Choose the result (Finesse 14)\nMira Ashvale"
+  }
+ },
+ "items.json/Traveler’s Bell": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nTraveler’s Bell - Use\nMira Ashvale"
+  }
+ },
+ "items.json/Kingfisher’s Net": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nKingfisher’s Net - Use\nMira Ashvale"
+  }
+ },
+ "items.json/Titan’s Girdle": {
+  "option:girdle": "Titan’s Girdle"
+ },
+ "items.json/Furball Bag": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nFurball Bag - Use\nMira Ashvale"
+  }
+ },
+ "items.json/Escher’s Mirrorball": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nEscher’s Mirrorball - Use\nMira Ashvale"
+  }
+ },
+ "items.json/Cheater’s Coin": {
+  "action:use": {
+   "button": "Use (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nCheater’s Coin - Use\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "items.json/Gadiman’s Backpack": {
+  "action:use": {
+   "button": "Use (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nGadiman’s Backpack - Use\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "items.json/Eclipse Coin": {
+  "action:use": {
+   "button": "Flip the coin",
+   "blocker": null,
+   "lines": [
+    "rolled 1d2 = 4"
+   ],
+   "report": "ACTION USED\nEclipse Coin - Flip the coin\nMira Ashvale\n• rolled 1d2 = 4"
+  }
+ },
+ "items.json/Sorcerer’s Hat": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nSorcerer’s Hat - Use\nMira Ashvale"
+  }
+ },
+ "items.json/Soul-Twin Circlets": {
+  "action:use": {
+   "button": "Use (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nSoul-Twin Circlets - Use\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "items.json/Namer’s Oracle": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nNamer’s Oracle - Use\nMira Ashvale"
+  }
+ },
+ "items.json/Crucible Frames": {
+  "action:use": {
+   "button": "Use (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nCrucible Frames - Use\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "items.json/Two-Faced Aegis Brooch": {
+  "action:use": {
+   "button": "Flip the coin",
+   "blocker": null,
+   "lines": [
+    "rolled 1d2 = 4"
+   ],
+   "report": "ACTION USED\nTwo-Faced Aegis Brooch - Flip the coin\nMira Ashvale\n• rolled 1d2 = 4"
+  }
+ },
+ "items.json/Molepaw Mittens": {
+  "action:use": {
+   "button": "Use (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nMolepaw Mittens - Use\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "items.json/Iron Dagger Pendant": {
+  "action:use": {
+   "button": "Use (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nIron Dagger Pendant - Use\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "items.json/Hero’s Helm": {
+  "trigger:helm": {
+   "button": "Hero’s Helm: allies gain a Hope",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "items.json/Rings of Alliance": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nRings of Alliance - Use\nMira Ashvale"
+  }
+ },
+ "items.json/Phobophage’s Circlet": {
+  "action:roll": {
+   "button": "GM spent Fear: roll d4",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nPhobophage’s Circlet - GM spent Fear: roll d4\nMira Ashvale"
+  },
+  "action:clear": {
+   "button": "Rolled a 4: clear a Stress",
+   "blocker": null,
+   "lines": [
+    "cleared 0 Stress"
+   ],
+   "report": "ACTION USED\nPhobophage’s Circlet - Rolled a 4: clear a Stress\nMira Ashvale\n• cleared 0 Stress"
+  }
+ },
+ "items.json/Warp Pendant": {
+  "action:use": {
+   "button": "Teleport (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nWarp Pendant - Teleport\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "items.json/Communion Relic": {
+  "action:use": {
+   "button": "Use (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nCommunion Relic - Use\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "items.json/Augur’s Relic": {
+  "action:use": {
+   "button": "Use",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nAugur’s Relic - Use\nMira Ashvale"
+  }
+ },
+ "items.json/Songbook of cursed carols": {
+  "option:carol": "Songbook of cursed carols - Cursed carol"
+ },
+ "items.json/Dancing remains": {
+  "action:agility": {
+   "button": "Throw (Agility 10)",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nDancing remains - Throw (Agility 10)\nMira Ashvale"
+  },
+  "action:presence": {
+   "button": "Throw (Presence 10)",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nDancing remains - Throw (Presence 10)\nMira Ashvale"
+  },
+  "action:hinder": {
+   "button": "Force disadvantage on a nearby roll (1 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Hope"
+   ],
+   "report": "ACTION USED\nDancing remains - Force disadvantage on a nearby roll\nMira Ashvale\n• spent 1 Hope"
+  }
+ },
+ "items.json/Mask of the dead court": {
+  "action:resist": {
+   "button": "Hide your true nature (Presence Reaction)",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nMask of the dead court - Hide your true nature (Presence Reaction)\nMira Ashvale"
+  }
+ },
+ "items.json/Mask of the Dance Master": {
+  "action:gain-token": {
+   "button": "Gain Mask token (confirm nearby death)",
+   "blocker": "Resource unavailable: death-mask",
+   "lines": null,
+   "report": null
+  }
+ },
+ "transformations.json/Ephemeral": {
+  "action:pass-through": {
+   "button": "Pass through a solid object (2 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 2 Stress"
+   ],
+   "report": "ACTION USED\nEphemeral - Pass through a solid object\nMira Ashvale\n• spent 2 Stress"
+  },
+  "mitigation:physical-resistance": "Ephemeral physical resistance",
+  "mitigation:magic-vulnerability": "Ephemeral double magic damage"
+ },
+ "transformations.json/Change Shape": {
+  "action:change-ancestry": {
+   "button": "Change ancestry and choose a feature",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nChange Shape - Change ancestry and choose a feature\nMira Ashvale"
+  }
+ },
+ "transformations.json/Only Skin Deep": {
+  "action:change-feature": {
+   "button": "Choose a different ancestry feature",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nOnly Skin Deep - Choose a different ancestry feature\nMira Ashvale"
+  }
+ },
+ "transformations.json/Fangs": {
+  "action:attack": {
+   "button": "Attack",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nFangs - Attack\nMira Ashvale"
+  },
+  "action:damage": {
+   "button": "Damage",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nFangs - Damage\nMira Ashvale"
+  }
+ },
+ "transformations.json/Feed": {
+  "option:feed-fear": "Feed - Spend a token (Fear d20)",
+  "option:hungry": "Feed - No Feed tokens (disadvantage)",
+  "option:hungry-reaction": "Feed - No Feed tokens (disadvantage)",
+  "trigger:feed": {
+   "button": "Feed",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "transformations.json/Wolf Form": {
+  "action:use": {
+   "button": "Wolf Form (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress",
+    "gained Wolf Form"
+   ],
+   "report": "ACTION USED\nWolf Form\nMira Ashvale\n• spent 1 Stress\n• gained Wolf Form"
+  },
+  "trigger:hope-stress": {
+   "button": "Wolf Form: mark Stress",
+   "cost": "1 Stress",
+   "choices": []
+  },
+  "mitigation:wolf-form": "Enter Wolf Form"
+ },
+ "transformations.json/Howling Rampage": {
+  "action:rampage": {
+   "button": "Howling Rampage",
+   "blocker": "Required effect is not active",
+   "lines": null,
+   "report": null
+  }
+ },
+ "weapons.json/Rapier": {
+  "option:quick": "Rapier - Quick: target another creature"
+ },
+ "weapons.json/Improved Rapier": {
+  "option:quick": "Improved Rapier - Quick: target another creature"
+ },
+ "weapons.json/Bladed Whip": {
+  "option:quick": "Bladed Whip - Quick: target another creature"
+ },
+ "weapons.json/Scepter of Elias": {
+  "trigger:invigorating": {
+   "button": "Invigorating: roll a d4",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "weapons.json/Wand of Enthrallment": {
+  "option:persuasive": "Wand of Enthrallment - Persuasive"
+ },
+ "weapons.json/Advanced Rapier": {
+  "option:quick": "Advanced Rapier - Quick: target another creature"
+ },
+ "weapons.json/Hammer of Wrath": {
+  "option:devastating": "Hammer of Wrath - Devastating: d20 damage die"
+ },
+ "weapons.json/Meridian Cutlass": {
+  "option:dueling": "Meridian Cutlass - Dueling: target is isolated"
+ },
+ "weapons.json/Axe of Fortunis": {
+  "trigger:lucky": {
+   "button": "Lucky: reroll the failed attack",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "weapons.json/Runes of Ruination": {
+  "option:painful": "Runes of Ruination - Painful: mark a Stress"
+ },
+ "weapons.json/Legendary Rapier": {
+  "option:quick": "Legendary Rapier - Quick: target another creature"
+ },
+ "weapons.json/Dual-Ended Sword": {
+  "option:quick": "Dual-Ended Sword - Quick: target another creature"
+ },
+ "weapons.json/Impact Gauntlet": {
+  "trigger:concussive": {
+   "button": "Concussive: knock the target back to Far range",
+   "cost": "1 Hope",
+   "choices": []
+  }
+ },
+ "weapons.json/Swinging Ropeblade": {
+  "trigger:grappling": {
+   "button": "Grappling: Restrain the target or pull it into Melee range",
+   "cost": "1 Hope",
+   "choices": []
+  }
+ },
+ "weapons.json/Ricochet Axes": {
+  "option:bouncing": "Ricochet Axes - Bouncing: targets hit"
+ },
+ "weapons.json/Siphoning Gauntlets": {
+  "trigger:lifestealing": {
+   "button": "Lifestealing: roll a d6",
+   "cost": "",
+   "choices": [
+    "clear a Hit Point on a 6",
+    "clear a Stress on a 6"
+   ]
+  }
+ },
+ "weapons.json/Midas Scythe": {
+  "option:greedy": "Midas Scythe - Greedy: spend a handful of gold, +1 Proficiency"
+ },
+ "weapons.json/Bloodstaff": {
+  "option:painful": "Bloodstaff - Painful: mark a Stress"
+ },
+ "weapons.json/Light-Frame Wheelchair": {
+  "option:quick": "Light-Frame Wheelchair - Quick: target another creature"
+ },
+ "weapons.json/Improved Light-Frame Wheelchair": {
+  "option:quick": "Improved Light-Frame Wheelchair - Quick: target another creature"
+ },
+ "weapons.json/Advanced Light-Frame Wheelchair": {
+  "option:quick": "Advanced Light-Frame Wheelchair - Quick: target another creature"
+ },
+ "weapons.json/Legendary Light-Frame Wheelchair": {
+  "option:quick": "Legendary Light-Frame Wheelchair - Quick: target another creature"
+ },
+ "weapons.json/Shortsword": {
+  "option:primary-damage": "Shortsword - Paired"
+ },
+ "weapons.json/Small Dagger": {
+  "option:primary-damage": "Small Dagger - Paired"
+ },
+ "weapons.json/Whip": {
+  "action:use": {
+   "button": "Startling (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nWhip - Startling\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "weapons.json/Improved Shortsword": {
+  "option:primary-damage": "Improved Shortsword - Paired"
+ },
+ "weapons.json/Improved Small Dagger": {
+  "option:primary-damage": "Improved Small Dagger - Paired"
+ },
+ "weapons.json/Improved Whip": {
+  "action:use": {
+   "button": "Startling (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nImproved Whip - Startling\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "weapons.json/Spiked Shield": {
+  "option:primary-damage": "Spiked Shield - Double Duty"
+ },
+ "weapons.json/Parrying Dagger": {
+  "action:parry": {
+   "button": "Parry",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nParrying Dagger - Parry\nMira Ashvale"
+  }
+ },
+ "weapons.json/Advanced Shortsword": {
+  "option:primary-damage": "Advanced Shortsword - Paired"
+ },
+ "weapons.json/Advanced Small Dagger": {
+  "option:primary-damage": "Advanced Small Dagger - Paired"
+ },
+ "weapons.json/Advanced Whip": {
+  "action:use": {
+   "button": "Startling (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nAdvanced Whip - Startling\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "weapons.json/Buckler": {
+  "action:use": {
+   "button": "Deflecting (1 Armor Slot)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Armor Slot"
+   ],
+   "report": "ACTION USED\nBuckler - Deflecting\nMira Ashvale\n• spent 1 Armor Slot"
+  }
+ },
+ "weapons.json/Powered Gauntlet": {
+  "option:charged": "Powered Gauntlet - Charged: +1 Proficiency"
+ },
+ "weapons.json/Legendary Shortsword": {
+  "option:primary-damage": "Legendary Shortsword - Paired"
+ },
+ "weapons.json/Legendary Small Dagger": {
+  "option:primary-damage": "Legendary Small Dagger - Paired"
+ },
+ "weapons.json/Legendary Whip": {
+  "action:use": {
+   "button": "Startling (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nLegendary Whip - Startling\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "weapons.json/Primer Shard": {
+  "trigger:locked-on": {
+   "button": "Locked On: next primary attack succeeds",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "weapons.json/Bug Hunter’s Aegis": {
+  "action:use": {
+   "button": "Swatter (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nBug Hunter’s Aegis - Swatter\nMira Ashvale\n• spent 1 Stress"
+  }
+ },
+ "weapons.json/Manacle Bolas": {
+  "trigger:restraining": {
+   "button": "Restraining: temporarily Restrain the target",
+   "cost": "1 Hope",
+   "choices": []
+  }
+ },
+ "weapons.json/Staff of the Whispering Archive": {
+  "action:use": {
+   "button": "Watchful: cast Floating Eye",
+   "blocker": null,
+   "lines": [
+    "afflicted by Watchful: Floating Eye"
+   ],
+   "report": "ACTION USED\nStaff of the Whispering Archive - Watchful: cast Floating Eye\nMira Ashvale\n• afflicted by Watchful: Floating Eye"
+  }
+ },
+ "weapons.json/Claws of Yifang": {
+  "mitigation:channeling": "Channeling"
+ },
+ "weapons.json/Devil’s Smithing Hammer": {
+  "trigger:deforming": {
+   "button": "Deforming: deform the target's metal armor",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "weapons.json/Life Wand": {
+  "option:undead": "Life Wand - Life-Linked: against undead"
+ },
+ "weapons.json/Spider’s Sting": {
+  "action:use": {
+   "button": "Webslinger: Restrain a target",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nSpider’s Sting - Webslinger: Restrain a target\nMira Ashvale"
+  }
+ },
+ "weapons.json/Katana": {
+  "option:quick": "Katana - Quick: target another creature"
+ },
+ "weapons.json/Enchanted Chakram": {
+  "option:ricochet": "Enchanted Chakram - Ricochet: target another creature"
+ },
+ "weapons.json/Arcane Rifle": {
+  "option:penalty": "Arcane Rifle - Aimed: target is close or engaged",
+  "option:ignore": "Arcane Rifle - Aimed: ignore the penalty"
+ },
+ "weapons.json/Improved Katana": {
+  "option:quick": "Improved Katana - Quick: target another creature"
+ },
+ "weapons.json/Bladed Fan": {
+  "action:parry": {
+   "button": "Parry",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nBladed Fan - Parry\nMira Ashvale"
+  }
+ },
+ "weapons.json/Improved Enchanted Chakram": {
+  "option:ricochet": "Improved Enchanted Chakram - Ricochet: target another creature"
+ },
+ "weapons.json/Improved Arcane Rifle": {
+  "option:penalty": "Improved Arcane Rifle - Aimed: target is close or engaged",
+  "option:ignore": "Improved Arcane Rifle - Aimed: ignore the penalty"
+ },
+ "weapons.json/Displacement Razor": {
+  "option:omnipresent": "Displacement Razor - Omnipresent: target within Very Far range"
+ },
+ "weapons.json/Enchanted Lute": {
+  "trigger:invigorating": {
+   "button": "Invigorating: roll a d4",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "weapons.json/Splintershaft Bow": {
+  "option:volleyed": "Splintershaft Bow - Volleyed: target a group"
+ },
+ "weapons.json/Advanced Katana": {
+  "option:quick": "Advanced Katana - Quick: target another creature"
+ },
+ "weapons.json/Blitz Hammer": {
+  "option:accelerator": "Blitz Hammer - Accelerator: move to Far range, +1 Proficiency"
+ },
+ "weapons.json/Soldier’s Pike": {
+  "mitigation:braced": "Braced: attacker marks a Hit Point"
+ },
+ "weapons.json/Chained Scythe": {
+  "option:quick": "Chained Scythe - Quick: target another creature"
+ },
+ "weapons.json/Singing Sword": {
+  "trigger:bolstering": {
+   "button": "Bolstering: PCs within Close range gain a Hope",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "weapons.json/Bladed Star": {
+  "trigger:rebounding": {
+   "button": "Rebounding: reroll with disadvantage",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "weapons.json/Advanced Enchanted Chakram": {
+  "option:ricochet": "Advanced Enchanted Chakram - Ricochet: target another creature"
+ },
+ "weapons.json/Advanced Arcane Rifle": {
+  "option:penalty": "Advanced Arcane Rifle - Aimed: target is close or engaged",
+  "option:ignore": "Advanced Arcane Rifle - Aimed: ignore the penalty"
+ },
+ "weapons.json/Rocket Maul": {
+  "trigger:concussive": {
+   "button": "Concussive: knock the target back to Far range",
+   "cost": "1 Hope",
+   "choices": []
+  }
+ },
+ "weapons.json/Arc Wand": {
+  "option:bouncing": "Arc Wand - Bouncing: additional targets"
+ },
+ "weapons.json/Staff of Augma": {
+  "trigger:catalytic": {
+   "button": "Catalytic: ally gains +3 to next attack",
+   "cost": "1 Stress",
+   "choices": []
+  }
+ },
+ "weapons.json/Legendary Katana": {
+  "option:quick": "Legendary Katana - Quick: target another creature"
+ },
+ "weapons.json/Infinite Staff": {
+  "option:extend-1": "Infinite Staff - Extending: reach Very Close",
+  "option:extend-2": "Infinite Staff - Extending: reach Close",
+  "option:extend-3": "Infinite Staff - Extending: reach Far",
+  "option:extend-4": "Infinite Staff - Extending: reach Very Far"
+ },
+ "weapons.json/Bec de Corbin": {
+  "option:devastating": "Bec de Corbin - Devastating: d20 damage die"
+ },
+ "weapons.json/Clockwork Crossbow": {
+  "option:quick": "Clockwork Crossbow - Quick: target another creature"
+ },
+ "weapons.json/Legendary Enchanted Chakram": {
+  "option:ricochet": "Legendary Enchanted Chakram - Ricochet: target another creature"
+ },
+ "weapons.json/Legendary Arcane Rifle": {
+  "option:penalty": "Legendary Arcane Rifle - Aimed: target is close or engaged",
+  "option:ignore": "Legendary Arcane Rifle - Aimed: ignore the penalty"
+ },
+ "weapons.json/Storm God’s Greataxe": {
+  "option:bouncing": "Storm God’s Greataxe - Bouncing: additional targets"
+ },
+ "weapons.json/Ethereal Zweihänder": {
+  "action:conjure": {
+   "button": "Conjure (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress",
+    "gained Ethereal Zweihänder conjured"
+   ],
+   "report": "ACTION USED\nEthereal Zweihänder - Conjure\nMira Ashvale\n• spent 1 Stress\n• gained Ethereal Zweihänder conjured"
+  }
+ },
+ "weapons.json/Gravity Arbalest": {
+  "trigger:magnetic": {
+   "button": "Magnetic: pull adversaries near the target",
+   "cost": "1 Hope",
+   "choices": []
+  }
+ },
+ "weapons.json/Hatchet": {
+  "option:follow-up": "Hatchet - Follow-Up: +1 Proficiency"
+ },
+ "weapons.json/Offhand Brass Knuckles": {
+  "option:primary-damage": "Offhand Brass Knuckles - Paired"
+ },
+ "weapons.json/Focus Runes": {
+  "option:primary-damage": "Focus Runes - Focused"
+ },
+ "weapons.json/Improved Hatchet": {
+  "option:follow-up": "Improved Hatchet - Follow-Up: +1 Proficiency"
+ },
+ "weapons.json/Improved Offhand Brass Knuckles": {
+  "option:primary-damage": "Improved Offhand Brass Knuckles - Paired"
+ },
+ "weapons.json/Improved Focus Runes": {
+  "option:primary-damage": "Improved Focus Runes - Focused"
+ },
+ "weapons.json/Eldritch Vambrace": {
+  "action:use": {
+   "button": "Deflecting (1 Armor Slot)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Armor Slot"
+   ],
+   "report": "ACTION USED\nEldritch Vambrace - Deflecting\nMira Ashvale\n• spent 1 Armor Slot"
+  }
+ },
+ "weapons.json/Segmented Staff": {
+  "option:primary-damage": "Segmented Staff - Double Duty"
+ },
+ "weapons.json/Razor Wire": {
+  "trigger:entangling": {
+   "button": "Entangling: target becomes temporarily Vulnerable",
+   "cost": "1 Hope",
+   "choices": []
+  }
+ },
+ "weapons.json/Advanced Hatchet": {
+  "option:follow-up": "Advanced Hatchet - Follow-Up: +1 Proficiency"
+ },
+ "weapons.json/Advanced Offhand Brass Knuckles": {
+  "option:primary-damage": "Advanced Offhand Brass Knuckles - Paired"
+ },
+ "weapons.json/Advanced Focus Runes": {
+  "option:primary-damage": "Advanced Focus Runes - Focused"
+ },
+ "weapons.json/Vorpal Shard": {
+  "trigger:targeted": {
+   "button": "Targeted: next weapon attack succeeds",
+   "cost": "1 Hope",
+   "choices": []
+  }
+ },
+ "weapons.json/Soul Chain": {
+  "trigger:draining": {
+   "button": "Draining: target marks a Stress, you clear a Stress",
+   "cost": "1 Hope",
+   "choices": []
+  }
+ },
+ "weapons.json/Legendary Hatchet": {
+  "option:follow-up": "Legendary Hatchet - Follow-Up: +1 Proficiency"
+ },
+ "weapons.json/Legendary Offhand Brass Knuckles": {
+  "option:primary-damage": "Legendary Offhand Brass Knuckles - Paired"
+ },
+ "weapons.json/Legendary Focus Runes": {
+  "option:primary-damage": "Legendary Focus Runes - Focused"
+ },
+ "weapons.json/Void Needle": {
+  "trigger:inverted": {
+   "button": "Inverted: gain a Hope",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "weapons.json/Staff of the Dance Master": {
+  "action:use": {
+   "button": "Make Them Dance (1 Stress)",
+   "blocker": null,
+   "lines": [
+    "spent 1 Stress"
+   ],
+   "report": "ACTION USED\nStaff of the Dance Master - Make Them Dance\nMira Ashvale\n• spent 1 Stress"
+  }
+ }
+}
