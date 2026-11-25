@@ -57,7 +57,7 @@ describe('guided catalog forms', () => {
     expect(source.entries[0].name).toBe('Example');
   });
   it('creates renamed variants whose buffs stack with the base item', () => {
-    const potion = (JSON.parse(readFileSync(new URL('../../dmmap-daggerheart/consumables.json', import.meta.url), 'utf8')) as { entries: CatalogObject[] })
+    const potion = (JSON.parse(readFileSync(new URL('../../src/test/resources/dmmt/legacy-catalogs/consumables.json', import.meta.url), 'utf8')) as { entries: CatalogObject[] })
       .entries;
     const base = potion.find(entry => entry.name === 'Bolster Potion')!;
     const variant = createVariant(base, ' Red Lemonade ', potion);

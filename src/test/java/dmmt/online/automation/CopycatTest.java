@@ -22,7 +22,7 @@ class CopycatTest {
     private static final AutomationHost HOST = AutomationHost.bundled();
 
     private static LegacyCatalogConverter.Result convert() throws Exception {
-        ObjectNode root = (ObjectNode) RuleJson.parse(Files.readString(Path.of("dmmap-daggerheart", "domain-cards.json")));
+        ObjectNode root = (ObjectNode) RuleJson.parse(Files.readString(dmmt.online.LegacyCatalogs.dir().resolve("domain-cards.json")));
         ArrayNode kept = RuleJson.JSON.createArrayNode();
         for (JsonNode entry : root.path("entries")) if ("copycat".equals(entry.path("id").asText())) kept.add(entry);
         root.set("entries", kept);

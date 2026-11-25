@@ -1,11 +1,11 @@
 import { el } from '../login';
-import { ApiError, hostFetch } from '../api';
+import { ApiError, hostFetch, ONLINE_CONTRACT_VERSION } from '../api';
 import type { RollMessage } from '../protocol';
 import { intentControl, ruleControl, type ControlText, type RuleDescriptor, type RuleIntent } from './controls';
 
 type ProfileRollKind = 'attack' | 'damage' | 'action' | 'reaction' | 'spellcast';
 
-export const AUTOMATION_COMPATIBILITY_VERSION = 1;
+export const AUTOMATION_COMPATIBILITY_VERSION = ONLINE_CONTRACT_VERSION;
 
 export interface DescribedActions {
   revision: number;

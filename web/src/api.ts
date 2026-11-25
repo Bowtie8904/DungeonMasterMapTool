@@ -7,9 +7,13 @@ export function configureDmSheet(token: string): void {
   dmSheetToken = token;
 }
 export function dmSheetAuthorization(): string | undefined { return dmSheetToken; }
+/** Online Play contract this browser speaks; must equal the host's AUTOMATION_COMPATIBILITY_VERSION. */
+export const ONLINE_CONTRACT_VERSION = 2;
+export const CONTRACT_HEADER = 'X-Online-Contract';
 export function hostFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  if (!dmSheetToken) return fetch(url, options);
   const headers = new Headers(options.headers);
+  headers.set(CONTRACT_HEADER, String(ONLINE_CONTRACT_VERSION));
+  if (!dmSheetToken) return fetch(url, { ...options, headers });
   headers.set('Authorization', `Bearer ${dmSheetToken}`);
   return fetch(url, { ...options, credentials: 'omit', headers });
 }
@@ -42,13 +46,30 @@ export class InventoryConflict extends ApiError {
   }
 }
 
+export class CompatibilityError extends ApiError {
+  constructor(public clientVersion: number | string, public hostVersion: number | string) {
+    super(compatibilityMessage(clientVersion, hostVersion), 409);
+  }
+}
+
+export function compatibilityMessage(clientVersion: number | string, hostVersion: number | string): string {
+  return `Online automation compatibility mismatch (client version ${clientVersion}; host version ${hostVersion}). Update the browser and host to matching versions and reload.`;
+}
+
+/** Throws unless the host advertises exactly this browser's Online Play contract; an old host advertises none. */
+export function assertHostCompatible(hostContract: unknown): void {
+  if (hostContract !== ONLINE_CONTRACT_VERSION) throw new CompatibilityError(ONLINE_CONTRACT_VERSION, typeof hostContract === 'number' ? hostContract : 'unknown');
+}
+
 async function readError(res: Response): Promise<ApiError> {
-  let body: { error?: string; retryAfterSeconds?: number } = {};
+  let body: { error?: string; retryAfterSeconds?: number; code?: string; hostVersion?: number | string } = {};
   try {
     body = await res.json();
   } catch {
     /* no body */
   }
+  if (res.status === 409 && body.code === 'automationCompatibilityMismatch')
+    return new CompatibilityError(ONLINE_CONTRACT_VERSION, body.hostVersion ?? 'unknown');
   let message = body.error ?? `Request failed (${res.status})`;
   if (res.status === 429 && body.retryAfterSeconds !== undefined) {
     message = `${body.error ?? 'Too many attempts'} Try again in ${body.retryAfterSeconds} s.`;
@@ -59,7 +80,9 @@ async function readError(res: Response): Promise<ApiError> {
 export async function getSession(): Promise<SessionInfo> {
   const res = await fetch('/api/session', { credentials: 'same-origin' });
   if (!res.ok) throw await readError(res);
-  return (await res.json()) as SessionInfo;
+  const session = (await res.json()) as SessionInfo;
+  assertHostCompatible(session.automationContract);
+  return session;
 }
 
 export async function login(playerId: string, password: string): Promise<void> {
@@ -307,7 +330,7 @@ export async function cardRequest<T>(path: string, body?: unknown): Promise<T> {
 }
 
 export async function notesRequest<T>(path = '', body?: unknown): Promise<T> {
-  const res = await fetch(`/api/notes${path}`, {
+  const res = await hostFetch(`/api/notes${path}`, {
     method: body === undefined ? 'GET' : 'POST',
     credentials: 'same-origin',
     cache: 'no-store',

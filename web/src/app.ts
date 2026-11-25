@@ -243,7 +243,7 @@ export class App {
       {
         onMessage: (m) => this.handle(m),
         onOpen: () => {},
-        onStatus: (s) => this.status(s),
+        onStatus: (s, detail) => this.status(s, detail),
       },
       () => this.store.lastSeq,
     );
@@ -254,13 +254,18 @@ export class App {
     this.conn.start();
   }
 
-  private status(s: 'connecting' | 'open' | 'closed' | 'kicked' | 'unauthorized'): void {
+  private status(s: 'connecting' | 'open' | 'closed' | 'kicked' | 'unauthorized' | 'incompatible', detail?: string): void {
     this.statusEl.textContent = s === 'open' ? 'online' : s === 'closed' ? 'reconnecting...' : s;
     this.statusEl.className = `status ${s}`;
     if (s === 'closed' && this.pendingDrawings.size) {
       this.pendingDrawings.clear();
       this.drawingHistory = [];
       this.toast('Connection lost before confirmation. Drawing undo history was reset.');
+    }
+    if (s === 'incompatible') {
+      this.toast(detail ?? 'Online automation compatibility mismatch. Update the browser and host to matching versions and reload.');
+      this.dispose();
+      this.onLoggedOut();
     }
     if (s === 'unauthorized') {
       this.dispose();

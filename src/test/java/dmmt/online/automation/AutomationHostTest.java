@@ -58,7 +58,7 @@ class AutomationHostTest {
     @Test
     void matchesSharedWardenReportAndRestFixture() throws Exception {
         ObjectNode example = fixture("parity/warden-protection");
-        JsonNode classes = RuleJson.parse(java.nio.file.Files.readString(java.nio.file.Path.of("dmmap-daggerheart", "classes.json")));
+        JsonNode classes = RuleJson.parse(java.nio.file.Files.readString(dmmt.online.LegacyCatalogs.dir().resolve("classes.json")));
         JsonNode feature = null;
         for (JsonNode entry : classes.path("entries")) if (example.path("classId").equals(entry.path("id")))
             for (JsonNode candidate : entry.path("features"))
@@ -1323,7 +1323,7 @@ class AutomationHostTest {
 
     @Test
     void convertedUntouchableUsesCurrentAgilityFromPassiveAndFrozenEffects() throws Exception {
-        JsonNode shipped = RuleJson.parse(java.nio.file.Files.readString(java.nio.file.Path.of("dmmap-daggerheart", "domain-cards.json")));
+        JsonNode shipped = RuleJson.parse(java.nio.file.Files.readString(dmmt.online.LegacyCatalogs.dir().resolve("domain-cards.json")));
         JsonNode untouchable = null;
         for (JsonNode entry : shipped.path("entries"))
             if ("untouchable".equals(entry.path("id").asText())) untouchable = entry;

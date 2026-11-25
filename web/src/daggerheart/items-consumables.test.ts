@@ -10,7 +10,7 @@ import { attachBlocker, attachItem, attachTargets, detachItem } from './attachme
 import { resolveRest } from './rest';
 
 type Entry = { id: string; name: string; text: string; automation?: Automation };
-const load = (file: string): Entry[] => JSON.parse(readFileSync(new URL(`../../../dmmap-daggerheart/${file}.json`, import.meta.url), 'utf8')).entries;
+const load = (file: string): Entry[] => JSON.parse(readFileSync(new URL(`../../../src/test/resources/dmmt/legacy-catalogs/${file}.json`, import.meta.url), 'utf8')).entries;
 const items = load('items');
 const consumables = load('consumables');
 const rules = (list: Entry[], name: string) => structuredClone(list.find(e => e.name === name)!.automation!);
@@ -42,7 +42,7 @@ describe('item and consumable catalog', () => {
   });
 
   it('only references custom resources that the entry declares', () => {
-    const builtIn = new Set(['hp', 'stress', 'hope', 'armor', 'gold', 'scars', 'permanentHp']);
+    const builtIn = new Set(['hp', 'stress', 'hope', 'armor', 'gold', 'scars', 'permanentHp', '@item']);
     const problems: string[] = [];
     for (const e of [...items, ...consumables]) {
       const declared = new Set((e.automation?.resources ?? []).map(r => r.id));

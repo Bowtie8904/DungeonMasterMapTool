@@ -51,7 +51,7 @@ function setup() {
     createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
   vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
   vi.stubGlobal('requestAnimationFrame', () => {});
-  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/classes.json', import.meta.url), 'utf8'));
   const c = emptyCharacter('Witch');
   c.className = 'Witch';
   c.mancer = { done: true };
@@ -68,7 +68,7 @@ describe('Witch controls', () => {
     c.effects.push({ id: 'held-talisman', name: 'Enchanted Talisman benefits', kind: 'buff', witchLinked: 'talisman',
       resources: [{ id: 'talisman-tokens:creator:activation', label: 'Talisman tokens', initial: 2 }] });
     const root = renderSheetView({ character: c, onRoll: () => false }) as unknown as Element;
-    expect(root.querySelectorAll('input').filter(i => i.ariaLabel === 'Tokens')).toHaveLength(3);
+    expect(root.querySelectorAll('input').filter(i => i.ariaLabel === 'Tokens')).toHaveLength(2);
     expect(root.querySelectorAll('input').some(i => i.ariaLabel === 'Talisman tokens')).toBe(false);
     expect(root.querySelectorAll('output').filter(i => i.ariaLabel === 'Lunar die')).toHaveLength(1);
     const header = root.querySelectorAll('div').find(e => e.className === 'ident-right')!;

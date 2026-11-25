@@ -4,7 +4,7 @@ import { emptyCharacter } from './data';
 import { availableRollOptions, availableRollTriggers, rollBonus, syncEffectDependencies, type Automation, type EffectDef } from './engine';
 import { openRollDialog, type RollRequest } from './view';
 
-const catalog = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+const catalog = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
 const card = catalog.entries.find((entry: { id: string }) => entry.id === 'invisibility');
 const automation: Automation = card.automation;
 const invisible = (): EffectDef & { id: string; source: string } => ({

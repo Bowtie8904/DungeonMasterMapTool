@@ -8,7 +8,7 @@ import {
   rollBonus, rollExperienceRefund, rollOptionDice, selectionBlocker, statBreakdown, syncDerived,
 } from './engine';
 
-const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
+const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/classes.json', import.meta.url), 'utf8'));
 
 function wizard(school = 'knowledge', stage = 'mastery') {
   const c = emptyCharacter('Wizard');

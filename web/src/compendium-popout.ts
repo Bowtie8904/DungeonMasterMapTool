@@ -61,8 +61,9 @@ export function startToolPopout(root: HTMLElement, tool: 'note' | 'compendium', 
   }) : undefined;
   const conn = new Connection({
     onOpen: () => {},
-    onStatus: state => {
-      if (state === 'unauthorized' || state === 'kicked') {
+    onStatus: (state, detail) => {
+      if (state === 'incompatible') report(detail ?? 'Online automation compatibility mismatch. Update the browser and host to matching versions and reload.');
+      else if (state === 'unauthorized' || state === 'kicked') {
         report('Your session ended. Sign in from the map tab, then reload this window. Unsaved note text remains available to copy.');
       } else if (state === 'closed') report('Disconnected. Reconnecting... Unsaved text is kept in this window.');
       else if (state === 'open') report('Connected');

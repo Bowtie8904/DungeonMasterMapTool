@@ -5,7 +5,7 @@ import { recreateDemiplane, DemiplaneCharacter, DemiplaneSelection } from './dem
 import { derivedStats } from './engine';
 import { RulesData, subclassStageOf } from './rules';
 
-const load = (name: string) => JSON.parse(readFileSync(resolve(__dirname, '../../../dmmap-daggerheart', `${name}.json`), 'utf8')).entries;
+const load = (name: string) => JSON.parse(readFileSync(resolve(__dirname, '../../../src/test/resources/dmmt/legacy-catalogs', `${name}.json`), 'utf8')).entries;
 const data: RulesData = {
   classes: load('classes'), ancestries: load('ancestries'), communities: load('communities'), weapons: load('weapons'),
   armor: load('armor'), consumables: load('consumables'), cards: load('domain-cards'), transformations: load('transformations'),

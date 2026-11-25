@@ -5,7 +5,7 @@ import { emptyCharacter, type DomainCard } from './data';
 import { actionBlocker, applyRest, availableRollOptions, availableRollTriggers, runAction, type RollContext } from './engine';
 import { applyDamage, availableMitigations, computeDamage } from './damage';
 
-const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
 function caster(id: string) {
   const c = emptyCharacter('Caster');
   c.hp = { on: 0, slots: 6, total: 6 };

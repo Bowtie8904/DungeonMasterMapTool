@@ -10,7 +10,7 @@ import {
 import { availableMitigations, computeDamage } from './damage';
 import { rollContext } from './rollbuttons';
 
-const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
 const entry = (id: string) => catalog.entries.find(card => card.id === id)!;
 const rules = (id: string) => entry(id).automation!;
 function character(...ids: string[]) {

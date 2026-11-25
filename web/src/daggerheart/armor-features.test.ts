@@ -6,7 +6,7 @@ import { applyDamage, availableMitigations, computeDamage, type DamageInput } fr
 import { availableMoves, resolveRest } from './rest';
 
 const armor: { entries: Array<{ name: string; feature?: { name: string }; automation?: Automation }> } =
-  JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/armor.json', import.meta.url), 'utf8'));
+  JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/armor.json', import.meta.url), 'utf8'));
 const rules = (feature: string): Automation => {
   const entry = armor.entries.find(e => e.feature?.name === feature);
   if (!entry?.automation) throw new Error(`Missing armor automation: ${feature}`);

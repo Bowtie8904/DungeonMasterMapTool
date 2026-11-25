@@ -346,7 +346,7 @@ it.each([['umbral-veil', 'Umbral Veil', 'rest'], ['dark-army', 'Dark Army', 'lon
       addEventListener: () => {}, removeEventListener: () => {} });
     vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
     vi.stubGlobal('requestAnimationFrame', () => {});
-    const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+    const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
     const c = emptyCharacter('Caster');
     c.mancer = { done: true };
     c.loadout = [{ name, level: 8, domain: 'Dread', type: 'Spell', recall: 1, text: '',
@@ -369,7 +369,7 @@ it('opens the same Spellcast-trait Hideous Retribution reaction from its card an
     addEventListener: () => {}, removeEventListener: () => {} });
   vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
   vi.stubGlobal('requestAnimationFrame', () => {});
-  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
   const c = emptyCharacter('Caster');
   c.mancer = { done: true };
   c.traits.find(t => t.name === 'Instinct')!.spellcast = true;
@@ -530,7 +530,7 @@ it.each(['ordinary', 'initial', 'continuing'] as const)('shows Deathrun die remo
     addEventListener: () => {}, removeEventListener: () => {} });
   const c = emptyCharacter('Hero');
   if (state !== 'ordinary') {
-    const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+    const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
     const automation = catalog.entries.find(entry => entry.id === 'deathrun')!.automation!;
     addEffect(c, automation.actions![0].steps![0].effect!);
     if (state === 'continuing') {
@@ -571,7 +571,7 @@ it('previews mixed-pool Deathrun removal with doubled bonus damage', () => {
     createElementNS: (_namespace: string, tag: string) => new Element(tag),
     addEventListener: () => {}, removeEventListener: () => {} });
   const c = emptyCharacter('Hero');
-  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
   addEffect(c, catalog.entries.find(entry => entry.id === 'deathrun')!.automation!.actions![0].steps![0].effect!);
   c.effects[0].deathrunRoll = {
     expression: '(2d8+2d6+2)*2', total: 38, rolls: [3, 8, 2, 4],
@@ -599,7 +599,7 @@ it('preselects one Cruel Precision option and the highest current printed trait 
     createElementNS: (_namespace: string, tag: string) => new Element(tag),
     addEventListener: () => {}, removeEventListener: () => {} });
   const c = emptyCharacter('Hero');
-  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
   c.loadout = [{ name: 'Cruel Precision', level: 3, domain: 'Bone', type: 'Ability', recall: 1, text: '',
     automation: catalog.entries.find(entry => entry.id === 'cruel-precision')!.automation }];
   c.traits.find(trait => trait.name === 'Finesse')!.mod = 2;
@@ -628,7 +628,7 @@ it('preserves ordinary option payments alongside a host-owned Deathrun activatio
     addEventListener: () => {}, removeEventListener: () => {} });
   const c = emptyCharacter('Hero');
   c.hope.on = 6;
-  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
   c.loadout = [{ name: 'Deathrun', level: 10, domain: 'Bone', type: 'Ability', recall: 1, text: '',
     automation: catalog.entries.find(entry => entry.id === 'deathrun')!.automation }];
   c.features = [{ name: 'Ordinary option', source: 'Custom', text: '', automation: { rollOptions: [
@@ -1164,7 +1164,7 @@ it('disables Teleport casts on unsupported hosts and after its long-rest use is 
     createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
   vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
   vi.stubGlobal('requestAnimationFrame', () => {});
-  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
   const entry = catalog.entries.find(item => item.id === 'teleport')!;
   const c = emptyCharacter('Caster');
   c.mancer = { done: true };
@@ -1206,7 +1206,7 @@ it('rolls Arcane Barrage only after a successful send and charges the chosen Hop
     createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
   vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
   vi.stubGlobal('requestAnimationFrame', () => {});
-  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
   const entry = catalog.entries.find(item => item.id === 'book-of-illiat')!;
   const c = emptyCharacter('Caster');
   c.mancer = { done: true };
@@ -1244,7 +1244,7 @@ it('gives Bloodbath one cast control and sends without duplicate browser-side pa
     addEventListener: () => {}, removeEventListener: () => {} });
   vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
   vi.stubGlobal('requestAnimationFrame', () => {});
-  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
   const entry = catalog.entries.find(item => item.id === 'bloodbath')!;
   const c = emptyCharacter('Caster');
   c.mancer = { done: true };
@@ -1279,7 +1279,7 @@ it('does not spend Hope or a rest use when Arcane Barrage is canceled', async ()
     createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
   vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
   vi.stubGlobal('requestAnimationFrame', () => {});
-  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
   const entry = catalog.entries.find(item => item.id === 'book-of-illiat')!;
   const c = emptyCharacter('Caster');
   c.mancer = { done: true };
@@ -1303,7 +1303,7 @@ it('disables Homet spells on old hosts and independently when their uses are exh
     createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
   vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
   vi.stubGlobal('requestAnimationFrame', () => {});
-  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
   const entry = catalog.entries.find(item => item.id === 'book-of-homet')!;
   const c = emptyCharacter('Caster');
   c.mancer = { done: true };
@@ -1326,7 +1326,7 @@ it('allows Banish difficulty to be adjusted and cleared on the card', async () =
     createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
   vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
   vi.stubGlobal('requestAnimationFrame', () => {});
-  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
   const entry = catalog.entries.find(item => item.id === 'banish')!;
   const c = emptyCharacter('Caster');
   c.mancer = { done: true };
@@ -1353,7 +1353,7 @@ it('swaps Codex-Touched with the selected vault card without paying Recall', asy
     createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
   vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
   vi.stubGlobal('requestAnimationFrame', () => {});
-  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
   const entry = catalog.entries.find(item => item.id === 'codex-touched')!;
   const c = emptyCharacter('Caster');
   c.mancer = { done: true };

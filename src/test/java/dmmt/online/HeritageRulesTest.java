@@ -17,7 +17,7 @@ class HeritageRulesTest {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private static String legacy() throws Exception {
-        return Files.readString(Path.of("dmmap-daggerheart", "ancestries.json"));
+        return Files.readString(dmmt.online.LegacyCatalogs.dir().resolve("ancestries.json"));
     }
 
     private static ObjectNode sheet() throws Exception {

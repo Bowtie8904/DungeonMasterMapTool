@@ -1,4 +1,4 @@
-import { ApiError, getSession, login } from './api';
+import { ApiError, CompatibilityError, getSession, login } from './api';
 import { markAudioGesture } from './settings';
 
 export function el<K extends keyof HTMLElementTagNameMap>(
@@ -48,7 +48,7 @@ export async function showLogin(root: HTMLElement, onSuccess: () => void): Promi
       if (select.disabled) info.textContent += ' - No player accounts are currently available.';
     } catch (e) {
       if (stopped || !card.isConnected) return;
-      info.textContent = `Cannot reach the session: ${(e as Error).message}`;
+      info.textContent = e instanceof CompatibilityError ? e.message : `Cannot reach the session: ${(e as Error).message}`;
       button.disabled = true;
     } finally {
       refreshing = false;

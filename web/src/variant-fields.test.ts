@@ -4,7 +4,7 @@ import { createVariant, type CatalogObject } from './catalog-fields';
 import { readPath, replaceFormula, variantFields, writeField } from './variant-fields';
 
 const load = (category: string, id: string): CatalogObject => {
-  const file = JSON.parse(readFileSync(new URL(`../../dmmap-daggerheart/${category}.json`, import.meta.url), 'utf8')) as { entries: CatalogObject[] };
+  const file = JSON.parse(readFileSync(new URL(`../../src/test/resources/dmmt/legacy-catalogs/${category}.json`, import.meta.url), 'utf8')) as { entries: CatalogObject[] };
   return file.entries.find(entry => entry.id === id)!;
 };
 

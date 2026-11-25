@@ -19,7 +19,7 @@ class WarriorAutomationTest {
     void grantsDowntimeToEverySheetWithoutDuplicatingOrResettingEarnedDice() throws Exception {
         ObjectNode warrior = MAPPER.createObjectNode();
         var features = warrior.putArray("features");
-        for (var entry : MAPPER.readTree(Path.of("dmmap-daggerheart", "classes.json").toFile()).path("entries"))
+        for (var entry : MAPPER.readTree(dmmt.online.LegacyCatalogs.dir().resolve("classes.json").toFile()).path("entries"))
             if ("warrior-call-of-the-slayer-mastery".equals(entry.path("id").asText()))
                 features.addAll((com.fasterxml.jackson.databind.node.ArrayNode) entry.path("features").deepCopy());
         ObjectNode ally = MAPPER.createObjectNode();
@@ -48,7 +48,7 @@ class WarriorAutomationTest {
     void preservesAndIdentifiesExistingGrantsWhenSourceIsDisabledWithoutGrantingNewOnes() throws Exception {
         ObjectNode warrior = MAPPER.createObjectNode();
         var features = warrior.putArray("features");
-        for (var entry : MAPPER.readTree(Path.of("dmmap-daggerheart", "classes.json").toFile()).path("entries"))
+        for (var entry : MAPPER.readTree(dmmt.online.LegacyCatalogs.dir().resolve("classes.json").toFile()).path("entries"))
             if ("warrior-call-of-the-slayer-mastery".equals(entry.path("id").asText()))
                 features.addAll((com.fasterxml.jackson.databind.node.ArrayNode) entry.path("features").deepCopy());
         ObjectNode ally = MAPPER.createObjectNode();

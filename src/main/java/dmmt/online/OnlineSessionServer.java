@@ -331,6 +331,7 @@ public final class OnlineSessionServer {
                         }
                     }), "/ws", java.util.EnumSet.of(jakarta.servlet.DispatcherType.REQUEST)));
         });
+        javalin.before("/api/*", this::enforceContract);
         javalin.get("/api/session", this::handleSession);
         javalin.post("/api/login", this::handleLogin);
         javalin.post("/api/logout", this::handleLogout);
@@ -1212,6 +1213,7 @@ public final class OnlineSessionServer {
         Campaign c = campaign;
         ObjectNode body = MAPPER.createObjectNode();
         body.put("protocol", OnlineProtocol.VERSION);
+        body.put("automationContract", OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION);
         body.put("sessionName", config.sessionName());
         body.put("campaignName", c == null ? "" : c.getName());
         body.put("paused", paused);
@@ -6176,6 +6178,23 @@ public final class OnlineSessionServer {
         return false;
     }
 
+    private static final java.util.regex.Pattern CONTRACT_GET =
+            java.util.regex.Pattern.compile("/api/(sheet|copycat|splendor|death-move|chat-cards|dm/catalog)/.*");
+
+    /** Every mutation and every sheet load must declare the browser's Online Play contract version. */
+    private void enforceContract(Context ctx) {
+        String path = ctx.path();
+        if (path.startsWith("/api/automation/") || path.equals("/api/login") || path.equals("/api/logout")) return;
+        String method = ctx.method().name();
+        boolean read = method.equals("GET") || method.equals("HEAD") || method.equals("OPTIONS");
+        if (read && !CONTRACT_GET.matcher(path).matches()) return;
+        String declared = ctx.header(OnlineProtocol.CONTRACT_HEADER);
+        if (declared == null) declared = ctx.queryParam(OnlineProtocol.CONTRACT_PARAM);
+        if (Integer.toString(OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION).equals(declared)) return;
+        rejectAutomationVersion(ctx, declared);
+        ctx.skipRemainingHandlers();
+    }
+
     private void rejectAutomationVersion(Context ctx, String version) {
         String client = version == null ? "unknown" :
                 version.matches("[A-Za-z0-9._-]{1,32}") ? version : "invalid";
@@ -8286,6 +8305,20 @@ public final class OnlineSessionServer {
             ctx.closeSession(1008, "Session is full");
             return;
         }
+        String declaredContract = ctx.queryParam(OnlineProtocol.CONTRACT_PARAM);
+        if (!Integer.toString(OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION).equals(declaredContract)) {
+            ObjectNode error = MAPPER.createObjectNode().put("type", "error")
+                    .put("code", "automationCompatibilityMismatch")
+                    .put("clientVersion", declaredContract == null ? "unknown" : declaredContract)
+                    .put("hostVersion", OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION)
+                    .put("message", "Online automation compatibility mismatch (client version "
+                            + (declaredContract == null ? "unknown" : declaredContract) + "; host version "
+                            + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION
+                            + "). Update the browser and host to matching versions and reload.");
+            ctx.send(error.toString());
+            ctx.closeSession(1008, "Online automation compatibility mismatch");
+            return;
+        }
         Client client = new Client(ctx, playerId, player.getName());
         client.dmActorId = grant == null ? null : grant.actorId();
         client.dmToken = grant == null ? null : ctx.queryParam("dm-sheet");
@@ -8294,7 +8327,8 @@ public final class OnlineSessionServer {
         synchronized (this) {
             clients.put(ctx.sessionId(), client);
             ObjectNode hello = MAPPER.createObjectNode();
-            hello.put("type", "hello").put("protocol", OnlineProtocol.VERSION);
+            hello.put("type", "hello").put("protocol", OnlineProtocol.VERSION)
+                    .put("automationContract", OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION);
             hello.put("playerId", playerId).put("playerName", player.getName());
             hello.put("accountColor", client.dmActorId == null ? player.getColor() : c.getDmColor());
             hello.put("measurementColors", true);

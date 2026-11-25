@@ -9,7 +9,7 @@ import { availableMoves, resolveRest } from './rest';
 import { updateCharacterAutomation } from './persist';
 import { rollContext } from './rollbuttons';
 
-const catalog = (name: string): CompendiumFile => JSON.parse(readFileSync(new URL(`../../../dmmap-daggerheart/${name}.json`, import.meta.url), 'utf8'));
+const catalog = (name: string): CompendiumFile => JSON.parse(readFileSync(new URL(`../../../src/test/resources/dmmt/legacy-catalogs/${name}.json`, import.meta.url), 'utf8'));
 const files = ['classes', 'ancestries', 'communities', 'weapons', 'armor', 'consumables', 'domain-cards', 'transformations', 'items'].map(catalog);
 const entries = (name: string) => files.find((f) => f.category === name)!.entries;
 const data: RulesData = { classes: entries('classes'), ancestries: entries('ancestries'), communities: entries('communities'), weapons: entries('weapons'), armor: entries('armor'), consumables: entries('consumables'), cards: entries('domain-cards'), transformations: entries('transformations'), items: entries('items') };

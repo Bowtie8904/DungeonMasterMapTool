@@ -8,7 +8,7 @@ import {
   runAction, selectedRollBonus, selectionBlocker, syncDerived,
 } from './engine';
 
-const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
+const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/classes.json', import.meta.url), 'utf8'));
 
 function assassin(guild = 'executioners', stage = 'mastery') {
   const c = emptyCharacter('Assassin');

@@ -1,5 +1,6 @@
 import { CompendiumPanel } from './compendium';
 import { el } from './login';
+import { CONTRACT_HEADER, ONLINE_CONTRACT_VERSION } from './api';
 import { CatalogEditor } from './catalog-editor';
 import { openVariantDialog } from './variant-dialog';
 import type { CatalogObject } from './catalog-fields';
@@ -21,7 +22,7 @@ export function startDmCompendium(root: HTMLElement): void {
     const response = await fetch(url, {
       method: method ?? (data ? 'POST' : 'GET'),
       credentials: 'omit',
-      headers: { Authorization: `Bearer ${token}`, ...(data ? { 'Content-Type': 'application/json' } : {}) },
+      headers: { [CONTRACT_HEADER]: String(ONLINE_CONTRACT_VERSION), Authorization: `Bearer ${token}`, ...(data ? { 'Content-Type': 'application/json' } : {}) },
       ...(data ? { body: JSON.stringify(data) } : {}),
     });
     if (!response.ok) {

@@ -11,7 +11,7 @@ import { updateCharacterAutomation } from './persist';
 import { renderSheetView } from './view';
 import { openDamageDialog } from './damage-view';
 
-const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
+const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/classes.json', import.meta.url), 'utf8'));
 
 function guardian(level = 1) {
   const c = emptyCharacter('Guardian');

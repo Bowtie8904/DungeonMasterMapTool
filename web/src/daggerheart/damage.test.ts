@@ -7,7 +7,7 @@ import { formatDamageReport, parseDamageReport } from './damage-summary';
 
 function rules(category: string, name: string): Automation {
   const file: { entries: Array<{ name: string; automation?: Automation; feature?: { name: string }; spells?: Array<{ name: string; automation?: Automation }>; features?: Array<{ name: string; automation?: Automation }> }> } =
-    JSON.parse(readFileSync(new URL(`../../../dmmap-daggerheart/${category}.json`, import.meta.url), 'utf8'));
+    JSON.parse(readFileSync(new URL(`../../../src/test/resources/dmmt/legacy-catalogs/${category}.json`, import.meta.url), 'utf8'));
   type Source = { name: string; automation?: Automation; feature?: { name: string } };
   const source = file.entries.flatMap((e): Source[] => [e, ...(e.features ?? []), ...(e.spells ?? [])]).find((e) => e.name === name || e.feature?.name === name);
   if (!source?.automation) throw new Error(`Missing automation: ${category}/${name}`);
@@ -169,7 +169,7 @@ describe('damage calculation', () => {
 
   it('negates magic damage only while Book of Yarrow Magic Immunity is active', () => {
     const { c, major } = setup();
-    const book = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'))
+    const book = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'))
       .entries.find((entry: { id: string }) => entry.id === 'book-of-yarrow');
     const automation: Automation = book.spells.find((spell: { name: string }) => spell.name === 'Magic Immunity').automation;
     c.hope.on = 6;

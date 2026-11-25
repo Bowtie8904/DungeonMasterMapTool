@@ -49,7 +49,7 @@ it('refreshes Conjure Shield Evasion and tooltip sources when manual Hope crosse
 
   vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
   vi.stubGlobal('requestAnimationFrame', () => {});
-  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/classes.json', import.meta.url), 'utf8'));
   const shield = catalog.entries.find(e => e.id === 'wizard-school-of-war-specialization')!.features!
     .find(f => f.name === 'Conjure Shield')!;
   const c = emptyCharacter('Wizard');

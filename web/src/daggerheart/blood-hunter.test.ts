@@ -12,7 +12,7 @@ import { mutagenChoices, resolveRest, restSlots, type RestPick } from './rest';
 import { updateCharacterAutomation } from './persist';
 import { effectSource } from '../effects';
 
-const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
+const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/classes.json', import.meta.url), 'utf8'));
 
 function hunter(order: string, stages = ['foundation', 'specialization', 'mastery']) {
   const c = emptyCharacter('Hunter');

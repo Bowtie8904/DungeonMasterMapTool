@@ -12,7 +12,7 @@ import { channelRawPower, chooseActionEffects } from './sorcerer';
 import { damageDieChoices } from './sorcerer-view';
 import { buildCharacter, creationProblems, emptyChoices, type RulesData } from './rules';
 
-const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
+const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/classes.json', import.meta.url), 'utf8'));
 const magic: Weapon = { name: 'Wand', slot: 'Primary', damage: 'd8+2', damageType: 'magic', trait: 'Instinct', range: 'Far', hands: 1, tier: 1 };
 const card: DomainCard = { name: 'Spell', level: 3, domain: 'Arcana', type: 'Spell', text: 'A spell.', recall: 1 };
 
@@ -161,7 +161,7 @@ describe('Sorcerer catalog automation', () => {
 
   it('validates, saves and reloads the creation element and charges the optional bonuses separately', () => {
     const d: RulesData = { classes: catalog.entries, ancestries: [], communities: [], transformations: [], cards: [], weapons: [], armor: [], consumables: [],
-      items: JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/items.json', import.meta.url), 'utf8')).entries };
+      items: JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/items.json', import.meta.url), 'utf8')).entries };
     const choices = { ...emptyChoices(), className: 'Sorcerer', subclass: 'Sorcerer: Elemental Origin' };
     expect(creationProblems(d, choices)).toContain('Choose your Elementalist element.');
     choices.element = 'Lightning';

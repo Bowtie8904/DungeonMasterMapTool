@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class OnlineSessionServerTest {
     @Test
     void servesBundledItemArtworkToPlayerBrowsersWithoutExternalRequests() throws Exception {
-        JsonNode entry = MAPPER.readTree(Path.of("dmmap-daggerheart", "items.json").toFile()).path("entries").get(0);
+        JsonNode entry = MAPPER.readTree(dmmt.online.LegacyCatalogs.dir().resolve("items.json").toFile()).path("entries").get(0);
         String image = entry.path("image").asText();
         assertTrue(ItemArtwork.validPath(image));
         var response = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + image))
@@ -568,8 +568,60 @@ class OnlineSessionServerTest {
         } finally { ws.abort(); }
     }
 
+    @Test
+    void staleBrowsersAreRefusedOnSheetLoadAndEveryMutationAndTheHostAdvertisesItsContract() throws Exception {
+        String owner = cookie();
+        campaign.getActors().add(Campaign.Actor.builder().id("stale").name("Stale").ownerId(playerId()).build());
+        store.saveSheet(campaign.getId(), "stale", "{\"name\":\"Stale\",\"level\":1}");
+        HttpClient raw = HttpClient.newHttpClient();
+        String host = "http://localhost:" + port;
+        String[][] calls = {{"GET", "/api/sheet/stale"}, {"PUT", "/api/sheet/stale"}, {"POST", "/api/sheet/stale/demiplane"},
+                {"GET", "/api/copycat/stale"}, {"GET", "/api/splendor/stale"}, {"POST", "/api/feature"},
+                {"POST", "/api/death-move"}, {"GET", "/api/death-move/stale"}, {"POST", "/api/death-recovery"},
+                {"POST", "/api/roll-reward"}, {"POST", "/api/damage-taken"}, {"POST", "/api/chat-cards"},
+                {"GET", "/api/chat-cards/stale"}, {"POST", "/api/chat-cards/stale/grab"}, {"POST", "/api/notes"},
+                {"PUT", "/api/preferences"}, {"PUT", "/api/actors/stale/artwork"}, {"POST", "/api/dm/compendium/add"},
+                {"POST", "/api/dm/compendium/link"}, {"PUT", "/api/dm/catalog/items"}, {"GET", "/api/dm/catalog/items"}};
+        for (String[] call : calls) {
+            for (String declared : new String[]{null, "1", "999"}) {
+                var builder = HttpRequest.newBuilder(URI.create(host + call[1])).header("Cookie", owner);
+                if (declared != null) builder.header(OnlineProtocol.CONTRACT_HEADER, declared);
+                var response = raw.send(builder.method(call[0], call[0].equals("GET") ? HttpRequest.BodyPublishers.noBody()
+                        : HttpRequest.BodyPublishers.ofString("{}")).build(), HttpResponse.BodyHandlers.ofString());
+                String label = call[0] + " " + call[1] + " declared " + declared;
+                assertEquals(409, response.statusCode(), label + " " + response.body());
+                JsonNode body = MAPPER.readTree(response.body());
+                assertEquals("automationCompatibilityMismatch", body.path("code").asText(), label);
+                assertEquals(OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION, body.path("hostVersion").asInt(), label);
+                assertEquals(declared == null ? "unknown" : declared, body.path("clientVersion").asText(), label);
+                assertTrue(body.path("error").asText().contains("Update the browser and host to matching versions and reload."), label);
+            }
+        }
+        var current = http.send(HttpRequest.newBuilder(URI.create(host + "/api/sheet/stale")).header("Cookie", owner).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, current.statusCode(), current.body());
+        var session = raw.send(HttpRequest.newBuilder(URI.create(host + "/api/session")).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION, MAPPER.readTree(session.body()).path("automationContract").asInt());
+
+        var messages = new java.util.concurrent.LinkedBlockingQueue<String>();
+        WebSocket.Listener listener = new WebSocket.Listener() {
+            @Override public CompletionStage<?> onText(WebSocket socket, CharSequence data, boolean last) {
+                messages.add(data.toString());
+                socket.request(1);
+                return null;
+            }
+        };
+        WebSocket stale = raw.newWebSocketBuilder().header("Cookie", owner)
+                .buildAsync(URI.create("ws://localhost:" + port + "/ws?contract=1"), listener).join();
+        JsonNode refusal = MAPPER.readTree(messages.poll(5, TimeUnit.SECONDS));
+        assertEquals("automationCompatibilityMismatch", refusal.path("code").asText());
+        assertEquals("1", refusal.path("clientVersion").asText());
+        assertEquals(OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION, refusal.path("hostVersion").asInt());
+        stale.abort();
+    }
+
     private ObjectNode splendorActor(String id, String... cards) throws Exception {
-        compendiumDir = Path.of("dmmap-daggerheart");
+        compendiumDir = dmmt.online.LegacyCatalogs.dir();
         campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId()).build());
         ObjectNode sheet = sageArcanaSheet(cards);
         sheet.withObject("/hp").put("on", 3);
@@ -643,7 +695,7 @@ class OnlineSessionServerTest {
         try (var input = getClass().getResourceAsStream("/dmmt/automation/parity/healing-hands.json")) {
             scenario = MAPPER.readTree(input);
         }
-        JsonNode cards = MAPPER.readTree(Path.of("dmmap-daggerheart", "domain-cards.json").toFile());
+        JsonNode cards = MAPPER.readTree(dmmt.online.LegacyCatalogs.dir().resolve("domain-cards.json").toFile());
         JsonNode card = null;
         for (JsonNode candidate : cards.path("entries"))
             if ("healing-hands".equals(candidate.path("id").asText())) card = candidate;
@@ -847,7 +899,7 @@ class OnlineSessionServerTest {
         try (var input = getClass().getResourceAsStream("/dmmt/automation/parity/healing-hands-outcomes.json")) {
             fixture = MAPPER.readTree(input);
         }
-        JsonNode cards = MAPPER.readTree(Path.of("dmmap-daggerheart", "domain-cards.json").toFile());
+        JsonNode cards = MAPPER.readTree(dmmt.online.LegacyCatalogs.dir().resolve("domain-cards.json").toFile());
         JsonNode card = null;
         for (JsonNode candidate : cards.path("entries"))
             if ("healing-hands".equals(candidate.path("id").asText())) card = candidate;
@@ -1653,7 +1705,7 @@ class OnlineSessionServerTest {
         assertEquals(MAPPER.readTree("{\"ok\":true}"), MAPPER.readTree(legacy.body()));
         Inbox inbox = new Inbox();
         WebSocket ws = http.newWebSocketBuilder().header("Cookie", cookie)
-                .buildAsync(URI.create("ws://localhost:" + port + "/ws?sheet-sync=1"), inbox).join();
+                .buildAsync(URI.create("ws://localhost:" + port + "/ws?sheet-sync=1&contract=" + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION), inbox).join();
         try {
             JsonNode hello = inbox.next("hello");
             assertTrue(hello.path("sheetActionResponses").asBoolean());
@@ -1826,11 +1878,11 @@ class OnlineSessionServerTest {
         String cookie = cookie();
         Inbox full = new Inbox(), legacy = new Inbox(), scopedDm = new Inbox();
         WebSocket fullWs = http.newWebSocketBuilder().header("Cookie", cookie)
-                .buildAsync(URI.create("ws://localhost:" + port + "/ws?sheet-sync=1"), full).join();
+                .buildAsync(URI.create("ws://localhost:" + port + "/ws?sheet-sync=1&contract=" + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION), full).join();
         WebSocket legacyWs = connect(cookie, legacy);
         String grant = URI.create(server.dmSheetUrl("other-performance")).getFragment();
         WebSocket dmWs = http.newWebSocketBuilder()
-                .buildAsync(URI.create("ws://127.0.0.1:" + port + "/ws?dm-sheet=" + grant), scopedDm).join();
+                .buildAsync(URI.create("ws://127.0.0.1:" + port + "/ws?contract=" + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + "&dm-sheet=" + grant), scopedDm).join();
         try {
             full.next("hello"); legacy.next("hello"); scopedDm.next("hello");
             ObjectNode action = MAPPER.createObjectNode().put("actorId", actor.getId()).put("key", "feat:Check").put("actionId", "check");
@@ -1869,7 +1921,7 @@ class OnlineSessionServerTest {
     }
 
     private ObjectNode bloodSheet(String... ids) throws Exception {
-        compendiumDir = Path.of("dmmap-daggerheart");
+        compendiumDir = dmmt.online.LegacyCatalogs.dir();
         ObjectNode sheet = witchHostSheet();
         sheet.putArray("features");
         var cards = sheet.putArray("loadout");
@@ -2066,7 +2118,7 @@ class OnlineSessionServerTest {
 
     @Test
     void specialCardsCommitPermanentChoicesCountdownAndLiveFearWithRestLimit() throws Exception {
-        compendiumDir = Path.of("dmmap-daggerheart");
+        compendiumDir = dmmt.online.LegacyCatalogs.dir();
         var actor = Campaign.Actor.builder().id("special-hero").name("Hero").ownerId(playerId()).build();
         campaign.getActors().add(actor);
         ObjectNode sheet = witchHostSheet();
@@ -2125,7 +2177,7 @@ class OnlineSessionServerTest {
     private Campaign campaign;
     private OnlineSessionServer server;
     private int port;
-    private final HttpClient http = HttpClient.newHttpClient();
+    private final HttpClient http = new ContractHttpClient();
     private final List<String> moves = new java.util.concurrent.CopyOnWriteArrayList<>();
     private volatile CompletableFuture<OnlineSessionServer.MoveResult> pendingMove;
     private final List<String> drawings = new java.util.concurrent.CopyOnWriteArrayList<>();
@@ -7403,8 +7455,8 @@ class OnlineSessionServerTest {
             {"request":{"requestId":"version-test","expectedRevision":0,
             "selections":[{"sourceInstanceId":"r","ruleId":"rally","bindingId":"sheet"}]}}""";
 
-        String browser = java.nio.file.Files.readString(Path.of("web", "src", "automation", "panel.ts"));
-        assertTrue(browser.contains("export const AUTOMATION_COMPATIBILITY_VERSION = "
+        String browser = java.nio.file.Files.readString(Path.of("web", "src", "api.ts"));
+        assertTrue(browser.contains("export const ONLINE_CONTRACT_VERSION = "
                 + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + ";"),
                 "The browser and host must use the same automation compatibility version.");
 
@@ -7610,7 +7662,7 @@ class OnlineSessionServerTest {
     @Test
     void convertedExperienceReplacementWorksThroughTheLiveCheckEndpoint() throws Exception {
         installRestRules();
-        JsonNode classes = MAPPER.readTree(Path.of("dmmap-daggerheart", "classes.json").toFile());
+        JsonNode classes = MAPPER.readTree(dmmt.online.LegacyCatalogs.dir().resolve("classes.json").toFile());
         JsonNode adept = null;
         for (JsonNode entry : classes.path("entries")) for (JsonNode feature : entry.path("features"))
             if ("Adept".equals(feature.path("name").asText())) adept = feature;
@@ -7700,7 +7752,7 @@ class OnlineSessionServerTest {
     @Test
     void convertedExperienceRefundsResolveBeforeCostsAndReplayExactlyOnce() throws Exception {
         installRestRules();
-        JsonNode classes = MAPPER.readTree(Path.of("dmmap-daggerheart", "classes.json").toFile());
+        JsonNode classes = MAPPER.readTree(dmmt.online.LegacyCatalogs.dir().resolve("classes.json").toFile());
         ObjectNode legacy = MAPPER.createObjectNode().put("format", "dmmap-daggerheart").put("version", 1)
                 .put("category", "classes").put("label", "Fixture");
         ArrayNode features = legacy.putArray("entries").addObject().put("id", "guardian").put("name", "Guardian")
@@ -9166,7 +9218,7 @@ class OnlineSessionServerTest {
     @Test
     void convertedWardenRollReportAndUsePersistAtomicallyAndReplay() throws Exception {
         automationCompendium();
-        JsonNode classes = MAPPER.readTree(Path.of("dmmap-daggerheart", "classes.json").toFile());
+        JsonNode classes = MAPPER.readTree(dmmt.online.LegacyCatalogs.dir().resolve("classes.json").toFile());
         JsonNode feature = null;
         for (JsonNode entry : classes.path("entries")) for (JsonNode candidate : entry.path("features"))
             if ("Warden’s Protection".equals(candidate.path("name").asText())) feature = candidate;
@@ -9972,7 +10024,7 @@ class OnlineSessionServerTest {
         assertEquals(persisted.getCountdowns(), campaign.getCountdowns());
 
         java.nio.file.Files.delete(compendiumDir.resolve("rules.json"));
-        assertEquals(409, automationHttp(cookie, "auto", null).statusCode(), "missing recipes make automation unavailable");
+        assertEquals(200, automationHttp(cookie, "auto", null).statusCode(), "missing recipes keep the last good pack serving");
     }
 
     @Test
@@ -10128,8 +10180,7 @@ class OnlineSessionServerTest {
         String recipeText = java.nio.file.Files.readString(compendiumDir.resolve("rules.json"));
         java.nio.file.Files.writeString(recipe, recipeText);
         var incomplete = automationHttp(cookie, "auto", null);
-        assertEquals(409, incomplete.statusCode(), incomplete.body());
-        assertTrue(incomplete.body().contains("ruleset.json"));
+        assertEquals(200, incomplete.statusCode(), "A rejected revision keeps the last good pack serving: " + incomplete.body());
         String rulesetText = """
                 {"format":"dmmap-daggerheart-ruleset","version":2,"name":"Shared rules",
                  "automation":{"rules":[{"id":"grant",
@@ -10167,15 +10218,15 @@ class OnlineSessionServerTest {
         ObjectNode badRecipes = (ObjectNode) MAPPER.readTree(recipeText);
         badRecipes.put("version", 1);
         java.nio.file.Files.writeString(recipe, badRecipes.toString());
-        assertEquals(409, automationHttp(cookie, "auto", null).statusCode(), "A changed recipe invalidates the pack.");
+        assertEquals(200, automationHttp(cookie, "auto", null).statusCode(), "A rejected recipe change keeps the last good pack.");
         java.nio.file.Files.writeString(recipe, recipeText);
         assertEquals(200, automationHttp(cookie, "auto", null).statusCode());
         java.nio.file.Files.writeString(ruleset, "{broken");
-        assertEquals(409, automationHttp(cookie, "auto", null).statusCode(), "Malformed shared rules cannot use a cached pack.");
+        assertEquals(200, automationHttp(cookie, "auto", null).statusCode(), "Malformed shared rules keep the last good pack.");
         java.nio.file.Files.delete(ruleset);
-        assertEquals(409, automationHttp(cookie, "auto", null).statusCode(), "A missing ruleset cannot use the root recipe.");
+        assertEquals(200, automationHttp(cookie, "auto", null).statusCode(), "A missing ruleset keeps the last good pack.");
         java.nio.file.Files.delete(recipe);
-        assertEquals(409, automationHttp(cookie, "auto", null).statusCode());
+        assertEquals(200, automationHttp(cookie, "auto", null).statusCode());
         java.nio.file.Files.delete(rules);
         assertEquals(200, automationHttp(cookie, "auto", null).statusCode(), "Removing the directory restores the fixture layout.");
     }
@@ -10252,7 +10303,7 @@ class OnlineSessionServerTest {
         String grant = URI.create(server.dmSheetUrl("patient")).getFragment();
         Inbox dmInbox = new Inbox(), playerInbox = new Inbox();
         WebSocket dm = http.newWebSocketBuilder()
-                .buildAsync(URI.create("ws://127.0.0.1:" + port + "/ws?dm-sheet=" + grant), dmInbox).join();
+                .buildAsync(URI.create("ws://127.0.0.1:" + port + "/ws?contract=" + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + "&dm-sheet=" + grant), dmInbox).join();
         try {
             dmInbox.next("hello");
             assertTrue(partyOptions(cookie).isEmpty());
@@ -11760,8 +11811,9 @@ class OnlineSessionServerTest {
             var saved = http.send(HttpRequest.newBuilder(URI.create(uri)).header("Cookie", cookie)
                     .header("Content-Type", "application/json").header("If-Match", loaded.required("version").textValue())
                     .PUT(HttpRequest.BodyPublishers.ofString(sheet.toString())).build(), HttpResponse.BodyHandlers.ofString());
-            assertEquals(409, saved.statusCode(), saved.body());
-            assertEquals(original, store.loadSheet(campaign.getId(), "roller"));
+            assertEquals(200, saved.statusCode(), "Recipes already compiled keep serving: " + saved.body());
+            assertNotEquals(original, store.loadSheet(campaign.getId(), "roller"));
+            loaded = MAPPER.readTree(sheetRead(cookie, "roller").body());
             sheet = (ObjectNode) loaded.required("sheet").deepCopy();
             sheet.put("notes", "Unrelated edit");
             saved = http.send(HttpRequest.newBuilder(URI.create(uri)).header("Cookie", cookie)
@@ -11945,7 +11997,7 @@ class OnlineSessionServerTest {
 
     @Test
     void formatOneSceneAndSessionResetsRemainAvailableWithSharedRules() throws Exception {
-        compendiumDir = Path.of("dmmap-daggerheart");
+        compendiumDir = dmmt.online.LegacyCatalogs.dir();
         campaign.getActors().add(Campaign.Actor.builder().id("legacy").name("Legacy").ownerId(playerId()).build());
         store.saveSheet(campaign.getId(), "legacy", """
                 {"usage":{"scene":{"used":1,"per":"scene"},"session":{"used":1,"per":"session"}},
@@ -12257,7 +12309,7 @@ class OnlineSessionServerTest {
 
     @Test
     void copycatListsUniqueOtherActorLoadoutsChargesRoundedHopeAndExpiresOnSourceVaulting() throws Exception {
-        compendiumDir = Path.of("dmmap-daggerheart");
+        compendiumDir = dmmt.online.LegacyCatalogs.dir();
         JsonNode catalog = MAPPER.readTree(compendiumDir.resolve("domain-cards.json").toFile()).path("entries");
         JsonNode definition = java.util.stream.StreamSupport.stream(catalog.spliterator(), false)
                 .filter(entry -> "Copycat".equals(entry.path("name").asText())).findFirst().orElseThrow();
@@ -12324,7 +12376,7 @@ class OnlineSessionServerTest {
     }
 
     private ObjectNode communitySheet(String name) throws Exception {
-        compendiumDir = Path.of("dmmap-daggerheart");
+        compendiumDir = dmmt.online.LegacyCatalogs.dir();
         JsonNode entry = java.util.stream.StreamSupport.stream(
                 MAPPER.readTree(compendiumDir.resolve("communities.json").toFile()).path("entries").spliterator(), false)
                 .filter(item -> name.equals(item.path("name").asText())).findFirst().orElseThrow();
@@ -12761,7 +12813,7 @@ class OnlineSessionServerTest {
 
     @Test
     void boneValorSupportTankRerollsAllyAndChargesOnlyFeatureOwnerAtomically() throws Exception {
-        compendiumDir = Path.of("dmmap-daggerheart");
+        compendiumDir = dmmt.online.LegacyCatalogs.dir();
         campaign.getActors().add(Campaign.Actor.builder().id("tank").name("Tank").ownerId(playerId()).build());
         campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Ally").ownerId(playerId()).build());
         store.saveSheet(campaign.getId(), "tank", bloodSheet("support-tank").toString());
@@ -12789,7 +12841,7 @@ class OnlineSessionServerTest {
 
     @Test
     void boneValorUtilityActionsRollActualDiceAndPersistTheirPaymentAndChat() throws Exception {
-        compendiumDir = Path.of("dmmap-daggerheart");
+        compendiumDir = dmmt.online.LegacyCatalogs.dir();
         campaign.getActors().add(Campaign.Actor.builder().id("bone").name("Bone").ownerId(playerId()).build());
         ObjectNode sheet = bloodSheet("i-see-it-coming", "redirect", "hold-the-line");
         sheet.putObject("proficiency").put("on", 3);
@@ -13238,7 +13290,7 @@ class OnlineSessionServerTest {
 
     @Test
     void invisibilityCastsOnOfflineSheetsReplacesRecipientAndSpendsCasterTokensOnlyOnCommittedActions() throws Exception {
-        compendiumDir = Path.of("dmmap-daggerheart");
+        compendiumDir = dmmt.online.LegacyCatalogs.dir();
         campaign.getActors().add(Campaign.Actor.builder().id("invisible-caster").name("Caster").ownerId(playerId()).build());
         campaign.getActors().add(Campaign.Actor.builder().id("invisible-recipient").name("Recipient").ownerId(playerId()).build());
         campaign.getActors().add(Campaign.Actor.builder().id("invisible-offline").name("Offline sheet").build());
@@ -15889,7 +15941,7 @@ class OnlineSessionServerTest {
         assertThrows(IllegalArgumentException.class, () -> server.dmSheetUrl("unowned"));
         Inbox dm = new Inbox();
         WebSocket socket = http.newWebSocketBuilder().buildAsync(
-                URI.create("ws://127.0.0.1:" + port + "/ws?sheet-sync=1&dm-sheet=" + token), dm).join();
+                URI.create("ws://127.0.0.1:" + port + "/ws?sheet-sync=1&contract=" + OnlineProtocol.AUTOMATION_COMPATIBILITY_VERSION + "&dm-sheet=" + token), dm).join();
         try {
             assertTrue(dm.next("hello").path("sheetSync").asBoolean());
             assertTrue(server.roster().isEmpty(), "Opening an offline owner's sheet must not connect that player");
@@ -16111,7 +16163,7 @@ class OnlineSessionServerTest {
     void pummeljoyCriticalMeleeRewardsAreAtomicCappedAndClaimedOnlyOnce() throws Exception {
         campaign.getActors().add(Campaign.Actor.builder().id("reward-actor").name("Brawler").ownerId(playerId()).build());
         rewardSheet(2, 3);
-        compendiumDir = Path.of("dmmap-daggerheart");
+        compendiumDir = dmmt.online.LegacyCatalogs.dir();
         ObjectNode sheet = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor"));
         sheet.putArray("features").addObject().put("name", "Pummeljoy");
         sheet.putArray("activeWeapons").addObject().put("name", "Brawler's Strike").put("range", "Melee");
@@ -16135,7 +16187,7 @@ class OnlineSessionServerTest {
     }
 
     private ObjectNode companionRewardSheet() throws Exception {
-        compendiumDir = Path.of("dmmap-daggerheart");
+        compendiumDir = dmmt.online.LegacyCatalogs.dir();
         rewardSheet(1, 3);
         ObjectNode sheet = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "reward-actor"));
         var features = sheet.putArray("features");
@@ -17847,7 +17899,7 @@ class OnlineSessionServerTest {
 
     @Test
     void chargeReactionsRollFixedDamageOnceForBothAncestries() throws Exception {
-        JsonNode ancestries = MAPPER.readTree(Path.of("dmmap-daggerheart", "ancestries.json").toFile()).path("entries");
+        JsonNode ancestries = MAPPER.readTree(dmmt.online.LegacyCatalogs.dir().resolve("ancestries.json").toFile()).path("entries");
         String cookie = cookie();
         Inbox inbox = new Inbox();
         WebSocket ws = connect(cookie, inbox);
@@ -18168,7 +18220,7 @@ class OnlineSessionServerTest {
         ObjectNode original = (ObjectNode) MAPPER.readTree("""
                 {"name":"Mara","inventory":[{"name":"Potion","type":"consumable","note":"Clear **HP**","qty":2}]}
                 """);
-        String image = MAPPER.readTree(Path.of("dmmap-daggerheart", "consumables.json").toFile())
+        String image = MAPPER.readTree(dmmt.online.LegacyCatalogs.dir().resolve("consumables.json").toFile())
                 .path("entries").get(0).path("image").asText();
         ((ObjectNode) original.path("inventory").get(0)).put("image", image);
         store.saveSheet(campaign.getId(), "source", original.toString());
@@ -18436,7 +18488,7 @@ class OnlineSessionServerTest {
     void compendiumChatLinksResolveHostDataWithoutInventoryAndCannotTransfer() throws Exception {
         Path dir = temp.resolve("chat-compendium");
         java.nio.file.Files.createDirectories(dir);
-        String image = MAPPER.readTree(Path.of("dmmap-daggerheart", "items.json").toFile())
+        String image = MAPPER.readTree(dmmt.online.LegacyCatalogs.dir().resolve("items.json").toFile())
                 .path("entries").get(0).path("image").asText();
         java.nio.file.Files.writeString(dir.resolve("items.json"), """
                 {"category":"items","label":"Items","entries":[{"id":"potion","name":"Host potion","image":"%s","rarity":"Rare","text":"Clear **HP**."}]}

@@ -82,7 +82,7 @@ class ChatPanelTest {
 
     @Test
     void comboStrikePreviewFitsItsFullDescriptionWithoutScrolling() throws Exception {
-        JsonNode classes = MAPPER.readTree(java.nio.file.Path.of("dmmap-daggerheart", "classes.json").toFile());
+        JsonNode classes = MAPPER.readTree(dmmt.online.LegacyCatalogs.dir().resolve("classes.json").toFile());
         List<JsonNode> features = classes.findParents("name").stream()
                 .filter(feature -> "Combo Strike".equals(feature.path("name").asText())
                         && feature.has("text")).toList();

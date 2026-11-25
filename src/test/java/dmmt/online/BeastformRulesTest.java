@@ -16,7 +16,7 @@ class BeastformRulesTest {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private static JsonNode classes() throws Exception {
-        return JSON.readTree(Files.readString(Path.of("dmmap-daggerheart", "classes.json")));
+        return JSON.readTree(Files.readString(dmmt.online.LegacyCatalogs.dir().resolve("classes.json")));
     }
 
     private static ObjectNode choice(String json) throws Exception {

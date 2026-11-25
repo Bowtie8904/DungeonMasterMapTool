@@ -12,7 +12,7 @@ import { updateCharacterAutomation } from './persist';
 import { criticalMeleeBonus } from './brawler';
 import { rollSourceFor } from './roll-source';
 
-const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
+const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/classes.json', import.meta.url), 'utf8'));
 const foundation = catalog.entries.find(e => e.id === 'ranger-beastbound-foundation')!;
 const choices = { name: 'Ash', animal: 'Wolf', attack: 'Bite', damageType: 'phys' as const, experiences: ['Scout', 'Loyal'] };
 function ranger(create = true): CharacterSheet {
@@ -27,7 +27,7 @@ function ranger(create = true): CharacterSheet {
 }
 function rulesData(): RulesData {
   return { classes: catalog.entries, ancestries: [], communities: [], weapons: [], armor: [], consumables: [], cards: [], transformations: [],
-    items: JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/items.json', import.meta.url), 'utf8')).entries };
+    items: JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/items.json', import.meta.url), 'utf8')).entries };
 }
 const train = (c: CharacterSheet, picks: CompanionTraining[]) => applyCompanionTraining(c, picks, picks.length);
 const level = (n: number, advancements: LevelUpRecord['advancements'] = [{ type: 'hp' }, { type: 'hp' }]): LevelUpRecord =>

@@ -378,6 +378,8 @@ export interface Hello {
   mapPings?: boolean;
   type: 'hello';
   sheetSync?: boolean;
+  /** Online Play contract version of the host; a browser refuses a host that omits or differs on it. */
+  automationContract?: number;
   sheetActionResponses?: boolean;
   sheetPatches?: boolean;
   sheetActionRebase?: boolean;
@@ -467,10 +469,12 @@ export type ServerMessage =
   | ({ type: 'rollUpdate'; id: number; ts: number } & Partial<Pick<RollMessage, 'outcome' | 'featureUses' | 'rewardClaimed' | 'deathResult' | 'featureRoll' | 'total' | 'expression' | 'rolls' | 'breakdown'>>)
   | AudioMessage
   | { type: 'kicked'; reason?: string }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string; code?: string; hostVersion?: number | string };
 
 export interface SessionInfo {
   protocol: number;
+  /** Online Play contract version of the host; absent on hosts that predate compatibility negotiation. */
+  automationContract?: number;
   sessionName: string;
   campaignName: string;
   paused: boolean;

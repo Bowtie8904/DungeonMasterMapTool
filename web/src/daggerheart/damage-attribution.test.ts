@@ -20,7 +20,7 @@ function collect(value: unknown, catalog: string, name = '', text = ''): void {
     collect(child, catalog, name, text);
   }
 }
-for (const file of files) collect(JSON.parse(readFileSync(new URL(`../../../dmmap-daggerheart/${file}.json`, import.meta.url), 'utf8')), file);
+for (const file of files) collect(JSON.parse(readFileSync(new URL(`../../../src/test/resources/dmmt/legacy-catalogs/${file}.json`, import.meta.url), 'utf8')), file);
 
 describe('catalog damage attribution', () => {
   it.each(options)('$catalog: $name / $option.id has one described contribution', ({ name, text, option }) => {

@@ -10,7 +10,7 @@ import { parseRestReport } from './rest-summary';
 const fixed = (n: number) => () => n;
 function rules(category: string, name: string): Automation {
   const file: { entries: Array<{ name: string; automation?: Automation; features?: Array<{ name: string; automation?: Automation }> }> } =
-    JSON.parse(readFileSync(new URL(`../../../dmmap-daggerheart/${category}.json`, import.meta.url), 'utf8'));
+    JSON.parse(readFileSync(new URL(`../../../src/test/resources/dmmt/legacy-catalogs/${category}.json`, import.meta.url), 'utf8'));
   const source = file.entries.flatMap((e) => [e, ...(e.features ?? [])]).find((e) => e.name === name);
   if (!source?.automation) throw new Error(`Missing automation: ${category}/${name}`);
   return structuredClone(source.automation);

@@ -4,7 +4,7 @@ import type { CompendiumFile } from './compendium';
 import { emptyCharacter, type DomainCard } from './data';
 import { availableRollTriggers, type Automation } from './engine';
 
-const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
 function load(id: string) {
   const entry = catalog.entries.find(card => card.id === id)!;
   const character = emptyCharacter('Caster');

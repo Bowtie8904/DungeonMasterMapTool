@@ -1,13 +1,17 @@
 import { ClockSync } from './clock';
 import { ServerMessage } from './protocol';
-import { configureSheetActionRebase, configureSheetActionResponses, configureSheetPatches, dmSheetAuthorization } from './api';
+import {
+  CompatibilityError, ONLINE_CONTRACT_VERSION, assertHostCompatible, configureSheetActionRebase, configureSheetActionResponses,
+  configureSheetPatches, dmSheetAuthorization,
+} from './api';
 import { invalidateCompendium } from './daggerheart/compendium';
 
 export interface ConnectionEvents {
   onMessage(msg: ServerMessage): void;
   /** Called when a socket opened and we must (re)send resync info. */
   onOpen(): void;
-  onStatus(status: 'connecting' | 'open' | 'closed' | 'kicked' | 'unauthorized'): void;
+  /** incompatible carries the actionable mismatch message and ends reconnecting. */
+  onStatus(status: 'connecting' | 'open' | 'closed' | 'kicked' | 'unauthorized' | 'incompatible', detail?: string): void;
 }
 
 export function backoffDelay(attempt: number): number {
@@ -77,7 +81,7 @@ export class Connection {
 
   private url(): string {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const params = new URLSearchParams({ 'sheet-sync': '1' });
+    const params = new URLSearchParams({ 'sheet-sync': '1', contract: String(ONLINE_CONTRACT_VERSION) });
     const dm = dmSheetAuthorization();
     if (dm) params.set('dm-sheet', dm);
     return `${proto}//${location.host}/ws?${params}`;
@@ -140,7 +144,17 @@ export class Connection {
         this.send({ type: 'pong', id: msg.id });
         return;
       }
+      if (msg.type === 'error' && msg.code === 'automationCompatibilityMismatch') {
+        this.refuse(new CompatibilityError(ONLINE_CONTRACT_VERSION, msg.hostVersion ?? 'unknown'));
+        return;
+      }
       if (msg.type === 'hello') {
+        try {
+          assertHostCompatible(msg.automationContract);
+        } catch (error) {
+          this.refuse(error as CompatibilityError);
+          return;
+        }
         invalidateCompendium();
         configureSheetActionResponses(msg.sheetActionResponses === true);
         configureSheetPatches(msg.sheetPatches === true);
@@ -195,6 +209,13 @@ export class Connection {
     ws.onerror = () => {
       /* close follows */
     };
+  }
+
+  private refuse(error: CompatibilityError): void {
+    this.stopped = true;
+    this.clearTimers();
+    this.ws?.close();
+    this.events.onStatus('incompatible', error.message);
   }
 
   private sample(): void {

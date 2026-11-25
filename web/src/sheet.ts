@@ -223,7 +223,8 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
   const conn = new Connection(
     {
       onOpen: () => {},
-      onStatus: (s) => {
+      onStatus: (s, detail) => {
+        if (s === 'incompatible') report(detail ?? 'Online automation compatibility mismatch. Update the browser and host to matching versions and reload.');
         if (s === 'unauthorized' && !unauthorized) {
           unauthorized = true;
           if (dmSheetAuthorization()) report('The DM sheet session is unavailable. Close and reopen it while hosting.');

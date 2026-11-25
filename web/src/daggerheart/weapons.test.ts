@@ -12,7 +12,7 @@ import { criticalMeleeBonus } from './brawler';
 import { openRollDialog, type RollRequest } from './view';
 import type { RollMessage } from '../protocol';
 
-const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/weapons.json', import.meta.url), 'utf8'));
+const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/weapons.json', import.meta.url), 'utf8'));
 const entry = (id: string) => catalog.entries.find(e => e.id === id)!;
 const weapon = (id: string): Weapon => weaponFrom(entry(id));
 const featured = (name: string) => catalog.entries.filter(e => e.feature?.name === name);

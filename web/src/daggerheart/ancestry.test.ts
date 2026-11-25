@@ -8,7 +8,7 @@ import {
 } from './engine';
 import { applyDamage, availableMitigations, computeDamage, mitigationBlocker } from './damage';
 
-const directory = new URL('../../../dmmap-daggerheart/', import.meta.url);
+const directory = new URL('../../../src/test/resources/dmmt/legacy-catalogs/', import.meta.url);
 const catalog = (name: string): CompendiumFile => JSON.parse(readFileSync(new URL(`${name}.json`, directory), 'utf8'));
 const ancestries = catalog('ancestries');
 function rules(ancestry: string, name: string): Automation {

@@ -9,8 +9,8 @@ import {
 } from './engine';
 import { applyDamage, availableMitigations, computeDamage } from './damage';
 
-const cards: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
-const consumables: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/consumables.json', import.meta.url), 'utf8'));
+const cards: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
+const consumables: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/consumables.json', import.meta.url), 'utf8'));
 const entry = (id: string) => cards.entries.find(card => card.id === id)!;
 const rules = (id: string) => entry(id).automation!;
 function character(...ids: string[]) {

@@ -8,7 +8,7 @@ import { availableMoves, resolveRest } from './rest';
 import { rollContext } from './rollbuttons';
 import type { RollMessage } from '../protocol';
 
-const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
 function load(c: CharacterSheet, ...ids: string[]) {
   for (const id of ids) {
     const entry = catalog.entries.find(card => card.id === id)!;

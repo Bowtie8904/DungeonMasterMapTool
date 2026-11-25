@@ -11,7 +11,7 @@ import {
   creationCompanionRules, subclassCard,
 } from './rules';
 
-const load = (f: string) => JSON.parse(readFileSync(resolve(__dirname, '../../../dmmap-daggerheart', f), 'utf8')).entries;
+const load = (f: string) => JSON.parse(readFileSync(resolve(__dirname, '../../../src/test/resources/dmmt/legacy-catalogs', f), 'utf8')).entries;
 const data: RulesData = {
   classes: load('classes.json'), ancestries: load('ancestries.json'), communities: load('communities.json'), weapons: load('weapons.json'),
   armor: load('armor.json'), consumables: load('consumables.json'), cards: load('domain-cards.json'), transformations: load('transformations.json'),

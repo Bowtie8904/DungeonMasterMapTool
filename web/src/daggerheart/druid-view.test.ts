@@ -32,7 +32,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('Beastform picker', () => {
   const setup = (level: number, evolution = false) => {
-    const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
+    const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/classes.json', import.meta.url), 'utf8'));
     const c = emptyCharacter('Druid');
     c.level = level;
     c.features = catalog.entries.find(e => e.id === 'druid')!.features!.map(f => ({ ...structuredClone(f), source: 'Class feature - Druid' }));

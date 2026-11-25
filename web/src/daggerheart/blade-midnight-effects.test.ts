@@ -5,7 +5,7 @@ import { emptyCharacter, type CharacterSheet, type DomainCard } from './data';
 import { actionBlocker, applyRest, availableRollOptions, commitRollOptions, configuredRollOption, derivedStats, rollOptionQuantityMax, runAction, selectedRollBonus, rollBonus, type Automation } from './engine';
 import { applyDamage, availableMitigations, computeDamage } from './damage';
 
-const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
 
 function load(c: CharacterSheet, id: string): Automation {
   const entry = catalog.entries.find(card => card.id === id)!;

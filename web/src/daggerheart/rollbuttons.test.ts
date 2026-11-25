@@ -149,7 +149,7 @@ describe('cross-player roll buttons', () => {
 
   it('offers Hideous Retribution on allied incoming-damage reports and opens the card reaction', async () => {
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
-    const catalog = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+    const catalog = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
     const c = character('Caster', undefined);
     c.loadout = [{ name: 'Hideous Retribution', domain: 'Dread', level: 2, type: 'Spell', recall: 2, text: '',
       automation: catalog.entries.find((card: { id: string }) => card.id === 'hideous-retribution').automation }];
@@ -219,7 +219,7 @@ describe('cross-player roll buttons', () => {
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
     const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetch);
-    const catalog = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+    const catalog = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
     const c = character('Fighter', undefined);
     c.loadout = ['not-good-enough', 'glancing-blow', 'whirlwind'].map(id => {
       const card = catalog.entries.find((entry: { id: string }) => entry.id === id);
@@ -272,7 +272,7 @@ describe('cross-player roll buttons', () => {
 
   it('hides both Endless Charisma alternatives once either choice has been used', async () => {
     vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
-    const catalog = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+    const catalog = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8'));
     const entry = catalog.entries.find((card: { id: string }) => card.id === 'endless-charisma');
     const c = character('Caster', undefined);
     c.loadout = [{ name: entry.name, domain: 'Grace', type: 'Ability', level: 7, recall: 1, text: '',
@@ -660,7 +660,7 @@ describe('cross-player roll buttons', () => {
       }
     };
     for (const file of files) {
-      walk(JSON.parse(readFileSync(new URL(`../../../dmmap-daggerheart/${file}.json`, import.meta.url), 'utf8')), file);
+      walk(JSON.parse(readFileSync(new URL(`../../../src/test/resources/dmmt/legacy-catalogs/${file}.json`, import.meta.url), 'utf8')), file);
     }
     expect(triggers.length).toBeGreaterThan(100);
     expect(triggers.filter(t => t.rollSection && !['result', 'feature', 'other'].includes(t.rollSection))).toEqual([]);

@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Shapeshifter's ancestryChoice (rest.ts 306-311, rules.ts replaceAncestry) as heritage.replace downtime rules. */
 class ShapeshifterTest {
     private static String read(String name) throws Exception {
-        return Files.readString(Path.of("dmmap-daggerheart", name));
+        return Files.readString(dmmt.online.LegacyCatalogs.dir().resolve(name));
     }
 
     private static final String MOVE = """

@@ -15,7 +15,7 @@ class ScarCapacityTest {
     private static final AutomationHost HOST = AutomationHost.bundled();
 
     private static AutomationHost.Pack convertedItems() throws Exception {
-        JsonNode shipped = RuleJson.parse(Files.readString(Path.of("dmmap-daggerheart", "consumables.json")));
+        JsonNode shipped = RuleJson.parse(Files.readString(dmmt.online.LegacyCatalogs.dir().resolve("consumables.json")));
         ObjectNode catalog = RuleJson.JSON.createObjectNode().put("format", "dmmap-daggerheart").put("version", 1)
                 .put("category", "consumables").put("label", "Scars");
         var entries = catalog.putArray("entries");

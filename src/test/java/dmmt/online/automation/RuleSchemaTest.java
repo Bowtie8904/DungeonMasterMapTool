@@ -57,6 +57,12 @@ class RuleSchemaTest {
         collect(failures, "ruleset", "core ruleset", MAPPER.readTree(LegacyCatalogConverter.coreRuleset()));
         try (Stream<Path> files = Files.list(DATA)) {
             for (Path file : files.filter(p -> p.toString().endsWith(".json")).toList()) {
+                collect(failures, "catalog", "shipped " + file.getFileName(), MAPPER.readTree(file.toFile()));
+                assertEquals(2, MAPPER.readTree(file.toFile()).path("version").asInt(), file + " must be format 2");
+            }
+        }
+        try (Stream<Path> files = Files.list(dmmt.online.LegacyCatalogs.dir())) {
+            for (Path file : files.filter(p -> p.toString().endsWith(".json")).toList()) {
                 JsonNode legacy = MAPPER.readTree(file.toFile());
                 if (!"dmmap-daggerheart".equals(legacy.path("format").asText())) continue;
                 collect(failures, "catalog", "converted " + file.getFileName(), LegacyCatalogConverter.convert(Files.readString(file)).catalog());

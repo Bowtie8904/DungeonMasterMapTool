@@ -9,7 +9,7 @@ import { classEntries, RulesData, subclassCard, subclassesOf } from './rules';
 import { applyTestingBuild, defaultTestingBuild, testingBuildProblems } from './testing';
 import { removeVitality } from './vitality';
 
-const load = (name: string) => JSON.parse(readFileSync(resolve(__dirname, '../../../dmmap-daggerheart', `${name}.json`), 'utf8'));
+const load = (name: string) => JSON.parse(readFileSync(resolve(__dirname, '../../../src/test/resources/dmmt/legacy-catalogs', `${name}.json`), 'utf8'));
 const data: RulesData = {
   classes: load('classes').entries, ancestries: load('ancestries').entries, communities: load('communities').entries,
   weapons: load('weapons').entries, armor: load('armor').entries, consumables: load('consumables').entries,

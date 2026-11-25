@@ -122,7 +122,7 @@ class ParityLedgerTest {
 
     @Test
     void everyLedgerRowMatchesTheLegacyBaseline(@TempDir Path staging) throws Exception {
-        LegacyCatalogConverter.main(new String[]{"dmmap-daggerheart", staging.toString()});
+        LegacyCatalogConverter.main(new String[]{dmmt.online.LegacyCatalogs.dir().toString(), staging.toString()});
         Map<String, String> texts = new LinkedHashMap<>();
         Map<String, JsonNode> catalogs = currentCatalogs = new LinkedHashMap<>();
         for (String category : CATEGORIES) {
@@ -1115,7 +1115,7 @@ class ParityLedgerTest {
     /** Beastforms: every assumed form is accepted and rejected like the legacy rules, pays the legacy Stress and sends a request the legacy rules build from. */
     private static String beastformMismatch(AutomationHost.Pack pack, Placed placed, JsonNode legacy) throws Exception {
         if (legacy == null || !legacy.has("beastforms")) return null;
-        JsonNode classes = MAPPER.readTree(java.nio.file.Files.readString(java.nio.file.Path.of("dmmap-daggerheart", "classes.json")));
+        JsonNode classes = MAPPER.readTree(java.nio.file.Files.readString(dmmt.online.LegacyCatalogs.dir().resolve("classes.json")));
         List<JsonNode> catalog = dmmt.online.LegacyRulesBridge.beastformCatalog(classes);
         int baseStress = legacy.at("/actions/0/cost/stress").asInt(1);
         int[] levels = {1, 2, 5, 8};

@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Druid Evolution/Beastform, Puddleduck's Fins and Yeti Coat (druid.ts transformBeastform/assumeBeastform) as beastform.assume rules. */
 class BeastformConversionTest {
     private static String read(String name) throws Exception {
-        return Files.readString(Path.of("dmmap-daggerheart", name));
+        return Files.readString(dmmt.online.LegacyCatalogs.dir().resolve(name));
     }
 
     private static LegacyCatalogConverter.Result convertEntries(String catalog, String... ids) throws Exception {

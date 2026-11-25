@@ -57,7 +57,7 @@ export const constantRoll: DiceRoll = (expression) => {
 };
 
 function catalog(category: string): { entries: Array<CompendiumEntry & { features?: Array<{ name: string; text: string; automation?: Automation }> }> } {
-  return JSON.parse(readFileSync(new URL(`dmmap-daggerheart/${category}.json`, ROOT), 'utf8'));
+  return JSON.parse(readFileSync(new URL(`src/test/resources/dmmt/legacy-catalogs/${category}.json`, ROOT), 'utf8'));
 }
 
 export function standardSheet(): CharacterSheet {

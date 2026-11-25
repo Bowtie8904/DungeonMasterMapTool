@@ -9,7 +9,7 @@ import {
 } from './engine';
 
 const catalog: { entries: Array<{ name: string; features: Array<{ name: string; text: string; automation: Automation }> }> } =
-  JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/communities.json', import.meta.url), 'utf8'));
+  JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/communities.json', import.meta.url), 'utf8'));
 
 function community(name: string) {
   const c = emptyCharacter(name);
@@ -111,7 +111,7 @@ describe('community catalog automation', () => {
 
   describe('community roll dialog wiring', () => {
     it.each([[true, 1], [false, 1], [true, 2], [false, 2]] as const)('uses the highest current weapon trait and links only this attack’s Rage Up to damage (sent=%s, uses=%s)', (sent, uses) => {
-      const cards = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8')).entries;
+      const cards = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8')).entries;
       const c = emptyCharacter('Fighter');
       c.stress.slots = 6;
       c.traits.find(t => t.name === 'Strength')!.mod = 3;
@@ -143,7 +143,7 @@ describe('community catalog automation', () => {
     });
 
     it.each([true, false])('maximizes one damage die before rolling and pays Stress only on send (%s)', sent => {
-      const cards = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8')).entries;
+      const cards = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/domain-cards.json', import.meta.url), 'utf8')).entries;
       const card = cards.find((entry: { id: string }) => entry.id === 'versatile-fighter');
       const c = emptyCharacter('Fighter');
       c.proficiency.on = 2;

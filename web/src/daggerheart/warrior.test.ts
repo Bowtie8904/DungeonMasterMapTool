@@ -11,7 +11,7 @@ import { creationIgnoresWeaponBurden, emptyChoices, type RulesData } from './rul
 import { rollContext } from './rollbuttons';
 import { setDisabledCopycatSources } from './copycat';
 
-const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
+const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/classes.json', import.meta.url), 'utf8'));
 const primary: Weapon = { name: 'Greatsword', slot: 'Primary', damage: 'd10+3', damageType: 'phys', trait: 'Strength', range: 'Melee', hands: 2, tier: 1 };
 const secondary: Weapon = { ...primary, name: 'Dagger', slot: 'Secondary', damage: 'd8+2', hands: 1 };
 

@@ -40,7 +40,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('martial stance dialog', () => {
   it('hides the trait field with a CSS-safe class unless Favored is selected', () => {
-    const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
+    const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/classes.json', import.meta.url), 'utf8'));
     const c = emptyCharacter('Martial Artist');
     c.testingCharacter = true;
     c.features = catalog.entries.find(e => e.id === 'brawler-martial-artist-foundation')!.features!

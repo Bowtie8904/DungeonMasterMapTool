@@ -3395,7 +3395,7 @@ class LegacyCatalogConverterTest {
 
     @Test
     void shippedWardenReportDiceRollOnceAndSpendOnlyOnSuccess() throws Exception {
-        JsonNode classes = RuleJson.parse(Files.readString(Path.of("dmmap-daggerheart", "classes.json")));
+        JsonNode classes = RuleJson.parse(Files.readString(dmmt.online.LegacyCatalogs.dir().resolve("classes.json")));
         JsonNode feature = null;
         for (JsonNode entry : classes.path("entries")) for (JsonNode candidate : entry.path("features"))
             if ("Warden\u2019s Protection".equals(candidate.path("name").asText())) feature = candidate;

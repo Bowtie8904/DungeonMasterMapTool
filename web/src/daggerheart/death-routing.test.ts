@@ -10,7 +10,7 @@ describe('death action routing and permanent pips', () => {
   it('routes every catalog equipment/card death action to the shared host dialog instead of local automation', () => {
     const seen = new Set<string>();
     for (const category of ['armor', 'domain-cards', 'consumables', 'classes']) {
-      const data = JSON.parse(readFileSync(new URL(`../../../dmmap-daggerheart/${category}.json`, import.meta.url), 'utf8'));
+      const data = JSON.parse(readFileSync(new URL(`../../../src/test/resources/dmmt/legacy-catalogs/${category}.json`, import.meta.url), 'utf8'));
       const sources = data.entries.flatMap((entry: { automation?: Automation; features?: Array<{ automation?: Automation }> }) => [entry, ...(entry.features ?? [])]);
       for (const source of sources as Array<{ automation?: Automation }>) {
         const actions = sheetActions(source.automation);

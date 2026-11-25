@@ -75,7 +75,7 @@ const roll: RollMessage = { id: 1, ts: 1, fromId: 'player', from: 'Player', sour
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 
 describe('Grouped class features', () => {
-  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/classes.json', import.meta.url), 'utf8'));
 
   it('groups only the four opted-in feature families, retaining Focus as its own feature', () => {
     const groups = catalog.entries.flatMap(entry => groupFeatures(entry.features ?? []))
@@ -181,7 +181,7 @@ describe('Grouped class features', () => {
 describe('Warlock feature controls', () => {
   it('renders one Favor resource and the standard blue Boon button without Favor feature actions', () => {
     setup();
-    const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
+    const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/classes.json', import.meta.url), 'utf8'));
     const c = emptyCharacter('Warlock');
     c.className = 'Warlock';
     c.mancer = { done: true };
@@ -203,7 +203,7 @@ describe('Warlock feature controls', () => {
 describe('Sorcerer selection dialogs', () => {
   it('groups the long-rest counter with manual swap, not unlimited Help, and disables only swap after use', () => {
     setup();
-    const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
+    const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../src/test/resources/dmmt/legacy-catalogs/classes.json', import.meta.url), 'utf8'));
     const c = emptyCharacter('Sorcerer');
     c.mancer = { done: true };
     c.features = catalog.entries.find(e => e.id === 'sorcerer-primal-origin-specialization')!.features!

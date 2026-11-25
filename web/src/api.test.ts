@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { acceptSheetVersion, applyDeathRecovery, configureDmSheet, configureSheetActionRebase, configureSheetActionResponses, configureSheetPatches, getDeathOptions, logout, saveSheet, takeDeathMove, tokenArtwork, uploadArtwork, useFeature } from './api';
+import { CONTRACT_HEADER, CompatibilityError, ONLINE_CONTRACT_VERSION, acceptSheetVersion, assertHostCompatible, getSession, hostFetch, applyDeathRecovery, configureDmSheet, configureSheetActionRebase, configureSheetActionResponses, configureSheetPatches, getDeathOptions, logout, saveSheet, takeDeathMove, tokenArtwork, uploadArtwork, useFeature } from './api';
 import { emptyCharacter } from './daggerheart/data';
 
 afterEach(() => { configureSheetPatches(false); configureSheetActionResponses(false); configureSheetActionRebase(false); vi.unstubAllGlobals(); });
@@ -101,7 +101,7 @@ it('loads encoded authoritative death options with authenticated credentials', a
   const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(options)));
   vi.stubGlobal('fetch', fetch);
   expect(await getDeathOptions('a b')).toEqual(options);
-  expect(fetch).toHaveBeenCalledWith('/api/death-move/a%20b', { credentials: 'same-origin' });
+  expect(fetch).toHaveBeenCalledWith('/api/death-move/a%20b', expect.objectContaining({ credentials: 'same-origin' }));
 });
 
 it('preserves basic death payloads and sends expanded recovery/range contracts', async () => {
@@ -148,4 +148,22 @@ it('surfaces portrait upload rejection and invalid response data', async () => {
   vi.stubGlobal('fetch', fetch);
   await expect(uploadArtwork('hero', image)).rejects.toThrow('Invalid image');
   await expect(uploadArtwork('hero', image)).rejects.toThrow('invalid artwork URL');
+});
+it('sends the online contract header on every host request', async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+  vi.stubGlobal('fetch', fetch);
+  await hostFetch('/api/sheet/a', { method: 'POST' });
+  expect(new Headers(fetch.mock.calls[0][1].headers).get(CONTRACT_HEADER)).toBe(String(ONLINE_CONTRACT_VERSION));
+});
+
+it('refuses a host with a missing or different online contract and names both versions', async () => {
+  expect(() => assertHostCompatible(ONLINE_CONTRACT_VERSION)).not.toThrow();
+  expect(() => assertHostCompatible(undefined)).toThrow(/unknown/);
+  expect(() => assertHostCompatible(ONLINE_CONTRACT_VERSION + 1)).toThrow(CompatibilityError);
+  try { assertHostCompatible(1); } catch (error) {
+    expect((error as Error).message).toContain(String(ONLINE_CONTRACT_VERSION));
+    expect((error as Error).message).toMatch(/reload/i);
+  }
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ authenticated: true, role: 'player' }))));
+  await expect(getSession()).rejects.toBeInstanceOf(CompatibilityError);
 });

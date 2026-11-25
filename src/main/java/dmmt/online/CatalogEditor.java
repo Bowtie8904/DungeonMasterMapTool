@@ -208,9 +208,9 @@ final class CatalogEditor {
     }
 
     static void validate(ObjectNode file, String category) {
-        if (!"dmmap-daggerheart".equals(file.path("format").asText()) || file.path("version").asInt() != 1
+        if (!"dmmap-daggerheart".equals(file.path("format").asText()) || (file.path("version").asInt() != 1 && file.path("version").asInt() != 2)
                 || !category.equals(file.path("category").asText()))
-            throw new Rejected(400, "Expected dmmap-daggerheart version 1 with category " + category + ".");
+            throw new Rejected(400, "Expected dmmap-daggerheart version 1 or 2 with category " + category + ".");
         Set<String> ids = new HashSet<>();
         Set<String> names = new HashSet<>();
         for (JsonNode entry : file.path("entries")) {
@@ -256,15 +256,15 @@ final class CatalogEditor {
                 }
                 default -> { }
             }
-            validateTree(entry, entry.path("name").asText(), 0);
+            validateTree(entry, entry.path("name").asText(), 0, file.path("version").asInt() == 1);
         }
     }
 
-    private static void validateTree(JsonNode node, String path, int depth) {
+    private static void validateTree(JsonNode node, String path, int depth, boolean legacy) {
         if (depth > 40) throw new Rejected(400, "Automation nesting is too deep: " + path);
         if (node.isObject()) {
             boolean namedMap = path.matches(".*\\.(cost|extraBenefitCost|usesOverrides|diceByLevel|diceByFeature|maxByLevel|traitBonusByFeature|maxBenefitsByFeature|actionBenefits)$");
-            boolean ruleFields = !namedMap && (depth == 0 || path.contains(".automation")
+            boolean ruleFields = legacy && !namedMap && (depth == 0 || path.contains(".automation")
                     || path.endsWith(".features[]") || path.endsWith(".spells[]"));
             var fields = node.fields();
             while (fields.hasNext()) {
@@ -290,10 +290,10 @@ final class CatalogEditor {
                     object(node, key); integer(value, "max", 1, 1000);
                     oneOf(value, "per", "shortRest", "longRest", "rest", "scene", "session");
                 }
-                validateTree(value, path + "." + key, depth + 1);
+                validateTree(value, path + "." + key, depth + 1, legacy);
             }
         } else if (node.isArray()) {
-            for (JsonNode child : node) validateTree(child, path + "[]", depth + 1);
+            for (JsonNode child : node) validateTree(child, path + "[]", depth + 1, legacy);
         }
     }
 
