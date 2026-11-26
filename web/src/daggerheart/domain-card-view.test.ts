@@ -742,7 +742,7 @@ it('formats current class, multiclass and mixed heritage in the sheet header', a
   const lines = (view: Element) => view.querySelectorAll('div').filter(div => div.className === 'sub').map(div => div.text());
   expect(lines(root)).toEqual([
     'Class: Wizard - School of Knowledge', 'Multiclass: Ranger - Wayfinder - Domain: Sage',
-    'Domains: Codex & Splendor', 'Heritage: Highborne Human-Giant (Vampire)', 'Played by Player',
+    'Domains: Codex & Splendor', 'Heritage: Highborne Vampire Human-Giant', 'Played by Player',
   ]);
   expect(c.ancestry).toBe('Human / Giant');
   const saves = changed.mock.calls.length;
@@ -753,7 +753,7 @@ it('formats current class, multiclass and mixed heritage in the sheet header', a
   await Promise.resolve();
   expect(lines(root)).toEqual([
     'Class: Bard - Troubadour', 'Multiclass: Ranger - Wayfinder - Domain: Sage',
-    'Domains: Codex & Splendor', 'Heritage: Ridgeborne Simiah (Shapeshifter)', 'Played by Player',
+    'Domains: Codex & Splendor', 'Heritage: Ridgeborne Shapeshifter Simiah', 'Played by Player',
   ]);
   expect(c.mancer.choices?.ancestry).toBe('Human');
   expect(c.mancer.choices?.ancestry2).toBe('Giant');
@@ -795,11 +795,11 @@ it('omits missing header identity parts and separators for incomplete and legacy
     { stored: { className: 'Ranger', ancestry: 'Human', community: 'Wildborne' },
       expected: ['Class: Ranger', 'Domains: ', 'Heritage: Wildborne Human'] },
     { stored: { subclass: 'Wayfinder', transformation: 'Ghost' },
-      expected: ['Class: Wayfinder', 'Domains: ', 'Heritage: (Ghost)'] },
+      expected: ['Class: Wayfinder', 'Domains: ', 'Heritage: Ghost'] },
     { stored: { className: 'Druid', subclass: 'Circle: Ancient', ancestry: 'Elf / Human' },
       expected: ['Class: Druid - Circle: Ancient', 'Domains: ', 'Heritage: Elf-Human'] },
     { stored: { community: 'Underborne', transformation: 'Vampire' },
-      expected: ['Domains: ', 'Heritage: Underborne (Vampire)'] },
+      expected: ['Domains: ', 'Heritage: Underborne Vampire'] },
     { stored: { className: 'Ranger', subclass: '  ', ancestry: '  ', community: '  ', transformation: '  ' },
       expected: ['Class: Ranger', 'Domains: '] },
     { stored: JSON.parse('{"className":null,"subclass":null,"ancestry":null,"community":null}'),

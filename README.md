@@ -399,7 +399,7 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   testing indicators remain visible; token customization and pop-out controls are inside the sheet.
 - **Daggerheart character sheet**: players open sheets from My actors.
   The header shows the primary class as `Class: Ranger - Wayfinder` and heritage as
-  `Heritage: Wildborne Human-Giant (Vampire)`, omitting the second ancestry and transformation when absent.
+  `Heritage: Wildborne Vampire Human-Giant`, omitting optional parts when absent.
   Additional classes retain their `Multiclass:` label and selected domain.
   Saved sheets are formatted JSON; catalog-backed feature and domain-card descriptions and rules are stored
   by reference when unmodified, so catalog updates appear without removing and re-adding them. Custom content,

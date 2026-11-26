@@ -1182,7 +1182,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const primaryClass = classText(c.className, c.subclass);
     const ancestry = (c.ancestry ?? '').split(' / ').map(name => name.trim()).filter(Boolean).join('-');
     const transformation = c.transformation?.trim();
-    const heritage = [c.community?.trim(), ancestry, transformation ? `(${transformation})` : ''].filter(Boolean).join(' ');
+    const heritage = [c.community?.trim(), transformation, ancestry].filter(Boolean).join(' ');
     const death = el('button', { class: 'small', type: 'button', title: 'Choose a death move when all HP are marked' }, 'Death move...');
     death.disabled = !canMakeDeathMove(c);
     death.addEventListener('click', () => deathDialog());

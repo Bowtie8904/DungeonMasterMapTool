@@ -28,7 +28,7 @@ try {
   const host = document.querySelector('#host');
   host.append(view);
   expectLines(view, ['Class: Wizard - School of Knowledge', 'Multiclass: Ranger - Wayfinder - Domain: Sage',
-    'Domains: Codex & Splendor', 'Heritage: Highborne Human-Giant (Vampire)']);
+    'Domains: Codex & Splendor', 'Heritage: Highborne Vampire Human-Giant']);
   for (const width of [900, 650, 500]) {
     host.style.width = `${width}px`;
     for (const line of view.querySelectorAll('.ident-main > .sub')) {
@@ -40,7 +40,7 @@ try {
   bus.notify(false);
   await Promise.resolve();
   expectLines(view, ['Class: Wizard - School of Knowledge', 'Multiclass: Ranger - Wayfinder - Domain: Sage',
-    'Domains: Codex & Splendor', 'Heritage: Ridgeborne Simiah (Shapeshifter)']);
+    'Domains: Codex & Splendor', 'Heritage: Ridgeborne Shapeshifter Simiah']);
   assert(c.mancer.choices.ancestry === 'Human' && c.mancer.choices.ancestry2 === 'Giant', 'Header changed creation choices');
   assert(saves === originalSaves, 'A presentation refresh saved the sheet');
   const readOnly = renderSheetView({ character: c, readOnly: () => true, onRoll: () => true, onChange: () => { saves++; } });
