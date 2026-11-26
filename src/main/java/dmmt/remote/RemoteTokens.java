@@ -37,8 +37,16 @@ public final class RemoteTokens implements RemoteOperations.Endpoint, AutoClosea
                              @JsonProperty(required = true) double zoom,
                              @JsonProperty(required = true) double centerX,
                              @JsonProperty(required = true) double centerY,
-                             RemoteAssetStore.AssetDescriptor source, RemoteAssetStore.AssetDescriptor crop)
+                             RemoteAssetStore.AssetDescriptor source, RemoteAssetStore.AssetDescriptor crop,
+                             dmmt.model.DaggerheartAdversary adversary)
     {
+        public Definition(String id, String name, String color, double sizeTiles, TokenShape shape,
+                          boolean border, double zoom, double centerX, double centerY,
+                          RemoteAssetStore.AssetDescriptor source, RemoteAssetStore.AssetDescriptor crop)
+        {
+            this(id, name, color, sizeTiles, shape, border, zoom, centerX, centerY, source, crop, null);
+        }
+
         public Definition
         {
             text(id, "Token identity", 256, false);
@@ -53,13 +61,19 @@ public final class RemoteTokens implements RemoteOperations.Endpoint, AutoClosea
             if (source != null && source.size() > RemoteImages.MAX_BYTES
                     || crop != null && crop.size() > RemoteImages.MAX_BYTES)
                 throw new IllegalArgumentException("Token artwork exceeds the remote byte limit.");
+            if (adversary != null)
+                adversary = new dmmt.service.DaggerheartAdversaryClipboard().parse(json(
+                        Map.of("format", dmmt.service.DaggerheartAdversaryClipboard.FORMAT,
+                                "version", 1, "system", "daggerheart", "adversary", adversary)).toString()).adversary();
         }
 
         public TokenDefinition materialize(String sourceImage, String image)
         {
             return TokenDefinition.builder().id(id).name(name).color(color).sizeTiles(sizeTiles)
                     .shape(shape).border(border).zoom(zoom).centerX(centerX).centerY(centerY)
-                    .sourceImage(sourceImage).image(image).build();
+                    .sourceImage(sourceImage).image(image)
+                    .adversary(adversary == null ? null : MAPPER.convertValue(adversary, dmmt.model.DaggerheartAdversary.class))
+                    .build();
         }
     }
 
@@ -489,7 +503,8 @@ public final class RemoteTokens implements RemoteOperations.Endpoint, AutoClosea
                                           RemoteAssetStore.AssetDescriptor crop)
     {
         return new Definition(token.getId(), token.getName(), token.getColor(), token.getSizeTiles(),
-                token.getShape(), token.isBorder(), token.getZoom(), token.getCenterX(), token.getCenterY(), source, crop);
+                token.getShape(), token.isBorder(), token.getZoom(), token.getCenterX(), token.getCenterY(), source, crop,
+                token.getAdversary());
     }
 
     public static Path localArtwork(String reference) throws IOException

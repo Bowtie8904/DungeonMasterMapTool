@@ -92,6 +92,45 @@ class RemoteTokensTest
     }
 
     @Test
+    void adversaryTemplatesRoundTripThroughHostLibraryAssetsAndRemoteEdits() throws Exception
+    {
+        try (Harness h = new Harness())
+        {
+            var token = new dmmt.service.DaggerheartAdversaryClipboard().parse("""
+                    {"format":"daggerheart-companion/adversary","version":1,"system":"daggerheart",
+                     "adversary":{"name":"Burrower","tier":1,"difficulty":14,"maxHp":8,"maxStress":3,
+                      "features":[{"name":"Claws","classification":"Action","description":"Attack"}]}}
+                    """).tokenDefinition();
+            token.setSourceImage(png("adversary.png").toUri().toString());
+            token.setImage(token.getSourceImage());
+            var uploaded = h.await(RemoteTokens.upload(token, h.connection));
+            var state = h.change(new RemoteTokens.Request(h.state().revision(), RemoteTokens.Operation.PUT,
+                    uploaded, null, "", null, null));
+            assertEquals(token.getAdversary(), state.entries().getFirst().token().adversary());
+            assertEquals(token.getAdversary(), h.service.load().getEntries().getFirst().getToken().getAdversary());
+            var prepared = h.await(RemoteTokens.download(state, h.connection, h.worker, h.owner::add));
+            var downloaded = prepared.library().getEntries().getFirst().getToken();
+            assertEquals(token.getAdversary(), downloaded.getAdversary());
+            assertNotNull(downloaded.getSourceImage());
+            downloaded.setName("Customized Burrower");
+            downloaded.setColor("#123456");
+            var edited = h.await(RemoteTokens.upload(downloaded, h.connection));
+            h.change(new RemoteTokens.Request(h.state().revision(), RemoteTokens.Operation.PUT,
+                    edited, null, "", null, null));
+            var saved = h.service.load().getEntries().getFirst().getToken();
+            assertEquals("Customized Burrower", saved.getName());
+            assertEquals("#123456", saved.getColor());
+            assertEquals(token.getAdversary(), saved.getAdversary());
+            assertFalse(Files.exists(directory.resolve("client-library").resolve("tokens.json")));
+            var invalid = dmmt.service.TokenLibraryService.copy(token).getAdversary();
+            invalid.setMaxHp(101);
+            assertThrows(IllegalArgumentException.class, () -> new RemoteTokens.Definition(
+                    token.getId(), token.getName(), token.getColor(), 1, token.getShape(), true,
+                    1, .5, .5, null, null, invalid));
+        }
+    }
+
+    @Test
     void localHostChangesInvalidateBothAlreadyStaleAndInFlightClientCommands() throws Exception
     {
         var service = new TokenLibraryService(directory.resolve("host-library"));

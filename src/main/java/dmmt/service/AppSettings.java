@@ -81,7 +81,9 @@ public final class AppSettings {
                 "files.import|Add handout images", "files.paste|Handout from clipboard", "files.folder|New handout folder",
                 "files.refresh|Reload handouts");
         addControls(controls, "tokens", "browser|Token browser tab", "create|Create token", "import|Import token image",
-                "paste|Token from clipboard", "folder|New token folder", "refresh|Reload token library");
+                "paste|Token from clipboard", "folder|New token folder", "refresh|Reload token library",
+                "images|Image tokens", "adversaries|Adversary tokens",
+                "adversaries.import|Import adversary from clipboard");
         addControls(controls, "tools", "select|Select", "ping|Ping", "laser|Laser pointer", "undo|Undo", "redo|Redo");
         addControls(controls, "fog", "enabled|Fog on/off", "revealBrush|Reveal brush", "hideBrush|Hide brush",
                 "revealRect|Reveal rectangle", "hideRect|Hide rectangle", "revealAll|Reveal all", "hideAll|Hide all",

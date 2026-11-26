@@ -26,6 +26,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -71,8 +72,63 @@ class TokenSupportTest
             settings.setHiddenControls(Set.of("tokens.create"));
             invoke(f.app, "applySectionVisibility");
             assertFalse(visibility.registeredNodes().get("tokens.create").getFirst().isVisible());
-            assertEquals(6, api.describe().stream().filter(row -> row.get("id").toString().startsWith("tokens.")).count());
+            assertEquals(9, api.describe().stream().filter(row -> row.get("id").toString().startsWith("tokens.")).count());
             assertTrue(api.keyImage("tokens.browser", null).length > 100);
+        });
+    }
+
+    @Test
+    void adversaryLibraryPlacementNeedsNoCampaignAndCreatesIndependentPersistedEncounters() throws Exception
+    {
+        onFx(() -> {
+            Fixture f = fixture();
+            var template = new dmmt.service.DaggerheartAdversaryClipboard().parse("""
+                    {"format":"daggerheart-companion/adversary","version":1,"system":"daggerheart",
+                     "adversary":{"name":"Burrower","tier":1,"difficulty":14,"maxHp":8,"maxStress":3,
+                     "features":[{"name":"Claws","classification":"Action","description":"Attack"}]}}
+                    """).tokenDefinition();
+            template.setColor("#123456");
+            template.setSizeTiles(2.5);
+            invoke(f.app, "addToken", template, 100.0, 100.0);
+            invoke(f.app, "addToken", template, 300.0, 100.0);
+            var first = f.project.getTokens().getFirst();
+            var second = f.project.getTokens().getLast();
+            assertNotEquals(template.getId(), first.getDefinitionId());
+            assertNotEquals(first.getDefinitionId(), second.getDefinitionId());
+            assertFalse(first.isPlayerVisible());
+            assertEquals(2.5, first.getSizeTiles());
+            assertEquals(0, first.getAdversaryState().getMarkedHp());
+            assertEquals(0, second.getAdversaryState().getMarkedStress());
+            assertFalse(second.getAdversaryState().isDead());
+            var firstDefinition = f.project.getTokenDefinitions().get(first.getDefinitionId());
+            assertEquals("#123456", firstDefinition.getColor());
+            assertEquals(template.getAdversary(), firstDefinition.getAdversary());
+            first.getAdversaryState().setMarkedHp(4);
+            firstDefinition.getAdversary().getFeatures().getFirst().setName("Changed encounter");
+            assertEquals(0, second.getAdversaryState().getMarkedHp());
+            assertEquals("Claws", template.getAdversary().getFeatures().getFirst().getName());
+            assertEquals("Claws", f.project.getTokenDefinitions().get(second.getDefinitionId())
+                    .getAdversary().getFeatures().getFirst().getName());
+            template.setColor("#FFFFFF");
+            invoke(f.app, "tokenDefinitionChanged", template);
+            assertEquals("#123456", firstDefinition.getColor());
+            f.api.execute("tools.undo", Map.of());
+            assertEquals(1, f.project.getTokens().size());
+            assertFalse(f.project.getTokenDefinitions().containsKey(second.getDefinitionId()));
+            f.api.execute("tools.redo", Map.of());
+            assertEquals(2, f.project.getTokens().size());
+            assertNotNull(f.project.getTokenDefinitions().get(second.getDefinitionId()).getAdversary());
+            var projects = new ProjectService();
+            Path file = temp.resolve("adversaries.dmmap");
+            projects.save(file, f.project);
+            var loaded = projects.load(file);
+            assertEquals(4, loaded.getTokens().getFirst().getAdversaryState().getMarkedHp());
+            assertEquals(2, loaded.getTokenDefinitions().size());
+            invoke(f.app, "removeToken", first.getId());
+            assertFalse(f.project.getTokenDefinitions().containsKey(first.getDefinitionId()));
+            f.api.execute("tools.undo", Map.of());
+            assertEquals(4, token(f, first.getId()).getAdversaryState().getMarkedHp());
+            assertNotNull(f.project.getTokenDefinitions().get(first.getDefinitionId()).getAdversary());
         });
     }
 

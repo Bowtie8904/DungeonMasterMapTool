@@ -9541,12 +9541,8 @@ public class DungeonMasterMapToolApplication extends Application {
         double x = snapToken(hoverInsideCanvas ? hoverWorldX : camera.getX(), false);
         double y = snapToken(hoverInsideCanvas ? hoverWorldY : camera.getY(), false);
         String definitionId = "adversary:" + UUID.randomUUID();
-        DmProject.TokenDefinition definition = DmProject.TokenDefinition.builder()
-                .id(definitionId)
-                .name(imported.tokenName())
-                .color(ADVERSARY_TOKEN_COLOR)
-                .adversary(imported.adversary())
-                .build();
+        DmProject.TokenDefinition definition = imported.tokenDefinition();
+        definition.setId(definitionId);
         DmProject.TokenInstance token = DmProject.TokenInstance.builder()
                 .id(UUID.randomUUID().toString())
                 .definitionId(definitionId)
@@ -9768,9 +9764,6 @@ public class DungeonMasterMapToolApplication extends Application {
                 (int) Math.round(color.getOpacity() * 255));
     }
 
-    /** Imported adversaries always start red; the export's token color is ignored. */
-    private static final String ADVERSARY_TOKEN_COLOR = "#D64545";
-
     private void tokenDefinitionChanged(DmProject.TokenDefinition definition) {
         if (project.getTokenDefinitions().containsKey(definition.getId())) {
             project.getTokenDefinitions().put(definition.getId(), dmmt.service.TokenLibraryService.copy(definition));
@@ -9903,10 +9896,15 @@ public class DungeonMasterMapToolApplication extends Application {
     private void addToken(DmProject.TokenDefinition definition, double x, double y) {
         setActiveTool(EditorTool.SELECT);
         clearSingleSelection();
-        project.getTokenDefinitions().put(definition.getId(), dmmt.service.TokenLibraryService.copy(definition));
+        DmProject.TokenDefinition placed = dmmt.service.TokenLibraryService.copy(definition);
+        if (placed.getAdversary() != null)
+            placed.setId("adversary:" + UUID.randomUUID());
+        project.getTokenDefinitions().put(placed.getId(), placed);
         DmProject.TokenInstance token = DmProject.TokenInstance.builder().id(UUID.randomUUID().toString())
-                .definitionId(definition.getId()).x(snapToken(x, false)).y(snapToken(y, false))
-                .sizeTiles(definition.getSizeTiles()).build();
+                .definitionId(placed.getId()).x(snapToken(x, false)).y(snapToken(y, false))
+                .sizeTiles(placed.getSizeTiles())
+                .adversaryState(placed.getAdversary() == null ? null
+                        : new dmmt.model.DaggerheartAdversary.CombatState(0, 0, 0, false)).build();
         executeWithHistory("Place token", () -> applyTokenState(token.getId(), token),
                 () -> applyTokenState(token.getId(), null));
         selectedTokenId = token.getId();

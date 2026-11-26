@@ -250,6 +250,51 @@
     -fx-spacing: 2;
 }
 
+.token-section-switch {
+    -fx-background-color: -dm-bg;
+    -fx-background-radius: 9;
+    -fx-border-color: -dm-border;
+    -fx-border-radius: 9;
+    -fx-padding: 3;
+    -fx-spacing: 3;
+}
+
+.token-section-switch .toggle-button {
+    -fx-background-color: transparent;
+    -fx-background-radius: 6;
+    -fx-border-color: transparent;
+    -fx-border-radius: 6;
+    -fx-padding: 7 3;
+    -fx-graphic-text-gap: 4;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -dm-muted;
+    -fx-alignment: center;
+}
+
+.token-section-switch .toggle-button .ikonli-font-icon {
+    -fx-icon-color: -dm-muted;
+}
+
+.token-section-switch .toggle-button:hover {
+    -fx-background-color: -dm-surface-2;
+    -fx-text-fill: -dm-text;
+}
+
+.token-section-switch .toggle-button:selected {
+    -fx-background-color: #3c3327;
+    -fx-border-color: #715633;
+    -fx-text-fill: -dm-accent;
+}
+
+.token-section-switch .toggle-button:selected .ikonli-font-icon {
+    -fx-icon-color: -dm-accent;
+}
+
+.token-section-switch .toggle-button:focused {
+    -fx-border-color: -dm-accent;
+}
+
 /* ---------- Text & labels ---------- */
 
 .label {

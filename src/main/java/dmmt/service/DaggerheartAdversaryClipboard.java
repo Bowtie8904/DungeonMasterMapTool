@@ -4,6 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dmmt.model.DaggerheartAdversary;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -13,7 +17,6 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 public final class DaggerheartAdversaryClipboard {
     public static final String FORMAT = "daggerheart-companion/adversary";
@@ -27,6 +30,11 @@ public final class DaggerheartAdversaryClipboard {
             .build();
 
     public record Import(DaggerheartAdversary adversary, String tokenName, String tokenColor, String imageUrl) {
+        public dmmt.model.DmProject.TokenDefinition tokenDefinition() {
+            return dmmt.model.DmProject.TokenDefinition.builder()
+                    .id(java.util.UUID.randomUUID().toString()).name(tokenName).color("#D64545")
+                    .adversary(adversary).build();
+        }
     }
 
     private final ObjectMapper mapper = JsonMappers.create();
@@ -92,16 +100,26 @@ public final class DaggerheartAdversaryClipboard {
             if (response.statusCode() != 200) {
                 throw new IOException("The adversary image server returned HTTP " + response.statusCode() + ".");
             }
-            String contentType = response.headers().firstValue("Content-Type").orElse("")
-                    .split(";", 2)[0].trim().toLowerCase(Locale.ROOT);
-            if (!"image/png".equals(contentType)) {
-                throw new IOException("The adversary image is not a PNG.");
-            }
             byte[] image = body.readNBytes(MAX_IMAGE_BYTES + 1);
             if (image.length > MAX_IMAGE_BYTES) {
-                throw new IOException("The adversary image is larger than 5 MB.");
+                throw new IOException("The adversary image is larger than 50 MiB.");
             }
-            return TokenAssets.store(image);
+            BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(image));
+            if (decoded == null) {
+                throw new IOException("The adversary artwork is not a supported image or is corrupt.");
+            }
+            BufferedImage normalized = new BufferedImage(decoded.getWidth(), decoded.getHeight(), BufferedImage.TYPE_INT_ARGB);
+            var graphics = normalized.createGraphics();
+            try {
+                graphics.drawImage(decoded, 0, 0, null);
+            } finally {
+                graphics.dispose();
+            }
+            ByteArrayOutputStream png = new ByteArrayOutputStream();
+            if (!ImageIO.write(normalized, "png", png)) {
+                throw new IOException("The adversary artwork could not be converted to PNG.");
+            }
+            return TokenAssets.store(png.toByteArray());
         }
     }
 

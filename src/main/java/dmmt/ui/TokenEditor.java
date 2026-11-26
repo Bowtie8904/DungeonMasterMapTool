@@ -112,7 +112,8 @@ public final class TokenEditor
     private Dialog<TokenDefinition> dialog(Window owner)
     {
         Dialog<TokenDefinition> dialog = new Dialog<>();
-        Dialogs.style(dialog, owner, "Token", "Create or edit a character token",
+        Dialogs.style(dialog, owner, "Token", token.getAdversary() == null
+                              ? "Create or edit a character token" : "Customize adversary token",
                       MaterialDesignA.ACCOUNT_CIRCLE_OUTLINE, false);
         TextField name = new TextField(token.getName());
         name.setId("token-name");
@@ -222,7 +223,9 @@ public final class TokenEditor
             zoom.setValue(zoom.getValue() * (e.getDeltaY() > 0 ? 1.1 : 1 / 1.1));
             e.consume();
         });
-        Label hint = new Label("Drag to pan; use the slider or wheel to zoom.\nChanges update all maps using this token.");
+        Label hint = new Label("Drag to pan; use the slider or wheel to zoom.\n"
+                + (token.getAdversary() == null ? "Changes update all maps using this token."
+                        : "Changes affect only this adversary definition; other placements stay unchanged."));
         hint.getStyleClass().add("muted");
         hint.setWrapText(true);
         error.getStyleClass().add("error-label");

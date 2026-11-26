@@ -107,14 +107,14 @@ class RemoteSessionTransportTest {
     void approvalOnlyRejectsDifferentCompatibilityVersionBeforeApprovalOrStateTransfer() throws Exception {
         try (var host = new Host(directory.resolve("incompatible-version.ini"));
              var client = RemoteSessionClient.requestControl(host.address(), identity.fingerprint(),
-                     BUILD + "-incompatible", 2000, "Incompatible desktop")) {
+                     "8", 2000, "Incompatible desktop")) {
             client.enableWorkspace();
             await(() -> client.phase() == RemoteSessionClient.Phase.DISCONNECTED);
             assertNull(host.pending());
             assertNull(client.latestState());
             assertNull(client.latestWorkspace());
             assertFalse(client.canReconnect());
-            assertTrue(client.lastError().contains("local compatibility version " + BUILD + "-incompatible"));
+            assertTrue(client.lastError().contains("local compatibility version 8"));
             assertTrue(client.lastError().contains("peer compatibility version " + BUILD));
         }
     }

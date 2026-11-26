@@ -17,6 +17,8 @@ import javafx.scene.paint.Color;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.file.Path;
 import java.util.Map;
@@ -37,6 +39,61 @@ class TokenBrowserTest
     static void startFx() throws Exception
     {
         FxTestSupport.startJavaFx();
+    }
+
+    @Test
+    void sectionSelectorUsesFullWidthAndHighlightsTheActiveChoice() throws Exception
+    {
+        onFx(() -> {
+            var browser = new TokenBrowser(new TokenLibraryService(temp), ignored -> {});
+            var scene = new Scene(browser);
+            scene.getStylesheets().add(Icons.STYLESHEET);
+            var images = (ToggleButton)browser.controls().get("tokens.images");
+            var adversaries = (ToggleButton)browser.controls().get("tokens.adversaries");
+            var selector = (javafx.scene.layout.HBox)images.getParent();
+            assertTrue(selector.getStyleClass().contains("token-section-switch"));
+            assertNotNull(images.getGraphic());
+            assertNotNull(adversaries.getGraphic());
+            assertTrue(images.isSelected());
+            assertFalse(adversaries.isSelected());
+            for (double width : new double[] {200, 270})
+            {
+                browser.resize(width, 600);
+                browser.applyCss();
+                browser.layout();
+                assertEquals(images.getWidth(), adversaries.getWidth(), 1.01);
+                assertEquals(browser.getWidth() - browser.getInsets().getLeft() - browser.getInsets().getRight(),
+                        selector.getWidth(), .01);
+                for (var button : java.util.List.of(images, adversaries))
+                {
+                    var text = (javafx.scene.text.Text)button.lookup(".text");
+                    assertTrue(button.getWidth() >= text.getLayoutBounds().getWidth()
+                                    + button.getGraphic().getLayoutBounds().getWidth()
+                                    + button.getGraphicTextGap() + button.getInsets().getLeft() + button.getInsets().getRight(),
+                            button.getText() + " must fit at sidebar width " + width);
+                }
+            }
+            assertEquals(Color.web("#e8a33d"), images.getTextFill());
+            assertEquals(Color.web("#8d94a1"), adversaries.getTextFill());
+            adversaries.fire();
+            browser.applyCss();
+            assertFalse(images.isSelected());
+            assertTrue(adversaries.isSelected());
+            assertEquals(Color.web("#8d94a1"), images.getTextFill());
+            assertEquals(Color.web("#e8a33d"), adversaries.getTextFill());
+            adversaries.fire();
+            assertTrue(adversaries.isSelected(), "The active section cannot be deselected");
+            var visibility = new ControlVisibility();
+            browser.controls().forEach(visibility::register);
+            var api = new DmControlApi(visibility);
+            visibility.apply(Set.of("tokens.images"));
+            browser.layout();
+            assertFalse(images.isManaged());
+            assertEquals(selector.getWidth() - selector.getInsets().getLeft() - selector.getInsets().getRight(),
+                    adversaries.getWidth(), .01);
+            api.execute("tokens.images", Map.of());
+            assertTrue(images.isSelected(), "The hidden control remains available through the API");
+        });
     }
 
     @Test
@@ -73,6 +130,183 @@ class TokenBrowserTest
             visibility.apply(Set.of());
             assertTrue(browser.controls().values().stream().allMatch(javafx.scene.Node::isManaged));
         });
+    }
+
+    @Test
+    void adversaryClipboardImportEditsArtworkAndPersistsInItsOwnSearchableSection() throws Exception
+    {
+        onFx(() -> {
+            var clipboard = javafx.scene.input.Clipboard.getSystemClipboard();
+            var previous = new javafx.scene.input.ClipboardContent();
+            for (var format : clipboard.getContentTypes())
+                previous.put(format, clipboard.getContent(format));
+            try
+            {
+                var service = new TokenLibraryService(temp);
+                service.createFolder("", "Monsters");
+                service.createFolder("Monsters", "Caves");
+                service.put(TokenDefinition.builder().id("image").name("Cave image").build(), "Monsters/Caves");
+                AtomicReference<TokenDefinition> changed = new AtomicReference<>();
+                var browser = new TokenBrowser(service, changed::set);
+                new Scene(browser);
+                var tree = (TreeView<?>)browser.getChildren().stream().filter(TreeView.class::isInstance)
+                        .findFirst().orElseThrow();
+                var search = (TextField)browser.lookup("#token-search");
+                var visibility = new ControlVisibility();
+                browser.controls().forEach(visibility::register);
+                var api = new DmControlApi(visibility);
+                api.execute("tokens.adversaries", Map.of());
+                tree.getRoot().getChildren().getFirst().setExpanded(true);
+                tree.getSelectionModel().select(2);
+                var content = new javafx.scene.input.ClipboardContent();
+                content.putString("""
+                        {"format":"daggerheart-companion/adversary","version":1,"system":"daggerheart",
+                         "adversary":{"name":"Burrower","tier":1,"difficulty":14,"maxHp":8,"maxStress":3,
+                          "features":[{"name":"Claws","classification":"Action","description":"Attack"}]},
+                         "token":{"name":"Burrower","color":"#000000"},
+                         "state":{"markedHp":7,"dead":true}}
+                        """);
+                clipboard.setContent(content);
+                Platform.runLater(() -> {
+                    DialogPane pane = openTokenDialog();
+                    ((TextField)pane.lookup("#token-name")).setText("Cave Burrower");
+                    var color = (ColorPicker)pane.lookup("#token-color");
+                    color.setValue(Color.BLUE);
+                    color.fireEvent(new javafx.event.ActionEvent());
+                    @SuppressWarnings("unchecked")
+                    Spinner<Double> size = (Spinner<Double>)pane.lookup("#token-size");
+                    size.getValueFactory().setValue(2.5);
+                    var image = new javafx.scene.input.ClipboardContent();
+                    image.putImage(new WritableImage(70, 40));
+                    clipboard.setContent(image);
+                    javafx.event.Event.fireEvent(pane, new javafx.scene.input.KeyEvent(
+                            javafx.scene.input.KeyEvent.KEY_PRESSED, "", "", javafx.scene.input.KeyCode.V,
+                            false, true, false, false));
+                    ButtonType save = pane.getButtonTypes().stream().filter(b -> b != ButtonType.CANCEL).findFirst().orElseThrow();
+                    ((Button)pane.lookupButton(save)).fire();
+                });
+                visibility.apply(Set.of("tokens.adversaries.import"));
+                api.execute("tokens.adversaries.import", Map.of());
+                var imported = changed.get();
+                assertNotNull(imported);
+                assertEquals("Cave Burrower", imported.getName());
+                assertEquals("Claws", imported.getAdversary().getFeatures().getFirst().getName());
+                assertEquals("#0000FF", imported.getColor());
+                assertEquals(2.5, imported.getSizeTiles());
+                assertEquals(70, TokenArt.decode(imported.getSourceImage()).getWidth());
+                assertEquals(40, TokenArt.decode(imported.getSourceImage()).getHeight());
+                assertEquals(256, TokenArt.decode(imported.getImage()).getWidth());
+                assertEquals("Monsters/Caves", service.load().getEntries().stream()
+                        .filter(e -> imported.getId().equals(e.getToken().getId()))
+                        .findFirst().orElseThrow().getFolder());
+                browser.refresh();
+                search.setText("monsters burrower");
+                assertEquals(1, tree.getRoot().getChildren().getFirst().getChildren().getFirst().getChildren().size());
+                api.execute("tokens.images", Map.of());
+                assertTrue(tree.getRoot().getChildren().isEmpty(), "Adversaries never leak into Images");
+                search.setText("cave image");
+                assertEquals(1, tree.getRoot().getChildren().getFirst().getChildren().getFirst().getChildren().size());
+                api.execute("tokens.adversaries", Map.of());
+                assertTrue(tree.getRoot().getChildren().isEmpty(), "Ordinary images never appear as adversaries");
+                var reloaded = new TokenLibraryService(temp).load().getEntries().stream()
+                        .filter(e -> e.getToken().getId().equals(imported.getId())).findFirst().orElseThrow();
+                assertEquals("Monsters/Caves", reloaded.getFolder());
+                assertEquals(imported.getAdversary(), reloaded.getToken().getAdversary());
+                assertEquals(imported.getSizeTiles(), reloaded.getToken().getSizeTiles());
+            }
+            finally
+            {
+                clipboard.setContent(previous);
+            }
+        });
+    }
+
+    private static DialogPane openTokenDialog()
+    {
+        return (DialogPane)javafx.stage.Window.getWindows().stream()
+                .filter(w -> w.getScene() != null && w.getScene().lookup("#token-name") != null)
+                .findFirst().orElseThrow().getScene().getRoot();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"png", "jpeg", "tiff"})
+    void adversaryImportDownloadsExportedArtworkAndCancelDoesNotCreateATemplate(String imageFormat) throws Exception
+    {
+        var image = new java.awt.image.BufferedImage(120, 60, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        var bytes = new java.io.ByteArrayOutputStream();
+        assertTrue(javax.imageio.ImageIO.write(image, imageFormat, bytes));
+        var server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/adversary.png", exchange -> {
+            try (exchange)
+            {
+                exchange.getResponseHeaders().set("Content-Type", "image/" + imageFormat);
+                exchange.sendResponseHeaders(200, bytes.size());
+                exchange.getResponseBody().write(bytes.toByteArray());
+            }
+        });
+        server.start();
+        var previous = new javafx.scene.input.ClipboardContent();
+        AtomicReference<TokenBrowser> browser = new AtomicReference<>();
+        AtomicReference<TokenDefinition> accepted = new AtomicReference<>();
+        var service = new TokenLibraryService(temp);
+        try
+        {
+            onFx(() -> {
+                var clipboard = javafx.scene.input.Clipboard.getSystemClipboard();
+                for (var format : clipboard.getContentTypes())
+                    previous.put(format, clipboard.getContent(format));
+                var content = new javafx.scene.input.ClipboardContent();
+                content.putString("""
+                        {"format":"daggerheart-companion/adversary","version":1,"system":"daggerheart",
+                         "adversary":{"name":"Artwork import","tier":1,"difficulty":14,"maxHp":8,"maxStress":3},
+                         "token":{"imageUrl":"http://127.0.0.1:%d/adversary.png"}}
+                        """.formatted(server.getAddress().getPort()));
+                clipboard.setContent(content);
+                browser.set(new TokenBrowser(service, accepted::set));
+                new Scene(browser.get());
+                ((Button)browser.get().controls().get("tokens.adversaries.import")).fire();
+            });
+            awaitFx(() -> {
+                if (javafx.stage.Window.getWindows().stream().noneMatch(w ->
+                        w.getScene() != null && w.getScene().lookup("#token-name") != null))
+                    return false;
+                var pane = openTokenDialog();
+                var save = pane.getButtonTypes().stream().filter(b -> b != ButtonType.CANCEL).findFirst().orElseThrow();
+                ((Button)pane.lookupButton(save)).fire();
+                return true;
+            });
+            awaitFx(() -> accepted.get() != null);
+            var imported = service.load().getEntries().getFirst().getToken();
+            assertEquals("#D64545", imported.getColor());
+            assertEquals("Artwork import", imported.getAdversary().getName());
+            onFx(() -> {
+                assertEquals(120, TokenArt.decode(imported.getSourceImage()).getWidth());
+                assertEquals(60, TokenArt.decode(imported.getSourceImage()).getHeight());
+                assertEquals(256, TokenArt.decode(imported.getImage()).getWidth());
+                assertEquals(256, TokenArt.decode(imported.getImage()).getHeight());
+                assertEquals(1, imported.getZoom());
+                assertEquals(.5, imported.getCenterX());
+                assertEquals(.5, imported.getCenterY());
+                var content = new javafx.scene.input.ClipboardContent();
+                content.putString("""
+                        {"format":"daggerheart-companion/adversary","version":1,"system":"daggerheart",
+                         "adversary":{"name":"Cancelled","tier":1,"difficulty":14,"maxHp":8,"maxStress":3}}
+                        """);
+                javafx.scene.input.Clipboard.getSystemClipboard().setContent(content);
+                ((ToggleButton)browser.get().controls().get("tokens.adversaries")).fire();
+                Platform.runLater(() -> ((Button)openTokenDialog().lookupButton(ButtonType.CANCEL)).fire());
+                var tree = browser.get().getChildren().stream().filter(TreeView.class::isInstance).findFirst().orElseThrow();
+                javafx.event.Event.fireEvent(tree, new javafx.scene.input.KeyEvent(
+                        javafx.scene.input.KeyEvent.KEY_PRESSED, "", "", javafx.scene.input.KeyCode.V,
+                        false, true, false, false));
+            });
+            assertEquals(1, service.load().getEntries().size());
+        }
+        finally
+        {
+            server.stop(0);
+            onFx(() -> javafx.scene.input.Clipboard.getSystemClipboard().setContent(previous));
+        }
     }
 
     @Test

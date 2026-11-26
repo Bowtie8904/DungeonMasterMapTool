@@ -7,6 +7,7 @@ import dmmt.remote.RemoteImages;
 import dmmt.remote.RemoteOperations;
 import dmmt.remote.RemoteTokens;
 import dmmt.service.TokenLibraryService;
+import dmmt.service.DaggerheartAdversaryClipboard;
 import javafx.scene.Node;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.control.*;
@@ -18,7 +19,9 @@ import javafx.stage.Window;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignA;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignC;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignF;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignI;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignR;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignS;
 
 import java.io.IOException;
 import java.util.*;
@@ -57,6 +60,10 @@ public final class TokenBrowser extends VBox
     private long nextRemotePoll;
     private boolean remoteQuery;
     private boolean remoteMutation;
+    private boolean adversaries;
+    private final ToggleButton imagesSection = new ToggleButton("Images");
+    private final ToggleButton adversariesSection = new ToggleButton("Adversaries");
+    private final Label hint = new Label();
 
     private record EditContext(RemoteOperations.Connection connection, long epoch, long revision) {}
 
@@ -74,12 +81,40 @@ public final class TokenBrowser extends VBox
         Button paste = Icons.button(MaterialDesignC.CONTENT_PASTE, "Create token from clipboard", () -> create(false, true));
         Button folder = Icons.button(MaterialDesignF.FOLDER_PLUS_OUTLINE, "New token folder", this::newFolder);
         Button reload = Icons.button(MaterialDesignR.REFRESH, "Reload tokens", this::refresh);
+        Button importAdversary = Icons.button(MaterialDesignC.CONTENT_PASTE, "Import adversary from clipboard", this::importAdversary);
+        importAdversary.setText("Import clipboard");
         controls.put("tokens.create", create);
         controls.put("tokens.import", image);
         controls.put("tokens.paste", paste);
         controls.put("tokens.folder", folder);
         controls.put("tokens.refresh", reload);
-        HBox actions = new HBox(create, image, paste, folder, reload);
+        controls.put("tokens.images", imagesSection);
+        controls.put("tokens.adversaries", adversariesSection);
+        controls.put("tokens.adversaries.import", importAdversary);
+        ToggleGroup sections = new ToggleGroup();
+        imagesSection.setToggleGroup(sections);
+        adversariesSection.setToggleGroup(sections);
+        imagesSection.setSelected(true);
+        imagesSection.setGraphic(Icons.icon(MaterialDesignI.IMAGE_FRAME, 14));
+        adversariesSection.setGraphic(Icons.icon(MaterialDesignS.SWORD_CROSS, 14));
+        for (ToggleButton section : List.of(imagesSection, adversariesSection))
+        {
+            section.setMinWidth(0);
+            section.setPrefWidth(100);
+            section.setMaxWidth(Double.MAX_VALUE);
+            HBox.setHgrow(section, Priority.ALWAYS);
+        }
+        HBox imageActions = new HBox(create, image, paste);
+        imageActions.getStyleClass().add("toolbar-row");
+        HBox adversaryActions = new HBox(importAdversary);
+        adversaryActions.getStyleClass().add("toolbar-row");
+        adversaryActions.setVisible(false);
+        adversaryActions.setManaged(false);
+        imagesSection.setOnAction(e -> showSection(false, imageActions, adversaryActions));
+        adversariesSection.setOnAction(e -> showSection(true, imageActions, adversaryActions));
+        HBox sectionActions = new HBox(imagesSection, adversariesSection);
+        sectionActions.getStyleClass().add("token-section-switch");
+        HBox actions = new HBox(imageActions, adversaryActions, folder, reload);
         actions.getStyleClass().add("toolbar-row");
         search.setPromptText("Search tokens and folders");
         search.setId("token-search");
@@ -95,7 +130,12 @@ public final class TokenBrowser extends VBox
             else if (e.getCode() == KeyCode.DELETE && selected != null)
                 delete(selected);
             else if (e.isControlDown() && e.getCode() == KeyCode.V)
-                create(false, true);
+            {
+                if (adversaries)
+                    importAdversary();
+                else
+                    create(false, true);
+            }
             else
                 return;
             e.consume();
@@ -107,15 +147,30 @@ public final class TokenBrowser extends VBox
                 e.consume();
             }
         });
-        Label hint = new Label("Drag tokens onto the map or into folders. Right-click to edit. Ctrl+V imports a clipboard image.");
+        hint.setText("Drag tokens onto the map or into folders. Right-click to edit. Ctrl+V imports a clipboard image.");
         hint.getStyleClass().add("muted");
         hint.setWrapText(true);
         remoteStatus.getStyleClass().add("muted");
         remoteStatus.setWrapText(true);
         remoteStatus.setVisible(false);
         remoteStatus.setManaged(false);
-        getChildren().addAll(title, actions, search, tree, hint, remoteStatus);
+        getChildren().addAll(title, sectionActions, actions, search, tree, hint, remoteStatus);
         refresh();
+    }
+
+    private void showSection(boolean value, HBox imageActions, HBox adversaryActions)
+    {
+        adversaries = value;
+        imagesSection.setSelected(!value);
+        adversariesSection.setSelected(value);
+        imageActions.setVisible(!value);
+        imageActions.setManaged(!value);
+        adversaryActions.setVisible(value);
+        adversaryActions.setManaged(value);
+        hint.setText(value
+                ? "Import adversaries with Ctrl+V. Drag onto any map for a fresh encounter. Folders are shared with Images; placed adversaries are independent copies."
+                : "Drag tokens onto the map or into folders. Right-click to edit. Ctrl+V imports a clipboard image.");
+        rebuild();
     }
 
     public Map<String, Node> controls()
@@ -329,7 +384,8 @@ public final class TokenBrowser extends VBox
             folders.put(folder, item);
             folders.get(parent(folder)).getChildren().add(item);
         }
-        for (var entry : library.getEntries().stream().filter(e -> !e.isDeleted())
+        for (var entry : library.getEntries().stream().filter(e -> !e.isDeleted()
+                                && (e.getToken().getAdversary() != null) == adversaries)
                                 .sorted(Comparator.comparing(e -> e.getToken().getName(), String.CASE_INSENSITIVE_ORDER)).toList())
         {
             if (TokenLibraryService.matches(entry.getToken().getName(), entry.getFolder(), search.getText()))
@@ -392,6 +448,8 @@ public final class TokenBrowser extends VBox
         attempt(() -> {
             EditContext context = editContext();
             String folder = selectedFolder();
+            if (adversaries)
+                imagesSection.fire();
             if (context.connection != null)
             {
                 var original = TokenDefinition.builder().id(UUID.randomUUID().toString()).name("New token").build();
@@ -420,6 +478,57 @@ public final class TokenBrowser extends VBox
             TokenDefinition token = TokenDefinition.builder().id(UUID.randomUUID().toString()).name("New token").build();
             TokenEditor.show(window(), token, image).ifPresent(result -> save(result, folder, context));
         });
+    }
+
+    private void importAdversary()
+    {
+        attempt(() -> {
+            EditContext context = editContext();
+            String folder = selectedFolder();
+            var imported = new DaggerheartAdversaryClipboard().parse(Clipboard.getSystemClipboard().getString());
+            if (!adversaries)
+                adversariesSection.fire();
+            TokenDefinition token = imported.tokenDefinition();
+            if (imported.imageUrl() == null || imported.imageUrl().isBlank())
+            {
+                editImportedAdversary(token, folder, context);
+                return;
+            }
+            CompletableFuture.supplyAsync(() -> {
+                try
+                {
+                    return DaggerheartAdversaryClipboard.downloadLocalImage(imported.imageUrl());
+                }
+                catch (InterruptedException error)
+                {
+                    Thread.currentThread().interrupt();
+                    throw new CompletionException(error);
+                }
+                catch (IOException | IllegalArgumentException error)
+                {
+                    throw new CompletionException(error);
+                }
+            }).whenCompleteAsync((reference, error) -> attempt(() -> {
+                requireContext(context);
+                if (error != null)
+                {
+                    LOG.warn("Could not import adversary artwork", error);
+                    Dialogs.error(window(), "Could not import adversary artwork",
+                            message(error) + "\nThe adversary can still be imported; choose an image in the token editor.");
+                }
+                else
+                    TokenArt.applySource(token, TokenArt.decode(reference), reference);
+                editImportedAdversary(token, folder, context);
+            }), Platform::runLater);
+        });
+    }
+
+    private void editImportedAdversary(TokenDefinition token, String folder, EditContext context)
+    {
+        if (context.connection != null)
+            prepareEditor(token, null, folder, context);
+        else
+            TokenEditor.show(window(), token, null).ifPresent(result -> save(result, folder, context));
     }
 
     private void edit(TokenDefinition token)
@@ -544,7 +653,7 @@ public final class TokenBrowser extends VBox
         EditContext context = editContext();
         if (Dialogs.confirmDanger(window(), "Delete token library item", "Delete " + item.name() + "?",
                                   "This removes the library entry" + (item.token == null ? " and all tokens in its subfolders" : "")
-                                          + " and unused library image files. Placed tokens are kept; unopened maps retain their last-saved appearance.", "Delete"))
+                                          + " and unused library image files. Folders are shared by Images and Adversaries; deleting a folder removes both kinds. Placed tokens are kept; unopened maps retain their last-saved appearance.", "Delete"))
         {
             attempt(() -> {
                 requireContext(context);
@@ -576,7 +685,10 @@ public final class TokenBrowser extends VBox
         }
         else
         {
-            menu.getItems().add(action("New token here...", () -> create(false, false)));
+            if (adversaries)
+                menu.getItems().add(action("Import adversary from clipboard...", this::importAdversary));
+            else
+                menu.getItems().add(action("New token here...", () -> create(false, false)));
             menu.getItems().add(action("New folder...", this::newFolder));
         }
         if (item.token != null || !item.folder.isEmpty())
