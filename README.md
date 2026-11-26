@@ -398,6 +398,9 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   sheet, or focus it and press Enter/Space. Row text is not selectable, and single-clicking no longer moves the camera. Disabled and
   testing indicators remain visible; token customization and pop-out controls are inside the sheet.
 - **Daggerheart character sheet**: players open sheets from My actors.
+  The header shows the primary class as `Class: Ranger - Wayfinder` and heritage as
+  `Heritage: Wildborne Human-Giant (Vampire)`, omitting the second ancestry and transformation when absent.
+  Additional classes retain their `Multiclass:` label and selected domain.
   Saved sheets are formatted JSON; catalog-backed feature and domain-card descriptions and rules are stored
   by reference when unmodified, so catalog updates appear without removing and re-adding them. Custom content,
   overrides and character state remain on the sheet. Existing sheets migrate when next saved. Keep the referenced
@@ -528,7 +531,7 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   editable table (`ADVANCEMENT_RULES` in `web/src/daggerheart/rules.ts`). **Transformations** (Hope & Fear, from
   `transformations.json`) are optional: skip the step in the mancer, or add/change/remove one later from the
   "Heritage features" card on the Character page (e.g. when the GM grants it). A character has at most one; its benefit and drawback are
-  shown as always-active heritage features and do not count against the domain card loadout. The wizards have a side panel with the full text of the hovered or selected class, subclass, ancestry, community, transformation, gear and domain card; weapons and armor are tables offering only the basic gear (starter flag in the data), and Evasion, Armor and thresholds list their sources on hover. The header labels the original class as "Class:" and any additional class as "Multiclass:".
+  shown as always-active heritage features and do not count against the domain card loadout. The wizards have a side panel with the full text of the hovered or selected class, subclass, ancestry, community, transformation, gear and domain card; weapons and armor are tables offering only the basic gear (starter flag in the data), and Evasion, Armor and thresholds list their sources on hover.
   Ghost's Ephemeral applies physical resistance/double magic damage in the damage calculator and has a
   2-Stress pass-through action. Shapeshifters choose exactly one ancestry feature when acquired; their
   feature buttons and rest moves change ancestry plus retained feature, or just the current ancestry's feature.

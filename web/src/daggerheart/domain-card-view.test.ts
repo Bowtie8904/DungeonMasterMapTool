@@ -1,11 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
 import { invalidateCompendium, refreshInventoryRarities, type CompendiumFile } from './compendium';
-import { emptyCharacter, normalizeSheet } from './data';
+import { emptyCharacter, normalizeSheet, type CharacterSheet } from './data';
 import { openRollDialog, renderSheetView, SheetBus, type RollRequest } from './view';
 import * as artworkEditor from '../token-artwork';
 import type { CardPreferences, CardPreferenceState } from './card-preferences';
 import { addEffect, applyRest, derivedStats, isManualOverride, removeManualOverride, rollBonus, setManualStat, setTrackSlots, statBreakdown, syncDerived, traitTotal } from './engine';
+import { emptyChoices } from './rules';
 
 class Element {
   className = '';
@@ -720,6 +721,97 @@ it('shows Background pronouns in the header, synchronizes edits, and handles leg
   pronouns().listeners.get('input')?.();
   expect(c.pronouns).toBe('she/her');
   expect(c.description.Pronouns).toBe('');
+});
+
+it('formats current class, multiclass and mixed heritage in the sheet header', async () => {
+  vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  vi.stubGlobal('HTMLInputElement', Element);
+  vi.stubGlobal('HTMLTextAreaElement', Element);
+  const c = emptyCharacter('Hero');
+  Object.assign(c, { className: 'Wizard', subclass: 'School of Knowledge', domains: ['Codex', 'Splendor'],
+    ancestry: 'Human / Giant', community: 'Highborne', transformation: 'Vampire', player: 'Player' });
+  c.mancer = { done: true, choices: { ...emptyChoices(), ancestry: 'Human', ancestry2: 'Giant' } };
+  c.levelUps = [{ level: 5, advancements: [{ type: 'multiclass',
+    multiclass: { className: 'Ranger', subclass: 'Ranger: Wayfinder', domain: 'Sage' } }] }];
+  const bus = new SheetBus();
+  const changed = vi.fn();
+  const root = renderSheetView({ character: c, bus, onRoll: () => true, onChange: changed }) as unknown as Element;
+  const lines = (view: Element) => view.querySelectorAll('div').filter(div => div.className === 'sub').map(div => div.text());
+  expect(lines(root)).toEqual([
+    'Class: Wizard - School of Knowledge', 'Multiclass: Ranger - Wayfinder - Domain: Sage',
+    'Domains: Codex & Splendor', 'Heritage: Highborne Human-Giant (Vampire)', 'Played by Player',
+  ]);
+  expect(c.ancestry).toBe('Human / Giant');
+  const saves = changed.mock.calls.length;
+
+  Object.assign(c, { className: 'Bard', subclass: 'Troubadour', ancestry: 'Simiah',
+    community: 'Ridgeborne', transformation: 'Shapeshifter', ancestryFeature: 'Clamber' });
+  bus.notify(false);
+  await Promise.resolve();
+  expect(lines(root)).toEqual([
+    'Class: Bard - Troubadour', 'Multiclass: Ranger - Wayfinder - Domain: Sage',
+    'Domains: Codex & Splendor', 'Heritage: Ridgeborne Simiah (Shapeshifter)', 'Played by Player',
+  ]);
+  expect(c.mancer.choices?.ancestry).toBe('Human');
+  expect(c.mancer.choices?.ancestry2).toBe('Giant');
+  expect(changed).toHaveBeenCalledTimes(saves);
+
+  const readOnly = renderSheetView({ character: c, onRoll: () => true, onChange: changed, readOnly: () => true }) as unknown as Element;
+  expect(lines(readOnly)).toEqual(lines(root));
+  expect(changed).toHaveBeenCalledTimes(saves);
+});
+
+it('formats testing-character multiclasses without losing their domains', () => {
+  vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const c = emptyCharacter('Tester');
+  c.mancer = { done: true };
+  Object.assign(c, { testingCharacter: true, className: 'Wizard', subclass: 'School',
+    ancestry: 'Elf / Orc', community: 'Wildborne' });
+  c.testingBuild = { className: 'Wizard', subclass: 'Wizard: School', stage: 'mastery', level: 10,
+    ancestry: 'Elf', ancestry2: 'Orc', community: 'Wildborne', multiclasses: [
+      { className: 'Bard', subclass: 'Bard: Troubadour', stage: 'foundation', domain: 'Grace' },
+      { className: 'Warrior', subclass: 'Warrior: Call of the Brave', stage: 'mastery', domain: 'Blade' },
+    ] };
+  const root = renderSheetView({ character: c, onRoll: () => true }) as unknown as Element;
+  expect(root.querySelectorAll('div').filter(div => div.className === 'sub').map(div => div.text())).toEqual([
+    'Class: Wizard - School', 'Multiclass: Bard - Troubadour - Domain: Grace',
+    'Multiclass: Warrior - Call of the Brave - Domain: Blade', 'Domains: ', 'Heritage: Wildborne Elf-Orc',
+  ]);
+});
+
+it('omits missing header identity parts and separators for incomplete and legacy sheets', () => {
+  vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const cases: Array<{ stored: Partial<CharacterSheet>; expected: string[] }> = [
+    { stored: {}, expected: ['Domains: '] },
+    { stored: { className: 'Ranger', ancestry: 'Human', community: 'Wildborne' },
+      expected: ['Class: Ranger', 'Domains: ', 'Heritage: Wildborne Human'] },
+    { stored: { subclass: 'Wayfinder', transformation: 'Ghost' },
+      expected: ['Class: Wayfinder', 'Domains: ', 'Heritage: (Ghost)'] },
+    { stored: { className: 'Druid', subclass: 'Circle: Ancient', ancestry: 'Elf / Human' },
+      expected: ['Class: Druid - Circle: Ancient', 'Domains: ', 'Heritage: Elf-Human'] },
+    { stored: { community: 'Underborne', transformation: 'Vampire' },
+      expected: ['Domains: ', 'Heritage: Underborne (Vampire)'] },
+    { stored: { className: 'Ranger', subclass: '  ', ancestry: '  ', community: '  ', transformation: '  ' },
+      expected: ['Class: Ranger', 'Domains: '] },
+    { stored: JSON.parse('{"className":null,"subclass":null,"ancestry":null,"community":null}'),
+      expected: ['Domains: '] },
+    { stored: JSON.parse('{"className":"Bard","levelUps":[{"level":5,"advancements":[{"type":"multiclass","multiclass":{"className":"Ranger"}}]}]}'),
+      expected: ['Class: Bard', 'Multiclass: Ranger', 'Domains: '] },
+  ];
+  for (const { stored, expected } of cases) {
+    const c = normalizeSheet(stored, 'Legacy');
+    const root = renderSheetView({ character: c, onRoll: () => true }) as unknown as Element;
+    expect(root.querySelectorAll('div').filter(div => div.className === 'sub').map(div => div.text())).toEqual(expected);
+  }
 });
 
 it('defaults edit mode off and gates base traits, Proficiency, names, background and Experiences', async () => {

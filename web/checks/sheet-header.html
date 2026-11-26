@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Character sheet header check</title></head>
+<body><main id="host" style="width: 900px"></main><pre id="result">RUNNING</pre>
+<script type="module">
+import '../src/style.css';
+import '../src/daggerheart/sheet.css';
+import { emptyCharacter, normalizeSheet } from '../src/daggerheart/data.ts';
+import { emptyChoices } from '../src/daggerheart/rules.ts';
+import { renderSheetView, SheetBus } from '../src/daggerheart/view.ts';
+
+const result = document.querySelector('#result');
+try {
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  const lines = (view) => [...view.querySelectorAll('.ident-main > .sub')].map((line) => line.textContent);
+  const expectLines = (view, expected) => {
+    const actual = lines(view);
+    assert(JSON.stringify(actual) === JSON.stringify(expected), `Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+  };
+  const c = emptyCharacter('Hero');
+  Object.assign(c, { className: 'Wizard', subclass: 'School of Knowledge', domains: ['Codex', 'Splendor'],
+    ancestry: 'Human / Giant', community: 'Highborne', transformation: 'Vampire' });
+  c.mancer = { done: true, choices: { ...emptyChoices(), ancestry: 'Human', ancestry2: 'Giant' } };
+  c.levelUps = [{ level: 5, advancements: [{ type: 'multiclass',
+    multiclass: { className: 'Ranger', subclass: 'Ranger: Wayfinder', domain: 'Sage' } }] }];
+  const bus = new SheetBus();
+  let saves = 0;
+  const view = renderSheetView({ character: c, bus, onRoll: () => true, onChange: () => { saves++; } });
+  const host = document.querySelector('#host');
+  host.append(view);
+  expectLines(view, ['Class: Wizard - School of Knowledge', 'Multiclass: Ranger - Wayfinder - Domain: Sage',
+    'Domains: Codex & Splendor', 'Heritage: Highborne Human-Giant (Vampire)']);
+  for (const width of [900, 650, 500]) {
+    host.style.width = `${width}px`;
+    for (const line of view.querySelectorAll('.ident-main > .sub')) {
+      assert(line.scrollWidth <= line.clientWidth + 1, `Header text overflows at ${width}px: ${line.textContent}`);
+    }
+  }
+  const originalSaves = saves;
+  Object.assign(c, { ancestry: 'Simiah', community: 'Ridgeborne', transformation: 'Shapeshifter', ancestryFeature: 'Clamber' });
+  bus.notify(false);
+  await Promise.resolve();
+  expectLines(view, ['Class: Wizard - School of Knowledge', 'Multiclass: Ranger - Wayfinder - Domain: Sage',
+    'Domains: Codex & Splendor', 'Heritage: Ridgeborne Simiah (Shapeshifter)']);
+  assert(c.mancer.choices.ancestry === 'Human' && c.mancer.choices.ancestry2 === 'Giant', 'Header changed creation choices');
+  assert(saves === originalSaves, 'A presentation refresh saved the sheet');
+  const readOnly = renderSheetView({ character: c, readOnly: () => true, onRoll: () => true, onChange: () => { saves++; } });
+  readOnly.classList.add('dh-popout');
+  expectLines(readOnly, lines(view));
+  assert(saves === originalSaves, 'Read-only rendering saved the sheet');
+  const legacy = renderSheetView({ character: normalizeSheet({}, 'Legacy'), onRoll: () => true });
+  expectLines(legacy, ['Domains: ']);
+  result.textContent = 'PASS: class, mixed heritage, transformation, multiclass, responsive layout, live updates, read-only and legacy sheets';
+} catch (error) {
+  result.textContent = 'FAIL: ' + error.stack;
+}
+</script></body></html>

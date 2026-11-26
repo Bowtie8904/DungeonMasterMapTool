@@ -35,7 +35,7 @@ import { openDemiplaneImport } from './demiplane-view';
 import { openCompanionMancer, openLevelUp, openMancer, openTransformation } from './mancer';
 import { companionAvailable, companionFeatures, companionRules, companionWeapon, hasCompanionTraining, markCompanionDamage, resolveBonded } from './companion';
 import { inline, rich } from './rich';
-import { MAX_LEVEL, replaceAncestry } from './rules';
+import { MAX_LEVEL, replaceAncestry, shortSubclass } from './rules';
 import { chooseAncestryFeature } from './ancestry-choice';
 import { openTestingEditor } from './testing-view';
 import { openRestDialog } from './rest-view';
@@ -1178,6 +1178,11 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       });
     }
     const sub = (label: string, ...bold: string[]) => el('div', { class: 'sub' }, label, ...bold.map((b) => el('b', {}, b)));
+    const classText = (className?: string, subclass?: string) => [className?.trim(), subclass?.trim()].filter(Boolean).join(' - ');
+    const primaryClass = classText(c.className, c.subclass);
+    const ancestry = (c.ancestry ?? '').split(' / ').map(name => name.trim()).filter(Boolean).join('-');
+    const transformation = c.transformation?.trim();
+    const heritage = [c.community?.trim(), ancestry, transformation ? `(${transformation})` : ''].filter(Boolean).join(' ');
     const death = el('button', { class: 'small', type: 'button', title: 'Choose a death move when all HP are marked' }, 'Death move...');
     death.disabled = !canMakeDeathMove(c);
     death.addEventListener('click', () => deathDialog());
@@ -1212,10 +1217,14 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
             }, true) : c.name, pronounsDisplay = el('span', { class: 'muted', style: 'font-size:13px;font-weight:400' }, pronounsText(displayedPronouns())),
               ...(opts.readOnly?.() ? [el('span', { class: 'tag', style: 'margin-left:8px', role: 'status' }, 'Disabled - read-only')] : [])),
             ...(c.testingCharacter ? [tag('TESTING CHARACTER - unrestricted', 'hope')] : []),
-            sub('Class: ', c.className, ` - Subclass: ${c.subclass}`),
-            ...multiclassesOf(c).map((m) => sub('Multiclass: ', m.className, ` - Subclass: ${m.subclass.replace(/^[^:]+:\s*/, '')} - Domain: ${m.domain}`)),
+            ...(primaryClass ? [sub('Class: ', primaryClass)] : []),
+            ...multiclassesOf(c).flatMap((m) => {
+              const domain = m.domain?.trim();
+              const details = [classText(m.className, shortSubclass(m.subclass ?? '')), domain ? `Domain: ${domain}` : ''].filter(Boolean).join(' - ');
+              return details ? [sub('Multiclass: ', details)] : [];
+            }),
             sub('Domains: ', c.domains.join(' & ')),
-            sub('Heritage: ', `${c.ancestry} ancestry, ${c.community} community${c.transformation ? `, ${c.transformation} transformation` : ''}`),
+            ...(heritage ? [sub('Heritage: ', heritage)] : []),
             ...(c.player ? [sub('Played by ', c.player)] : []),
             restActions,
             ...(c.pendingDeathRoll ? [el('p', { class: 'muted' }, 'Risk recovery pending — resolve the result in chat before rolling.')] : []),

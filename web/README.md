@@ -327,6 +327,13 @@ to open/focus its sheet; row text is not selectable and single-click never moves
 including level-ups/testing-build edits. Disabled/testing indicators remain visible and disabled sheets
 remain readable. Token customization and pop-out controls remain inside the sheet.
 
+The sheet header displays the primary class and subclass as `Class: Ranger - Wayfinder` and heritage as
+`Heritage: Wildborne Human-Giant (Vampire)`. Mixed ancestry and transformation are shown only when present;
+additional classes remain labeled `Multiclass:` with their selected domain. This is presentation only,
+shared by player, pop-out and embedded DM sheets; saved identity and remote contracts are unchanged.
+`checks/sheet-header.html` exercises the rendered header, live identity changes, read-only sheets and
+incomplete characters in a real browser.
+
 Character-sheet portraits open the circular, mandatory-border token editor. Choose or paste
 an image (Ctrl+V works without clipboard-read permission), pan by dragging, zoom, choose a border color
 (default: the authenticated account's assigned color) and size (default: 1 tile; half-tile increments).
