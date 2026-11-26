@@ -137,7 +137,7 @@ export interface SheetViewOptions {
   bus?: SheetBus;
   /** Called after anything on the sheet may have changed (the host debounces and saves). */
   onChange?: () => void;
-  onImport?: (character: CharacterSheet) => Promise<void>;
+  onImport?: (character: CharacterSheet, portrait?: string) => Promise<string | void>;
   supportsKeptDice?: () => boolean;
   supportsZeroKeptDice?: () => boolean;
   supportsRollMultipliers?: () => boolean;
@@ -1118,8 +1118,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const importButton = el('button', { type: 'button', disabled: !opts.actorId || !opts.onImport || opts.readOnly?.() === true }, 'Import from Demiplane');
     importButton.addEventListener('click', () => {
       if (!opts.actorId || !opts.onImport || opts.readOnly?.()) return;
-      openDemiplaneImport(opts.actorId, () => !opts.readOnly?.() && c.mancer?.done === false && !c.className, async imported => {
-        try { await opts.onImport!(imported); }
+      openDemiplaneImport(opts.actorId, () => !opts.readOnly?.() && c.mancer?.done === false && !c.className, async (imported, portrait) => {
+        try { return await opts.onImport!(imported, portrait); }
         finally { render(false); }
       });
     });

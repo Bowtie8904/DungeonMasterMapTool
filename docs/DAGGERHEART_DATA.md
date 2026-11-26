@@ -23,6 +23,12 @@ Each file: `{ "format": "dmmap-daggerheart", "version": 1, "category", "label", 
 
 `starter: true` (weapons, armor) marks the basic gear the Character Mancer offers.
 
+Class-guide keepsakes are matched to `items.json` by name (case-insensitive; curly and straight apostrophes
+are equivalent). Items includes the SRD 2 keepsakes for every guided class, including Assassin, Brawler,
+Warlock and Witch; keep those names when editing so Mancer and Demiplane grants stay catalog-backed.
+The Mancer's suggested equipment uses catalog entries by name, except Brawler's Strike, which comes from
+the class feature's `unarmedWeapon` automation and requires no other active weapons.
+
 ## Item artwork
 
 Catalog entries accept optional `image` metadata, editable in the guided editor's **Overview** tab:

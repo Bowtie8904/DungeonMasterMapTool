@@ -7,7 +7,7 @@ import { CompendiumEntry } from './compendium';
 import { rich } from './rich';
 import { groupFeatures } from './feature-groups';
 import { ancestryPicker } from './ancestry-choice';
-import { ancestryFeatureChoices, creationIgnoresWeaponBurden } from './rules';
+import { ancestryFeatureChoices, creationIgnoresWeaponBurden, creationUnarmedWeapon } from './rules';
 import { levelUpStances } from './rules';
 import { stanceProblems } from './brawler';
 import { applyCompanionTraining, buildCompanion, companionChoiceProblems, companionEntitlements, companionRules, companionTrainingProblems, emptyCompanionChoices } from './companion';
@@ -354,6 +354,7 @@ export async function openMancer(host: HTMLElement, c: CharacterSheet, onDone: (
     ch.connections = g.connections.map((q) => ({ question: q, answer: '' }));
   };
   const weaponOf = (name: string) => data.weapons.find((e) => e.name === name);
+  const unarmedSelected = () => !!ch.primary && ch.primary === creationUnarmedWeapon(data, ch)?.name;
   const twoHanded = () => !creationIgnoresWeaponBurden(data, ch) && /two/i.test(weaponOf(ch.primary)?.weapon?.burden ?? '');
   const cardFilter = { domain: '' };
   let mixedMode = !!ch.ancestry2 && ch.ancestry2 !== ch.ancestry;
@@ -522,10 +523,14 @@ export async function openMancer(host: HTMLElement, c: CharacterSheet, onDone: (
     const kind = (e: CompendiumEntry) => (e.weapon?.damage.type === 'magic' ? 'Magic' : 'Physical');
 
     list.push({
-      key: 'primary', title: 'Choose your primary weapon', hint: creationIgnoresWeaponBurden(data, ch) ? 'Combat Training ignores weapon burden; you can also equip a secondary weapon.' : 'A two-handed weapon fills both hands; otherwise you will also pick a one-handed secondary weapon next.',
+      key: 'primary', title: 'Choose your primary weapon', hint: creationUnarmedWeapon(data, ch) ? 'Your unarmed weapon requires no other active weapons. Alternatively, choose an ordinary weapon.' : creationIgnoresWeaponBurden(data, ch) ? 'Combat Training ignores weapon burden; you can also equip a secondary weapon.' : 'A two-handed weapon fills both hands; otherwise you will also pick a one-handed secondary weapon next.',
       problem: () => (ch.primary ? null : 'Pick a primary weapon.'),
-      side: () => { const e = weaponOf(ch.primary); return e ? gearPanel(e) : null; },
+      side: () => { const e = weaponOf(ch.primary); return unarmedSelected() ? classPanel(findClass(data, ch.className)!) : e ? gearPanel(e) : null; },
       render: (body, _t, redraw) => {
+        const unarmed = creationUnarmedWeapon(data, ch);
+        if (unarmed) body.append(choice(unarmed.name, `${unarmed.range} - ${unarmed.damage} ${unarmed.damageType} - choose your trait on the sheet`, unarmedSelected(), () => {
+          ch.primary = unarmed.name; ch.secondary = undefined; redraw();
+        }, unarmed.name === guide.primary ? [badge('suggested', 'feat')] : [], false, () => classPanel(findClass(data, ch.className)!)));
         const all = starterGear(data.weapons).filter((e) => e.weapon?.slot === 'primary').sort(byName(guide.primary));
         const groups = (['Physical', 'Magic'] as const).flatMap((k) => (['One-Handed', 'Two-Handed'] as const).map((h) => ({
           title: `${k} - ${h.toLowerCase()}`,
@@ -535,15 +540,15 @@ export async function openMancer(host: HTMLElement, c: CharacterSheet, onDone: (
       },
     });
 
-    if (ch.primary && !twoHanded()) {
+    if (ch.primary && !unarmedSelected() && !twoHanded()) {
       list.push({
         key: 'secondary', title: 'Choose your secondary weapon', hint: 'Your off-hand weapon. It is always one-handed.',
         problem: () => (ch.secondary ? null : 'Pick a secondary weapon.'),
         side: () => { const e = weaponOf(ch.secondary ?? ''); return e ? gearPanel(e) : null; },
         render: (body, _t, redraw) => {
-          const all = starterGear(data.weapons).filter((e) => e.weapon?.slot === 'secondary').sort(byName(''));
+          const all = starterGear(data.weapons).filter((e) => e.weapon?.slot === 'secondary').sort(byName(guide.secondary ?? ''));
           const groups = (['Physical', 'Magic'] as const).map((k) => ({ title: `${k} weapons`, items: all.filter((e) => kind(e) === k) }));
-          body.append(gearTable(groups, weaponCols(false), ch.secondary ?? '', '', (e) => { ch.secondary = e.name; redraw(); }));
+          body.append(gearTable(groups, weaponCols(false), ch.secondary ?? '', guide.secondary ?? '', (e) => { ch.secondary = e.name; redraw(); }));
         },
       });
     }

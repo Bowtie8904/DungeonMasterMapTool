@@ -361,24 +361,36 @@ signing in. The DM host needs internet access; neither Demiplane credentials nor
 The importer reads saved creation traits, class/subclass, ancestry/community, Experiences, equipment and
 per-level advancement records (including trait/Experience increases, HP/Stress, Evasion, Proficiency,
 subclass upgrades, extra domain cards and supported multiclass selections). Demiplane's suggested-trait
-toggle uses verified starting allocations for the standard SRD classes and Brawler; manual allocations
+toggle uses the standard SRD allocations and the user-provided Assassin, Brawler, Warlock and Witch allocations; manual allocations
 are still validated when that toggle is off. Martial Artist starting forms are matched to local stances.
 Mixed ancestry uses the selected first and second feature names and their positions, rather than the
 player's custom ancestry name. When multiple local ancestries match a feature, the import dialog asks
 the player to choose; missing or unrecognized features block import.
+Saved pronouns, appearance, description, notes and ordered background/connection answers populate the
+existing Details fields. Question wording comes from saved prompts or verified class guides; classes
+without verified prompts keep their answers under numbered question labels, not generic invented questions.
+Warlock patron and sphere of influence are retained as narrative description fields, not mechanical overrides.
 Local catalogs supply
 feature/card/item mechanics and automation; ambiguous names are never guessed. Custom or unmatched
 equipment stays plain inventory without invented mechanics. Item quantities default to one, and where
 the active loadout cannot be verified the first five acquired matched cards are active, with the rest in
-the vault; both are reported for review. Portraits, active effects, usage counters, scars, manual overrides
-and unsupported background fields are not transferred. Missing required creation data, including
+the vault; both are reported for review. A publicly available Demiplane portrait is downloaded and saved
+as the actor's token artwork; if it cannot be fetched or saved, the import completes and reports the issue.
+Active effects, usage counters, scars, manual overrides and unsupported background fields are not transferred. Missing required creation data, including
 unreadable companion/stance/element or starting Experience-bonus choices, blocks import rather than
 inventing a character. Unknown progression records remain in internal reconstruction diagnostics; historical card
 swaps/removals are not inferred from final cards.
 
 Demiplane's `50ft of Rope` matches the `50 feet of rope` item when no exact catalog name exists.
 Both official Brawler keepsakes (hand wraps from a mentor and a book about your secret hobby) are
-included in Items. Absent saved gold fields preserve the normal starting handful (10 coins); explicit
+included in Items, as are the SRD 2 Assassin (list of names, rusted insignia blade), Warlock (patron carving,
+a ring you can't remove) and Witch (small harmless pet, scrying stone) keepsakes. Class guides for Assassin,
+Brawler, Warlock and Witch use the SRD 2 class items and questions and user-provided suggested traits and gear.
+The Mancer highlights the suggested primary, secondary (when specified) and armor without selecting them.
+Brawler can choose its generated Brawler's Strike instead of equipping other weapons; its trait defaults to
+the highest trait and can be changed on the sheet. Blood Hunter is not in the SRD and uses the generic guide. Item matching
+treats curly and straight apostrophes alike. Previously imported characters are unchanged; re-import to
+replace a plain keepsake with its catalog entry. Absent saved gold fields preserve the normal starting handful (10 coins); explicit
 saved amounts, including zero, replace that default.
 
 `POST /api/sheet/{id}/demiplane` accepts `{ "url": "https://app.demiplane.com/..." }` for an owned,

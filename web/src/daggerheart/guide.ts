@@ -1,17 +1,41 @@
-// Per-class creation guidance from the Daggerheart SRD 1.0 (Darrington Press Community Gaming License):
+// Per-class creation guidance from the Daggerheart SRD (Darrington Press Community Gaming License):
 // suggested traits (Agility, Strength, Finesse, Instinct, Presence, Knowledge), starting gear, class items and question prompts.
-// Classes that are not listed here fall back to GENERIC_GUIDE.
+// Assassin, Brawler, Warlock and Witch have user-provided suggested traits and gear.
+// Classes that are not listed here fall back to GENERIC_GUIDE entirely.
 
 export interface ClassGuide {
   traits: number[];
   primary: string;
+  secondary?: string;
   armor: string;
   classItems: string[];
   background: string[];
   connections: string[];
 }
 
-export const CLASS_GUIDES: Record<string, ClassGuide> = {
+/** Guidance with optional suggestions for classes without known recommendations. */
+export type ClassGuideSource = Omit<ClassGuide, 'traits' | 'primary' | 'armor'> & Partial<Pick<ClassGuide, 'traits' | 'primary' | 'armor'>>;
+
+export const CLASS_GUIDES: Record<string, ClassGuideSource> = {
+  "Assassin": {
+    "traits": [2, -1, 1, 0, 0, 1],
+    "primary": "Katana",
+    "armor": "Brigandine Armor",
+    "classItems": [
+      "A list of names with several marked off",
+      "a rusted blade inscribed with an insignia"
+    ],
+    "background": [
+      "You once killed someone you were close to. What happened, and how did it change you?",
+      "What organization trained you in the art of killing, and how did you become a member?",
+      "Throughout your career, one target has eluded you. Who are they, and how have they slipped through your fingers?"
+    ],
+    "connections": [
+      "I've killed someone for you. Who were they?",
+      "How did you save me when I was on the brink of death? What have I promised you as repayment?",
+      "What secret about myself did I tell you, and how did it change your view of me?"
+    ]
+  },
   "Bard": {
     "traits": [
       0,
@@ -36,6 +60,25 @@ export const CLASS_GUIDES: Record<string, ClassGuide> = {
       "What made you realize we were going to be such good friends?",
       "What do I do that annoys you?",
       "Why do you grab my hand at night?"
+    ]
+  },
+  "Brawler": {
+    "traits": [1, 1, 0, 2, 0, -1],
+    "primary": "Brawler's Strike",
+    "armor": "Brigandine Armor",
+    "classItems": [
+      "hand wraps from a mentor",
+      "a book about your secret hobby"
+    ],
+    "background": [
+      "Where did you spend time during your formative years that taught you, directly or indirectly, how to fight in the style you use?",
+      "What organization has vowed to kill you on sight, and what did you do to invoke their ire?",
+      "Who did you recently lose a fight to that you're desperate for a rematch against?"
+    ],
+    "connections": [
+      "What is one thing we're both afraid of?",
+      "What do I rely on you for during our travels? How do you feel about it?",
+      "I still haven't forgiven you for something you said to me. What was it, and why did you say it?"
     ]
   },
   "Druid": {
@@ -194,6 +237,26 @@ export const CLASS_GUIDES: Record<string, ClassGuide> = {
       "Why do we keep our shared past a secret?"
     ]
   },
+  "Warlock": {
+    "traits": [1, -1, 0, 1, 2, 0],
+    "primary": "Scimitar",
+    "secondary": "Fighting Cloak",
+    "armor": "Mage Robes",
+    "classItems": [
+      "A carving that symbolizes your patron",
+      "a ring you can't remove"
+    ],
+    "background": [
+      "Who from your community shunned you after you made a pact with your patron?",
+      "What desperate situation led you to pledge your life to your patron?",
+      "Your patron has given you one task you must accomplish above all else. What is it, and why does it worry you?"
+    ],
+    "connections": [
+      "Why do you think I confide in you about what my patron says and does?",
+      "Our relationship has changed since you saw me show tribute to my patron. What did you see, and how has it affected you?",
+      "I once did something very foolish, and you've never let me live it down. What was it?"
+    ]
+  },
   "Warrior": {
     "traits": [
       2,
@@ -218,6 +281,26 @@ export const CLASS_GUIDES: Record<string, ClassGuide> = {
       "We knew each other long before this party came together. How?",
       "What mundane task do you usually help me with off the battlefield?",
       "What fear am I helping you overcome?"
+    ]
+  },
+  "Witch": {
+    "traits": [0, -1, 0, 2, 1, 1],
+    "primary": "Casting Dagger",
+    "secondary": "Rune Shield",
+    "armor": "Mage Robes",
+    "classItems": [
+      "A small, harmless pet",
+      "a scrying stone"
+    ],
+    "background": [
+      "Who from your community feared your magical craft? What rumor did they spread about you, and what truth did it contain?",
+      "You once used your power to help someone in a dire situation. Who were they, and why did they come to you?",
+      "Your magic once opened a door best left closed. Who or what was on the other side?"
+    ],
+    "connections": [
+      "What unique ritual or practice have I taught you that we now perform together?",
+      "I once appeared to you in a dream and shared a vision of the future. What did I tell you?",
+      "What do you typically come to me for advice about?"
     ]
   },
   "Wizard": {

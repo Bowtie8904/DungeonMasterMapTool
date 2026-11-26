@@ -55,15 +55,24 @@ The browser's simplified-lighting option still uses flat shapes for performance.
 - **Starting gear:** Torch, 50 feet of rope, Basic supplies and standard class keepsakes are available in the
   Items compendium. The Character Mancer grants those catalog entries, including their descriptions and
   host-defined automation, alongside the usual starting potion and gold. Custom keepsakes remain supported.
-  Brawler's mentor hand wraps and secret-hobby book are also in Items. Demiplane import recognizes
+  Brawler's mentor hand wraps and secret-hobby book are also in Items, as are the SRD 2 Assassin, Warlock and
+  Witch keepsakes. The Mancer offers class items and background/connection questions for Assassin, Brawler,
+  Warlock and Witch, along with their user-supplied suggested traits and highlighted gear, including Warlock
+  and Witch secondary weapons. Brawler can choose its generated unarmed strike instead of active weapons.
+  Blood Hunter, absent from the SRD, uses the generic guide.
+  Demiplane import recognizes
   `50ft of Rope` and preserves starting gold when no saved gold amount is provided (saved zero stays zero).
 
 - **Demiplane character import:** Open a freshly created actor and choose **Create Character** or
   **Import from Demiplane**. Import accepts a publicly shared Daggerheart character link and recreates
   supported saved creation/level-up choices with this host's name-matched features, domain cards and equipment.
-  Suggested traits are supported for the standard classes and Brawler, including saved Martial Artist starting forms.
+  Suggested traits are supported for the standard classes, Assassin, Brawler, Warlock and Witch, including saved Martial Artist starting forms.
   Mixed ancestry is reconstructed from its two selected features; if a feature matches multiple local
   ancestries, choose the intended ancestry in the import dialog. Unknown or missing features block import.
+  Pronouns, appearance, notes and saved background/connection answers populate Details. Question wording
+  uses saved prompts or verified class guides; otherwise answers retain numbered labels. Warlock patron
+  and sphere of influence are preserved as narrative details. Public Demiplane portraits are downloaded
+  and set as the actor's token artwork when available.
   A concise popup after saving lists only unmatched feature/card names, item quantity warnings and an unverified active loadout.
   Custom items remain plain inventory; quantities and active loadout may need review. Private characters
   cannot be imported. Builds with unreadable essential creation choices fail without replacing the empty sheet.

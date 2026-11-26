@@ -143,6 +143,42 @@
    "text": "A small elemental companion with no combat abilities."
   },
   {
+   "id": "list-of-names",
+   "image": "/item-icons/lorc/scroll-unfurled.svg",
+   "name": "A list of names with several marked off",
+   "text": "A list of targets, several already crossed out."
+  },
+  {
+   "id": "rusted-insignia-blade",
+   "image": "/item-icons/lorc/plain-dagger.svg",
+   "name": "a rusted blade inscribed with an insignia",
+   "text": "An old, rusted blade bearing an insignia from your past."
+  },
+  {
+   "id": "patron-carving",
+   "image": "/item-icons/delapouite/ceremonial-mask.svg",
+   "name": "A carving that symbolizes your patron",
+   "text": "A small carving that represents the patron you made your pact with."
+  },
+  {
+   "id": "unremovable-ring",
+   "image": "/item-icons/delapouite/ring.svg",
+   "name": "a ring you can't remove",
+   "text": "A ring bound to your finger that cannot be taken off."
+  },
+  {
+   "id": "harmless-pet",
+   "image": "/item-icons/lorc/hanging-spider.svg",
+   "name": "A small, harmless pet",
+   "text": "A small companion with no combat abilities."
+  },
+  {
+   "id": "scrying-stone",
+   "image": "/item-icons/lorc/stone-sphere.svg",
+   "name": "a scrying stone",
+   "text": "A polished stone used to glimpse distant or hidden things."
+  },
+  {
    "id": "personal-keepsake",
    "image": "/item-icons/delapouite/locked-heart.svg",
    "name": "A keepsake from your past",

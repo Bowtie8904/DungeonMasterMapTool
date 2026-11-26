@@ -94,7 +94,9 @@ export const MAX_TRACK = 12;
 export const LOADOUT_SIZE = 5;
 
 export function guideFor(className: string): ClassGuide {
-  return CLASS_GUIDES[className] ?? GENERIC_GUIDE;
+  const guide = CLASS_GUIDES[className];
+  if (!guide) return GENERIC_GUIDE;
+  return { ...guide, traits: guide.traits ?? GENERIC_GUIDE.traits, primary: guide.primary ?? '', armor: guide.armor ?? '' };
 }
 
 export const classEntries = (d: RulesData) => d.classes.filter((e) => e.kind === 'class').sort((a, b) => a.name.localeCompare(b.name));
@@ -179,6 +181,10 @@ export const starterGear = (list: CompendiumEntry[]) => {
   return flagged.length ? flagged : tier1(list);
 };
 
+export function creationUnarmedWeapon(d: RulesData, ch: CreationChoices) {
+  return findClass(d, ch.className)?.features?.find(f => f.automation?.unarmedWeapon)?.automation?.unarmedWeapon;
+}
+
 export function experienceProblems(names: string[]): string[] {
   return names.some((n) => !n.trim()) || names.length < 2 ? ['Write two Experiences.'] : [];
 }
@@ -214,11 +220,14 @@ export function emptyChoices(): CreationChoices {
 
 const STARTING_ITEMS = ['Torch', '50 feet of rope', 'Basic supplies'];
 
+const foldItemName = (name: string) => name.trim().toLowerCase().replace(/[‘’]/g, "'");
+const sameItemName = (a: string, b: string) => foldItemName(a) === foldItemName(b);
+
 function creationItemProblems(d: RulesData, ch: CreationChoices): string[] {
   const problems = STARTING_ITEMS.filter(name => d.items.filter(e => e.name === name).length !== 1)
     .map(name => `Starting item "${name}" must have exactly one entry in the Items compendium. Ask the DM to restore it.`);
   const name = ch.classItem.trim();
-  if (name && d.items.filter(e => e.name.toLowerCase() === name.toLowerCase()).length > 1)
+  if (name && d.items.filter(e => sameItemName(e.name, name)).length > 1)
     problems.push(`Class item "${name}" matches multiple Items compendium entries. Ask the DM to resolve the duplicate names.`);
   return problems;
 }
@@ -238,7 +247,10 @@ export function creationProblems(d: RulesData, ch: CreationChoices): string[] {
   if (ch.transformation === 'Shapeshifter' && !ancestryFeatureChoices(d.ancestries, ch.ancestry2 && ch.ancestry2 !== ch.ancestry ? `${ch.ancestry} / ${ch.ancestry2}` : ch.ancestry).some((f) => f.name === ch.ancestryFeature)) p.push('Choose the ancestry feature to retain.');
   if (!traitsValid(ch.traits)) p.push('Assign +2, +1, +1, 0, 0 and -1 to your six traits.');
   const primary = d.weapons.find((e) => e.name === ch.primary);
-  if (!primary) p.push('Choose a primary weapon.');
+  const unarmed = creationUnarmedWeapon(d, ch);
+  if (unarmed && ch.primary === unarmed.name) {
+    if (ch.secondary) p.push(`${unarmed.name} requires no other active weapons.`);
+  } else if (!primary) p.push('Choose a primary weapon.');
   else if (!creationIgnoresWeaponBurden(d, ch) && primary.weapon?.burden && /two/i.test(primary.weapon.burden) && ch.secondary) p.push('A two-handed weapon leaves no hand for a secondary weapon.');
   if (!d.armor.some((e) => e.name === ch.armor)) p.push('Choose armor.');
   p.push(...creationExperienceProblems(d, ch));
@@ -330,7 +342,9 @@ export function buildCharacter(d: RulesData, ch: CreationChoices, prev?: Charact
     if (entry.automation) c.features.push({ source: `Creation - ${entry.name}`, name: entry.name, text: entry.text ?? '', automation: entry.automation });
   }
 
-  const primary = d.weapons.find((e) => e.name === ch.primary);
+  const unarmed = creationUnarmedWeapon(d, ch);
+  if (unarmed && ch.primary === unarmed.name && ch.secondary) throw new Error(`${unarmed.name} requires no other active weapons.`);
+  const primary = unarmed && ch.primary === unarmed.name ? undefined : d.weapons.find((e) => e.name === ch.primary);
   const secondary = ch.secondary ? d.weapons.find((e) => e.name === ch.secondary) : undefined;
   if (primary?.weapon) c.activeWeapons.push(weaponFrom(primary));
   if (secondary?.weapon) c.activeWeapons.push(weaponFrom(secondary));
@@ -345,7 +359,7 @@ export function buildCharacter(d: RulesData, ch: CreationChoices, prev?: Charact
   if (potion) addToSheet(c, 'consumables', potion);
   if (ch.classItem.trim()) {
     const name = ch.classItem.trim();
-    const matches = d.items.filter(e => e.name.toLowerCase() === name.toLowerCase());
+    const matches = d.items.filter(e => sameItemName(e.name, name));
     if (matches.length === 1) addToSheet(c, 'items', structuredClone(matches[0]));
     else c.inventory.push({ name, type: 'class item', qty: 1 });
   }

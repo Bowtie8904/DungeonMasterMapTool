@@ -15,6 +15,7 @@ import { openCopycat } from './daggerheart/copycat-view';
 import { openSplendorAction } from './daggerheart/splendor-view';
 import { setDisabledCopycatSources } from './daggerheart/copycat';
 import { cardPreferences } from './daggerheart/card-preferences';
+import { applyImportedPortrait } from './token-artwork';
 
 declare global {
   interface Window { dmmtFlushSheet?: () => Promise<void> }
@@ -111,10 +112,13 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
         document.title = `${sheet.name} - Daggerheart`;
         changed?.();
       },
-      onImport: async imported => {
+      onImport: async (imported, portrait) => {
         await saveImportedCharacter(sheet, imported, changed!, () => !readOnly() && allowed && !unauthorized);
+        const result = await applyImportedPortrait(actorId, portrait);
+        if (result.artwork) bus.artwork = artwork = result.artwork;
         document.title = `${sheet.name} - Daggerheart`;
         bus.notify(false);
+        return result.warning;
       },
       onFeature: async (key, actionId, amount) => {
         await changed!.flush();

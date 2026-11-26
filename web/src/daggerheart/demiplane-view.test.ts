@@ -48,7 +48,7 @@ class Element {
 
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
-function open(save: (character: ReturnType<typeof emptyCharacter>) => Promise<void>, canImport = () => true) {
+function open(save: (character: ReturnType<typeof emptyCharacter>, portrait?: string) => Promise<string | void>, canImport = () => true) {
   const body = new Element('body');
   vi.stubGlobal('HTMLElement', Element);
   vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag), activeElement: null });
@@ -89,6 +89,20 @@ it('opens only a link dialog and reports import issues only after the save compl
   expect(dialog.isConnected).toBe(false);
   expect(loadRulesData).toHaveBeenCalledTimes(1);
   expect(fetchCompendiumCategory).toHaveBeenCalledWith('items');
+});
+
+it('passes the public portrait to the save handler and reports a post-save artwork failure', async () => {
+  const character = emptyCharacter('Portrait Hero');
+  const portrait = 'data:image/webp;base64,cmVwbGFjZWQ=';
+  vi.mocked(recreateDemiplane).mockReturnValue({ character, issues: [], reportIssues: [] });
+  vi.mocked(getDemiplaneCharacter).mockResolvedValue({ name: character.name, level: 1, summary: {}, engines: [], portrait });
+  const save = vi.fn().mockResolvedValue('Portrait could not be saved.');
+  const { submit } = open(save);
+  submit();
+  await vi.waitFor(() => expect(noticeDialog).toHaveBeenCalled());
+  expect(save).toHaveBeenCalledWith(character, portrait);
+  expect(vi.mocked(noticeDialog).mock.calls[0][0]).toContain('Portrait could not be saved.');
+  expect(vi.mocked(noticeDialog).mock.calls[0][1]).toBe('Character imported - review needed');
 });
 
 it('keeps link and errors visible after a failed save and never shows success', async () => {

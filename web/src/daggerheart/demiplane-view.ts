@@ -7,7 +7,7 @@ import { DemiplaneAncestryChoiceRequired, recreateDemiplane } from './demiplane'
 import { loadRulesData } from './rules';
 
 export function openDemiplaneImport(actorId: string, canImport: () => boolean,
-                                    save: (character: CharacterSheet) => Promise<void>): void {
+                                    save: (character: CharacterSheet, portrait?: string) => Promise<string | void>): void {
   const previous = document.activeElement;
   const dialog = el('dialog', { class: 'app-message-dialog demiplane-dialog', ariaLabel: 'Import from Demiplane' });
   const input = el('input', { type: 'url', required: true, ariaLabel: 'Demiplane character link',
@@ -64,12 +64,15 @@ export function openDemiplaneImport(actorId: string, canImport: () => boolean,
         const result = recreateDemiplane(source, rules, items.entries, choices);
         if (!canImport()) throw new Error('The actor changed while importing. Nothing was imported.');
         status.textContent = 'Saving the imported character...';
-        await save(result.character);
+        const portraitWarning = source.portrait
+          ? await save(result.character, source.portrait)
+          : await save(result.character);
+        const reportIssues = [...result.reportIssues, ...(portraitWarning ? [portraitWarning] : [])];
         dialog.close();
         await noticeDialog(
           `${result.character.name} was imported at level ${result.character.level} and saved.`
-          + (result.reportIssues.length ? `\n\n${result.reportIssues.map(issue => `- ${issue}`).join('\n\n')}` : ''),
-          result.reportIssues.length ? 'Character imported - review needed' : 'Character imported');
+          + (reportIssues.length ? `\n\n${reportIssues.map(issue => `- ${issue}`).join('\n\n')}` : ''),
+          reportIssues.length ? 'Character imported - review needed' : 'Character imported');
       } catch (e) {
         status.textContent = '';
         if (e instanceof DemiplaneAncestryChoiceRequired) {

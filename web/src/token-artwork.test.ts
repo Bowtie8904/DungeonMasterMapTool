@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { cropGeometry, editTokenArtwork } from './token-artwork';
+import { applyImportedPortrait, cropGeometry, editTokenArtwork, importTokenArtwork } from './token-artwork';
 
 const settings = { color: '#123456', sizeTiles: 1, zoom: 1, centerX: .5, centerY: .5 };
 
@@ -34,6 +34,7 @@ class Element {
   remove() { this.isConnected = false; }
   focus() {}
   getContext() { return this.context; }
+  toDataURL() { return 'data:image/png;base64,YQ=='; }
   reportValidity() { return Number(this.value) >= .5 && Number(this.value) % .5 === 0; }
   setPointerCapture() {}
   getBoundingClientRect() { return { width: 280 }; }
@@ -64,6 +65,34 @@ function environment() {
   vi.stubGlobal('fetch', fetch);
   return { body, fetch };
 }
+
+it('converts an imported portrait to a bounded PNG and applies the actor token framing', async () => {
+  const { fetch } = environment();
+  const artwork = await importTokenArtwork('hero', 'data:image/webp;base64,cmVwbGFjZWQ=');
+  expect(artwork).toBe('/a/finished.png');
+  expect(fetch).toHaveBeenCalledTimes(2);
+  const settings = JSON.parse(fetch.mock.calls[1][1].body);
+  expect(settings).toMatchObject({ ...settings, image: 'data:image/png;base64,YQ==' });
+  expect(settings.image).not.toContain('webp');
+});
+
+it('applies an imported portrait for any sheet window and turns failures into a warning', async () => {
+  const { fetch } = environment();
+  expect(await applyImportedPortrait('hero', undefined)).toEqual({});
+  expect(fetch).not.toHaveBeenCalled();
+  expect(await applyImportedPortrait('hero', 'data:image/webp;base64,cmVwbGFjZWQ=')).toEqual({ artwork: '/a/finished.png' });
+  const failed = await applyImportedPortrait('hero', 'https://example.com/image.png');
+  expect(failed.artwork).toBeUndefined();
+  expect(failed.warning).toMatch(/imported, but its portrait could not be saved: .*not a supported image/);
+});
+
+it('rejects invalid and over-sized imported portraits before uploading', async () => {
+  const { fetch } = environment();
+  await expect(importTokenArtwork('hero', 'https://example.com/image.png')).rejects.toThrow('not a supported image');
+  await expect(importTokenArtwork('hero', `data:image/webp;base64,${'a'.repeat(8 * 1024 * 1024 * 4 / 3 + 9)}`))
+    .rejects.toThrow('exceeds 8 MB');
+  expect(fetch).not.toHaveBeenCalled();
+});
 
 it('saves clipboard-event images with a circular border, pan, zoom, color and tile size', async () => {
   const { body, fetch } = environment();

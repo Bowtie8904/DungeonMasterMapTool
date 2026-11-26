@@ -6,6 +6,7 @@ import { emoteCommand } from './chat-command';
 import { iconButton } from './icons';
 import { LogEntry, renderLogEntry } from './chat';
 import { applyFeatureState, applyInventory, autosave, featureTarget, isLifeWard, loadCharacter, saveImportedCharacter, useSheetAction, type SheetSave } from './daggerheart/persist';
+import { applyImportedPortrait } from './token-artwork';
 import { basicDeathOptions } from './daggerheart/death';
 import { INVENTORY_DRAG, postCard, postCompendiumCard, transferable, waitForInventoryDrag, type GrabQuantity, type SharedCard, type SharedEntry } from './shared-cards';
 import { SheetWindow, ToolWindow } from './daggerheart/window';
@@ -1669,10 +1670,13 @@ export class App {
               this.scheduleEffects();
               this.scheduleRollActions();
             },
-            onImport: async imported => {
+            onImport: async (imported, portrait) => {
               await saveImportedCharacter(character, imported, changed, () => !readOnly());
+              const result = await applyImportedPortrait(a.id, portrait);
+              if (result.artwork) bus.artwork = result.artwork;
               bus.notify(false);
               this.scheduleRollActions();
+              return result.warning;
             },
             onFeature: (key, actionId, amount) => this.useSheetFeature(a.id, character, changed, key, actionId, amount),
             restActors: () => (this.store.state?.actors ?? []).filter(actor => !actor.disabled && actor.id !== a.id && !!actor.ownerId),

@@ -6,7 +6,7 @@ import { plain } from './rich';
 import { derivedStats, statBreakdown } from './engine';
 import { CLASS_GUIDES, GENERIC_GUIDE } from './guide';
 import {
-  advancementLeft, applyLevelUp, buildCharacter, classEntries, creationProblems, emptyChoices, levelUpCards, levelUpProblems, RulesData,
+  advancementLeft, applyLevelUp, buildCharacter, classEntries, creationProblems, emptyChoices, guideFor, levelUpCards, levelUpProblems, RulesData,
   startingCards, subclassesOf, suggestedTraits, setTransformation, starterGear, tier1, creationAllowances,
   creationCompanionRules, subclassCard,
 } from './rules';
@@ -19,7 +19,7 @@ const data: RulesData = {
 };
 
 function choicesFor(className: string) {
-  const g = CLASS_GUIDES[className];
+  const g = guideFor(className);
   const ch = emptyChoices();
   ch.className = className;
   ch.subclass = subclassesOf(data, className)[0];
@@ -29,8 +29,9 @@ function choicesFor(className: string) {
   ch.ancestry = 'Human';
   ch.community = data.communities[0].name;
   ch.traits = suggestedTraits(g);
-  ch.primary = g.primary;
-  ch.armor = g.armor;
+  ch.primary = g.primary || starterGear(data.weapons).find(e => e.weapon?.slot === 'primary' && e.weapon.burden === 'One-Handed')!.name;
+  ch.secondary = g.secondary;
+  ch.armor = g.armor || starterGear(data.armor)[0].name;
   ch.experiences = ['Tavern brawler', 'Bookworm'];
   ch.cards = startingCards(data, ch).slice(0, creationAllowances(data, ch).domainCards).map((e) => e.name);
   ch.name = 'Test';
@@ -53,6 +54,90 @@ describe('character mancer rules', () => {
       }
     }
     expect(data.items.some(e => e.name === GENERIC_GUIDE.classItems[0])).toBe(true);
+  });
+
+  it('covers every SRD class guide and preserves the Blood Hunter fallback', () => {
+    for (const name of ['Assassin', 'Bard', 'Brawler', 'Druid', 'Guardian', 'Ranger', 'Rogue', 'Seraph', 'Sorcerer', 'Warlock', 'Warrior', 'Witch', 'Wizard']) {
+      expect(CLASS_GUIDES[name], name).toBeDefined();
+      expect(CLASS_GUIDES[name].classItems, name).toHaveLength(2);
+      expect(CLASS_GUIDES[name].background, name).toHaveLength(3);
+      expect(CLASS_GUIDES[name].connections, name).toHaveLength(3);
+    }
+    expect(guideFor('Bard')).toEqual(CLASS_GUIDES.Bard);
+    expect(guideFor('Blood Hunter')).toBe(GENERIC_GUIDE);
+    const typed = buildCharacter(data, { ...choicesFor('Warlock'), classItem: 'A ring you can’t remove' });
+    expect(typed.inventory.find(i => i.name === "a ring you can't remove")).toMatchObject({ type: 'gear', qty: 1 });
+  });
+
+  it('applies the supplied suggested traits and creates their catalog-backed equipment', () => {
+    const cases = [
+      { name: 'Assassin', traits: [2, -1, 1, 0, 0, 1], primary: 'Katana', armor: 'Brigandine Armor' },
+      { name: 'Brawler', traits: [1, 1, 0, 2, 0, -1], primary: "Brawler's Strike", armor: 'Brigandine Armor' },
+      { name: 'Warlock', traits: [1, -1, 0, 1, 2, 0], primary: 'Scimitar', secondary: 'Fighting Cloak', armor: 'Mage Robes' },
+      { name: 'Witch', traits: [0, -1, 0, 2, 1, 1], primary: 'Casting Dagger', secondary: 'Rune Shield', armor: 'Mage Robes' },
+    ];
+    for (const expected of cases) {
+      const guide = guideFor(expected.name);
+      expect(guide).toMatchObject(expected.secondary ? { traits: expected.traits, primary: expected.primary, secondary: expected.secondary, armor: expected.armor }
+        : { traits: expected.traits, primary: expected.primary, armor: expected.armor });
+      const ch = choicesFor(expected.name);
+      expect(creationProblems(data, ch), expected.name).toEqual([]);
+      const c = buildCharacter(data, ch);
+      expect(c.traits.map(t => t.mod), expected.name).toEqual(expected.traits);
+      expect(c.activeWeapons.map(w => w.name), expected.name).toEqual([expected.primary, ...(expected.secondary ? [expected.secondary] : [])]);
+      expect(c.activeArmor?.name).toBe(expected.armor);
+      if (expected.name === 'Brawler') {
+        expect(c.activeWeapons[0]).toMatchObject({ generated: 'brawler', trait: 'Instinct', range: 'Melee', damage: 'd8+d6', damageType: 'phys' });
+        expect(derivedStats(c).evasion).toBe(c.evasion + 1);
+      } else {
+        expect(c.activeWeapons[0].automation).toEqual(data.weapons.find(e => e.name === expected.primary)?.automation);
+      }
+      if (expected.secondary) expect(c.activeWeapons[1].automation).toEqual(data.weapons.find(e => e.name === expected.secondary)?.automation);
+      expect(c.activeArmor?.automation).toEqual(data.armor.find(e => e.name === expected.armor)?.automation);
+    }
+  });
+
+  it('uses the supplied equipment statistics and feature automation', () => {
+    const weapon = (name: string) => data.weapons.find(e => e.name === name)!;
+    expect(weapon('Katana')).toMatchObject({
+      starter: true, weapon: { trait: 'Agility', range: 'Melee', damage: { dice: '1d10', bonus: 3, type: 'physical' }, burden: 'Two-Handed' },
+      feature: { name: 'Quick' }, automation: { rollOptions: [{ cost: { stress: 1 } }] },
+    });
+    expect(weapon('Scimitar')).toMatchObject({
+      starter: true, weapon: { trait: 'Presence', range: 'Melee', damage: { dice: '1d8', bonus: 1, type: 'physical' }, burden: 'One-Handed' },
+    });
+    expect(weapon('Fighting Cloak')).toMatchObject({
+      starter: true, weapon: { slot: 'secondary', trait: 'Presence', range: 'Melee', damage: { dice: '1d4', type: 'physical' }, burden: 'One-Handed' },
+      feature: { name: 'Padded' }, automation: { modifiers: [{ stat: 'thresholds', value: 2 }] },
+    });
+    expect(weapon('Casting Dagger')).toMatchObject({
+      starter: true, weapon: { trait: 'Instinct', range: 'Close', damage: { dice: '1d6', type: 'magic' }, burden: 'One-Handed' },
+      feature: { name: 'Versatile' }, automation: { alternateProfiles: [{ trait: 'Instinct', range: 'Melee', damage: '1d8' }] },
+    });
+    expect(weapon('Rune Shield')).toMatchObject({
+      starter: true, weapon: { slot: 'secondary', trait: 'Knowledge', range: 'Melee', damage: { dice: '1d4', type: 'magic' }, burden: 'One-Handed' },
+      feature: { name: 'Protective' }, automation: { modifiers: [{ stat: 'armorScore', value: 1 }] },
+    });
+    expect(data.armor.find(e => e.name === 'Brigandine Armor')).toMatchObject({
+      starter: true, armor: { major: 6, severe: 12, score: 3 }, feature: { name: 'Lined' },
+      automation: { mitigation: [{ cost: { stress: 1 }, negate: true }] },
+    });
+    expect(data.armor.find(e => e.name === 'Mage Robes')).toMatchObject({
+      starter: true, armor: { major: 4, severe: 10, score: 2 }, feature: { name: 'Enchanted' },
+      automation: { modifiers: [{ stat: 'thresholds', value: '@spellcast' }] },
+    });
+  });
+
+  it('only accepts the generated unarmed option for its class and without a secondary weapon', () => {
+    const ch = choicesFor('Brawler');
+    ch.secondary = 'Fighting Cloak';
+    expect(creationProblems(data, ch)).toContain("Brawler's Strike requires no other active weapons.");
+    expect(() => buildCharacter(data, ch)).toThrow('requires no other active weapons');
+    const bard = { ...choicesFor('Bard'), primary: "Brawler's Strike" };
+    expect(creationProblems(data, bard)).toContain('Choose a primary weapon.');
+    const ordinary = { ...choicesFor('Brawler'), primary: 'Scimitar', secondary: 'Fighting Cloak' };
+    expect(creationProblems(data, ordinary)).toEqual([]);
+    expect(buildCharacter(data, ordinary).activeWeapons.map(w => w.name)).toEqual(['Scimitar', 'Fighting Cloak']);
   });
 
   it('uses edited catalog descriptions and isolated automation, but preserves custom keepsakes', () => {

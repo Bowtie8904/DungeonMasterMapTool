@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { recreateDemiplane, DemiplaneAncestryChoiceRequired, DemiplaneCharacter, DemiplaneSelection } from './demiplane';
 import { derivedStats } from './engine';
 import { RulesData, subclassStageOf } from './rules';
+import { CLASS_GUIDES } from './guide';
+import { normalizeSheet } from './data';
 
 const load = (name: string) => JSON.parse(readFileSync(resolve(__dirname, '../../../dmmap-daggerheart', `${name}.json`), 'utf8')).entries;
 const data: RulesData = {
@@ -98,6 +100,106 @@ function mixedFixture(first: string, second: string): DemiplaneCharacter {
 }
 
 describe('Demiplane reconstruction', () => {
+  it('maps saved pronouns, appearance, notes and ordered question answers into Details and creation choices', () => {
+    const source = fixture(3);
+    const field = (name: string, value: string) => source.engines.push({ name, key: name, args: {}, value });
+    field('character_details_pronoun', 'he/him');
+    field('character_details_eyes', 'Emeralds holding a glint of mischief');
+    field('character_details_clothes', 'Red cloth and leather tunic');
+    field('character_details_body', 'Tall');
+    field('character_details_color', 'Chestnut and cream');
+    field('character_details_attitude', 'Mischievous');
+    field('character_details_description', 'A wandering storyteller.');
+    field('character_details_notes', 'Keep this\non two lines.');
+    field('character_details_background-question-2--answer', 'The mentor');
+    field('character_details_background-question-0--answer', 'The village elders');
+    field('character_details_connection-question-1--answer', 'We disagree about magic');
+    const { character: c, issues } = recreateDemiplane(source, data, items);
+    expect(c.pronouns).toBe('he/him');
+    expect(c.description).toMatchObject({ Pronouns: 'he/him', Eyes: 'Emeralds holding a glint of mischief',
+      Attire: 'Red cloth and leather tunic', Body: 'Tall', Color: 'Chestnut and cream', Attitude: 'Mischievous' });
+    expect(c.otherDetails).toBe('A wandering storyteller.');
+    expect(c.notes).toBe('Keep this\non two lines.');
+    expect(c.backgroundQuestions).toEqual([
+      `${CLASS_GUIDES.Bard.background[0]}\nThe village elders`,
+      CLASS_GUIDES.Bard.background[1],
+      `${CLASS_GUIDES.Bard.background[2]}\nThe mentor`,
+    ]);
+    expect(c.connections[1]).toBe(`${CLASS_GUIDES.Bard.connections[1]}\nWe disagree about magic`);
+    expect(c.mancer?.choices).toMatchObject({ pronouns: 'he/him', description: 'A wandering storyteller.',
+      background: [
+        { question: CLASS_GUIDES.Bard.background[0], answer: 'The village elders' },
+        { question: CLASS_GUIDES.Bard.background[1], answer: '' },
+        { question: CLASS_GUIDES.Bard.background[2], answer: 'The mentor' },
+      ] });
+    expect(normalizeSheet(JSON.parse(JSON.stringify(c)), c.name)).toMatchObject({
+      pronouns: c.pronouns, description: c.description, otherDetails: c.otherDetails,
+      backgroundQuestions: c.backgroundQuestions, connections: c.connections, notes: c.notes,
+    });
+    expect(issues.some(issue => issue.includes('character_details'))).toBe(false);
+  });
+
+  it('reports an unavailable public portrait, but not one that was fetched successfully', () => {
+    const source = fixture(1);
+    source.engines.push({ name: 'character_avatar', key: 'avatar', args: {}, value: '' });
+    const unavailable = recreateDemiplane({ ...source, portraitIssue: 'The portrait could not be fetched.' }, data, items);
+    expect(unavailable.reportIssues).toContain('The portrait could not be fetched.');
+    const available = recreateDemiplane({ ...source, portrait: 'data:image/webp;base64,YQ==' }, data, items);
+    expect(available.reportIssues.some(issue => /portrait/i.test(issue))).toBe(false);
+    expect(available.issues.some(issue => /portrait/i.test(issue))).toBe(false);
+  });
+
+  it('preserves saved question wording and uses numbered labels when no verified guide exists', () => {
+    const source = fixture(1);
+    const classes = structuredClone(data.classes);
+    classes.find(e => e.kind === 'class' && e.name === 'Bard')!.name = 'Homebrew';
+    classes.filter(e => e.parent === 'Bard').forEach(e => { e.parent = 'Homebrew'; });
+    source.engines.find(e => e.key === 'class')!.args.name = 'Homebrew';
+    source.engines.push(
+      { name: 'character_details_background-question-2--answer', key: 'answer', args: {}, value: 'Free him from this weapon' },
+      { name: 'character_details_connection-question-0--question', key: 'prompt', args: {}, value: 'Who saved you?' },
+      { name: 'character_details_connection-question-0--answer', key: 'connection', args: {}, value: 'My friend' },
+    );
+    const c = recreateDemiplane(source, { ...data, classes }, items).character;
+    expect(c.backgroundQuestions).toEqual(['Background question 3\nFree him from this weapon']);
+    expect(c.connections).toEqual(['Who saved you?\nMy friend']);
+    expect(c.mancer?.choices?.background).toEqual([{ question: 'Background question 3', answer: 'Free him from this weapon' }]);
+  });
+
+  it('keeps the legacy pronouns field and rejects conflicting or malformed details', () => {
+    const source = fixture(1);
+    source.engines.push({ name: 'character_pronouns', key: 'pronouns', args: {}, value: 'they/them' });
+    expect(recreateDemiplane(source, data, items).character.pronouns).toBe('they/them');
+    source.engines.push({ name: 'character_details_pronoun', key: 'detail-pronouns', args: {}, value: 'he/him' });
+    expect(() => recreateDemiplane(source, data, items)).toThrow('conflicting values');
+    source.engines.pop();
+    source.engines.push({ name: 'character_details_background-question-0--answer', key: 'answer', args: {}, value: 42 });
+    expect(() => recreateDemiplane(source, data, items)).toThrow('is not text');
+    source.engines.pop();
+    source.engines.push({ name: 'character_details_background-question-100--answer', key: 'answer', args: {}, value: 'Answer' });
+    expect(() => recreateDemiplane(source, data, items)).toThrow('unsupported question index');
+  });
+
+  it('imports Warlock patron and sphere as narrative details without changing mechanics', () => {
+    const source = fixture(1);
+    const classes = structuredClone(data.classes.filter(e => e.name === 'Bard' || e.parent === 'Bard'));
+    classes.find(e => e.kind === 'class')!.name = 'Warlock';
+    classes.filter(e => e.parent === 'Bard').forEach(e => { e.parent = 'Warlock'; });
+    source.engines.find(e => e.key === 'class')!.args.name = 'Warlock';
+    const baseline = recreateDemiplane(source, { ...data, classes }, items).character;
+    source.engines.push(
+      { name: 'element-class_custom-option_warlock-patron_value', key: 'patron', args: {}, value: 'A fallen deity' },
+      { name: 'element-class_custom-option_warlock-sphere-of-influence_value', key: 'sphere', args: {}, value: 'War' },
+    );
+    const c = recreateDemiplane(source, { ...data, classes }, items).character;
+    expect(c.description).toMatchObject({ Patron: 'A fallen deity', 'Sphere of influence': 'War' });
+    expect(c.features).toEqual(baseline.features);
+    expect(derivedStats(c)).toEqual(derivedStats(baseline));
+    source.engines.push({ name: 'character_details_background-question-2--answer', key: 'answer', args: {}, value: 'Free him from this weapon' });
+    expect(recreateDemiplane(source, { ...data, classes }, items).character.backgroundQuestions)
+      .toEqual([...CLASS_GUIDES.Warlock.background.slice(0, 2), `${CLASS_GUIDES.Warlock.background[2]}\nFree him from this weapon`]);
+  });
+
   it('reconstructs the linked mixed ancestry from the ordered selected features, not its custom name', () => {
     const { character: c, issues } = recreateDemiplane(mixedFixture('Caprine Leap', 'Ignition'), data, items);
     expect(c.ancestry).toBe('Faun / Emberkin');
@@ -148,6 +250,23 @@ describe('Demiplane reconstruction', () => {
     expect(recreateDemiplane(source, data, items).character.traits).toEqual(c.traits);
     source.engines.find(e => e.key === 'suggested')!.value = 0;
     expect(() => recreateDemiplane(source, data, items)).toThrow('trait-selection-value-2');
+  });
+
+  it.each([
+    ['Assassin', [2, -1, 1, 0, 0, 1]],
+    ['Warlock', [1, -1, 0, 1, 2, 0]],
+    ['Witch', [0, -1, 0, 2, 1, 1]],
+  ])('imports %s suggested traits before replaying level-up increases', (name, initial) => {
+    const source = fixture(2);
+    const classes = structuredClone(data.classes.filter(e => e.name === 'Bard' || e.parent === 'Bard'));
+    classes.find(e => e.kind === 'class' && e.name === 'Bard')!.name = name;
+    classes.filter(e => e.parent === 'Bard').forEach(e => { e.parent = name; });
+    source.engines.find(e => e.key === 'class')!.args.name = name;
+    source.engines = source.engines.filter(e => !e.name.startsWith('trait-selection-value'));
+    source.engines.push({ name: 'use-suggested-traits', key: 'suggested', args: {}, value: 1 });
+    const c = recreateDemiplane(source, { ...data, classes }, items).character;
+    expect(c.mancer?.choices?.traits).toEqual(Object.fromEntries(['Agility', 'Strength', 'Finesse', 'Instinct', 'Presence', 'Knowledge'].map((trait, i) => [trait, initial[i]])));
+    expect(c.traits.map(t => t.mod)).toEqual(initial.map((value, i) => value + (i === 3 || i === 4 ? 1 : 0)));
   });
 
   it('imports the linked Brawler suggested traits and saved Martial Artist forms', () => {
@@ -336,5 +455,19 @@ describe('Demiplane reconstruction', () => {
     expect(recreateDemiplane(source, data, duplicate).issues.join('\n')).toContain('ambiguous catalog name');
     const exact = [...items, { id: 'alternate-rope', name: '50ft of Rope', text: 'Host rope entry' }];
     expect(recreateDemiplane(source, data, exact).character.inventory.find(e => e.name === '50ft of Rope')?.note).toBe('Host rope entry');
+  });
+
+  it('matches SRD 2 keepsakes regardless of typographic apostrophes', () => {
+    const source = fixture(1);
+    const saved = ['a ring you can\'t remove', 'A carving that symbolizes your patron', 'A list of names with several marked off',
+      'a rusted blade inscribed with an insignia', 'A small, harmless pet', 'a scrying stone', 'A book you\'re trying to translate'];
+    for (const name of saved) source.engines.push({ name: 'core/selection/equipment/custom/index.eng', key: name, args: { customName: name } });
+    const result = recreateDemiplane(source, data, items);
+    for (const name of [...saved.slice(0, 6), 'A book you’re trying to translate']) {
+      const entry = items.find((e: { name: string }) => e.name === name)!;
+      expect(entry, name).toBeDefined();
+      expect(result.character.inventory.find(e => e.name === name), name).toMatchObject({ qty: 1, type: 'gear', note: entry.text, image: entry.image });
+    }
+    expect(result.issues.some(issue => issue.includes('Custom item'))).toBe(false);
   });
 });

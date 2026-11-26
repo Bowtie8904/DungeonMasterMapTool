@@ -19,6 +19,8 @@ export interface DemiplaneCharacter {
   level: number;
   summary: { class?: string; subclass?: string };
   engines: DemiplaneSelection[];
+  portrait?: string;
+  portraitIssue?: string;
 }
 
 export interface DemiplaneResult {
@@ -34,7 +36,7 @@ export class DemiplaneAncestryChoiceRequired extends Error {
 }
 
 const text = (value: unknown): string => typeof value === 'string' ? value : '';
-const normalize = (value: string): string => value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
+const normalize = (value: string): string => value.normalize('NFKC').trim().replace(/\s+/g, ' ').replace(/[‘’]/g, "'").toLowerCase();
 const itemMatches = (entries: CompendiumEntry[], name: string): CompendiumEntry[] => {
   const exact = entries.filter(e => normalize(e.name) === normalize(name));
   if (exact.length || normalize(name) !== '50ft of rope') return exact;
@@ -60,6 +62,17 @@ export function recreateDemiplane(source: DemiplaneCharacter, data: RulesData, i
     const matches = all.filter(e => e.name === name);
     if (matches.length > 1) throw new Error(`Demiplane contains conflicting values for "${name}". Nothing was imported.`);
     return matches.length ? use(matches[0]).value : undefined;
+  };
+  const detailText = (...fields: string[]): string => {
+    const values = fields.map(field => {
+      const value = scalar(field);
+      if (value !== undefined && typeof value !== 'string')
+        throw new Error(`Character details: "${field}" is not text. Nothing was imported.`);
+      return value;
+    }).filter((value): value is string => value !== undefined);
+    if (new Set(values).size > 1)
+      throw new Error(`Character details: conflicting values for ${fields.join(' / ')}. Nothing was imported.`);
+    return values[0] ?? '';
   };
   const match = (entries: CompendiumEntry[], name: string, context: string, required = false): CompendiumEntry | undefined => {
     const matches = context === 'Equipment' ? itemMatches(entries, name)
@@ -122,8 +135,7 @@ export function recreateDemiplane(source: DemiplaneCharacter, data: RulesData, i
     ['trait-selection-value-1-second', 1], ['trait-selection-value-neg-1', -1]] as const;
   const useSuggested = scalar('use-suggested-traits');
   if (useSuggested === 1 || useSuggested === true) {
-    // Brawler's published Demiplane allocation; other supported classes share the SRD guides.
-    const values = ch.className === 'Brawler' ? [1, 1, 0, 2, 0, -1] : CLASS_GUIDES[ch.className]?.traits;
+    const values = CLASS_GUIDES[ch.className]?.traits;
     if (!values) throw new Error(`Starting traits: the suggested allocation for "${ch.className}" is not supported. Nothing was imported.`);
     TRAIT_ORDER.forEach((name, i) => { ch.traits[name] = values[i]; });
     manualTraits.forEach(([field]) => scalar(field));
@@ -146,7 +158,42 @@ export function recreateDemiplane(source: DemiplaneCharacter, data: RulesData, i
   }
   ch.experiences = [0, 1].map(i => text(scalar(`character_experience_${i}_name`)));
   if (ch.experiences.some(n => !n.trim())) issues.push('One or both starting Experiences are blank. Fill them in on the sheet.');
-  ch.pronouns = text(scalar('character_pronouns'));
+  ch.pronouns = detailText('character_details_pronoun', 'character_pronouns');
+  const questions = (kind: 'background' | 'connection', guide: string[]) => {
+    const prefix = `character_details_${kind}-question-`;
+    const indices = new Set<number>(guide.map((_, i) => i));
+    for (const e of all.filter(e => e.name.startsWith(prefix))) {
+      const suffix = /^(\d+)--(answer|question)$/.exec(e.name.slice(prefix.length));
+      if (!suffix) continue;
+      const index = Number(suffix[1]);
+      if (!Number.isSafeInteger(index) || index > 99)
+        throw new Error(`Character details: unsupported question index in "${e.name}". Nothing was imported.`);
+      indices.add(index);
+    }
+    return [...indices].sort((a, b) => a - b).map(i => ({
+      question: detailText(`${prefix}${i}--question`) || guide[i]
+        || `${kind === 'background' ? 'Background' : 'Connection'} question ${i + 1}`,
+      answer: detailText(`${prefix}${i}--answer`),
+    }));
+  };
+  ch.background = questions('background', CLASS_GUIDES[ch.className]?.background ?? []);
+  ch.connections = questions('connection', CLASS_GUIDES[ch.className]?.connections ?? []);
+  ch.description = detailText('character_details_description');
+  const description: Record<string, string> = {};
+  for (const [field, label] of [
+    ['age', 'Age'], ['height', 'Height'], ['eyes', 'Eyes'], ['hair', 'Hair'], ['skin', 'Skin'],
+    ['clothes', 'Attire'], ['body', 'Body'], ['color', 'Color'], ['attitude', 'Attitude'],
+  ]) {
+    const value = detailText(`character_details_${field}`);
+    if (value) description[label] = value;
+  }
+  const notes = detailText('character_details_notes');
+  if (ch.className === 'Warlock' && cls) {
+    for (const [field, label] of [['patron', 'Patron'], ['sphere-of-influence', 'Sphere of influence']]) {
+      const value = detailText(`element-${cls.key}_custom-option_warlock-${field}_value`);
+      if (value) description[label] = value;
+    }
+  }
   const cards = selected(/^tabula\/domain\//);
   const matchedCards = new Map<DemiplaneSelection, string>();
   for (const e of cards) {
@@ -166,6 +213,8 @@ export function recreateDemiplane(source: DemiplaneCharacter, data: RulesData, i
   catch (error) {
     throw new Error(`This build needs additional creation selections: ${(error as Error).message} They could not be read reliably from Demiplane. Nothing was imported; use Create Character instead.`);
   }
+  Object.assign(c.description, description);
+  c.notes = notes;
   const savedLevel = scalar('character_level');
   const level = savedLevel === undefined ? source.level : savedLevel;
   if (typeof level !== 'number' || !Number.isInteger(level) || level < 1 || level > 10)
@@ -338,8 +387,8 @@ export function recreateDemiplane(source: DemiplaneCharacter, data: RulesData, i
   if (scars !== undefined && scars !== 0)
     issues.push(`Demiplane records ${String(scars)} scars. Death/scar benefits were not imported; review them manually.`);
   issues.push('Features, equipment mechanics and derived stats use the local catalogs, not Demiplane overrides. Active effects, limited-use counters and manual stat overrides are not transferred.');
-  if (all.some(e => e.name === 'character_avatar'))
-    issues.push('The Demiplane portrait was not downloaded. The actor keeps its current token artwork; change it by clicking the portrait on the sheet.');
+  if (all.some(e => e.name === 'character_avatar') && !source.portrait)
+    reportIssues.push(source.portraitIssue ?? 'The Demiplane portrait could not be downloaded. The actor keeps its current token artwork.');
   if (cards.length > 5) {
     const warning = 'The active loadout could not be verified. The first five acquired matched cards are active and the rest are in the vault; review your loadout.';
     issues.push(warning);

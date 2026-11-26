@@ -6,6 +6,37 @@ export function cropGeometry(width: number, height: number, settings: TokenArtwo
   return { scale, x: edge / 2 - settings.centerX * width * scale, y: edge / 2 - settings.centerY * height * scale };
 }
 
+/** Converts a downloaded image into a bounded PNG and applies the actor's standard token framing. */
+export async function importTokenArtwork(actorId: string, dataUrl: string): Promise<string> {
+  const match = /^data:image\/(?:png|jpeg|webp|gif);base64,([A-Za-z0-9+/]+={0,2})$/i.exec(dataUrl);
+  if (!match || match[1].length > 8 * 1024 * 1024 * 4 / 3 + 8) throw new Error('The Demiplane portrait is not a supported image or exceeds 8 MB.');
+  const image = new Image();
+  image.src = dataUrl;
+  try { await image.decode(); }
+  catch { throw new Error('The Demiplane portrait could not be decoded.'); }
+  if (!image.naturalWidth || !image.naturalHeight || image.naturalWidth * image.naturalHeight > 40_000_000)
+    throw new Error('The Demiplane portrait exceeds the 40 million pixel limit.');
+  const scale = Math.min(1, 1024 / Math.max(image.naturalWidth, image.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Cannot convert the Demiplane portrait.');
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const png = canvas.toDataURL('image/png');
+  if (!png.startsWith('data:image/png;base64,') || png.length > 8 * 1024 * 1024 * 4 / 3 + 64)
+    throw new Error('The converted Demiplane portrait exceeds the 8 MB limit.');
+  const settings = await tokenArtwork(actorId);
+  return (await tokenArtwork(actorId, { ...settings, image: png })).artwork;
+}
+
+/** Applies an imported portrait after the character was saved; failures become a warning so the import is kept. */
+export async function applyImportedPortrait(actorId: string, portrait: string | undefined): Promise<{ artwork?: string; warning?: string }> {
+  if (!portrait) return {};
+  try { return { artwork: await importTokenArtwork(actorId, portrait) }; }
+  catch (error) { return { warning: `The character was imported, but its portrait could not be saved: ${(error as Error).message}` }; }
+}
+
 export async function editTokenArtwork(actorId: string, canEdit: () => boolean): Promise<string | undefined> {
   const settings = await tokenArtwork(actorId);
   if (!canEdit()) throw new Error('This character sheet is read-only.');

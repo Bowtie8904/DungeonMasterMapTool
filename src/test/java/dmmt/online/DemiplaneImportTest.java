@@ -28,14 +28,34 @@ class DemiplaneImportTest {
     }
 
     @Test
+    void acceptsOnlyPublicAvatarImagesFromTheDemiplaneBucket() {
+        String image = "https://demiplane-prod-app-avatar.s3.us-west-2.amazonaws.com/140d5bef-1c8b-43ea-a638-a858d5236c5d.webp";
+        assertEquals(image, DemiplaneImport.avatarUri(image).toString());
+        for (String invalid : List.of(
+                image.replace("https://", "http://"),
+                image.replace("demiplane-prod-app-avatar.s3.us-west-2.amazonaws.com", "example.com"),
+                image.replace("amazonaws.com", "amazonaws.com.evil.test"),
+                image.replace("https://", "https://user@"),
+                image + "?redirect=https://example.com",
+                image.replace(".webp", ".svg"),
+                image.replace("us-west-2", "us-east-1"))) {
+            assertThrows(IllegalArgumentException.class, () -> DemiplaneImport.avatarUri(invalid), invalid);
+        }
+    }
+
+    @Test
     void readsSplitFlightRecordsAndReturnsOnlyTheRequestedCharacterBuild() throws Exception {
         ObjectNode character = MAPPER.createObjectNode().put("uuid", ID).put("name", "Test Hero").put("level", 2)
-                .put("user_id", "not-imported").put("accessToken", "not-imported");
+                .put("user_id", "not-imported").put("accessToken", "not-imported")
+                .put("avatar_url", "https://demiplane-prod-app-avatar.s3.us-west-2.amazonaws.com/avatar.webp");
         character.putObject("formated_data").putObject("format").put("class", "Bard").put("subclass", "Wordsmith")
                 .put("unrelated", "not-imported");
         ObjectNode engine = character.putObject("data").putArray("engines").addObject()
                 .put("name", "tabula/class/bard.eng").put("demiplaneEngineId", "class").put("value", 1);
         engine.putObject("args").put("name", "Bard").putObject("addEngineStatus").put("internal", true);
+        ((com.fasterxml.jackson.databind.node.ArrayNode) character.path("data").path("engines"))
+                .addObject().put("name", "character_avatar").put("demiplaneEngineId", "avatar")
+                .put("value", "https://demiplane-prod-app-avatar.s3.us-west-2.amazonaws.com/avatar.webp").putObject("args").putNull("id");
         ObjectNode props = MAPPER.createObjectNode();
         props.putObject("characterSheetContent").set("character", character);
         props.putObject("currentUser").put("unrelated", "not-imported");
@@ -49,6 +69,8 @@ class DemiplaneImportTest {
         assertEquals("class", parsed.path("engines").get(0).path("key").asText());
         assertFalse(parsed.toString().contains("not-imported"));
         assertFalse(parsed.toString().contains("addEngineStatus"));
+        assertFalse(parsed.toString().contains("avatar.webp"));
+        assertFalse(parsed.path("engines").get(1).has("value"));
         assertThrows(IOException.class, () -> DemiplaneImport.parse(html, "aaaaaaaa-2222-3333-4444-555555555555"));
     }
 
