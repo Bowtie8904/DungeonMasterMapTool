@@ -27,6 +27,12 @@ export interface DemiplaneResult {
   reportIssues: string[];
 }
 
+export class DemiplaneAncestryChoiceRequired extends Error {
+  constructor(readonly position: 0 | 1, readonly feature: string, readonly candidates: string[]) {
+    super(`Choose the ancestry for ${position === 0 ? 'first' : 'second'} feature "${feature}".`);
+  }
+}
+
 const text = (value: unknown): string => typeof value === 'string' ? value : '';
 const normalize = (value: string): string => value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
 const itemMatches = (entries: CompendiumEntry[], name: string): CompendiumEntry[] => {
@@ -38,7 +44,8 @@ const title = (e: DemiplaneSelection): string => text(e.args.name) || text(e.arg
   || e.name.split('/').pop()?.replace(/\.eng$/, '').replace(/-/g, ' ') || e.name;
 
 /** Replays saved choices with local rules, not Demiplane's rendered totals or executable engine files. */
-export function recreateDemiplane(source: DemiplaneCharacter, data: RulesData, items: CompendiumEntry[]): DemiplaneResult {
+export function recreateDemiplane(source: DemiplaneCharacter, data: RulesData, items: CompendiumEntry[],
+                                  ancestryChoices: Partial<Record<0 | 1, string>> = {}): DemiplaneResult {
   if (!source || !Array.isArray(source.engines) || !source.engines.length
       || source.engines.some(e => !e || typeof e.name !== 'string' || typeof e.key !== 'string'
         || !e.args || typeof e.args !== 'object' || Array.isArray(e.args))) {
@@ -85,8 +92,30 @@ export function recreateDemiplane(source: DemiplaneCharacter, data: RulesData, i
   ch.subclass = match(foundations.map(e => ({ ...e, name: shortSubclass(e.name) })), shortSubclass(subName), 'Subclass', true)!.name;
   ch.subclass = foundations.find(e => normalize(shortSubclass(e.name)) === normalize(ch.subclass))!.name;
   const ancestry = unique(selected(/^tabula\/ancestry\//), 'Ancestry');
+  const mixed = unique(selected(/^core\/selection\/ancestry\/mixed-ancestry\/index\.eng$/), 'Mixed ancestry');
   const community = unique(selected(/^tabula\/community\//), 'Community');
-  ch.ancestry = match(data.ancestries, ancestry ? title(ancestry) : '', 'Ancestry', true)!.name;
+  if (mixed && ancestry) throw new Error('Ancestry: conflicting standard and mixed selections. Nothing was imported.');
+  if (mixed) {
+    for (const [position, row] of [[0, 'heritage-ancestry-features-top'], [1, 'heritage-ancestry-features-bottom']] as const) {
+      const feature = unique(selected(/^tabula\/ancestry-feature\//)
+        .filter(e => e.args.parentEngine === mixed.key && e.args.sourceRow === row), `Mixed ancestry ${row}`);
+      if (!feature) throw new Error(`Mixed ancestry: missing ${position === 0 ? 'first' : 'second'} feature. Nothing was imported.`);
+      const featureName = title(feature);
+      const candidates = data.ancestries.filter(e => normalize(e.features?.[position]?.name ?? '') === normalize(featureName));
+      if (!featureName || !candidates.length) throw new Error(`Mixed ancestry: feature "${featureName || '(missing name)'}" has no matching local ancestry. Nothing was imported.`);
+      const names = candidates.map(e => e.name);
+      if (new Set(names.map(normalize)).size !== names.length)
+        throw new Error(`Mixed ancestry: duplicate local ancestry names for "${featureName}". Nothing was imported.`);
+      const choice = ancestryChoices[position];
+      if (choice && !names.includes(choice)) throw new Error(`Mixed ancestry: invalid ancestry choice for "${featureName}". Nothing was imported.`);
+      if (names.length > 1 && !choice) throw new DemiplaneAncestryChoiceRequired(position, featureName, names);
+      if (position === 0) ch.ancestry = choice || names[0];
+      else ch.ancestry2 = choice || names[0];
+    }
+    scalar('character_ancestry_mixed-ancestry-name');
+  } else {
+    ch.ancestry = match(data.ancestries, ancestry ? title(ancestry) : '', 'Ancestry', true)!.name;
+  }
   ch.community = match(data.communities, community ? title(community) : '', 'Community', true)!.name;
   ch.traits = Object.fromEntries(TRAIT_ORDER.map(name => [name, 0])) as Record<TraitName, number>;
   const manualTraits = [['trait-selection-value-2', 2], ['trait-selection-value-1', 1],

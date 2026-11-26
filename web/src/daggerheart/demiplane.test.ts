@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { recreateDemiplane, DemiplaneCharacter, DemiplaneSelection } from './demiplane';
+import { recreateDemiplane, DemiplaneAncestryChoiceRequired, DemiplaneCharacter, DemiplaneSelection } from './demiplane';
 import { derivedStats } from './engine';
 import { RulesData, subclassStageOf } from './rules';
 
@@ -82,7 +82,62 @@ function fixture(level = 10): DemiplaneCharacter {
   return { name: 'Imported Hero', level, summary: { class: 'Bard', subclass: 'Wordsmith' }, engines };
 }
 
+function mixedFixture(first: string, second: string): DemiplaneCharacter {
+  const source = fixture(1);
+  source.engines = source.engines.filter(e => e.key !== 'ancestry');
+  source.engines.push(
+    { name: 'core/selection/ancestry/mixed-ancestry/index.eng', key: 'mixed', args: { sourceRow: 'heritage-ancestry' } },
+    { name: 'character_ancestry_mixed-ancestry-name', key: 'custom-name', args: {}, value: 'Cursed Rabbitfolk' },
+    ...[first, second].map((name, i) => ({
+      name: `tabula/ancestry-feature/${name.toLowerCase().replaceAll(' ', '-')}.eng`,
+      key: `feature-${i}`, args: { name, parentEngine: 'mixed',
+        sourceRow: `heritage-ancestry-features-${i === 0 ? 'top' : 'bottom'}` },
+    })),
+  );
+  return source;
+}
+
 describe('Demiplane reconstruction', () => {
+  it('reconstructs the linked mixed ancestry from the ordered selected features, not its custom name', () => {
+    const { character: c, issues } = recreateDemiplane(mixedFixture('Caprine Leap', 'Ignition'), data, items);
+    expect(c.ancestry).toBe('Faun / Emberkin');
+    expect(c.heritage.filter(f => f.source.startsWith('Ancestry - ')).map(f => f.name))
+      .toEqual(['Caprine Leap', 'Ignition']);
+    expect(c.mancer?.choices?.ancestry).toBe('Faun');
+    expect(c.mancer?.choices?.ancestry2).toBe('Emberkin');
+    expect(issues.some(issue => /mixed-ancestry|caprine-leap|ignition/i.test(issue))).toBe(false);
+  });
+
+  it('requires explicit valid choices for each ambiguous ancestry feature', () => {
+    const source = mixedFixture('Amphibious', 'Kick');
+    expect(() => recreateDemiplane(source, data, items)).toThrow(DemiplaneAncestryChoiceRequired);
+    try { recreateDemiplane(source, data, items); } catch (e) {
+      expect(e).toMatchObject({ position: 0, feature: 'Amphibious', candidates: ['Ribbet', 'Tidekin'] });
+    }
+    try { recreateDemiplane(source, data, items, { 0: 'Tidekin' }); } catch (e) {
+      expect(e).toMatchObject({ position: 1, feature: 'Kick', candidates: ['Faun', 'Centaur'] });
+    }
+    const c = recreateDemiplane(source, data, items, { 0: 'Tidekin', 1: 'Centaur' }).character;
+    expect(c.ancestry).toBe('Tidekin / Centaur');
+    expect(c.heritage.filter(f => f.source.startsWith('Ancestry - ')).map(f => f.name)).toEqual(['Amphibious', 'Kick']);
+    expect(() => recreateDemiplane(source, data, items, { 0: 'Faun' })).toThrow('invalid ancestry choice');
+  });
+
+  it('rejects missing, unknown, conflicting and duplicate mixed-ancestry selections', () => {
+    const source = mixedFixture('Caprine Leap', 'Ignition');
+    source.engines.find(e => e.key === 'feature-0')!.args.parentEngine = 'other';
+    expect(() => recreateDemiplane(source, data, items)).toThrow('missing first feature');
+    source.engines.find(e => e.key === 'feature-0')!.args.parentEngine = 'mixed';
+    source.engines.find(e => e.key === 'feature-0')!.args.name = 'Unknown feature';
+    expect(() => recreateDemiplane(source, data, items)).toThrow('no matching local ancestry');
+    source.engines.find(e => e.key === 'feature-0')!.args.name = 'Caprine Leap';
+    source.engines.push({ ...source.engines.find(e => e.key === 'feature-0')! });
+    expect(() => recreateDemiplane(source, data, items)).toThrow('multiple saved selections');
+    source.engines.pop();
+    source.engines.push({ name: 'tabula/ancestry/elf.eng', key: 'elf', args: { name: 'Elf' } });
+    expect(() => recreateDemiplane(source, data, items)).toThrow('conflicting standard and mixed');
+  });
+
   it('uses suggested class traits and then replays level-up increases, ignoring inactive manual choices', () => {
     const source = fixture(2);
     source.engines.push({ name: 'use-suggested-traits', key: 'suggested', args: { parentEngine: 'class' }, value: 1 });

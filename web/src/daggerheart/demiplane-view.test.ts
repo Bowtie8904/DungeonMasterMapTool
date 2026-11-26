@@ -3,7 +3,7 @@ import { getDemiplaneCharacter } from '../api';
 import { noticeDialog } from '../dialogs';
 import { fetchCompendiumCategory } from './compendium';
 import { emptyCharacter } from './data';
-import { recreateDemiplane } from './demiplane';
+import { DemiplaneAncestryChoiceRequired, recreateDemiplane } from './demiplane';
 import { openDemiplaneImport } from './demiplane-view';
 import { loadRulesData } from './rules';
 
@@ -11,7 +11,9 @@ vi.mock('../api', () => ({ getDemiplaneCharacter: vi.fn() }));
 vi.mock('../dialogs', () => ({ noticeDialog: vi.fn().mockResolvedValue(true) }));
 vi.mock('./compendium', () => ({ fetchCompendiumCategory: vi.fn().mockResolvedValue({ entries: [] }) }));
 vi.mock('./rules', () => ({ loadRulesData: vi.fn().mockResolvedValue({}) }));
-vi.mock('./demiplane', () => ({ recreateDemiplane: vi.fn() }));
+vi.mock('./demiplane', async importOriginal => ({
+  ...await importOriginal<typeof import('./demiplane')>(), recreateDemiplane: vi.fn(),
+}));
 
 class Element {
   className = '';
@@ -24,6 +26,7 @@ class Element {
   attributes: Record<string, string> = {};
   constructor(readonly tag: string) {}
   append(...nodes: Array<Element | string>) { this.children.push(...nodes); }
+  replaceChildren(...nodes: Array<Element | string>) { this.children = nodes; }
   addEventListener(type: string, handler: (event: { preventDefault: () => void }) => unknown) { this.listeners.set(type, handler); }
   setAttribute(name: string, value: string) { this.attributes[name] = value; }
   removeAttribute(name: string) { delete this.attributes[name]; }
@@ -117,4 +120,47 @@ it('shows only success when there are no user-facing warnings', async () => {
   submit();
   await vi.waitFor(() => expect(noticeDialog).toHaveBeenCalled());
   expect(noticeDialog).toHaveBeenCalledWith('Hero was imported at level 1 and saved.', 'Character imported');
+});
+
+it('asks for ambiguous ancestries one at a time without refetching or saving before resolution', async () => {
+  const c = emptyCharacter('Hero');
+  vi.mocked(getDemiplaneCharacter).mockResolvedValue({ name: c.name, level: 1, summary: {}, engines: [] });
+  vi.mocked(recreateDemiplane)
+    .mockImplementationOnce(() => { throw new DemiplaneAncestryChoiceRequired(0, 'Amphibious', ['Ribbet', 'Tidekin']); })
+    .mockImplementationOnce(() => { throw new DemiplaneAncestryChoiceRequired(1, 'Kick', ['Faun', 'Centaur']); })
+    .mockReturnValueOnce({ character: c, issues: [], reportIssues: [] });
+  const save = vi.fn().mockResolvedValue(undefined);
+  const { dialog, input, submit } = open(save);
+  submit();
+  await vi.waitFor(() => expect(dialog.find('select')).toBeDefined());
+  expect(save).not.toHaveBeenCalled();
+  expect(dialog.find('select').children).toHaveLength(3);
+  dialog.find('select').value = 'Tidekin';
+  submit();
+  await vi.waitFor(() => expect(vi.mocked(recreateDemiplane)).toHaveBeenCalledTimes(2));
+  expect(save).not.toHaveBeenCalled();
+  dialog.find('select').value = 'Centaur';
+  submit();
+  await vi.waitFor(() => expect(save).toHaveBeenCalledWith(c));
+  expect(vi.mocked(recreateDemiplane).mock.calls[2][3]).toEqual({ 0: 'Tidekin', 1: 'Centaur' });
+  expect(getDemiplaneCharacter).toHaveBeenCalledTimes(1);
+  await vi.waitFor(() => expect(input.disabled).toBe(false));
+});
+
+it('discards pending ancestry choices when the link changes', async () => {
+  vi.mocked(getDemiplaneCharacter).mockResolvedValue({ name: 'Hero', level: 1, summary: {}, engines: [] });
+  vi.mocked(recreateDemiplane)
+    .mockImplementationOnce(() => { throw new DemiplaneAncestryChoiceRequired(0, 'Amphibious', ['Ribbet', 'Tidekin']); })
+    .mockReturnValueOnce({ character: emptyCharacter('Other'), issues: [], reportIssues: [] });
+  const save = vi.fn().mockResolvedValue(undefined);
+  const { dialog, input, submit } = open(save);
+  submit();
+  await vi.waitFor(() => expect(dialog.find('select')).toBeDefined());
+  input.value = 'https://app.demiplane.com/nexus/daggerheart/character-sheet/other';
+  input.listeners.get('input')!({ preventDefault() {} });
+  expect(dialog.find('select')).toBeUndefined();
+  submit();
+  await vi.waitFor(() => expect(save).toHaveBeenCalled());
+  expect(getDemiplaneCharacter).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(recreateDemiplane).mock.calls[1][3]).toEqual({});
 });

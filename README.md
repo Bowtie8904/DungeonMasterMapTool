@@ -62,6 +62,8 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   **Import from Demiplane**. Import accepts a publicly shared Daggerheart character link and recreates
   supported saved creation/level-up choices with this host's name-matched features, domain cards and equipment.
   Suggested traits are supported for the standard classes and Brawler, including saved Martial Artist starting forms.
+  Mixed ancestry is reconstructed from its two selected features; if a feature matches multiple local
+  ancestries, choose the intended ancestry in the import dialog. Unknown or missing features block import.
   A concise popup after saving lists only unmatched feature/card names, item quantity warnings and an unverified active loadout.
   Custom items remain plain inventory; quantities and active loadout may need review. Private characters
   cannot be imported. Builds with unreadable essential creation choices fail without replacing the empty sheet.

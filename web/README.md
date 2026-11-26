@@ -362,6 +362,9 @@ per-level advancement records (including trait/Experience increases, HP/Stress, 
 subclass upgrades, extra domain cards and supported multiclass selections). Demiplane's suggested-trait
 toggle uses verified starting allocations for the standard SRD classes and Brawler; manual allocations
 are still validated when that toggle is off. Martial Artist starting forms are matched to local stances.
+Mixed ancestry uses the selected first and second feature names and their positions, rather than the
+player's custom ancestry name. When multiple local ancestries match a feature, the import dialog asks
+the player to choose; missing or unrecognized features block import.
 Local catalogs supply
 feature/card/item mechanics and automation; ambiguous names are never guessed. Custom or unmatched
 equipment stays plain inventory without invented mechanics. Item quantities default to one, and where
