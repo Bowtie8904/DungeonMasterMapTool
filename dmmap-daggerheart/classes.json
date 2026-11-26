@@ -736,11 +736,11 @@
       "actions": [
        {
         "id": "hp",
-        "label": "Sparing Touch: clear 2 HP",
+        "label": "Clear 2 HP",
         "texts": {
-         "button": "Sparing Touch: clear 2 HP",
-         "chatButton": "Sparing Touch: clear 2 HP",
-         "roll": "Sparing Touch: clear 2 HP"
+         "button": "Clear 2 HP",
+         "chatButton": "Clear 2 HP",
+         "roll": "Clear 2 HP"
         },
         "target": "actor",
         "steps": [
@@ -753,11 +753,11 @@
        },
        {
         "id": "stress",
-        "label": "Sparing Touch: clear 2 Stress",
+        "label": "Clear 2 Stress",
         "texts": {
-         "button": "Sparing Touch: clear 2 Stress",
-         "chatButton": "Sparing Touch: clear 2 Stress",
-         "roll": "Sparing Touch: clear 2 Stress"
+         "button": "Clear 2 Stress",
+         "chatButton": "Clear 2 Stress",
+         "roll": "Clear 2 Stress"
         },
         "target": "actor",
         "steps": [

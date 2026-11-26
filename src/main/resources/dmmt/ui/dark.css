@@ -10,6 +10,8 @@
     -dm-text: #dfe2e8;
     -dm-muted: #8d94a1;
     -dm-danger: #ff7b6b;
+    -dm-chat-accent: #4fc3f7;
+    -dm-chat-accent-border: #2c8fba;
 
     -fx-base: #262a31;
     -fx-background: -dm-bg;
@@ -1664,7 +1666,7 @@
 .chat-roll .chat-roll-breakdown { -fx-padding: 4 14 0 14; }
 .chat-roll .chat-roll-breakdown:expanded { -fx-padding: 8 14 12 14; }
 .chat-summary { -fx-text-fill: #a6b2c3; -fx-font-size: 11px; -fx-padding: 2 0 4 0; -fx-cursor: hand; }
-.chat-summary:hover { -fx-text-fill: #d0ad66; }
+.chat-summary:hover { -fx-text-fill: -dm-chat-accent; }
 .chat-roll-formula { -fx-font-family: "Consolas", monospace; -fx-font-size: 11px; -fx-text-fill: #b8c5d6; -fx-background-color: #00000033; -fx-background-radius: 5; -fx-padding: 6 8; }
 .chat-detail-row { -fx-padding: 7 0; -fx-border-color: transparent transparent #ffffff08 transparent; }
 .chat-detail-label, .chat-detail-value { -fx-text-fill: #c5cfdd; -fx-font-size: 11px; }
@@ -1674,11 +1676,11 @@
 .chat-detail-note { -fx-text-fill: #a6b2c3; -fx-font-size: 10px; }
 .chat-detail-negative { -fx-text-fill: #f2a4a4; -fx-font-weight: bold; -fx-font-size: 12px; }
 .chat-detail-total { -fx-border-color: transparent; }
-.chat-detail-total .label { -fx-text-fill: #f5d490; -fx-font-weight: bold; -fx-font-size: 12px; }
+.chat-detail-total .label { -fx-text-fill: -dm-chat-accent; -fx-font-weight: bold; -fx-font-size: 12px; }
 .chat-source-name, .chat-shared-name { -fx-font-weight: bold; -fx-font-size: 15px; -fx-text-fill: -dm-text; }
-.chat-source-preview .chat-source-name { -fx-text-fill: #f5d490; }
+.chat-source-preview .chat-source-name { -fx-text-fill: -dm-chat-accent; }
 .chat-source-tooltip .scroll-pane, .chat-source-tooltip .viewport { -fx-background-color: transparent; }
-.chat-source-preview { -fx-padding: 8; }
+.chat-source-preview { -fx-padding: 8; -fx-background-color: #1d2730; -fx-background-radius: 6; -fx-border-color: -dm-chat-accent-border -dm-chat-accent-border -dm-chat-accent-border -dm-chat-accent; -fx-border-width: 1 1 1 3; -fx-border-radius: 6; }
 .chat-source-preview .chat-markdown-text { -fx-font-size: 14px; }
 .chat-source-text, .chat-shared-description { -fx-text-fill: #c4ccd8; }
 .chat-markdown-text { -fx-fill: #c4ccd8; }

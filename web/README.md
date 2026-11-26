@@ -533,6 +533,10 @@ The same preview appears on a sourced roll or action title, or on the text of a 
 message; there is no separate source section.
 Chat action buttons also show the full associated feature, card, effect or weapon description when available.
 Disabled actions remain inspectable and include their availability reason.
+Source previews use dark panels with cyan borders and headings. Breakdown controls, Character Mancer and
+level-up window headers and selections, sheet stat previews, editing, favorites and quick access use the
+shared cyan interaction accent.
+Semantic Hope, currency, critical, reaction and warning colors are unchanged.
 The desktop DM chat uses the same saved descriptions. Older messages without row descriptions remain usable.
 These fields are additive; compatibility versions are unchanged. Older hosts/history fall back to formula
 and dice details. Open breakdown sections survive new messages and updates to their own message,

@@ -20,6 +20,10 @@ The **Online Play** tab (next to DM Link) lets you host an optional, DM-controll
 who join from a browser. **It is not DM control** (that is DM Link below); players get restricted access.
 Nothing starts until you click **Start online session**, so offline play and the second-screen view are unchanged.
 
+Chat source previews use cyan borders and headings on dark panels in both browser and desktop chat.
+Character Mancer and level-up windows, sheet editing and quick-access controls share the browser's cyan accent;
+gold remains reserved for gameplay cues such as Hope, currency and critical results.
+
 **Custom effects (partial implementation):** While hosting, the **Custom effects** tool on the right-hand tool rail (below Handouts) opens a dialog that lets the DM
 select saved player characters, compose stat or roll modifiers, optional roll bonuses, damage mitigation,
 resource actions and visible narrative rules, and remove individual DM-managed effects. Passive and selectable

@@ -19,6 +19,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignC;
@@ -153,6 +154,10 @@ class ChatPanelTest {
                 root.applyCss();
                 root.layout();
                 var preview = (VBox) root.lookup(".chat-source-preview");
+                assertEquals(Color.web("#4fc3f7"), ((Label) preview.getChildren().get(1)).getTextFill(),
+                        "Source preview headings must have the visible cyan chat accent");
+                assertNotNull(preview.getBorder(), "Source previews must have a visible accent border");
+                assertEquals(Color.web("#4fc3f7"), preview.getBorder().getStrokes().getFirst().getLeftStroke());
                 assertTrue(popup[0].getWidth() >= 490, "Preview must have a comfortable reading width");
                 assertEquals(scrolling, root.lookup(".scroll-pane") != null);
                 if (!scrolling)

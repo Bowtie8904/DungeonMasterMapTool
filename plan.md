@@ -33,6 +33,8 @@ Desktop tool for tabletop dungeon masters that:
 
 ## 3) Current Implementation Status
 
+- **Consistent interface accents:** Chat source previews and roll breakdown controls use dark surfaces with visibly cyan borders, headings and totals rather than decorative gold or entirely neutral styling, in both browser and desktop chat. Apply the same visible accent to Character Mancer and level-up window headers, progress, selections, traits, gear and detail headings, plus sheet stat previews, edit, favorites and quick-access controls. Preserve semantic Hope/gold, critical results, reaction prompts, warnings and other gameplay colors. Presentation only; no settings, behavior or remote compatibility changes.
+
 - **Enchanted inventory artwork:** Give newly created Rune Ward, Lifeblood Talisman and Enchanted Talisman items the existing bundled runestone or pendant artwork. For older image-less items, show the same artwork in browser inventory and shared cards only when their existing enchanted-item marker and name identify them; preserve explicit artwork, inventory data, transfer identity and gameplay. Older hosts remain usable, with no settings or incompatible remote-contract changes.
 
 - **Chat card source previews:** Replace the separate roll-source disclosure in browser and desktop DM chat with the existing themed, accessible hover/focus preview on the roll or action title; source-bearing plain action messages use their message text. Keep per-breakdown-row previews, full formatted source descriptions, legacy messages and roll breakdown state intact. This is presentation only, with no settings or remote contract change.
