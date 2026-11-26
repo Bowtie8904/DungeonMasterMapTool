@@ -16,6 +16,7 @@ describe('performance settings', () => {
     expect(settings.lightningFlashes).toBe(true);
     expect(settings.lightFlicker).toBe(true);
     expect(settings.animatedTextures).toBe(true);
+    expect(settings.lowResource).toBe(false);
     expect(settings.effectiveMaxParticles).toBe(settings.maxParticles);
   });
 
@@ -28,5 +29,17 @@ describe('performance settings', () => {
     settings.lightFlicker = false;
     expect(settings.animatedTextures).toBe(true);
     expect(settings.showWeather).toBe(true);
+  });
+
+  it('low-resource mode halves the effective particle cap without changing other preferences', () => {
+    store.set('dmmt.maxParticles', '500');
+    settings.lowResource = true;
+    expect(settings.effectiveMaxParticles).toBe(250);
+    expect(settings.showWeather).toBe(true);
+    expect(settings.lightFlicker).toBe(true);
+    settings.reduceParticles = true;
+    expect(settings.effectiveMaxParticles).toBe(150);
+    settings.lowResource = false;
+    expect(settings.effectiveMaxParticles).toBe(300);
   });
 });

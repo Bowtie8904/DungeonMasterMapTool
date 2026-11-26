@@ -37,6 +37,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OnlineSessionServerTest {
     @Test
+    void rosterPingUpdatesOnlyWhenMateriallyDifferent() {
+        assertFalse(OnlineSessionServer.rosterPingChanged(40, 59));
+        assertTrue(OnlineSessionServer.rosterPingChanged(40, 60));
+        assertTrue(OnlineSessionServer.rosterPingChanged(-1, 0));
+        assertTrue(OnlineSessionServer.rosterPingChanged(0, -1));
+    }
+
+    @Test
     void emotesUseHostCharacterIdentityAndPersistWithWhisperRouting() throws Exception {
         Campaign.Actor first = Campaign.Actor.builder().id("mara").name("Mara").ownerId(playerId()).build();
         Campaign.Actor second = Campaign.Actor.builder().id("rook").name("Rook").ownerId(playerId()).build();

@@ -1,6 +1,7 @@
 package dmmt.online;
 
 import java.util.ArrayDeque;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Executor;
 import java.util.function.Supplier;
 
@@ -10,6 +11,8 @@ import java.util.function.Supplier;
  * messages are replaced by a single fresh snapshot instead of letting memory and latency grow.
  */
 final class OnlineOutbox {
+    private record QueuedMessage(String json, String coalesceKey) { }
+
     interface Sink {
         void send(String json) throws Exception;
 
@@ -21,10 +24,16 @@ final class OnlineOutbox {
     private final int maxMessages;
     private final long maxBytes;
     private final Supplier<String> resync;
-    private final ArrayDeque<String> queue = new ArrayDeque<>();
+    private static final long RESYNC_RETRY_WINDOW_NANOS = TimeUnit.SECONDS.toNanos(10);
+    private static final String SLOW_CLIENT_NOTICE =
+            "{\"type\":\"kicked\",\"reason\":\"Your connection cannot keep up. Reconnect on a faster network.\"}";
+    private final ArrayDeque<QueuedMessage> queue = new ArrayDeque<>();
     private long queuedBytes;
     private boolean draining;
     private boolean overflowed;
+    private boolean resyncing;
+    private long lastResyncNanos;
+    private boolean slowNoticePending;
     private boolean closed;
     private int closeCode;
     private String closeReason;
@@ -40,17 +49,41 @@ final class OnlineOutbox {
     }
 
     void send(String json) {
+        enqueue(json, null);
+    }
+
+    void sendLatest(String key, String json) {
+        enqueue(json, key);
+    }
+
+    private void enqueue(String json, String coalesceKey) {
         synchronized (this) {
             if (closed || closeRequested) return;
+            if (overflowed) {
+                schedule();
+                return;
+            }
+            if (coalesceKey != null && !queue.isEmpty() && coalesceKey.equals(queue.peekLast().coalesceKey())) {
+                QueuedMessage replaced = queue.removeLast();
+                queuedBytes -= replaced.json().length();
+            }
             if (!overflowed && !queue.isEmpty()
                     && (queue.size() >= maxMessages || queuedBytes + json.length() > maxBytes)) {
                 queue.clear();
                 queuedBytes = 0;
-                overflowed = true;
+                if (resyncing || lastResyncNanos != 0
+                        && System.nanoTime() - lastResyncNanos < RESYNC_RETRY_WINDOW_NANOS) {
+                    closeRequested = true;
+                    closeCode = 1008;
+                    closeReason = "Connection too slow";
+                    slowNoticePending = true;
+                } else {
+                    overflowed = true;
+                }
             }
             // While overflowed the snapshot sent on resync already contains this change.
-            if (!overflowed) {
-                queue.add(json);
+            if (!overflowed && !closeRequested) {
+                queue.add(new QueuedMessage(json, coalesceKey));
                 queuedBytes += json.length();
             }
             schedule();
@@ -93,7 +126,9 @@ final class OnlineOutbox {
     private void drain() {
         while (true) {
             String json = null;
+            QueuedMessage message = null;
             boolean snapshot = false;
+            boolean slowNotice = false;
             boolean close = false;
             synchronized (this) {
                 if (closed) {
@@ -102,9 +137,14 @@ final class OnlineOutbox {
                 }
                 if (overflowed) {
                     overflowed = false;
+                    resyncing = true;
                     snapshot = true;
-                } else if ((json = queue.poll()) != null) {
-                    queuedBytes -= json.length();
+                } else if (slowNoticePending) {
+                    slowNoticePending = false;
+                    slowNotice = true;
+                } else if ((message = queue.poll()) != null) {
+                    queuedBytes -= message.json().length();
+                    json = message.json();
                 } else if (closeRequested) {
                     close = true;
                     closed = true;
@@ -118,8 +158,20 @@ final class OnlineOutbox {
                     sink.close(closeCode, closeReason);
                     return;
                 }
-                if (snapshot) json = resync.get();
-                if (json != null) sink.send(json);
+                if (slowNotice) {
+                    sink.send(SLOW_CLIENT_NOTICE);
+                    continue;
+                }
+                if (snapshot) {
+                    json = resync.get();
+                    if (json != null) sink.send(json);
+                    synchronized (this) {
+                        resyncing = false;
+                        if (json != null) lastResyncNanos = System.nanoTime();
+                    }
+                } else if (json != null) {
+                    sink.send(json);
+                }
             } catch (Exception failure) {
                 synchronized (this) {
                     closed = true;

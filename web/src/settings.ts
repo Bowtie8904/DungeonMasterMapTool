@@ -99,9 +99,16 @@ export const settings = {
   set animatedTextures(on: boolean) {
     setFlag('dmmt.animatedTextures', on);
   },
+  get lowResource(): boolean {
+    return flag('dmmt.lowResource', false);
+  },
+  set lowResource(on: boolean) {
+    setFlag('dmmt.lowResource', on);
+  },
   /** Particle cap after "Reduce weather particles". */
   get effectiveMaxParticles(): number {
-    return this.reduceParticles ? Math.min(this.maxParticles, REDUCED_MAX_PARTICLES) : this.maxParticles;
+    const capped = this.reduceParticles ? Math.min(this.maxParticles, REDUCED_MAX_PARTICLES) : this.maxParticles;
+    return this.lowResource ? Math.floor(capped / 2) : capped;
   },
 };
 

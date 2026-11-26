@@ -26,6 +26,11 @@ const MIN_FRAME_MS = 33;
 const HEAVY_MOVE_INTERVAL_MS = 66;
 const MOVE_TICK_MS = 50;
 
+export function canvasBackingScale(devicePixelRatio: number, lowResource = false): number {
+  if (lowResource) return 1;
+  return Math.max(1, Math.min(2, Number.isFinite(devicePixelRatio) ? devicePixelRatio : 1));
+}
+
 export interface MoveCommit {
   tokenId: string;
   x: number;
@@ -80,6 +85,7 @@ export class MapView {
   simpleLighting = false;
   flickerEnabled = true;
   animatedTextures = true;
+  lowResourceMode = false;
   /** Glide other tokens between position updates instead of jumping; off saves redraws on slow devices. */
   smoothMovement = true;
   /** Own-token HUD (HP, Stress, Armor, Hope) keyed by actor id; empty or hidden when the player turned it off. */
@@ -113,6 +119,11 @@ export class MapView {
   private lightTint: HTMLCanvasElement = document.createElement('canvas');
   private fx: HTMLCanvasElement = document.createElement('canvas');
   private fxMask: HTMLCanvasElement = document.createElement('canvas');
+  private sceneCache: HTMLCanvasElement | null = null;
+  private sceneCacheValid = false;
+  private mapImageCache: HTMLCanvasElement | null = null;
+  private mapImageCacheImages: GameState['images'] | null = null;
+  private mapImageCacheKey = '';
   private brushMask = document.createElement('canvas');
   private brushBorder = document.createElement('canvas');
   private brushBorderKey = '';
@@ -203,7 +214,14 @@ export class MapView {
   invalidate(): void {
     if (this.paused || !this.canPing) this.cancelPingHold();
     this.dirty = true;
+    this.sceneCacheValid = false;
     this.updateCursor();
+  }
+
+  setLowResourceMode(enabled: boolean): void {
+    if (this.lowResourceMode === enabled) return;
+    this.lowResourceMode = enabled;
+    this.resize();
   }
 
   destroy(): void {
@@ -211,6 +229,12 @@ export class MapView {
     this.destroyed = true;
     this.resizeObserver.disconnect();
     this.images.clear(); this.tiles.clear(); this.maskCache.clear(); this.glowCache.clear();
+    if (this.sceneCache) this.sceneCache.width = this.sceneCache.height = 1;
+    if (this.mapImageCache) this.mapImageCache.width = this.mapImageCache.height = 1;
+    this.sceneCache = null;
+    this.mapImageCache = null;
+    this.sceneCacheValid = false;
+    this.mapImageCacheImages = null;
   }
 
   /** Call after walls/doors/lights/tokens/lighting/fog changes. */
@@ -421,7 +445,7 @@ export class MapView {
   }
 
   private resize(): void {
-    this.dpr = window.devicePixelRatio || 1;
+    this.dpr = canvasBackingScale(window.devicePixelRatio || 1, this.lowResourceMode);
     this.width = this.canvas.clientWidth;
     this.height = this.canvas.clientHeight;
     this.canvas.width = Math.max(1, Math.round(this.width * this.dpr));
@@ -432,6 +456,17 @@ export class MapView {
       c.width = this.canvas.width;
       c.height = this.canvas.height;
     }
+    if (this.sceneCache) {
+      this.sceneCache.width = this.canvas.width;
+      this.sceneCache.height = this.canvas.height;
+    }
+    if (this.mapImageCache) {
+      this.mapImageCache.width = this.canvas.width;
+      this.mapImageCache.height = this.canvas.height;
+    }
+    this.sceneCacheValid = false;
+    this.mapImageCacheImages = null;
+    this.mapImageCacheKey = '';
     if (this.fitted && this.state && this.cam.scale === 1) this.fit();
     this.dirty = true;
   }
@@ -853,6 +888,7 @@ export class MapView {
     if (!img) {
       img = new Image();
       img.onload = () => {
+        this.mapImageCacheImages = null;
         this.dirty = true;
       };
       img.src = url;
@@ -872,6 +908,7 @@ export class MapView {
     img = new Image();
     img.decoding = 'async';
     img.onload = () => {
+      this.mapImageCacheImages = null;
       this.dirty = true;
     };
     img.src = url;
@@ -1036,12 +1073,20 @@ export class MapView {
     const s = this.state;
     if (!s) return;
     const weatherActive = this.weatherEnabled && weatherKind(s.weather.type) !== 'none';
-        const flickering = this.flickerEnabled && s.lighting.flicker !== false && (s.lights.some((l) => l.on && l.flicker)
+    const flickering = this.flickerEnabled && s.lighting.flicker !== false && (s.lights.some((l) => l.on && l.flicker)
       || (s.overlays ?? []).some((o) => o.emits && (o.flicker ?? 0) > 0));
-    if (!this.dirty && !weatherActive && !flickering && !this.textureActive && !this.pingActive && !this.fog.animating
-      && !this.moving) return;
-    if (time - this.lastFrame < MIN_FRAME_MS) return;
+    const sceneChanged = this.dirty;
+    const otherAnimation = flickering || this.textureActive || this.pingActive || this.fog.animating || this.moving;
+    const lightningActive = weatherActive && this.lightningEnabled && weatherKind(s.weather.type) === 'thunderstorm'
+      && lightningFlash(this.serverNow() / 1000 + (s.weather.seed || 0), s.weather.lightningIntervalSeconds) > 0
+      && flashStyle.opacity > 0;
+    if (!sceneChanged && !weatherActive && !otherAnimation) return;
+    const effectOnly = !sceneChanged && !this.moving && !this.pingActive && !this.fog.animating
+      && (weatherActive || flickering || this.textureActive);
+    const minFrameMs = this.lowResourceMode && effectOnly ? 1000 / 15 : MIN_FRAME_MS;
+    if (time - this.lastFrame < minFrameMs) return;
     this.lastFrame = time;
+    if (sceneChanged || otherAnimation || lightningActive) this.sceneCacheValid = false;
     const deferVision = this.visionDirty && this.motionActive() && time - this.lastVision < HEAVY_MOVE_INTERVAL_MS;
     if (this.visionDirty && !deferVision) {
       this.visionDirty = false;
@@ -1050,7 +1095,9 @@ export class MapView {
     }
     // A deferred vision update needs another frame even if nothing else changes.
     this.dirty = deferVision;
-    this.draw(s);
+    const useSceneCache = !sceneChanged && weatherActive && !otherAnimation && !lightningActive && this.sceneCacheValid;
+    const cacheScene = weatherActive && !otherAnimation && !lightningActive;
+    this.draw(s, useSceneCache, cacheScene);
   }
 
   private world(ctx: CanvasRenderingContext2D): void {
@@ -1067,16 +1114,41 @@ export class MapView {
     ctx.closePath();
   }
 
-  private draw(s: GameState): void {
-    applyWeatherConfig(s.weather);
-    this.updateShown(s);
-    const ctx = this.ctx;
-    const ppc = s.grid.pixelsPerCell;
+  private drawMapImages(ctx: CanvasRenderingContext2D, s: GameState): void {
+    if (s.images.length === 0) {
+      this.world(ctx);
+      return;
+    }
+    const width = this.canvas.width;
+    const height = this.canvas.height;
+    if (width > 3840 || height > 2160) {
+      this.renderMapImages(ctx, s);
+      return;
+    }
+    const key = `${width}|${height}|${this.cam.x}|${this.cam.y}|${this.cam.scale}|${this.dpr}`;
+    if (!this.mapImageCache) this.mapImageCache = document.createElement('canvas');
+    const cache = this.mapImageCache;
+    if (cache.width !== width) cache.width = width;
+    if (cache.height !== height) cache.height = height;
+    if (this.mapImageCacheImages !== s.images || this.mapImageCacheKey !== key) {
+      const cacheCtx = cache.getContext('2d');
+      if (!cacheCtx) {
+        this.renderMapImages(ctx, s);
+        return;
+      }
+      cacheCtx.setTransform(1, 0, 0, 1, 0, 0);
+      cacheCtx.clearRect(0, 0, width, height);
+      this.renderMapImages(cacheCtx, s);
+      this.mapImageCacheImages = s.images;
+      this.mapImageCacheKey = key;
+    }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#0b0d10';
-    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    ctx.drawImage(cache, 0, 0);
     this.world(ctx);
+  }
 
+  private renderMapImages(ctx: CanvasRenderingContext2D, s: GameState): void {
+    this.world(ctx);
     const layers = [...s.images].sort((a, b) => a.zIndex - b.zIndex);
     for (const im of layers) {
       ctx.save();
@@ -1095,6 +1167,23 @@ export class MapView {
       }
       ctx.restore();
     }
+  }
+
+  private draw(s: GameState, useSceneCache = false, cacheScene = false): void {
+    applyWeatherConfig(s.weather);
+    this.updateShown(s);
+    const ctx = this.ctx;
+    const ppc = s.grid.pixelsPerCell;
+    if (useSceneCache && this.sceneCache && this.sceneCacheValid) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(this.sceneCache, 0, 0);
+      this.drawWeather(ctx, s);
+      return;
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#0b0d10';
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    this.drawMapImages(ctx, s);
 
     this.textureActive = this.animatedTextures && (s.overlays ?? []).some((o) => o.tile && (o.layers ?? []).some((l) => l[0] !== 0 || l[1] !== 0 || l[4] > 0));
     if (s.view?.showGrid === true) this.drawGrid(ctx, ppc, s.view?.gridOpacity ?? 0.08);
@@ -1116,8 +1205,29 @@ export class MapView {
     this.drawPings(ctx, s);
     this.drawToolAnnotations(ctx, s);
 
-    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     const seconds = this.serverNow() / 1000 + (s.weather.seed || 0);
+    const kind = weatherKind(s.weather.type);
+    const flash = this.weatherEnabled && this.lightningEnabled && kind === 'thunderstorm'
+      ? lightningFlash(seconds, s.weather.lightningIntervalSeconds) : 0;
+    if (cacheScene && flash <= 0 && this.canvas.width <= 3840 && this.canvas.height <= 2160) {
+      if (!this.sceneCache) this.sceneCache = document.createElement('canvas');
+      if (this.sceneCache.width !== this.canvas.width) this.sceneCache.width = this.canvas.width;
+      if (this.sceneCache.height !== this.canvas.height) this.sceneCache.height = this.canvas.height;
+      const cacheCtx = this.sceneCache.getContext('2d');
+      if (cacheCtx) {
+        cacheCtx.setTransform(1, 0, 0, 1, 0, 0);
+        cacheCtx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        cacheCtx.drawImage(this.canvas, 0, 0);
+        this.sceneCacheValid = true;
+      }
+    } else {
+      this.sceneCacheValid = false;
+    }
+    this.drawWeather(ctx, s, seconds);
+  }
+
+  private drawWeather(ctx: CanvasRenderingContext2D, s: GameState, seconds = this.serverNow() / 1000 + (s.weather.seed || 0)): void {
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     const kind = weatherKind(s.weather.type);
     ctx.save();
     if (this.weatherEnabled && kind !== 'none' && !weatherIndoors(s.weather)) {
@@ -2050,7 +2160,7 @@ export class MapView {
   private punchShapeLight(c: CanvasRenderingContext2D, o: Overlay, range: number, strength: number): void {
     if (o.type !== 'circle' && o.type !== 'rect' && o.type !== 'brush') return;
     c.save();
-    if (this.simpleLighting) {
+    if (this.simpleLighting || this.lowResourceMode) {
       c.fillStyle = c.strokeStyle = `rgba(0,0,0,${strength * 0.4})`;
       this.paintShape(c, o);
     } else {

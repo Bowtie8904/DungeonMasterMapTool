@@ -361,7 +361,7 @@ describe('map interaction cursors', () => {
     expect(Reflect.get(view, 'dirty')).toBe(true);
     Reflect.set(document, 'hidden', false);
     Reflect.get(view, 'frame').call(view, 2000);
-    expect(draw).toHaveBeenCalledWith(current);
+    expect(draw).toHaveBeenCalledWith(current, false, false);
     expect(vision).toHaveBeenCalledOnce();
     Reflect.get(view, 'frame').call(view, 3000);
     expect(draw).toHaveBeenCalledOnce();

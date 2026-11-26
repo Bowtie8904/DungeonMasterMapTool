@@ -79,3 +79,53 @@ it('negotiates death option capability additively and clears it on reconnect to 
   expect(conn.deathMoveOptions).toBe(false);
   conn.stop();
 });
+
+it('batches ordered state messages and flushes before the next immediate message', () => {
+  vi.useFakeTimers();
+  const sockets: FakeSocket[] = [];
+  class FakeSocket {
+    static OPEN = 1;
+    readyState = 0;
+    onopen?: () => void;
+    onmessage?: (event: { data: string }) => void;
+    onclose?: () => void;
+    onerror?: () => void;
+    constructor() { sockets.push(this); }
+    send(): void {}
+    close(): void {}
+  }
+  vi.stubGlobal('WebSocket', FakeSocket);
+  vi.stubGlobal('location', { protocol: 'http:', host: 'localhost' });
+  const documentState = { hidden: false };
+  vi.stubGlobal('document', documentState);
+  vi.stubGlobal('requestAnimationFrame', undefined);
+  vi.stubGlobal('window', {
+    setTimeout: globalThis.setTimeout,
+    clearTimeout: globalThis.clearTimeout,
+    setInterval: globalThis.setInterval,
+    clearInterval: globalThis.clearInterval,
+  });
+  const batches: string[][] = [];
+  const immediate: string[] = [];
+  const conn = new Connection({
+    onMessage: msg => immediate.push(msg.type),
+    onMessages: messages => batches.push(messages.map(msg => msg.type)),
+    onOpen: () => {},
+    onStatus: () => {},
+  }, () => 0);
+  conn.start();
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'delta', seq: 1, ops: [] }) });
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'tokenMoved', mapKey: 'm/l', id: 't', x: 1, y: 1 }) });
+  expect(batches).toEqual([]);
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'pause', paused: true }) });
+  expect(batches).toEqual([['delta', 'tokenMoved']]);
+  expect(immediate).toEqual(['pause']);
+
+  documentState.hidden = true;
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'delta', seq: 2, ops: [] }) });
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'snapshot', seq: 3, state: {} }) });
+  sockets[0].onmessage?.({ data: JSON.stringify({ type: 'delta', seq: 4, ops: [] }) });
+  vi.advanceTimersByTime(0);
+  expect(batches[1].map(type => type)).toEqual(['snapshot', 'delta']);
+  conn.stop();
+});

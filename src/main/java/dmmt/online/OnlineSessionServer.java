@@ -215,6 +215,7 @@ public final class OnlineSessionServer {
     private static final int OUTBOX_MAX_MESSAGES = 512;
     private static final long OUTBOX_MAX_BYTES = 8L * 1024 * 1024;
     private final Map<String, OnlineOutbox> outboxes = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, Long> publishedRosterPing = new java.util.HashMap<>();
     private volatile java.util.concurrent.ExecutorService sendExecutor;
     private static final class Client {
         final WsContext ctx;
@@ -383,7 +384,6 @@ public final class OnlineSessionServer {
 
     /** Sends an application-level ping; the browser answers with {@code pong} so the DM sees each player's latency. */
     synchronized void pingClients() {
-        publishRoster();
         for (Client client : clients.values()) {
             long id = ++pingCounter;
             client.pingId = id;
@@ -392,11 +392,11 @@ public final class OnlineSessionServer {
         }
     }
 
-    private void onPong(Client client, long id) {
+    private synchronized void onPong(Client client, long id) {
         if (id != 0 && id == client.pingId && client.pingSentNanos != 0) {
             client.rttMs = Math.max(0, (System.nanoTime() - client.pingSentNanos) / 1_000_000L);
             client.pingSentNanos = 0;
-            publishRoster();
+            publishRosterIfPingChanged();
         }
     }
 
@@ -869,11 +869,35 @@ public final class OnlineSessionServer {
         return value.isBlank() ? "" : value;
     }
 
-    private void publishRoster() {
+    private synchronized void publishRoster() {
+        List<RosterEntry> entries = roster();
         ObjectNode out = MAPPER.createObjectNode().put("type", "roster");
         out.put("dmColor", campaign.getDmColor());
-        out.set("players", MAPPER.valueToTree(roster()));
+        out.set("players", MAPPER.valueToTree(entries));
+        publishedRosterPing.clear();
+        for (RosterEntry entry : entries) publishedRosterPing.put(entry.playerId(), entry.pingMs());
         broadcast(out.toString());
+    }
+
+    private void publishRosterIfPingChanged() {
+        Map<String, Long> currentPing = new java.util.HashMap<>();
+        for (Client connected : clients.values()) {
+            if (connected.dmActorId != null) continue;
+            currentPing.merge(connected.playerId, connected.rttMs,
+                    (before, next) -> before < 0 || next >= 0 && next < before ? next : before);
+        }
+        for (Map.Entry<String, Long> entry : currentPing.entrySet()) {
+            Long previous = publishedRosterPing.get(entry.getKey());
+            if (previous == null || rosterPingChanged(previous, entry.getValue())) {
+                publishRoster();
+                return;
+            }
+        }
+    }
+
+    static boolean rosterPingChanged(long previous, long current) {
+        if ((previous < 0) != (current < 0)) return true;
+        return previous >= 0 && Math.abs(previous - current) >= 20;
     }
 
     public synchronized List<OnlineMeasurement> measurements() {
@@ -6505,7 +6529,7 @@ public final class OnlineSessionServer {
                 .put("id", tokenId).put("x", x).put("y", y).toString();
         for (Client other : clients.values()) {
             if (other != sender) {
-                sendTo(other.ctx, json);
+                sendLatestTo(other.ctx, moveMapKey.length() + ":" + moveMapKey + tokenId, json);
             }
         }
     }
@@ -7442,6 +7466,15 @@ public final class OnlineSessionServer {
             return;
         }
         outbox.send(json);
+    }
+
+    private void sendLatestTo(WsContext ctx, String key, String json) {
+        OnlineOutbox outbox = outbox(ctx);
+        if (outbox == null) {
+            sendTo(ctx, json);
+            return;
+        }
+        outbox.sendLatest(key, json);
     }
 
     /** Closes after everything already queued for this connection has been written. */

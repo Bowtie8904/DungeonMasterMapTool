@@ -107,6 +107,9 @@ export class App {
   };
   private cmdCounter = 0;
   private pendingMoves = new Map<string, MoveCommit>();
+  private batchingState = false;
+  private deferredAfterState: boolean | null = null;
+  private batchedChanges = new Set<string>();
   private log: LogEntry[] = [];
   private logEl = el('div', { class: 'log' });
   private logContent = el('div', { class: 'log-content' });
@@ -240,6 +243,7 @@ export class App {
     this.conn = new Connection(
       {
         onMessage: (m) => this.handle(m),
+        onMessages: (messages) => this.handleStateBatch(messages),
         onOpen: () => {},
         onStatus: (s) => this.status(s),
       },
@@ -352,6 +356,8 @@ export class App {
         el('label', { class: 'setting-check', title: 'Show HP, Stress, Armor and Hope on your own tokens, like the DM sees them.' },
           resources, ' Show resources on my tokens')),
       el('section', { class: 'settings-group' }, el('h3', {}, 'Performance'),
+        perfToggle('Low-resource mode', 'Reduce map rendering quality and effect animation rate on this device only.',
+          () => settings.lowResource, (on) => (settings.lowResource = on)),
         perfToggle('Show weather', 'Turn off to hide rain, snow, fog and other weather on your screen only.',
           () => settings.showWeather, (on) => (settings.showWeather = on)),
         perfToggle('Reduce weather particles', 'Draw at most 300 weather particles instead of the full amount.',
@@ -368,6 +374,7 @@ export class App {
   }
 
   private applyEffectSettings(): void {
+    this.view.setLowResourceMode(settings.lowResource);
     this.view.maxParticles = settings.effectiveMaxParticles;
     this.view.weatherEnabled = settings.showWeather;
     this.view.lightningEnabled = settings.lightningFlashes;
@@ -1101,6 +1108,10 @@ export class App {
         const r = this.store.applyDelta(msg.seq, msg.ops);
         if (r === 'gap') this.conn.send({ type: 'resync', lastSeq: this.store.lastSeq });
         else if (r === 'ok') {
+          if (this.batchingState) {
+            for (const change of this.store.changed) this.batchedChanges.add(change);
+            this.store.changed = this.batchedChanges;
+          }
           this.syncInFlight();
           this.afterState(false);
         }
@@ -1263,7 +1274,26 @@ export class App {
     this.view.invalidate();
   }
 
+  private handleStateBatch(messages: ServerMessage[]): void {
+    this.batchingState = true;
+    this.deferredAfterState = null;
+    this.batchedChanges.clear();
+    try {
+      for (const msg of messages) this.handle(msg);
+    } finally {
+      this.batchingState = false;
+      const full = this.deferredAfterState;
+      this.deferredAfterState = null;
+      if (full !== null) this.afterState(full);
+      this.batchedChanges.clear();
+    }
+  }
+
   private afterState(full: boolean): void {
+    if (this.batchingState) {
+      this.deferredAfterState = this.deferredAfterState === true || full;
+      return;
+    }
     const s = this.store.state;
     if (!s) return;
     const map = `${s.mapId}/${s.levelId}`;

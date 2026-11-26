@@ -18,9 +18,11 @@ class OnlineOutboxTest {
         final List<String> sent = new CopyOnWriteArrayList<>();
         final List<String> closed = new CopyOnWriteArrayList<>();
         volatile CountDownLatch gate = new CountDownLatch(0);
+        volatile CountDownLatch entered = new CountDownLatch(0);
 
         @Override
         public void send(String json) throws Exception {
+            entered.countDown();
             gate.await(5, TimeUnit.SECONDS);
             sent.add(json);
         }
@@ -103,5 +105,61 @@ class OnlineOutboxTest {
         outbox.discard();
         outbox.send("late");
         assertTrue(sink.sent.isEmpty());
+    }
+
+    @Test
+    void coalescesOnlyAdjacentMovesForTheSameToken() throws Exception {
+        ExecutorService executor = Executors.newCachedThreadPool();
+        try {
+            Recorder sink = new Recorder();
+            sink.gate = new CountDownLatch(1);
+            sink.entered = new CountDownLatch(1);
+            OnlineOutbox outbox = new OnlineOutbox(sink, executor, 100, 1 << 20, () -> null);
+            outbox.send("first");
+            assertTrue(sink.entered.await(5, TimeUnit.SECONDS));
+            outbox.sendLatest("map/token-a", "move-a1");
+            outbox.sendLatest("map/token-a", "move-a2");
+            outbox.send("delta");
+            outbox.sendLatest("map/token-a", "move-a3");
+            outbox.sendLatest("map/token-b", "move-b1");
+            sink.gate.countDown();
+            await(() -> assertEquals(5, sink.sent.size()));
+            assertEquals(List.of("first", "move-a2", "delta", "move-a3", "move-b1"), sink.sent);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void repeatedOverflowSoonAfterResyncNotifiesAndClosesSlowClient() throws Exception {
+        ExecutorService executor = Executors.newCachedThreadPool();
+        try {
+            Recorder sink = new Recorder();
+            sink.gate = new CountDownLatch(1);
+            OnlineOutbox outbox = new OnlineOutbox(sink, executor, 2, 1 << 20, () -> "snapshot");
+            outbox.send("initial");
+            outbox.send("queued-1");
+            outbox.send("queued-2");
+            outbox.send("queued-3");
+            sink.gate.countDown();
+            await(() -> assertTrue(sink.sent.contains("snapshot")));
+
+            sink.gate = new CountDownLatch(1);
+            sink.entered = new CountDownLatch(1);
+            outbox.send("hold");
+            assertTrue(sink.entered.await(5, TimeUnit.SECONDS));
+            outbox.send("overflow-1");
+            outbox.send("overflow-2");
+            outbox.send("overflow-3");
+            sink.gate.countDown();
+
+            await(() -> assertEquals(1, sink.closed.size()));
+            assertTrue(sink.sent.stream().anyMatch(message -> message.contains("\"type\":\"kicked\"")
+                    && message.contains("cannot keep up")));
+            assertTrue(sink.closed.get(0).startsWith("1008:Connection too slow"));
+            assertEquals(1, sink.sent.stream().filter("snapshot"::equals).count());
+        } finally {
+            executor.shutdownNow();
+        }
     }
 }

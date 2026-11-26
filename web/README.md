@@ -299,7 +299,7 @@ not hard fills with blurred shadows. Flicker adjusts strength and reach; indoor 
 Simplified lighting retains its flat-shape approximation. No protocol or settings contract changes are required.
 Tint uses the host's optional `lighting.tintDarknessFactor` to match the DM view without reducing player ambient darkness;
 older hosts that omit it retain full-strength player tint. Overlapping lights share a single capped tint overlay.
-Settings kept in localStorage: `dmmt.volume`, `dmmt.muted`, `dmmt.maxParticles` (default 1500).
+Settings kept in localStorage: `dmmt.volume`, `dmmt.muted`, `dmmt.maxParticles` (default 1500), and browser-only display/performance preferences including `dmmt.lowResource`. Low-resource mode caps map backing resolution at 1×, limits effect-only animation to 15 fps, halves the configured weather particle cap and uses simplified lighting. It does not change fog, vision, game state or the host's settings.
 The host resolves future message, roll, card and whisper-recipient names to the first enabled actor
 owned by that player in campaign order, or the account name if none is enabled. Saved legacy identities
 are ignored. The roster displays the actor name alongside the account name. Older clients cannot edit

@@ -5,6 +5,7 @@ import { invalidateCompendium } from './daggerheart/compendium';
 
 export interface ConnectionEvents {
   onMessage(msg: ServerMessage): void;
+  onMessages?(messages: ServerMessage[]): void;
   /** Called when a socket opened and we must (re)send resync info. */
   onOpen(): void;
   onStatus(status: 'connecting' | 'open' | 'closed' | 'kicked' | 'unauthorized'): void;
@@ -50,6 +51,9 @@ export class Connection {
   private timers: number[] = [];
   private syncId = 0;
   private reconnectTimer: number | null = null;
+  private stateBatch: ServerMessage[] = [];
+  private stateBatchFrame: number | null = null;
+  private stateBatchTimer: number | null = null;
 
   constructor(private events: ConnectionEvents, private getLastSeq: () => number) {}
 
@@ -60,6 +64,7 @@ export class Connection {
 
   stop(): void {
     this.stopped = true;
+    this.flushStateBatch();
     this.clearTimers();
     if (this.reconnectTimer !== null) clearTimeout(this.reconnectTimer);
     this.ws?.close();
@@ -140,6 +145,11 @@ export class Connection {
         this.send({ type: 'pong', id: msg.id });
         return;
       }
+      if (msg.type === 'snapshot' || msg.type === 'delta' || msg.type === 'tokenMoved') {
+        this.queueStateMessage(msg);
+        return;
+      }
+      this.flushStateBatch();
       if (msg.type === 'hello') {
         invalidateCompendium();
         configureSheetActionResponses(msg.sheetActionResponses === true);
@@ -181,6 +191,7 @@ export class Connection {
       this.events.onMessage(msg);
     };
     ws.onclose = () => {
+      this.flushStateBatch();
       this.clearTimers();
       if (this.stopped) return;
       if (!opened && !this.everOpened) {
@@ -215,5 +226,35 @@ export class Connection {
       clearInterval(t);
     }
     this.timers = [];
+    if (this.stateBatchTimer !== null) clearTimeout(this.stateBatchTimer);
+    if (this.stateBatchFrame !== null && typeof cancelAnimationFrame === 'function')
+      cancelAnimationFrame(this.stateBatchFrame);
+    this.stateBatchTimer = null;
+    this.stateBatchFrame = null;
+  }
+
+  private queueStateMessage(msg: ServerMessage): void {
+    if (msg.type === 'snapshot') this.stateBatch = [];
+    this.stateBatch.push(msg);
+    const hidden = typeof document !== 'undefined' && document.hidden;
+    if (this.stateBatchFrame === null && typeof requestAnimationFrame === 'function' && !hidden) {
+      this.stateBatchFrame = requestAnimationFrame(() => this.flushStateBatch());
+    }
+    if (this.stateBatchTimer === null) {
+      this.stateBatchTimer = window.setTimeout(() => this.flushStateBatch(), hidden ? 0 : 100);
+    }
+  }
+
+  private flushStateBatch(): void {
+    if (this.stateBatchTimer !== null) clearTimeout(this.stateBatchTimer);
+    if (this.stateBatchFrame !== null && typeof cancelAnimationFrame === 'function')
+      cancelAnimationFrame(this.stateBatchFrame);
+    this.stateBatchTimer = null;
+    this.stateBatchFrame = null;
+    if (this.stateBatch.length === 0) return;
+    const messages = this.stateBatch;
+    this.stateBatch = [];
+    if (this.events.onMessages) this.events.onMessages(messages);
+    else for (const msg of messages) this.events.onMessage(msg);
   }
 }
