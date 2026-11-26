@@ -1,4 +1,5 @@
 import { el } from '../login';
+import { INVENTORY_ITEM_ICONS } from '../item-artwork';
 import { confirmDialog } from '../dialogs';
 import { editTokenArtwork } from '../token-artwork';
 import { chooseTalismanHope } from './witch-view';
@@ -53,13 +54,6 @@ import type { DomainCardView } from '../api';
 import { favoriteKey, isFavorite, quickAccessEntries, type FavoriteCategory } from './quick-access';
 
 const CARD_DRAG = 'application/x-dmmt-domain-card';
-const CUSTOM_ITEM_ICONS: Record<InventoryItem['type'], string> = {
-  loot: '/item-icons/delapouite/chest.svg',
-  gear: '/item-icons/delapouite/backpack.svg',
-  consumable: '/item-icons/lorc/standing-potion.svg',
-  'class item': '/item-icons/lorc/gem-pendant.svg',
-};
-
 export interface RollRequest {
   hostOptions?: Array<{ key: string; id: string; trait?: TraitName }>;
   hostAction?: { key: string; id: string; amount?: number };
@@ -473,7 +467,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if (!name.value.trim()) name.value = '';
       if (!form.reportValidity()) return;
       const item: InventoryItem = { name: name.value.trim(), type: type.value as InventoryItem['type'], qty: amount.valueAsNumber, custom: true };
-      item.image = CUSTOM_ITEM_ICONS[item.type];
+      item.image = INVENTORY_ITEM_ICONS[item.type];
       if (note.value.trim()) item.note = note.value.trim();
       c.inventory.push(item);
       dialog.close();
@@ -1996,9 +1990,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       gold.append(transfer);
     }
     const rows = c.inventory.map((i) => {
-      const displayedItem = i.custom && i.image === undefined ? { ...i, image: CUSTOM_ITEM_ICONS[i.type] } : i;
       const grade = rarityGrade(cachedInventoryRarity(i));
-      const name = el('div', { class: 'loot-name' }, el('b', {}, gradedItemName(displayedItem, grade)), tag(i.type));
+      const name = el('div', { class: 'loot-name' }, el('b', {}, gradedItemName(i, grade, INVENTORY_ITEM_ICONS[i.type])), tag(i.type));
       const description = i.note ? el('div', { class: 'loot-description muted' }, i.note) : null;
       const row = share(el('tr', {},
         el('td', {}, name, ...(description ? [description] : [])),
@@ -2008,7 +2001,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       ), { category: 'item', item: i }, true, i.qty > 0);
       if (description) {
         const key = `${i.name}\n${i.note}`;
-        const toggle = el('button', { type: 'button', class: 'loot-description-toggle' }, gradedItemName(displayedItem, grade));
+        const toggle = el('button', { type: 'button', class: 'loot-description-toggle' }, gradedItemName(i, grade, INVENTORY_ITEM_ICONS[i.type]));
         name.replaceChildren(toggle, tag(i.type));
         row.classList.add('loot-expandable');
         const paint = () => {

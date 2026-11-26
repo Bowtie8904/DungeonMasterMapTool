@@ -2,7 +2,7 @@ import { cardRequest } from './api';
 import type { Armor, DomainCard, Feature, InventoryItem, Weapon } from './daggerheart/data';
 import { rich } from './daggerheart/rich';
 import { el } from './login';
-import { itemName } from './item-artwork';
+import { INVENTORY_ITEM_ICONS, itemName } from './item-artwork';
 import { drawingId } from './tools';
 
 export type SharedEntry =
@@ -137,7 +137,7 @@ export function renderSharedCard(card: SharedCard, onGrab?: (card: SharedCard, q
   const offer = transferable(card) && (card.offerQuantity ?? 0) > 0;
   const root = el('section', { class: `shared-card shared-${card.category}${offer ? ' transfer-offer' : ''}` },
     el('div', { class: 'shared-source' }, offer ? `Transfer offer from ${card.actorName}` : card.actorName),
-    el('h3', {}, itemName(card.item)),
+    el('h3', {}, itemName(card.item, card.category === 'item' ? INVENTORY_ITEM_ICONS[card.item.type] : undefined)),
     el('div', { class: 'shared-badges' }, ...displayBadges.map(text => el('span', {}, text))), body);
   if (offer) {
     const amount = el('b', { class: 'shared-qty-n' }, String(card.available));

@@ -43,6 +43,9 @@ tiers and potion families share silhouettes; poisons and distinct item/equipment
 different artwork. Icons appear beside names in Equipment, Loot, compendium rows/details, editor
 previews and shared/transfer chat cards, including native desktop chat. Existing catalog-linked
 characters refresh artwork without resetting quantities or mechanics; custom items remain independent.
+Image-less inventory items, including imports and previously saved items, use a type-based default in
+Loot and browser shared/transfer cards without changing their saved data. Invalid explicit artwork remains
+an error indicator rather than silently falling back.
 Creation, imports and transfers preserve artwork. Artwork is additive presentation metadata, ignored
 when matching transfer stock, so legacy offers remain usable and compatibility versions are unchanged.
 

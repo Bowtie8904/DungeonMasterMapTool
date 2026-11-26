@@ -21,8 +21,8 @@ export function rarityGrade(rarity: unknown): InventoryGrade {
   }
 }
 
-export function gradedItemName(item: ItemArtworkSubject, grade?: InventoryGrade): HTMLElement {
-  const name = itemName(item);
+export function gradedItemName(item: ItemArtworkSubject, grade?: InventoryGrade, fallbackImage?: string): HTMLElement {
+  const name = itemName(item, fallbackImage);
   if (grade) {
     name.classList.add('inventory-grade', `inventory-grade-${grade.level}`);
     name.title = grade.label;

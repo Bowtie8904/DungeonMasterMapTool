@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { itemImagePath, itemName } from './item-artwork';
+import { INVENTORY_ITEM_ICONS, itemImagePath, itemName } from './item-artwork';
 import { addToSheet, armorFrom, weaponFrom, type CompendiumEntry } from './daggerheart/compendium';
 import { emptyCharacter, normalizeSheet } from './daggerheart/data';
 import { updateCharacterAutomation } from './daggerheart/persist';
@@ -7,6 +7,7 @@ import { renderSharedCard } from './shared-cards';
 import { gradedItemName, rarityGrade } from './daggerheart/inventory-grade';
 
 class Element {
+  className = '';
   children: Array<Element | string> = [];
   listeners = new Map<string, () => void>();
   classList = { add: () => {}, toggle: () => {} };
@@ -60,6 +61,8 @@ it.each([
   expect((itemName({ name }) as unknown as Element).all().some(node => node.tag === 'img')).toBe(false);
   expect((itemName({ ...item, image }) as unknown as Element).all().find(node => node.tag === 'img'))
     .toMatchObject({ src: image });
+  expect((itemName(item, INVENTORY_ITEM_ICONS.gear) as unknown as Element).all().find(node => node.tag === 'img'))
+    .toMatchObject({ src: expected });
 });
 
 it('does not assign artwork to unrelated enchanted-item markers', () => {
@@ -68,6 +71,34 @@ it('does not assign artwork to unrelated enchanted-item markers', () => {
     const item = { name, witchTalisman: { sourceActorId: 'caster', activationId: 'activation' } };
     expect((itemName(item) as unknown as Element).all().some(node => node.tag === 'img')).toBe(false);
   }
+});
+
+it.each([
+  ['loot', '/item-icons/delapouite/chest.svg'],
+  ['gear', '/item-icons/delapouite/backpack.svg'],
+  ['consumable', '/item-icons/lorc/standing-potion.svg'],
+  ['class item', '/item-icons/lorc/gem-pendant.svg'],
+] as const)('shows the %s fallback in shared cards without changing saved inventory', (type, expected) => {
+  vi.stubGlobal('document', { createElement: (tag: string) => new Element(tag) });
+  const item = { name: "a ring you can't remove", type, qty: 1 };
+  const render = () => renderSharedCard({ category: 'item', item, cardId: 'offer', actorId: 'hero',
+    actorName: 'Hero', available: 1, offerQuantity: 1 }) as unknown as Element;
+  expect(render().all().find(node => node.tag === 'img')).toMatchObject({ src: expected, alt: '' });
+  expect(item).not.toHaveProperty('image');
+  expect(INVENTORY_ITEM_ICONS[type]).toBe(expected);
+});
+
+it('preserves explicit artwork and reports invalid artwork instead of hiding it with a fallback', () => {
+  vi.stubGlobal('document', { createElement: (tag: string) => new Element(tag) });
+  const fallback = INVENTORY_ITEM_ICONS.gear;
+  expect((itemName({ name: 'Ring', image }, fallback) as unknown as Element).all().find(n => n.tag === 'img'))
+    .toMatchObject({ src: image });
+  const invalid = itemName({ name: 'Ring', image: 'https://example.test/image.svg' }, fallback) as unknown as Element;
+  expect(invalid.all().some(n => n.tag === 'img')).toBe(false);
+  expect(invalid.all().find(n => n.className === 'item-artwork-error'))
+    .toMatchObject({ ariaLabel: 'Item image unavailable' });
+  expect((itemName({ name: 'Ring', image: '' }, fallback) as unknown as Element).all().find(n => n.tag === 'img'))
+    .toMatchObject({ src: fallback });
 });
 
 it('preserves artwork through catalog conversions and sheet serialization', () => {

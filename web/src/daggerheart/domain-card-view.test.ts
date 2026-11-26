@@ -245,7 +245,7 @@ it('marks loot rarity and carried tiers but keeps active equipment names plain',
     expect(grade(row)?.title).toBe('Unclassified rarity');
     expect(grade(row)?.text()).toContain('(Unclassified rarity)');
   }
-  expect(rows()[1].querySelectorAll('img')).toHaveLength(0);
+  expect(rows()[1].querySelectorAll('img')[0].src).toBe('/item-icons/delapouite/backpack.svg');
   const toggle = rows()[1].querySelectorAll('button').find(button => button.className === 'loot-description-toggle')!;
   expect(toggle.ariaLabel).toBe("Show Relic's description (Uncommon rarity)");
   await toggle.click();
@@ -286,7 +286,7 @@ it.each([
   c.inventory = [
     { name: 'Old custom item', type, qty: 1, custom: true },
     { name: 'Custom artwork', type, qty: 1, custom: true, image: override },
-    { name: 'Plain catalog item', type, qty: 1 },
+    { name: 'Plain catalog item', type, qty: 1, note: 'Imported without artwork.' },
   ];
   const onChange = vi.fn();
   const onShare = vi.fn();
@@ -296,7 +296,8 @@ it.each([
   expect(row('Old custom item').querySelectorAll('img')[0].src).toBe(image);
   expect(c.inventory[0].image).toBeUndefined();
   expect(row('Custom artwork').querySelectorAll('img')[0].src).toBe(override);
-  expect(row('Plain catalog item').querySelectorAll('img')).toHaveLength(0);
+  expect(row('Plain catalog item').querySelectorAll('img')[0].src).toBe(image);
+  expect(c.inventory[2].image).toBeUndefined();
 
   await root.querySelectorAll('button').find(button => button.ariaLabel === 'Add custom item')!.click();
   body.querySelectorAll('input').find(input => input.ariaLabel === 'Item name')!.value = 'New custom item';
