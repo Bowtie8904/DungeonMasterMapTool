@@ -4,11 +4,12 @@ import { addToSheet, armorFrom, weaponFrom, type CompendiumEntry } from './dagge
 import { emptyCharacter, normalizeSheet } from './daggerheart/data';
 import { updateCharacterAutomation } from './daggerheart/persist';
 import { renderSharedCard } from './shared-cards';
+import { gradedItemName, rarityGrade } from './daggerheart/inventory-grade';
 
 class Element {
   children: Array<Element | string> = [];
   listeners = new Map<string, () => void>();
-  classList = { toggle: () => {} };
+  classList = { add: () => {}, toggle: () => {} };
   replacement?: Element;
   constructor(readonly tag: string) {}
   append(...children: Array<Element | string>): void { this.children.push(...children); }
@@ -41,6 +42,32 @@ it('renders decorative artwork in names and transfer cards without hiding legacy
   const icon = name.all().find(node => node.tag === 'img')!;
   icon.listeners.get('error')!();
   expect(icon.replacement).toMatchObject({ title: `Item image unavailable: ${image}`, ariaLabel: 'Item image unavailable' });
+});
+
+it.each([
+  ['Rune Ward', '/item-icons/lorc/rune-stone.svg'],
+  ['Lifeblood Talisman', '/item-icons/lorc/gem-pendant.svg'],
+  ['Enchanted Talisman', '/item-icons/lorc/gem-pendant.svg'],
+])('displays legacy %s artwork without changing the saved item', (name, expected) => {
+  vi.stubGlobal('document', { createElement: (tag: string) => new Element(tag) });
+  const item = { name, type: 'gear' as const, qty: 1, witchTalisman: { sourceActorId: 'caster', activationId: 'activation' } };
+  const rendered = gradedItemName(item, rarityGrade(undefined)) as unknown as Element;
+  expect(rendered.all().find(node => node.tag === 'img')).toMatchObject({ src: expected, alt: '' });
+  const card = renderSharedCard({ category: 'item', item, cardId: 'offer', actorId: 'caster', actorName: 'Caster',
+    available: 1, offerQuantity: 1 }) as unknown as Element;
+  expect(card.all().find(node => node.tag === 'img')).toMatchObject({ src: expected });
+  expect(item).not.toHaveProperty('image');
+  expect((itemName({ name }) as unknown as Element).all().some(node => node.tag === 'img')).toBe(false);
+  expect((itemName({ ...item, image }) as unknown as Element).all().find(node => node.tag === 'img'))
+    .toMatchObject({ src: image });
+});
+
+it('does not assign artwork to unrelated enchanted-item markers', () => {
+  vi.stubGlobal('document', { createElement: (tag: string) => new Element(tag) });
+  for (const name of ['Other item', 'toString']) {
+    const item = { name, witchTalisman: { sourceActorId: 'caster', activationId: 'activation' } };
+    expect((itemName(item) as unknown as Element).all().some(node => node.tag === 'img')).toBe(false);
+  }
 });
 
 it('preserves artwork through catalog conversions and sheet serialization', () => {

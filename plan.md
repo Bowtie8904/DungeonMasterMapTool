@@ -33,6 +33,8 @@ Desktop tool for tabletop dungeon masters that:
 
 ## 3) Current Implementation Status
 
+- **Enchanted inventory artwork:** Give newly created Rune Ward, Lifeblood Talisman and Enchanted Talisman items the existing bundled runestone or pendant artwork. For older image-less items, show the same artwork in browser inventory and shared cards only when their existing enchanted-item marker and name identify them; preserve explicit artwork, inventory data, transfer identity and gameplay. Older hosts remain usable, with no settings or incompatible remote-contract changes.
+
 - **Chat card source previews:** Replace the separate roll-source disclosure in browser and desktop DM chat with the existing themed, accessible hover/focus preview on the roll or action title; source-bearing plain action messages use their message text. Keep per-breakdown-row previews, full formatted source descriptions, legacy messages and roll breakdown state intact. This is presentation only, with no settings or remote contract change.
 
 - **Browser roll source previews:** Show breakdown-row source previews to the left of the chat sidebar when space permits, without covering other breakdown rows. Fit and vertically clamp previews to the viewport; on narrow screens with insufficient space beside chat, fall back above or below the row. Preserve hover, keyboard focus, Escape dismissal and existing roll data. Presentation only; no settings or remote contract change.

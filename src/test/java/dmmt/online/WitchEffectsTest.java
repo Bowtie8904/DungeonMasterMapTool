@@ -22,9 +22,11 @@ class WitchEffectsTest {
         Map<String, ObjectNode> sheets = new LinkedHashMap<>(Map.of("caster", caster, "ally", ally));
         WitchEffects.synchronize(sheets, copy(sheets));
         assertEquals("Rune Ward", caster.path("inventory").get(0).path("name").asText());
+        assertEquals("/item-icons/lorc/rune-stone.svg", caster.path("inventory").get(0).path("image").asText());
         Map<String, ObjectNode> previous = copy(sheets);
         ChatCards.transfer(caster, ally, "item", caster.path("inventory").get(0).deepCopy());
         WitchEffects.synchronize(sheets, previous);
+        assertEquals("/item-icons/lorc/rune-stone.svg", ally.path("inventory").get(0).path("image").asText());
         JsonNode ward = linked(ally, "runeWard");
         assertEquals(8, ward.path("mitigation").get(0).path("roll").path("sides").asInt());
         assertEquals(1, ward.path("mitigation").get(0).path("cost").path("hope").asInt());
@@ -73,9 +75,11 @@ class WitchEffectsTest {
         sheets.put("holder", holder);
         WitchEffects.synchronize(sheets, copy(sheets));
         assertEquals("Lifeblood Talisman", caster.path("inventory").get(0).path("name").asText());
+        assertEquals("/item-icons/lorc/gem-pendant.svg", caster.path("inventory").get(0).path("image").asText());
         Map<String, ObjectNode> previous = copy(sheets);
         ChatCards.transfer(caster, holder, "item", caster.path("inventory").get(0).deepCopy());
         WitchEffects.synchronize(sheets, previous);
+        assertEquals("/item-icons/lorc/gem-pendant.svg", holder.path("inventory").get(0).path("image").asText());
         assertTrue(linked(caster, "lifeblood").isMissingNode());
         JsonNode buff = linked(holder, "lifeblood");
         assertEquals("manual", buff.path("until").asText());
@@ -191,6 +195,7 @@ class WitchEffectsTest {
         sheets.put("ally", ally);
         WitchEffects.synchronize(sheets, copy(sheets));
         JsonNode item = witch.path("inventory").get(0).deepCopy();
+        assertEquals("/item-icons/lorc/gem-pendant.svg", item.path("image").asText());
         assertTrue(item.path("note").asText().contains("protective essence"));
         assertEquals("witch", item.path("witchTalisman").path("sourceActorId").asText());
         assertEquals("activation", item.path("witchTalisman").path("activationId").asText());
@@ -201,6 +206,7 @@ class WitchEffectsTest {
         Map<String, ObjectNode> previous = copy(sheets);
         ChatCards.transfer(witch, ally, "item", item);
         WitchEffects.synchronize(sheets, previous);
+        assertEquals("/item-icons/lorc/gem-pendant.svg", ally.path("inventory").get(0).path("image").asText());
         assertTrue(linked(witch, "talisman").isMissingNode());
         JsonNode buff = linked(ally, "talisman");
         assertEquals(-1, buff.path("mitigation").get(0).path("hp").asInt());

@@ -916,6 +916,8 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   rows/details and shared/transfer chat cards, including desktop DM chat and player browsers. Configure the
   optional `image` field in **Edit JSON catalogs > Overview**; see [item artwork](docs/DAGGERHEART_DATA.md#item-artwork)
   for paths and attribution. Existing catalog-backed gear picks up artwork without recreating characters.
+  Rune Ward, Lifeblood Talisman and Enchanted Talisman use the existing runestone and pendant icons;
+  older enchanted items without saved artwork display them in the browser as well.
   Loot descriptions start hidden for compact rows. Click a row or its item name to show/hide the full description; there is no plus/minus icon, and keyboard users can activate the name with Enter/Space. Quantity, action and tool buttons do not expand rows. Expansion is retained across sheet refreshes, including in read-only views.
   The subtle **+** next to the Inventory search box adds a custom item (name, optional description, type -
   loot by default - and quantity, default 1). Custom loot, gear, consumables and class items use chest,

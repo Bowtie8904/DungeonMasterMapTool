@@ -1,4 +1,4 @@
-import { itemName } from '../item-artwork';
+import { itemName, type ItemArtworkSubject } from '../item-artwork';
 import { el } from '../login';
 
 export interface InventoryGrade {
@@ -21,7 +21,7 @@ export function rarityGrade(rarity: unknown): InventoryGrade {
   }
 }
 
-export function gradedItemName(item: { name: string; image?: string }, grade?: InventoryGrade): HTMLElement {
+export function gradedItemName(item: ItemArtworkSubject, grade?: InventoryGrade): HTMLElement {
   const name = itemName(item);
   if (grade) {
     name.classList.add('inventory-grade', `inventory-grade-${grade.level}`);

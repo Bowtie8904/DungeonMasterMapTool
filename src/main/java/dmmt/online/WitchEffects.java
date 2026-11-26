@@ -120,6 +120,7 @@ final class WitchEffects {
             } else if (grant.item() && !grant.marker.path("witchTalismanCreated").asBoolean()) {
                 ObjectNode item = grant.sheet.withArray("inventory").addObject();
                 item.put("name", "runeWard".equals(grant.kind()) ? "Rune Ward" : "lifeblood".equals(grant.kind()) ? "Lifeblood Talisman" : "Enchanted Talisman").put("qty", 1).put("type", "gear")
+                        .put("image", "runeWard".equals(grant.kind()) ? "/item-icons/lorc/rune-stone.svg" : "/item-icons/lorc/gem-pendant.svg")
                         .put("note", "lifeblood".equals(grant.kind())
                                 ? "Enchanted with the caster's life essence. When marking 2 or more HP, spend 1 Hope to mark 1 fewer. "
                                     + "Disappears when the caster has no marked HP or casts this spell again."

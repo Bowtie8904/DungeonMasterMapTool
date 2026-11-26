@@ -7,6 +7,8 @@ Item artwork uses optional catalog/sheet `image: "/item-icons/author/icon-name.s
 The same decorative icons appear in Equipment, Loot, compendium rows/details and shared/transfer
 chat cards; desktop chat renders their bundled SVG paths natively. New custom items receive an icon
 for their selected type; older custom items without artwork show the same defaults in Loot.
+Rune Ward, Lifeblood Talisman and Enchanted Talisman use the existing runestone and pendant icons;
+image-less legacy enchanted items show the same artwork in Loot and shared cards without changing saved data.
 Other missing metadata leaves names unchanged. Only local bundled references are accepted, never remote URLs or inline markup.
 Assets live in `public\item-icons` and are copied by Vite into the packaged classpath web resources.
 See [artwork configuration and attribution](../docs/DAGGERHEART_DATA.md#item-artwork).
