@@ -11,7 +11,7 @@ import type { CompanionRules } from './companion';
 import { activeCards, activeCardSources, actorAutomationAvailable, clearBorrowedCard } from './copycat';
 import { migrateVitality } from './vitality';
 import { rollSourceFor } from './roll-source';
-import { applyReportLines, formatText } from './texts';
+import { applyReportLines, damageRollLabel, formatText } from './texts';
 import type { ActionTexts, TextVars } from './texts';
 
 export type Resource = string;
@@ -1348,6 +1348,7 @@ export function traitContributions(c: CharacterSheet, name: TraitName): RollCont
 }
 
 export function damageContributions(c: CharacterSheet, weapon: CharacterSheet['activeWeapons'][number], bonus: RollBonus, proficiencyBonus = 0): RollContribution[] {
+  const label = weapon.generated === 'feature' ? damageRollLabel(weapon.name) : `${weapon.name} damage`;
   const proficiency = derivedStats(c).proficiency + proficiencyBonus;
   const pool = damagePool(c, weapon);
   const additions = !pool?.dropLowest && /^(?:\d*d\d+\+)*\d*d\d+(?:[+-]\d+)?$/i.test(weapon.damage.replace(/\s/g, '')) ? [
@@ -1379,8 +1380,8 @@ export function damageContributions(c: CharacterSheet, weapon: CharacterSheet['a
     ...(weapon.dieOverride ? [{ label: 'Attack option', impact: `d${weapon.dieOverride} damage dice for this attack` }] : []),
   ];
   return [
-    { label: `${weapon.name} damage (Proficiency ${proficiency})`.slice(0, 120), expression: parts?.[1] ?? base, rollSource: rollSourceFor(c, `weapon:${weapon.name}`), notes },
-    ...(parts?.[2] ? [{ label: `${weapon.name} damage bonus`.slice(0, 120), expression: parts[2], rollSource: rollSourceFor(c, `weapon:${weapon.name}`) }] : []),
+    { label: `${label} (Proficiency ${proficiency})`.slice(0, 120), expression: parts?.[1] ?? base, rollSource: rollSourceFor(c, `weapon:${weapon.name}`), notes },
+    ...(parts?.[2] ? [{ label: `${label} bonus`.slice(0, 120), expression: parts[2], rollSource: rollSourceFor(c, `weapon:${weapon.name}`) }] : []),
     ...additions.map(addition => ({
       label: addition.label.slice(0, 120),
       expression: [...weapon.damage.matchAll(/\d*d(\d+)/gi)].map(match => `${addition.count}d${match[1]}`).join('+'),

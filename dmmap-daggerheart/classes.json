@@ -398,7 +398,7 @@
         "id": "use",
         "label": "Perform battle ritual",
         "texts": {
-         "button": "Perform battle ritual",
+         "button": "Perform ritual",
          "chatButton": "Perform battle ritual",
          "roll": "Perform battle ritual"
         },
@@ -1246,7 +1246,7 @@
         "id": "use",
         "label": "Walk Between Worlds (13)",
         "texts": {
-         "button": "Walk Between Worlds (13)",
+         "button": "Spellcast (13)",
          "chatButton": "Walk Between Worlds (13)",
          "roll": "Walk Between Worlds (13)"
         },
@@ -1682,7 +1682,7 @@
         "id": "attack",
         "label": "Focus Cannon: Instinct roll",
         "texts": {
-         "button": "Focus Cannon: Instinct roll",
+         "button": "Instinct roll",
          "chatButton": "Focus Cannon: Instinct roll",
          "roll": "Focus Cannon: Instinct roll"
         },
@@ -1697,7 +1697,7 @@
         "id": "damage",
         "label": "Focus Cannon: damage",
         "texts": {
-         "button": "Focus Cannon: damage",
+         "button": "Damage",
          "chatButton": "Focus Cannon: damage",
          "roll": "Focus Cannon: damage"
         },
@@ -2024,7 +2024,7 @@
            "id": "vigilant",
            "label": "Vigilant: defend",
            "texts": {
-            "button": "Vigilant: defend",
+            "button": "Defend",
             "chatButton": "Vigilant: defend",
             "roll": "Vigilant: defend"
            },
@@ -2258,7 +2258,7 @@
         "id": "roll",
         "label": "Roll Lunar Phases d6",
         "texts": {
-         "button": "Roll Lunar Phases d6",
+         "button": "Roll d6",
          "chatButton": "Roll Lunar Phases d6",
          "roll": "Roll Lunar Phases d6"
         },
@@ -2726,6 +2726,9 @@
        {
         "id": "use",
         "label": "Spectral Form death move",
+        "texts": {
+         "button": "Death move"
+        },
         "deathMove": "spectral"
        }
       ],
@@ -3818,7 +3821,7 @@
         "id": "brew",
         "label": "Brew toxic concoctions",
         "texts": {
-         "button": "Brew toxic concoctions",
+         "button": "Brew concoctions",
          "chatButton": "Brew toxic concoctions",
          "roll": "Brew toxic concoctions"
         },
@@ -6303,7 +6306,7 @@
         "id": "roll",
         "label": "Roll Prayer Dice",
         "texts": {
-         "button": "Roll Prayer Dice",
+         "button": "Roll dice",
          "chatButton": "Roll Prayer Dice",
          "roll": "Roll Prayer Dice"
         },
@@ -6852,7 +6855,7 @@
              "id": "stress",
              "label": "Spend Rally Die: clear Stress",
              "texts": {
-              "button": "Spend Rally Die: clear Stress",
+              "button": "Spend die: clear Stress",
               "chatButton": "Spend Rally Die: clear Stress",
               "roll": "Spend Rally Die: clear Stress"
              },
@@ -7484,7 +7487,7 @@
              "id": "launch",
              "label": "Cannonball (invite ally to throw)",
              "texts": {
-              "button": "Cannonball (invite ally to throw)",
+              "button": "Invite ally to throw",
               "chatButton": "Cannonball (invite ally to throw)",
               "roll": "Cannonball (invite ally to throw)"
              },
@@ -7519,7 +7522,7 @@
                        "id": "attack",
                        "label": "Cannonball throw (Agility)",
                        "texts": {
-                        "button": "Cannonball throw (Agility)",
+                        "button": "Throw (Agility)",
                         "chatButton": "Cannonball throw (Agility)",
                         "roll": "Cannonball throw (Agility)"
                        },
@@ -7532,7 +7535,7 @@
                        "id": "damage",
                        "label": "Cannonball damage",
                        "texts": {
-                        "button": "Cannonball damage",
+                        "button": "Damage",
                         "chatButton": "Cannonball damage",
                         "roll": "Cannonball damage"
                        },
@@ -7576,7 +7579,7 @@
                        "id": "attack",
                        "label": "Cannonball throw (Strength)",
                        "texts": {
-                        "button": "Cannonball throw (Strength)",
+                        "button": "Throw (Strength)",
                         "chatButton": "Cannonball throw (Strength)",
                         "roll": "Cannonball throw (Strength)"
                        },
@@ -7589,7 +7592,7 @@
                        "id": "damage",
                        "label": "Cannonball damage",
                        "texts": {
-                        "button": "Cannonball damage",
+                        "button": "Damage",
                         "chatButton": "Cannonball damage",
                         "roll": "Cannonball damage"
                        },
@@ -7613,7 +7616,7 @@
              "id": "second",
              "label": "Cannonball: second target",
              "texts": {
-              "button": "Cannonball: second target",
+              "button": "Hit second target",
               "chatButton": "Cannonball: second target",
               "roll": "Cannonball: second target"
              },
@@ -7711,7 +7714,7 @@
              "id": "attack",
              "label": "Trample attack",
              "texts": {
-              "button": "Trample attack",
+              "button": "Attack",
               "chatButton": "Trample attack",
               "roll": "Trample attack"
              },
@@ -7727,7 +7730,7 @@
              "id": "damage",
              "label": "Trample damage",
              "texts": {
-              "button": "Trample damage",
+              "button": "Damage",
               "chatButton": "Trample damage",
               "roll": "Trample damage"
              },
@@ -7926,7 +7929,7 @@
              "id": "question",
              "label": "Bird's-Eye View: ask the GM",
              "texts": {
-              "button": "Bird's-Eye View: ask the GM",
+              "button": "Ask the GM",
               "chatButton": "Bird's-Eye View: ask the GM",
               "roll": "Bird's-Eye View: ask the GM"
              },
@@ -8071,7 +8074,7 @@
              "id": "question",
              "label": "Bird's-Eye View: ask the GM",
              "texts": {
-              "button": "Bird's-Eye View: ask the GM",
+              "button": "Ask the GM",
               "chatButton": "Bird's-Eye View: ask the GM",
               "roll": "Bird's-Eye View: ask the GM"
              },
@@ -8187,7 +8190,7 @@
              "id": "attack",
              "label": "Demolish attack",
              "texts": {
-              "button": "Demolish attack",
+              "button": "Attack",
               "chatButton": "Demolish attack",
               "roll": "Demolish attack"
              },
@@ -8203,7 +8206,7 @@
              "id": "damage",
              "label": "Demolish damage",
              "texts": {
-              "button": "Demolish damage",
+              "button": "Damage",
               "chatButton": "Demolish damage",
               "roll": "Demolish damage"
              },

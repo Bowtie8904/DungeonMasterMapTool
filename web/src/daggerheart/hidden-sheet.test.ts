@@ -61,6 +61,36 @@ it('keeps hidden-sheet damage/spell handlers live without building full DOM, and
   expect(body.text).toContain('Spell damage');
 });
 
+it.each([
+  ['Successful Power Push', 'Successful Power Push damage'],
+  ['Successful Fireball: damage', 'Successful Fireball: damage'],
+  ['Blood Puppet: puppet damage', 'Blood Puppet: puppet damage'],
+  ['Rain of Blades: roll d8+2 magic damage', 'Rain of Blades: roll d8+2 magic damage'],
+  ['Siphon Essence: roll d12+4 damage (once per long rest)', 'Siphon Essence: roll d12+4 damage (once per long rest)'],
+])('sends one damage label for %s in the title and breakdown', async (label, expected) => {
+  const body = new Element('body');
+  vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag), addEventListener: vi.fn(), removeEventListener: vi.fn() });
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  vi.stubGlobal('requestAnimationFrame', vi.fn());
+  const c = emptyCharacter('Hero');
+  const bus = new SheetBus();
+  const onRoll = vi.fn((_request: RollRequest) => true);
+  const after = vi.fn();
+  renderSheetView({ character: c, bus, visible: () => false, onRoll });
+  expect(bus.spellDamage?.(label, { dice: 'd10+2', type: 'magic' }, false, after)).toBe(true);
+  expect(body.text).toContain(expected);
+  expect(body.text).not.toContain(`${label} damage damage`);
+  await body.all(node => node.tag === 'button' && node.text === 'Roll to chat')[0].listeners.get('click')?.();
+  expect(onRoll.mock.calls[0][0]).toMatchObject({
+    label: expected,
+    contributions: expect.arrayContaining([
+      expect.objectContaining({ label: `${expected} (Proficiency 1)`, expression: '1d10' }),
+      expect.objectContaining({ label: `${expected} bonus`, expression: '+2' }),
+    ]),
+  });
+  expect(after).toHaveBeenCalledOnce();
+});
+
 it.each([6, 12])('includes the linked Rage Up source in a %i damage bonus', async bonus => {
   const body = new Element('body');
   vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag), addEventListener: vi.fn(), removeEventListener: vi.fn() });

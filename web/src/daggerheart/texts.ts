@@ -44,6 +44,10 @@ export function formatText(template: string, vars: TextVars = {}): string {
   });
 }
 
+export function damageRollLabel(label: string): string {
+  return /\bdamage\b/i.test(label) ? label : `${label} damage`;
+}
+
 /** Names of all placeholders used by a template, in order of appearance. */
 export function templatePlaceholders(template: string): string[] {
   const names: string[] = [];

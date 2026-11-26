@@ -2659,6 +2659,9 @@
      {
       "id": "use",
       "label": "Break Cathartoid Egg (death move)",
+      "texts": {
+       "button": "Break egg (death move)"
+      },
       "deathMove": "egg"
      }
     ]
@@ -3020,7 +3023,7 @@
       "id": "downtime-narrative",
       "label": "Brew Gyre Cap tea",
       "texts": {
-       "button": "Brew Gyre Cap tea",
+       "button": "Brew tea",
        "chatButton": "Brew Gyre Cap tea",
        "roll": "Brew Gyre Cap tea",
        "reportTitle": "{source} - Brew Gyre Cap tea"

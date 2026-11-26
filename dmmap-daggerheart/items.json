@@ -669,7 +669,7 @@
       "id": "use",
       "label": "Deploy glider",
       "texts": {
-       "button": "Deploy glider",
+       "button": "Deploy",
        "chatButton": "Deploy glider",
        "roll": "Deploy glider",
        "reportTitle": "{source} - Deploy glider"

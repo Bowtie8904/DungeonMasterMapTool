@@ -71,7 +71,7 @@
  },
  "ancestries.json/Luckbender": {
   "action:use": {
-   "button": "Luckbender: roll Duality Dice (3 Hope)",
+   "button": "Roll Duality Dice (3 Hope)",
    "blocker": null,
    "lines": [
     "spent 3 Hope"
@@ -99,7 +99,7 @@
  },
  "ancestries.json/Charge": {
   "action:use": {
-   "button": "Charge damage (1 Stress)",
+   "button": "Damage (1 Stress)",
    "blocker": null,
    "lines": [
     "spent 1 Stress"
@@ -640,7 +640,7 @@
  },
  "classes.json/Battle Ritual": {
   "action:use": {
-   "button": "Perform battle ritual",
+   "button": "Perform ritual",
    "blocker": null,
    "lines": [
     "cleared 0 Stress",
@@ -681,20 +681,20 @@
  },
  "classes.json/Sparing Touch": {
   "action:hp": {
-   "button": "Sparing Touch: clear 2 HP",
+   "button": "Clear 2 HP",
    "blocker": null,
    "lines": [
     "cleared 2 HP"
    ],
-   "report": "ACTION USED\nSparing Touch: clear 2 HP\nMira Ashvale\n• cleared 2 HP"
+   "report": "ACTION USED\nSparing Touch - Clear 2 HP\nMira Ashvale\n• cleared 2 HP"
   },
   "action:stress": {
-   "button": "Sparing Touch: clear 2 Stress",
+   "button": "Clear 2 Stress",
    "blocker": null,
    "lines": [
     "cleared 0 Stress"
    ],
-   "report": "ACTION USED\nSparing Touch: clear 2 Stress\nMira Ashvale\n• cleared 0 Stress"
+   "report": "ACTION USED\nSparing Touch - Clear 2 Stress\nMira Ashvale\n• cleared 0 Stress"
   }
  },
  "classes.json/Transcendence": {
@@ -768,7 +768,7 @@
  },
  "classes.json/Walk Between Worlds": {
   "action:use": {
-   "button": "Walk Between Worlds (13)",
+   "button": "Spellcast (13)",
    "blocker": null,
    "lines": [],
    "report": "ACTION USED\nWalk Between Worlds (13)\nMira Ashvale"
@@ -849,13 +849,13 @@
  },
  "classes.json/Focus Cannon": {
   "action:attack": {
-   "button": "Focus Cannon: Instinct roll (1 focus)",
+   "button": "Instinct roll (1 focus)",
    "blocker": "Resource unavailable: focus",
    "lines": null,
    "report": null
   },
   "action:damage": {
-   "button": "Focus Cannon: damage",
+   "button": "Damage",
    "blocker": null,
    "lines": [],
    "report": "ACTION USED\nFocus Cannon: damage\nMira Ashvale"
@@ -915,7 +915,7 @@
  },
  "classes.json/Lunar Phases": {
   "action:roll": {
-   "button": "Roll Lunar Phases d6",
+   "button": "Roll d6",
    "blocker": null,
    "lines": [
     "Lunar Phases: rolled 4. +3 to Major and Severe damage thresholds."
@@ -1003,7 +1003,7 @@
  },
  "classes.json/Spectral Form": {
   "action:use": {
-   "button": "Spectral Form death move",
+   "button": "Death move",
    "blocker": "Requires all HP marked and no pending death recovery",
    "lines": null,
    "report": null
@@ -1156,7 +1156,7 @@
  },
  "classes.json/Toxic Concoctions": {
   "action:brew": {
-   "button": "Brew toxic concoctions (1 Stress)",
+   "button": "Brew concoctions (1 Stress)",
    "blocker": "Resource unavailable: poison",
    "lines": null,
    "report": null
@@ -1608,7 +1608,7 @@
  },
  "classes.json/Prayer Dice": {
   "action:roll": {
-   "button": "Roll Prayer Dice",
+   "button": "Roll dice",
    "blocker": null,
    "lines": [
     "Rolled 1d4: 4.",
@@ -2650,7 +2650,7 @@
  },
  "consumables.json/Cathartoid Egg": {
   "action:use": {
-   "button": "Break Cathartoid Egg (death move)",
+   "button": "Break egg (death move)",
    "blocker": "Requires all HP marked and no pending death recovery",
    "lines": null,
    "report": null
@@ -2753,7 +2753,7 @@
  },
  "consumables.json/Gyre Cap": {
   "action:downtime-narrative": {
-   "button": "Brew Gyre Cap tea",
+   "button": "Brew tea",
    "blocker": "Choose this move in the rest dialog",
    "lines": null,
    "report": null
@@ -3782,7 +3782,7 @@
  },
  "domain-cards.json/Arcane Reflection": {
   "action:reflect": {
-   "button": "Arcane Reflection: roll Hope dice",
+   "button": "Roll Hope dice",
    "blocker": null,
    "lines": [
     "If any die shows 6, the GM reflects the incoming magic attack to its caster instead."
@@ -3847,13 +3847,13 @@
  },
  "domain-cards.json/Blood Puppet": {
   "action:control": {
-   "button": "Blood Puppet: control Spellcast roll",
+   "button": "Control puppet: Spellcast roll",
    "blocker": null,
    "lines": [],
    "report": "ACTION USED\nBlood Puppet: control Spellcast roll\nMira Ashvale"
   },
   "action:attack": {
-   "button": "Blood Puppet: puppet attack Spellcast roll",
+   "button": "Puppet attack: Spellcast roll",
    "blocker": null,
    "lines": [],
    "report": "ACTION USED\nBlood Puppet: puppet attack Spellcast roll\nMira Ashvale"
@@ -3903,7 +3903,7 @@
  },
  "domain-cards.json/Repudiate": {
   "action:reaction": {
-   "button": "Repudiate: Spellcast Reaction",
+   "button": "Spellcast Reaction",
    "blocker": null,
    "lines": [],
    "report": "ACTION USED\nRepudiate: Spellcast Reaction\nMira Ashvale"
@@ -3963,7 +3963,7 @@
  },
  "domain-cards.json/Recant": {
   "action:use": {
-   "button": "Recant: target makes Reaction (15) (1 Hope)",
+   "button": "Target makes Reaction (15) (1 Hope)",
    "blocker": null,
    "lines": [
     "spent 1 Hope",
@@ -3993,7 +3993,7 @@
  },
  "domain-cards.json/Eternal Enervation": {
   "action:cast": {
-   "button": "Eternal Enervation: Spellcast",
+   "button": "Spellcast",
    "blocker": null,
    "lines": [
     "On success, the GM makes the chosen adversary permanently Vulnerable."
@@ -4036,7 +4036,7 @@
  },
  "domain-cards.json/Boost": {
   "action:boost": {
-   "button": "Boost: prepare aerial attack (1 Stress)",
+   "button": "Prepare aerial attack (1 Stress)",
    "blocker": null,
    "lines": [
     "spent 1 Stress",
@@ -4046,7 +4046,7 @@
    "report": "ACTION USED\nBoost: prepare aerial attack\nMira Ashvale\n• spent 1 Stress\n• gained Boost attack\n• gained Boost damage"
   },
   "action:miss": {
-   "button": "Boosted attack missed: discard damage",
+   "button": "Missed attack: discard damage",
    "blocker": "Required effect is not active",
    "lines": null,
    "report": null
@@ -4126,7 +4126,7 @@
  },
  "domain-cards.json/Codex-Touched": {
   "action:swap": {
-   "button": "Codex-Touched: swap with vault",
+   "button": "Swap with vault",
    "blocker": "Requires more matching domain cards in the active loadout",
    "lines": null,
    "report": null
@@ -4134,7 +4134,7 @@
  },
  "domain-cards.json/Confusing Aura": {
   "action:defend": {
-   "button": "Roll Confusing Aura layers",
+   "button": "Roll layers",
    "blocker": "Required effect is not active",
    "lines": null,
    "report": null
@@ -4142,7 +4142,7 @@
  },
  "domain-cards.json/Tekaira Armored Beetles": {
   "action:beetles": {
-   "button": "Conjure Tekaira Armored Beetles (1 Stress)",
+   "button": "Conjure beetles (1 Stress)",
    "blocker": null,
    "lines": [
     "spent 1 Stress",
@@ -4172,7 +4172,7 @@
  },
  "domain-cards.json/Counterspell": {
   "action:reaction": {
-   "button": "Counterspell: Spellcast Reaction",
+   "button": "Spellcast Reaction",
    "blocker": null,
    "lines": [],
    "report": "ACTION USED\nCounterspell: Spellcast Reaction\nMira Ashvale"
@@ -4183,7 +4183,7 @@
  },
  "domain-cards.json/Critical Inspiration": {
   "action:use": {
-   "button": "Critical Inspiration: critical attack",
+   "button": "Critical attack",
    "blocker": null,
    "lines": [],
    "report": "ACTION USED\nCritical Inspiration: critical attack\nMira Ashvale"
@@ -4226,7 +4226,7 @@
  },
  "domain-cards.json/Death Grip": {
   "action:vines": {
-   "button": "Successful Death Grip: vines damage",
+   "button": "Successful cast: vines damage",
    "blocker": null,
    "lines": [
     "Apply only to intervening adversaries who fail their Reaction Roll (13)."
@@ -4384,13 +4384,13 @@
  },
  "domain-cards.json/Gifted Tracker": {
   "action:question": {
-   "button": "Gifted Tracker: ask one question (1 Hope)",
+   "button": "Ask one question (1 Hope)",
    "blocker": null,
    "lines": [
     "spent 1 Hope",
     "Ask one listed tracking question. Evasion is +1 only against creatures tracked this way."
    ],
-   "report": "ACTION USED\nGifted Tracker: ask one question\nMira Ashvale\n• spent 1 Hope\n• Ask one listed tracking question. Evasion is +1 only against creatures tracked this way."
+   "report": "ACTION USED\nGifted Tracker - Ask one question\nMira Ashvale\n• spent 1 Hope\n• Ask one listed tracking question. Evasion is +1 only against creatures tracked this way."
   }
  },
  "domain-cards.json/Goad Them On": {
@@ -4436,7 +4436,7 @@
  },
  "domain-cards.json/Healing Field": {
   "action:base": {
-   "button": "Healing Field: clear 1 HP",
+   "button": "Clear 1 HP",
    "blocker": null,
    "lines": [
     "cleared 1 HP"
@@ -4444,7 +4444,7 @@
    "report": "ACTION USED\nHealing Field: clear 1 HP\nMira Ashvale\n• cleared 1 HP"
   },
   "action:upgrade": {
-   "button": "Healing Field: clear 2 HP (2 Hope)",
+   "button": "Clear 2 HP (2 Hope)",
    "blocker": null,
    "lines": [
     "spent 2 Hope",
@@ -4462,7 +4462,7 @@
  },
  "domain-cards.json/Hideous Retribution": {
   "action:reaction": {
-   "button": "Hideous Retribution reaction",
+   "button": "Reaction",
    "blocker": null,
    "lines": [],
    "report": "ACTION USED\nHideous Retribution - Hideous Retribution reaction\nMira Ashvale"
@@ -4518,7 +4518,7 @@
  },
  "domain-cards.json/Invigoration": {
   "action:restore": {
-   "button": "Invigoration: roll Hope dice",
+   "button": "Roll Hope dice",
    "blocker": null,
    "lines": [
     "If any die shows 6, restore one spent limited feature use."
@@ -4578,7 +4578,7 @@
  },
  "domain-cards.json/Lean on Me": {
   "action:use": {
-   "button": "Lean on Me: console or inspire an ally",
+   "button": "Console or inspire an ally",
    "blocker": null,
    "lines": [
     "cleared 0 Stress"
@@ -4686,7 +4686,7 @@
    "report": "ACTION USED\nMidnight Spirit\nMira Ashvale\n• spent 1 Hope\n• gained Midnight Spirit"
   },
   "action:attack": {
-   "button": "Midnight Spirit: attack Spellcast",
+   "button": "Attack: Spellcast",
    "blocker": "Required effect is not active",
    "lines": null,
    "report": null
@@ -4694,7 +4694,7 @@
  },
  "domain-cards.json/Midnight-Touched": {
   "action:hope": {
-   "button": "Midnight-Touched: gain Hope instead of GM Fear",
+   "button": "Gain Hope instead of GM Fear",
    "blocker": "Requires more matching domain cards in the active loadout",
    "lines": null,
    "report": null
@@ -4702,7 +4702,7 @@
  },
  "domain-cards.json/Mutual Suffering": {
   "action:react": {
-   "button": "Mutual Suffering: Reaction",
+   "button": "Reaction",
    "blocker": null,
    "lines": [],
    "report": "ACTION USED\nMutual Suffering: Reaction\nMira Ashvale"
@@ -4769,7 +4769,7 @@
  },
  "domain-cards.json/Octarine Wall": {
   "action:damage": {
-   "button": "Creature touches Octarine Wall: damage",
+   "button": "Creature touches wall: damage",
    "blocker": null,
    "lines": [
     "The creature makes Reaction (14); on failure, it takes this magic damage."
@@ -4835,7 +4835,7 @@
  },
  "domain-cards.json/Rain of Blades": {
   "action:cast": {
-   "button": "Rain of Blades: Spellcast roll (1 Hope)",
+   "button": "Spellcast roll (1 Hope)",
    "blocker": null,
    "lines": [
     "spent 1 Hope"
@@ -4868,7 +4868,7 @@
  },
  "domain-cards.json/Redirect": {
   "action:use": {
-   "button": "Redirect: roll Proficiency d6s",
+   "button": "Roll Proficiency d6s",
    "blocker": null,
    "lines": [],
    "report": "ACTION USED\nRedirect: roll Proficiency d6s\nMira Ashvale"
@@ -4911,7 +4911,7 @@
  },
  "domain-cards.json/Rune Ward": {
   "action:infuse": {
-   "button": "Infuse Rune Ward trinket",
+   "button": "Infuse trinket",
    "blocker": "Resource unavailable: rune-ward",
    "lines": null,
    "report": null
@@ -4962,7 +4962,7 @@
  },
  "domain-cards.json/Shadowhunter": {
   "action:enter": {
-   "button": "Shadowhunter: enter low light or darkness",
+   "button": "Enter low light or darkness",
    "blocker": null,
    "lines": [
     "gained Shadowhunter: shrouded"
@@ -4970,7 +4970,7 @@
    "report": "ACTION USED\nShadowhunter: enter low light or darkness\nMira Ashvale\n• gained Shadowhunter: shrouded"
   },
   "action:leave": {
-   "button": "Shadowhunter: leave shadow",
+   "button": "Leave shadow",
    "blocker": "Required effect is not active",
    "lines": null,
    "report": null
@@ -5202,7 +5202,7 @@
  },
  "domain-cards.json/Thought Delver": {
   "action:use": {
-   "button": "Thought Delver: read surface thoughts (1 Hope)",
+   "button": "Read surface thoughts (1 Hope)",
    "blocker": null,
    "lines": [
     "spent 1 Hope",
@@ -5211,7 +5211,7 @@
    "report": "ACTION USED\nThought Delver: read surface thoughts\nMira Ashvale\n• spent 1 Hope\n• Read the target's vague surface thoughts. You may make a Spellcast Roll from this message to delve deeper."
   },
   "action:delve": {
-   "button": "Thought Delver: deeper thoughts Spellcast",
+   "button": "Deeper thoughts: Spellcast",
    "blocker": null,
    "lines": [],
    "report": "ACTION USED\nThought Delver: deeper thoughts Spellcast\nMira Ashvale"
@@ -5225,7 +5225,7 @@
    "report": "ACTION USED\nTowering Stalk - Conjure climbing stalk\nMira Ashvale"
   },
   "action:attack": {
-   "button": "Towering Stalk: attack Spellcast roll (1 Stress)",
+   "button": "Attack: Spellcast roll (1 Stress)",
    "blocker": null,
    "lines": [
     "spent 1 Stress"
@@ -5245,7 +5245,7 @@
  },
  "domain-cards.json/Troublemaker": {
   "action:use": {
-   "button": "Troublemaker: Presence Roll",
+   "button": "Presence Roll",
    "blocker": null,
    "lines": [],
    "report": "ACTION USED\nTroublemaker: Presence Roll\nMira Ashvale"
@@ -5274,7 +5274,7 @@
    "report": null
   },
   "action:spend": {
-   "button": "Spend token: -1 to an attack roll (1 veil)",
+   "button": "-1 to an attack roll (1 veil)",
    "blocker": "Resource unavailable: veil",
    "lines": null,
    "report": null
@@ -5360,7 +5360,7 @@
  },
  "domain-cards.json/Vital Ward": {
   "action:physical": {
-   "button": "Vital Ward: physical resistance (1 HP)",
+   "button": "Physical resistance (1 HP)",
    "blocker": null,
    "lines": [
     "spent 1 HP",
@@ -5369,7 +5369,7 @@
    "report": "ACTION USED\nVital Ward: physical resistance\nMira Ashvale\n• spent 1 HP\n• gained Vital Ward"
   },
   "action:magic": {
-   "button": "Vital Ward: magic resistance (1 HP)",
+   "button": "Magic resistance (1 HP)",
    "blocker": null,
    "lines": [
     "spent 1 HP",
@@ -5399,7 +5399,7 @@
  },
  "domain-cards.json/Weave the Flesh": {
   "action:base": {
-   "button": "Weave the Flesh: allies clear HP or Stress (1 HP)",
+   "button": "Allies clear HP or Stress (1 HP)",
    "blocker": null,
    "lines": [
     "spent 1 HP"
@@ -5407,7 +5407,7 @@
    "report": "ACTION USED\nWeave the Flesh: allies clear HP or Stress\nMira Ashvale\n• spent 1 HP"
   },
   "action:upgrade": {
-   "button": "Weave the Flesh: allies clear HP and Stress (1 HP, 1 Stress)",
+   "button": "Allies clear HP and Stress (1 HP, 1 Stress)",
    "blocker": null,
    "lines": [
     "spent 1 HP, 1 Stress"
@@ -5522,7 +5522,7 @@
  },
  "items.json/Glider": {
   "action:use": {
-   "button": "Deploy glider (1 Stress)",
+   "button": "Deploy (1 Stress)",
    "blocker": null,
    "lines": [
     "spent 1 Stress"

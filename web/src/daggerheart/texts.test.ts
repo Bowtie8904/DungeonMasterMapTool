@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { readdirSync, readFileSync } from 'node:fs';
 import cases from '../../../src/test/resources/dmmt/text-template-cases.json';
-import { applyReportLines, formatText, templatePlaceholders, validateCatalogTexts, validateTexts } from './texts';
+import { applyReportLines, damageRollLabel, formatText, templatePlaceholders, validateCatalogTexts, validateTexts } from './texts';
 import { actionButtonText, blockedTitle, optionRowParts, rollOptionAppliedLabel, rollOptionText } from './engine';
 import type { ActionDef } from './engine';
 
@@ -12,6 +13,48 @@ describe('formatText', () => {
   });
   it('lists placeholders', () => {
     expect(templatePlaceholders('{a} {{b}} {c}')).toEqual(['a', 'c']);
+  });
+});
+
+describe('damageRollLabel', () => {
+  it.each([
+    ['Successful Power Push', 'Successful Power Push damage'],
+    ['Successful Ice Spike', 'Successful Ice Spike damage'],
+    ['Successful Fireball: damage', 'Successful Fireball: damage'],
+    ['Blood Spike: mark a Stress, roll d10 damage', 'Blood Spike: mark a Stress, roll d10 damage'],
+    ['Siphon Essence: roll d12+4 damage (once per long rest)', 'Siphon Essence: roll d12+4 damage (once per long rest)'],
+    ['Damage', 'Damage'],
+    ['Sword', 'Sword damage'],
+  ])('labels %s without redundant damage', (label, expected) => {
+    expect(damageRollLabel(label)).toBe(expected);
+  });
+});
+
+describe('catalog button labels', () => {
+  it('does not repeat the enclosing feature name on an action button', () => {
+    const directory = new URL('../../../dmmap-daggerheart/', import.meta.url);
+    const checked: string[] = [];
+    function check(value: unknown, path: string, owner = ''): void {
+      if (Array.isArray(value)) { value.forEach((item, i) => check(item, `${path}[${i}]`, owner)); return; }
+      if (!value || typeof value !== 'object') return;
+      const record = value as Record<string, unknown>;
+      const name = typeof record.name === 'string' ? record.name : owner;
+      if (name && /\.(?:actions|conditionalActions)\[\d+\]$/.test(path) && typeof record.label === 'string') {
+        const template = record.texts && typeof record.texts === 'object'
+          && 'button' in record.texts && typeof record.texts.button === 'string' ? record.texts.button : undefined;
+        const button = actionButtonText(template, record.label, { source: name }, '');
+        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (button.toLowerCase() !== name.toLowerCase()) {
+          expect(button, path).not.toMatch(new RegExp(`\\b${escaped}\\b`, 'i'));
+        }
+        checked.push(path);
+      }
+      for (const [key, child] of Object.entries(record)) check(child, `${path}.${key}`, name);
+    }
+    for (const file of readdirSync(directory).filter(name => name.endsWith('.json'))) {
+      check(JSON.parse(readFileSync(new URL(file, directory), 'utf8')), file);
+    }
+    expect(checked.length).toBeGreaterThan(100);
   });
 });
 

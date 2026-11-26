@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { mockCharacter } from './data';
-import { actionBlocker, actionCost, costText, rollOptionLabel, runActionDetailed, sourceActionLabel } from './engine';
+import { actionBlocker, actionButtonText, actionCost, costText, rollOptionLabel, runActionDetailed, sourceActionLabel } from './engine';
 import type { ActionDef, Automation, AvailableRollOption } from './engine';
 import { formatActionReport } from './action-summary';
 
-// Characterization of every automation-generated text for the shipped catalogs. The snapshot was recorded before the
-// configurable-texts feature; it must stay identical while catalogs carry no `texts`.
+// Characterization of automation-generated texts, including configured sheet button labels, for the shipped catalogs.
 const directory = new URL('../../../dmmap-daggerheart/', import.meta.url);
 const files = readdirSync(directory).filter(name => name.endsWith('.json')).sort();
 
@@ -41,11 +40,11 @@ function actionTexts(owner: Owner, action: ActionDef): Record<string, unknown> {
   try { lines = runActionDetailed(c, key, owner.automation, structuredClone(action), action.label, fixed); }
   catch (error) { lines = `error: ${(error as Error).message}`; }
   const report = Array.isArray(lines) ? formatActionReport({ title: sourceActionLabel(undefined, owner.name, action.label), character: c.name, lines }) : null;
-  return { button: cost ? `${action.label} (${cost})` : action.label, blocker, lines, report };
+  return { button: actionButtonText(action.texts?.button, action.label, { actor: c.name, source: owner.name }, cost), blocker, lines, report };
 }
 
 describe('golden automation texts', () => {
-  it('keeps generated texts unchanged for the shipped catalogs', () => {
+  it('keeps generated texts unchanged for the shipped catalogs', async () => {
     const result: Record<string, unknown> = {};
     for (const file of files) {
       const owners: Owner[] = [];
@@ -66,6 +65,6 @@ describe('golden automation texts', () => {
       }
     }
     expect(Object.keys(result).length).toBeGreaterThan(100);
-    expect(JSON.stringify(result, null, 1)).toMatchFileSnapshot('__snapshots__/texts-golden.json');
+    await expect(JSON.stringify(result, null, 1)).toMatchFileSnapshot('__snapshots__/texts-golden.json');
   });
 });

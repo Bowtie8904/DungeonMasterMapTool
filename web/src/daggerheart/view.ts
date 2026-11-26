@@ -42,7 +42,7 @@ import { openRestDialog } from './rest-view';
 import { openDamageDialog } from './damage-view';
 import { canMakeDeathMove, hpHealingFloor, type DeathMove, type DeathMoveExtras, type DeathOptions } from './death';
 import { openDeathDialog, openScarsDialog } from './death-view';
-import { formatText } from './texts';
+import { damageRollLabel, formatText } from './texts';
 import { actionReportTitle, configuredReportTitle, formatActionReport } from './action-summary';
 import { iconButton } from '../icons';
 import { mutagenEffectSource } from '../effects';
@@ -524,7 +524,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       bonus.contributions.push({ label: 'Rage Up', expression: String(linkedBonus), rollSource: linkedSource });
       bonus.names.push('Rage Up');
     }
-    openRollDialog(root, c, `${w.name}${w.profile ? ` (${w.profile})` : ''} damage`, [], bonus, action?.submit ?? sendRoll(['damage', ...(w.damageType === 'magic' ? ['magicdamage'] : []), ...(targets.includes('spelldamage') ? ['spelldamage'] : []), ...(w.profile ? [`weaponProfile:${w.profile}`] : []), ...(w.dieOverride ? [`damageDie:${w.dieOverride}`] : [])].join(','), w.name, rollSource ?? rollSourceFor(c, `weapon:${w.name}`)),
+    const title = `${w.name}${w.profile ? ` (${w.profile})` : ''}`;
+    openRollDialog(root, c, w.generated === 'feature' ? damageRollLabel(title) : `${title} damage`, [], bonus, action?.submit ?? sendRoll(['damage', ...(w.damageType === 'magic' ? ['magicdamage'] : []), ...(targets.includes('spelldamage') ? ['spelldamage'] : []), ...(w.profile ? [`weaponProfile:${w.profile}`] : []), ...(w.dieOverride ? [`damageDie:${w.dieOverride}`] : [])].join(','), w.name, rollSource ?? rollSourceFor(c, `weapon:${w.name}`)),
       () => { consumeBonus(c, action ? rollBonus(c, targets, w, false) : bonus); after?.(); render(); }, targets, w, opts.supportsKeptDice, undefined, critical, action?.pending ?? pendingAction, opts.supportsRollMultipliers, attackFear, opts.supportsBrawlerRolls, proficiencyBonus, opts.supportsDruidAutomation, opts.supportsSeraphAutomation, opts.supportsDomainCardAutomation, opts.supportsZeroKeptDice, !!action, outcome, opts.supportsWeaponAutomation);
   };
   if (opts.bus) opts.bus.spellDamage = (label, spec, critical, onSent, rollSource, pendingAction) => {
@@ -634,7 +635,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const dice = (spec.count === 'spellcast'
       ? spec.dice.replace(/(\d*)d(\d+)/gi, (_term, diceCount: string, sides: string) => count > 0 ? `${Number(diceCount || 1) * count}d${sides}` : '0')
       : spec.dice).replace(/@([a-z_][\w-]*?)(?=d\d)/gi, (value) => String(Math.max(0, evalValue(value, c))));
-    return { name: label, slot: 'Primary', damageType: spec.type === 'magic' ? 'magic' : 'phys', trait: 'Instinct',
+    return { name: label, generated: 'feature', slot: 'Primary', damageType: spec.type === 'magic' ? 'magic' : 'phys', trait: 'Instinct',
       range: '', damage: dice, hands: 1, tier: 0, fixedDice: spec.fixed || spec.count === 'spellcast',
       ...(spec.extraDice ? { automation: { damage: { extraDice: spec.extraDice, dropLowest: 0 } } } : {}) };
   }
@@ -648,10 +649,11 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     if (action.specialAction === 'vitality' && c.vitalityBenefits?.length) {
       return el('span', { class: 'muted' }, `Vitality permanently used: ${c.vitalityBenefits.join(', ')}.${c.vitalityEffectRemoved ? ' Buff removed; benefits no longer apply.' : ' Buff removable only in edit mode under Effects.'}${c.testingCharacter ? ' Retained only to preserve the fixed testing loadout.' : ''}`);
     }
-    if (key.startsWith('card:') && !canCastDomain(c) && action.actionRoll?.trait === 'spellcast') {
-      return el('button', { type: 'button', class: 'small', disabled: true, title: 'Cannot cast domain spells in Beastform' }, action.label);
-    }
     const textVars = actionTextVars({ actor: c.name, source: label, action });
+    if (key.startsWith('card:') && !canCastDomain(c) && action.actionRoll?.trait === 'spellcast') {
+      return el('button', { type: 'button', class: 'small', disabled: true, title: 'Cannot cast domain spells in Beastform' },
+        actionButtonText(action.texts?.button, action.label, textVars, costText(actionCost(c, action), c)));
+    }
     const highest = () => {
       const trait = TRAIT_ORDER.reduce((best, name) => traitTotal(c, name) > traitTotal(c, best) ? name : best);
       return { trait, total: signed(traitTotal(c, trait)) };
@@ -830,7 +832,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
           const expression = `${amount}d${spec.sides}${spec.bonusPerDie ? `+${amount * spec.bonusPerDie}` : ''}`;
           const source = spec.type ? `damage,${spec.type === 'magic' ? `magicdamage${key.startsWith('card:') ? ',spelldamage' : ''}` : 'physicaldamage'}` : key;
           const sent = sendRoll(source, undefined, rollSourceFor(c, key))({
-            label: spec.type ? `${action.label} damage` : action.label, expression,
+            label: spec.type ? damageRollLabel(action.label) : action.label, expression,
             contributions: [{ label: `${amount} ${resourceLabel}`, expression }],
           });
           if (!sent) { error.textContent = 'Not connected. Nothing was spent.'; return; }

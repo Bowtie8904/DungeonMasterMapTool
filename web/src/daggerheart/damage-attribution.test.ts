@@ -25,6 +25,14 @@ function collect(value: unknown, catalog: string, name = '', text = ''): void {
 for (const file of files) collect(JSON.parse(readFileSync(new URL(`../../../dmmap-daggerheart/${file}.json`, import.meta.url), 'utf8')), file);
 
 describe('catalog damage attribution', () => {
+  it('preserves host-validated weapon labels even when their name contains damage', () => {
+    const c = emptyCharacter('Roller');
+    const weapon: Weapon = { name: 'Damage Dealer', slot: 'Primary', damage: 'd8+3', damageType: 'phys',
+      range: 'Melee', trait: 'Strength', tier: 1, hands: 1 };
+    const parts = damageContributions(c, weapon, rollBonus(c, ['damage']));
+    expect(parts.map(part => part.label)).toEqual(['Damage Dealer damage (Proficiency 1)', 'Damage Dealer damage bonus']);
+  });
+
   it('identifies all attack-linked trait damage options requiring source handoff', () => {
     expect(linkedOptions.map(({ catalog, name, option }) => [catalog, name, option.id]))
       .toEqual([['domain-cards', 'Rage Up', 'rage1']]);

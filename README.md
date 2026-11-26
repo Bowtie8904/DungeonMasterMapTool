@@ -482,6 +482,9 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   when that player disconnects. Older player clients do not report labels; private player-to-player whispers
   remain private. Summaries are live presentation hints, not saved history or authoritative eligibility.
   **Seraph:** Roll Prayer Dice once per session without a confirmation; the feature shows its remaining session use.
+  Feature and domain-card buttons use concise action labels (such as **Clear 2 HP** or **Spellcast Reaction**),
+  without repeating their card's name. Chat actions and reports retain source context; damage titles and breakdowns
+  avoid adding a second "damage" to labels that already contain it. These wording changes do not alter gameplay.
   Manage individual values only in the compact class-resource group: the face, a highlighted yellow **+** to gain Hope, and **x** to remove
   a manually used die. Each die uses an independent random sample; d4 repeats are normal, especially with Devout.
   Each die can reduce incoming damage, add to any chat roll (including an ally's), grant Hope, or be removed for

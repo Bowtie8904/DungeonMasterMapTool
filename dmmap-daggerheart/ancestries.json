@@ -405,7 +405,7 @@
         "id": "use",
         "label": "Luckbender: roll Duality Dice",
         "texts": {
-         "button": "Luckbender: roll Duality Dice",
+         "button": "Roll Duality Dice",
          "chatButton": "Luckbender: roll Duality Dice",
          "roll": "Luckbender: roll Duality Dice"
         },
@@ -485,7 +485,7 @@
         "id": "use",
         "label": "Charge damage",
         "texts": {
-         "button": "Charge damage",
+         "button": "Damage",
          "chatButton": "Charge damage",
          "roll": "Charge damage"
         },
@@ -1257,7 +1257,7 @@
         "id": "use",
         "label": "Charge damage",
         "texts": {
-         "button": "Charge damage",
+         "button": "Damage",
          "chatButton": "Charge damage",
          "roll": "Charge damage"
         },

@@ -84,7 +84,7 @@
       "id": "reflect",
       "label": "Arcane Reflection: roll Hope dice",
       "texts": {
-       "button": "Arcane Reflection: roll Hope dice",
+       "button": "Roll Hope dice",
        "chatButton": "Arcane Reflection: roll Hope dice",
        "roll": "Arcane Reflection: roll Hope dice"
       },
@@ -538,7 +538,7 @@
       "id": "control",
       "label": "Blood Puppet: control Spellcast roll",
       "texts": {
-       "button": "Blood Puppet: control Spellcast roll",
+       "button": "Control puppet: Spellcast roll",
        "chatButton": "Blood Puppet: control Spellcast roll",
        "roll": "Blood Puppet: control Spellcast roll"
       },
@@ -550,7 +550,7 @@
       "id": "attack",
       "label": "Blood Puppet: puppet attack Spellcast roll",
       "texts": {
-       "button": "Blood Puppet: puppet attack Spellcast roll",
+       "button": "Puppet attack: Spellcast roll",
        "chatButton": "Blood Puppet: puppet attack Spellcast roll",
        "roll": "Blood Puppet: puppet attack Spellcast roll"
       },
@@ -858,7 +858,7 @@
       "conditionalRollTriggers": [
        {
         "id": "damage",
-        "label": "Successful Power Push: damage",
+        "label": "Successful Power Push",
         "on": "card:Power Push",
         "successIfKnown": true,
         "damage": {
@@ -920,7 +920,7 @@
       "conditionalRollTriggers": [
        {
         "id": "damage",
-        "label": "Successful Ice Spike: damage",
+        "label": "Successful Ice Spike",
         "on": "card:Ice Spike",
         "successIfKnown": true,
         "damage": {
@@ -954,7 +954,7 @@
         "id": "reaction",
         "label": "Repudiate: Spellcast Reaction",
         "texts": {
-         "button": "Repudiate: Spellcast Reaction",
+         "button": "Spellcast Reaction",
          "chatButton": "Repudiate: Spellcast Reaction",
          "roll": "Repudiate: Spellcast Reaction",
          "reportTitle": "{source} - Repudiate: Spellcast Reaction"
@@ -1245,7 +1245,7 @@
         "id": "use",
         "label": "Recant: target makes Reaction (15)",
         "texts": {
-         "button": "Recant: target makes Reaction (15)",
+         "button": "Target makes Reaction (15)",
          "chatButton": "Recant: target makes Reaction (15)",
          "roll": "Recant: target makes Reaction (15)",
          "reportTitle": "{source} - Recant: target makes Reaction (15)"
@@ -1367,7 +1367,7 @@
         "id": "cast",
         "label": "Eternal Enervation: Spellcast",
         "texts": {
-         "button": "Eternal Enervation: Spellcast",
+         "button": "Spellcast",
          "chatButton": "Eternal Enervation: Spellcast",
          "roll": "Eternal Enervation: Spellcast",
          "reportTitle": "{source} - Eternal Enervation: Spellcast"
@@ -1667,7 +1667,7 @@
       "id": "boost",
       "label": "Boost: prepare aerial attack",
       "texts": {
-       "button": "Boost: prepare aerial attack",
+       "button": "Prepare aerial attack",
        "chatButton": "Boost: prepare aerial attack",
        "roll": "Boost: prepare aerial attack"
       },
@@ -1727,7 +1727,7 @@
       "id": "miss",
       "label": "Boosted attack missed: discard damage",
       "texts": {
-       "button": "Boosted attack missed: discard damage",
+       "button": "Missed attack: discard damage",
        "chatButton": "Boosted attack missed: discard damage",
        "roll": "Boosted attack missed: discard damage",
        "reportTitle": "{source} - Boosted attack missed: discard damage"
@@ -2203,6 +2203,9 @@
      {
       "id": "swap",
       "label": "Codex-Touched: swap with vault",
+      "texts": {
+       "button": "Swap with vault"
+      },
       "codexSwap": true,
       "uses": {
        "max": 1,
@@ -2269,7 +2272,7 @@
       "id": "defend",
       "label": "Roll Confusing Aura layers",
       "texts": {
-       "button": "Roll Confusing Aura layers",
+       "button": "Roll layers",
        "chatButton": "Roll Confusing Aura layers",
        "roll": "Roll Confusing Aura layers",
        "reportTitle": "{source} - Roll Confusing Aura layers"
@@ -2301,7 +2304,7 @@
         "id": "beetles",
         "label": "Conjure Tekaira Armored Beetles",
         "texts": {
-         "button": "Conjure Tekaira Armored Beetles",
+         "button": "Conjure beetles",
          "chatButton": "Conjure Tekaira Armored Beetles",
          "roll": "Conjure Tekaira Armored Beetles",
          "reportTitle": "{source} - Conjure Tekaira Armored Beetles"
@@ -2551,7 +2554,7 @@
       "id": "reaction",
       "label": "Counterspell: Spellcast Reaction",
       "texts": {
-       "button": "Counterspell: Spellcast Reaction",
+       "button": "Spellcast Reaction",
        "chatButton": "Counterspell: Spellcast Reaction",
        "roll": "Counterspell: Spellcast Reaction"
       },
@@ -2626,7 +2629,7 @@
       "id": "use",
       "label": "Critical Inspiration: critical attack",
       "texts": {
-       "button": "Critical Inspiration: critical attack",
+       "button": "Critical attack",
        "chatButton": "Critical Inspiration: critical attack",
        "roll": "Critical Inspiration: critical attack"
       },
@@ -2923,7 +2926,7 @@
       "id": "vines",
       "label": "Successful Death Grip: vines damage",
       "texts": {
-       "button": "Successful Death Grip: vines damage",
+       "button": "Successful cast: vines damage",
        "chatButton": "Successful Death Grip: vines damage",
        "roll": "Successful Death Grip: vines damage",
        "reportTitle": "{source} - Successful Death Grip: vines damage"
@@ -2998,7 +3001,7 @@
            "id": "end",
            "label": "End Deathrun",
            "texts": {
-            "button": "End Deathrun",
+            "button": "End",
             "chatButton": "End Deathrun",
             "roll": "End Deathrun",
             "reportTitle": "{source} - End Deathrun"
@@ -3056,7 +3059,7 @@
          "id": "end",
          "label": "End Deathrun",
          "texts": {
-          "button": "End Deathrun",
+          "button": "End",
           "chatButton": "End Deathrun",
           "roll": "End Deathrun",
           "reportTitle": "{source} - End Deathrun"
@@ -4371,7 +4374,7 @@
       "id": "base",
       "label": "Healing Field: clear 1 HP",
       "texts": {
-       "button": "Healing Field: clear 1 HP",
+       "button": "Clear 1 HP",
        "chatButton": "Healing Field: clear 1 HP",
        "roll": "Healing Field: clear 1 HP"
       },
@@ -4400,7 +4403,7 @@
       "id": "upgrade",
       "label": "Healing Field: clear 2 HP",
       "texts": {
-       "button": "Healing Field: clear 2 HP",
+       "button": "Clear 2 HP",
        "chatButton": "Healing Field: clear 2 HP",
        "roll": "Healing Field: clear 2 HP"
       },
@@ -4578,7 +4581,7 @@
       "id": "reaction",
       "label": "Hideous Retribution reaction",
       "texts": {
-       "button": "Hideous Retribution reaction",
+       "button": "Reaction",
        "chatButton": "Hideous Retribution reaction",
        "roll": "Hideous Retribution reaction",
        "reportTitle": "{source} - Hideous Retribution reaction"
@@ -4915,7 +4918,7 @@
       "id": "restore",
       "label": "Invigoration: roll Hope dice",
       "texts": {
-       "button": "Invigoration: roll Hope dice",
+       "button": "Roll Hope dice",
        "chatButton": "Invigoration: roll Hope dice",
        "roll": "Invigoration: roll Hope dice"
       },
@@ -5196,7 +5199,7 @@
       "id": "use",
       "label": "Lean on Me: console or inspire an ally",
       "texts": {
-       "button": "Lean on Me: console or inspire an ally",
+       "button": "Console or inspire an ally",
        "chatButton": "Lean on Me: console or inspire an ally",
        "roll": "Lean on Me: console or inspire an ally"
       },
@@ -5552,7 +5555,7 @@
       "id": "attack",
       "label": "Midnight Spirit: attack Spellcast",
       "texts": {
-       "button": "Midnight Spirit: attack Spellcast",
+       "button": "Attack: Spellcast",
        "chatButton": "Midnight Spirit: attack Spellcast",
        "roll": "Midnight Spirit: attack Spellcast"
       },
@@ -5596,6 +5599,9 @@
      {
       "id": "hope",
       "label": "Midnight-Touched: gain Hope instead of GM Fear",
+      "texts": {
+       "button": "Gain Hope instead of GM Fear"
+      },
       "requiresZeroHope": true,
       "loadoutDomain": {
        "domain": "Midnight",
@@ -5653,7 +5659,7 @@
       "id": "react",
       "label": "Mutual Suffering: Reaction",
       "texts": {
-       "button": "Mutual Suffering: Reaction",
+       "button": "Reaction",
        "chatButton": "Mutual Suffering: Reaction",
        "roll": "Mutual Suffering: Reaction"
       },
@@ -6009,7 +6015,7 @@
       "id": "damage",
       "label": "Creature touches Octarine Wall: damage",
       "texts": {
-       "button": "Creature touches Octarine Wall: damage",
+       "button": "Creature touches wall: damage",
        "chatButton": "Creature touches Octarine Wall: damage",
        "roll": "Creature touches Octarine Wall: damage",
        "reportTitle": "{source} - Creature touches Octarine Wall: damage"
@@ -6364,7 +6370,7 @@
       "id": "cast",
       "label": "Rain of Blades: Spellcast roll",
       "texts": {
-       "button": "Rain of Blades: Spellcast roll",
+       "button": "Spellcast roll",
        "chatButton": "Rain of Blades: Spellcast roll",
        "roll": "Rain of Blades: Spellcast roll"
       },
@@ -6554,7 +6560,7 @@
       "id": "use",
       "label": "Redirect: roll Proficiency d6s",
       "texts": {
-       "button": "Redirect: roll Proficiency d6s",
+       "button": "Roll Proficiency d6s",
        "chatButton": "Redirect: roll Proficiency d6s",
        "roll": "Redirect: roll Proficiency d6s"
       },
@@ -6892,7 +6898,7 @@
       "id": "infuse",
       "label": "Infuse Rune Ward trinket",
       "texts": {
-       "button": "Infuse Rune Ward trinket",
+       "button": "Infuse trinket",
        "chatButton": "Infuse Rune Ward trinket",
        "roll": "Infuse Rune Ward trinket",
        "reportTitle": "{source} - Infuse Rune Ward trinket"
@@ -7362,6 +7368,9 @@
      {
       "id": "enter",
       "label": "Shadowhunter: enter low light or darkness",
+      "texts": {
+       "button": "Enter low light or darkness"
+      },
       "steps": [
        {
         "op": "effect",
@@ -7377,6 +7386,9 @@
      {
       "id": "leave",
       "label": "Shadowhunter: leave shadow",
+      "texts": {
+       "button": "Leave shadow"
+      },
       "requiresEffect": "Shadowhunter: shrouded",
       "endEffect": "Shadowhunter: shrouded"
      }
@@ -8765,7 +8777,7 @@
       "id": "use",
       "label": "Thought Delver: read surface thoughts",
       "texts": {
-       "button": "Thought Delver: read surface thoughts",
+       "button": "Read surface thoughts",
        "chatButton": "Thought Delver: read surface thoughts",
        "roll": "Thought Delver: read surface thoughts"
       },
@@ -8782,7 +8794,7 @@
       "id": "delve",
       "label": "Thought Delver: deeper thoughts Spellcast",
       "texts": {
-       "button": "Thought Delver: deeper thoughts Spellcast",
+       "button": "Deeper thoughts: Spellcast",
        "chatButton": "Thought Delver: deeper thoughts Spellcast",
        "roll": "Thought Delver: deeper thoughts Spellcast"
       },
@@ -8831,7 +8843,7 @@
       "id": "attack",
       "label": "Towering Stalk: attack Spellcast roll",
       "texts": {
-       "button": "Towering Stalk: attack Spellcast roll",
+       "button": "Attack: Spellcast roll",
        "chatButton": "Towering Stalk: attack Spellcast roll",
        "roll": "Towering Stalk: attack Spellcast roll"
       },
@@ -8904,7 +8916,7 @@
       "id": "use",
       "label": "Troublemaker: Presence Roll",
       "texts": {
-       "button": "Troublemaker: Presence Roll",
+       "button": "Presence Roll",
        "chatButton": "Troublemaker: Presence Roll",
        "roll": "Troublemaker: Presence Roll"
       },
@@ -9591,6 +9603,9 @@
      {
       "id": "physical",
       "label": "Vital Ward: physical resistance",
+      "texts": {
+       "button": "Physical resistance"
+      },
       "bloodAutomation": true,
       "cost": {
        "hp": 1
@@ -9660,6 +9675,9 @@
      {
       "id": "magic",
       "label": "Vital Ward: magic resistance",
+      "texts": {
+       "button": "Magic resistance"
+      },
       "bloodAutomation": true,
       "cost": {
        "hp": 1
@@ -9949,7 +9967,7 @@
       "id": "base",
       "label": "Weave the Flesh: allies clear HP or Stress",
       "texts": {
-       "button": "Weave the Flesh: allies clear HP or Stress",
+       "button": "Allies clear HP or Stress",
        "chatButton": "Weave the Flesh: allies clear HP or Stress",
        "roll": "Weave the Flesh: allies clear HP or Stress"
       },
@@ -9985,7 +10003,7 @@
       "id": "upgrade",
       "label": "Weave the Flesh: allies clear HP and Stress",
       "texts": {
-       "button": "Weave the Flesh: allies clear HP and Stress",
+       "button": "Allies clear HP and Stress",
        "chatButton": "Weave the Flesh: allies clear HP and Stress",
        "roll": "Weave the Flesh: allies clear HP and Stress"
       },

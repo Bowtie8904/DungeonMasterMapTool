@@ -275,6 +275,10 @@ the new transactions; older clients remain connectable and no LAN compatibility 
 
 `src/vectors.test.ts` checks `../src/test/resources/online/vectors.json` (shared with the Java tests) when it exists.
 
+Automation `texts.button` labels describe the action without repeating the enclosing feature or domain-card name.
+Chat actions and reports keep their source context. Damage roll titles and breakdowns do not append "damage" again
+when it already appears in the label; gameplay, costs and existing chat history are unchanged.
+
 Layout: `bitset.ts` (base64 + zlib bitset codec), `store.ts` (snapshot/delta), `clock.ts`, `vision.ts`, `weather.ts`,
 `render.ts` (canvas), `net.ts` (WebSocket), `app.ts` (map UI), `sheet.ts` (mock sheet), `login.ts`.
 Controlled actor tokens temporarily clear fog within the host's configured sight range (default 40 tiles), independent

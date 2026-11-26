@@ -1129,6 +1129,10 @@ Classes, ancestries, communities and transformations are included in the total.
   Woven Net trait rolls; and Life Support, Healing Strike, Sparing Touch and Restoration target healing.
   Range, willingness, hidden-Difficulty attack success and narrative prerequisites remain player/GM decisions.
   Healing Hands and Salvation Beam use explicit result-dependent and allocation workflows described above.
+  Use `texts.button` for concise sheet actions without repeating the enclosing feature/card name; retain contextual
+  `label`, `chatButton` and report wording outside the card. Feature damage titles and breakdowns automatically add
+  "damage" only when it is not already present in the supplied label. Ordinary weapon labels retain their
+  host-validated format. Costs remain automatic suffixes.
 - **Pools:** Favor, Slayer Dice, Tide, poison tokens, Spellcharge, Inspiration, Restoration, thorns, Dark Army
   fiends, Twilight Toll, chaos, Invisibility/Disguise tokens and Alconite charge. Explicit gain/spend/clear buttons
   track **numeric tokens** only. Follow descriptions for start/end-session and rest preparation/clearing; rest
