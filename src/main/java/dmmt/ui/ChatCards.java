@@ -355,7 +355,7 @@ public final class ChatCards {
             return card;
         }
         if (!reactionTrait.isEmpty()) {
-            card.getChildren().add(reactionBody(reactionTrait, text));
+            card.getChildren().add(reactionBody(reactionTrait));
             return card;
         }
         if (roll) {
@@ -412,20 +412,11 @@ public final class ChatCards {
         return new VBox(banner, title, bullets(report.lines()));
     }
 
-    private static Node reactionBody(String trait, String text) {
-        Label title = new Label("REACTION ROLL");
+    private static Node reactionBody(String trait) {
+        Label title = new Label(trait + " Reaction Roll");
         title.getStyleClass().add("chat-reaction-banner");
-        Label tag = new Label(trait);
-        tag.getStyleClass().add("chat-reaction-trait");
-        HBox banner = new HBox(8, title, tag);
-        banner.setAlignment(Pos.CENTER_LEFT);
-        banner.setPadding(new Insets(8, 12, 0, 12));
-        VBox box = new VBox(banner);
-        Matcher source = Pattern.compile("^(.*?) \u00B7 \\w+ Reaction - ").matcher(text);
-        if (source.find()) box.getChildren().add(wrapped(source.group(1), "chat-reaction-source"));
-        String article = "AEIOU".contains(trait.substring(0, 1)) ? "an" : "a";
-        box.getChildren().add(wrapped("Make " + article + " " + trait + " Reaction Roll.", "chat-reaction-text"));
-        return box;
+        title.setPadding(new Insets(8, 12, 10, 12));
+        return title;
     }
 
     private static Node header(JsonNode m, Runnable delete, Function<String, String> artwork) {

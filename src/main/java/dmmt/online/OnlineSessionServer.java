@@ -1007,12 +1007,11 @@ public final class OnlineSessionServer {
     }
 
     /** Sends a public, clickable reaction-roll prompt without publishing a target Difficulty. */
-    public void dmReactionPrompt(String text, String trait) {
-        if (text == null || text.isBlank()) return;
+    public void dmReactionPrompt(String trait) {
         if (!List.of("Strength", "Agility", "Finesse", "Instinct", "Presence", "Knowledge").contains(trait)) {
             throw new IllegalArgumentException("Unsupported reaction trait.");
         }
-        ObjectNode message = chatMessage("dm", "DM", null, clip(text));
+        ObjectNode message = chatMessage("dm", "DM", null, trait + " Reaction Roll");
         message.set("reactionPrompt", MAPPER.createObjectNode().put("trait", trait));
         deliver(message, null);
     }

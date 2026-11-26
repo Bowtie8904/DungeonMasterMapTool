@@ -1846,8 +1846,7 @@ public class DungeonMasterMapToolApplication extends Application {
                 if (onlineController == null || !onlineController.running()) {
                     return "Start an online session to request a reaction roll.";
                 }
-                String article = "AEIOU".contains(trait.substring(0, 1)) ? "an" : "a";
-                onlineController.sendReactionPrompt("Make " + article + " " + trait + " Reaction Roll.", trait);
+                onlineController.sendReactionPrompt(trait);
                 return null;
             }
             @Override public List<dmmt.ui.ChatPanel.Recipient> recipients() {
@@ -9829,9 +9828,7 @@ public class DungeonMasterMapToolApplication extends Application {
                     if (onlineController == null || !onlineController.running()) {
                         status("Start an online session to send player reaction prompts.");
                     } else {
-                        String article = "AEIOU".contains(trait.substring(0, 1)) ? "an" : "a";
-                        onlineController.sendReactionPrompt(label + " - make " + article + " "
-                                + trait + " Reaction Roll.", trait);
+                        onlineController.sendReactionPrompt(trait);
                     }
                 },
                 (adversaryName, name, classification, text) -> {

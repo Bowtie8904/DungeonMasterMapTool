@@ -956,9 +956,9 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
         }
     }
 
-    public void sendReactionPrompt(String text, String trait) {
+    public void sendReactionPrompt(String trait) {
         OnlineSessionServer current = server;
-        if (current != null) current.dmReactionPrompt(text, trait);
+        if (current != null) current.dmReactionPrompt(trait);
     }
 
     /** Links an adversary feature in the chat; returns an error message or {@code null}. */

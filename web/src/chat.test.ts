@@ -13,6 +13,7 @@ it('renders public and whispered emotes distinctly without interpreting their te
     children: Array<Element | string> = [];
     append(...children: Array<Element | string>) { this.children.push(...children); }
     setAttribute() {}
+    get text(): string { return this.children.map(child => typeof child === 'string' ? child : child.text).join(''); }
     find(cls: string): Element | undefined {
       return this.className.split(' ').includes(cls) ? this : this.children.flatMap(child => typeof child === 'string' ? [] : [child])
         .map(child => child.find(cls)).find(Boolean);
@@ -32,6 +33,15 @@ it('renders public and whispered emotes distinctly without interpreting their te
       id: 2, ts: 0, fromId: 'player', from: 'Mara', text: 'Mara says hello.',
     } }, 'player') as unknown as Element;
     expect(regular.className).not.toContain('emote');
+
+    const reaction = renderLogEntry({ kind: 'chat', m: {
+      id: 3, ts: 0, fromId: 'dm', from: 'DM',
+      text: 'Erzmagier Phylax · Agility Reaction - make an Agility Reaction Roll.',
+      reactionPrompt: { trait: 'Agility' },
+    } }, 'player') as unknown as Element;
+    expect(reaction.find('reaction-banner')?.text).toBe('Agility Reaction Roll');
+    expect(reaction.text).not.toContain('Erzmagier Phylax');
+    expect(reaction.text).not.toContain('Make an Agility Reaction Roll');
   } finally { vi.unstubAllGlobals(); }
 });
 

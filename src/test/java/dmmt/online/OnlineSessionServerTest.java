@@ -315,16 +315,18 @@ class OnlineSessionServerTest {
         try {
             inbox.next("hello");
             otherInbox.next("hello");
-            server.dmReactionPrompt("Acid Burrower · Agility Reaction", "Agility");
+            server.dmReactionPrompt("Agility");
             JsonNode prompt = inbox.next("chat");
             JsonNode otherPrompt = otherInbox.next("chat");
+            assertEquals("Agility Reaction Roll", prompt.path("text").asText());
+            assertEquals("Agility Reaction Roll", otherPrompt.path("text").asText());
             assertEquals("Agility", prompt.path("reactionPrompt").path("trait").asText());
             assertEquals("Agility", otherPrompt.path("reactionPrompt").path("trait").asText());
             assertFalse(prompt.has("difficulty"));
             assertFalse(prompt.has("outcome"));
             assertFalse(otherPrompt.has("difficulty"));
             assertFalse(otherPrompt.has("outcome"));
-            assertThrows(IllegalArgumentException.class, () -> server.dmReactionPrompt("Invalid", "Luck"));
+            assertThrows(IllegalArgumentException.class, () -> server.dmReactionPrompt("Luck"));
         } finally {
             ws.abort();
             otherWs.abort();

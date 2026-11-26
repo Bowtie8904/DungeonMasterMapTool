@@ -259,11 +259,7 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
     return card;
   }
   if (reaction && e.kind === 'chat') {
-    const source = /^(.*?) · \w+ Reaction - /.exec(e.m.text)?.[1];
-    card.append(el('div', { class: 'reaction-banner' }, el('strong', {}, 'Reaction roll'),
-        el('span', { class: 'reaction-trait' }, reaction.trait)),
-      ...(source ? [el('div', { class: 'reaction-source' }, source)] : []),
-      el('div', { class: 'reaction-text' }, `Make ${/^[AEIOU]/.test(reaction.trait) ? 'an' : 'a'} ${reaction.trait} Reaction Roll.`));
+    card.append(el('div', { class: 'reaction-banner' }, `${reaction.trait} Reaction Roll`));
     if (rollActions) {
       const actions = rollActions(e.m);
       if (actions) card.append(actions);

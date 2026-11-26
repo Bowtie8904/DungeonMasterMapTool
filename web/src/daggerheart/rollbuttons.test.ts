@@ -1350,15 +1350,17 @@ describe('cross-player roll buttons', () => {
       bus,
       save: Object.assign(() => undefined, { flush: async () => undefined }),
     });
-    const prompt: ChatMessage = {
-      id: 45, ts: 2000, fromId: 'dm', from: 'DM', text: 'Acid Burrower · Agility Reaction',
-      reactionPrompt: { trait: 'Agility' },
-    };
-    const box = rollButtons(prompt, host as never) as unknown as FakeElement;
-    const button = box.queryAll('button')[0];
-    expect(button.text).toBe('Roll Agility Reaction');
-    await button.click();
-    expect(reactionRoll).toHaveBeenCalledWith(prompt.text, 'Agility');
-    expect(prompt).not.toHaveProperty('difficulty');
+    for (const text of ['Agility Reaction Roll', 'Acid Burrower · Agility Reaction - make an Agility Reaction Roll.']) {
+      const prompt: ChatMessage = {
+        id: 45, ts: 2000, fromId: 'dm', from: 'DM', text,
+        reactionPrompt: { trait: 'Agility' },
+      };
+      const box = rollButtons(prompt, host as never) as unknown as FakeElement;
+      const button = box.queryAll('button')[0];
+      expect(button.text).toBe('Roll Agility Reaction');
+      await button.click();
+      expect(reactionRoll).toHaveBeenLastCalledWith('Agility', 'Agility');
+      expect(prompt).not.toHaveProperty('difficulty');
+    }
   });
 });
