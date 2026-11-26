@@ -1166,6 +1166,90 @@ it('switches both zones globally without saving character data and preserves exp
   expect(changed).not.toHaveBeenCalled();
 });
 
+it('retains feature row expansion by name and source after authoritative sheet replacements', async () => {
+  vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const c = emptyCharacter('Adventurer');
+  c.mancer = { done: true };
+  c.features = [
+    { name: 'Shared name', source: 'Class: First', text: 'First description' },
+    { name: 'Shared name', source: 'Class: Second', text: 'Second description' },
+  ];
+  c.heritage = [{ name: 'Heritage', source: 'Ancestry', text: 'Heritage description' }];
+  const changed = vi.fn();
+  const bus = new SheetBus();
+  const root = renderSheetView({ character: c, bus, onChange: changed, onRoll: () => true }) as unknown as Element;
+  await root.querySelectorAll('button').find(button => button.ariaLabel === 'List view')!.click();
+  const rows = () => root.querySelectorAll('details');
+  for (const index of [0, 2]) {
+    rows()[index].open = true;
+    rows()[index].listeners.get('toggle')?.();
+  }
+  changed.mockClear();
+  Object.assign(c, structuredClone(c));
+  c.features.reverse();
+  c.features[1].text = 'Updated first description';
+  bus.notify(false);
+  await Promise.resolve();
+  expect(rows().map(row => row.open)).toEqual([false, true, true]);
+  expect(rows()[1].text()).toContain('Updated first description');
+  rows()[1].open = false;
+  rows()[1].listeners.get('toggle')?.();
+  Object.assign(c, structuredClone(c));
+  bus.notify(false);
+  await Promise.resolve();
+  expect(rows().map(row => row.open)).toEqual([false, false, true]);
+  expect(changed).not.toHaveBeenCalled();
+});
+
+it('preserves expanded loadout and vault rows after Rune Ward and chat-triggered sheet replacements', async () => {
+  vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+  const ward = catalog.entries.find(entry => entry.id === 'rune-ward')!;
+  const stealth = catalog.entries.find(entry => entry.id === 'stealth-expertise')!;
+  const c = emptyCharacter('Caster');
+  c.mancer = { done: true };
+  c.loadout = [
+    { name: ward.name, level: 1, domain: 'Arcana', type: 'Spell', recall: 0, text: ward.text!, automation: ward.automation },
+    { name: stealth.name, level: 4, domain: 'Midnight', type: 'Ability', recall: 0, text: stealth.text!, automation: stealth.automation },
+  ];
+  c.vault = [{ name: 'Vaulted', level: 1, domain: 'Codex', type: 'Spell', recall: 1, text: 'Vault description' }];
+  const bus = new SheetBus();
+  const changed = vi.fn();
+  const onFeature = vi.fn(async () => {
+    Object.assign(c, structuredClone(c));
+    c.resources!['rune-ward'] = 1;
+    c.usage['card:Rune Ward'] = { used: 1, per: 'rest' };
+  });
+  const root = renderSheetView({ character: c, bus, onChange: changed, onRoll: () => true, onFeature,
+    supportsDomainCardAutomation: () => true }) as unknown as Element;
+  await root.querySelectorAll('button').find(button => button.text() === 'Domain Cards')!.click();
+  await root.querySelectorAll('button').find(button => button.ariaLabel === 'List view')!.click();
+  const rows = () => root.querySelectorAll('details');
+  for (const row of rows()) {
+    row.open = true;
+    row.listeners.get('toggle')?.();
+  }
+  changed.mockClear();
+  await root.querySelectorAll('button').find(button => button.text() === 'Infuse Rune Ward trinket')!.click();
+  expect(onFeature).toHaveBeenCalledWith('card:Rune Ward', 'infuse', undefined);
+  expect(rows().map(row => row.open)).toEqual([true, true, true]);
+  expect(root.querySelectorAll('button').find(button => button.text() === 'Infuse Rune Ward trinket')!.disabled).toBe(true);
+
+  rows()[0].open = false;
+  rows()[0].listeners.get('toggle')?.();
+  Object.assign(c, structuredClone(c), { stress: { ...c.stress, on: c.stress.on + 1 } });
+  bus.notify(false);
+  await Promise.resolve();
+  expect(rows().map(row => row.open)).toEqual([false, true, true]);
+  expect(changed).not.toHaveBeenCalled();
+});
+
 it('disables Teleport casts on unsupported hosts and after its long-rest use is spent', async () => {
   vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),
     createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });

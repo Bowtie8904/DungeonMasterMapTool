@@ -1631,7 +1631,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
 
   let featureView: DomainCardView = 'card';
   let featureQuery = '';
-  const expandedFeatures = new Set<Feature>();
+  const expandedFeatures = new Set<string>();
   let featurePage: HTMLElement | undefined;
 
   function charPage(): HTMLElement {
@@ -1692,7 +1692,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const nodes = characterFeatureGroups(c.features, c.heritage).map(({ feature, children }) => {
       const full = characterFeatureCard(feature, children);
       if (featureView === 'card') return { feature, children, node: full };
-      const details = el('details', { class: 'domain-list-row feature-list-row', open: expandedFeatures.has(feature) });
+      const key = favoriteKey('feature', feature);
+      const details = el('details', { class: 'domain-list-row feature-list-row', open: expandedFeatures.has(key) });
       const chat = el('span', { class: 'list-chat' }, favoriteButton('feature', feature));
       if (opts.onShare) {
         const button = iconButton('chat', `Post ${feature.name} to chat`, () => opts.onShare!({ category: 'feature', item: feature }));
@@ -1706,8 +1707,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         if ((event.target as Element).closest('button')) event.preventDefault();
       });
       details.addEventListener('toggle', () => {
-        if (details.open) expandedFeatures.add(feature);
-        else expandedFeatures.delete(feature);
+        if (details.open) expandedFeatures.add(key);
+        else expandedFeatures.delete(key);
       });
       details.append(summary, full);
       return { feature, children, node: details };
@@ -2214,7 +2215,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   }
 
   const cardQuery = { loadout: '', vault: '' };
-  const expandedCards = new Set<DomainCard>();
+  const expandedCards = new Set<string>();
   let cardState: CardPreferenceState = { view: 'card', pending: false, error: '' };
   let cardPage: HTMLElement | undefined;
 
@@ -2243,7 +2244,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   }
 
   function cardListRow(d: DomainCard, loadout: boolean): HTMLElement {
-    const details = el('details', { class: 'domain-list-row', open: expandedCards.has(d) });
+    const key = favoriteKey('domain', d);
+    const details = el('details', { class: 'domain-list-row', open: expandedCards.has(key) });
     const move = () => {
       if (c.testingCharacter || d.permanentlyVaulted || opts.readOnly?.()) return;
       if (loadout) { c.loadout.splice(c.loadout.indexOf(d), 1); c.vault.push(d); }
@@ -2270,8 +2272,8 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       if ((event.target as Element).closest('button, .card-menu-list')) event.preventDefault();
     });
     details.addEventListener('toggle', () => {
-      if (details.open) expandedCards.add(d);
-      else expandedCards.delete(d);
+      if (details.open) expandedCards.add(key);
+      else expandedCards.delete(key);
     });
     details.append(summary, dcard(d, loadout));
     return details;
@@ -2288,7 +2290,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       const index = list.indexOf(d);
       if (index < 0) return;
       list.splice(index, 1);
-      expandedCards.delete(d);
+      expandedCards.delete(favoriteKey('domain', d));
       render();
     });
     button.classList.add('share-icon', 'delete-domain-card');

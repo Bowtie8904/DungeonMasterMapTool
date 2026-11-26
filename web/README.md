@@ -202,7 +202,9 @@ ancestry, community and transformation. Card view shares domain cards' natural-h
 flow and narrow-sheet fallback. An independent compact Card/List switch lasts for the open sheet;
 list rows show name, source and chat link and expand to the complete feature with actions and grouped
 subfeatures. Search covers names, sources and full text (including grouped children), survives refreshes
-and remains available on read-only sheets, as does row expansion. No settings or remote contracts change.
+and remains available on read-only sheets, as does row expansion. Feature and domain-card expansion
+uses stable identity keys, so replacing sheet entries after host actions or chat roll triggers retains
+the user's expanded and collapsed rows. No settings or remote contracts change.
 
 Star Character-tab features (including grouped children), domain cards, weapons and loot to bookmark
 them for that character. Minimize the floating sheet and select **Quick Access** to open its compact
