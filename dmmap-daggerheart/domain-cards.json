@@ -2292,12 +2292,12 @@
    "domain": "Sage",
    "level": 2,
    "recall": 1,
-   "text": "***Tekaira Armored Beetles:*Mark a Stress** to conjure armored beetles that encircle you. When you next take damage, reduce the severity by one threshold. You can **spend a Hope** to keep the beetles conjured after taking damage.\n\n***Fire Flies:*** Make a **Spellcast Roll** against all adversaries within Close range. **Spend a Hope** to deal **2d8+3** magic damage to targets you succeeded against.",
+   "text": "***Tekaira Armored Beetles: *Mark a Stress** to conjure armored beetles that encircle you. When you next take damage, reduce the severity by one threshold. You can **spend a Hope** to keep the beetles conjured after taking damage.\n\n***Fire Flies:*** Make a **Spellcast Roll** against all adversaries within Close range. **Spend a Hope** to deal **2d8+3** magic damage to targets you succeeded against.",
    "automation": {},
    "spells": [
     {
      "name": "Tekaira Armored Beetles",
-     "text": "***Tekaira Armored Beetles:*Mark a Stress** to conjure armored beetles that encircle you. When you next take damage, reduce the severity by one threshold. You can **spend a Hope** to keep the beetles conjured after taking damage.",
+     "text": "**Mark a Stress** to conjure armored beetles that encircle you. When you next take damage, reduce the severity by one threshold. You can **spend a Hope** to keep the beetles conjured after taking damage.",
      "automation": {
       "actions": [
        {
@@ -2354,7 +2354,7 @@
     },
     {
      "name": "Fire Flies",
-     "text": "***Fire Flies:*** Make a **Spellcast Roll** against all adversaries within Close range. **Spend a Hope** to deal **2d8+3** magic damage to targets you succeeded against.",
+     "text": "Make a **Spellcast Roll** against all adversaries within Close range. **Spend a Hope** to deal **2d8+3** magic damage to targets you succeeded against.",
      "automation": {
       "conditionalRollTriggers": [
        {
