@@ -47,11 +47,8 @@ public final class ConnectedPlayersOverlay extends VBox {
         getChildren().addAll(heading, row(campaign.getDmColor(), "Gamemaster", "Host"));
         for (OnlineSessionServer.RosterEntry player : players) {
             if (player.connections() <= 0) continue;
-            String identity = player.chatIdentity();
-            String pronouns = player.pronouns();
-            String name = player.playerName() + (identity == null || identity.isEmpty() ? ""
-                    : " (" + identity + (pronouns == null || pronouns.isBlank() ? "" : " [" + pronouns + "]") + ")");
-            getChildren().add(row(player.color(), name, player.pingMs() < 0 ? "--" : player.pingMs() + " ms"));
+            getChildren().add(row(player.color(), RosterNames.displayName(player),
+                    player.pingMs() < 0 ? "--" : player.pingMs() + " ms"));
         }
     }
 

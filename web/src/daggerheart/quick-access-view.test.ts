@@ -15,7 +15,14 @@ class Element {
   valueAsNumber = 0;
   type = '';
   attributes: Record<string, string> = {};
-  style = { cssText: '', setProperty: () => {} };
+  style = { cssText: '', height: '', setProperty: () => {} };
+  readOnly = false;
+  clientWidth = 0;
+  clientHeight = 30;
+  offsetHeight = 32;
+  get scrollHeight(): number {
+    return 10 + 20 * this.value.split('\n').reduce((lines, line) => lines + Math.max(1, Math.ceil(line.length / Math.max(1, this.clientWidth / 10))), 0);
+  }
   dataset: Record<string, string> = {};
   children: Array<Element | string> = [];
   classList = {
@@ -36,7 +43,7 @@ class Element {
   setAttribute(name: string, value: string): void { this.attributes[name] = value; }
   addEventListener(event: string, handler: (event: Event) => void): void { this.listeners.set(event, handler); }
   querySelector(): null { return null; }
-  querySelectorAll(selector: string): Element[] { return this.all().slice(1).filter(node => selector.split(', ').includes(node.tag)); }
+  querySelectorAll(selector: string): Element[] { return this.all().slice(1).filter(node => selector.split(', ').includes(node.tag) || node.matches(selector)); }
   matches(selector: string): boolean { return selector.startsWith('.') && this.classList.contains(selector.slice(1)); }
   all(): Element[] { return [this, ...this.children.flatMap(c => typeof c === 'string' ? [] : c.all())]; }
   click(): void { this.listeners.get('click')?.({ preventDefault() {}, stopPropagation() {} } as Event); }
@@ -46,13 +53,21 @@ afterEach(() => vi.unstubAllGlobals());
 
 function setup(readOnly = false, configure?: (c: CharacterSheet) => void, visible = false) {
   let mini: Element | null = null;
+  const frames: FrameRequestCallback[] = [];
+  const observers: ResizeObserverCallback[] = [];
   vi.stubGlobal('document', {
     createElement: (tag: string) => new Element(tag),
     createElementNS: (_namespace: string, tag: string) => new Element(tag),
     addEventListener: () => {},
   });
-  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
-  vi.stubGlobal('requestAnimationFrame', () => {});
+  vi.stubGlobal('ResizeObserver', class {
+    constructor(callback: ResizeObserverCallback) { observers.push(callback); }
+    observe(): void {}
+    disconnect(): void {}
+  });
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.push(callback); });
+  vi.stubGlobal('HTMLInputElement', class { static [Symbol.hasInstance](node: Element): boolean { return node.tag === 'input'; } });
+  vi.stubGlobal('HTMLTextAreaElement', class { static [Symbol.hasInstance](node: Element): boolean { return node.tag === 'textarea'; } });
   const c = emptyCharacter('Hero');
   c.mancer = { done: true };
   const feature: Feature = { name: 'Magic Gift', source: 'Class', text: 'Complete gift description',
@@ -71,8 +86,99 @@ function setup(readOnly = false, configure?: (c: CharacterSheet) => void, visibl
     onQuickAccess: node => { content = node as unknown as Element; },
     onMiniStrip: strip => { mini = strip as unknown as Element | null; },
   });
-  return { c, bus, changed, content: () => content, mini: () => mini, view: view as unknown as Element };
+  return {
+    c, bus, changed, content: () => content, mini: () => mini, view: view as unknown as Element,
+    flushLayout: () => { frames.splice(0).forEach(callback => callback(0)); },
+    resize: () => { observers[0]([], {} as ResizeObserver); },
+  };
 }
+
+it('uses multiline Background fields and preserves edits, pronouns and blur-only renames', () => {
+  const test = setup(false, c => {
+    c.otherDetails = 'Other\nDetails';
+    c.notes = 'Saved\nNotes';
+    c.backgroundQuestions = ['Saved\nAnswer'];
+    c.connections = ['Old\nFriend'];
+  }, true);
+  const button = (label: string) => test.view.all().find(node => node.tag === 'button' && node.text === label)!;
+  button('Background').click();
+  const areas = () => test.view.all().filter(node => node.className === 'bg-textarea');
+  expect(areas()).toHaveLength(Object.keys(test.c.description).length + 4);
+  expect(areas().every(node => node.tag === 'textarea' && node.readOnly)).toBe(true);
+  test.view.all().find(node => node.className === 'sheet-edit-switch')!.click();
+  expect(areas().every(node => !node.readOnly)).toBe(true);
+  const change = (node: Element, value: string) => {
+    node.value = value;
+    node.listeners.get('input')!({ target: node } as unknown as Event);
+  };
+  const hair = areas().find(node => node.ariaLabel === 'Hair')!;
+  change(hair, 'Long braids\nWith ribbons');
+  expect(test.c.description.Hair).toBe('Long braids\nWith ribbons');
+  change(areas().find(node => node.ariaLabel === 'Pronouns')!, 'she/her\nthey/them');
+  expect(test.c.pronouns).toBe('she/her\nthey/them');
+  const name = areas().find(node => node.ariaLabel === 'Name')!;
+  const saves = test.changed.mock.calls.length;
+  change(name, 'New\nName');
+  expect(test.c.name).toBe('Hero');
+  expect(test.c.description.Name).toBe('Hero');
+  expect(test.changed).toHaveBeenCalledTimes(saves);
+  name.listeners.get('blur')!({ target: name } as unknown as Event);
+  expect(test.c.name).toBe('New\nName');
+  expect(test.c.description.Name).toBe('New\nName');
+  expect(test.changed).toHaveBeenCalledTimes(saves + 1);
+  name.listeners.get('blur')!({ target: name } as unknown as Event);
+  expect(test.changed).toHaveBeenCalledTimes(saves + 1);
+  for (const [index, value] of ['Details\nEdited', 'Notes\nEdited', 'Answer\nEdited', 'Connection\nEdited'].entries()) {
+    change(areas()[Object.keys(test.c.description).length + index], value);
+  }
+  expect([test.c.otherDetails, test.c.notes, test.c.backgroundQuestions[0], test.c.connections[0]])
+    .toEqual(['Details\nEdited', 'Notes\nEdited', 'Answer\nEdited', 'Connection\nEdited']);
+});
+
+it('fits saved Background text, grows and shrinks on input and refits when width becomes available or changes', () => {
+  const test = setup(false, c => { c.notes = 'A long saved note that wraps'; }, true);
+  test.view.all().find(node => node.tag === 'button' && node.text === 'Background')!.click();
+  const note = test.view.all().find(node => node.ariaLabel === 'Notes')!;
+  test.flushLayout();
+  expect(note.style.height).toBe('');
+  note.clientWidth = 100;
+  test.resize();
+  test.flushLayout();
+  expect(note.style.height).toBe(`${note.scrollHeight + 2}px`);
+  const original = parseInt(note.style.height);
+  note.value += '\nAnother long line that wraps';
+  note.listeners.get('input')!({ target: note } as unknown as Event);
+  expect(parseInt(note.style.height)).toBeGreaterThan(original);
+  note.value = 'Short';
+  note.listeners.get('input')!({ target: note } as unknown as Event);
+  expect(note.style.height).toBe('32px');
+  note.value = 'Text that wraps at different widths';
+  note.clientWidth = 300;
+  test.resize();
+  test.flushLayout();
+  const wideHeight = parseInt(note.style.height);
+  note.clientWidth = 80;
+  test.resize();
+  test.flushLayout();
+  expect(parseInt(note.style.height)).toBeGreaterThan(wideHeight);
+});
+
+it('keeps read-only Background fields visible but rejects input and rename commits', () => {
+  const test = setup(true, c => { c.notes = 'Saved\nNotes'; }, true);
+  test.view.all().find(node => node.tag === 'button' && node.text === 'Background')!.click();
+  const areas = test.view.all().filter(node => node.className === 'bg-textarea');
+  expect(areas.every(node => node.readOnly && !node.disabled)).toBe(true);
+  const name = areas.find(node => node.ariaLabel === 'Name')!;
+  name.value = 'Forbidden';
+  name.listeners.get('input')!({ target: name } as unknown as Event);
+  name.listeners.get('blur')!({ target: name } as unknown as Event);
+  expect(test.c.name).toBe('Hero');
+  const note = areas.find(node => node.ariaLabel === 'Notes')!;
+  note.value = 'Forbidden';
+  note.listeners.get('input')!({ target: note } as unknown as Event);
+  expect(test.c.notes).toBe('Saved\nNotes');
+  expect(test.changed).not.toHaveBeenCalled();
+});
 
 it('shows item artwork on carried equipment and loot with an accessible disclosure', () => {
   const image = (name: string) => `/item-icons/lorc/${name}.svg`;

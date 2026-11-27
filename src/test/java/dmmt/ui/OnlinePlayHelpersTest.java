@@ -1,6 +1,7 @@
 package dmmt.ui;
 
 import dmmt.online.Campaign;
+import dmmt.online.OnlineSessionServer;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -8,6 +9,22 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 class OnlinePlayHelpersTest {
+    @Test
+    void rosterNamesPutPronounsAfterTheCharacterAndSupportMissingFields() {
+        assertEquals("Alice (Aria)[they/them]", RosterNames.displayName(
+                new OnlineSessionServer.RosterEntry("p1", "Alice", 1, 42, "Aria", "#2979ff", "they/them")));
+        assertEquals("Alice (Aria)", RosterNames.displayName(
+                new OnlineSessionServer.RosterEntry("p1", "Alice", 1, 42, "Aria", "#2979ff")));
+        assertEquals("Alice (Aria)", RosterNames.displayName(
+                new OnlineSessionServer.RosterEntry("p1", "Alice", 1, 42, "Aria", "#2979ff", "  ")));
+        assertEquals("Alice (Aria)", RosterNames.displayName(
+                new OnlineSessionServer.RosterEntry("p1", "Alice", 1, 42, "Aria", "#2979ff", null)));
+        assertEquals("Alice", RosterNames.displayName(
+                new OnlineSessionServer.RosterEntry("p1", "Alice", 1, 42, "", "#2979ff", "they/them")));
+        assertEquals("Alice", RosterNames.displayName(
+                new OnlineSessionServer.RosterEntry("p1", "Alice", 1, 42, null, "#2979ff", "they/them")));
+    }
+
     @Test
     void folderPathsAreNormalized() {
         assertEquals("", OnlinePlayPanel.normalize(null));

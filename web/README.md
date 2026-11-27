@@ -315,8 +315,12 @@ are ignored. The roster displays the actor name alongside the account name. Olde
 the derived name; historical messages retain their original names.
 Character-sheet name edits rename the campaign actor, and DM actor renames update the saved sheet and its
 Background Name field. Legacy mismatches display the actor name until explicitly renamed. A pending rename
-stays local to the header or Background Name text field until it loses focus; typing pauses and background saves
+stays local to the header or Background Name textarea until it loses focus; typing pauses and background saves
 do not persist a partial name. A committed rename in the map tab is saved before sending a chat message.
+Background description fields, Other details, Notes, background questions and connections are wrapping,
+auto-growing multiline textareas without internal scrollbars or manual resizing. They also shrink when text
+is removed and refit saved text when opened or resized, including read-only, pop-out and embedded DM sheets.
+Experience names and modifiers retain their existing controls. No settings or compatibility contracts change.
 New chat and roll cards capture the same actor's portrait without showing an initial alongside it, falling back to the sender's initial when
 artwork is missing or unavailable; older messages keep their existing initial avatars.
 
@@ -439,8 +443,9 @@ Online protocol and DM Link compatibility versions are unchanged. No global sett
 The map uses floating left Navigate/Drawing/Measure tools and a collapsible right Chat/Actors/Notes/Settings rail plus a Compendium button after Notes that opens a floating window.
 There is no top-center session, campaign, map or account heading. The bottom-left **Connected players**
 overlay contains a slightly transparent connection-status badge, visible even before the first roster
-and retained across roster refreshes and reconnects. Players are shown as `username (character [pronouns])`
-when pronouns are available, without a self marker; the roster grows to fit up to the viewport width.
+and retained across roster refreshes and reconnects. Players are shown as `username (character)[pronouns]`
+when pronouns are available, without a self marker; absent characters or pronouns are omitted. The roster
+grows to fit up to the viewport width.
 The optional roster pronouns field is backward-compatible with older hosts and clients; compatibility versions remain unchanged.
 `countdowns.ts` renders the optional `state.countdowns` array (`id`, `name`, `initialValue`, `value`) as a
 read-only, translucent top-right list beside the sidebar. Countdown and collapsed active-effect rows use
@@ -740,6 +745,7 @@ internal seams at overlaps. The edge is cached independently of texture animatio
 run `npm run dev`, then open `http://localhost:5173/checks/player-layout.html` (adjust the port if necessary).
 It exercises actual layout controls and canvas gestures with local test state, without a running Java host.
 The page reports PASS/FAIL; it is not included in the production bundle.
+`checks/roster.html` covers connected-player names, optional pronouns, roster updates and wrapping.
 `checks/token-controls.html` isolates token click/box selection, half-tile arrows, movement rollback,
 rotation commands/previews/cancellation, pause and older-host capability handling with the real app and canvas.
 `checks/chat-cards.html` previews real chat/roll cards with collapsed and expanded details side by side,

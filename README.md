@@ -285,13 +285,15 @@ The browser's simplified-lighting option still uses flat shapes for performance.
     none) and owner. Folders can still be collapsed. Right-click for owner, artwork, rename, remove, place at view
     centre and folder management; drag actors and folders into folders, or **drag an actor straight onto the map**
     to place it there (like the token browser).
-  - **Connected:** connected players with their open tabs and ping; right-click to kick.
+  - **Connected:** connected players with their current characters and pronouns, open tabs and ping;
+    long names wrap, and right-click kicks a player.
 - **Connected players overlay:** while hosting, the bottom-left of the DM map shows the same roster as
   the browser: account color dots, player names and current character identities, and live ping in
   milliseconds (`--` until measured). The Dungeon Master has a colored **Host** row, and the heading
   shows whether the session is live or paused. It refreshes even with the Online Play sidebar closed
   and does not intercept map clicks. Character pronouns, when present, appear as
-  `username (character [pronouns])`; both rosters grow with their contents and wrap at the map edge.
+  `username (character)[pronouns]`; absent characters or pronouns are omitted. Both rosters grow with
+  their contents and wrap at the map edge.
 - **Movement during map switches:** Updated player browsers identify the map and level with each token move,
   so the host can reject a delayed move from a previous map. Older browsers remain compatible but cannot
   supply that additional check.
@@ -415,6 +417,9 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   sheet, or focus it and press Enter/Space. Row text is not selectable, and single-clicking no longer moves the camera. Disabled and
   testing indicators remain visible; token customization and pop-out controls are inside the sheet.
 - **Daggerheart character sheet**: players open sheets from My actors.
+  Background description fields, Other details, Notes, background questions and connections accept multiline
+  text, wrap automatically and grow or shrink to fit without internal scrollbars. This also applies to pop-out
+  and DM sheets; edit mode is still required, and Name changes commit when the field loses focus.
   The header shows the primary class as `Class: Ranger - Wayfinder` and heritage as
   `Heritage: Wildborne Vampire Human-Giant`, omitting optional parts when absent.
   Additional classes retain their `Multiclass:` label and selected domain.

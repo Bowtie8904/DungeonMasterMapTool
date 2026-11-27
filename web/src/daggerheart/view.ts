@@ -330,6 +330,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       layoutPending = false;
       if (opts.visible?.() === false) return;
       layoutCards();
+      root.querySelectorAll<HTMLTextAreaElement>('.bg-textarea').forEach(sizeBackgroundArea);
     });
   };
   const descriptionObserver = new ResizeObserver(scheduleLayout);
@@ -1028,6 +1029,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     ]));
     root.querySelectorAll<HTMLElement>('.cards, .cards > .dcard, .cards > .feat').forEach(node => cardLayoutObserver.observe(node));
     layoutCards();
+    root.querySelectorAll<HTMLTextAreaElement>('.bg-textarea').forEach(sizeBackgroundArea);
     opts.onMiniStrip?.(c.mancer?.done === false || (c.transformation === 'Shapeshifter' && !c.ancestryFeature) ? null : miniStrip());
     if (opts.quickAccessVisible?.()) opts.onQuickAccess?.(ready ? quickAccess() : null);
     if (readOnly) {
@@ -2350,21 +2352,38 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     return cardPage;
   }
 
+  function sizeBackgroundArea(t: HTMLTextAreaElement): void {
+    if (!t.clientWidth) return;
+    const borderHeight = t.offsetHeight - t.clientHeight;
+    t.style.height = 'auto';
+    t.style.height = `${t.scrollHeight + borderHeight}px`;
+  }
+
   function bgPage(): HTMLElement {
-    const area = (value: string, set: (v: string) => void, placeholder = '') => {
-      const t = el('textarea', { value, placeholder, readOnly: !canEdit() });
-      t.addEventListener('input', () => { if (canEdit()) set(t.value); });
+    const area = (value: string, set: (v: string) => void, placeholder = '', label = '', commitOnBlur = false) => {
+      const t = el('textarea', { class: 'bg-textarea', rows: 1, wrap: 'soft', value, placeholder, ariaLabel: label, readOnly: !canEdit() });
+      let committed = value;
+      t.addEventListener('input', () => {
+        sizeBackgroundArea(t);
+        if (canEdit() && !commitOnBlur) set(t.value);
+      });
+      if (commitOnBlur) t.addEventListener('blur', () => {
+        if (!canEdit() || t.value === committed) return;
+        set(t.value);
+        committed = t.value;
+        opts.onChange?.();
+      });
       return t;
     };
     const fields = el('div', { class: 'fields' }, ...Object.keys(c.description).map((k) => {
-      const i = textEdit(k, k === 'Pronouns' ? displayedPronouns() : c.description[k], value => {
+      const i = area(k === 'Pronouns' ? displayedPronouns() : c.description[k], value => {
         c.description[k] = value;
         if (k === 'Name') c.name = value;
         if (k === 'Pronouns') {
           c.pronouns = value;
           pronounsDisplay.textContent = pronounsText(value);
         }
-      }, k === 'Name');
+      }, '', k, k === 'Name');
       return el('label', { class: 'field' }, k, i);
     }));
     const qa = (list: string[], prefix: string) => el('div', { class: 'qa' }, ...list.map((v, i) => el('label', { class: 'q' }, `${prefix} ${i + 1}`, area(v, (x) => { list[i] = x; }))));
@@ -2374,7 +2393,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         'div', {},
         experiences(),
         card('Character description', null, fields, el('label', { class: 'field', style: 'margin-top:8px' }, 'Other details', area(c.otherDetails, (v) => { c.otherDetails = v; }))),
-        card('Notes', null, area(c.notes, (v) => { c.notes = v; }, 'Free notes')),
+        card('Notes', null, area(c.notes, (v) => { c.notes = v; }, 'Free notes', 'Notes')),
       ),
       el('div', {}, card('Background questions', el('span', { class: 'muted' }, 'From the class guide'), qa(c.backgroundQuestions, 'Question')), card('Connections', el('span', { class: 'muted' }, 'Relationships with other PCs'), qa(c.connections, 'Connection question'))),
     );

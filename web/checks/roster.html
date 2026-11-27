@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Connected players browser regression</title></head>
+<body><div id="app"></div><pre id="result"></pre>
+<script type="module">
+import '../src/style.css';
+import { App } from '../src/app.ts';
+
+const result = document.getElementById('result');
+const checks = [];
+const assert = (condition, name) => { if (!condition) throw Error(name); checks.push(name); };
+let app;
+try {
+  app = new App(document.getElementById('app'), () => {});
+  app.handle({ type: 'hello', protocol: 1, playerId: 'alice', playerName: 'Alex',
+    campaignId: 'campaign', paused: false, playerWhispers: true });
+  app.handle({ type: 'roster', dmColor: '#e53935', players: [
+    { playerId: 'alice', playerName: 'Alex', chatIdentity: 'Rook', pronouns: 'they/them', connections: 1, pingMs: 24 },
+    { playerId: 'bob', playerName: 'Bob', chatIdentity: 'Mori', connections: 2, pingMs: -1 },
+    { playerId: 'cara', playerName: 'Cara', pronouns: 'she/her', connections: 1, pingMs: 40 },
+  ] });
+  const rows = [...document.querySelectorAll('.players-overlay .player-row')];
+  assert(rows.map(row => row.querySelector('.player-name').textContent).join('|')
+    === 'Gamemaster|Alex (Rook)[they/them]|Bob (Mori)|Cara', 'roster names and older-host fallbacks');
+  assert(rows.map(row => row.lastElementChild.textContent).join('|') === 'Host|24 ms|--|40 ms', 'host and ping labels');
+  const singleLineHeight = rows[1].querySelector('.player-name').getBoundingClientRect().height;
+
+  app.handle({ type: 'roster', players: [
+    { playerId: 'alice', playerName: 'Alex', chatIdentity: 'New character', pronouns: 'she/her', connections: 1, pingMs: 15 },
+  ] });
+  assert(document.querySelectorAll('.players-overlay .player-name')[1].textContent
+    === 'Alex (New character)[she/her]', 'identity and pronoun changes refresh the roster');
+
+  app.handle({ type: 'roster', players: [
+    { playerId: 'alice', playerName: 'Alex', chatIdentity: 'New character', pronouns: '  ', connections: 1, pingMs: 15 },
+  ] });
+  assert(document.querySelectorAll('.players-overlay .player-name')[1].textContent
+    === 'Alex (New character)', 'cleared pronouns disappear from the roster');
+
+  const longCharacter = 'LongCharacterName'.repeat(12);
+  app.handle({ type: 'roster', players: [
+    { playerId: 'alice', playerName: 'Alex', chatIdentity: longCharacter, pronouns: 'they/them', connections: 1, pingMs: 15 },
+  ] });
+  const overlay = document.querySelector('.players-overlay');
+  const longName = overlay.querySelectorAll('.player-name')[1];
+  assert(longName.textContent === `Alex (${longCharacter})[they/them]`, 'long names retain all characters');
+  assert(longName.getBoundingClientRect().height > singleLineHeight, 'long names wrap');
+  assert(overlay.getBoundingClientRect().right <= innerWidth, 'roster fits within the viewport');
+  assert(getComputedStyle(overlay).pointerEvents === 'none', 'roster does not intercept map input');
+  result.textContent = `PASS: ${checks.length} roster browser checks`;
+  document.body.dataset.result = 'pass';
+} catch (error) {
+  result.textContent = 'FAIL: ' + error.stack;
+  document.body.dataset.result = 'fail';
+} finally {
+  app?.dispose();
+}
+</script></body>
+</html>

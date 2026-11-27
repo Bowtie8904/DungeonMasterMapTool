@@ -50,7 +50,7 @@ class ConnectedPlayersOverlayTest {
             assertEquals("CONNECTED PLAYERS", text(overlay, 0, 0));
             assertEquals("live", text(overlay, 0, 1));
             assertRow(overlay, 1, "Gamemaster", "Host", "#e53935");
-            assertRow(overlay, 2, "Alice (Aria [they/them])", "42 ms", "#2979ff");
+            assertRow(overlay, 2, "Alice (Aria)[they/them]", "42 ms", "#2979ff");
             assertRow(overlay, 3, "Bob", "--", "#00c853");
             assertTrue(overlay.getWidth() >= 215);
             assertTrue(overlay.getHeight() < 150, "The roster remains a compact map overlay");

@@ -406,7 +406,22 @@ public final class OnlinePlayPanel extends VBox {
 
     private Node connectedPage() {
         TableColumn<OnlineSessionServer.RosterEntry, String> name = column("Player",
-                OnlineSessionServer.RosterEntry::playerName);
+                RosterNames::displayName);
+        name.setCellFactory(c -> new TableCell<>() {
+            {
+                setWrapText(true);
+            }
+
+            @Override protected double computePrefHeight(double width) {
+                // Table rows ask cells for an unconstrained height, so measure at the column width.
+                return super.computePrefHeight(c.getWidth());
+            }
+
+            @Override protected void updateItem(String value, boolean empty) {
+                super.updateItem(value, empty);
+                setText(empty ? null : value);
+            }
+        });
         TableColumn<OnlineSessionServer.RosterEntry, String> tabsColumn = column("Tabs",
                 r -> String.valueOf(r.connections()));
         TableColumn<OnlineSessionServer.RosterEntry, String> ping = column("Ping",
@@ -427,6 +442,7 @@ public final class OnlinePlayPanel extends VBox {
         name.setPrefWidth(130);
         rosterTable.getColumns().setAll(List.of(name, tabsColumn, ping));
         styleTable(rosterTable);
+        rosterTable.setFixedCellSize(Region.USE_COMPUTED_SIZE);
         rosterPlaceholder.setWrapText(true);
         rosterPlaceholder.setPadding(new Insets(12));
         rosterTable.setPlaceholder(rosterPlaceholder);

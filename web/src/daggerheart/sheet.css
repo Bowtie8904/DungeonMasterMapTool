@@ -252,6 +252,7 @@
 }
 
 .dh textarea { width: 100%; min-height: 70px; resize: vertical; }
+.dh textarea.bg-textarea { box-sizing: border-box; min-height: 32px; max-height: none; overflow: hidden; resize: none; white-space: pre-wrap; overflow-wrap: anywhere; }
 .dh .field { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--muted); }
 .dh .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
 .dh .qa { display: flex; flex-direction: column; gap: 8px; }
