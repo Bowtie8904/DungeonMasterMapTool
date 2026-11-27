@@ -58,7 +58,8 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   Brawler's mentor hand wraps and secret-hobby book are also in Items, as are the SRD 2 Assassin, Warlock and
   Witch keepsakes. The Mancer offers class items and background/connection questions for Assassin, Brawler,
   Warlock and Witch, along with their user-supplied suggested traits and highlighted gear, including Warlock
-  and Witch secondary weapons. Brawler can choose its generated unarmed strike instead of active weapons.
+  and Witch secondary weapons. Brawler picks an ordinary weapon in the Mancer; Brawler's Strike is not offered
+  there and is generated on the sheet when both weapon slots are empty.
   Blood Hunter, absent from the SRD, uses the generic guide.
   Demiplane import recognizes
   `50ft of Rope` and preserves starting gold when no saved gold amount is provided (saved zero stays zero).

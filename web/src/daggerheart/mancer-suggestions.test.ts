@@ -82,23 +82,16 @@ it.each([
   expect(armorRow.text()).toContain('suggested');
 });
 
-it('allows Brawler to choose the suggested generated strike without a secondary weapon', async () => {
+it('does not offer Brawler\'s Strike in creation and requires an ordinary Brawler weapon', async () => {
   const { body, heading, button } = await open('Brawler');
-  const strike = body.all().find(node => node.tag === 'button' && node.text().startsWith("Brawler's Strike"))!;
-  expect(strike.text()).toContain('suggested');
-  strike.click();
-  button('Next').click();
-  expect(heading()).toBe('Choose your armor');
-  expect(body.all().find(node => node.tag === 'tr' && node.text().startsWith('Brigandine Armor'))!.text()).toContain('suggested');
-  button('Back').click();
+  expect(body.text()).not.toContain("Brawler's Strike");
   body.all().find(node => node.tag === 'tr' && node.text().startsWith('Scimitar'))!.click();
   button('Next').click();
   expect(heading()).toBe('Choose your secondary weapon');
   body.all().find(node => node.tag === 'tr' && node.text().startsWith('Fighting Cloak'))!.click();
-  button('Back').click();
-  body.all().find(node => node.tag === 'button' && node.text().startsWith("Brawler's Strike"))!.click();
   button('Next').click();
   expect(heading()).toBe('Choose your armor');
+  expect(body.all().find(node => node.tag === 'tr' && node.text().startsWith('Brigandine Armor'))!.text()).toContain('suggested');
 });
 
 it('highlights Assassin recommendations and skips the secondary step for the two-handed katana', async () => {

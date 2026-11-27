@@ -419,7 +419,8 @@ included in Items, as are the SRD 2 Assassin (list of names, rusted insignia bla
 a ring you can't remove) and Witch (small harmless pet, scrying stone) keepsakes. Class guides for Assassin,
 Brawler, Warlock and Witch use the SRD 2 class items and questions and user-provided suggested traits and gear.
 The Mancer highlights the suggested primary, secondary (when specified) and armor without selecting them.
-Brawler can choose its generated Brawler's Strike instead of equipping other weapons; its trait defaults to
+Brawler picks an ordinary primary weapon in the Mancer; Brawler's Strike is not offered there and is generated
+on the sheet when both weapon slots are empty; its trait defaults to
 the highest trait and can be changed on the sheet. Blood Hunter is not in the SRD and uses the generic guide. Item matching
 treats curly and straight apostrophes alike. Previously imported characters are unchanged; re-import to
 replace a plain keepsake with its catalog entry. Absent saved gold fields preserve the normal starting handful (10 coins); explicit
