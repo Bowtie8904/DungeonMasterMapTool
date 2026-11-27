@@ -4,7 +4,9 @@ import { chooseChannelCard, chooseFeatureEffects, chooseRollModification } from 
 import { emptyCharacter } from './data';
 import type { RollMessage } from '../protocol';
 import type { CompendiumFile } from './compendium';
-import { renderSheetView } from './view';
+import { openRollDialog, renderSheetView, type RollRequest } from './view';
+import { openHelpAlly } from './help-ally';
+import { availableRollOptions, rollBonus } from './engine';
 import { groupFeatures } from './feature-groups';
 import { updateCharacterAutomation } from './persist';
 
@@ -20,6 +22,7 @@ class Element {
   open = false;
   removed = false;
   ariaLabel = '';
+  get ownerDocument() { return document; }
   style = { cssText: '', setProperty: () => {} };
   classList = { toggle: () => {}, add: () => {}, contains: (name: string) => this.className.split(' ').includes(name) };
   dataset: Record<string, string> = {};
@@ -64,7 +67,7 @@ afterEach(() => vi.unstubAllGlobals());
 function setup() {
   const body = new Element('body');
   vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag),
-    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {}, removeEventListener: () => {} });
   vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
   vi.stubGlobal('requestAnimationFrame', () => {});
   return body;
@@ -208,7 +211,7 @@ describe('Sorcerer selection dialogs', () => {
     c.mancer = { done: true };
     c.features = catalog.entries.find(e => e.id === 'sorcerer-primal-origin-specialization')!.features!
       .map(f => ({ ...f, source: 'Subclass specialization - Primal Origin' }));
-    const root = renderSheetView({ character: c, onRoll: () => false }) as unknown as Element;
+    const root = renderSheetView({ character: c, onRoll: () => false, supportsHelpAlly: () => true }) as unknown as Element;
     const group = root.querySelectorAll('span').find(e => e.ariaLabel === 'Enchanted Aid limited actions')!;
     expect(group.text()).toContain('1/1 per long rest');
     expect(group.text()).not.toContain('Help an Ally');
@@ -219,7 +222,65 @@ describe('Sorcerer selection dialogs', () => {
     const refreshed = root.querySelectorAll('span').find(e => e.ariaLabel === 'Enchanted Aid limited actions')!;
     expect(refreshed.text()).toContain('0/1 per long rest');
     expect(refreshed.querySelectorAll('button')[0].disabled).toBe(true);
-    expect(root.querySelectorAll('button').find(b => b.text() === 'Help an Ally: d8')!.disabled).toBe(false);
+    expect(root.querySelectorAll('button').find(b => b.text() === 'Help an Ally: d8 (1 Hope)')!.disabled).toBe(false);
+  });
+
+  describe('Help an Ally dialogs', () => {
+    it('selects an ally without die or description inputs or spending resources locally', async () => {
+      const body = setup();
+      const c = emptyCharacter('Helper');
+      const send = vi.fn(async () => {});
+      openHelpAlly(body as unknown as HTMLElement, c, () => [{ id: 'ally', name: 'Ally', ownerId: 'player' }], send);
+      const dialog = body.querySelectorAll('dialog')[0];
+      const target = dialog.querySelectorAll('select').find(e => e.ariaLabel === 'Ally to help')!;
+      expect(dialog.querySelectorAll('select').map(e => e.ariaLabel)).toEqual(['Ally to help', 'Help feature']);
+      expect(dialog.querySelectorAll('select').find(e => e.ariaLabel === 'Help feature')!.className).toBe('dh-help-feature');
+      expect(dialog.querySelectorAll('textarea')).toHaveLength(0);
+      expect(dialog.text()).toContain('d6 advantage die');
+      target.value = 'ally';
+      const hope = c.hope.on;
+      dialog.querySelectorAll('button').find(e => e.text() === 'Help ally')!.click();
+      await settle();
+      expect(send).toHaveBeenCalledWith('ally', {}, undefined);
+      expect(c.hope.on).toBe(hope);
+      expect(dialog.removed).toBe(true);
+    });
+
+    it('preselects the fixed buff die and retains the buff when sending fails', async () => {
+      const body = setup();
+      const c = emptyCharacter('Ally');
+      c.effects.push({ id: 'help-1', name: 'Help from Helper', kind: 'buff', until: 'manual',
+        helpAlly: { die: 6 }, rollOptions: [{ id: 'help', label: 'Help an Ally', roll: 'action',
+          advantage: 'advantage', helpAllyDie: 6, hostOwned: true, defaultOn: true, excludeRolls: ['reaction', 'damage'] }] });
+      const requests: RollRequest[] = [];
+      openRollDialog(body as unknown as HTMLElement, c, 'Agility', [{ label: 'Agility', expression: '3' }],
+        rollBonus(c, ['action'], undefined, false), async request => { requests.push(request); return false; }, () => {}, ['action'],
+        undefined, undefined, undefined, false, undefined, undefined, undefined, undefined, 0, undefined, undefined, undefined, undefined, false, undefined, undefined, () => true);
+      const dialog = body.querySelector('.dh-rolldlg')!;
+      expect(dialog.querySelectorAll('select').some(e => e.ariaLabel.includes('Help an Ally die size'))).toBe(false);
+      expect(dialog.text()).toContain('Fixed d6 helper die');
+      expect(dialog.querySelectorAll('label').find(e => e.text().startsWith('Own advantage die'))!.hidden).toBe(true);
+      expect(dialog.querySelectorAll('input').find(e => e.ariaLabel === 'Also roll your own advantage die')!.checked).toBe(false);
+      dialog.querySelectorAll('button').find(e => e.text() === 'Roll to chat')!.click();
+      await settle();
+      expect(requests[0]).toMatchObject({ kind: 'duality', expression: '2d12+3', helpAdvantage: true,
+        hostOptions: [{ key: 'effect:help-1', id: 'help', helpAllyDie: 6 }] });
+      expect(c.effects).toHaveLength(1);
+      expect(dialog.text()).toContain('Not connected');
+      expect(availableRollOptions(c, ['action', 'reaction'])).toHaveLength(0);
+      expect(availableRollOptions(c, ['damage'])).toHaveLength(0);
+    });
+
+    it('places standard Help directly below rest controls and disables it on older hosts', () => {
+      setup();
+      const c = emptyCharacter('Hero');
+      c.mancer = { done: true };
+      const root = renderSheetView({ character: c, onRoll: () => false }) as unknown as Element;
+      const actions = root.querySelectorAll('div').filter(e => e.className === 'header-actions');
+      expect(actions[0].text()).toContain('Short restLong rest');
+      expect(actions[1].text()).toBe('Help an Ally');
+      expect(actions[1].querySelectorAll('button')[0].disabled).toBe(true);
+    });
   });
 
   it('renders all individual dice, selects multiple rerolls and keeps errors inline without paying on cancel', async () => {

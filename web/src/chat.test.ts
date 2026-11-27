@@ -45,6 +45,34 @@ it('renders public and whispered emotes distinctly without interpreting their te
   } finally { vi.unstubAllGlobals(); }
 });
 
+it('renders structured Help an Ally announcements as a themed card', () => {
+  class Element {
+    className = '';
+    children: Array<Element | string> = [];
+    append(...children: Array<Element | string>) { this.children.push(...children); }
+    setAttribute() {}
+    get text(): string { return this.children.map(child => typeof child === 'string' ? child : child.text).join(''); }
+    find(cls: string): Element | undefined {
+      return this.className.split(' ').includes(cls) ? this : this.children.flatMap(child => typeof child === 'string' ? [] : [child])
+        .map(child => child.find(cls)).find(Boolean);
+    }
+  }
+  vi.stubGlobal('document', { createElement: () => new Element() });
+  try {
+    const card = renderLogEntry({ kind: 'chat', m: {
+      id: 8, ts: 0, fromId: 'helper-id', from: 'Aria', text: 'legacy fallback',
+      helpAlly: { helper: 'Aria', ally: 'Bram', die: 10, feature: 'Epic Poetry', hopeSpent: 1, evasion: 1 },
+    } }, 'helper-id') as unknown as Element;
+    expect(card.className).toContain('help-ally-report');
+    expect(card.find('help-ally-banner')?.text).toBe('Help an Allyd10 advantage');
+    expect(card.find('help-ally-pair')?.text).toBe('Aria→Bram');
+    expect(card.find('help-ally-details')?.text).toContain('Epic Poetry');
+    expect(card.find('help-ally-details')?.text).toContain('1 Hope spent');
+    expect(card.find('help-ally-bonus')?.text).toBe('Helper armor: +1 Evasion to both characters');
+    expect(card.text).not.toContain('legacy fallback');
+  } finally { vi.unstubAllGlobals(); }
+});
+
 describe('roll breakdowns', () => {
   it('labels each mixed-pool die in attributed, legacy, doubled and secret rolls', () => {
     class Element {

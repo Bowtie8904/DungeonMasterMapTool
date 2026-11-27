@@ -37,6 +37,215 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OnlineSessionServerTest {
     @Test
+    void helpDiceFollowActiveHelperFeaturesAndRemainSnapshottedInTheBuff() throws Exception {
+        for (String id : List.of("helper", "ally")) {
+            campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId()).build());
+            store.saveSheet(campaign.getId(), id, sageArcanaSheet().toString());
+        }
+        JsonNode classes = MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries");
+        JsonNode epic = null, eloquent = null, companion = null;
+        for (JsonNode features : classes.findValues("features")) for (JsonNode feature : features) {
+            if ("Epic Poetry".equals(feature.path("name").asText())) epic = feature;
+            if ("Eloquent".equals(feature.path("name").asText())) eloquent = feature;
+            if ("Companion".equals(feature.path("name").asText())
+                    && feature.path("automation").path("helpAllyDie").path("die").asInt() == 8) companion = feature;
+        }
+        for (JsonNode forms : classes.findValues("beastforms")) for (JsonNode form : forms)
+            for (JsonNode feature : form.path("features"))
+                if ("Companion".equals(feature.path("name").asText())) companion = feature;
+        assertNotNull(epic);
+        assertNotNull(eloquent);
+        assertNotNull(companion);
+        String cookie = cookie();
+        for (String scenario : List.of("standard", "epic", "companion", "runic", "runic-unmarked", "runic-vaulted",
+                "overlap", "gear", "empty-item", "free-epic")) {
+            ObjectNode sheet = sageArcanaSheet(scenario.startsWith("runic") || scenario.equals("overlap")
+                    ? new String[]{"Runic Adrenaline"} : new String[]{});
+            sheet.withObject("/hope").put("on", 3);
+            sheet.withObject("/hp").put("on", scenario.equals("runic-unmarked") ? 0 : 1);
+            if (List.of("epic", "overlap", "free-epic").contains(scenario)) sheet.withArray("features").add(epic.deepCopy());
+            if (scenario.equals("companion"))
+                sheet.withArray("effects").addObject().put("id", "form").put("name", "Household Friend")
+                        .put("until", "manual").putArray("features").add(companion.deepCopy());
+            if (scenario.equals("runic-vaulted")) {
+                sheet.withArray("vault").addAll(sheet.withArray("loadout"));
+                sheet.putArray("loadout");
+            }
+            if (scenario.equals("gear") || scenario.equals("empty-item")) {
+                ObjectNode item = sheet.withArray("inventory").addObject().put("name", "Custom help item")
+                        .put("type", "gear").put("qty", scenario.equals("gear") ? 1 : 0);
+                item.putObject("automation").putObject("helpAllyDie").put("die", 12);
+            }
+            if (scenario.equals("free-epic")) sheet.withArray("features").add(eloquent.deepCopy());
+            store.saveSheet(campaign.getId(), "helper", sheet.toString());
+            store.saveSheet(campaign.getId(), "ally", sageArcanaSheet().toString());
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "helper").put("targetActorId", "ally")
+                    .put("key", "").put("actionId", "help");
+            request.putObject("helpAlly");
+            if (scenario.equals("free-epic")) {
+                for (JsonNode action : eloquent.path("automation").path("actions"))
+                    if (action.has("helpAlly")) request.put("key", "feat:Eloquent").put("actionId", action.path("id").asText());
+            }
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), scenario + ": " + response.body());
+            int expected = switch (scenario) {
+                case "epic", "overlap", "free-epic" -> 10;
+                case "companion", "runic" -> 8;
+                case "gear" -> 12;
+                default -> 6;
+            };
+            JsonNode buff = MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")).path("effects").get(0);
+            assertEquals(expected, buff.path("helpAlly").path("die").asInt(), scenario);
+            if (scenario.equals("companion")) {
+                request.put("key", "feat:Companion").put("actionId", "help");
+                response = featureHttp(cookie, request);
+                assertEquals(200, response.statusCode(), "The granted Companion action must use beastform rules: " + response.body());
+                assertEquals(8, MAPPER.readTree(store.loadSheet(campaign.getId(), "ally"))
+                        .path("effects").get(1).path("helpAlly").path("die").asInt());
+            }
+            sheet.putArray("features");
+            sheet.putArray("effects");
+            sheet.putArray("loadout");
+            sheet.putArray("inventory");
+            store.saveSheet(campaign.getId(), "helper", sheet.toString());
+            assertEquals(expected, MAPPER.readTree(store.loadSheet(campaign.getId(), "ally"))
+                    .path("effects").get(0).path("helpAlly").path("die").asInt(), "Changing helper features cannot change an existing buff.");
+        }
+    }
+
+    @Test
+    void helpFeatureVariantsPreserveTheirHopeCostsAndIndependentUseLimits() throws Exception {
+        for (String id : List.of("helper", "ally")) {
+            campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId()).build());
+            store.saveSheet(campaign.getId(), id, sageArcanaSheet().toString());
+        }
+        JsonNode classes = MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries");
+        String cookie = cookie();
+        for (String name : List.of("Enchanted Aid", "Epic Poetry", "Eloquent", "Heavenly Aid")) {
+            ObjectNode sheet = sageArcanaSheet();
+            sheet.withObject("/hope").put("on", 3);
+            JsonNode definition = null;
+            for (JsonNode entry : classes) for (JsonNode feature : entry.path("features"))
+                if (name.equals(feature.path("name").asText())) definition = feature;
+            assertNotNull(definition, name);
+            sheet.withArray("features").add(definition.deepCopy());
+            if (name.equals("Enchanted Aid")) sheet.withObject("/usage").putObject("feat:Enchanted Aid").put("used", 1).put("per", "longRest");
+            if (name.equals("Heavenly Aid")) sheet.withObject("/resources").put("summoner-circle-3", 1);
+            store.saveSheet(campaign.getId(), "helper", sheet.toString());
+            JsonNode action = java.util.stream.StreamSupport.stream(definition.path("automation").path("actions").spliterator(), false)
+                    .filter(candidate -> candidate.has("helpAlly")).findFirst().orElseThrow();
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "helper").put("targetActorId", "ally")
+                    .put("key", "feat:" + name).put("actionId", action.path("id").asText());
+            request.set("helpAlly", action.path("helpAlly").deepCopy());
+            var response = featureHttp(cookie, request);
+            assertEquals(200, response.statusCode(), name + ": " + response.body());
+            JsonNode updated = MAPPER.readTree(store.loadSheet(campaign.getId(), "helper"));
+            assertEquals(action.path("cost").has("hope") ? 2 : 3, updated.path("hope").path("on").asInt(), name);
+            if (name.equals("Enchanted Aid")) assertEquals(1, updated.path("usage").path("feat:Enchanted Aid").path("used").asInt());
+            if (name.equals("Eloquent") || name.equals("Heavenly Aid"))
+                assertEquals(400, featureHttp(cookie, request).statusCode(), "Used up feature cannot help again.");
+        }
+    }
+
+    @Test
+    void helpAllyPersistsHopeAndBuffAtomicallyAndConsumesItOnlyOnAValidAction() throws Exception {
+        for (String id : List.of("helper", "ally")) {
+            campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId()).build());
+            ObjectNode sheet = sageArcanaSheet();
+            sheet.withObject("/hope").put("on", 3);
+            store.saveSheet(campaign.getId(), id, sheet.toString());
+        }
+        String cookie = cookie();
+        ObjectNode help = MAPPER.createObjectNode().put("actorId", "helper").put("targetActorId", "ally")
+                .put("key", "").put("actionId", "help");
+        help.putObject("helpAlly").put("die", 10).put("description", "I steady their aim.");
+        help.put("targetActorId", "helper");
+        assertEquals(400, featureHttp(cookie, help).statusCode());
+        assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "helper")).path("hope").path("on").asInt());
+        help.put("targetActorId", "ally");
+        var response = featureHttp(cookie, help);
+        assertEquals(200, response.statusCode(), response.body());
+        assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "helper")).path("hope").path("on").asInt());
+        JsonNode buff = MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")).path("effects").get(0);
+        assertTrue(buff.path("rollOptions").get(0).path("defaultOn").asBoolean());
+        assertEquals(6, buff.path("helpAlly").path("die").asInt(), "Legacy helper choices cannot override the standard die.");
+        assertFalse(buff.path("text").asText().contains("I steady their aim."));
+        JsonNode announcement = store.historyTail(campaign.getId(), 10).stream()
+                .filter(entry -> entry.path("helpAlly").isObject()).findFirst().orElseThrow();
+        assertEquals("helper", announcement.path("helpAlly").path("helper").asText());
+        assertEquals("ally", announcement.path("helpAlly").path("ally").asText());
+        assertEquals(6, announcement.path("helpAlly").path("die").asInt());
+        assertEquals(1, announcement.path("helpAlly").path("hopeSpent").asInt());
+        ObjectNode request = MAPPER.createObjectNode().put("actorId", "ally").put("key", "").put("actionId", "roll");
+        ObjectNode roll = request.putObject("transactionalRoll").put("ref", "help-action").put("kind", "duality")
+                .put("source", "reaction").put("expression", "2d12+3").put("helpAdvantage", true);
+        roll.putArray("hostOptions").addObject().put("key", "effect:" + buff.path("id").asText()).put("id", "help").put("helpAllyDie", 8);
+        roll.putArray("contributions").addObject().put("label", "Hope die").put("expression", "1d12");
+        roll.withArray("contributions").addObject().put("label", "Fear die").put("expression", "1d12");
+        roll.withArray("contributions").addObject().put("label", "Trait").put("expression", "3");
+        assertEquals(400, featureHttp(cookie, request).statusCode());
+        assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")).path("effects").size());
+        roll.put("source", "action");
+        response = featureHttp(cookie, request);
+        assertEquals(200, response.statusCode(), response.body());
+        assertEquals(0, MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")).path("effects").size());
+        JsonNode result = store.historyTail(campaign.getId(), 10).stream()
+                .filter(entry -> "help-action".equals(entry.path("ref").asText())).findFirst().orElseThrow();
+        int die = result.path("rolls").get(2).asInt();
+        assertTrue(die >= 1 && die <= 6);
+        assertEquals(result.path("rolls").get(0).asInt() + result.path("rolls").get(1).asInt() + 3 + die, result.path("total").asInt());
+        assertEquals("1d6", result.path("breakdown").get(3).path("expression").asText(), "The recipient cannot override the buff die.");
+        assertEquals(200, featureHttp(cookie, request).statusCode(), "An HTTP retry must not roll or consume twice.");
+        roll.put("ref", "expired-help");
+        assertEquals(400, featureHttp(cookie, request).statusCode());
+    }
+
+    @Test
+    void helpAllyAppliesHelperArmorOnceAndTacticianExperienceCostsRecipientHope() throws Exception {
+        for (String id : List.of("helper", "ally")) {
+            campaign.getActors().add(Campaign.Actor.builder().id(id).name(id).ownerId(playerId()).build());
+            ObjectNode sheet = sageArcanaSheet(id.equals("helper") ? new String[]{"Tactician"} : new String[]{});
+            sheet.withObject("/hope").put("on", 3);
+            if (id.equals("helper")) {
+                sheet.putArray("experiences").addObject().put("name", "Teamwork").put("mod", 2);
+                for (JsonNode armor : MAPPER.readTree(compendiumDir.resolve("armor.json").toFile()).path("entries"))
+                    if ("Love Guard".equals(armor.path("name").asText())) {
+                        ObjectNode equipped = ((ObjectNode) armor).deepCopy();
+                        equipped.put("score", armor.path("armor").path("score").asInt());
+                        sheet.set("activeArmor", equipped);
+                    }
+            }
+            store.saveSheet(campaign.getId(), id, sheet.toString());
+        }
+        String cookie = cookie();
+        ObjectNode help = MAPPER.createObjectNode().put("actorId", "helper").put("targetActorId", "ally").put("key", "").put("actionId", "help");
+        help.putObject("helpAlly").put("die", 6);
+        help.put("key", "armor:Love Guard").put("actionId", "use");
+        assertEquals(200, featureHttp(cookie, help).statusCode());
+        assertEquals(400, featureHttp(cookie, help).statusCode(), "The armor feature itself is once per scene.");
+        help.put("key", "").put("actionId", "help");
+        assertEquals(200, featureHttp(cookie, help).statusCode());
+        JsonNode helper = MAPPER.readTree(store.loadSheet(campaign.getId(), "helper"));
+        JsonNode ally = MAPPER.readTree(store.loadSheet(campaign.getId(), "ally"));
+        assertEquals(1, helper.path("usage").path("armor:Love Guard").path("used").asInt());
+        assertEquals(1, java.util.stream.StreamSupport.stream(ally.path("effects").spliterator(), false)
+                .filter(effect -> "Helper".equals(effect.path("name").asText())).count());
+        JsonNode buff = ally.path("effects").get(0);
+        ObjectNode request = MAPPER.createObjectNode().put("actorId", "ally").put("key", "").put("actionId", "roll");
+        ObjectNode roll = request.putObject("transactionalRoll").put("ref", "tactician-help").put("kind", "duality")
+                .put("source", "action").put("expression", "2d12+2").put("helpAdvantage", true);
+        roll.putArray("hostOptions").addObject().put("key", "effect:" + buff.path("id").asText()).put("id", "help").put("helpAllyDie", 6);
+        roll.withArray("hostOptions").addObject().put("key", "effect:" + buff.path("id").asText()).put("id", "experience-0");
+        roll.putArray("contributions").addObject().put("label", "Hope die").put("expression", "1d12");
+        roll.withArray("contributions").addObject().put("label", "Fear die").put("expression", "1d12");
+        roll.withArray("contributions").addObject().put("label", buff.path("name").asText() + " - Tactician: Teamwork").put("expression", "2");
+        var response = featureHttp(cookie, request);
+        assertEquals(200, response.statusCode(), response.body());
+        assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")).path("hope").path("on").asInt());
+        assertEquals(2, MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")).path("effects").size(), "Other help and scene Evasion remain.");
+    }
+
+    @Test
     void rosterPingUpdatesOnlyWhenMateriallyDifferent() {
         assertFalse(OnlineSessionServer.rosterPingChanged(40, 59));
         assertTrue(OnlineSessionServer.rosterPingChanged(40, 60));

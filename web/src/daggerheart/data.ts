@@ -357,12 +357,13 @@ export function traitMod(c: CharacterSheet, name: TraitName): number {
 }
 
 export type Advantage = -1 | 0 | 1;
+export type AdvantageDie = 4 | 6 | 8 | 10 | 12 | 20 | 100;
 
 /** Builds the Hope/Fear expression plus an optional advantage die and modifier. */
-export function dualityExpression(mod: number, adv: Advantage, hopeDie: 12 | 20 = 12, fearDie: 12 | 20 = 12, advantageDie: 6 | 8 = 6): string {
+export function dualityExpression(mod: number, adv: Advantage, hopeDie: 12 | 20 = 12, fearDie: 12 | 20 = 12, advantageDie: AdvantageDie = 6, disadvantageDie: AdvantageDie = 6): string {
   let e = hopeDie === 12 && fearDie === 12 ? '2d12' : `1d${hopeDie}+1d${fearDie}`;
   if (adv === 1) e += `+1d${advantageDie}`;
-  else if (adv === -1) e += '-1d6';
+  else if (adv === -1) e += `-1d${disadvantageDie}`;
   if (mod > 0) e += `+${mod}`;
   else if (mod < 0) e += `${mod}`;
   return e;

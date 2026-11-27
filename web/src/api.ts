@@ -194,6 +194,7 @@ export async function saveSheet(actorId: string, sheet: CharacterSheet, serializ
 }
 
 export interface FeatureRequest {
+  helpAlly?: import('./daggerheart/help-ally').HelpAllyRequest;
   expectedSheetVersion?: string;
   incomingDamage?: { sheet: import('./daggerheart/data').CharacterSheet; input: Omit<import('./daggerheart/damage').DamageInput, 'selected'> & { selected: string[] }; result: { armorUsed: number; armorMarked: number; hp: number; hpBeforeReplace: number; final: number; applied: Array<{ key: string; id: string }> }; report: string };
   transactionalRoll?: import('./daggerheart/view').RollRequest;

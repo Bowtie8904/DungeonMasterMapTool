@@ -237,8 +237,8 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   Manipulate Magic also offers reach, +2, and additional-target choices on eligible action rolls. Channel Raw
   Power selects and vaults a domain card for Hope or a one-use damage bonus. Elementalist saves a creation
   element and offers Hope-cost bonuses; Transcendence grants two selected buffs. Minor Illusion, Natural
-  Evasion and Enchanted Aid roll their dice in chat. Damage-die edits also post a before/after summary.
-  Enchanted Aid's unlimited d8 Help roll is independent of its manual/chat Spellcast swap, which share
+  Evasion rolls its die in chat. Damage-die edits also post a before/after summary.
+  Enchanted Aid's d8 Help action costs 1 Hope and is independent of its manual/chat Spellcast swap, which share
   a clearly grouped once-per-long-rest counter. Arcane Charge has paid/free activation and a default-on
   magic-damage mitigation choice; its long-rest buff can be spent for +10 magic damage. Narrative
   prerequisites and the alternative +3 reaction Difficulty remain table-managed.
@@ -576,6 +576,25 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   on Hope/critical rolls. Howling Rampage rolls tier d20 physical damage and ends the form.
   Steps with detail previews keep an empty panel visible before selection, so hovering, focusing and selecting
   options only updates its contents without shifting the layout (including on narrow screens).
+- **Help an Ally:** the standard action sits immediately below Short/Long rest. Choose an ally and any
+  Help feature to use; standard help spends 1 Hope. No description or die selection is required. The host
+  determines the die from the helper's features and stores it in a removable buff with a preselected
+  action-roll option. Neither player can change the helper die. Cancelling or failing to send retains
+  it; a completed action consumes selected help, including cancelled advantage. Use its X to dismiss it.
+  Help never applies to reaction or damage rolls. With multiple helpers or an additional source of your
+  own advantage, the host rolls the dice and adds **only the highest result**, not their sum (SRD p. 49).
+  Helper dice are rolled with the recipient's action; check **Also roll your own advantage die** only for
+  an additional source. Individual die rerolls recompute the highest result; whole-action chat rerolls
+  never charge or reuse already-consumed help.
+  Feature choices support Wordsmith's narrated **Epic Poetry d10**, Primal Origin's Spellcast-only
+  **Enchanted Aid d8**, Household Friend beastform's **Companion d8**, and the free-Hope **Eloquent/Heavenly Aid**
+  alternatives (their session use/Archangel cost still applies). Epic Poetry and Companion automatically
+  improve standard help, as does **Runic Adrenaline** (d8) when HP are marked. Overlapping overrides use
+  the largest die, including with free-Hope help; the die stays fixed even if the helper's features change.
+  **Helper** armor gives
+  both participants +1 Evasion on the first Hope-paid help each scene. **Tactician** lets the recipient
+  spend 1 Hope on one of the helper's Experiences. **Lightheaded** from Phantom Fern Shoots defaults the
+  separate, editable disadvantage die to d8. Unsupported older hosts show an update hint.
 - **Beastbound Ranger companions:** the **Companion** tab appears between Character and Domain Cards.
   The Character Mancer creates your animal; existing and multiclass Beastbound characters use **Create companion**
   to open a focused companion wizard, including earned training. Track name, animal, Experiences, Evasion,
@@ -917,8 +936,8 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   Relaxing/Heartbreaking Songs apply the bard's recovery/Hope and show Clear 1 HP/Gain 1 Hope buttons
   directly on their chat messages for other players, usable once per player per performance;
   Maestro adds a Hope-or-Stress choice to Rally, and Rousing Speech lets allies clear 2 Stress.
-  Wordsmith's Heart of a Poet adds a host-rolled d4 to a finished action, while Epic Poetry rolls a d10
-  Help-an-Ally advantage die and upgrades Rally to d10. Range and narrative conditions remain table-confirmed;
+  Wordsmith's Heart of a Poet adds a host-rolled d4 to a finished action, while Epic Poetry offers a d10
+  Help-an-Ally buff and upgrades Rally to d10. Range and narrative conditions remain table-confirmed;
   Epic Song's Vulnerable condition is applied manually. Reload existing sheets to pick up the updated songs.
   Midnight's **Stealth Expertise** reaction is offered on non-attack Fear action rolls only, for yourself
   or an ally; moving unnoticed and the ally's range still require player confirmation.

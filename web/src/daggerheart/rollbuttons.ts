@@ -193,11 +193,19 @@ export function rerollRequest(m: RollMessage, t: AvailableRollTrigger, original?
     source: m.source,
     weapon: m.weapon,
   };
+  if (m.helpAlly) {
+    const used = new Set(m.helpAlly.sourceKeys);
+    const contributions = original.contributions?.filter(part => !m.helpAlly!.labels.includes(part.label));
+    original = { ...original, helpAdvantage: undefined,
+      hostOptions: original.hostOptions?.filter(option => !used.has(option.key)),
+      contributions,
+      expression: contributions?.length ? contributions.map(part => part.expression).join('+').replace(/\+-/g, '-') : original.expression };
+  }
   const advantage = t.trigger.advantage;
   const disadvantage = !advantage && t.trigger.disadvantage;
-  const tags = (m.source ?? '').split(',').filter(Boolean);
+  const tags = (m.source ?? '').split(',').filter(tag => tag && !m.helpAlly?.sourceKeys.some(key => tag.startsWith(`option:${key}:`)));
   return {
-    ...original, ...base, label, source: tags.includes('reroll') || !tags.length ? m.source : [...tags, 'reroll'].join(','),
+    ...original, ...base, label, source: (tags.includes('reroll') || !tags.length ? tags : [...tags, 'reroll']).join(','),
     expression: original.expression + (advantage ? '+1d6' : disadvantage ? '-1d6' : ''),
     contributions: [...(original.contributions ?? []), ...(advantage ? [{ label: `Advantage - ${t.source}`.slice(0, 120), expression: '1d6' }]
       : disadvantage ? [{ label: `Disadvantage - ${t.source}`.slice(0, 120), expression: '-1d6' }] : [])],

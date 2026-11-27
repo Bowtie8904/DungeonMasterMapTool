@@ -986,6 +986,29 @@ describe('cross-player roll buttons', () => {
     expect(request?.source?.split(',')).toContain('reaction');
     expect(request?.source?.split(',')).not.toContain('action');
   });
+  it('does not reuse consumed help dice or spend the helper Experience again on a reroll', () => {
+    const message = { ...original, source: 'action,option:effect:help-1:help',
+      helpAlly: { highest: 8, helpers: 1, sourceKeys: ['effect:help-1'], labels: ['Help from Helper', 'Help from Helper - Tactician: Teamwork'] },
+      expression: '2d12+3+2', breakdown: [
+        { label: 'Hope die', expression: '1d12', rolls: [5], total: 5 },
+        { label: 'Fear die', expression: '1d12', rolls: [3], total: 3 },
+        { label: 'Agility', expression: '3', rolls: [], total: 3 },
+        { label: 'Help from Helper - Tactician: Teamwork', expression: '2', rolls: [], total: 2 },
+        { label: 'Help from Helper', expression: '1d8', rolls: [8], total: 8 },
+      ] };
+    const trigger = { key: 'test', source: 'Reroll', automation: {},
+      trigger: { id: 'reroll', label: 'Reroll', on: 'action', reroll: 'duality' as const } };
+    const request = rerollRequest(message, trigger);
+    expect(request?.expression).toBe('1d12+1d12+3');
+    expect(request?.contributions?.map(part => part.label)).toEqual(['Hope die', 'Fear die', 'Agility']);
+    expect(request?.source).toBe('action,reroll');
+    const live = rerollRequest(message, trigger, { label: 'Roll', expression: '2d12+3+2', helpAdvantage: true,
+      hostOptions: [{ key: 'effect:help-1', id: 'help', helpAllyDie: 8 }, { key: 'effect:help-1', id: 'experience-0' }],
+      contributions: message.breakdown.slice(0, 4) });
+    expect(live?.hostOptions).toEqual([]);
+    expect(live?.helpAdvantage).toBeUndefined();
+    expect(live?.expression).toBe('1d12+1d12+3');
+  });
 
   it.each([
     [[3, 9], false, 9],

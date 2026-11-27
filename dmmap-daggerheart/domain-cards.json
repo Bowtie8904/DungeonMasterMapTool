@@ -6938,6 +6938,7 @@
    "recall": 1,
    "text": "Your practice of blood magic has seeped into your bloodstream, enhancing your vitals in moments of urgency. When you roll with advantage, use a **d8** instead of a d6 as your advantage die if you have 1 or more Hit Points marked.\n\nAfter you make a Strength, an Agility, or a Finesse roll, you can **mark a Hit Point** to roll 1d8 and add it to the result.",
    "automation": {
+    "helpAllyDie": {"die": 8, "markedHp": 1},
     "conditionalRollOptions": [
      {
       "id": "advantage",
@@ -8484,7 +8485,8 @@
    "domain": "Bone",
    "level": 3,
    "recall": 1,
-   "text": "When you Help an Ally, they can spend a Hope to add one of your Experiences to their roll alongside your advantage die.\n\nWhen making a Tag Team Roll, you can roll a **d20** as your Hope Die."
+   "text": "When you Help an Ally, they can spend a Hope to add one of your Experiences to their roll alongside your advantage die.\n\nWhen making a Tag Team Roll, you can roll a **d20** as your Hope Die.",
+   "automation": {"helpAllyExperience": true}
   },
   {
    "id": "telekinesis",

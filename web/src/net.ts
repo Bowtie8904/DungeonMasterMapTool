@@ -17,6 +17,7 @@ export function backoffDelay(attempt: number): number {
 
 /** Auto-reconnecting WebSocket with clock sync. */
 export class Connection {
+  helpAlly = false;
   brawlerRolls = false;
   druidAutomation = false;
   keptDice = false;
@@ -89,6 +90,7 @@ export class Connection {
   }
 
   private open(): void {
+    this.helpAlly = false;
     this.keptDice = false;
     this.zeroKeptDice = false;
     this.glancingBlowDamage = false;
@@ -151,6 +153,7 @@ export class Connection {
       }
       this.flushStateBatch();
       if (msg.type === 'hello') {
+        this.helpAlly = msg.helpAlly === true;
         invalidateCompendium();
         configureSheetActionResponses(msg.sheetActionResponses === true);
         configureSheetPatches(msg.sheetPatches === true);

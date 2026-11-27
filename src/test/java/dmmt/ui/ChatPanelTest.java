@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -54,6 +55,31 @@ class ChatPanelTest {
                 assertEquals(!recipient.isEmpty(), card.getStyleClass().contains("chat-whisper"));
             });
         }
+    }
+
+    @Test
+    void rendersStructuredHelpAllyAsAThemedDmChatCard() throws Exception {
+        JsonNode message = MAPPER.readTree("""
+                {"type":"chat","from":"Aria","fromId":"player","text":"legacy fallback",
+                 "helpAlly":{"helper":"Aria","ally":"Bram","die":10,"feature":"Epic Poetry",
+                 "hopeSpent":1,"spellcastOnly":true,"evasion":1}}
+                """);
+        onFx(() -> {
+            VBox card = (VBox) ChatCards.render(message);
+            assertTrue(card.getStyleClass().contains("chat-help-ally"));
+            assertEquals("HELP AN ALLY", ((Label) card.lookup(".chat-help-ally-banner")).getText());
+            assertEquals("d10 ADVANTAGE", ((Label) card.lookup(".chat-help-ally-die")).getText());
+            assertEquals(Set.of("Aria", "Bram"), card.lookupAll(".chat-help-ally-name").stream()
+                    .map(node -> ((Label) node).getText()).collect(java.util.stream.Collectors.toSet()));
+            assertEquals("Epic Poetry", card.lookupAll(".chat-help-ally-detail").stream()
+                    .map(node -> ((Label) node).getText()).filter("Epic Poetry"::equals).findFirst().orElseThrow());
+            assertEquals("1 Hope spent", card.lookupAll(".chat-help-ally-detail").stream()
+                    .map(node -> ((Label) node).getText()).filter("1 Hope spent"::equals).findFirst().orElseThrow());
+            assertTrue(card.lookupAll(".chat-help-ally-detail").stream()
+                    .map(node -> ((Label) node).getText()).anyMatch("Spellcast only"::equals));
+            assertEquals("Helper armor: +1 Evasion to both characters.", ((Label) card.lookup(".chat-help-ally-bonus")).getText());
+            assertNull(card.lookup(".chat-text"), "Render the structured event, not its plain-text fallback.");
+        });
     }
 
     @Test

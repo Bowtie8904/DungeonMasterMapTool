@@ -28,6 +28,20 @@ export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFi
       if (entry?.image && !item.image) item.image = entry.image;
       const rules = entry?.automation;
       if (!rules) continue;
+      for (const definition of (rules.actions ?? []).flatMap(action => action.steps ?? []).flatMap(step => step.effect ? [step.effect] : [])) {
+        if (!definition.disadvantageDie) continue;
+        for (const effect of [...c.effects, ...(item.automation?.actions ?? []).flatMap(action => action.steps ?? []).flatMap(step => step.effect ? [step.effect] : [])])
+          if (effect.name === definition.name) effect.disadvantageDie = definition.disadvantageDie;
+      }
+      if (rules.helpAllyEvasion !== undefined) {
+        item.automation ??= {};
+        item.automation.helpAllyEvasion = rules.helpAllyEvasion;
+        item.automation.actions = structuredClone(rules.actions);
+      }
+      if (rules.helpAllyDie) {
+        item.automation ??= {};
+        item.automation.helpAllyDie = structuredClone(rules.helpAllyDie);
+      }
       if (rules.deathMove) {
         item.automation ??= {};
         item.automation.deathMove = structuredClone(rules.deathMove);

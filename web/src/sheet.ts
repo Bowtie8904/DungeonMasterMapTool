@@ -134,6 +134,14 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
         }
         await useSheetAction(changed!, { actorId, key, actionId, amount, ...(allocations ? { allocations } : {}), ...(targetActorId ? { targetActorId } : {}), ...(isLifeWard(sheet, key) ? { confirmRange: true } : {}) });
       },
+      supportsHelpAlly: () => conn.helpAlly,
+      onHelpAlly: async (targetActorId, helpAlly, choice) => {
+        if (!conn.isOpen) throw new Error('Not connected. The ally was not helped.');
+        if (!conn.helpAlly) throw new Error('Update the host to use Help an Ally.');
+        await changed!.flush();
+        await useSheetAction(changed!, { actorId, key: choice?.key ?? '', actionId: choice?.action.id ?? 'help',
+          targetActorId, helpAlly });
+      },
       onCopycat: (key, actionId) => openCopycat(sheet, actorId, key, actionId, changed!),
       onSplendor: async (key, action) => {
         await changed!.flush();
@@ -193,6 +201,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
       onRoll: (r) => {
         if (r.hostOptions?.length || r.hostAction) {
           return (async () => {
+            if (r.helpAdvantage !== undefined && !conn.helpAlly) throw new Error('Update the host to roll with Help an Ally.');
             if (!conn.boneValorAutomation) throw new Error('Update the host to resolve this Bone/Valor card roll.');
             await changed!.flush();
             await useSheetAction(changed!, { actorId, key: '', actionId: 'roll', transactionalRoll: r });

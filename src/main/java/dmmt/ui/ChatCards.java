@@ -306,7 +306,8 @@ public final class ChatCards {
         String text = m.path("text").asText("");
         boolean whisper = !m.path("toId").asText("").isEmpty();
         boolean emote = !roll && m.path("emote").asBoolean(false);
-        boolean plain = !roll && !whisper && !m.has("sharedCard") && !emote;
+        boolean helpAlly = !roll && !whisper && m.path("helpAlly").isObject();
+        boolean plain = !roll && !whisper && !m.has("sharedCard") && !emote && !helpAlly;
         String system = plain && "dm".equals(m.path("fromId").asText()) ? m.path("system").asText("") : "";
         if (!"sceneEnd".equals(system) && !"newSession".equals(system)) system = "";
         RestReport rest = plain && system.isEmpty() ? parseRestReport(text) : null;
@@ -327,6 +328,7 @@ public final class ChatCards {
         if (rest != null) card.getStyleClass().add("chat-rest");
         if (damage != null) card.getStyleClass().add("chat-damage");
         if (action != null) card.getStyleClass().add("chat-action");
+        if (helpAlly) card.getStyleClass().add("chat-help-ally");
         if (whisper) card.getStyleClass().add("chat-whisper");
         if (emote) card.getStyleClass().add("chat-emote");
         card.getChildren().add(header(m, delete, artwork));
@@ -340,6 +342,10 @@ public final class ChatCards {
         }
         if (!system.isEmpty()) {
             card.getChildren().add(systemBody(system, text));
+            return card;
+        }
+        if (helpAlly) {
+            card.getChildren().add(helpAllyBody(m.path("helpAlly")));
             return card;
         }
         if (rest != null) {
@@ -410,6 +416,50 @@ public final class ChatCards {
         Label title = wrapped(report.title(), "chat-action-title");
         attachSourcePreview(title, source, report.title());
         return new VBox(banner, title, bullets(report.lines()));
+    }
+
+    private static Node helpAllyBody(JsonNode help) {
+        Label banner = new Label("HELP AN ALLY");
+        banner.getStyleClass().add("chat-help-ally-banner");
+        Label die = new Label("d" + help.path("die").asInt(6) + " ADVANTAGE");
+        die.getStyleClass().add("chat-help-ally-die");
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        HBox heading = new HBox(8, banner, spacer, die);
+        heading.setAlignment(Pos.CENTER_LEFT);
+        heading.setPadding(new Insets(8, 12, 0, 12));
+
+        Label helper = wrapped(help.path("helper").asText("?"), "chat-help-ally-name");
+        Label arrow = new Label("\u2192");
+        arrow.getStyleClass().add("chat-help-ally-arrow");
+        Label ally = wrapped(help.path("ally").asText("?"), "chat-help-ally-name");
+        HBox pair = new HBox(14, helper, arrow, ally);
+        pair.setAlignment(Pos.CENTER);
+        pair.setPadding(new Insets(14, 12, 8, 12));
+
+        FlowPane details = new FlowPane(6, 5);
+        details.setAlignment(Pos.CENTER);
+        String feature = help.path("feature").asText("Standard help");
+        details.getChildren().add(helpBadge(feature));
+        int hope = help.path("hopeSpent").asInt();
+        details.getChildren().add(helpBadge(hope > 0 ? hope + " Hope spent" : "No Hope spent"));
+        if (help.path("spellcastOnly").asBoolean())
+            details.getChildren().add(helpBadge("Spellcast only"));
+        details.setPadding(new Insets(0, 12, 10, 12));
+
+        VBox body = new VBox(4, heading, pair, details);
+        if (help.path("evasion").asInt() > 0) {
+            Label bonus = wrapped("Helper armor: +" + help.path("evasion").asInt() + " Evasion to both characters.",
+                    "chat-help-ally-bonus");
+            body.getChildren().add(bonus);
+        }
+        return body;
+    }
+
+    private static Label helpBadge(String text) {
+        Label badge = new Label(text);
+        badge.getStyleClass().add("chat-help-ally-detail");
+        return badge;
     }
 
     private static Node reactionBody(String trait) {

@@ -206,12 +206,13 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
     el('time', { dateTime: new Date(m.ts).toISOString(), title: new Date(m.ts).toLocaleString() }, time));
   const system = e.kind === 'chat' && !m.toId && m.fromId === 'dm' && (e.m.system === 'sceneEnd' || e.m.system === 'newSession') ? e.m.system : null;
   const emote = e.kind === 'chat' && e.m.emote === true;
-  const plainChat = e.kind === 'chat' && !m.toId && !e.m.sharedCard && !system && !emote;
+  const helpAlly = e.kind === 'chat' && !m.toId ? e.m.helpAlly : null;
+  const plainChat = e.kind === 'chat' && !m.toId && !e.m.sharedCard && !system && !emote && !helpAlly;
   const report = plainChat ? parseRestReport(e.m.text) : null;
   const damage = plainChat && !report ? parseDamageReport(e.m.text) : null;
   const action = plainChat && !report && !damage ? parseActionReport(e.m.text) : null;
   const reaction = e.kind === 'chat' && plainChat && !report && !damage && !action && e.m.reactionPrompt ? e.m.reactionPrompt : null;
-  const card = el('article', { class: `entry${e.kind === 'roll' ? ' roll' : ''}${e.kind === 'roll' && isCriticalRoll(e.m) ? ' critical-roll' : ''}${report ? ' rest-report' : ''}${damage ? ' damage-report' : ''}${action ? ' action-report' : ''}${reaction ? ' reaction-report' : ''}${system ? ' system-report' : ''}${m.toId ? ' whisper' : ''}${emote ? ' emote' : ''}` }, header);
+  const card = el('article', { class: `entry${e.kind === 'roll' ? ' roll' : ''}${e.kind === 'roll' && isCriticalRoll(e.m) ? ' critical-roll' : ''}${report ? ' rest-report' : ''}${damage ? ' damage-report' : ''}${action ? ' action-report' : ''}${reaction ? ' reaction-report' : ''}${system ? ' system-report' : ''}${helpAlly ? ' help-ally-report' : ''}${m.toId ? ' whisper' : ''}${emote ? ' emote' : ''}` }, header);
   if (m.toId) {
     card.append(el('div', { class: 'message-recipient' }, el('span', { class: 'whisper-label' },
       `Whisper to ${m.toId === 'dm' ? 'Gamemaster' : m.to ?? (m.toId === playerId ? 'you' : m.toId)}`)));
@@ -221,6 +222,17 @@ export function renderLogEntry(e: LogEntry, playerId: string, onGrab?: (card: Sh
     card.append(el('div', { class: 'system-banner' }, el('strong', {}, system === 'newSession' ? 'New session' : 'Scene ended')),
       el('div', { class: 'rest-subtitle' }, lines[1] ?? ''),
       el('ul', { class: 'rest-moves' }, ...lines.slice(2).map((l: string) => el('li', {}, l.replace(/^• /, '')))));
+    return card;
+  }
+  if (helpAlly) {
+    card.append(
+      el('div', { class: 'help-ally-banner' }, el('strong', {}, 'Help an Ally'), el('span', {}, `d${helpAlly.die} advantage`)),
+      el('div', { class: 'help-ally-pair' }, el('strong', {}, helpAlly.helper), el('span', { class: 'help-ally-arrow', ariaHidden: 'true' }, '→'), el('strong', {}, helpAlly.ally)),
+      el('div', { class: 'help-ally-details' },
+        el('span', {}, helpAlly.feature ?? 'Standard help'),
+        el('span', {}, helpAlly.hopeSpent ? `${helpAlly.hopeSpent} Hope spent` : 'No Hope spent'),
+        ...(helpAlly.spellcastOnly ? [el('span', {}, 'Spellcast only')] : [])),
+      ...(helpAlly.evasion ? [el('div', { class: 'help-ally-bonus' }, `Helper armor: +${helpAlly.evasion} Evasion to both characters`)] : []));
     return card;
   }
   if (report) {

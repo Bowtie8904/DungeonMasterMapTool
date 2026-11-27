@@ -1703,6 +1703,13 @@
 .chat-entry.chat-action { -fx-background-color: radial-gradient(focus-angle 0deg, focus-distance 0%, center 0% 0%, radius 70%, #4a78d426, transparent), linear-gradient(to bottom right, #1f2735, #181d27); -fx-border-color: #4a5f86 #4a5f86 #4a5f86 #6c9cf0; -fx-border-width: 1 1 1 4; }
 .chat-action-banner { -fx-text-fill: #9fc0f7; -fx-font-weight: bold; -fx-padding: 8 12 0 12; }
 .chat-action-title { -fx-font-weight: bold; -fx-padding: 2 12 0 12; }
+.chat-entry.chat-help-ally { -fx-background-color: radial-gradient(focus-angle 0deg, focus-distance 0%, center 92% 0%, radius 65%, #8058a633, transparent), linear-gradient(to bottom right, #292536, #191f29); -fx-border-color: #55416d #55416d #55416d #b08ae0; -fx-border-width: 1 1 1 4; }
+.chat-help-ally-banner { -fx-text-fill: #d7bcff; -fx-font-size: 11px; -fx-font-weight: bold; }
+.chat-help-ally-die { -fx-background-color: #76549b; -fx-background-radius: 12; -fx-padding: 3 9; -fx-text-fill: #f0e5ff; -fx-font-size: 11px; -fx-font-weight: bold; }
+.chat-help-ally-name { -fx-text-fill: #f0eafa; -fx-font-size: 15px; -fx-font-weight: bold; }
+.chat-help-ally-arrow { -fx-text-fill: #c6a2f5; -fx-font-size: 20px; }
+.chat-help-ally-detail { -fx-background-color: #4d435b; -fx-background-radius: 10; -fx-padding: 2 8; -fx-text-fill: #c7bdcf; -fx-font-size: 10px; }
+.chat-help-ally-bonus { -fx-background-color: #65bb8f18; -fx-background-radius: 6; -fx-padding: 6 10; -fx-text-fill: #9fe0bb; -fx-font-size: 11px; -fx-alignment: center; }
 .chat-entry.chat-reaction { -fx-background-color: radial-gradient(focus-angle 0deg, focus-distance 0%, center 0% 0%, radius 70%, #e0b64a22, transparent), linear-gradient(to bottom right, #2a2619, #1c1a14); -fx-border-color: #7a6a3a #7a6a3a #7a6a3a #e0b64a; -fx-border-width: 1 1 1 4; }
 .chat-reaction-banner { -fx-text-fill: #e6c46a; -fx-font-weight: bold; }
 .chat-entry.chat-system { -fx-background-color: radial-gradient(focus-angle 0deg, focus-distance 0%, center 0% 0%, radius 70%, #8e5cf026, transparent), linear-gradient(to bottom right, #262036, #1b1a24); -fx-border-color: #6b4fa3 #6b4fa3 #6b4fa3 #b79cf0; -fx-border-width: 1 1 1 4; }

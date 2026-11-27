@@ -827,13 +827,42 @@ one-use +2-per-card-level magic-damage option (only select it for a spell). Tran
 rest-duration passive buffs, with a trait picker for its trait bonus. Elementalist chooses an element during
 creation and shows it on the feature; existing characters without a saved choice can select it there.
 Its optional action +2 / damage +3 each costs 1 Hope. Minor Illusion rolls against 10; Natural Evasion
-posts a d6. Enchanted Aid's unlimited d8 Help roll never spends the independent long-rest Spellcast swap.
+posts a d6. Enchanted Aid's d8 Help action costs 1 Hope and never spends the independent long-rest Spellcast swap.
 Its manual swap button shares the chat swap's counter; that counter is grouped with the swap, not Help.
 Arcane Charge's Hope-cost button, free magic-damage button and default-on magic mitigation all grant the
 same long-rest Charged buff; its optional +10 magic-damage bonus consumes it. Remove the buff manually
 when taking the alternative +3 reaction Difficulty. The new chat-edit dialogs require
 `hello.sorcererAutomation:true`; older hosts show an update hint. Existing compatibility versions and
 settings are unchanged.
+
+**Help an Ally:** the sheet header places its standard action below the rest controls. `help-ally.ts`
+opens a themed ally/feature dialog without die or description inputs; both main-page and popped-out sheets flush pending
+changes and submit `FeatureRequest.helpAlly` with `targetActorId`. The host journals the helper's costs,
+recipient's buff and a structured, themed Help card in both the player browser and DM chat, with the ally,
+fixed die and feature/armor benefits together.
+Optional `hello.helpAlly` gates the new flow; older hosts
+disable it. Online Play and DM Link compatibility versions and settings remain unchanged.
+Catalog `actions[].helpAlly` metadata routes Epic Poetry (narrated d10), Enchanted Aid (Spellcast-only d8,
+1 Hope, independent of the swap limit), Household Friend's Companion (d8), Eloquent (shared session use) and
+Heavenly Aid (Archangel resource, no Hope) through the same flow. Standard help costs 1 Hope.
+`helpAllyEvasion` on equipped Helper armor applies +1 Evasion to both participants once per scene on
+Hope-paid help; `helpAllyExperience` on active Tactician snapshots the helper's Experiences for one
+optional recipient-Hope spend. `automation.helpAllyDie: { die, markedHp? }` declares passive helper-die
+overrides: Epic Poetry d10, active Household Friend Companion d8, and marked-HP Runic Adrenaline d8.
+The host derives the strongest applicable override from saved active features, heritage, loadout,
+weapons, armor and inventory; selected Help features retain their costs and Spellcast restrictions.
+Passive overrides also apply to free-Hope alternatives. Vaulted cards and empty items do not apply.
+Phantom Fern Shoots' Lightheaded effect sets `disadvantageDie:8`.
+The recipient's immutable, manually dismissible help effect exposes a default-on action option
+(`helpAllyDie`, `hostOwned`), excluding reaction/damage. The die is snapshotted in the buff and shown as
+read-only, not recomputed from either character at roll time. Legacy request die/description fields
+are accepted but ignored; the host uses the saved buff die, never a size requested by the recipient.
+`helpAdvantage` indicates whether advantage survived cancellation/was accepted. The
+host rolls helpers alongside the action, pools them with an optional own advantage die, adds only the
+highest result, annotates kept/dropped dice, and consumes only selected help in the same transaction.
+Cancel, connection failure and invalid/stale requests retain the buff. Its X removes it through normal
+sheet persistence. Rerolls strip already-consumed help options/Experience bonuses instead of spending
+again or trying to activate an expired effect.
 Warlock Favor is shown only in class resources; the exclusive **Gain Favor instead of Hope** reward is
 available on successful Hope action rolls, even at full Hope. Deathless Embrace and Otherworldly Ire ask
 for Favor/Patron Dice; Deadly Vengeance asks for HP marked and also works from mitigation using final HP.

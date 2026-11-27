@@ -1928,6 +1928,7 @@
     "text": "The first time you spend Hope to help an ally in a scene, you and the ally gain +1 Evasion until the end of that scene."
    },
    "automation": {
+    "helpAllyEvasion": 1,
     "uses": {
      "max": 1,
      "per": "scene"
@@ -1936,6 +1937,8 @@
      {
       "id": "use",
       "label": "Helper: spent Hope to help an ally",
+      "helpAlly": {"die": 6},
+      "cost": {"hope": 1},
       "texts": {
        "button": "Helper: spent Hope to help an ally",
        "chatButton": "Helper: spent Hope to help an ally",

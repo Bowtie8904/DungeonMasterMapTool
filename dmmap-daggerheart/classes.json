@@ -321,6 +321,7 @@
         "id": "help",
         "label": "Help an Ally",
         "cost": {"summoner-circle-3": 1},
+        "helpAlly": {"die": 6, "description": "Command an Archangel to help an ally within Close range; the Archangel disappears."},
         "sendRoll": {"dice": "1d6", "label": "Heavenly Aid"},
         "report": {"text": "Help an Ally within Close range without spending Hope; the ally uses this advantage die."}
        }
@@ -4355,6 +4356,8 @@
          "roll": "Help an Ally: d8"
         },
         "usesSource": false,
+        "cost": {"hope": 1},
+        "helpAlly": {"die": 8, "spellcastOnly": true, "description": "Enhance an ally's Spellcast roll with your essence."},
         "sendRoll": {
          "dice": "1d8",
          "label": "Enchanted Aid: advantage die"
@@ -6267,10 +6270,12 @@
      "text": "Your Rally Die increases to a **d10**. Additionally, when you Help an Ally, you can narrate the moment as if you were writing the tale of their heroism in a memoir. When you do, roll a **d10** as your advantage die.",
      "type": "subclass",
      "automation": {
+      "helpAllyDie": {"die": 10},
       "actions": [
        {
         "id": "help",
         "label": "Help an Ally: roll d10 advantage",
+        "helpAlly": {"die": 10, "description": "Narrate the moment as if writing the tale of your ally's heroism in a memoir."},
         "texts": {
          "button": "Help an Ally: roll d10 advantage",
          "chatButton": "Help an Ally: roll d10 advantage",
@@ -6320,6 +6325,11 @@
          "chatButton": "Eloquent",
          "roll": "Eloquent"
         }
+       },
+       {
+        "id": "help",
+        "label": "Help an Ally without spending Hope",
+        "helpAlly": {"die": 6, "description": "Encourage your ally. Shares Eloquent's once-per-session use."}
        }
       ]
      }
@@ -7542,10 +7552,12 @@
           "name": "Companion",
           "text": "When you Help an Ally, roll a d8 as your advantage die.",
           "automation": {
+           "helpAllyDie": {"die": 8},
            "actions": [
             {
              "id": "help",
              "label": "Help an Ally",
+             "helpAlly": {"die": 8, "description": "Help your ally while in Familiar beastform."},
              "texts": {
               "button": "Help an Ally",
               "chatButton": "Help an Ally",

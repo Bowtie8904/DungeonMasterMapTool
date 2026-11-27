@@ -3563,6 +3563,7 @@
          "name": "Lightheaded",
          "kind": "debuff",
          "until": "manual",
+         "disadvantageDie": 8,
          "text": "The effect of most poisons is removed, but for 1 hour you roll a d8 as your disadvantage die."
         }
        }

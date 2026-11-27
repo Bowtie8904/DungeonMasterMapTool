@@ -196,6 +196,7 @@ export interface Actor {
 }
 
 export interface ChatMessage {
+  helpAlly?: { helper: string; ally: string; die: number; feature?: string; spellcastOnly?: boolean; hopeSpent: number; evasion?: number };
   incomingDamage?: boolean;
   reactionPrompt?: { trait: 'Strength' | 'Agility' | 'Finesse' | 'Instinct' | 'Presence' | 'Knowledge' };
   id: string | number;
@@ -238,6 +239,7 @@ export interface RollDetail extends RollContribution {
 }
 
 export interface RollMessage {
+  helpAlly?: { highest: number; helpers: number; sourceKeys: string[]; labels: string[] };
   deathrun?: { effectId: string; count: number };
   actionBenefits?: ChatMessage['actionBenefits'];
   id: string | number;
@@ -356,6 +358,7 @@ export type DeltaOp =
   | { op: 'tokens'; upsert?: Token[]; remove?: string[] };
 
 export interface Hello {
+  helpAlly?: boolean;
   mapPings?: boolean;
   type: 'hello';
   sheetSync?: boolean;
@@ -445,7 +448,7 @@ export type ServerMessage =
   | { type: 'handouts'; folders: string[]; files: HandoutFile[] }
   | { type: 'handoutShow'; id: string; name: string }
   | ({ type: 'roll' } & RollMessage)
-  | ({ type: 'rollUpdate'; id: number; ts: number } & Partial<Pick<RollMessage, 'outcome' | 'featureUses' | 'rewardClaimed' | 'deathResult' | 'featureRoll' | 'total' | 'expression' | 'rolls' | 'breakdown'>>)
+  | ({ type: 'rollUpdate'; id: number; ts: number } & Partial<Pick<RollMessage, 'outcome' | 'featureUses' | 'rewardClaimed' | 'deathResult' | 'featureRoll' | 'total' | 'expression' | 'rolls' | 'breakdown' | 'helpAlly'>>)
   | AudioMessage
   | { type: 'kicked'; reason?: string }
   | { type: 'error'; message: string };

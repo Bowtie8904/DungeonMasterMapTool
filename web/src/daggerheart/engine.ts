@@ -52,6 +52,8 @@ export interface Modifier {
 }
 
 export interface EffectDef {
+  helpAlly?: { die: import('./data').AdvantageDie; spellcastOnly?: boolean };
+  disadvantageDie?: import('./data').AdvantageDie;
   /** Created and removed by the DM or the host's expiration/consumption rules. */
   dmManaged?: boolean;
   dmUsesRemaining?: number;
@@ -145,6 +147,7 @@ export interface Step {
 }
 
 export interface ActionDef {
+  helpAlly?: { die: import('./data').AdvantageDie; spellcastOnly?: boolean; description?: string };
   /** Optional display wording; absent fields keep the generated text. Costs are always appended by the app. */
   texts?: ActionTexts;
   /** Offered only while this resource is above 0; it is not spent by this requirement. */
@@ -280,6 +283,7 @@ export interface ResourceDef {
 }
 
 export interface RollOption extends ActionDef {
+  helpAllyDie?: import('./data').AdvantageDie;
   /** Die sizes the player picks from in the roll dialog (first is the default); replaces `dice` with one die of that size. */
   dieSizes?: number[];
   /** Host: when this option's die shows this face, the `requiresResource` pool is emptied and reported (Superior Alconite Crystal). */
@@ -292,7 +296,7 @@ export interface RollOption extends ActionDef {
   linkedDamageTrait?: TraitName;
   linkedDamageMultiplier?: number;
   allResourceDice?: { resource: string; sides: number };
-  advantageDie?: 8;
+  advantageDie?: import('./data').AdvantageDie;
   magicDamage?: boolean;
   rerollBelow?: number;
   resourceMultiplier?: { resource: string; value: number };
@@ -399,6 +403,9 @@ export interface RollTrigger extends ActionDef {
 export type RollActionSection = 'result' | 'feature' | 'other';
 
 export interface Automation {
+  helpAllyEvasion?: number;
+  helpAllyExperience?: boolean;
+  helpAllyDie?: { die: import('./data').AdvantageDie; markedHp?: number };
   /** Optional wording for the feature's Hope button and the fallback report title of its actions. */
   texts?: ActionTexts;
   /** Attachable item: while attached, the chosen weapon/armor gains this feature, automation and/or attack trait. */
@@ -1330,6 +1337,7 @@ export function selectedRollBonus(c: CharacterSheet, base: RollBonus, selected: 
   const out = { ...base, dice: [...base.dice], names: [...base.names], contributions: [...base.contributions] };
   for (const selection of selected) {
     const { option } = selection;
+    if (option.helpAllyDie) continue;
     const value = option.resourceMultiplier ? (c.resources?.[option.resourceMultiplier.resource] ?? 0) * option.resourceMultiplier.value
       : option.traitValue ? traitTotal(c, option.traitValue)
       : option.derivedProficiency ? derivedStats(c).proficiency : evalValue(option.value, c);
@@ -1352,9 +1360,9 @@ export function signedDice(dice: string): string {
 }
 
 export function suggestedAdvantage(selected: AvailableRollOption[]): Advantage {
-  const advantage = selected.some((s) => s.option.advantage === 'advantage');
-  const disadvantage = selected.some((s) => s.option.advantage === 'disadvantage');
-  return advantage === disadvantage ? 0 : advantage ? 1 : -1;
+  const balance = selected.filter(s => s.option.advantage === 'advantage').length
+    - selected.filter(s => s.option.advantage === 'disadvantage').length;
+  return balance === 0 ? 0 : balance > 0 ? 1 : -1;
 }
 
 export function effectiveAdvantage(requested: Advantage, selected: AvailableRollOption[]): Advantage {

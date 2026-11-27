@@ -1728,6 +1728,14 @@ export class App {
               return result.warning;
             },
             onFeature: (key, actionId, amount, allocations) => this.useSheetFeature(a.id, character, changed, key, actionId, amount, allocations),
+            supportsHelpAlly: () => this.conn.helpAlly,
+            onHelpAlly: async (targetActorId, helpAlly, choice) => {
+              if (!this.conn.isOpen) throw new Error('Not connected. The ally was not helped.');
+              if (!this.conn.helpAlly) throw new Error('Update the host to use Help an Ally.');
+              await changed.flush();
+              await useSheetAction(changed, { actorId: a.id, key: choice?.key ?? '', actionId: choice?.action.id ?? 'help',
+                targetActorId, helpAlly });
+            },
             restActors: () => (this.store.state?.actors ?? []).filter(actor => !actor.disabled && actor.id !== a.id && !!actor.ownerId),
             onRest: async (rest, rebase) => {
               if (!this.conn.boneValorAutomation) throw new Error('Update the host to resolve Bone/Valor rest benefits.');
@@ -1797,6 +1805,7 @@ export class App {
             onRoll: (r) => {
               if (r.hostOptions?.length || r.hostAction) {
                 return (async () => {
+                  if (r.helpAdvantage !== undefined && !this.conn.helpAlly) throw new Error('Update the host to roll with Help an Ally.');
                   if (!this.conn.boneValorAutomation) throw new Error('Update the host to resolve this Bone/Valor card roll.');
                   await changed.flush();
                   await useSheetAction(changed, { actorId: a.id, key: '', actionId: 'roll', transactionalRoll: r });

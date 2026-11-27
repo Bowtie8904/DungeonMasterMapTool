@@ -2395,6 +2395,11 @@ public final class OnlineSessionServer {
                 actionResponse(ctx, playerId, sourceActor);
                 return;
             }
+            if (request.has("helpAlly")) {
+                resolveHelpAlly(sourceActor, request);
+                actionResponse(ctx, playerId, sourceActor);
+                return;
+            }
             if (request.has("transactionalRoll")) {
                 resolveCardOptionRoll(sourceActor, request.path("transactionalRoll"));
                 actionResponse(ctx, playerId, sourceActor);
@@ -3267,6 +3272,134 @@ public final class OnlineSessionServer {
         deliver(message, null, false);
     }
 
+    private synchronized void resolveHelpAlly(Campaign.Actor actor, JsonNode request) throws IOException {
+        Campaign.Actor ally = campaign.actor(request.path("targetActorId").asText());
+        if (ally == null || ally.isDisabled() || actor.getId().equals(ally.getId()) || !hasPlayerSheet(ally))
+            throw new IllegalArgumentException("Choose an active ally with a saved player character sheet.");
+        ObjectNode sheet = storedSheet(actor.getId());
+        ObjectNode target = storedSheet(ally.getId());
+        String key = request.path("key").asText();
+        JsonNode rule = MAPPER.createObjectNode();
+        int hopeCost = 1;
+        boolean spentArmorUse = false;
+        if (!key.isBlank()) {
+            JsonNode source = featureSource(sheet, key);
+            JsonNode auto = helpAllyAutomation(sheet, key, source);
+            JsonNode action = featureDefinition(auto, request.path("actionId").asText(), false);
+            if (action == null || !action.path("helpAlly").isObject()
+                    || key.startsWith("card:") && !activeCardKey(sheet, key))
+                throw new IllegalArgumentException("This Help feature is no longer available. Reopen Help an Ally.");
+            rule = action.path("helpAlly");
+            hopeCost = action.path("cost").path("hope").asInt();
+            applyFeatureCost(sheet, action.path("cost"));
+            if (!action.has("usesSource") || action.path("usesSource").asBoolean()) {
+                useFeatureLimit(sheet, key, effectiveFeatureUses(sheet, key, auto.path("uses")));
+                spentArmorUse = key.startsWith("armor:") && auto.path("helpAllyEvasion").asInt() > 0;
+            }
+            if (action.has("uses")) useFeatureLimit(sheet, key + ":action:" + action.path("id").asText(), action.path("uses"));
+        } else applyFeatureCost(sheet, MAPPER.createObjectNode().put("hope", 1));
+        ArrayNode experiences = MAPPER.createArrayNode();
+        for (JsonNode card : sheet.path("loadout")) {
+            String cardKey = "card:" + card.path("name").asText();
+            JsonNode auto = catalogAutomation(cardKey, card.path("name").asText(), card.path("automation"));
+            if (auto.path("helpAllyExperience").asBoolean()) experiences.addAll((ArrayNode) sheet.withArray("experiences"));
+        }
+        ObjectNode helpRule = ((ObjectNode) rule).deepCopy();
+        helpRule.put("die", helpAllyDie(sheet, rule));
+        ObjectNode effect = HelpAllyRules.effect(actor.getId(), actor.getName(), helpRule, experiences);
+        target.withArray("effects").add(effect);
+        List<String> report = new ArrayList<>();
+        report.add(actor.getName() + " helps " + ally.getName() + " with a d" + effect.path("helpAlly").path("die").asInt()
+                + " advantage die" + (rule.path("spellcastOnly").asBoolean() ? " on a Spellcast action" : "")
+                + (hopeCost > 0 ? " (spent " + hopeCost + " Hope)." : " (no Hope spent)."));
+        JsonNode armor = sheet.path("activeArmor");
+        String armorKey = "armor:" + armor.path("name").asText();
+        JsonNode armorAuto = catalogAutomation(armorKey, armor.path("name").asText(), armor.path("automation"));
+        int evasion = armorAuto.path("helpAllyEvasion").asInt();
+        int grantedEvasion = 0;
+        if (hopeCost > 0 && evasion > 0 && (spentArmorUse || sheet.path("usage").path(armorKey).path("used").asInt() == 0)) {
+            if (!spentArmorUse) useFeatureLimit(sheet, armorKey, MAPPER.createObjectNode().put("max", 1).put("per", "scene"));
+            grantedEvasion = evasion;
+            for (ObjectNode recipient : List.of(sheet, target)) {
+                ObjectNode bonus = recipient.withArray("effects").addObject().put("id", "helper-" + java.util.UUID.randomUUID())
+                        .put("name", "Helper").put("source", armor.path("name").asText()).put("kind", "buff")
+                        .put("until", "scene").put("text", "+" + evasion + " Evasion until the end of the scene.");
+                bonus.putArray("modifiers").addObject().put("stat", "evasion").put("value", evasion);
+            }
+            report.add("Helper: both characters gain +" + evasion + " Evasion until the end of the scene.");
+        }
+        ObjectNode message = chatMessage(actor.getOwnerId(), actor.getName(), null, String.join("\n", report));
+        message.put("actorId", actor.getId());
+        ObjectNode announcement = message.putObject("helpAlly").put("helper", actor.getName()).put("ally", ally.getName())
+                .put("die", effect.path("helpAlly").path("die").asInt()).put("hopeSpent", hopeCost);
+        if (!key.isBlank()) announcement.put("feature", key.substring(key.indexOf(':') + 1));
+        if (rule.path("spellcastOnly").asBoolean()) announcement.put("spellcastOnly", true);
+        if (grantedEvasion > 0) announcement.put("evasion", grantedEvasion);
+        Map<String, ObjectNode> changed = new java.util.LinkedHashMap<>();
+        changed.put(actor.getId(), sheet);
+        changed.put(ally.getId(), target);
+        commitFeatureSheets(changed, message, true);
+        for (var entry : changed.entrySet()) sendFeatureState(campaign.actor(entry.getKey()), entry.getValue());
+        deliver(message, null, false);
+    }
+
+    private int helpAllyDie(ObjectNode sheet, JsonNode rule) throws IOException {
+        int sides = rule.has("die") ? HelpAllyRules.die(rule.path("die")) : 6;
+        Map<String, JsonNode> sources = new java.util.LinkedHashMap<>();
+        for (String field : List.of("features", "heritage", "loadout", "activeWeapons", "inventory")) {
+            String prefix = switch (field) {
+                case "loadout" -> "card:";
+                case "activeWeapons" -> "weapon:";
+                case "inventory" -> "item:";
+                default -> "feat:";
+            };
+            for (JsonNode source : sheet.path(field)) {
+                if (source.path("permanentlyVaulted").asBoolean()
+                        || field.equals("inventory") && source.path("qty").asInt() <= 0) continue;
+                sources.put(prefix + source.path("name").asText(), source);
+                JsonNode borrowed = source.path("borrowedCard");
+                if (field.equals("loadout") && source.path("name").asText().equals("Copycat") && borrowed.isObject()) {
+                    Campaign.Actor original = campaign.actor(borrowed.path("sourceActorId").asText());
+                    String name = borrowed.path("card").path("name").asText();
+                    if (original != null && !original.isDisabled() && hasPlayerSheet(original)
+                            && CopycatCards.activeCard(storedSheet(original.getId()), name) != null) {
+                        String key = "card:Copycat/" + name;
+                        sources.put(key, featureSource(sheet, key));
+                    }
+                }
+            }
+        }
+        JsonNode armor = sheet.path("activeArmor");
+        if (armor.isObject()) sources.put("armor:" + armor.path("name").asText(), armor);
+        for (JsonNode effect : sheet.path("effects")) {
+            Campaign.Actor owner = campaign.actor(effect.path("sourceActorId").asText());
+            if (owner != null && owner.isDisabled()) continue;
+            for (JsonNode feature : effect.path("features"))
+                sources.put("feat:" + feature.path("name").asText(), feature);
+            if (effect.path("weapon").isObject()) {
+                sources.keySet().removeIf(key -> key.startsWith("weapon:"));
+                JsonNode weapon = effect.path("weapon");
+                sources.put("weapon:" + weapon.path("name").asText(), weapon);
+            }
+        }
+        for (var entry : sources.entrySet()) {
+            JsonNode source = entry.getValue();
+            JsonNode override = helpAllyAutomation(sheet, entry.getKey(), source).path("helpAllyDie");
+            if (override.isObject() && sheet.path("hp").path("on").asInt() >= override.path("markedHp").asInt())
+                sides = Math.max(sides, HelpAllyRules.die(override.path("die")));
+        }
+        return sides;
+    }
+
+    private JsonNode helpAllyAutomation(ObjectNode sheet, String key, JsonNode source) {
+        if (key.startsWith("feat:")) {
+            // Granted Companion rules belong to the beastform, not the same-named Ranger feature.
+            for (JsonNode effect : sheet.path("effects")) for (JsonNode feature : effect.path("features"))
+                if (feature == source) return feature.path("automation");
+        }
+        return catalogAutomation(key, source.path("name").asText(), source.path("automation"));
+    }
+
     private synchronized void resolveCardOptionRoll(Campaign.Actor actor, JsonNode request) throws IOException {
         if (!(request instanceof ObjectNode input)) throw new IllegalArgumentException("Invalid card roll.");
         String ref = input.path("ref").asText();
@@ -3305,6 +3438,8 @@ public final class OnlineSessionServer {
                 if (id.equals(option.path("id").asText())) definition = option;
             if (definition == null) throw new IllegalArgumentException("This card roll option is no longer available.");
             boolean dmManaged = key.startsWith("effect:") && source.path("dmManaged").asBoolean();
+            if (source.has("helpAlly") && definition.has("exclusive") && !dmExclusiveEffects.add("tactician-experience"))
+                throw new IllegalArgumentException("Choose only one helper Experience.");
             if (dmManaged && definition.has("exclusive") && !dmExclusiveEffects.add(key))
                 throw new IllegalArgumentException("Choose only one option from this effect.");
             if (dmManaged && !source.has("dmConsumeOnRoll")) dmEffectUses.add(key.substring("effect:".length()));
@@ -3350,6 +3485,15 @@ public final class OnlineSessionServer {
                             && (expected.equals(part.path("expression").asText())
                             || ("(" + expected + ")*2").equals(part.path("expression").asText()))) contributed = true;
                 if (!contributed) throw new IllegalArgumentException("The selected effect bonus must be included.");
+            }
+            if (source.has("helpAlly") && definition.has("value")) {
+                String expected = String.valueOf(definition.path("value").asInt());
+                String label = optionContributionLabel(source.path("name").asText(), definition.path("label").asText());
+                boolean contributed = false;
+                for (JsonNode part : input.path("contributions"))
+                    if (label.equals(part.path("label").asText()) && expected.equals(part.path("expression").asText()))
+                        contributed = true;
+                if (!contributed) throw new IllegalArgumentException("Include the selected helper Experience bonus.");
             }
             if (definition.has("resourceMultiplier")) {
                 JsonNode multiplier = definition.path("resourceMultiplier");
@@ -3414,6 +3558,7 @@ public final class OnlineSessionServer {
             roll.put("kind", "duality").put("rewardClaimed", false);
             if (input.path("difficulty").isInt()) roll.set("difficulty", input.path("difficulty"));
         }
+        HelpAllyRules.applyRoll(sheet, input, roll, config.maxDice(), diceRandom);
         applyDomainSuccess(sheet, actor, roll);
         for (int i = 0; i < definitions.size(); i++) {
             JsonNode definition = definitions.get(i);
@@ -3997,6 +4142,8 @@ public final class OnlineSessionServer {
         int updatedTotal = Math.addExact(previousTotal, delta);
         roll.put("total", updatedTotal);
         if (definition.path("rerollAnyDie").asBoolean() && "duality".equals(roll.path("kind").asText())) {
+            HelpAllyRules.refreshPool(roll);
+            updatedTotal = roll.path("total").asInt();
             int hope = roll.path("rolls").path(0).asInt(), fear = roll.path("rolls").path(1).asInt();
             if (hope == fear) roll.remove("outcome");
             else roll.put("outcome", hope > fear ? "hope" : "fear");
@@ -4304,6 +4451,13 @@ public final class OnlineSessionServer {
             for (JsonNode candidate : sheet.path("effects"))
                 if (name.equals(candidate.path("id").asText())) effect = candidate;
             if (effect == null) throw new IllegalArgumentException("The effect is no longer active.");
+            if (effect.has("helpAlly")) {
+                Campaign.Actor helper = campaign.actor(effect.path("sourceActorId").asText());
+                if (helper == null || helper.isDisabled()) throw new IllegalArgumentException("The helper is no longer active.");
+                ObjectNode source = ((ObjectNode) effect).deepCopy();
+                source.putObject("automation").set("rollOptions", effect.path("rollOptions").deepCopy());
+                return source;
+            }
             if (effect.path("dmManaged").asBoolean()) {
                 ObjectNode source = MAPPER.createObjectNode().put("name", effect.path("name").asText()).put("dmManaged", true);
                 if (effect.has("dmConsumeOnRoll")) source.set("dmConsumeOnRoll", effect.get("dmConsumeOnRoll"));
@@ -5528,6 +5682,7 @@ public final class OnlineSessionServer {
         update.set("expression", roll.path("expression"));
         update.set("rolls", roll.path("rolls"));
         if (roll.has("breakdown")) update.set("breakdown", roll.get("breakdown"));
+        if (roll.has("helpAlly")) update.set("helpAlly", roll.get("helpAlly"));
         String toId = roll.path("toId").asText("");
         String fromId = roll.path("fromId").asText("");
         if (toId.isEmpty()) {
@@ -6344,6 +6499,7 @@ public final class OnlineSessionServer {
             hello.put("weaponAutomation", true);
             hello.put("deathMoves", true);
             hello.put("deathMoveOptions", true);
+            hello.put("helpAlly", true);
             hello.put("sheetSync", true);
             hello.put("sheetActionResponses", true);
             hello.put("sheetPatches", true);

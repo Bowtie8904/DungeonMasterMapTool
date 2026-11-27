@@ -12,6 +12,7 @@ final class DmEffectProtection {
     }
 
     static void validate(JsonNode previous, JsonNode next, String restKind) {
+        HelpAllyRules.validateEffects(previous, next);
         Map<String, JsonNode> oldEffects = managed(previous);
         Map<String, JsonNode> newEffects = managed(next);
         for (var entry : newEffects.entrySet()) {
