@@ -83,6 +83,8 @@ export class SheetBus {
   artwork?: string;
   featureAction?: (name: string, id: string) => boolean;
   reactionRoll?: (label: string, trait: TraitName) => boolean;
+  /** Opens incoming-damage mitigation without requiring a visible sheet. */
+  takeDamage?: () => boolean;
   private listeners: Array<(save?: boolean) => void> = [];
   /** Recently sent rolls by ref, so chat buttons can repeat them. */
   readonly sent = new Map<string, RollRequest>();
@@ -255,6 +257,12 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       void opts.onDamageTaken(severity).catch((e: Error) => opts.onLog?.(`Could not expire damage-linked effects: ${e.message}`));
     }
   }, undefined, opts.onIncomingDamage, (label, value) => opts.onLog?.(`${label}\nWard Die: 1d8 = ${value}\nIncoming damage reduced by ${value}.${value === 8 ? ' The Rune Ward trinket is destroyed.' : ''}`));
+  const isReady = () => c.mancer?.done !== false && !(c.transformation === 'Shapeshifter' && !c.ancestryFeature);
+  if (opts.bus) opts.bus.takeDamage = () => {
+    if (opts.readOnly?.() || !isReady()) return false;
+    openDamage(document.body);
+    return true;
+  };
   const inventoryQuery = { equipment: '', loot: '' };
   const expandedDescriptions = new Set<string>();
   const expandedQuickDescriptions = new Set<string>();
@@ -1071,7 +1079,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const bonded = readOnly ? null : resolveBonded(c, rollLocal);
     if (bonded) opts.onLog?.(bonded);
     syncDerived(c);
-    const ready = c.mancer?.done !== false && !(c.transformation === 'Shapeshifter' && !c.ancestryFeature);
+    const ready = isReady();
     if (opts.visible?.() === false) {
       actionRefreshers = [];
       if (opts.miniVisible?.()) opts.onMiniStrip?.(ready ? miniStrip() : null);

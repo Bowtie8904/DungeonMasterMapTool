@@ -90,15 +90,20 @@ export class SheetWindow {
     return !this.element.classList.contains(HIDDEN);
   }
 
+  get isMinimised(): boolean {
+    return this.isOpen && this.element.classList.contains('minimised');
+  }
+
   toggleMinimised(): void {
     if (!this.quickAccess.isExternal) this.quickAccess.close();
     this.element.classList.toggle('minimised');
     this.bus.notify(false);
   }
 
-  /** Toggles Quick Access beside an external trigger, independent of the sheet's open/minimized state. */
-  toggleQuickAccess(trigger: HTMLElement): void {
-    this.quickAccess.toggleFrom(trigger);
+  /** Without an external trigger, use the minimized sheet bar. */
+  toggleQuickAccess(trigger?: HTMLElement): void {
+    if (trigger) this.quickAccess.toggleFrom(trigger);
+    else this.quickAccess.toggle();
   }
 
   closeQuickAccess(): void {

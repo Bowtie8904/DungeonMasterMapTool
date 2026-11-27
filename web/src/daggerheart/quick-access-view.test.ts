@@ -2,6 +2,9 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { emptyCharacter, type CharacterSheet, type Feature } from './data';
 import { favoriteKey } from './quick-access';
 import { renderSheetView, SheetBus } from './view';
+import { openDamageDialog } from './damage-view';
+
+vi.mock('./damage-view', () => ({ openDamageDialog: vi.fn() }));
 
 class Element {
   className = '';
@@ -79,19 +82,45 @@ function setup(readOnly = false, configure?: (c: CharacterSheet) => void, visibl
   configure?.(c);
   const bus = new SheetBus();
   const changed = vi.fn();
+  const commitDamage = vi.fn();
+  const log = vi.fn();
   let content: Element;
   const view = renderSheetView({
     character: c, bus, readOnly: () => readOnly, onRoll: () => false, onChange: changed,
+    onIncomingDamage: commitDamage, onLog: log,
     visible: () => visible, miniVisible: () => true, quickAccessVisible: () => true,
     onQuickAccess: node => { content = node as unknown as Element; },
     onMiniStrip: strip => { mini = strip as unknown as Element | null; },
   });
   return {
-    c, bus, changed, content: () => content, mini: () => mini, view: view as unknown as Element,
+    c, bus, changed, commitDamage, log, content: () => content, mini: () => mini, view: view as unknown as Element,
     flushLayout: () => { frames.splice(0).forEach(callback => callback(0)); },
     resize: () => { observers[0]([], {} as ResizeObserver); },
   };
 }
+
+it('opens damage mitigation from a hidden sheet with the existing host and save/report callbacks', () => {
+  vi.mocked(openDamageDialog).mockClear();
+  const test = setup();
+  expect(test.bus.takeDamage?.()).toBe(true);
+  expect(openDamageDialog).toHaveBeenCalledOnce();
+  const args = vi.mocked(openDamageDialog).mock.calls[0];
+  expect(args[1]).toBe(test.c);
+  expect(args[4]).toBe(test.commitDamage);
+  args[2]('Marked 1 HP', 1, true);
+  expect(test.log).toHaveBeenCalledWith('Marked 1 HP', undefined, undefined, true);
+  expect(test.changed).toHaveBeenCalled();
+});
+
+it('does not open damage mitigation for read-only or unfinished characters', () => {
+  vi.mocked(openDamageDialog).mockClear();
+  for (const test of [
+    setup(true),
+    setup(false, c => { c.mancer = { done: false }; }),
+    setup(false, c => { c.transformation = 'Shapeshifter'; c.ancestryFeature = undefined; }),
+  ]) expect(test.bus.takeDamage?.()).toBe(false);
+  expect(openDamageDialog).not.toHaveBeenCalled();
+});
 
 it('uses multiline Background fields and preserves edits, pronouns and blur-only renames', () => {
   const test = setup(false, c => {

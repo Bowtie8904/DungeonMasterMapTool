@@ -4,6 +4,7 @@ import { Connection } from './net';
 import { ChatMessage, Actor, GameState, Overlay, RollMessage, ServerMessage } from './protocol';
 import { emoteCommand } from './chat-command';
 import { iconButton } from './icons';
+import { noticeDialog } from './dialogs';
 import { LogEntry, renderLogEntry } from './chat';
 import { applyFeatureState, applyInventory, autosave, featureTarget, isLifeWard, loadCharacter, saveImportedCharacter, useSheetAction, type SheetSave } from './daggerheart/persist';
 import { applyImportedPortrait } from './token-artwork';
@@ -69,6 +70,7 @@ export class App {
   private flyout = el('aside', { class: 'tool-flyout hidden', id: 'tool-flyout' });
   private drawingOptions = el('div', { class: 'tool-options' });
   private measuringOptions = el('div', { class: 'tool-options hidden' });
+  private distanceRulerButton?: HTMLButtonElement;
   private toolTitle = el('h2', {}, 'Drawing');
   private rosterEl = el('aside', { class: 'players-overlay' });
   private effectsEl = el('aside', { class: 'effects-overlay' });
@@ -97,6 +99,7 @@ export class App {
     if (this.audioAvailable && !settings.muted) { this.audio.enable(); this.updateSoundUi(); }
   };
   private undoKey = (e: KeyboardEvent) => {
+    if (this.playerShortcut(e)) return;
     const target = e.target;
     if (e.defaultPrevented || target instanceof HTMLElement &&
       (target.isContentEditable || target.closest('textarea, select')
@@ -108,6 +111,48 @@ export class App {
       e.preventDefault(); this.undoDrawing();
     }
   };
+  private playerShortcut(e: KeyboardEvent): boolean {
+    const key = e.key.toLowerCase();
+    const target = e.target;
+    if (!['c', 'f', 'd', 'r', ' '].includes(key) || e.defaultPrevented || e.repeat || e.isComposing
+      || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey
+      || target instanceof HTMLElement && (target.isContentEditable
+        || target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]'))
+      || key === ' ' && target instanceof HTMLElement
+        && target.closest('button, a[href], [role="button"], [role="tab"], [role="switch"], summary')
+      || document.querySelector('dialog[open], .dh-rolldlg-backdrop, .dh-wiz-backdrop, [role="dialog"][aria-modal="true"]')) return false;
+    if (key === 'r') {
+      const measure = this.toolButtons.get('measure');
+      if (!measure || measure.disabled || !this.distanceRulerButton || this.view.paused) return false;
+      e.preventDefault();
+      if (this.view.tool !== 'measure' || this.flyout.classList.contains('hidden')) measure.click();
+      this.distanceRulerButton.click();
+      return true;
+    }
+    const actor = this.myActors.find(a => !a.disabled);
+    if (!actor) return false;
+    if (key === ' ') {
+      e.preventDefault();
+      if (this.view.focusActor(actor.id)) this.closeTools();
+      return true;
+    }
+    e.preventDefault();
+    void this.ensureSheet(actor).then(handle => {
+      if (this.myActors.find(a => !a.disabled)?.id !== actor.id
+        || document.querySelector('dialog[open], .dh-rolldlg-backdrop, .dh-wiz-backdrop, [role="dialog"][aria-modal="true"]')) return;
+      const win = this.sheetWindows.get(actor.id)!;
+      if (key === 'c') {
+        if (win.isOpen) win.toggleMinimised();
+        else win.setOpen(true);
+      } else if (key === 'f') {
+        for (const [id, other] of this.sheetWindows) if (id !== actor.id) other.closeQuickAccess();
+        win.toggleQuickAccess(win.isMinimised ? undefined : this.quickAccessButton);
+      } else if (!handle.bus.takeDamage?.()) {
+        this.toast('Finish character creation and ancestry selection before taking damage.');
+      }
+    }).catch((e: Error) => this.toast(`Cannot load the character sheet: ${e.message}`));
+    return true;
+  }
   private cmdCounter = 0;
   private pendingMoves = new Map<string, MoveCommit>();
   private batchingState = false;
@@ -274,6 +319,23 @@ export class App {
   }
 
   private buildSettings(): HTMLElement {
+    const shortcuts = el('button', { type: 'button', class: 'settings-shortcuts',
+      title: 'Show available player keyboard shortcuts' }, 'Shortcuts');
+    shortcuts.setAttribute('aria-haspopup', 'dialog');
+    shortcuts.addEventListener('click', () => {
+      const reference = el('div', { class: 'shortcut-help', tabIndex: 0, ariaLabel: 'Keyboard shortcut reference' }, el('p', {}, [
+        'C - Open the active character sheet.',
+        'F - Toggle Quick Access.',
+        'D - Open the active character\'s damage mitigation dialog.',
+        'R - Activate the Distance ruler.',
+        'Space - Center on character.',
+        'P - Ping.',
+        'Arrow keys - Move selected controlled tokens by half a tile.',
+        'Ctrl+Z / Cmd+Z - Undo your latest drawing edit.',
+        'Delete / Backspace - Delete selected owned drawings or measurements.',
+      ].join('\n\n')));
+      void noticeDialog(reference, 'Player shortcuts');
+    });
     const slider = (title: string, get: () => number, set: (v: number) => void) => {
       const s = el('input', { type: 'range', min: '0', max: '1', step: '0.05', value: String(get()), title });
       s.addEventListener('input', () => {
@@ -350,7 +412,7 @@ export class App {
       });
       return el('label', { class: 'setting-check', title }, box, ` ${label}`);
     };
-    return el('div', { class: 'settings-section' }, this.audioSection,
+    return el('div', { class: 'settings-section' }, shortcuts, this.audioSection,
       el('section', { class: 'settings-group' }, el('h3', {}, 'Display'),
         el('label', { class: 'setting-check', title: 'Glide moving tokens between updates. Turn off on slow devices to redraw less.' },
           smooth, ' Smooth token movement'),
@@ -609,7 +671,7 @@ export class App {
     const rail = el('nav', { class: 'tool-rail' });
     rail.setAttribute('aria-label', 'Map tools');
     for (const [id, label] of [['navigate', 'Navigate / select'], ['ping', 'Ping (P)'], ['ink', 'Ink'],
-      ['effects', 'Areas & effects'], ['measure', 'Measure']] as const) {
+      ['effects', 'Areas & effects'], ['measure', 'Measure (R: distance ruler)']] as const) {
       if (id === 'ink' || id === 'measure') rail.append(el('div', { class: 'tool-divider', role: 'separator' }));
       const button = iconButton(id === 'ink' ? 'pen' : id === 'effects' ? 'draw' : id, label, () => {
         if (id === 'ping') {
@@ -728,7 +790,7 @@ export class App {
       field('Opacity', this.alphaInput));
     const measureModes = el('div', { class: 'mode-buttons' });
     const measureHint = el('p', { class: 'tool-hint' }, 'Drag to measure a distance in grid tiles.');
-    for (const [id, icon, label] of [['distance', 'measure', 'Distance ruler'], ['radius', 'radius', 'Circle radius'],
+    for (const [id, icon, label] of [['distance', 'measure', 'Distance ruler (R)'], ['radius', 'radius', 'Circle radius'],
       ['cone', 'cone', 'Cone (60 degrees)'], ['rect', 'rect', 'Rectangle']] as const) {
       const button = iconButton(icon, label, () => {
         this.view.setTool('measure');
@@ -737,6 +799,7 @@ export class App {
         measureModes.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
         measureHint.textContent = `${label}: drag on the map. Units: grid tiles.`;
       });
+      if (id === 'distance') this.distanceRulerButton = button;
       button.setAttribute('aria-pressed', String(id === 'distance')); measureModes.append(button);
     }
     this.measureColorInput.addEventListener('input', () => {

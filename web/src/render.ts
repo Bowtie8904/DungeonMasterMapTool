@@ -418,6 +418,19 @@ export class MapView {
     this.dirty = true;
   }
 
+  /** Select and center the current map's controlled token for an actor, preserving zoom. */
+  focusActor(actorId: string): boolean {
+    const token = this.state?.tokens.find(t => t.actorId === actorId && this.isMine(t));
+    if (!token) return false;
+    this.setTool('navigate');
+    this.selectedTokens.add(token.id);
+    this.focus(token);
+    this.onSelection(null, false, 1);
+    this.onSelectTool();
+    this.canvas.focus();
+    return true;
+  }
+
   private fit(): void {
     const s = this.state;
     if (!s) return;

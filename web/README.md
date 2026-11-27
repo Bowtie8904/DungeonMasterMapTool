@@ -238,6 +238,18 @@ save through the sheet render flow and refresh with sheet updates; edit mode nev
 The lower Evasion/trait row uses compact line heights and minimal vertical padding while keeping trait names above modifiers.
 Double-clicking empty title-bar space or the title text toggles
 minimize/restore like the Minimize button; double-clicks on title buttons and the Edit mode switch are ignored.
+Player-browser **C** opens the first non-disabled owned character's sheet, then toggles condensed/expanded.
+**F** toggles its Quick Access beside the open condensed sheet, otherwise beside the left rail;
+the rail star itself always uses the rail. **D** opens incoming-damage mitigation through `SheetBus.takeDamage`,
+reusing the sheet's gameplay/save/host callbacks even while hidden or condensed and respecting readiness/read-only access.
+These shortcuts ignore editable controls, modifiers, repeats, IME composition, handled events and open modal/gameplay dialogs.
+**R** activates Distance ruler (not the previously selected radius/cone/rectangle), synchronizing the existing
+rail/options and honoring host measurement availability and pause; it needs no assigned character.
+**Space** centers and exclusively selects the first active character's controlled token on the current map,
+preserves zoom and switches to Navigate/select with map focus for arrow movement. Missing tokens do nothing;
+there is no fallback to a different character. Centering still works while paused, but movement remains blocked.
+Space retains native activation on buttons/links and other interactive controls and shares the shortcut guards above.
+They add no settings or remote contracts and remain compatible with existing hosts.
 The map-tool rail ends with a separated, neutral outlined star matching the other tools (`App.quickAccessButton`) that toggles the same tray for
 the player's first non-disabled owned character via `SheetWindow.toggleQuickAccess`, whether its sheet is
 closed, open or minimized (disabled when there is none). That tray is placed right of the rail with
@@ -548,6 +560,9 @@ closing the map tab; disconnect/kick status keeps unsaved note text available to
 `notes.test.ts` covers tree boundaries and authenticated/error-aware requests; `checks/notes.html` exercises
 the actual sidebar, dialogs, editor draft protection, resize memory, conflicts and folder operations in a browser.
 Settings is anchored at the bottom; character sheets open from Actors.
+Its small **Shortcuts** button opens the existing `noticeDialog` with player keyboard bindings and their individual
+descriptions, including applicable host-permission and pause restrictions. This is read-only help,
+dismissible with OK or Escape, with focus returned to the button; it adds no stored preference or remote contract.
 The desktop DM opens the same sheet in an embedded WebView by double-clicking an actor or Select-mode actor token.
 `?dm-sheet=1` uses an actor-scoped, revocable loopback capability supplied in the URL fragment and immediately
 removed from browser history; HTTP requests use a Bearer header and the socket uses the capability at upgrade.

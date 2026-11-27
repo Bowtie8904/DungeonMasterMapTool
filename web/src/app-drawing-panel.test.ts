@@ -39,6 +39,7 @@ class Element {
   setAttribute(name: string, value: string) { this.attributes.set(name, value); }
   addEventListener(type: string, listener: () => void) { this.listeners.set(type, listener); }
   fire(type: string) { this.listeners.get(type)?.(); }
+  click() { if (!this.disabled) this.fire('click'); }
   closest(selector: string): Element | null {
     if (selector.startsWith('.') && this.classList.contains(selector.slice(1))) return this;
     return this.parent?.closest(selector) ?? null;
@@ -56,15 +57,17 @@ class Select extends Element { constructor() { super('select'); } }
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('drawing size controls', () => {
-  it('hides the size control for both ink modes and restores it for effects', () => {
+describe('map tool controls', () => {
+  it('keeps ink size controls and the distance ruler shortcut synchronized with their tool options', () => {
+    vi.stubGlobal('HTMLElement', Element);
     vi.stubGlobal('HTMLInputElement', Input);
     vi.stubGlobal('HTMLSelectElement', Select);
     vi.stubGlobal('document', {
       createElement: (tag: string) => tag === 'input' ? new Input() : tag === 'select' ? new Select() : new Element(tag),
       createElementNS: (_namespace: string, tag: string) => new Element(tag),
+      querySelector: () => null,
     });
-    const view = { tool: 'navigate', drawMode: 'pen', setTool(tool: string) { this.tool = tool; } };
+    const view = { tool: 'navigate', drawMode: 'pen', measureMode: 'radius', paused: false, setTool(tool: string) { this.tool = tool; } };
     const context = {
       view, toolButtons: new Map<string, Element>(), flyout: new Element('aside'),
       drawingOptions: new Element('div'), measuringOptions: new Element('div'), toolTitle: new Element('h2'),
@@ -76,6 +79,7 @@ describe('drawing size controls', () => {
       drawingCategory(mode: string) { return Reflect.get(App.prototype, 'drawingCategory').call(context, mode); },
       activateDrawingMode(mode: string) { Reflect.get(App.prototype, 'activateDrawingMode').call(context, mode); },
       updateDrawingMode(mode: string) { Reflect.get(App.prototype, 'updateDrawingMode').call(context, mode); },
+      closeTools() { Reflect.get(App.prototype, 'closeTools').call(context); },
     };
     context.flyout.classList.add('hidden');
     Reflect.get(App.prototype, 'buildTools').call(context);
@@ -112,5 +116,26 @@ describe('drawing size controls', () => {
     expect(size.classList.contains('hidden')).toBe(true);
     context.drawingOptions.querySelectorAll('[data-draw-mode]').find(button => button.dataset.drawMode === 'pen')!.fire('click');
     expect(size.classList.contains('hidden')).toBe(true);
+
+    context.toolButtons.get('measure')!.disabled = false;
+    const pressR = () => Reflect.get(App.prototype, 'playerShortcut').call(context,
+      { key: 'r', target: null, preventDefault: vi.fn() });
+    expect(pressR()).toBe(true);
+    const distance = Reflect.get(context, 'distanceRulerButton') as Element;
+    const modes = distance.parent!;
+    const cone = modes.children.find(button => button.attributes.get('aria-label') === 'Cone (60 degrees)')!;
+    expect(view.tool).toBe('measure');
+    expect(view.measureMode).toBe('distance');
+    expect(context.flyout.classList.contains('hidden')).toBe(false);
+    expect(context.toolButtons.get('measure')!.attributes.get('aria-pressed')).toBe('true');
+    expect(context.toolButtons.get('measure')!.attributes.get('aria-expanded')).toBe('true');
+    expect(distance.attributes.get('aria-pressed')).toBe('true');
+    cone.fire('click');
+    expect(view.measureMode).toBe('cone');
+    expect(pressR()).toBe(true);
+    expect(view.measureMode).toBe('distance');
+    expect(context.flyout.classList.contains('hidden')).toBe(false);
+    expect(distance.attributes.get('aria-pressed')).toBe('true');
+    expect(cone.attributes.get('aria-pressed')).toBe('false');
   });
 });

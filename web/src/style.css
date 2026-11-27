@@ -81,6 +81,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, canvas:focus-vi
 .sidebar > .actors, .settings-section { padding: 16px; overflow-y: auto; }
 .settings-section { display: flex; flex-direction: column; gap: 18px; }
 .settings-section h3 { margin: 0; font-size: 13px; color: var(--muted); }
+.settings-shortcuts { align-self: flex-start; padding: 4px 8px; font-size: 12px; }
+.shortcut-help { max-height: min(60dvh, 520px); overflow-y: auto; padding-right: 6px; }
+.shortcut-help > p { margin: 0; }
 .volumes { display: flex; flex-direction: column; gap: 18px; }
 .volumes.disabled { opacity: .45; }
 .settings-group { display: flex; flex-direction: column; gap: 14px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }

@@ -26,6 +26,9 @@ campaign DM preference. Failed saves show an inline error and keep the previous 
 Chat names are not a setting: the host uses the first enabled actor assigned to the player, or the account
 name when no enabled actor is assigned. The bottom-left overlay shows the account and actor names.
 
+**Settings > Shortcuts** opens a read-only player keyboard-shortcut reference with contextual restrictions.
+Dismiss it with OK or Escape. It does not edit keybindings or store any setting.
+
 **Settings > Smooth token movement** (default on) is stored only in that browser's local storage
 (`dmmt.smoothTokens`), not in `dmmt-settings.ini`. When on, tokens moved by other players or the DM glide
 between position updates instead of jumping; the map redraws only while a token is gliding. Turn it off on

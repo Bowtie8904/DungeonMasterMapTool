@@ -20,7 +20,7 @@ class CanvasStub {
   }
   getBoundingClientRect() { return { left: 0, top: 0 }; }
   addEventListener(type: string, listener: (event: Event) => void) { this.listeners.set(type, listener); }
-  focus() {}
+  focus = vi.fn();
   setPointerCapture() { this.captured = true; }
   hasPointerCapture() { return this.captured; }
   releasePointerCapture() { this.captured = false; }
@@ -79,6 +79,62 @@ describe('map interaction cursors', () => {
     view.setMeasurements([{ ...measure }]);
   });
   afterEach(() => { view.destroy(); vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  it('centers and exclusively selects the active actor token at the existing zoom, ready for arrow movement', () => {
+    current.tokens[0].actorId = 'hero';
+    canvas.pointer('pointerdown', 250, 250);
+    canvas.pointer('pointerup', 250, 250);
+    const cam = Reflect.get(view, 'cam');
+    cam.scale = 2;
+    const selection = vi.fn();
+    const selectTool = vi.fn();
+    const move = vi.fn();
+    view.onSelection = selection;
+    view.onSelectTool = selectTool;
+    view.onMove = move;
+    expect(view.focusActor('hero')).toBe(true);
+    expect(cam.scale).toBe(2);
+    expect(cam.x + current.tokens[0].x * cam.scale).toBe(500);
+    expect(cam.y + current.tokens[0].y * cam.scale).toBe(500);
+    expect(view.tool).toBe('navigate');
+    expect([...Reflect.get(view, 'selectedTokens')]).toEqual(['token']);
+    expect(Reflect.get(view, 'selectedDrawings').size).toBe(0);
+    expect(Reflect.get(view, 'selectedMeasures').size).toBe(0);
+    expect(selection).toHaveBeenLastCalledWith(null, false, 1);
+    expect(selectTool).toHaveBeenCalledOnce();
+    expect(canvas.focus).toHaveBeenCalled();
+    expect(move).not.toHaveBeenCalled();
+    canvas.key('ArrowRight');
+    expect(current.tokens[0].x).toBe(125);
+    expect(move).toHaveBeenCalledOnce();
+  });
+
+  it('does not change camera, selection or tool for missing or uncontrolled actor tokens', () => {
+    current.tokens[1].actorId = 'other-actor';
+    view.setTool('measure');
+    view.measureMode = 'radius';
+    const cam = { ...Reflect.get(view, 'cam') };
+    const selection = vi.fn();
+    view.onSelection = selection;
+    expect(view.focusActor('missing')).toBe(false);
+    expect(view.focusActor('other-actor')).toBe(false);
+    expect(Reflect.get(view, 'cam')).toEqual(cam);
+    expect(view.tool).toBe('measure');
+    expect(view.measureMode).toBe('radius');
+    expect(selection).not.toHaveBeenCalled();
+    expect(canvas.focus).not.toHaveBeenCalled();
+  });
+
+  it('can focus an actor while paused without allowing token movement', () => {
+    current.tokens[0].actorId = 'hero';
+    view.paused = true;
+    const move = vi.fn();
+    view.onMove = move;
+    expect(view.focusActor('hero')).toBe(true);
+    canvas.key('ArrowRight');
+    expect(current.tokens[0].x).toBe(100);
+    expect(move).not.toHaveBeenCalled();
+  });
 
   it.each([false, true])('clips fast drags before vision, attached lighting and move commands (Shift=%s)', shift => {
     current.walls = [150, -10000, 150, 10000];

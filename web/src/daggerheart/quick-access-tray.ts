@@ -19,7 +19,7 @@ export class QuickAccessTray {
     this.button = el('button', { type: 'button', class: 'mini-quick-access', ariaLabel: 'Quick Access' }, '\u2605 Quick Access');
     this.button.setAttribute('aria-controls', id);
     this.button.setAttribute('aria-expanded', 'false');
-    this.button.addEventListener('click', () => this.isOpen && !this.external ? this.close() : this.show(null));
+    this.button.addEventListener('click', () => this.toggle());
     const close = el('button', { type: 'button', ariaLabel: 'Close Quick Access' }, '\u00d7');
     close.addEventListener('click', () => this.close(true));
     this.element = el('div', { id, class: 'dh quick-access-tray', role: 'region', ariaLabel: 'Quick Access' },
@@ -34,6 +34,11 @@ export class QuickAccessTray {
   get isExternal(): boolean { return this.open && !!this.external; }
 
   isOpenFrom(trigger: HTMLElement): boolean { return this.open && this.external === trigger; }
+
+  toggle(): void {
+    if (this.open && !this.external) this.close();
+    else this.show(null);
+  }
 
   /** Toggles the tray from an external trigger, placed beside that trigger. */
   toggleFrom(trigger: HTMLElement): void {

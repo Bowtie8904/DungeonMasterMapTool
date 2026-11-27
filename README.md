@@ -634,6 +634,13 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   that opens the damage mitigation dialog. Double-click the sheet's title bar to minimize or restore it.
   A star matching the other tool buttons at the bottom of the left map-tool rail opens the same Quick Access tray for your first
   active character beside the rail, whether its sheet is open, minimized or closed.
+  **Browser shortcuts:** **C** opens your first active character's sheet, then alternates condensed/expanded.
+  **F** toggles Quick Access beside that sheet when condensed, otherwise beside the left rail.
+  **D** opens that character's damage mitigation dialog, even with the sheet closed.
+  **R** activates the distance ruler. **Space** centers the map on your active character's token
+  and selects it for movement, preserving zoom; if it has no controlled token on this map, nothing changes.
+  Shortcuts do not run while typing, using modifiers, holding a key or working in a modal/gameplay dialog.
+  Space retains normal activation on buttons and other interactive controls.
   The minimized sheet also shows HP, Stress, Armor and Hope counters in a low-profile row above the other controls, with labels beside the blocks.
   Only available slots appear; mark or unmark them as on the full sheet, with automatic updates.
   The lower Evasion/trait row uses compact stacked labels and modifiers to keep the minimized sheet short.
@@ -995,7 +1002,8 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   brush, Circle and Rectangle with the effect-texture and style controls. Each drawing category remembers its last
   selected mode for the session. The right vertical icon rail switches between Chat, My actors and
     Settings (at the bottom); the Compendium button opens a floating window instead. Open character sheets from My actors, not a separate navigation shortcut.
-  Click the selected section again to collapse it to just its icons. Settings contains your audio
+  Click the selected section again to collapse it to just its icons. A small **Shortcuts** button in Settings
+  displays the available player keyboard shortcuts in a themed dialog. Settings contains your audio
   controls, display options and logout, grouped into **Audio** (enable sound, master/music/ambient volume,
   all 50% by default) and **Display** sections with **Log out** at the bottom. Future chat messages, rolls and shared cards use the name of the first enabled actor
   assigned to the player, or the account name if there is none. The bottom-left roster shows the account

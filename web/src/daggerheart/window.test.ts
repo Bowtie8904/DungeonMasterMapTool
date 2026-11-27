@@ -1,6 +1,8 @@
 import { afterEach, expect, it, vi } from 'vitest';
 
 const trayClose = vi.fn();
+const trayToggle = vi.fn();
+const trayToggleFrom = vi.fn();
 const trays: Array<{ isExternal: boolean }> = [];
 vi.mock('./view', () => ({
   SheetBus: class { notify = vi.fn(); },
@@ -11,6 +13,8 @@ vi.mock('./quick-access-tray', () => ({
     isOpen = false; isExternal = false; button = document.createElement('button'); close = trayClose;
     constructor() { trays.push(this); }
     setContent(): void {}
+    toggle = trayToggle;
+    toggleFrom = trayToggleFrom;
   },
 }));
 
@@ -49,6 +53,23 @@ class FakeElement {
 }
 
 afterEach(() => vi.unstubAllGlobals());
+
+it('routes Quick Access to the sheet bar or the unchanged external trigger', async () => {
+  vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag), activeElement: null });
+  const { SheetWindow } = await import('./window');
+  const win = new SheetWindow({ character: {} } as never, 'Hero', () => {}, () => {});
+  expect(win.isMinimised).toBe(false);
+  win.setOpen(true);
+  win.toggleMinimised();
+  expect(win.isMinimised).toBe(true);
+  win.toggleQuickAccess();
+  expect(trayToggle).toHaveBeenCalledOnce();
+  const trigger = document.createElement('button');
+  win.toggleQuickAccess(trigger);
+  expect(trayToggleFrom).toHaveBeenCalledWith(trigger);
+  win.setOpen(false);
+  expect(win.isMinimised).toBe(false);
+});
 
 it('toggles minimise when the title bar is double-clicked, ignoring its buttons', async () => {
   vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag), activeElement: null });
