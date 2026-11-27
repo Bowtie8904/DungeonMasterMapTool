@@ -145,7 +145,7 @@ function fetchUrl(url) {
 
 /**
  * Understands every URL the application's right-click menu copies - command URL, index URL, increment/decrement
- * URL, key image URL and map switch URL - so one paste configures an action completely (plan.md 3.36.2).
+ * URL, key image URL and map switch URL - so one paste configures an action completely.
  */
 function parseCopiedUrl(text) {
 	let url;

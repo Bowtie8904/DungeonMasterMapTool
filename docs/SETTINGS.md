@@ -195,7 +195,7 @@ chooses its graphics pipeline before application settings can be changed in the 
 On Windows, close the application and start `DungeonMasterMapTool-Compatibility.exe` to bypass
 Direct3D (`-Dprism.order=sw`). Start the normal EXE again to restore hardware acceleration;
 neither launcher changes the settings file. Compatibility rendering may be slower.
-See the [README troubleshooting instructions](../README.md#windows-graphics-compatibility-black-player-screen--direct3d-errors)
+See the [Windows graphics troubleshooting guide](INSTALLATION.md)
 for configuring an older packaged EXE without a command line.
 
 ## Local control API
@@ -251,7 +251,7 @@ API endpoint.
 
 ## Online play
 
-Settings of the optional Online Play web server (the **Online Play** tab). Nothing listens until you click **Start online session**. Online Play is for players in browsers and is not the DM Link (LAN remote control between two DM machines). See the README for tunnel setup.
+Settings of the optional Online Play web server (the **Online Play** tab). Nothing listens until you click **Start online session**. Online Play is for players in browsers and is not the DM Link (LAN remote control between two DM machines). See the [Online Play guide](ONLINE_PLAY.md) for connection and tunnel setup.
 
 ### `online.autoPullPlayers`
 
@@ -1658,7 +1658,7 @@ never edits the fog mask. To disable flashes entirely, set both flash brightness
 
 The ambient audio feature: a library of music and sound effects, one playing music category plus any number of
 looping sound effects, and the waveform window that cuts long recordings into clips. See
-[the audio chapter of the README](../README.md#18-ambient-audio) for how it is used.
+[the audio chapter of the user guide](USER_GUIDE.md#18-ambient-audio) for how it is used.
 
 **Loop current song** in the audio overlay is session-only and defaults to off on every application start.
 It is also available through the `audio.musicLoop` API control, but has no persisted settings-file entry.

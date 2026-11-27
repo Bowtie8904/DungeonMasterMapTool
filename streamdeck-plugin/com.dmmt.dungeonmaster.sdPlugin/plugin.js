@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * Dungeon Master Map Tool - Stream Deck plugin (plan.md 3.36).
+ * Dungeon Master Map Tool - Stream Deck plugin.
  *
  * Runs in Stream Deck's Node.js runtime, talks to the application's local control API over plain HTTP and keeps
  * every visible key in sync through one shared poller per application address.

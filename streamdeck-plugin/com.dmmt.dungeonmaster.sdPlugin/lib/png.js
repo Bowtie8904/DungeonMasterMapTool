@@ -2,7 +2,7 @@
 
 /**
  * Minimal dependency-free PNG decoder/encoder for 8-bit images, used to composite the highlight of a Stream Deck
- * key onto the artwork served by the application (plan.md 3.36.3). Only what the application produces and what
+ * key onto the artwork served by the application. Only what the application produces and what
  * Stream Deck consumes is supported: 8 bits per channel, no interlacing.
  */
 

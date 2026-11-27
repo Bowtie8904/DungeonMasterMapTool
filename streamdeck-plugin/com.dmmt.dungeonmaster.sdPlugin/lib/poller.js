@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * One shared poller per application address (plan.md 3.36.3).
+ * One shared poller per application address.
  *
  * Every visible key registers the control ids it needs; the poller then issues a single
  * `GET /api/controls?ids=...` for their union, plus at most one `GET /api/state` when a map key is visible.

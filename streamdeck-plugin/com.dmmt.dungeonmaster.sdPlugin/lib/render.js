@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * Builds the base64 PNG a key shows (plan.md 3.36.3). The artwork comes from the application's key image
+ * Builds the base64 PNG a key shows. The artwork comes from the application's key image
  * endpoint; this module only adds the state: an accent border while the control is active, a dim veil while it
  * is inactive, a grey veil for disabled controls and a red border when the control is unknown or the
  * application cannot be reached.

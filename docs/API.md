@@ -23,7 +23,7 @@ the **Session** sidebar tab; `/api/controls/session/browser` only opens that tab
 does not start hosting, approve a peer or disclose pairing credentials. Discovered hosts support explicit
 Request control followed by approval on A without copied details or codes. Host settings never start a local
 HTTP listener on B. Existing controls continue through their normal UI actions, including host-directed
-actions while B is connected. See [LAN remote control](../README.md#lan-remote-control) for pairing and recovery.
+actions while B is connected. See the [DM Link guide](DM_LINK.md) for pairing and recovery.
 
 ## External control setup
 
