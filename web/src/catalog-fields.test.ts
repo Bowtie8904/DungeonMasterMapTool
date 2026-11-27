@@ -43,6 +43,9 @@ describe('guided catalog forms', () => {
     expect(entryTemplate('classes').backgroundFields).toEqual([]);
     expect(fieldHelp('uses')).toContain('independent');
     expect(fieldHelp('resources')).toContain('once');
+    expect(fieldHelp('group', 'entry.automation.resources[0].group')).toContain('combined total');
+    expect(fieldHelp('group')).toContain('effect grouping');
+    expect(fieldHelp('groupMax')).toContain('Combined maximum');
   });
   it('learns nested optional fields and list templates from all automation owners', () => {
     const source = {

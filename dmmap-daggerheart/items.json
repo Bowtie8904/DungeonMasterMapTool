@@ -5,6 +5,18 @@
  "label": "Items",
  "entries": [
   {
+   "id": "summoner-spirit-bottle",
+   "image": "/item-icons/delapouite/magic-potion.svg",
+   "name": "A harmless spirit in a glass bottle",
+   "text": "A bottled, harmless spirit kept as a Summoner's personal keepsake."
+  },
+  {
+   "id": "summoner-mysterious-coins",
+   "image": "/item-icons/delapouite/two-coins.svg",
+   "name": "A pair of mysterious coins",
+   "text": "Two enigmatic coins kept as a Summoner's personal keepsake."
+  },
+  {
    "id": "torch",
    "image": "/item-icons/delapouite/torch.svg",
    "name": "Torch",

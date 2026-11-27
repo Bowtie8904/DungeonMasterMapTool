@@ -3854,6 +3854,222 @@ class OnlineSessionServerTest {
     }
 
     @Test
+    void summonerHungerSpendsACorpseOnlyOnASuccessfulCastAndReportsManualDamage() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("summoner").name("Summoner").ownerId(playerId()).build());
+        ObjectNode sheet = communitySheet("Seaborne");
+        sheet.put("className", "Summoner").put("subclass", "Necromancy");
+        var features = sheet.putArray("features");
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries"))
+            if ("summoner".equals(entry.path("id").asText())
+                    || "summoner-necromancy-foundation".equals(entry.path("id").asText()))
+                features.addAll((ArrayNode) entry.path("features").deepCopy());
+        sheet.putArray("effects");
+        sheet.withObject("/resources").put("summoner-circle-2", 3);
+        store.saveSheet(campaign.getId(), "summoner", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            long seed = 0;
+            while (true) {
+                var random = new java.util.Random(seed);
+                if (random.nextInt(12) != random.nextInt(12)) break;
+                seed++;
+            }
+            for (boolean success : List.of(false, true)) {
+                diceSeed(seed);
+                ws.sendText(MAPPER.createObjectNode().put("type", "roll").put("kind", "duality")
+                        .put("expression", success ? "2d12+100" : "2d12-100").put("actorId", "summoner")
+                        .put("source", "action,attack,spellcast,feat:Hunger of the Grave")
+                        .put("difficulty", 15).toString(), true).join();
+                JsonNode roll = inbox.next("roll");
+                ObjectNode request = MAPPER.createObjectNode().put("actorId", "summoner")
+                        .put("key", "feat:Hunger of the Grave").put("actionId", "hit");
+                request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+                var response = featureHttp(cookie, request);
+                assertEquals(success ? 200 : 400, response.statusCode(), response.body());
+                JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "summoner"));
+                assertEquals(success ? 2 : 3, saved.path("resources").path("summoner-circle-2").asInt());
+                if (success) assertTrue(inbox.next("chat").path("text").asText().contains("Dealt 15 physical damage. One Shambling Corpse removed."));
+            }
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void summonerAidOfTheSpiritsDistributesExactlyTwoHopeToOtherPlayersAndPaysItsCost() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("summoner").name("Summoner").ownerId(playerId()).build());
+        campaign.getActors().add(Campaign.Actor.builder().id("ally").name("Ally").ownerId(playerId()).build());
+        ObjectNode sheet = communitySheet("Seaborne");
+        sheet.put("className", "Summoner").put("subclass", "Necromancy");
+        var features = sheet.putArray("features");
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries"))
+            if ("summoner".equals(entry.path("id").asText())) features.addAll((ArrayNode) entry.path("features").deepCopy());
+        sheet.putArray("effects");
+        ((ObjectNode) sheet.path("hope")).put("on", 4);
+        ObjectNode ally = sheet.deepCopy();
+        ((ObjectNode) ally.path("hope")).put("on", 1);
+        store.saveSheet(campaign.getId(), "summoner", sheet.toString());
+        store.saveSheet(campaign.getId(), "ally", ally.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "summoner").put("key", "feat:Aid of the Spirits")
+                    .put("actionId", "use");
+            request.putArray("allocations").addObject().put("actorId", "ally").put("amount", 3);
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            request.putArray("allocations").addObject().put("actorId", "summoner").put("amount", 2);
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            request.putArray("allocations").addObject().put("actorId", "ally").put("amount", 2);
+            var result = featureHttp(cookie, request);
+            assertEquals(200, result.statusCode(), result.body());
+            assertEquals(1, MAPPER.readTree(store.loadSheet(campaign.getId(), "summoner")).path("hope").path("on").asInt());
+            assertEquals(3, MAPPER.readTree(store.loadSheet(campaign.getId(), "ally")).path("hope").path("on").asInt());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void summonerDeathKnightRequiresTheFourthCircleConvertsHopeToFearAndRejectsDuplicateUse() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("summoner").name("Summoner").ownerId(playerId()).build());
+        ObjectNode sheet = communitySheet("Seaborne");
+        sheet.put("className", "Summoner").put("subclass", "Necromancy");
+        sheet.put("level", 8);
+        var features = sheet.putArray("features");
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries"))
+            if ("summoner".equals(entry.path("id").asText())
+                    || entry.path("id").asText().startsWith("summoner-necromancy-"))
+                features.addAll((ArrayNode) entry.path("features").deepCopy());
+        sheet.putArray("effects");
+        sheet.withObject("/resources").put("summoner-circle-4", 0);
+        store.saveSheet(campaign.getId(), "summoner", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            long seed = 0;
+            while (true) {
+                var random = new java.util.Random(seed);
+                if (random.nextInt(12) > random.nextInt(12)) break;
+                seed++;
+            }
+            diceSeed(seed);
+            ws.sendText(MAPPER.createObjectNode().put("type", "roll").put("kind", "duality")
+                    .put("expression", "2d12+100").put("actorId", "summoner")
+                    .put("source", "action,attack").put("difficulty", 15).toString(), true).join();
+            JsonNode roll = inbox.next("roll");
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "summoner")
+                    .put("key", "feat:Deathly Warrior").put("actionId", "charge");
+            request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+            int fear = campaign.getFear();
+            var empty = featureHttp(cookie, request);
+            assertEquals(400, empty.statusCode());
+            assertTrue(empty.body().contains("summoner-circle-4"), empty.body());
+            assertEquals(fear, campaign.getFear());
+            sheet.withObject("/resources").put("summoner-circle-4", 1);
+            store.saveSheet(campaign.getId(), "summoner", sheet.toString());
+            var converted = featureHttp(cookie, request);
+            assertEquals(200, converted.statusCode(), converted.body());
+            assertEquals(fear + 1, campaign.getFear());
+            JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "summoner"));
+            assertEquals(1, saved.path("resources").path("summoner-circle-4").asInt());
+            assertTrue(java.util.stream.StreamSupport.stream(saved.path("effects").spliterator(), false)
+                    .anyMatch(e -> "Deathly Warrior damage".equals(e.path("name").asText())
+                            && "2d12".equals(e.path("rollOptions").path(0).path("dice").asText())));
+            JsonNode historyRoll = store.historyTail(campaign.getId(), 20).stream()
+                    .filter(e -> "roll".equals(e.path("type").asText()) && e.path("id").equals(roll.path("id")))
+                    .findFirst().orElseThrow();
+            assertEquals("fear", historyRoll.path("outcome").asText());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            assertEquals(fear + 1, campaign.getFear());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void summonerHopefulStrikeUsesTheArchangelDieOnlyWithAThirdCircleAndSpendsOneAngel() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("summoner").name("Summoner").ownerId(playerId()).build());
+        ObjectNode sheet = communitySheet("Seaborne");
+        sheet.put("className", "Summoner").put("subclass", "Theurgy").put("level", 8);
+        var features = sheet.putArray("features");
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries"))
+            if ("summoner".equals(entry.path("id").asText())
+                    || entry.path("id").asText().startsWith("summoner-theurgy-"))
+                features.addAll((ArrayNode) entry.path("features").deepCopy());
+        sheet.putArray("effects");
+        sheet.putObject("resources").put("summoner-circle-2", 2);
+        sheet.withObject("/resources").put("summoner-circle-3", 1);
+        store.saveSheet(campaign.getId(), "summoner", sheet.toString());
+        String cookie = cookie();
+        Inbox inbox = new Inbox();
+        WebSocket ws = connect(cookie, inbox);
+        try {
+            long seed = 0;
+            while (true) {
+                var random = new java.util.Random(seed);
+                if (random.nextInt(12) > random.nextInt(12)) break;
+                seed++;
+            }
+            diceSeed(seed);
+            ws.sendText(MAPPER.createObjectNode().put("type", "roll").put("kind", "duality")
+                    .put("expression", "2d12+100").put("actorId", "summoner")
+                    .put("source", "action,attack").put("difficulty", 15).toString(), true).join();
+            JsonNode roll = inbox.next("roll");
+            ObjectNode request = MAPPER.createObjectNode().put("actorId", "summoner")
+                    .put("key", "feat:Hopeful Strike").put("actionId", "strike");
+            request.putObject("roll").put("id", roll.path("id").asLong()).put("ts", roll.path("ts").asLong());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+            request.put("actionId", "divine-strike");
+            var strike = featureHttp(cookie, request);
+            assertEquals(200, strike.statusCode(), strike.body());
+            JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "summoner"));
+            assertTrue(java.util.stream.StreamSupport.stream(saved.path("effects").spliterator(), false)
+                    .anyMatch(e -> "Hopeful Strike damage".equals(e.path("name").asText())
+                            && "1d12".equals(e.path("rollOptions").path(0).path("dice").asText())));
+            assertEquals(1, saved.path("resources").path("summoner-circle-2").asInt());
+            assertEquals(1, saved.path("resources").path("summoner-circle-3").asInt());
+            assertEquals(400, featureHttp(cookie, request).statusCode());
+        } finally { ws.abort(); }
+    }
+
+    @Test
+    void summonerHallowedHopeRollsTheExtraHopeDieSpendsItAndDismissesTheManifestationWhenEmpty() throws Exception {
+        campaign.getActors().add(Campaign.Actor.builder().id("summoner").name("Summoner").ownerId(playerId()).build());
+        ObjectNode sheet = communitySheet("Seaborne");
+        sheet.put("className", "Summoner").put("subclass", "Theurgy").put("level", 8);
+        var features = sheet.putArray("features");
+        for (JsonNode entry : MAPPER.readTree(compendiumDir.resolve("classes.json").toFile()).path("entries"))
+            if ("summoner".equals(entry.path("id").asText())
+                    || entry.path("id").asText().startsWith("summoner-theurgy-"))
+                features.addAll((ArrayNode) entry.path("features").deepCopy());
+        sheet.putArray("effects");
+        sheet.putObject("resources").put("summoner-circle-4", 1);
+        sheet.withObject("/resources").put("summoner-hallowed-hope", 2);
+        store.saveSheet(campaign.getId(), "summoner", sheet.toString());
+        String cookie = cookie();
+        ObjectNode body = MAPPER.createObjectNode().put("actorId", "summoner");
+        ObjectNode roll = body.putObject("transactionalRoll").put("ref", "hope-1").put("kind", "duality")
+                .put("expression", "2d12+3").put("source", "action,attack");
+        roll.putArray("hostOptions").addObject().put("key", "feat:Hallowed Hope").put("id", "hallowed-hope");
+        var parts = roll.putArray("contributions");
+        parts.addObject().put("label", "Hope die").put("expression", "1d12");
+        parts.addObject().put("label", "Fear die").put("expression", "1d12");
+        parts.addObject().put("label", "Attack").put("expression", "3");
+        var first = featureHttp(cookie, body);
+        assertEquals(200, first.statusCode(), first.body());
+        JsonNode saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "summoner"));
+        assertEquals(1, saved.path("resources").path("summoner-hallowed-hope").asInt());
+        assertEquals(1, saved.path("resources").path("summoner-circle-4").asInt());
+        roll.put("ref", "hope-2");
+        assertEquals(200, featureHttp(cookie, body).statusCode());
+        saved = MAPPER.readTree(store.loadSheet(campaign.getId(), "summoner"));
+        assertEquals(0, saved.path("resources").path("summoner-hallowed-hope").asInt());
+        assertEquals(0, saved.path("resources").path("summoner-circle-4").asInt());
+        assertTrue(dmMessages.stream().anyMatch(m -> m.path("featureRoll").path("consequence").asText().contains("extra Hope die")
+                && m.path("featureRoll").path("consequence").asText().contains("disappears")));
+        roll.put("ref", "hope-3");
+        assertEquals(400, featureHttp(cookie, body).statusCode());
+    }
+
+    @Test
     void grimPsychometryRequiresSuccessfulFeatureRollAndChargesStressOnce() throws Exception {
         campaign.getActors().add(Campaign.Actor.builder().id("hunter").name("Hunter").ownerId(playerId()).build());
         ObjectNode sheet = communitySheet("Seaborne");

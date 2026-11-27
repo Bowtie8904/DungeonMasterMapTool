@@ -29,6 +29,7 @@ import { characterFeatureGroups } from './feature-groups';
 import { isManualOverride, removeManualOverride, setManualStat } from './engine';
 import { weaponAttackBlocker, weaponDamageRules, weaponProfiles, weaponWithProfile } from './engine';
 import { useConsumableUnit, withSelectedAmount } from './engine';
+import { resourceGroupRoom, summonCircles, summonEntities, summonLimits, summonProblem } from './engine';
 import { attachmentDef, attachItem, attachTargets, detachItem } from './attachments';
 import { isVitalityEffect, removeVitality } from './vitality';
 import { openDemiplaneImport } from './demiplane-view';
@@ -124,7 +125,7 @@ export interface SheetViewOptions {
   restActors?: () => import('../protocol').Actor[];
   /** Posts a short message (action results) to the shared chat. */
   onLog?: (text: string, rollSource?: RollSource, restDice?: import('./rest').RestDie[], incomingDamage?: boolean) => void;
-  onFeature?: (key: string, actionId: string, amount?: number) => Promise<void>;
+  onFeature?: (key: string, actionId: string, amount?: number, allocations?: Array<{ actorId: string; amount: number }>) => Promise<void>;
   onCopycat?: (key: string, actionId: string) => Promise<void>;
   onDamageTaken?: (severity: number) => Promise<void>;
   onIncomingDamage?: (damage: NonNullable<import('../api').FeatureRequest['incomingDamage']>,
@@ -758,6 +759,48 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         });
         return;
       }
+      if (action.summon) {
+        const limits = summonLimits(c, action);
+        const circles = summonCircles(c);
+        const dialog = el('dialog', { class: 'dh dh-rolldlg dh-summon', ariaLabel: action.label });
+        const error = el('div', { class: 'error', role: 'alert' });
+        const status = el('p', { class: 'muted' });
+        const inputs = new Map<string, HTMLInputElement>();
+        const rows = circles.map(circle => {
+          const input = el('input', { type: 'number', min: '0', max: String(circle.space), step: '1', value: '0', ariaLabel: `${circle.label} - ${circle.entity}` });
+          inputs.set(circle.resource, input as HTMLInputElement);
+          return el('label', { class: 'dh-summon-row' },
+            el('span', {}, `${circle.entity} - ${circle.label} (${circle.held} held)`), input);
+        });
+        const cancel = el('button', { type: 'button' }, 'Cancel');
+        const go = el('button', { type: 'button', class: 'primary' }, 'Summon');
+        const chosen = () => Object.fromEntries(circles.map(circle => [circle.resource, inputs.get(circle.resource)!.valueAsNumber || 0]));
+        const refresh = () => {
+          const additions = chosen();
+          const sum = Object.values(additions).reduce((n, v) => n + v, 0);
+          const problem = summonProblem(c, action, additions);
+          status.textContent = `Summoning ${sum} of up to ${limits.perAction} this action; holding ${limits.held} of ${limits.total} in total.`;
+          error.textContent = problem ?? '';
+          go.disabled = sum === 0 || problem !== null;
+        };
+        for (const input of inputs.values()) input.addEventListener('input', refresh);
+        cancel.addEventListener('click', () => dialog.close());
+        dialog.addEventListener('close', () => dialog.remove(), { once: true });
+        go.addEventListener('click', () => {
+          let lines: string[];
+          try { lines = summonEntities(c, key, a, action, label === action.label ? label : `${label} - ${action.label}`, chosen()); }
+          catch (e) { error.textContent = (e as Error).message; return; }
+          hooks.after?.(action);
+          opts.onLog?.(formatActionReport({ title: titled(actionReportTitle(c, key, label, action.label)), character: c.name, lines }), rollSourceFor(c, key));
+          dialog.close();
+          render();
+        });
+        dialog.append(el('h4', {}, action.label), status, ...rows, error, el('div', { class: 'acts' }, cancel, go));
+        document.body.append(dialog);
+        dialog.showModal();
+        refresh();
+        return;
+      }
       if (action.confirm && !await confirmDialog(action.confirm, action.label)) return;
       if (a.deathMove?.kind === 'mask' && action.steps?.some(s => s.op === 'gain' && s.resource === 'death-mask')
           && !await confirmDialog('Confirm at the table that you have earned this Mask token.')) return;
@@ -935,6 +978,14 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       }
       if (action.target === 'allActors' || action.chatBenefits) {
         if (!opts.supportsPartyFeatures?.()) { opts.onLog?.('Update the host to use party feature actions.'); return; }
+      }
+      if (action.distributeHope) {
+        if (!opts.onFeature || !opts.restActors) { opts.onLog?.('This host does not support distributing Hope. Update the host.'); return; }
+        const blocker = actionBlocker(c, key, a, action);
+        if (blocker) { opts.onLog?.(blocker); return; }
+        openHopeDistribution(root, action.label, action.distributeHope, opts.restActors(),
+          (allocations) => opts.onFeature!(key, action.id, undefined, allocations).then(() => { hooks.after?.(action); render(); }));
+        return;
       }
       if (action.target || action.check || action.chatBenefits && !action.actionRoll) {
         if (!opts.onFeature) { opts.onLog?.('This host does not support targeted feature actions. Update the host.'); return; }
@@ -1238,7 +1289,9 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         ),
         vital('Hope', el('div', {}, hopePips(), scars)),
         vital('Proficiency', proficiencyPips()),
-        ...extraResources.map((r) => vital(r.label, poolControls(r))),
+        ...extraResources.filter(r => !r.group).map((r) => vital(r.label, poolControls(r))),
+        ...[...new Set(extraResources.flatMap(r => r.group ? [r.group] : []))]
+          .map(group => vital(group, resourceGroupControls(extraResources.filter(r => r.group === group)), 'resource-group-vital')),
         ...[...activeFeatures(c), ...c.heritage].flatMap(f => f.automation?.effectCounters ?? []).filter(r => !r.cardOnly)
           .map(r => vital(r.label, counterResource(r))),
         ...activeFeatures(c).flatMap(f => f.automation?.dicePool ? [vital(f.automation.dicePool.label, dicePoolControls(f.automation.dicePool))] : []),
@@ -1248,13 +1301,23 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
 
   function poolInput(r: NonNullable<Automation['resources']>[number]): HTMLInputElement {
     const input = el('input', { type: 'number', min: '0', step: '1', value: String(c.resources?.[r.id] ?? 0), ariaLabel: r.label });
-    if (r.max !== undefined) input.max = String(Math.max(0, evalValue(r.max, c)));
+    const room = resourceGroupRoom(c, r);
+    if (Number.isFinite(room)) input.max = String(room);
     input.addEventListener('change', () => {
       if (!Number.isFinite(input.valueAsNumber)) { input.value = String(c.resources?.[r.id] ?? 0); return; }
-      c.resources![r.id] = Math.max(0, Math.min(r.max === undefined ? Infinity : evalValue(r.max, c), Math.floor(input.valueAsNumber)));
+      c.resources![r.id] = Math.max(0, Math.min(resourceGroupRoom(c, r), Math.floor(input.valueAsNumber)));
       render();
     });
     return input;
+  }
+
+  function resourceGroupControls(defs: NonNullable<Automation['resources']>): HTMLElement {
+    const group = defs[0].group!;
+    const limit = defs.find(r => r.groupMax !== undefined)?.groupMax;
+    const total = defs.reduce((n, r) => n + (c.resources?.[r.id] ?? 0), 0);
+    const title = limit === undefined ? group : `${group}: ${total} / ${Math.max(0, evalValue(limit, c))}`;
+    return el('div', { class: 'dh-resource-group', role: 'group', ariaLabel: group, title },
+      ...defs.map(r => el('label', { class: 'dh-resource-slot' }, el('span', { class: 'dh-resource-slot-label' }, r.label), poolInput(r))));
   }
 
   function counterResource(r: NonNullable<Automation['effectCounters']>[number]): HTMLElement {
@@ -1671,8 +1734,12 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       node.append(el('label', { class: 'row' }, 'Element', select));
     }
     if (actions) node.append(actions);
-    if (quick && f.automation?.classResourceOnly)
-      for (const resource of f.automation.resources ?? []) node.append(el('label', { class: 'row' }, resource.label, poolControls(resource)));
+    if (quick && f.automation?.classResourceOnly) {
+      const resources = f.automation.resources ?? [];
+      for (const resource of resources.filter(r => !r.group)) node.append(el('label', { class: 'row' }, resource.label, poolControls(resource)));
+      for (const group of new Set(resources.flatMap(r => r.group ? [r.group] : [])))
+        node.append(el('div', { class: 'row' }, group, resourceGroupControls(resources.filter(r => r.group === group))));
+    }
     if (quick && f.automation?.dicePool) node.append(dicePoolControls(f.automation.dicePool));
     for (const child of children) {
       if (quick) {
@@ -2410,6 +2477,43 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
 }
 
 export interface PendingAction { key: string; automation: Automation; action: ActionDef; blocker?: () => string | null }
+
+/** Dialog that splits exactly `total` Hope among other characters and submits the allocations. */
+export function openHopeDistribution(host: HTMLElement, title: string, total: number, actors: Array<{ id: string; name: string }>,
+  send: (allocations: Array<{ actorId: string; amount: number }>) => Promise<void>): void {
+  const dialog = el('dialog', { class: 'dh dh-rolldlg dh-summon', ariaLabel: title });
+  const error = el('div', { class: 'error', role: 'alert' });
+  const status = el('p', { class: 'muted', role: 'status' });
+  const cancel = el('button', { type: 'button' }, 'Cancel');
+  const go = el('button', { type: 'button', class: 'primary' }, 'Give Hope');
+  const rows = actors.map(actor => {
+    const input = el('input', { type: 'number', min: '0', max: String(total), step: '1', value: '0', ariaLabel: `Hope for ${actor.name}` }) as HTMLInputElement;
+    return { actor, input, node: el('label', { class: 'dh-summon-row' }, el('span', {}, actor.name), input) };
+  });
+  const values = () => rows.map(row => ({ actorId: row.actor.id, amount: row.input.valueAsNumber || 0 }));
+  const sum = () => values().reduce((n, v) => n + v.amount, 0);
+  const valid = () => values().every(v => Number.isInteger(v.amount) && v.amount >= 0) && sum() >= 1 && sum() <= total;
+  const refresh = () => {
+    status.textContent = `Distributing ${sum()} of up to ${total} Hope among PCs within Far range.`;
+    go.disabled = !valid();
+  };
+  for (const row of rows) row.input.addEventListener('input', refresh);
+  cancel.addEventListener('click', () => dialog.close());
+  dialog.addEventListener('close', () => dialog.remove(), { once: true });
+  go.addEventListener('click', async () => {
+    if (!valid()) return;
+    go.disabled = true;
+    error.textContent = '';
+    try { await send(values().filter(v => v.amount > 0)); dialog.close(); }
+    catch (e) { error.textContent = (e as Error).message; refresh(); }
+  });
+  dialog.append(el('h4', {}, title), status, ...rows.map(row => row.node),
+    ...(rows.length ? [] : [el('p', { class: 'muted' }, 'No other connected characters are available.')]),
+    error, el('div', { class: 'acts' }, cancel, go));
+  host.ownerDocument.body.append(dialog);
+  dialog.showModal();
+  refresh();
+}
 
 function openHopeTransfer(host: HTMLElement, c: CharacterSheet, send: (amount: number) => Promise<void>): void {
   const backdrop = el('div', { class: 'dh dh-rolldlg-backdrop' });

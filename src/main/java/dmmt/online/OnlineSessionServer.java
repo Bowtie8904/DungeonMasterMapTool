@@ -2493,6 +2493,12 @@ public final class OnlineSessionServer {
             }
             if (definition.has("excludesEffect") && DruidEffects.hasEffect(sourceSheet, definition.path("excludesEffect").asText()))
                 throw new IllegalArgumentException("This effect is already active.");
+            String requiredResource = definition.path("requiresResource").asText("");
+            if (!requiredResource.isBlank() && sourceSheet.path("resources").path(requiredResource).asInt() <= 0)
+                throw new IllegalArgumentException("This feature requires " + requiredResource + " above 0.");
+            String emptyResource = definition.path("resourceEmpty").asText("");
+            if (!emptyResource.isBlank() && sourceSheet.path("resources").path(emptyResource).asInt() > 0)
+                throw new IllegalArgumentException("This feature is available only while " + emptyResource + " is empty.");
 
             ObjectNode originalRoll = hasRoll ? findSessionRoll(request.path("roll")) : null;
             if (hasRoll) validateTrigger(sourceActor, key, definition, originalRoll);
@@ -2511,6 +2517,7 @@ public final class OnlineSessionServer {
                         + definition.path("spentTokenDamage").path("sides").asInt()).put("fixed", true).put("type", "magic");
             }
             else if (!hasRoll && !definition.has("target") && !definition.has("check") && !definition.has("chatBenefits")
+                    && !definition.has("distributeHope")
                     && !definition.has("patronDice") && !definition.path("spendFavor").asBoolean()
                     && !definition.path("menacingReach").asBoolean() && !definition.path("hostOwned").asBoolean()
                     && !List.of("talisman", "lifeblood").contains(definition.path("witchAction").asText()))
@@ -2620,7 +2627,9 @@ public final class OnlineSessionServer {
             if (fearGrant > 0) reportLines.add("Gave the GM " + fearGrant + " Fear.");
             if (definition.path("report").isObject()) {
                 JsonNode report = definition.path("report");
-                int amount = report.has("dice")
+                int amount = report.has("resource")
+                        ? Math.max(0, sourceSheet.path("resources").path(report.path("resource").asText()).asInt()) * report.path("per").asInt(1)
+                        : report.has("dice")
                         ? DiceRoller.roll(report.path("dice").asText(), config.maxDice(), diceRandom).total()
                         : report.has("amount") ? featureAmount(report.path("amount"), sourceSheet) : 0;
                 reportLines.add(report.path("text").asText().replace("{amount}", String.valueOf(Math.max(0, amount)))
@@ -2654,6 +2663,36 @@ public final class OnlineSessionServer {
                 int after = Math.min(max, before + amount.asInt());
                 resources.put(resource, after);
                 reportLines.add("Gained " + (after - before) + " Feed tokens (" + after + "/" + max + ").");
+            }
+            if (definition.has("distributeHope")) {
+                int total = definition.path("distributeHope").asInt();
+                JsonNode input = request.path("allocations");
+                if (total < 1 || !input.isArray())
+                    throw new IllegalArgumentException("Choose how to distribute " + total + " Hope.");
+                Map<String, Integer> given = new java.util.LinkedHashMap<>();
+                int sum = 0;
+                for (JsonNode entry : input) {
+                    String id = entry.path("actorId").asText();
+                    Campaign.Actor recipient = c.actor(id);
+                    if (recipient == null || recipient.isDisabled() || recipient.getId().equals(sourceActor.getId())
+                            || recipient.getOwnerId() == null || c.player(recipient.getOwnerId()) == null
+                            || !entry.path("amount").isInt() || entry.path("amount").asInt() < 1 || given.containsKey(id))
+                        throw new IllegalArgumentException("Choose other player characters and whole numbers of Hope.");
+                    sum = Math.addExact(sum, entry.path("amount").asInt());
+                    given.put(id, entry.path("amount").asInt());
+                }
+                if (sum < 1 || sum > total) throw new IllegalArgumentException("Distribute 1 to " + total + " Hope.");
+                for (var share : given.entrySet()) {
+                    ObjectNode recipientSheet = changedSheets.computeIfAbsent(share.getKey(), id -> {
+                        try { return storedSheet(id); }
+                        catch (IOException e) { throw new FeatureIoException(e); }
+                    });
+                    ObjectNode track = requireTrack(recipientSheet, "hope");
+                    if (share.getValue() > track.path("slots").asInt() - track.path("on").asInt())
+                        throw new IllegalArgumentException(c.actor(share.getKey()).getName() + " cannot receive that much Hope.");
+                    gainTrack(recipientSheet, "hope", share.getValue());
+                    reportLines.add("Gave " + share.getValue() + " Hope to " + c.actor(share.getKey()).getName() + ".");
+                }
             }
             if (definition.path("transferHope").asBoolean()) {
                 JsonNode amount = request.path("amount");
@@ -3271,7 +3310,9 @@ public final class OnlineSessionServer {
             if (dmManaged && !source.has("dmConsumeOnRoll")) dmEffectUses.add(key.substring("effect:".length()));
             if (key.startsWith("card:") && !activeCardKey(sheet, key))
                 throw new IllegalArgumentException("This card must be in the active loadout.");
-            if (!tags.contains(definition.path("roll").asText())
+            boolean actionRoll = "duality".equals(definition.path("roll").asText()) && "duality".equals(input.path("kind").asText())
+                    && (tags.contains("action") || tags.contains("reaction"));
+            if (!actionRoll && !tags.contains(definition.path("roll").asText())
                     || definition.has("weapon") && (weapon == null || tags.contains("spelldamage")))
                 throw new IllegalArgumentException("This option requires a matching equipped weapon roll.");
             if (definition.path("deathrun").asBoolean()) {
@@ -3386,6 +3427,8 @@ public final class OnlineSessionServer {
                 applyFeatureSteps(sheet, steps, definition.path("label").asText(), actor, keys.get(i), lines);
             }
             if (definition.has("endEffect")) removeEffects(sheet, definition.path("endEffect").asText(), null, null);
+            if (definition.path("extraHopeDie").isObject())
+                applyExtraHopeDie(sheet, roll, definition.path("label").asText(), definition.path("extraHopeDie"), lines);
         }
         if (damage && sheet.path("effects") instanceof ArrayNode effects) {
             for (int i = effects.size() - 1; i >= 0; i--) {
@@ -3419,6 +3462,39 @@ public final class OnlineSessionServer {
         invisibilityRolls.put(reference, roll.deepCopy());
         sendFeatureState(actor, sheet);
         deliver(roll, null, false);
+    }
+
+    /** Rolls one extra Hope die for a Duality roll and keeps the higher of it and the normal Hope die. */
+    private void applyExtraHopeDie(ObjectNode sheet, ObjectNode roll, String label, JsonNode rule, List<String> lines) {
+        ArrayNode values = roll.withArray("rolls");
+        if (!"duality".equals(roll.path("kind").asText()) || values.size() < 2)
+            throw new IllegalArgumentException("An extra Hope die needs a Duality roll.");
+        int sides = roll.path("expression").asText().startsWith("1d20+") ? 20 : 12;
+        int previous = values.get(0).asInt();
+        int extra = DiceRoller.roll("1d" + sides, config.maxDice(), diceRandom).total();
+        if (extra > previous) {
+            int delta = extra - previous;
+            values.set(0, MAPPER.getNodeFactory().numberNode(extra));
+            roll.put("total", Math.addExact(roll.path("total").asInt(), delta));
+            for (JsonNode raw : roll.path("breakdown")) {
+                if (raw instanceof ObjectNode detail && detail.path("rolls").size() > 0) {
+                    ((ArrayNode) detail.path("rolls")).set(0, MAPPER.getNodeFactory().numberNode(extra));
+                    detail.put("total", detail.path("total").asInt() + delta);
+                    detail.withArray("notes").addObject().put("label", label)
+                            .put("impact", "Extra Hope die " + extra + " replaced Hope die " + previous);
+                    break;
+                }
+            }
+            int fear = values.get(1).asInt();
+            if (extra == fear) roll.remove("outcome");
+            else roll.put("outcome", extra > fear ? "hope" : "fear");
+            lines.add(label + ": extra Hope die " + extra + " beats " + previous + ". Hope die is now " + extra + ".");
+        } else lines.add(label + ": extra Hope die " + extra + " does not beat " + previous + ". Hope die stays " + previous + ".");
+        String dismiss = rule.path("dismiss").asText();
+        if (!dismiss.isBlank() && sheet.path("resources").path(rule.path("resource").asText()).asInt() <= 0) {
+            sheet.withObject("/resources").put(dismiss, 0);
+            lines.add("No extra Hope dice remain; the Divine Manifestation disappears.");
+        }
     }
 
     private boolean activeCardKey(ObjectNode sheet, String key) {

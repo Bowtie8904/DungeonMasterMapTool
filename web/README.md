@@ -72,6 +72,15 @@ Linked actor conditions persist when their token is absent, hidden or on another
 inherit saved conditions on the host; synchronization matches actor effects by condition ID, preserving
 legacy token linkage without duplicating effects when the token ID changes. Non-actor conditions remain local to the token.
 
+Summoner's July 9, 2026 playtest class, Necromancy and Theurgy use catalog automation. Grouped
+resources (`group`/`groupMax`) render one **Summoning circles** header widget with the four circle counts
+and a level-capped total; features spend or require those counts (action/trigger `requiresResource`/`resourceEmpty`).
+Circle features declare their Entity (`entity`) and Summon Entity's `summon` action opens an allocation dialog.
+Hallowed Hope's replacement of the original Hope die remains
+manual; supplemental dice, payments, conditional statistics, damage and protection use
+existing controls. The creation guide includes Greatstaff, Leather Armor and catalog-backed keepsakes.
+See [the feature-by-feature limits](../docs/DAGGERHEART_DATA.md#summoner-playtest-metadata).
+
 Wizard automation is maintained in `dmmap-daggerheart/classes.json`. Adept is an optional duality-roll
 choice requiring a selected Experience; it doubles that modifier and replaces the 1 Hope cost with
 1 Stress. Honed Expertise automatically rolls a client-local d6 at submission, showing the result

@@ -611,6 +611,116 @@
   },
   "mitigation:vitreous": "Vitreous"
  },
+ "classes.json/Aid of the Spirits": {
+  "action:use": {
+   "button": "Aid of the Spirits (3 Hope)",
+   "blocker": null,
+   "lines": [
+    "spent 3 Hope",
+    "cleared 0 Stress",
+    "Distributed 2 Hope among other PCs within Far range."
+   ],
+   "report": "ACTION USED\nAid of the Spirits\nMira Ashvale\n• spent 3 Hope\n• cleared 0 Stress\n• Distributed 2 Hope among other PCs within Far range."
+  }
+ },
+ "classes.json/Summon Entity": {
+  "action:summon": {
+   "button": "Summon Entities (1 Stress)",
+   "blocker": "Your Entity limit is reached",
+   "lines": null,
+   "report": null
+  },
+  "action:command": {
+   "button": "Command entity",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nSummon Entity - Command entity\nMira Ashvale"
+  }
+ },
+ "classes.json/First Circle - Fate Spirit": {
+  "action:reroll": {
+   "button": "Expend Fate Spirit (1 summoner-circle-1)",
+   "blocker": "Resource unavailable: summoner-circle-1",
+   "lines": null,
+   "report": null
+  }
+ },
+ "classes.json/Hunger of the Grave": {
+  "action:roll": {
+   "button": "Spellcast roll",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nHunger of the Grave - Spellcast roll\nMira Ashvale"
+  },
+  "trigger:hit": {
+   "button": "Hunger of the Grave: hit",
+   "cost": "1 summoner-circle-2",
+   "choices": []
+  }
+ },
+ "classes.json/Grim Harvest": {
+  "action:harvest": {
+   "button": "Grim Harvest",
+   "blocker": "Resource unavailable: summoner-circle-2",
+   "lines": null,
+   "report": null
+  }
+ },
+ "classes.json/Spectral Terror": {
+  "action:roll": {
+   "button": "Spellcast roll",
+   "blocker": null,
+   "lines": [],
+   "report": "ACTION USED\nSpectral Terror - Spellcast roll\nMira Ashvale"
+  },
+  "trigger:hit": {
+   "button": "Spectral Terror: target marks 1 Stress",
+   "cost": "1 summoner-circle-3",
+   "choices": []
+  }
+ },
+ "classes.json/Deathly Warrior": {
+  "trigger:charge": {
+   "button": "Deathly Warrior: succeed with Fear",
+   "cost": "",
+   "choices": []
+  }
+ },
+ "classes.json/Knightly Bulwark": {
+  "mitigation:intercept": "Knightly Bulwark"
+ },
+ "classes.json/Angelic Presence": {
+  "option:influence": "Angelic Presence: influence others"
+ },
+ "classes.json/Hopeful Strike": {
+  "trigger:strike": {
+   "button": "Hopeful Strike: 1d10 magic",
+   "cost": "1 summoner-circle-2",
+   "choices": []
+  },
+  "trigger:divine-strike": {
+   "button": "Hopeful Strike: 1d12 magic",
+   "cost": "1 summoner-circle-2",
+   "choices": []
+  }
+ },
+ "classes.json/Heavenly Aid": {
+  "action:fly": {
+   "button": "Fly with Archangel (1 summoner-circle-3)",
+   "blocker": "Resource unavailable: summoner-circle-3",
+   "lines": null,
+   "report": null
+  },
+  "action:help": {
+   "button": "Help an Ally (1 summoner-circle-3)",
+   "blocker": "Resource unavailable: summoner-circle-3",
+   "lines": null,
+   "report": null
+  }
+ },
+ "classes.json/Hallowed Hope": {
+  "option:hallowed-hope": "Hallowed Hope"
+ },
  "classes.json/Loyal Friend": {
   "action:use": {
    "button": "Loyal Friend",

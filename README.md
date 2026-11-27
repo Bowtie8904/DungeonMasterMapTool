@@ -507,6 +507,16 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   when that player disconnects. Older player clients do not report labels; private player-to-player whispers
   remain private. Summaries are live presentation hints, not saved history or authoritative eligibility.
   **Seraph:** Roll Prayer Dice once per session without a confirmation; the feature shows its remaining session use.
+  **Summoner (The Void, July 9, 2026):** Blood/Splendor, with Necromancy and Theurgy at all subclass stages,
+  is available in the Character Mancer and compendium. A **Summoning circles** widget at the top of the
+  sheet tracks the four circles' summon counts and caps their total at the character's level; features
+  spend or require those counts instead of tracking entities. **Summon Entities** opens a dialog to allocate
+  Entities per unlocked circle (named by circle and subclass Entity, e.g. Third Circle - Ghost), enforcing
+  the per-circle, total (level) and per-action (tier) limits. Existing rules handle payments,
+  Ghost Evasion, Angel advantage, Hopeful Strike's bonus magic damage on the damage roll, Death Knight protection and
+  Hope-to-Fear conversion, and Hallowed Hope's extra Hope dice (placed on the card when summoned; an optional action/reaction roll option rolls one and keeps the higher Hope die). **Aid of the Spirits** opens a dialog
+  splitting 1 or 2 Hope among other connected characters. Adversary rerolls/Stress, applying corpse damage, positioning, and replacing the normal Hope die
+  remain table-managed. See [Summoner automation limits](docs/DAGGERHEART_DATA.md#summoner-playtest-metadata).
   Feature and domain-card buttons use concise action labels (such as **Clear 2 HP** or **Spellcast Reaction**),
   without repeating their card's name. Chat actions and reports retain source context; damage titles and breakdowns
   avoid adding a second "damage" to labels that already contain it. These wording changes do not alter gameplay.

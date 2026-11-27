@@ -108,6 +108,7 @@ export const FIELD_HELP: Record<string, string> = {
   combo: 'Use host-rolled Combo Dice after normal damage; not multiplied or maximized for criticals.',
   multiplier: 'Damage multiplier supported by the runtime (currently 2).',
   hopeDie: 'Replace the Hope die with the supported die size (currently d20).',
+  extraHopeDie: 'Host-resolved: roll one extra Hope die with the Duality roll and keep the higher; `dismiss` is set to 0 when `resource` runs out.',
   fearDie: 'Replace the Fear die with the supported die size (currently d20).',
   input: 'Player-entered numeric bonus with a default and allowed bounds.',
   default: 'Initial value shown in the input; does not override a player’s selection.',
@@ -122,7 +123,9 @@ export const FIELD_HELP: Record<string, string> = {
   diceResource: 'Identify the option’s dice in chat breakdowns for resource-specific reroll actions.',
   rerollResourceDice: 'Reroll only dice showing 1 from this resource on an attack or damage roll.',
   failedOnly: 'Require a failed roll; unknown Difficulty remains player-confirmed.',
-  resourceEmpty: 'Offer this option only when this named resource pool is empty.',
+  resourceEmpty: 'Offer this option/action/trigger only when this named resource pool is empty.',
+  entity: 'Entity held by a grouped circle resource: {resource, name, steps?}. Owning this card unlocks the circle in a `summon` action; steps run for each summon.',
+  summon: 'Action opens an allocation dialog adding up to `count` (number or formula) Entities to unlocked circles, within each circle maximum and the group total.',
   consumeItem: 'Consume an inventory copy when this action/option is used.',
   downtime: 'Rest-move restrictions, optional dice-table outcomes and recipe crafting (craft).',
   table: 'Downtime: dice-table expression and ordered text outcomes. Action: `dice` and outcomes with inclusive min/max ranges, text and optional steps that run on that result.',
@@ -189,6 +192,7 @@ export const FIELD_HELP: Record<string, string> = {
   usesOverrides: 'Source-key-to-maximum map that raises another feature’s use limit without resetting it.',
   actionBenefits: 'Source-key-to-chat-benefit map added to another feature’s report.',
   chatBenefits: 'After an action, offer allies one of these benefits in chat. Claims are host-validated.',
+  distributeHope: 'Open a dialog to split up to this much Hope (at least 1) among other connected player characters (host-validated allocations).',
   transferHope: 'Ask for a positive Hope amount to transfer to a selected ally.',
   allowSourceOwner: 'Allow another eligible character owned by the source player as a recipient.',
   blocksMovement: 'Block player token movement while this effect is active. DM movement is unaffected.',
@@ -250,7 +254,7 @@ export const FIELD_HELP: Record<string, string> = {
   counter: 'Persistent effect counter, with value and maximum.',
   maxByLevel: 'Character-level-to-counter-maximum overrides.',
   effectCounters: 'Show counters for these named active effects on the granting feature.',
-  report: 'Text/dice/amount to report in chat; does not silently change a target’s sheet.',
+  report: 'Text/dice/amount (or `resource` x `per`) to report in chat; does not silently change a target’s sheet.',
   manual: 'Rules that require table adjudication. They are described, not automatically executed.',
   additional: 'Offer this as an additional rest choice, not an additional downtime slot.',
   armorBlocked: 'Do not offer Armor as a mitigation for this damage.',
@@ -316,7 +320,8 @@ export const FIELD_HELP: Record<string, string> = {
   keepItem: 'This consumable action never uses up a unit by itself.',
   doomsday: 'Doomsday Potion sequence: d12 per Hope slot, a scar for each result below 12, and the effect on the first 12.',
   dieSizes: 'Die sizes offered in a dropdown next to this roll option; the first is the default.',
-  requiresResource: 'Offer this option only while the named resource pool is above 0; selecting it does not spend the pool.',
+  requiresResource: 'Offer this option/action/trigger only while the named resource pool is above 0; it does not spend the pool.',
+  groupMax: 'Combined maximum of all resources in this group (number or formula); input and gains clamp to the remaining room.',
   expendOn: 'Online Play host: when this option’s own die shows this face, empty its required resource pool and report it on the roll card.',
   storeDamage: 'Custom resource that receives the incoming damage when this mitigation is applied (Lightning Scarab).',
   minHope: 'Apply this rest benefit only when the character has at least this much Hope as the rest starts.',
@@ -384,6 +389,7 @@ export function fieldHelp(key: string, path = ''): string {
   if (/\.diceByFeature\.[^.]+$/.test(path)) return `Dice used while the exact feature "${key}" is learned.`;
   if (/\.usesOverrides\.[^.]+$/.test(path)) return `Raise the maximum uses of source "${key}" to this value; spent uses are not reset.`;
   if (/\.actionBenefits\.[^.]+$/.test(path)) return `Chat benefit choices added to source "${key}" while the granting feature is learned.`;
+  if (/\.resources\[\d+\]\.group$/.test(path)) return 'Header group label: pools sharing it render as one widget with a combined total.';
   return FIELD_HELP[key] ?? `Named ${fieldLabel(key).toLowerCase()} setting. Preserve the value type and consult the rule’s description; custom keys only execute if supported by the host.`;
 }
 

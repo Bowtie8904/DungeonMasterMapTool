@@ -5,6 +5,370 @@
  "label": "Classes",
  "entries": [
   {
+   "id": "summoner",
+   "name": "Summoner",
+   "kind": "class",
+   "domains": ["Blood", "Splendor"],
+   "text": "As a summoner, you harness your occult training to call forth and command otherworldly entities that act on your behalf.",
+   "startingHp": 6,
+   "startingEvasion": 10,
+   "features": [
+    {
+     "name": "Aid of the Spirits",
+     "type": "hope",
+     "text": "Spend 3 Hope to conjure otherworldly aid. Distribute 2 Hope among one or more other PCs within Far range, and you clear a Stress.",
+     "automation": {
+      "actions": [{
+       "id": "use",
+       "label": "Aid of the Spirits",
+       "cost": {"hope": 3},
+       "distributeHope": 2,
+       "steps": [{"op": "clear", "resource": "stress", "amount": 1}],
+       "report": {"text": "Distributed 2 Hope among other PCs within Far range."}
+      }]
+     }
+    },
+    {
+     "name": "Summon Entity",
+     "type": "class",
+     "text": "You can summon otherworldly Entities: Fate Spirits and other Entities from your subclass. Each Entity is associated with a summoning circle below. Mark a Stress to summon a number of your Entities equal to your tier, and add them to the appropriate circles. You can hold a total number of Entities equal to your level. Summoned Entities stay within Very Close range, can perform harmless tasks within that range, and cannot be targeted. If a task requires an action roll, make a Spellcast Roll to command the Entity.",
+     "automation": {
+      "classResourceOnly": true,
+      "resources": [
+       {"id": "summoner-circle-1", "label": "First Circle", "initial": 0, "max": "@level", "group": "Summoning circles", "groupMax": "@level"},
+       {"id": "summoner-circle-2", "label": "Second Circle", "initial": 0, "max": "@level", "group": "Summoning circles", "groupMax": "@level"},
+       {"id": "summoner-circle-3", "label": "Third Circle", "initial": 0, "max": "@level", "group": "Summoning circles", "groupMax": "@level"},
+       {"id": "summoner-circle-4", "label": "Fourth Circle", "initial": 0, "max": 1, "group": "Summoning circles", "groupMax": "@level"}
+      ],
+      "actions": [
+       {"id": "summon", "label": "Summon Entities", "cost": {"stress": 1}, "summon": {"count": "@tier"}},
+       {"id": "command", "label": "Command entity", "actionRoll": {"trait": "spellcast"}}
+      ]
+     }
+    },
+    {
+     "name": "First Circle - Fate Spirit",
+     "type": "class",
+     "text": "After an adversary within Very Close range makes a successful attack roll, you can command a Fate Spirit to force the adversary to reroll the attack. The spirit then disappears.",
+     "automation": {
+      "entity": {"resource": "summoner-circle-1", "name": "Fate Spirit"},
+      "actions": [{
+       "id": "reroll",
+       "label": "Expend Fate Spirit",
+       "cost": {"summoner-circle-1": 1},
+       "report": {"text": "An adversary within Very Close range rerolls its successful attack; resolve the adversary roll manually."}
+      }]
+     }
+    }
+   ]
+  },
+  {
+   "id": "summoner-necromancy-foundation",
+   "name": "Summoner: Necromancy",
+   "kind": "subclass",
+   "parent": "Summoner",
+   "stage": "foundation",
+   "spellcastTrait": "Knowledge",
+   "domains": ["Blood", "Splendor"],
+   "text": "Command undead entities.",
+   "features": [
+    {
+     "name": "Second Circle - Shambling Corpse",
+     "type": "subclass",
+     "text": "You can summon Shambling Corpses using your Second Circle.",
+     "automation": {"entity": {"resource": "summoner-circle-2", "name": "Shambling Corpse"}}
+    },
+    {
+     "name": "Hunger of the Grave",
+     "type": "subclass",
+     "text": "Make a Spellcast Roll against a target within Far range. On a success, your Shambling Corpses move to attack the target, dealing 5 physical damage for each Shambling Corpse before returning to you. One Shambling Corpse then disappears.",
+     "automation": {
+      "actions": [{"id": "roll", "label": "Spellcast roll", "actionRoll": {"trait": "spellcast", "attack": true}}],
+      "rollTriggers": [{
+       "id": "hit",
+       "label": "Hunger of the Grave: hit",
+       "on": "feat:Hunger of the Grave",
+       "when": "always",
+       "successIfKnown": true,
+       "cost": {"summoner-circle-2": 1},
+       "description": "Confirm success against a target within Far range; deal 5 physical damage per corpse before spending one.",
+       "report": {"resource": "summoner-circle-2", "per": 5, "text": "Dealt {amount} physical damage. One Shambling Corpse removed."}
+      }]
+     }
+    },
+    {
+     "name": "Grim Harvest",
+     "type": "subclass",
+     "text": "When an adversary within Far range marks its last Hit Point, you can summon one Shambling Corpse without marking a Stress.",
+     "automation": {
+      "actions": [{
+       "id": "harvest",
+       "label": "Grim Harvest",
+       "steps": [{"op": "gain", "resource": "summoner-circle-2", "amount": 1}]
+      }]
+     }
+    }
+   ]
+  },
+  {
+   "id": "summoner-necromancy-specialization",
+   "name": "Summoner: Necromancy",
+   "kind": "subclass",
+   "parent": "Summoner",
+   "stage": "specialization",
+   "spellcastTrait": "Knowledge",
+   "domains": ["Blood", "Splendor"],
+   "text": "Add protective and terrifying ghosts to your summons.",
+   "features": [
+    {
+     "name": "Third Circle - Ghosts",
+     "type": "subclass",
+     "text": "You can summon Ghosts using your Third Circle.",
+     "automation": {"entity": {"resource": "summoner-circle-3", "name": "Ghost"}}
+    },
+    {
+     "name": "Ghostly Protectors",
+     "type": "subclass",
+     "text": "While you have any Ghosts summoned, your Evasion has a +1 bonus as they swirl around you in protection.",
+     "automation": {"modifiers": [{"stat": "evasion", "value": "@summoner-circle-3", "max": 1}]}
+    },
+    {
+     "name": "Spectral Terror",
+     "type": "subclass",
+     "text": "Make a Spellcast Roll against a target within Far range. On a success, one of your Ghosts flies to the target to scare it, causing it to mark a Stress. That Ghost then disappears.",
+     "automation": {
+      "actions": [{"id": "roll", "label": "Spellcast roll", "actionRoll": {"trait": "spellcast"}}],
+      "rollTriggers": [{
+       "id": "hit",
+       "label": "Spectral Terror: target marks 1 Stress",
+       "on": "feat:Spectral Terror",
+       "when": "always",
+       "successIfKnown": true,
+       "cost": {"summoner-circle-3": 1},
+       "description": "Confirm success against a target within Far range.",
+       "report": {"text": "The target marks 1 Stress"}
+      }]
+     }
+    }
+   ]
+  },
+  {
+   "id": "summoner-necromancy-mastery",
+   "name": "Summoner: Necromancy",
+   "kind": "subclass",
+   "parent": "Summoner",
+   "stage": "mastery",
+   "spellcastTrait": "Knowledge",
+   "domains": ["Blood", "Splendor"],
+   "text": "Command a single Death Knight.",
+   "features": [
+    {
+     "name": "Fourth Circle - Death Knight",
+     "type": "subclass",
+     "text": "You can summon one Death Knight at a time using your Fourth Circle.",
+     "automation": {"entity": {"resource": "summoner-circle-4", "name": "Death Knight"}}
+    },
+    {
+     "name": "Deathly Warrior",
+     "type": "subclass",
+     "text": "When you succeed on an attack roll with Hope, you can instead succeed with Fear, causing your Death Knight to rush your target, add 2d12 to the attack’s damage, and then return to you.",
+     "automation": {
+      "rollTriggers": [{
+       "id": "charge",
+       "label": "Deathly Warrior: succeed with Fear",
+       "on": "attack",
+       "when": "hope",
+       "successIfKnown": true,
+       "requiresResource": "summoner-circle-4",
+       "outcome": "fear",
+       "giveFear": 1,
+       "steps": [{
+        "op": "effect",
+        "effect": {
+         "name": "Deathly Warrior damage",
+         "kind": "buff",
+         "until": "manual",
+         "rollOptions": [{"id": "damage", "label": "Extra damage", "roll": "damage", "dice": "2d12", "defaultOn": true, "endEffect": "Deathly Warrior damage", "description": "Only for the attack whose Hope outcome was changed to Fear."}]
+        }
+       }]
+      }]
+     }
+    },
+    {
+     "name": "Knightly Bulwark",
+     "type": "subclass",
+     "text": "When you take Severe damage, the Death Knight takes one of the Hit Points instead and then disappears.",
+     "automation": {
+      "mitigation": [{
+       "id": "intercept",
+       "label": "Knightly Bulwark",
+       "when": {"severity": ["severe"]},
+       "cost": {"summoner-circle-4": 1},
+       "hp": -1,
+       "report": "The Death Knight absorbs one HP and disappears."
+      }]
+     }
+    }
+   ]
+  },
+  {
+   "id": "summoner-theurgy-foundation",
+   "name": "Summoner: Theurgy",
+   "kind": "subclass",
+   "parent": "Summoner",
+   "stage": "foundation",
+   "spellcastTrait": "Knowledge",
+   "domains": ["Blood", "Splendor"],
+   "text": "Call on angelic entities.",
+   "features": [
+    {
+     "name": "Second Circle - Angel",
+     "type": "subclass",
+     "text": "You can summon Angels using your Second Circle.",
+     "automation": {"entity": {"resource": "summoner-circle-2", "name": "Angel"}}
+    },
+    {
+     "name": "Angelic Presence",
+     "type": "subclass",
+     "text": "While you have any Angels summoned, you have advantage on Presence rolls to influence others, as the angelic power around you inspires awe and fear.",
+     "automation": {
+      "rollOptions": [{"id": "influence", "label": "Angelic Presence: influence others", "roll": "trait:Presence", "requiresResource": "summoner-circle-2", "advantage": "advantage"}]
+     }
+    },
+    {
+     "name": "Hopeful Strike",
+     "type": "subclass",
+     "text": "When you succeed with Hope on an attack roll, you can command one Angel to deal an extra 1d10 magic damage to the target. The Angel then disappears.",
+     "automation": {
+      "rollTriggers": [
+       {
+        "id": "strike",
+        "label": "Hopeful Strike: 1d10 magic",
+        "on": "attack",
+        "when": "hopeOrCritical",
+        "successIfKnown": true,
+        "exclusiveRollGroup": "summoner-hopeful-strike",
+        "resourceEmpty": "summoner-circle-3",
+        "cost": {"summoner-circle-2": 1},
+        "steps": [{
+         "op": "effect",
+         "effect": {
+          "name": "Hopeful Strike damage",
+          "kind": "buff",
+          "until": "manual",
+          "rollOptions": [{"id": "damage", "label": "Extra magic damage", "roll": "damage", "dice": "1d10", "defaultOn": true, "endEffect": "Hopeful Strike damage", "description": "Extra magic damage from the commanded Angel; only for the attack that triggered it."}]
+         }
+        }]
+       },
+       {
+        "id": "divine-strike",
+        "label": "Hopeful Strike: 1d12 magic",
+        "on": "attack",
+        "when": "hopeOrCritical",
+        "successIfKnown": true,
+        "exclusiveRollGroup": "summoner-hopeful-strike",
+        "requiresResource": "summoner-circle-3",
+        "cost": {"summoner-circle-2": 1},
+        "steps": [{
+         "op": "effect",
+         "effect": {
+          "name": "Hopeful Strike damage",
+          "kind": "buff",
+          "until": "manual",
+          "rollOptions": [{"id": "damage", "label": "Extra magic damage", "roll": "damage", "dice": "1d12", "defaultOn": true, "endEffect": "Hopeful Strike damage", "description": "Extra magic damage from the commanded Angel; only for the attack that triggered it."}]
+         }
+        }]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "summoner-theurgy-specialization",
+   "name": "Summoner: Theurgy",
+   "kind": "subclass",
+   "parent": "Summoner",
+   "stage": "specialization",
+   "spellcastTrait": "Knowledge",
+   "domains": ["Blood", "Splendor"],
+   "text": "Summon Archangels to strengthen and assist your party.",
+   "features": [
+    {
+     "name": "Third Circle - Archangel",
+     "type": "subclass",
+     "text": "You can summon Archangels using your Third Circle.",
+     "automation": {"entity": {"resource": "summoner-circle-3", "name": "Archangel"}}
+    },
+    {
+     "name": "Divine Commander",
+     "type": "subclass",
+     "text": "While you have any Archangels summoned, the extra damage of your Hopeful Strike is 1d12 instead of 1d10."
+    },
+    {
+     "name": "Heavenly Aid",
+     "type": "subclass",
+     "text": "You can command an Archangel to do one of the following:\n- Fly you or an ally within Very Close range to a location within Far range.\n- Help an Ally within Close range without spending Hope.\nThe Archangel then disappears.",
+     "automation": {
+      "actions": [
+       {
+        "id": "fly",
+        "label": "Fly with Archangel",
+        "cost": {"summoner-circle-3": 1},
+        "report": {"text": "Fly yourself or an ally within Very Close range to a location within Far range; move the recipient manually."}
+       },
+       {
+        "id": "help",
+        "label": "Help an Ally",
+        "cost": {"summoner-circle-3": 1},
+        "sendRoll": {"dice": "1d6", "label": "Heavenly Aid"},
+        "report": {"text": "Help an Ally within Close range without spending Hope; the ally uses this advantage die."}
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "summoner-theurgy-mastery",
+   "name": "Summoner: Theurgy",
+   "kind": "subclass",
+   "parent": "Summoner",
+   "stage": "mastery",
+   "spellcastTrait": "Knowledge",
+   "domains": ["Blood", "Splendor"],
+   "text": "Call forth one Divine Manifestation.",
+   "features": [
+    {
+     "name": "Fourth Circle - Divine Manifestation",
+     "type": "subclass",
+     "text": "You can summon one Divine Manifestation at a time using your Fourth Circle.",
+     "automation": {
+      "entity": {"resource": "summoner-circle-4", "name": "Divine Manifestation", "steps": [{"op": "gain", "resource": "summoner-hallowed-hope", "amount": 3}]}
+     }
+    },
+    {
+     "name": "Hallowed Hope",
+     "type": "subclass",
+     "text": "When you summon a Divine Manifestation, place three extra Hope dice on this card. When you make an action or a reaction roll, you can roll and expend one Hope die from this card, along with your normal Hope die, and use the Hope die with the highest result. When there are no dice left on this card, the Divine Manifestation disappears.",
+     "automation": {
+      "resources": [{"id": "summoner-hallowed-hope", "label": "Extra Hope dice", "initial": 0, "max": 3, "cardOnly": true}],
+      "rollOptions": [{
+       "id": "hallowed-hope",
+       "label": "Hallowed Hope",
+       "roll": "duality",
+       "hostOwned": true,
+       "requiresResource": "summoner-hallowed-hope",
+       "cost": {"summoner-hallowed-hope": 1},
+       "extraHopeDie": {"resource": "summoner-hallowed-hope", "dismiss": "summoner-circle-4"},
+       "texts": {"option": "Roll and expend an extra Hope die; keep the higher Hope die"},
+       "description": "Rolls the extra Hope die with your normal Hope die and keeps the highest result. The Divine Manifestation disappears when no dice are left."
+      }]
+     }
+    }
+   ]
+  },
+  {
    "id": "ranger-beastbound-mastery",
    "name": "Ranger: Beastbound",
    "kind": "subclass",

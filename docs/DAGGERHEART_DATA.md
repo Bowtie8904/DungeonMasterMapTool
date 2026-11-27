@@ -123,6 +123,50 @@ versions change. Older clients can continue reading catalog files and saved shee
 
 ## Automation block
 
+### Summoner playtest metadata
+
+The catalog includes Summoner and all three Necromancy/Theurgy stages from
+[The Void, July 9, 2026](https://www.daggerheart.com/wp-content/uploads/2026/07/Summoner_Void_2026_07_09.pdf),
+using original rules summaries. Starting values are 6 HP/10 Evasion, domains Blood/Splendor and
+Spellcast Knowledge. Creation suggests Greatstaff, Leather Armor and the catalog-backed bottled-spirit
+or mysterious-coins keepsake. Existing Blood cards are unchanged.
+
+Circle tracking uses the generic grouped-resource metadata (`group`/`groupMax`) plus action/trigger
+`requiresResource`/`resourceEmpty` gates; no class-specific runtime logic, setting or compatibility version
+is introduced. Summon Entity (`classResourceOnly`) declares `summoner-circle-1` to `-4`
+(First–Third Circle max `@level`, Fourth Circle max 1) in the **Summoning circles** group with
+`groupMax: "@level"`. The sheet header shows one widget with the four counts and their total; feature cards
+do not track entities themselves. Counters start empty and have no automatic rest/scene/session reset.
+Pay **Summon Entities** (an action with `summon: {count: "@tier"}`) to open a dialog listing each unlocked circle
+as "<Entity> - <Circle>"; a circle unlocks when its feature, carrying `entity: {resource, name, steps?}`, is owned.
+Limits: each circle's own maximum, the level-sized total, and the tier-sized amount per action. The Divine
+Manifestation's `entity.steps` place its three Hallowed Hope dice on summon. Texts follow the playtest PDF.
+Necromancy uses circle 1 for Fate Spirits, 2 for Shambling Corpses, 3 for Ghosts and 4 for the Death Knight.
+Theurgy uses circle 2 for Angels, 3 for Archangels and 4 for the Divine Manifestation. The manifestation's
+three extra Hope dice are a card-only pool shown on the Hallowed Hope card and count as one entity.
+
+| Feature | Existing automation | Table-managed remainder |
+|---|---|---|
+| Aid of the Spirits | Pay 3 Hope; clear 1 Stress | `distributeHope: 2` dialog allocates 1-2 Hope among other PCs within Far range |
+| Summon Entity | Pay 1 Stress; allocation dialog per unlocked circle with circle/total/tier limits; command Spellcast roll; header widget tracks four circles | Harmless tasks and range |
+| Fate Spirit | Spend one First Circle entity; publish reroll instruction | Adversary's successful attack and reroll |
+| Hunger of the Grave | Spellcast attack; result action spends one Second Circle corpse and reports total damage (5 x corpses before spending) and the removed corpse (`report.resource`/`per`) | Confirm hidden-Difficulty success; apply 5 physical damage per corpse counted before expenditure |
+| Grim Harvest | Gain one Second Circle corpse without Stress, limited by the group's remaining capacity | Defeat within Far range |
+| Ghostly Protectors | Third Circle-valued Evasion modifier, capped at +1 | None beyond maintaining the Third Circle count |
+| Spectral Terror | Spellcast; successful-result action spends a Third Circle Ghost | Hidden-Difficulty success and target's 1 Stress |
+| Deathly Warrior | Requires a Fourth Circle entity; successful noncritical Hope-attack action converts outcome to Fear, gives GM 1 Fear and prepares consumable 2d12 damage | Apply the prepared bonus only to the triggering attack; no automatic attack-to-damage binding |
+| Knightly Bulwark | Severe-damage mitigation reduces marked HP by one and spends the Fourth Circle Knight | None beyond normal damage entry |
+| Angelic Presence | Presence advantage option gated by a nonzero Second Circle | Select only when influencing others |
+| Hopeful Strike / Divine Commander | Successful Hope/critical attack spend one Second Circle Angel to add a 1d10 (1d12 with a Third Circle entity) damage-roll bonus option, like Deathly Warrior | Hidden-Difficulty success and range; the bonus is magic damage, noted in its description |
+| Heavenly Aid | Spend one Third Circle Archangel for flight report or free d6 Help roll | Positioning/recipient and using the Help die on the ally's roll |
+| Divine Manifestation / Hallowed Hope | Summoning places three Extra Hope dice on the Hallowed Hope card; an optional host-resolved action/reaction roll option (`extraHopeDie`) spends one, rolls an extra Hope die, keeps the higher and sets the Fourth Circle to 0 when none remain | Nothing |
+
+Hidden attack Difficulty follows the existing player-confirmed success convention. Success-result
+actions reject a known failure, and Hopeful Strike's alternatives share an `exclusiveRollGroup`.
+Deathly Warrior uses the existing outcome-conversion rules, which do not convert critical successes.
+Restricting circles by subclass stage and keeping two Hope dice inside one Duality roll would require new runtime rules.
+These omissions are deliberate, not silently approximated with unlimited ally claims or a d20 Hope die.
+
 ### Active-loadout conditional modifiers
 
 `conditionalModifiers` contains passive modifiers with `loadoutDomain: {domain, min}`.
@@ -642,6 +686,11 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   `longRestLoss` subtracts that many tokens automatically on each long rest, floored at zero (Feed).
   `resetOn: "longRest"|"shortRest"|"rest"` restores the pool to `initial` on that rest;
   a long rest also counts as a short rest. Toxic Concoctions uses `initial: 0, resetOn: "longRest"`.
+  `group: "<label>"` with `groupMax` (number or formula) renders same-group header resources as one labelled
+  widget of round counters on one line (the total shows as a tooltip). Each pool keeps its own `max`; the combined values never exceed
+  `groupMax`. Manual input and `gain` steps clamp to the remaining room. When syncing over-full groups, earlier
+  definitions keep their values and later pools are reduced (Summoning circles: `groupMax: "@level"`).
+  The host does not enforce `groupMax`; no host-side gain targets grouped pools.
 - **dicePool**: `{id, label, count, sides, extraByFeature?: {"Feature": number}}` declares one grouped class
   resource. An action with `rollDicePool: true` replaces its dice, rolling `count` (a supported value formula)
   plus feature-granted extras and keeping the highest `count`. Nonpositive count produces no dice.
@@ -759,7 +808,7 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   the granting actor at grant time, replacing `@die` in the effect's actions/options, never from its recipient.
   Scene-duration effects expire on **End scene**, **New session** or any rest; session-duration effects expire
   only on **New session**, not on rests, reconnects or hosting restarts.
-  `transferHope: true` with `target: "actor"` asks for a positive integer `amount` and an ally (Close-Knit).
+  `distributeHope: N` opens a dialog splitting 1 to N Hope among other connected player characters; the host validates the `allocations`, free Hope slots and the 1-to-N total (Aid of the Spirits). `transferHope: true` with `target: "actor"` asks for a positive integer `amount` and an ally (Close-Knit).
   The host validates both balances and the shared use limit, then spends and grants the entire amount atomically;
   insufficient Hope or recipient capacity leaves both sheets and the use counter unchanged.
   `actionRoll.trait: "highest"` selects the trait with the highest current total modifier (Fangs; ties use
@@ -968,6 +1017,9 @@ feature with independently limited sub-abilities: a source-wide limit applies to
   `fearDie: 20` independently replaces the Fear d12 with a d20 (Feed); Hope and Fear can both be d20.
   `resourceEmpty: "<id>"` offers an option only at zero tokens. Combined with `defaultOn` and
   `advantage: "disadvantage"`, it suggests hunger disadvantage without removing the player's override.
+  Actions and triggers accept the same `requiresResource` (above 0, not spent) and `resourceEmpty` gates; the
+  sheet blocks them with "Requires <label>"/"Only while <label> is empty", and the Online Play host rejects
+  feature action/trigger requests that fail either gate (Deathly Warrior, Hopeful Strike, Hallowed Hope).
   `dice` and its replacements support `@tier` as a dice count (`"@tierd4"`).
   `diceByFeature: {"Ambush":"@tierd6","Backstab":"@tierd8"}` replaces the dice when the character has
   that learned feature; the last matching entry wins. This keeps subclass upgrades in JSON.

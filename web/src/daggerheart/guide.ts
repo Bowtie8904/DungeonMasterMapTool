@@ -1,6 +1,7 @@
 // Per-class creation guidance from the Daggerheart SRD (Darrington Press Community Gaming License):
 // suggested traits (Agility, Strength, Finesse, Instinct, Presence, Knowledge), starting gear, class items and question prompts.
 // Assassin, Brawler, Warlock and Witch have user-provided suggested traits and gear.
+// Summoner uses playtest statistics and original question summaries (The Void, July 9, 2026).
 // Classes that are not listed here fall back to GENERIC_GUIDE entirely.
 
 export interface ClassGuide {
@@ -17,6 +18,25 @@ export interface ClassGuide {
 export type ClassGuideSource = Omit<ClassGuide, 'traits' | 'primary' | 'armor'> & Partial<Pick<ClassGuide, 'traits' | 'primary' | 'armor'>>;
 
 export const CLASS_GUIDES: Record<string, ClassGuideSource> = {
+  "Summoner": {
+    "traits": [0, -1, 1, 1, 0, 2],
+    "primary": "Greatstaff",
+    "armor": "Leather Armor",
+    "classItems": [
+      "A harmless spirit in a glass bottle",
+      "A pair of mysterious coins"
+    ],
+    "background": [
+      "How do you keep unwanted beings from following your summons into the world?",
+      "Why did you disregard your community's opposition to your occult studies?",
+      "What danger might an entity you failed to control pose while it is free?"
+    ],
+    "connections": [
+      "Which mystery are we investigating together?",
+      "Why would you not help me study an occult ritual?",
+      "How does recognizing yourself in me affect our relationship?"
+    ]
+  },
   "Assassin": {
     "traits": [2, -1, 1, 0, 0, 1],
     "primary": "Katana",

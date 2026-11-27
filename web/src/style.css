@@ -461,6 +461,14 @@ button.share-icon:disabled { opacity: .25; }
 .cmp-detail-row td { background: #ffffff06; padding: 0 !important; }
 .cmp-detail-row .cmp-detail { padding: 10px 16px 14px 36px; max-width: 760px; }
 .dh-dice-pool { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+.dh-resource-group { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; }
+.dh-resource-slot { position: relative; display: block; flex: none; width: 36px; height: 36px; border: 2px solid var(--border); border-radius: 50%; background: var(--accent-soft); }
+.dh-resource-slot:focus-within { border-color: var(--accent, #ffda84); }
+.dh-summon-row { display: flex; justify-content: space-between; align-items: center; gap: .75rem; margin: .4rem 0; }
+.dh-summon-row input { width: 4.5rem; }
+.dh-resource-slot-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.dh .dh-resource-slot input { width: 100%; height: 100%; min-width: 0; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text); font-size: 16px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; -moz-appearance: textfield; appearance: textfield; }
+.dh .dh-resource-slot input::-webkit-outer-spin-button, .dh .dh-resource-slot input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .dh-pool-die { display: inline-flex; align-items: center; gap: 1px; height: 23px; padding: 1px 3px; border: 1px solid var(--border); background: var(--accent-soft); border-radius: 4px; }
 .dh-pool-die > strong { min-width: 12px; text-align: center; font-size: 13px; font-variant-numeric: tabular-nums; }
 .dh .dh-pool-die > button { width: 15px; min-width: 15px; height: 18px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 13px; line-height: 18px; }

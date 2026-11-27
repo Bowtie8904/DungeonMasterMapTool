@@ -825,7 +825,7 @@ export class App {
     });
   }
 
-  private async useSheetFeature(actorId: string, character: CharacterSheet, save: SheetSave, key: string, actionId: string, amount?: number): Promise<void> {
+  private async useSheetFeature(actorId: string, character: CharacterSheet, save: SheetSave, key: string, actionId: string, amount?: number, allocations?: Array<{ actorId: string; amount: number }>): Promise<void> {
     await save.flush();
     const target = featureTarget(character, key, actionId);
     let targetActorId: string | undefined;
@@ -837,7 +837,7 @@ export class App {
       if (!selected) return;
       targetActorId = selected.id;
     }
-    await useSheetAction(save, { actorId, key, actionId, amount, ...(targetActorId ? { targetActorId } : {}), ...(isLifeWard(character, key) ? { confirmRange: true } : {}) });
+    await useSheetAction(save, { actorId, key, actionId, amount, ...(allocations ? { allocations } : {}), ...(targetActorId ? { targetActorId } : {}), ...(isLifeWard(character, key) ? { confirmRange: true } : {}) });
   }
 
   private selectTool(): void {
@@ -1727,7 +1727,7 @@ export class App {
               this.scheduleRollActions();
               return result.warning;
             },
-            onFeature: (key, actionId, amount) => this.useSheetFeature(a.id, character, changed, key, actionId, amount),
+            onFeature: (key, actionId, amount, allocations) => this.useSheetFeature(a.id, character, changed, key, actionId, amount, allocations),
             restActors: () => (this.store.state?.actors ?? []).filter(actor => !actor.disabled && actor.id !== a.id && !!actor.ownerId),
             onRest: async (rest, rebase) => {
               if (!this.conn.boneValorAutomation) throw new Error('Update the host to resolve Bone/Valor rest benefits.');

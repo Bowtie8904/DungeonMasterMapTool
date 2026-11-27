@@ -147,6 +147,12 @@ export interface Step {
 export interface ActionDef {
   /** Optional display wording; absent fields keep the generated text. Costs are always appended by the app. */
   texts?: ActionTexts;
+  /** Offered only while this resource is above 0; it is not spent by this requirement. */
+  requiresResource?: string;
+  /** Offered only while this resource is 0. */
+  resourceEmpty?: string;
+  /** Opens a dialog that adds up to `count` Entities to the unlocked circles (`entity` automations), within each circle's maximum and the group's `groupMax`. */
+  summon?: { count: ModValue };
   /** Rolls `dice` once; the first outcome whose inclusive range contains the total is reported and its steps run. */
   table?: { dice: string; outcomes: Array<{ min: number; max?: number; text: string; steps?: Step[] }> };
   /** Requires at least this much Hope (Backsies Stone: spend all, minimum 1). */
@@ -205,7 +211,7 @@ export interface ActionDef {
   evolution?: boolean;
   channel?: string;
   aura?: boolean;
-  report?: { amount?: ModValue; dice?: string; text: string };
+  report?: { amount?: ModValue; dice?: string; resource?: string; per?: number; text: string };
   weaponRange?: string;
   shiftStance?: boolean;
   refocus?: boolean;
@@ -248,6 +254,8 @@ export interface ActionDef {
   chatBenefits?: ChatBenefit[];
   allowSourceOwner?: boolean;
   transferHope?: boolean;
+  /** Distribute exactly this much Hope among other connected PCs (host-validated `allocations`). */
+  distributeHope?: number;
   check?: { dice: string; unless?: number; mark?: 'stress'; success?: number; gain?: string };
 }
 
@@ -256,6 +264,10 @@ export interface ResourceDef {
   resetValue?: ModValue;
   minimumReset?: number;
   cardOnly?: boolean;
+  /** Header resources sharing this label render together in one widget. */
+  group?: string;
+  /** Combined maximum of every resource in the same `group`. */
+  groupMax?: ModValue;
   whileEffect?: string;
   sessionHope?: boolean;
   id: string;
@@ -270,8 +282,6 @@ export interface ResourceDef {
 export interface RollOption extends ActionDef {
   /** Die sizes the player picks from in the roll dialog (first is the default); replaces `dice` with one die of that size. */
   dieSizes?: number[];
-  /** Offered only while this resource is above 0; it is not spent by selecting the option. */
-  requiresResource?: string;
   /** Host: when this option's die shows this face, the `requiresResource` pool is emptied and reported (Superior Alconite Crystal). */
   expendOn?: number;
   deathrun?: boolean;
@@ -318,8 +328,9 @@ export interface RollOption extends ActionDef {
   ignoreDisadvantage?: boolean;
   requiresEffect?: string;
   hopeDie?: 20;
+  /** Host: rolls this extra Hope die with the duality roll and keeps the higher; `dismiss` is set to 0 once `resource` is empty (Hallowed Hope). */
+  extraHopeDie?: { resource: string; dismiss?: string };
   fearDie?: 20;
-  resourceEmpty?: string;
   input?: { label: string; default: number; min: number; max: number; source?: 'attackFear' };
   quantity?: { resource: string; label: string; max?: number };
   /** Preselected and cannot be unticked while it can be paid (Painful). */
@@ -410,6 +421,8 @@ export interface Automation {
   ignoreWeaponBurden?: boolean;
   partyDowntime?: boolean;
   classResourceOnly?: boolean;
+  /** Names the Entity held by the circle resource `resource`; its card unlocks the circle for a `summon` action. `steps` run when one is summoned. */
+  entity?: { resource: string; name: string; steps?: Step[] };
   elementChoice?: string[];
   dicePool?: { id: string; label: string; count: ModValue; sides: number; extraByFeature?: Record<string, number> };
   hopeReward?: { removeFear?: number; favor?: number; resource?: string; amount?: number; roll: string };
@@ -658,6 +671,94 @@ export function syncResources(c: CharacterSheet): void {
     const value = r.whileEffect && !c.effects.some(e => e.name === r.whileEffect) ? 0 : c.resources[r.id] ?? evalValue(r.initial, c);
     c.resources[r.id] = Math.max(0, Math.min(max, value));
   }
+  const used = new Map<string, number>();
+  for (const r of resourceDefinitions(c)) {
+    if (!r.group || r.groupMax === undefined) continue;
+    const before = used.get(r.group) ?? 0;
+    c.resources[r.id] = Math.max(0, Math.min(c.resources[r.id], evalValue(r.groupMax, c) - before));
+    used.set(r.group, before + c.resources[r.id]);
+  }
+}
+
+function resourceLabel(c: CharacterSheet, id: string): string {
+  return resourceDefinitions(c).find(r => r.id === id)?.label ?? id;
+}
+
+/** Highest value `r` may hold, given its own maximum and the remaining combined maximum of its group. */
+export function resourceGroupRoom(c: CharacterSheet, r: ResourceDef): number {
+  const own = r.max === undefined ? Infinity : Math.max(0, evalValue(r.max, c));
+  if (!r.group || r.groupMax === undefined) return own;
+  const others = resourceDefinitions(c).filter(o => o.group === r.group && o.id !== r.id)
+    .reduce((n, o) => n + (c.resources?.[o.id] ?? 0), 0);
+  return Math.max(0, Math.min(own, evalValue(r.groupMax, c) - others));
+}
+
+export interface SummonCircle {
+  resource: string;
+  label: string;
+  entity: string;
+  held: number;
+  /** Entities this circle can still take on its own, ignoring the shared limit. */
+  space: number;
+}
+
+/** Circles unlocked by the cards on the sheet, in the order their resources are defined. */
+export function summonCircles(c: CharacterSheet): SummonCircle[] {
+  const defs = resourceDefinitions(c);
+  const found = new Map<string, SummonCircle>();
+  for (const e of automationSources(c).flatMap(a => a.entity ? [a.entity] : [])) {
+    const def = defs.find(r => r.id === e.resource);
+    if (!def || found.has(def.id)) continue;
+    const held = c.resources?.[def.id] ?? 0;
+    const max = def.max === undefined ? Infinity : Math.max(0, evalValue(def.max, c));
+    found.set(def.id, { resource: def.id, label: def.label, entity: e.name, held, space: Math.max(0, max - held) });
+  }
+  return [...found.values()].sort((x, y) => defs.findIndex(r => r.id === x.resource) - defs.findIndex(r => r.id === y.resource));
+}
+
+/** Entities one summon action may add, the shared limit and what is already held. */
+export function summonLimits(c: CharacterSheet, action: ActionDef): { perAction: number; total: number; held: number; room: number } {
+  const perAction = Math.max(0, Math.floor(evalValue(action.summon?.count, c)));
+  const first = summonCircles(c).map(circle => resourceDefinitions(c).find(r => r.id === circle.resource)).find(r => r?.group && r.groupMax !== undefined);
+  if (!first) return { perAction, total: Infinity, held: 0, room: Infinity };
+  const total = Math.max(0, Math.floor(evalValue(first.groupMax, c)));
+  const held = resourceDefinitions(c).filter(r => r.group === first.group).reduce((n, r) => n + (c.resources?.[r.id] ?? 0), 0);
+  return { perAction, total, held, room: Math.max(0, total - held) };
+}
+
+/** Why `additions` (Entities per circle resource) cannot be summoned, or null when they can. Empty selections are not a problem. */
+export function summonProblem(c: CharacterSheet, action: ActionDef, additions: Record<string, number>): string | null {
+  const circles = summonCircles(c);
+  const entries = Object.entries(additions).filter(([, n]) => n !== 0);
+  const limits = summonLimits(c, action);
+  let total = 0;
+  for (const [id, n] of entries) {
+    const circle = circles.find(ci => ci.resource === id);
+    if (!circle) return 'That circle is not unlocked.';
+    if (!Number.isInteger(n) || n < 0) return 'Enter whole numbers of Entities.';
+    if (n > circle.space) return `${circle.label} can hold ${circle.space} more ${circle.entity}${circle.space === 1 ? '' : 's'}.`;
+    total += n;
+  }
+  if (total > limits.perAction) return `One summon adds at most ${limits.perAction} Entit${limits.perAction === 1 ? 'y' : 'ies'}.`;
+  if (total > limits.room) return `You can hold ${limits.total} Entit${limits.total === 1 ? 'y' : 'ies'} in total; ${limits.room} more fit.`;
+  return null;
+}
+
+/** Pays the action's cost and adds the chosen Entities to their circles. Throws when the choice breaks a limit. */
+export function summonEntities(c: CharacterSheet, key: string, a: Automation, action: ActionDef, label: string, additions: Record<string, number>, roll: DiceRoll = rollLocal): string[] {
+  const picked = summonCircles(c).map(circle => ({ circle, n: additions[circle.resource] ?? 0 })).filter(p => p.n !== 0);
+  const problem = summonProblem(c, action, additions);
+  if (problem) throw new Error(problem);
+  if (!picked.length) throw new Error('Choose at least one Entity to summon.');
+  const log = runActionDetailed(c, key, a, action, label, roll);
+  if (!log) throw new Error(actionBlocker(c, key, a, action) ?? 'This action is no longer available.');
+  for (const { circle, n } of picked) {
+    c.resources![circle.resource] = circle.held + n;
+    log.push(`summoned ${n} ${circle.entity}${n === 1 ? '' : 's'} (${circle.label})`);
+    const steps = automationSources(c).find(s => s.entity?.resource === circle.resource)?.entity?.steps;
+    if (steps?.length) log.push(...runActionDetailed(c, key, { ...a, uses: undefined }, { id: `summon-${circle.resource}`, label, steps }, label, roll) ?? []);
+  }
+  return log;
 }
 
 function allModifiers(c: CharacterSheet): Modifier[] {
@@ -1559,6 +1660,9 @@ export function actionBlocker(c: CharacterSheet, key: string, a: Automation, act
   if (context !== 'rest' && isRestOnlyAction(action) && !action.ancestryChoice) return 'Choose this move in the rest dialog';
   if (action.requiresEffect && !c.effects.some((e) => e.name === action.requiresEffect)) return 'Required effect is not active';
   if (action.excludesEffect && c.effects.some(e => e.name === action.excludesEffect)) return 'Effect is already active';
+  if (action.requiresResource && (c.resources?.[action.requiresResource] ?? 0) <= 0) return `Requires ${resourceLabel(c, action.requiresResource)}`;
+  if (action.resourceEmpty && (c.resources?.[action.resourceEmpty] ?? 0) > 0) return `Only while ${resourceLabel(c, action.resourceEmpty)} is empty`;
+  if (action.summon && (summonLimits(c, action).room <= 0 || !summonCircles(c).some(circle => circle.space > 0))) return 'Your Entity limit is reached';
   if (action.uses) { key = `${key}:action:${action.id}`; a = { ...a, uses: action.uses }; }
   const left = usesLeft(c, key, a);
   if (left !== null && left <= 0) return noUsesLeftText(a.uses?.per);
@@ -1602,6 +1706,7 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
   if (action.uses) { key = `${key}:action:${action.id}`; a = { ...a, uses: action.uses }; }
   const log: string[] = [];
   const resolvedCost = actionCost(c, action);
+  const costFreeResource = action.report?.resource ? c.resources?.[action.report.resource] ?? 0 : 0;
   payCost(c, resolvedCost);
   const cost = costText(resolvedCost, c);
   if (cost) log.push(`spent ${cost}`);
@@ -1653,7 +1758,7 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
   // Report amounts describe the state before this action's steps (Lightning Scarab clears the pool it reports).
   const reportAmount = action.report ? (() => {
     const trait = TRAIT_ORDER.find(name => action.report!.amount === `@${name}`);
-    return action.report!.dice ? roll(action.report!.dice) : trait ? traitTotal(c, trait) : evalValue(action.report!.amount, c);
+    return action.report!.resource ? Math.max(0, costFreeResource) * (action.report!.per ?? 1) : action.report!.dice ? roll(action.report!.dice) : trait ? traitTotal(c, trait) : evalValue(action.report!.amount, c);
   })() : 0;
   for (const step of steps) {
     if (step.fallbackEffect && !(step.resource && track(c, step.resource)) && !resourceDefinitions(c).some(r => r.id === step.resource)) {
@@ -1686,8 +1791,7 @@ export function runActionDetailed(c: CharacterSheet, key: string, a: Automation,
       const def = resourceDefinitions(c).find((r) => r.id === step.resource)!;
       const before = c.resources![def.id];
       const n = Math.max(0, step.amount === 'all' ? before : amount(1));
-      const max = def.max === undefined ? Infinity : Math.max(0, evalValue(def.max, c));
-      c.resources![def.id] = step.op === 'gain' ? Math.min(max, before + n) : Math.max(0, before - n);
+      c.resources![def.id] = step.op === 'gain' ? Math.min(resourceGroupRoom(c, def), before + n) : Math.max(0, before - n);
       log.push(`${step.op === 'gain' ? 'gained' : 'spent'} ${Math.abs(c.resources![def.id] - before)} ${def.label}`);
       continue;
     }
@@ -1901,6 +2005,8 @@ function triggerApplies(c: CharacterSheet, t: RollTrigger, ctx: RollContext): bo
   if (t.on === 'trait' && !targets.some(target => target.startsWith('trait:'))) return false;
   if (t.on !== 'any' && t.on !== 'duality' && t.on !== 'trait' && !targets.includes(t.on)) return false;
   if (t.requiresEffect && !c.effects.some((e) => e.name === t.requiresEffect)) return false;
+  if (t.requiresResource && (c.resources?.[t.requiresResource] ?? 0) <= 0) return false;
+  if (t.resourceEmpty && (c.resources?.[t.resourceEmpty] ?? 0) > 0) return false;
   if (t.weapon && t.weapon !== ctx.weapon) return false;
   if (t.weaponAttack && (!ctx.weapon || !ctx.source.split(',').includes('attack'))) return false;
   if (ctx.kind === 'damage' && t.when && t.when !== 'always') return false;

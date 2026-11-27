@@ -120,7 +120,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
         bus.notify(false);
         return result.warning;
       },
-      onFeature: async (key, actionId, amount) => {
+      onFeature: async (key, actionId, amount, allocations) => {
         await changed!.flush();
         let targetActorId: string | undefined;
         const target = featureTarget(sheet, key, actionId);
@@ -132,7 +132,7 @@ export async function startSheet(root: HTMLElement, actorId: string): Promise<vo
           if (!selected) return;
           targetActorId = selected.id;
         }
-        await useSheetAction(changed!, { actorId, key, actionId, amount, ...(targetActorId ? { targetActorId } : {}), ...(isLifeWard(sheet, key) ? { confirmRange: true } : {}) });
+        await useSheetAction(changed!, { actorId, key, actionId, amount, ...(allocations ? { allocations } : {}), ...(targetActorId ? { targetActorId } : {}), ...(isLifeWard(sheet, key) ? { confirmRange: true } : {}) });
       },
       onCopycat: (key, actionId) => openCopycat(sheet, actorId, key, actionId, changed!),
       onSplendor: async (key, action) => {
