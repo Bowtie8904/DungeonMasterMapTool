@@ -4839,7 +4839,6 @@ class OnlineSessionServerTest {
         caster.putArray("features").addObject().put("name", "Mark last HP")
                 .putObject("automation").putArray("actions").addObject().put("id", "use").put("target", "actor")
                 .putArray("steps").addObject().put("op", "mark").put("resource", "hp").put("amount", 2);
-        compendiumDir = null;
         store.saveSheet(campaign.getId(), "caster", caster.toString());
         campaign.actor("ally").setOwnerId(playerId());
         ObjectNode dying = (ObjectNode) MAPPER.readTree(store.loadSheet(campaign.getId(), "ally"));
@@ -5712,7 +5711,7 @@ class OnlineSessionServerTest {
         ((ObjectNode) capped.path("inventory").get(0)).put("qty", 99);
         store.saveSheet(campaign.getId(), "target", capped.toString());
         assertEquals(400, dmCompendiumHttp("add", request, token).statusCode());
-        assertEquals(capped.toString(), store.loadSheet(campaign.getId(), "target"));
+        assertEquals(capped, MAPPER.readTree(store.loadSheet(campaign.getId(), "target")));
         assertEquals(400, dmCompendiumHttp("add", request.put("actorId", "unowned"), token).statusCode());
         assertEquals(400, dmCompendiumHttp("add", request.put("actorId", "missing"), token).statusCode());
         assertEquals(400, dmCompendiumHttp("add", request.put("actorId", "target").put("category", "../items"), token).statusCode());

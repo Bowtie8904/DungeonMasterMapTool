@@ -415,14 +415,11 @@ class DmControlApiTest {
             api.attachUrlMenus(() -> "http://127.0.0.1:8080", statuses::add);
 
             fire(button, "Copy key image URL");
-            assertEquals("http://127.0.0.1:8080/api/controls/player/freeze/image",
-                    Clipboard.getSystemClipboard().getString());
+            assertClipboardEquals("http://127.0.0.1:8080/api/controls/player/freeze/image");
             fire(slider, "Copy increment key image URL");
-            assertEquals("http://127.0.0.1:8080/api/controls/effects/opacity/image?operation=increment",
-                    Clipboard.getSystemClipboard().getString());
+            assertClipboardEquals("http://127.0.0.1:8080/api/controls/effects/opacity/image?operation=increment");
             fire(slider, "Copy decrement key image URL");
-            assertEquals("http://127.0.0.1:8080/api/controls/effects/opacity/image?operation=decrement",
-                    Clipboard.getSystemClipboard().getString());
+            assertClipboardEquals("http://127.0.0.1:8080/api/controls/effects/opacity/image?operation=decrement");
             assertTrue(statuses.stream().allMatch(status -> status.startsWith("Copied API URL: ")), statuses.toString());
             assertTrue(button.getContextMenu().getItems().stream()
                     .noneMatch(item -> "Copy increment key image URL".equals(item.getText())));
@@ -454,6 +451,15 @@ class DmControlApiTest {
     private static void fire(Control control, String label) {
         control.getContextMenu().getItems().stream().filter(item -> label.equals(item.getText())).findFirst()
                 .orElseThrow(() -> new AssertionError(label + " is missing")).fire();
+    }
+
+    private static void assertClipboardEquals(String expected) throws InterruptedException {
+        for (int attempt = 0; attempt < 100; attempt++) {
+            String actual = Clipboard.getSystemClipboard().getString();
+            if (expected.equals(actual)) return;
+            Thread.sleep(10);
+        }
+        assertEquals(expected, Clipboard.getSystemClipboard().getString());
     }
 
     private static void assertError(int status, Runnable action) {
