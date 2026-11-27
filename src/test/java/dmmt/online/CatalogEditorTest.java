@@ -30,6 +30,23 @@ class CatalogEditorTest {
     }
 
     @Test
+    void validatesOptionalClassBackgroundFieldsAndPreservesExistingClassContracts() throws Exception {
+        ObjectNode catalog = file("""
+                [{"id":"class","name":"Example","kind":"class","domains":["Sage"],"startingHp":6,"startingEvasion":10}]
+                """);
+        catalog.put("category", "classes");
+        ObjectNode entry = (ObjectNode) catalog.path("entries").get(0);
+        assertDoesNotThrow(() -> CatalogEditor.validate(catalog, "classes"));
+        entry.putArray("backgroundFields").add("Patron").add("Age").add("patron");
+        assertDoesNotThrow(() -> CatalogEditor.validate(catalog, "classes"));
+        for (String invalid : List.of("null", "\"Patron\"", "[42]", "[\"\"]", "[\"  \"]")) {
+            entry.set("backgroundFields", MAPPER.readTree(invalid));
+            assertEquals(400, assertThrows(CatalogEditor.Rejected.class,
+                    () -> CatalogEditor.validate(catalog, "classes")).status());
+        }
+    }
+
+    @Test
     void editsAndCreatesInTheActualJsonPreservingOtherDataAndRejectingStaleDrafts() throws Exception {
         ObjectNode original = file(""" 
                 [{"id":"one","name":"One","text":"Old","extra":{"keep":42}},{"id":"two","name":"Two","text":"Untouched"}]

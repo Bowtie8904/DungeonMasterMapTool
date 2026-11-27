@@ -70,8 +70,14 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   Mixed ancestry is reconstructed from its two selected features; if a feature matches multiple local
   ancestries, choose the intended ancestry in the import dialog. Unknown or missing features block import.
   Pronouns, appearance, notes and saved background/connection answers populate Details. Question wording
-  uses saved prompts or verified class guides; otherwise answers retain numbered labels. Warlock patron
-  and sphere of influence are preserved as narrative details. Public Demiplane portraits are downloaded
+  uses saved prompts or verified class guides; otherwise answers retain numbered labels. Configured
+  class-specific fields, including multiclass fields, import matching saved Demiplane detail names
+  or class-owned custom-option names; imports never add custom background rows.
+  All sheets share Name, Pronouns, Age, Height, Physique, Eyes, Hair, Skin / Fur, Attire and Attitude.
+  Add optional class-specific labels to each class entry's `backgroundFields` array in
+  `dmmap-daggerheart\classes.json` (for example `"backgroundFields": ["Patron", "Sphere of influence"]`).
+  Creation offers these fields, and multiclassing offers only the new class's non-duplicate fields.
+  Existing obsolete field answers are preserved in Other details. Public Demiplane portraits are downloaded
   and set as the actor's token artwork when available.
   A concise popup after saving lists only unmatched feature/card names, item quantity warnings and an unverified active loadout.
   Custom items remain plain inventory; quantities and active loadout may need review. Private characters

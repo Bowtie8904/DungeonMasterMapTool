@@ -2,6 +2,7 @@ import { CharacterSheet, TestingBuild, TestingStage } from './data';
 import { cardFrom, CompendiumEntry } from './compendium';
 import { resourceDefinitions, syncDerived } from './engine';
 import { martialStances } from './brawler';
+import { syncBackgroundDetails } from './background';
 import { tierOf } from './data';
 import {
   buildCharacter, classEntries, creationAllowances, emptyChoices, findClass, guideFor, MAX_LEVEL, RulesData,
@@ -131,6 +132,7 @@ export function applyTestingBuild(d: RulesData, c: CharacterSheet, build: Testin
   }
   c.mancer = { done: true };
   c.testingBuild = b;
+  syncBackgroundDetails(d.classes, c);
   const resources = new Set(resourceDefinitions(c).map((r) => r.id));
   for (const id of Object.keys(c.resources ?? {})) if (!resources.has(id)) delete c.resources![id];
   syncDerived(c);

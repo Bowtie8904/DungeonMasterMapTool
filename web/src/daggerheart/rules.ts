@@ -10,6 +10,7 @@ import { CLASS_GUIDES, ClassGuide, GENERIC_GUIDE } from './guide';
 import { martialStances, stanceProblems } from './brawler';
 import { applyCompanionTraining, buildCompanion, companionChoiceProblems, companionRules, companionTrainingProblems } from './companion';
 import type { CompanionRules } from './companion';
+import { syncBackgroundDetails } from './background';
 
 export interface RulesData {
   classes: CompendiumEntry[];
@@ -301,6 +302,7 @@ export function buildCharacter(d: RulesData, ch: CreationChoices, prev?: Charact
   c.description.Name = name;
   c.description.Pronouns = ch.pronouns;
   if (prev) for (const k of Object.keys(prev.description)) if (!['Name', 'Pronouns'].includes(k)) c.description[k] = prev.description[k];
+  syncBackgroundDetails(d.classes, c, ch.backgroundDetails);
   for (const t of c.traits) t.mod = ch.traits[t.name] ?? 0;
 
   for (const f of cls.features ?? []) c.features.push(toFeature(f.type === 'hope' ? 'Hope feature' : `Class feature - ${cls.name}`, f));
@@ -570,6 +572,7 @@ export function applyLevelUp(d: RulesData, c: CharacterSheet, rec: LevelUpRecord
     applyCompanionTraining(c, rec.companionTraining ?? [], companionCount);
   }
   (c.levelUps ??= []).push(structuredClone(rec));
+  syncBackgroundDetails(d.classes, c, rec.backgroundDetails);
   syncDerived(c);
 }
 

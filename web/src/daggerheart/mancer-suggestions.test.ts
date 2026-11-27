@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { emptyCharacter } from './data';
-import { openMancer } from './mancer';
-import { emptyChoices, loadRulesData, subclassesOf, type RulesData } from './rules';
+import { COMMON_BACKGROUND_FIELDS, emptyCharacter } from './data';
+import { openLevelUp, openMancer } from './mancer';
+import { buildCharacter, emptyChoices, guideFor, loadRulesData, shortSubclass, startingCards, subclassesOf, suggestedTraits, type RulesData } from './rules';
 
 vi.mock('./rules', async importOriginal => ({
   ...await importOriginal<typeof import('./rules')>(),
@@ -12,6 +12,9 @@ vi.mock('./rules', async importOriginal => ({
 
 class Element {
   className = '';
+  value = '';
+  disabled = false;
+  classList = { toggle() {} };
   textContent = '';
   children: Array<Element | string> = [];
   parent?: Element;
@@ -106,4 +109,78 @@ it('highlights Assassin recommendations and skips the secondary step for the two
   button('Next').click();
   expect(heading()).toBe('Choose your armor');
   expect(body.all().find(node => node.tag === 'tr' && node.text().startsWith('Brigandine Armor'))!.text()).toContain('suggested');
+});
+
+function backgroundWizardSetup() {
+  const body = new Element('body');
+  vi.stubGlobal('document', { createElement: (tag: string) => new Element(tag), addEventListener() {}, removeEventListener() {} });
+  const d = structuredClone(data);
+  d.classes.find(e => e.kind === 'class' && e.name === 'Bard')!.backgroundFields = ['Instrument'];
+  d.classes.find(e => e.kind === 'class' && e.name === 'Warlock')!.backgroundFields = ['instrument', 'Patron', 'Age', 'Sphere of influence'];
+  vi.mocked(loadRulesData).mockResolvedValue(d);
+  const guide = guideFor('Bard');
+  const choices = { ...emptyChoices(), name: 'Hero', className: 'Bard', subclass: subclassesOf(d, 'Bard')[0],
+    ancestry: 'Human', community: d.communities[0].name, traits: suggestedTraits(guide),
+    primary: 'Quarterstaff', armor: guide.armor, experiences: ['Singer', 'Traveler'],
+    classItem: guide.classItems[0].charAt(0).toUpperCase() + guide.classItems[0].slice(1),
+    cards: startingCards(d, 'Bard').slice(0, 2).map(e => e.name) };
+  const character = buildCharacter(d, choices);
+  const heading = () => body.all().find(node => node.tag === 'h2')?.text();
+  const button = (label: string) => body.all().find(node => node.tag === 'button' && node.text() === label)!;
+  const input = (label: string) => body.all().find(node => node.tag === 'label' && node.text().startsWith(label))!
+    .all().find(node => node.tag === 'input')!;
+  const fill = (label: string, value: string) => {
+    const node = input(label);
+    node.value = value;
+    node.listeners.input?.({ preventDefault() {} });
+  };
+  return { body, d, character, heading, button, input, fill, host: { ownerDocument: { body } } as unknown as HTMLElement };
+}
+
+it('offers all shared and configured fields in creation and applies optional answers only on completion', async () => {
+  const { body, character, heading, button, fill, host } = backgroundWizardSetup();
+  character.mancer!.done = false;
+  const done = vi.fn();
+  await openMancer(host, character, done);
+  for (let i = 0; i < 20 && heading() !== 'Who are you?'; i++) button('Next').click();
+  expect(heading()).toBe('Who are you?');
+  const labels = body.all().filter(node => node.tag === 'label').map(node => node.text());
+  for (const field of [...COMMON_BACKGROUND_FIELDS, 'Instrument']) expect(labels.some(label => label.startsWith(field))).toBe(true);
+  fill('Physique', 'Tall');
+  fill('Instrument', 'Lute');
+  expect(character.description.Instrument).toBe('');
+  button('Next').click();
+  button('Create character').click();
+  expect(character.description).toMatchObject({ Physique: 'Tall', Instrument: 'Lute', Attitude: '' });
+  expect(done).toHaveBeenCalledOnce();
+});
+
+it('offers only new non-duplicate multiclass fields, keeps edits local, and accepts blank answers', async () => {
+  const { body, d, character, heading, button, fill, host } = backgroundWizardSetup();
+  character.level = 4;
+  character.description.Instrument = 'Lute';
+  const before = structuredClone(character);
+  const done = vi.fn();
+  await openLevelUp(host, character, done);
+  fill('New Experience', 'Witch hunter');
+  button('Next').click();
+  body.all().find(node => node.tag === 'button' && node.text().startsWith('Multiclass'))!.click();
+  button('Next').click();
+  body.all().find(node => node.tag === 'button' && node.text().startsWith('Warlock'))!.click();
+  button('Dread').click();
+  const subclass = subclassesOf(d, 'Warlock')[0];
+  body.all().find(node => node.tag === 'button' && node.text().startsWith(shortSubclass(subclass)))!.click();
+  button('Next').click();
+  expect(heading()).toBe('Your new class background');
+  expect(body.all().filter(node => node.tag === 'label').map(node => node.text())).toEqual(['Patron', 'Sphere of influence']);
+  fill('Patron', 'The moon');
+  expect(character).toEqual(before);
+  button('Next').click();
+  expect(heading()).toBe('Take a new domain card');
+  body.all().find(node => node.tag === 'button' && node.className.startsWith('cho'))!.click();
+  button('Next').click();
+  button('Next').click();
+  button('Level up!').click();
+  expect(done).toHaveBeenCalledOnce();
+  expect(character.description).toMatchObject({ Instrument: 'Lute', Patron: 'The moon', 'Sphere of influence': '' });
 });

@@ -1,7 +1,8 @@
-import { Advancement, CharacterSheet, handsUsed, ignoresWeaponBurden, LevelUpRecord, TRAIT_ORDER, TraitName } from './data';
+import { Advancement, CharacterSheet, COMMON_BACKGROUND_FIELDS, handsUsed, ignoresWeaponBurden, LevelUpRecord, TRAIT_ORDER, TraitName } from './data';
 import { addToSheet, armorFrom, CompendiumEntry, weaponFrom } from './compendium';
 import { derivedStats, syncDerived } from './engine';
 import { CLASS_GUIDES } from './guide';
+import { backgroundFields, characterBackgroundFields, syncBackgroundDetails } from './background';
 import {
   applyLevelUp, buildCharacter, creationAllowances, emptyChoices, levelUpProblems, RulesData,
   shortSubclass, traitsValid,
@@ -44,6 +45,58 @@ const itemMatches = (entries: CompendiumEntry[], name: string): CompendiumEntry[
 };
 const title = (e: DemiplaneSelection): string => text(e.args.name) || text(e.args.customName)
   || e.name.split('/').pop()?.replace(/\.eng$/, '').replace(/-/g, ' ') || e.name;
+
+interface ImportedClassSelection { className: string; engine: DemiplaneSelection }
+
+function importClassBackgroundDetails(classes: CompendiumEntry[], character: CharacterSheet, engines: DemiplaneSelection[],
+                                      classSelections: ImportedClassSelection[], consumed: Set<DemiplaneSelection>): Record<string, string> {
+  const fieldKey = (name: string) => normalize(name).replace(/[\s_-]+/g, ' ').trim();
+  const fields = characterBackgroundFields(classes, character).slice(COMMON_BACKGROUND_FIELDS.length)
+    .map(label => ({ label, key: fieldKey(label) }));
+  const allKeys = new Set(fields.map(field => field.key));
+  const scopes = classSelections.filter(({ engine }) => engine.key).map(({ className, engine }) => ({
+    prefix: `element-${engine.key}_custom-option_`,
+    slugs: [...new Set([className, text(engine.args.slug), engine.name.split('/').pop()?.replace(/\.eng$/, '') ?? '']
+      .map(fieldKey).filter(Boolean))],
+    fields: new Set(backgroundFields(classes, [className]).slice(COMMON_BACKGROUND_FIELDS.length).map(fieldKey)),
+  }));
+  const answers = new Map<string, { value: string; source: string }>();
+  const labels = (engine: DemiplaneSelection) => [text(engine.args.name), text(engine.args.label), text(engine.args.customName)];
+  for (const engine of engines) {
+    if (consumed.has(engine)) continue;
+    const matches = new Set<string>();
+    const addMatches = (names: string[], allowed: ReadonlySet<string>) => {
+      const keys = new Set(names.map(fieldKey).filter(Boolean));
+      for (const field of fields) if (allowed.has(field.key) && keys.has(field.key)) matches.add(field.label);
+    };
+    if (engine.name.toLowerCase().startsWith('character_details_')
+        && !/^character_details_(background|connection)[_-]question[_-]/i.test(engine.name)) {
+      const name = engine.name.slice('character_details_'.length);
+      const withoutValue = name.toLowerCase().endsWith('_value') ? name.slice(0, -'_value'.length) : '';
+      addMatches([name, withoutValue, ...labels(engine)], allKeys);
+    }
+    for (const scope of scopes) {
+      if (!engine.name.startsWith(scope.prefix) || !engine.name.toLowerCase().endsWith('_value')) continue;
+      const name = fieldKey(engine.name.slice(scope.prefix.length, -'_value'.length));
+      const fieldNames = scope.slugs.filter(slug => name.startsWith(`${slug} `))
+        .map(slug => name.slice(slug.length + 1));
+      if (fieldNames.length) addMatches([...fieldNames, ...labels(engine)], scope.fields);
+    }
+    if (matches.size > 1)
+      throw new Error(`Character details: "${engine.name}" matches multiple configured fields (${[...matches].join(', ')}). Nothing was imported.`);
+    const field = [...matches][0];
+    if (!field) continue;
+    consumed.add(engine);
+    if (engine.value === undefined) continue;
+    if (typeof engine.value !== 'string')
+      throw new Error(`Character details: "${engine.name}" for "${field}" is not text. Nothing was imported.`);
+    const previous = answers.get(field);
+    if (previous && previous.value !== engine.value)
+      throw new Error(`Character details: conflicting values for "${field}" in "${previous.source}" and "${engine.name}". Nothing was imported.`);
+    answers.set(field, { value: engine.value, source: engine.name });
+  }
+  return Object.fromEntries([...answers].map(([field, answer]) => [field, answer.value]));
+}
 
 /** Replays saved choices with local rules, not Demiplane's rendered totals or executable engine files. */
 export function recreateDemiplane(source: DemiplaneCharacter, data: RulesData, items: CompendiumEntry[],
@@ -99,6 +152,7 @@ export function recreateDemiplane(source: DemiplaneCharacter, data: RulesData, i
   const cls = unique(selected(/^tabula\/class\//).filter(e => e.args.builderSection === 'class'), 'Class');
   ch.className = match(data.classes.filter(e => e.kind === 'class'),
     cls ? title(cls) : text(source.summary?.class), 'Class', true)!.name;
+  const classSelections: ImportedClassSelection[] = cls ? [{ className: ch.className, engine: cls }] : [];
   const sub = unique(selected(/^tabula\/subclass\//).filter(e => e.args.sourceRow === 'class-foundation'), 'Subclass');
   const subName = sub ? title(sub) : text(source.summary?.subclass);
   const foundations = data.classes.filter(e => e.kind === 'subclass' && e.parent === ch.className && e.stage === 'foundation');
@@ -181,19 +235,22 @@ export function recreateDemiplane(source: DemiplaneCharacter, data: RulesData, i
   ch.description = detailText('character_details_description');
   const description: Record<string, string> = {};
   for (const [field, label] of [
-    ['age', 'Age'], ['height', 'Height'], ['eyes', 'Eyes'], ['hair', 'Hair'], ['skin', 'Skin'],
-    ['clothes', 'Attire'], ['body', 'Body'], ['color', 'Color'], ['attitude', 'Attitude'],
+    ['age', 'Age'], ['height', 'Height'], ['hair', 'Hair'],
   ]) {
     const value = detailText(`character_details_${field}`);
     if (value) description[label] = value;
   }
-  const notes = detailText('character_details_notes');
-  if (ch.className === 'Warlock' && cls) {
-    for (const [field, label] of [['patron', 'Patron'], ['sphere-of-influence', 'Sphere of influence']]) {
-      const value = detailText(`element-${cls.key}_custom-option_warlock-${field}_value`);
-      if (value) description[label] = value;
-    }
+  for (const [label, fields] of [
+    ['Eyes', ['eyes', 'eyes-like']],
+    ['Attire', ['clothes', 'attire']],
+    ['Physique', ['body', 'body-thats', 'physique']],
+    ['Skin / Fur', ['skin', 'color', 'the-color-of']],
+    ['Attitude', ['attitude', 'attitude-like']],
+  ] as const) {
+    const value = detailText(...fields.map(field => `character_details_${field}`));
+    if (value) description[label] = value;
   }
+  const notes = detailText('character_details_notes');
   const cards = selected(/^tabula\/domain\//);
   const matchedCards = new Map<DemiplaneSelection, string>();
   for (const e of cards) {
@@ -213,7 +270,7 @@ export function recreateDemiplane(source: DemiplaneCharacter, data: RulesData, i
   catch (error) {
     throw new Error(`This build needs additional creation selections: ${(error as Error).message} They could not be read reliably from Demiplane. Nothing was imported; use Create Character instead.`);
   }
-  Object.assign(c.description, description);
+  syncBackgroundDetails(data.classes, c, description);
   c.notes = notes;
   const savedLevel = scalar('character_level');
   const level = savedLevel === undefined ? source.level : savedLevel;
@@ -283,6 +340,7 @@ export function recreateDemiplane(source: DemiplaneCharacter, data: RulesData, i
           const localDomain = domain && entry?.domains?.find(d => normalize(d) === normalize(title(domain)));
           if (entry && localSubclass && localDomain) {
             advancement = { type: 'multiclass', multiclass: { className: entry.name, subclass: localSubclass.name, domain: localDomain } };
+            classSelections.push({ className: entry.name, engine: multiClass });
           } else issues.push(`Level ${next}: the multiclass foundation or domain could not be matched; multiclass features were not applied.`);
         } else issues.push(`Level ${next}: the multiclass class selection could not be read; multiclass features were not applied.`);
       } else {
@@ -299,6 +357,11 @@ export function recreateDemiplane(source: DemiplaneCharacter, data: RulesData, i
     try { applyLevelUp(data, c, rec); }
     catch (error) { throw new Error(`Level ${next} cannot be recreated safely: ${(error as Error).message} Nothing was imported.`); }
   }
+  syncBackgroundDetails(data.classes, c, {
+    ...description,
+    ...importClassBackgroundDetails(data.classes, c, all, classSelections, consumed),
+  });
+  if (c.mancer?.choices) c.mancer.choices.backgroundDetails = { ...c.description };
   for (const card of cards.filter(e => !ch.cards.includes(matchedCards.get(e) ?? ''))) {
     const name = matchedCards.get(card);
     if (name && ![...c.loadout, ...c.vault].some(e => e.name === name))

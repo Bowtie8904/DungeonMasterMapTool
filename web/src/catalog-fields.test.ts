@@ -6,7 +6,7 @@ import { addEffect, type EffectDef } from './daggerheart/engine';
 
 describe('guided catalog forms', () => {
   it('organizes entry fields by task while retaining uncommon fields in Advanced', () => {
-    for (const key of ['id', 'name', 'weapon', 'armor', 'startingHp', 'recall']) expect(entryFieldTab(key)).toBe('Overview');
+    for (const key of ['id', 'name', 'weapon', 'armor', 'startingHp', 'backgroundFields', 'recall']) expect(entryFieldTab(key)).toBe('Overview');
     for (const key of ['feature', 'features', 'spells']) expect(entryFieldTab(key)).toBe('Features');
     expect(entryFieldTab('automation')).toBe('Automation');
     expect(entryFieldTab('customExtension')).toBe('Advanced');
@@ -38,6 +38,9 @@ describe('guided catalog forms', () => {
       expect(entryTemplate(category).name).toBe('');
     }
     expect(fieldHelp('startingHp')).toContain('new characters only');
+    expect(fieldHelp('backgroundFields')).toContain('multiclassing');
+    expect(fieldHelp('backgroundFields')).toContain('matching field names');
+    expect(entryTemplate('classes').backgroundFields).toEqual([]);
     expect(fieldHelp('uses')).toContain('independent');
     expect(fieldHelp('resources')).toContain('once');
   });

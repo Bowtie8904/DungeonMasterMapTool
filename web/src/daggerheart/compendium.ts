@@ -42,6 +42,8 @@ export interface CompendiumEntry {
   domains?: string[];
   startingHp?: number;
   startingEvasion?: number;
+  /** Optional narrative fields added to the shared character background fields. */
+  backgroundFields?: string[];
   spellcastTrait?: string;
   /** Basic gear offered at character creation (weapons and armor). */
   starter?: boolean;

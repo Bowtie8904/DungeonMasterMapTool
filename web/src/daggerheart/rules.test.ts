@@ -5,6 +5,9 @@ import { emptyCharacter, LevelUpRecord, multiclassesOf, normalizeSheet, TRAIT_OR
 import { plain } from './rich';
 import { derivedStats, statBreakdown } from './engine';
 import { CLASS_GUIDES, GENERIC_GUIDE } from './guide';
+import { additionalBackgroundFields, backgroundFields, syncBackgroundDetails } from './background';
+import { updateCharacterAutomation } from './persist';
+import { COMMON_BACKGROUND_FIELDS } from './data';
 import {
   advancementLeft, applyLevelUp, buildCharacter, classEntries, creationProblems, emptyChoices, guideFor, levelUpCards, levelUpProblems, RulesData,
   startingCards, subclassesOf, suggestedTraits, setTransformation, starterGear, tier1, creationAllowances,
@@ -39,6 +42,51 @@ function choicesFor(className: string) {
 }
 
 describe('character mancer rules', () => {
+  it('uses shared plus configured background fields for creation and optional multiclass answers', () => {
+    const d = structuredClone(data);
+    d.classes.find(e => e.kind === 'class' && e.name === 'Bard')!.backgroundFields = ['Instrument', 'Attire', 'instrument'];
+    d.classes.find(e => e.kind === 'class' && e.name === 'Warlock')!.backgroundFields = ['Instrument', 'Patron', 'Sphere of influence', ' name '];
+    const ch = { ...choicesFor('Bard'), backgroundDetails: { Physique: 'Tall', Instrument: 'Lute', Unknown: 'Not a field' } };
+    const c = buildCharacter(d, ch);
+    expect(Object.keys(c.description)).toEqual([...COMMON_BACKGROUND_FIELDS, 'Instrument']);
+    expect(c.description).toMatchObject({ Physique: 'Tall', Instrument: 'Lute' });
+    expect(additionalBackgroundFields(d.classes, c, ['Warlock'])).toEqual(['Patron', 'Sphere of influence']);
+    const rec: LevelUpRecord = { level: 5, advancements: [
+      { type: 'multiclass', multiclass: { className: 'Warlock', domain: 'Dread', subclass: subclassesOf(d, 'Warlock')[0] } },
+    ], backgroundDetails: { Patron: 'The moon', Instrument: '', Unknown: 'Ignored' } };
+    applyLevelUp(d, c, rec);
+    expect(Object.keys(c.description)).toEqual([...COMMON_BACKGROUND_FIELDS, 'Instrument', 'Patron', 'Sphere of influence']);
+    expect(c.description).toMatchObject({ Instrument: '', Patron: 'The moon', 'Sphere of influence': '' });
+    expect(c.levelUps?.[0].backgroundDetails).toEqual(rec.backgroundDetails);
+    syncBackgroundDetails(d.classes, c);
+    expect(c.description.Patron).toBe('The moon');
+  });
+
+  it('refreshes configured fields and migrates legacy labels without losing obsolete answers', () => {
+    const c = emptyCharacter('Hero');
+    c.className = 'Warlock';
+    c.description = { Name: 'Hero', Skin: 'Brown', Body: 'Tall', Color: 'Cream', Patron: 'The sun', Custom: 'Legacy answer' };
+    c.otherDetails = 'Existing prose';
+    updateCharacterAutomation(c, [{ format: '', version: 1, category: 'classes', label: '', entries: data.classes }]);
+    expect(c.description).toMatchObject({ 'Skin / Fur': 'Brown', Physique: 'Tall', Patron: 'The sun' });
+    expect(c.description).not.toHaveProperty('Custom');
+    expect(c.otherDetails).toBe('Existing prose\nColor: Cream\nCustom: Legacy answer');
+    const classes = structuredClone(data.classes);
+    classes.find(e => e.kind === 'class' && e.name === 'Warlock')!.backgroundFields = ['New field'];
+    syncBackgroundDetails(classes, c);
+    expect(c.description).toHaveProperty('New field', '');
+    expect(c.otherDetails).toContain('Patron: The sun');
+    const once = c.otherDetails;
+    syncBackgroundDetails(classes, c);
+    expect(c.otherDetails).toBe(once);
+  });
+
+  it('allows classes without extra fields and rejects malformed configuration explicitly', () => {
+    expect(backgroundFields([{ id: 'old', name: 'Old', kind: 'class' }], ['Old'])).toEqual(COMMON_BACKGROUND_FIELDS);
+    expect(() => backgroundFields([{ id: 'bad', name: 'Bad', kind: 'class', backgroundFields: [''] }], ['Bad']))
+      .toThrow('backgroundFields must be a list');
+  });
+
   it('grants compendium-backed supplies and every standard class keepsake', () => {
     for (const [className, guide] of Object.entries(CLASS_GUIDES)) {
       for (const classItem of guide.classItems) {

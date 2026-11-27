@@ -4,6 +4,7 @@ import { el } from '../login';
 import { noticeDialog } from '../dialogs';
 import { Advancement, AdvancementType, CharacterSheet, CompanionChoices, CompanionTraining, CreationChoices, LevelUpRecord, RangerCompanion, TRAIT_ACTIONS, TRAIT_ORDER, TraitName, signed, tierOf } from './data';
 import { CompendiumEntry } from './compendium';
+import { additionalBackgroundFields, backgroundFields, backgroundValue } from './background';
 import { rich } from './rich';
 import { groupFeatures } from './feature-groups';
 import { ancestryPicker } from './ancestry-choice';
@@ -338,6 +339,8 @@ export async function openMancer(host: HTMLElement, c: CharacterSheet, onDone: (
   const data = await loadWithNotice(host);
   if (!data) return;
   const ch: CreationChoices = c.mancer?.choices ? structuredClone(c.mancer.choices) : emptyChoices();
+  const backgroundDetails = ch.backgroundDetails = c.mancer?.done
+    ? { ...ch.backgroundDetails, ...c.description } : { ...c.description, ...ch.backgroundDetails };
   if (!ch.name) ch.name = c.name;
   const pickClass = (name: string) => {
     if (ch.className === name) return;
@@ -639,6 +642,9 @@ export async function openMancer(host: HTMLElement, c: CharacterSheet, onDone: (
         body.append(
           el('label', { class: 'dh-wiz-q' }, 'Name', textInput(ch.name, 'Character name', (v) => { ch.name = v; }, touch)),
           el('label', { class: 'dh-wiz-q' }, 'Pronouns', textInput(ch.pronouns, 'e.g. she/her', (v) => { ch.pronouns = v; }, touch)),
+          ...backgroundFields(data.classes, [ch.className]).filter(field => !['Name', 'Pronouns'].includes(field)).map(field =>
+            el('label', { class: 'dh-wiz-q' }, `${field} (optional)`, textInput(backgroundValue(backgroundDetails, field), '',
+              v => { backgroundDetails[field] = v; }, touch))),
           el('label', { class: 'dh-wiz-q' }, 'Description (optional)', textInput(ch.description, 'Appearance, mannerisms...', (v) => { ch.description = v; }, touch, true)),
         );
       },
@@ -884,6 +890,18 @@ export async function openLevelUp(host: HTMLElement, c: CharacterSheet, onDone: 
           },
         });
       }
+    });
+
+    const newFields = additionalBackgroundFields(data.classes, c,
+      rec.advancements.flatMap(a => a.multiclass ? [a.multiclass.className] : []));
+    if (newFields.length) list.push({
+      key: 'background-details', title: 'Your new class background', hint: 'These additional details are optional. You can also fill them in later on your Background tab.',
+      problem: () => null,
+      render: (body, touch) => {
+        for (const field of newFields) body.append(el('label', { class: 'dh-wiz-q' }, field,
+          textInput(backgroundValue(rec.backgroundDetails ?? c.description, field), '',
+            v => { (rec.backgroundDetails ??= {})[field] = v; }, touch)));
+      },
     });
 
     const companion = companionRules(c);

@@ -369,7 +369,26 @@ the player to choose; missing or unrecognized features block import.
 Saved pronouns, appearance, description, notes and ordered background/connection answers populate the
 existing Details fields. Question wording comes from saved prompts or verified class guides; classes
 without verified prompts keep their answers under numbered question labels, not generic invented questions.
-Warlock patron and sphere of influence are retained as narrative description fields, not mechanical overrides.
+Every class uses Name, Pronouns, Age, Height, Physique, Eyes, Hair, Skin / Fur, Attire and Attitude.
+Configure additional optional fields with an ordered `backgroundFields` array on each `kind: "class"`
+entry in `dmmap-daggerheart\classes.json`, or its compendium editor Overview.
+For example, Warlock ships with `"backgroundFields": ["Patron", "Sphere of influence"]`;
+other classes start with an empty list. Labels are deduplicated case-insensitively, including shared fields.
+The Character Mancer offers these fields during creation; multiclass advancement offers only fields
+not supplied by the original or existing classes. Leaving them blank never blocks advancement.
+Sheets refresh their configured fields on load, preserving answers; obsolete legacy/custom rows become
+labeled prose in Other details. Demiplane imports never add fields: clothes maps to Attire,
+eyes/eyes like to Eyes, body/body thats to Physique, skin/color/the color of to Skin / Fur,
+and attitude/attitude like to Attitude. For the primary class and matched multiclasses, configured
+extra fields are matched by name against saved `character_details_<field>` or
+`character_details_<field>_value` values and class-owned
+`element-<class engine>_custom-option_<class>-<field>_value` values. Explicit field names/labels in
+those records also match. Matching ignores capitalization, Unicode representation and differences
+between spaces, hyphens and underscores; it does not guess partial names. For example, Warlock Patron
+and Sphere of influence import for either a starting or multiclass Warlock. Unmatched fields remain
+blank, unrelated or unconfigured fields never create rows, and conflicting, ambiguous or non-text
+matches stop the import with an error. These are narrative values, not mechanical overrides.
+No settings or compatibility-version change is needed.
 Local catalogs supply
 feature/card/item mechanics and automation; ambiguous names are never guessed. Custom or unmatched
 equipment stays plain inventory without invented mechanics. Item quantities default to one, and where

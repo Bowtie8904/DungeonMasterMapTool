@@ -6038,6 +6038,7 @@
    "id": "ranger",
    "name": "Ranger",
    "kind": "class",
+   "backgroundFields": [],
    "domains": [
     "Bone",
     "Sage"
@@ -6154,6 +6155,7 @@
    "id": "warrior",
    "name": "Warrior",
    "kind": "class",
+   "backgroundFields": [],
    "domains": [
     "Blade",
     "Bone"
@@ -6246,6 +6248,7 @@
    "id": "seraph",
    "name": "Seraph",
    "kind": "class",
+   "backgroundFields": [],
    "domains": [
     "Splendor",
     "Valor"
@@ -6321,6 +6324,7 @@
    "id": "sorcerer",
    "name": "Sorcerer",
    "kind": "class",
+   "backgroundFields": [],
    "domains": [
     "Arcana",
     "Midnight"
@@ -6440,11 +6444,12 @@
    "id": "assassin",
    "name": "Assassin",
    "kind": "class",
+   "backgroundFields": [],
    "domains": [
     "Blade",
     "Midnight"
    ],
-   "text": "As an assassin, you blend expertise in stealth and a mastery over death, dealing fatal blows tothe unwary with lethal accuracy.",
+   "text": "As an assassin, you blend expertise in stealth and a mastery over death, dealing fatal blows to the unwary with lethal accuracy.",
    "startingHp": 5,
    "startingEvasion": 12,
    "features": [
@@ -6578,6 +6583,7 @@
    "id": "witch",
    "name": "Witch",
    "kind": "class",
+   "backgroundFields": [],
    "domains": [
     "Sage",
     "Dread"
@@ -6660,6 +6666,7 @@
    "id": "brawler",
    "name": "Brawler",
    "kind": "class",
+   "backgroundFields": [],
    "domains": [
     "Valor",
     "Bone"
@@ -6749,6 +6756,7 @@
    "id": "bard",
    "name": "Bard",
    "kind": "class",
+   "backgroundFields": [],
    "domains": [
     "Grace",
     "Codex"
@@ -6882,6 +6890,7 @@
    "id": "blood-hunter",
    "name": "Blood Hunter",
    "kind": "class",
+   "backgroundFields": [],
    "domains": [
     "Blade",
     "Blood"
@@ -7071,6 +7080,7 @@
    "id": "druid",
    "name": "Druid",
    "kind": "class",
+   "backgroundFields": [],
    "domains": [
     "Sage",
     "Arcana"
@@ -8448,6 +8458,7 @@
    "id": "rogue",
    "name": "Rogue",
    "kind": "class",
+   "backgroundFields": [],
    "domains": [
     "Midnight",
     "Grace"
@@ -8529,6 +8540,7 @@
    "id": "guardian",
    "name": "Guardian",
    "kind": "class",
+   "backgroundFields": [],
    "domains": [
     "Valor",
     "Blade"
@@ -8658,6 +8670,10 @@
    "id": "warlock",
    "name": "Warlock",
    "kind": "class",
+   "backgroundFields": [
+    "Patron",
+    "Sphere of influence"
+   ],
    "domains": [
     "Dread",
     "Grace"
@@ -8772,6 +8788,7 @@
    "id": "wizard",
    "name": "Wizard",
    "kind": "class",
+   "backgroundFields": [],
    "domains": [
     "Codex",
     "Splendor"

@@ -5,7 +5,7 @@ import { recreateDemiplane, DemiplaneAncestryChoiceRequired, DemiplaneCharacter,
 import { derivedStats } from './engine';
 import { RulesData, subclassStageOf } from './rules';
 import { CLASS_GUIDES } from './guide';
-import { normalizeSheet } from './data';
+import { COMMON_BACKGROUND_FIELDS, normalizeSheet } from './data';
 
 const load = (name: string) => JSON.parse(readFileSync(resolve(__dirname, '../../../dmmap-daggerheart', `${name}.json`), 'utf8')).entries;
 const data: RulesData = {
@@ -117,7 +117,10 @@ describe('Demiplane reconstruction', () => {
     const { character: c, issues } = recreateDemiplane(source, data, items);
     expect(c.pronouns).toBe('he/him');
     expect(c.description).toMatchObject({ Pronouns: 'he/him', Eyes: 'Emeralds holding a glint of mischief',
-      Attire: 'Red cloth and leather tunic', Body: 'Tall', Color: 'Chestnut and cream', Attitude: 'Mischievous' });
+      Attire: 'Red cloth and leather tunic', Physique: 'Tall', 'Skin / Fur': 'Chestnut and cream', Attitude: 'Mischievous' });
+    expect(Object.keys(c.description)).toEqual(Object.keys(recreateDemiplane(fixture(3), data, items).character.description));
+    expect(c.description).not.toHaveProperty('Body');
+    expect(c.description).not.toHaveProperty('Color');
     expect(c.otherDetails).toBe('A wandering storyteller.');
     expect(c.notes).toBe('Keep this\non two lines.');
     expect(c.backgroundQuestions).toEqual([
@@ -184,6 +187,7 @@ describe('Demiplane reconstruction', () => {
     const source = fixture(1);
     const classes = structuredClone(data.classes.filter(e => e.name === 'Bard' || e.parent === 'Bard'));
     classes.find(e => e.kind === 'class')!.name = 'Warlock';
+    classes.find(e => e.kind === 'class')!.backgroundFields = ['Patron', 'Sphere of influence'];
     classes.filter(e => e.parent === 'Bard').forEach(e => { e.parent = 'Warlock'; });
     source.engines.find(e => e.key === 'class')!.args.name = 'Warlock';
     const baseline = recreateDemiplane(source, { ...data, classes }, items).character;
@@ -195,9 +199,158 @@ describe('Demiplane reconstruction', () => {
     expect(c.description).toMatchObject({ Patron: 'A fallen deity', 'Sphere of influence': 'War' });
     expect(c.features).toEqual(baseline.features);
     expect(derivedStats(c)).toEqual(derivedStats(baseline));
+    const withoutConfiguredFields = structuredClone(classes);
+    withoutConfiguredFields.find(e => e.kind === 'class')!.backgroundFields = [];
+    const unconfigured = recreateDemiplane(source, { ...data, classes: withoutConfiguredFields }, items).character;
+    expect(unconfigured.description).not.toHaveProperty('Patron');
+    expect(unconfigured.description).not.toHaveProperty('Sphere of influence');
+    expect(unconfigured.otherDetails).not.toContain('fallen deity');
     source.engines.push({ name: 'character_details_background-question-2--answer', key: 'answer', args: {}, value: 'Free him from this weapon' });
     expect(recreateDemiplane(source, { ...data, classes }, items).character.backgroundQuestions)
       .toEqual([...CLASS_GUIDES.Warlock.background.slice(0, 2), `${CLASS_GUIDES.Warlock.background[2]}\nFree him from this weapon`]);
+  });
+
+  it('maps appearance aliases, rejects conflicting aliases and never adds unknown detail fields', () => {
+    const source = fixture(1);
+    for (const [field, value] of [['eyes-like', 'Green'], ['body-thats', 'Tall'], ['the-color-of', 'Brown'],
+      ['attitude-like', 'Cheerful'], ['favorite-food', 'Soup']])
+      source.engines.push({ name: `character_details_${field}`, key: field, args: {}, value });
+    const c = recreateDemiplane(source, data, items).character;
+    expect(c.description).toMatchObject({ Eyes: 'Green', Physique: 'Tall', 'Skin / Fur': 'Brown', Attitude: 'Cheerful' });
+    expect(c.description).not.toHaveProperty('favorite-food');
+    source.engines.push({ name: 'character_details_eyes', key: 'eyes', args: {}, value: 'Blue' });
+    expect(() => recreateDemiplane(source, data, items)).toThrow('conflicting values');
+  });
+
+  it('matches configured class fields by saved names and explicit labels without adding unconfigured fields', () => {
+    const source = fixture(1);
+    const classes = structuredClone(data.classes);
+    classes.find(e => e.kind === 'class' && e.name === 'Bard')!.backgroundFields = [
+      'Instrument', 'Life Motto', 'Stage Name', 'Caf\u00e9 Style', "Traveler's Mark", 'Catchphrase', 'Sigil', 'Blank',
+    ];
+    source.engines.push(
+      { name: 'character_details_INSTRUMENT', key: 'instrument', args: {}, value: 'Lute' },
+      { name: 'character_details_life-motto', key: 'motto', args: {}, value: 'Make them laugh' },
+      { name: 'character_details_custom-1', key: 'stage', args: { name: 'STAGE_name' }, value: 'The Star' },
+      { name: 'character_details_custom-2', key: 'style', args: { label: 'Cafe\u0301-Style' }, value: 'Bright' },
+      { name: 'character_details_custom-3', key: 'phrase', args: { customName: 'Catchphrase' }, value: 'Encore!' },
+      { name: 'element-class_custom-option_BARD-traveler\u2019s-mark_value', key: 'mark', args: {}, value: 'Compass' },
+      { name: 'element-class_custom-option_bard-id-123_value', key: 'sigil', args: { label: 'Sigil' }, value: 'Star' },
+      { name: 'element-class_custom-option_bard-instrument_value', key: 'instrument-copy', args: {}, value: 'Lute' },
+      { name: 'character_details_blank', key: 'blank', args: {} },
+      { name: 'character_details_instrument-case', key: 'partial', args: {}, value: 'Not an instrument' },
+      { name: 'character_details_favorite-food', key: 'food', args: {}, value: 'Soup' },
+      { name: 'element-other_custom-option_bard-instrument_value', key: 'other', args: {}, value: 'Not this class' },
+      { name: 'element-class_custom-option_ranger-instrument_value', key: 'wrong-class', args: { label: 'Instrument' }, value: 'Not a Bard option' },
+      { name: 'character_details_background-question-5--answer', key: 'question', args: { name: 'Instrument' }, value: 'An answer' },
+      { name: 'character_details_background_question_6__answer', key: 'other-question', args: { name: 'Instrument' }, value: 'Another answer' },
+    );
+    const { character: c, issues, reportIssues } = recreateDemiplane(source, { ...data, classes }, items);
+    expect(c.description).toMatchObject({
+      Instrument: 'Lute', 'Life Motto': 'Make them laugh', 'Stage Name': 'The Star',
+      'Caf\u00e9 Style': 'Bright', "Traveler's Mark": 'Compass', Catchphrase: 'Encore!', Sigil: 'Star', Blank: '',
+    });
+    expect(Object.keys(c.description)).toEqual([
+      ...COMMON_BACKGROUND_FIELDS, 'Instrument', 'Life Motto', 'Stage Name', 'Caf\u00e9 Style', "Traveler's Mark", 'Catchphrase', 'Sigil', 'Blank',
+    ]);
+    expect(c.description).not.toHaveProperty('favorite-food');
+    expect(c.mancer?.choices?.backgroundDetails).toEqual(c.description);
+    expect(normalizeSheet(JSON.parse(JSON.stringify(c)), c.name).description).toEqual(c.description);
+    expect(issues.some(issue => issue.includes('character_details_INSTRUMENT'))).toBe(false);
+    expect(issues.some(issue => issue.includes('element-class_custom-option_bard-instrument_value'))).toBe(false);
+    expect(issues.some(issue => issue.includes('character_details_favorite-food'))).toBe(true);
+    expect(reportIssues.some(issue => /favorite.food/i.test(issue))).toBe(false);
+  });
+
+  it('imports configured fields for a matched multiclass using that class engine, without cross-class guessing', () => {
+    const source = fixture(5);
+    source.engines = source.engines.filter(e => !e.key.startsWith('level-5-') && e.key !== 'Words of Discord');
+    source.engines.push(
+      { name: 'core/selection/level-up/generic-option/index.eng', key: 'multi', args: { name: 'Multiclass', level: 5 } },
+      { name: 'tabula/class/warlock.eng', key: 'warlock', args: { name: 'Warlock', slug: 'warlock', parentEngine: 'multi' } },
+      { name: 'tabula/subclass/pact-of-the-endless-foundation.eng', key: 'endless',
+        args: { name: 'Pact Of The Endless', parentEngine: 'warlock', sourceRow: 'warlock-multiclass-subclass-choice' } },
+      { name: 'core/selection/level-up/extra-domain/index.eng', key: 'dread',
+        args: { name: 'Dread', parentEngine: 'warlock', sourceRow: 'warlock-multiclass-domain-choice' } },
+      { name: 'element-class_custom-option_bard-instrument_value', key: 'instrument', args: {}, value: 'Lute' },
+      { name: 'element-warlock_custom-option_warlock-patron_value', key: 'patron', args: {}, value: 'The moon' },
+      { name: 'element-warlock_custom-option_warlock-sphere-of-influence_value', key: 'sphere', args: {}, value: 'Tides' },
+      { name: 'element-warlock_custom-option_warlock-instrument_value', key: 'multi-instrument', args: {}, value: 'Lute' },
+      { name: 'character_details_shared_name_value', key: 'shared', args: {}, value: 'The Wanderer' },
+      { name: 'element-class_custom-option_bard-patron_value', key: 'other-patron', args: {}, value: 'Wrong class' },
+      { name: 'element-warlock_custom-option_warlock-unconfigured_value', key: 'unknown', args: {}, value: 'No row' },
+    );
+    const classes = structuredClone(data.classes);
+    classes.find(e => e.kind === 'class' && e.name === 'Bard')!.backgroundFields = ['Instrument', 'Shared Name'];
+    classes.find(e => e.kind === 'class' && e.name === 'Warlock')!.backgroundFields!.push('instrument');
+    const { character: c, issues } = recreateDemiplane(source, { ...data, classes }, items);
+    expect(c.levelUps![3].advancements).toContainEqual({ type: 'multiclass',
+      multiclass: { className: 'Warlock', subclass: 'Warlock: Pact Of The Endless', domain: 'Dread' } });
+    expect(Object.keys(c.description)).toEqual([...COMMON_BACKGROUND_FIELDS, 'Instrument', 'Shared Name', 'Patron', 'Sphere of influence']);
+    expect(c.description).toMatchObject({ Instrument: 'Lute', 'Shared Name': 'The Wanderer',
+      Patron: 'The moon', 'Sphere of influence': 'Tides' });
+    expect(c.mancer?.choices?.backgroundDetails).toEqual(c.description);
+    expect(issues.some(issue => issue.includes('element-warlock_custom-option_warlock-patron_value'))).toBe(false);
+    expect(issues.some(issue => issue.includes('element-class_custom-option_bard-patron_value'))).toBe(true);
+    expect(c.description).not.toHaveProperty('Unconfigured');
+
+    source.engines.find(e => e.key === 'multi-instrument')!.value = 'Harp';
+    expect(() => recreateDemiplane(source, { ...data, classes }, items)).toThrow('conflicting values for "Instrument"');
+    source.engines.find(e => e.key === 'multi-instrument')!.value = 'Lute';
+    source.engines.find(e => e.key === 'dread')!.args.name = 'Not a domain';
+    const unresolved = recreateDemiplane(source, { ...data, classes }, items).character;
+    expect(unresolved.description).not.toHaveProperty('Patron');
+    expect(unresolved.description).not.toHaveProperty('Sphere of influence');
+  });
+
+  it('rejects conflicting and ambiguous matching field names instead of choosing a value', () => {
+    const source = fixture(1);
+    const classes = structuredClone(data.classes);
+    classes.find(e => e.kind === 'class' && e.name === 'Bard')!.backgroundFields = ['Instrument', 'Motto'];
+    source.engines.push(
+      { name: 'character_details_instrument', key: 'detail', args: {}, value: 'Lute' },
+      { name: 'element-class_custom-option_bard-instrument_value', key: 'class-detail', args: {}, value: 'Harp' },
+    );
+    expect(() => recreateDemiplane(source, { ...data, classes }, items)).toThrow(/conflicting values for "Instrument".*Nothing was imported/);
+    source.engines.find(e => e.key === 'class-detail')!.value = '';
+    expect(() => recreateDemiplane(source, { ...data, classes }, items)).toThrow('conflicting values for "Instrument"');
+    source.engines = source.engines.filter(e => e.key !== 'class-detail');
+    source.engines.find(e => e.key === 'detail')!.args.label = 'Motto';
+    expect(() => recreateDemiplane(source, { ...data, classes }, items)).toThrow(/matches multiple configured fields.*Instrument.*Motto/);
+
+    classes.find(e => e.kind === 'class' && e.name === 'Bard')!.backgroundFields = ['Instrument', 'Instrument Value'];
+    source.engines.find(e => e.key === 'detail')!.name = 'character_details_instrument_value';
+    source.engines.find(e => e.key === 'detail')!.args = {};
+    expect(() => recreateDemiplane(source, { ...data, classes }, items)).toThrow('matches multiple configured fields');
+
+    classes.find(e => e.kind === 'class' && e.name === 'Bard')!.backgroundFields = ['Caf\u00e9', 'Cafe\u0301'];
+    source.engines.find(e => e.key === 'detail')!.name = 'character_details_caf\u00e9';
+    source.engines.find(e => e.key === 'detail')!.args = {};
+    expect(() => recreateDemiplane(source, { ...data, classes }, items)).toThrow('matches multiple configured fields');
+  });
+
+  it('preserves configured labels that are also JavaScript object property names', () => {
+    const source = fixture(1);
+    const classes = structuredClone(data.classes);
+    classes.find(e => e.kind === 'class' && e.name === 'Bard')!.backgroundFields = ['__proto__', 'constructor'];
+    source.engines.push(
+      { name: 'character_details___proto__', key: 'proto', args: {}, value: 'A label' },
+      { name: 'character_details_constructor', key: 'constructor', args: {}, value: 'Another label' },
+    );
+    const c = recreateDemiplane(source, { ...data, classes }, items).character;
+    expect(Object.getOwnPropertyDescriptor(c.description, '__proto__')?.value).toBe('A label');
+    expect(Object.getOwnPropertyDescriptor(c.description, 'constructor')?.value).toBe('Another label');
+    expect(Object.getPrototypeOf(c.description)).toBe(Object.prototype);
+  });
+
+  it.each([null, 42, false, {}, []])('rejects a matching class-specific value that is not text (%s)', value => {
+    const source = fixture(1);
+    const classes = structuredClone(data.classes);
+    classes.find(e => e.kind === 'class' && e.name === 'Bard')!.backgroundFields = ['Instrument'];
+    source.engines.push({ name: 'element-class_custom-option_bard-instrument_value', key: 'bad', args: {}, value });
+    expect(() => recreateDemiplane(source, { ...data, classes }, items)).toThrow(/Instrument.*not text.*Nothing was imported/);
+    classes.find(e => e.kind === 'class' && e.name === 'Bard')!.backgroundFields = [];
+    expect(() => recreateDemiplane(source, { ...data, classes }, items)).not.toThrow();
   });
 
   it('reconstructs the linked mixed ancestry from the ordered selected features, not its custom name', () => {

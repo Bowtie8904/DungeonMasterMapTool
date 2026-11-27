@@ -33,6 +33,7 @@ export const FIELD_HELP: Record<string, string> = {
   domains: 'Domains available to this class/build. Creating a catalog domain name does not invent new rules.',
   startingHp: 'Starting HP slots for new characters only. Existing HP tracks and advancements are not rebuilt.',
   startingEvasion: 'Starting base Evasion for new characters only. Existing character bases are not rebuilt.',
+  backgroundFields: 'Ordered optional background text-field labels for this class, for example Patron. Shared fields are always shown; duplicate labels are shown once. Used by creation and multiclassing; Demiplane details import by matching field names.',
   parent: 'Exact name of the class this subclass belongs to.',
   stage: 'Subclass progression stage: foundation, specialization or mastery.',
   spellcastTrait: 'Trait used for Spellcast rolls by this subclass.',
@@ -352,7 +353,7 @@ export const STEP_TEMPLATES: { label: string; value: CatalogObject }[] = [
 export type EditorTab = 'Overview' | 'Features' | 'Automation' | 'Advanced';
 export const OVERVIEW_FIELDS = new Set([
   'id', 'name', 'image', 'text', 'description', 'tier', 'rarity', 'starter', 'armor', 'weapon',
-  'kind', 'domains', 'startingHp', 'startingEvasion', 'parent', 'stage', 'spellcastTrait',
+  'kind', 'domains', 'startingHp', 'startingEvasion', 'backgroundFields', 'parent', 'stage', 'spellcastTrait',
   'domain', 'level', 'cardType', 'recall',
 ]);
 
@@ -410,7 +411,7 @@ export function entryTemplate(category: string): CatalogObject {
     tier: 1, weapon: { slot: 'primary', trait: 'Agility', range: 'Melee', damage: { dice: 'd6', bonus: 0, type: 'physical' }, burden: 'One-Handed' }, starter: false,
   });
   if (category === 'domain-cards') Object.assign(base, { domain: 'Arcana', level: 1, cardType: 'Ability', recall: 0 });
-  if (category === 'classes') Object.assign(base, { kind: 'class', domains: ['Arcana', 'Sage'], startingHp: 6, startingEvasion: 10, features: [] });
+  if (category === 'classes') Object.assign(base, { kind: 'class', domains: ['Arcana', 'Sage'], startingHp: 6, startingEvasion: 10, backgroundFields: [], features: [] });
   if (['ancestries', 'communities', 'transformations'].includes(category)) base.features = [];
   if (['items', 'consumables'].includes(category)) base.rarity = 'Common';
   return base;

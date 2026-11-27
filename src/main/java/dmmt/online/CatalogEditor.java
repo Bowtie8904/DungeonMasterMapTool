@@ -252,6 +252,13 @@ final class CatalogEditor {
                     if ("class".equals(entry.path("kind").asText())) {
                         integer(entry, "startingHp", 1, 100); integer(entry, "startingEvasion", 0, 100);
                         if (!entry.path("domains").isArray()) throw new Rejected(400, "Class domains must be a list.");
+                        if (entry.has("backgroundFields")) {
+                            JsonNode fields = entry.path("backgroundFields");
+                            if (!fields.isArray()) throw new Rejected(400, "Class backgroundFields must be a list of non-empty text labels.");
+                            for (JsonNode field : fields)
+                                if (!field.isTextual() || field.asText().isBlank())
+                                    throw new Rejected(400, "Class backgroundFields must be a list of non-empty text labels.");
+                        }
                     } else {
                         text(entry, "parent"); oneOf(entry, "stage", "foundation", "specialization", "mastery");
                     }

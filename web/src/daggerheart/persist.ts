@@ -7,10 +7,12 @@ import { syncResources } from './engine';
 import { applyTestingBuild, defaultTestingBuild } from './testing';
 import { loadRulesData } from './rules';
 import { activeCardSources, prepareBorrowedCard } from './copycat';
+import { syncBackgroundDetails } from './background';
 
 /** Refresh copied rule metadata without rebuilding a character or resetting spent resources/advancements. */
 export function updateCharacterAutomation(c: CharacterSheet, files: CompendiumFile[]): void {
   const entries = (category: string) => files.find((f) => f.category === category)?.entries ?? [];
+  if (files.some(file => file.category === 'classes')) syncBackgroundDetails(entries('classes'), c);
   const equipment = (category: string, items: Array<{ name: string; automation?: import('./engine').Automation }>) => {
     for (const item of items) {
       const entry = entries(category).find((e) => e.name === item.name);

@@ -135,6 +135,7 @@ export interface Experience {
 
 /** Everything the player decided in the Character Mancer, kept so the choices can be reviewed and edited. */
 export interface CreationChoices {
+  backgroundDetails?: Record<string, string>;
   element?: string;
   companion?: CompanionChoices;
   stances?: string[];
@@ -181,6 +182,7 @@ export interface Advancement {
 }
 
 export interface LevelUpRecord {
+  backgroundDetails?: Record<string, string>;
   companionTraining?: CompanionTraining[];
   companionExperience?: string;
   stances?: string[];
@@ -389,6 +391,8 @@ export function dualitySucceeds(r: DualityResult, difficulty: number): boolean {
 export const OUTCOME_LABEL = { crit: 'Critical success', hope: 'With Hope', fear: 'With Fear' } as const;
 
 /** A blank level 1 sheet: nothing chosen yet, so the sheet offers the Character Mancer. */
+export const COMMON_BACKGROUND_FIELDS = ['Name', 'Pronouns', 'Age', 'Height', 'Physique', 'Eyes', 'Hair', 'Skin / Fur', 'Attire', 'Attitude'];
+
 export function emptyCharacter(name: string): CharacterSheet {
   return {
     mancer: { done: false },
@@ -421,7 +425,7 @@ export function emptyCharacter(name: string): CharacterSheet {
     inventory: [],
     loadout: [],
     vault: [],
-    description: { Name: name, Pronouns: '', Age: '', Height: '', Eyes: '', Hair: '', Skin: '', Attire: '' },
+    description: Object.fromEntries(COMMON_BACKGROUND_FIELDS.map(field => [field, field === 'Name' ? name : ''])),
     otherDetails: '',
     notes: '',
     backgroundQuestions: [],

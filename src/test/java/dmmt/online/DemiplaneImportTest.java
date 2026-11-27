@@ -56,6 +56,12 @@ class DemiplaneImportTest {
         ((com.fasterxml.jackson.databind.node.ArrayNode) character.path("data").path("engines"))
                 .addObject().put("name", "character_avatar").put("demiplaneEngineId", "avatar")
                 .put("value", "https://demiplane-prod-app-avatar.s3.us-west-2.amazonaws.com/avatar.webp").putObject("args").putNull("id");
+        ((com.fasterxml.jackson.databind.node.ArrayNode) character.path("data").path("engines"))
+                .addObject().put("name", "character_details_custom-1").put("demiplaneEngineId", "detail")
+                .put("value", "Lute").putObject("args").put("label", "Instrument");
+        ((com.fasterxml.jackson.databind.node.ArrayNode) character.path("data").path("engines"))
+                .addObject().put("name", "element-class_custom-option_bard-motto_value").put("demiplaneEngineId", "motto")
+                .put("value", "Encore").putObject("args");
         ObjectNode props = MAPPER.createObjectNode();
         props.putObject("characterSheetContent").set("character", character);
         props.putObject("currentUser").put("unrelated", "not-imported");
@@ -71,6 +77,10 @@ class DemiplaneImportTest {
         assertFalse(parsed.toString().contains("addEngineStatus"));
         assertFalse(parsed.toString().contains("avatar.webp"));
         assertFalse(parsed.path("engines").get(1).has("value"));
+        assertEquals("Lute", parsed.path("engines").get(2).path("value").asText());
+        assertEquals("Instrument", parsed.path("engines").get(2).path("args").path("label").asText());
+        assertEquals("element-class_custom-option_bard-motto_value", parsed.path("engines").get(3).path("name").asText());
+        assertEquals("Encore", parsed.path("engines").get(3).path("value").asText());
         assertThrows(IOException.class, () -> DemiplaneImport.parse(html, "aaaaaaaa-2222-3333-4444-555555555555"));
     }
 
