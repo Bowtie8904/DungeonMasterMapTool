@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
-import { invalidateCompendium, refreshInventoryRarities, type CompendiumFile } from './compendium';
+import { cardFrom, invalidateCompendium, refreshInventoryRarities, type CompendiumFile } from './compendium';
 import { emptyCharacter, normalizeSheet, type CharacterSheet } from './data';
 import { openRollDialog, renderSheetView, SheetBus, type RollRequest } from './view';
 import * as artworkEditor from '../token-artwork';
@@ -63,6 +63,52 @@ class Element {
 }
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+it.each(['card', 'list'] as const)('shows the shared Tempest instructions and three plain Spellcast buttons in %s view', async view => {
+  const body = new Element('body');
+  vi.stubGlobal('document', { body, createElement: (tag: string) => new Element(tag),
+    createElementNS: (_namespace: string, tag: string) => new Element(tag), addEventListener: () => {} });
+  vi.stubGlobal('ResizeObserver', class { observe(): void {} disconnect(): void {} });
+  vi.stubGlobal('requestAnimationFrame', () => {});
+  const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+  const entry = catalog.entries.find(item => item.id === 'tempest')!;
+  const c = emptyCharacter('Caster');
+  c.mancer = { done: true };
+  c.traits.find(trait => trait.name === 'Instinct')!.spellcast = true;
+  c.loadout = [cardFrom(entry, c)];
+  const requests: RollRequest[] = [];
+  const cardPreferences: CardPreferences = {
+    subscribe(listener) { listener({ view, pending: false, error: '' }); },
+    load: async () => {},
+    save: async () => {},
+  };
+  const root = renderSheetView({ character: c, cardPreferences, onRoll: request => { requests.push(request); return true; } }) as unknown as Element;
+  await root.querySelectorAll('button').find(button => button.text() === 'Domain Cards')!.click();
+  const card = view === 'card' ? root.querySelectorAll('div').find(node => node.className === 'dcard')! : root.querySelectorAll('details')[0];
+  const sections = card.querySelectorAll('div').filter(node => node.className === 'dspell');
+  expect(sections).toHaveLength(3);
+  expect(card.text()).toContain('Choose one of the following tempests');
+  expect(card.text()).toContain('until the GM spends a Fear on their turn to end this spell');
+  expect(card.text().indexOf('Choose one')).toBeLessThan(card.text().indexOf('Blizzard'));
+  expect(card.querySelectorAll('button').filter(button => button.text() === 'Spellcast roll')).toHaveLength(3);
+  for (const [index, name] of ['Blizzard', 'Hurricane', 'Sandstorm'].entries()) {
+    expect(sections[index].text()).toContain(name);
+    const buttons = sections[index].querySelectorAll('button').filter(button => button.text() === 'Spellcast roll');
+    expect(buttons.map(button => button.text())).toEqual(['Spellcast roll']);
+    await buttons[0].click();
+    await body.querySelectorAll('button').filter(button => button.text() === 'Roll to chat').at(-1)!.click();
+    expect(requests.at(-1)?.label).toBe(`Spellcast (Instinct) - ${name}`);
+    expect(requests.at(-1)?.source).toContain(`card:${name}`);
+    expect(requests.at(-1)?.source).not.toContain('featureAction:');
+    expect(requests.at(-1)?.rollSource?.name).toBe(name);
+  }
+  c.vault = c.loadout.splice(0);
+  const vaulted = renderSheetView({ character: c, cardPreferences, onRoll: () => true }) as unknown as Element;
+  await vaulted.querySelectorAll('button').find(button => button.text() === 'Domain Cards')!.click();
+  const disabled = vaulted.querySelectorAll('button').filter(button => button.text() === 'Spellcast roll');
+  expect(disabled).toHaveLength(3);
+  expect(disabled.every(button => button.disabled)).toBe(true);
+});
 
 it('offers Create Character or Import from Demiplane only on an uncreated sheet and disables read-only import', () => {
   vi.stubGlobal('document', { body: new Element('body'), createElement: (tag: string) => new Element(tag),

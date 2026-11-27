@@ -231,6 +231,7 @@ The browser's simplified-lighting option still uses flat shapes for performance.
 - **Deadly/Uncanny Focus, Critical Inspiration, and Magic Immunity:** focus ends automatically with the scene (or can be removed earlier); nearby allies can claim their critical-attack benefit, and Magic Immunity negates magic damage while active.
 - **Grimoires and Lean on Me:** several spells now use their printed difficulties, Runic Lock tracks successful casts per rest, and one consoled ally can claim Lean on Me’s Stress clearing.
 - **Conjure Swarm:** conjure armored beetles for Stress; incoming damage consumes their automatic severity reduction unless Hope is spent to retain them.
+- **Tempest:** Blizzard, Hurricane and Sandstorm each have their own spell section and plain Spellcast roll button, with the shared casting text retained above them. Each successful roll offers only that tempest's damage.
 - **Weave the Flesh:** mark HP to offer allies a healing choice, with an optional Stress-paid upgrade to both benefits.
 - **Safe Haven and Specter of the Dark:** Safe Haven's extra rest move has no additional Hope cost; Specter grants physical immunity until its effect is manually ended.
 - **Spellcast difficulties:** Final Words, Forest Sprites, Resurrection, Rift Walker, Salvation Beam, and Veil of Night use their printed difficulties; subsequent narrative effects remain table-managed.

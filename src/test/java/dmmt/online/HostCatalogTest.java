@@ -104,6 +104,25 @@ class HostCatalogTest {
     }
 
     @Test
+    void tempestSpellsResolveCanonicalDamageAndPreserveLegacyActionSources() throws Exception {
+        Files.copy(Path.of("dmmap-daggerheart", "domain-cards.json"), directory.resolve("domain-cards.json"));
+        HostCatalog.Snapshot snapshot = new HostCatalog().snapshot(directory);
+        String[] names = {"Blizzard", "Hurricane", "Sandstorm"};
+        String[] dice = {"2d20+8", "3d10+10", "5d6+9"};
+        var legacy = snapshot.automation("card:Tempest", "Tempest", MAPPER.nullNode());
+        assertEquals(3, legacy.path("actions").size());
+        for (int i = 0; i < names.length; i++) {
+            var automation = snapshot.automation("card:Tempest/" + names[i], names[i], MAPPER.nullNode());
+            var trigger = automation.path("conditionalRollTriggers").get(0);
+            assertEquals("card:" + names[i], trigger.path("on").asText());
+            assertEquals(dice[i], trigger.path("damage").path("dice").asText());
+            assertTrue(trigger.path("successIfKnown").asBoolean());
+            assertEquals(dice[i], legacy.path("conditionalRollTriggers").get(i).path("damage").path("dice").asText());
+        }
+        assertTrue(snapshot.card("Tempest").path("text").asText().startsWith("Choose one of the following tempests"));
+    }
+
+    @Test
     void hydrationKeepsIndependentSheetStateAndCatalogDefinitions() throws Exception {
         Files.writeString(directory.resolve("items.json"), items().toString());
         HostCatalog.Snapshot snapshot = new HostCatalog().snapshot(directory);

@@ -2143,9 +2143,9 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
   }
 
   /** A grimoire spell: its own text, Spellcast roll and automation buttons, independent of the other spells. */
-  function spellBlock(d: DomainCard, s: Spell, loadout: boolean, cardKey = `card:${d.name}`, quick = false): HTMLElement {
+  function spellBlock(d: DomainCard, s: Spell, loadout: boolean, cardKey = `card:${d.name}`, quick = false, introduction = ''): HTMLElement {
     const acts = el('div', { class: 'act' });
-    if (d.spellcast && asksSpellcastRoll(s.text) && !s.automation?.actions?.some(action => action.actionRoll?.trait === 'spellcast')) {
+    if (d.spellcast && asksSpellcastRoll(`${introduction}\n\n${s.text}`) && !s.automation?.actions?.some(action => action.actionRoll?.trait === 'spellcast')) {
       const sp = el('button', { class: 'small primary', type: 'button' }, 'Spellcast roll');
       const tracked = s.automation?.automaticRestUse;
       const blocked = tracked && (!loadout || !opts.supportsDomainCardAutomation?.() || usesLeft(c, `${cardKey}/${s.name}`, s.automation!) === 0);
@@ -2170,6 +2170,9 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     const cardKey = embedded ? `card:Copycat/${d.name}` : `card:${d.name}`;
     const acts = el('div', { class: 'act' });
     const spells = d.spells?.length ? d.spells : null;
+    const paragraphs = spells ? d.text.split(/\n\s*\n/) : [];
+    const firstSpell = paragraphs.findIndex(paragraph => spells?.some(spell => paragraph.includes(spell.name)));
+    const introduction = spells ? (firstSpell < 0 ? d.text : paragraphs.slice(0, firstSpell).join('\n\n')).trim() : '';
     if (!spells && d.spellcast && !d.automation?.hideSpellcast && asksSpellcastRoll(d.text) && !d.automation?.actions?.some(action => action.actionRoll?.trait === 'spellcast')) {
       const sp = el('button', { class: 'small primary', type: 'button' }, 'Spellcast roll');
       const tracked = d.automation?.automaticRestUse;
@@ -2211,7 +2214,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
         ...(copiedCardAvailable(d) ? [dcard(d.borrowedCard.card, loadout, true, true)] : []),
       ] : [];
       const description = [rich(d.text)];
-      const controls = [...pools, acts, ...(spells ? spells.map(s => spellBlock(d, s, loadout, cardKey, true)) : []), ...copied];
+      const controls = [...pools, acts, ...(spells ? spells.map(s => spellBlock(d, s, loadout, cardKey, true, introduction)) : []), ...copied];
       if (embedded) {
         const { toggle, text } = quickDescription(cardKey, d.name, description);
         return el('div', { class: 'dspell' }, toggle, text, ...controls);
@@ -2221,7 +2224,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
     if (embedded) {
       const pools = loadout ? (d.automation?.resources ?? []).map(r => el('label', { class: 'card-resource' }, 'Tokens', poolInput({ ...r, label: 'Tokens' }))) : [];
       return el('div', { class: 'dspell copycat-borrowed' }, el('div', { class: 'hd' }, `Level ${d.level} · ${d.domain} · ${d.type}`, ...pools),
-        el('span', { class: 'sn' }, d.name), ...(spells ? spells.map(s => spellBlock(d, s, loadout, cardKey)) : [rich(d.text)]), acts);
+        el('span', { class: 'sn' }, d.name), ...(spells ? [...(introduction ? [rich(introduction)] : []), ...spells.map(s => spellBlock(d, s, loadout, cardKey, false, introduction))] : [rich(d.text)]), acts);
     }
     const move = () => {
       if (c.testingCharacter || d.permanentlyVaulted) return;
@@ -2244,7 +2247,7 @@ export function renderSheetView(opts: SheetViewOptions): HTMLElement {
       el('p', { class: 'muted' }, `Copied from ${d.borrowedCard.sourceActorName}. Ends on rest or source vaulting.${copiedCardAvailable(d) ? '' : ' Source disabled; copied card is unavailable.'}`),
       ...(copiedCardAvailable(d) ? [dcard(d.borrowedCard.card, loadout, true)] : []),
     ] : [];
-    const node = share(el('div', { class: 'dcard' }, hd, el('span', { class: 'ty' }, d.type), el('span', { class: 'nm' }, d.name), ...(spells ? spells.map((s) => spellBlock(d, s, loadout)) : [rich(d.text)]), acts, ...copied), { category: 'domain', item: d });
+    const node = share(el('div', { class: 'dcard' }, hd, el('span', { class: 'ty' }, d.type), el('span', { class: 'nm' }, d.name), ...(spells ? [...(introduction ? [rich(introduction)] : []), ...spells.map(s => spellBlock(d, s, loadout, cardKey, false, introduction))] : [rich(d.text)]), acts, ...copied), { category: 'domain', item: d });
     return draggableCard(node, d, loadout);
   }
 

@@ -8581,6 +8581,65 @@
   {
    "id": "tempest",
    "name": "Tempest",
+   "spells": [
+    {
+     "name": "Blizzard",
+     "text": "Deal **2d20+8** magic damage and targets are temporarily *Vulnerable*.",
+     "automation": {
+      "conditionalRollTriggers": [
+       {
+        "id": "blizzard",
+        "label": "Blizzard damage",
+        "on": "card:Blizzard",
+        "successIfKnown": true,
+        "damage": {
+         "dice": "2d20+8",
+         "fixed": true,
+         "type": "magic"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Hurricane",
+     "text": "Deal **3d10+10** magic damage and choose a direction the wind is blowing. Targets can’t move against the wind.",
+     "automation": {
+      "conditionalRollTriggers": [
+       {
+        "id": "hurricane",
+        "label": "Hurricane damage",
+        "on": "card:Hurricane",
+        "successIfKnown": true,
+        "damage": {
+         "dice": "3d10+10",
+         "fixed": true,
+         "type": "magic"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "name": "Sandstorm",
+     "text": "Deal **5d6+9** magic damage. Attacks made from beyond Melee range have disadvantage.",
+     "automation": {
+      "conditionalRollTriggers": [
+       {
+        "id": "sandstorm",
+        "label": "Sandstorm damage",
+        "on": "card:Sandstorm",
+        "successIfKnown": true,
+        "damage": {
+         "dice": "5d6+9",
+         "fixed": true,
+         "type": "magic"
+        }
+       }
+      ]
+     }
+    }
+   ],
    "automation": {
     "actions": [
      {
@@ -8663,7 +8722,7 @@
    "domain": "Sage",
    "level": 10,
    "recall": 2,
-   "text": "Choose one of the following tempests and make a **Spellcast Roll** against all targets within Far range. Targets you succeed against experience its effects until the GM spends a Fear on their turn to end this spell.\n\n- ***Blizzard:*** Deal **2d20+8** magic damage and targets are temporarily *Vulnerable*.\n- ***Hurricane: ***Deal **3d10+10** magic damage and choose a direction the wind is blowing. Targets can’t move against the wind.\n- ***Sandstorm:*** Deal **5d6+9** magic damage. Attacks made from beyond Melee range have disadvantage."
+   "text": "Choose one of the following tempests and make a **Spellcast Roll** against all targets within Far range. Targets you succeed against experience its effects until the GM spends a Fear on their turn to end this spell."
   },
   {
    "id": "terrify",

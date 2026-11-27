@@ -546,6 +546,8 @@ Forager's host-rolled downtime adds one of five automated inventory consumables,
 rest-chat reward on a 6; the party may carry five. Rest cards render these reward actions even
 without recovery dice, including long rests. Its Luck Charm rerolls exactly one selected die,
 including Duality, Disadvantage and Combo dice. Conjure Swarm renders two independent spells.
+Tempest likewise renders Blizzard, Hurricane and Sandstorm separately with plain Spellcast roll
+buttons, retaining the shared casting instructions above them and each tempest's damage on its own result.
 Success-dependent spells keep their payments, buffs and damage on their own chat results.
 These are additive catalog and message fields on existing endpoints; compatibility versions and
 settings are unchanged. Rebuild with `npm run build` in `web`, then `mvn process-resources` at the

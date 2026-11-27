@@ -8,6 +8,7 @@ import {
   selectedRollBonus, sheetActions, syncResources,
 } from './engine';
 import { applyDamage, availableMitigations, computeDamage } from './damage';
+import { updateCharacterAutomation } from './persist';
 
 const cards: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
 const consumables: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/consumables.json', import.meta.url), 'utf8'));
@@ -67,6 +68,27 @@ describe('Sage and Arcana online automation', () => {
     });
   });
 
+  it.each([
+    ['Blizzard', 'blizzard', '2d20+8'],
+    ['Hurricane', 'hurricane', '3d10+10'],
+    ['Sandstorm', 'sandstorm', '5d6+9'],
+  ])('routes %s damage only to its own successful cast and retains legacy rolls', (name, id, dice) => {
+    const c = character('tempest');
+    expect(c.loadout[0].spells!.map(spell => spell.name)).toEqual(['Blizzard', 'Hurricane', 'Sandstorm']);
+    const spell = c.loadout[0].spells!.find(spell => spell.name === name)!;
+    expect(sheetActions(spell.automation)).toHaveLength(0);
+    const context = { source: `action,spellcast,card:Tempest,card:${name}`, hope: 7, fear: 2, total: 15, difficulty: 14 };
+    const triggers = availableRollTriggers(c, context);
+    expect(triggers).toHaveLength(1);
+    expect(triggers[0].key).toBe(`card:Tempest/${name}`);
+    expect(triggers[0].trigger).toMatchObject({ id, damage: { dice, fixed: true, type: 'magic' } });
+    expect(availableRollTriggers(c, { ...context, total: 13 })).toHaveLength(0);
+    expect(availableRollTriggers(c, { ...context, difficulty: undefined })).toHaveLength(1);
+    const legacy = availableRollTriggers(c, { ...context, source: `action,spellcast,card:Tempest,featureAction:card:Tempest:${id}` });
+    expect(legacy).toHaveLength(1);
+    expect(legacy[0].trigger.damage?.dice).toBe(dice);
+  });
+
   it('places success costs and damage on their own results, including the additional restraint', () => {
     const c = character('vicious-entangle', 'wild-fortress', 'falling-sky');
     const options = availableRollTriggers(c, { source: 'action,spellcast,card:Vicious Entangle', hope: 7, fear: 2, total: 14 });
@@ -74,6 +96,21 @@ describe('Sage and Arcana online automation', () => {
     expect(options[1].trigger.cost).toEqual({ hope: 1 });
     expect(availableRollTriggers(c, { source: 'action,spellcast,card:Wild Fortress', hope: 2, fear: 3, total: 12, difficulty: 13 })).toHaveLength(0);
     expect(rules('falling-sky').conditionalRollTriggers![0].resourceRoll).toMatchObject({ resource: 'stress', sides: 20, bonusPerDie: 2 });
+  });
+
+  it('refreshes existing Tempest loadout and vault cards into independent spells without resetting state', () => {
+    const c = character('tempest', 'tempest');
+    c.vault.push(c.loadout.pop()!);
+    for (const card of [...c.loadout, ...c.vault]) delete card.spells;
+    c.hope.on = 2;
+    c.usage['card:Tempest'] = { used: 1, per: 'longRest' };
+    updateCharacterAutomation(c, [cards]);
+    for (const card of [...c.loadout, ...c.vault]) {
+      expect(card.spells?.map(spell => spell.name)).toEqual(['Blizzard', 'Hurricane', 'Sandstorm']);
+      expect(card.text).toContain('Choose one of the following tempests');
+    }
+    expect(c.hope.on).toBe(2);
+    expect(c.usage['card:Tempest']).toEqual({ used: 1, per: 'longRest' });
   });
 
   it('allows the base Confusing Aura with zero free Stress and validates variable pool availability', () => {
