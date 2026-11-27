@@ -440,7 +440,10 @@ advancement and capacity rules; the host also rejects testing-only fields, free 
 multiclasses/loadout capacity on normal sheets. Missing actor markers default to false. These fields are additive;
 Online protocol and DM Link compatibility versions are unchanged. No global setting enables these exceptions.
 
-The map uses floating left Navigate/Drawing/Measure tools and a collapsible right Chat/Actors/Notes/Settings rail plus a Compendium button after Notes that opens a floating window.
+The map uses floating left Navigate/Ink/Areas & effects/Measure tools and a collapsible right
+Chat/Actors/Notes/Settings rail plus a Compendium button after Notes that opens a floating window. Ink
+contains Pen and Line; Areas & effects contains Freehand brush, Circle and Rectangle, plus the effect-texture
+and style controls. Each drawing category remembers its last selected mode for the session.
 There is no top-center session, campaign, map or account heading. The bottom-left **Connected players**
 overlay contains a slightly transparent connection-status badge, visible even before the first roster
 and retained across roster refreshes and reconnects. Players are shown as `username (character)[pronouns]`
@@ -691,7 +694,11 @@ characters each for label/detail) and the latest 300 reported messages per conne
 that connection's reports; reconnect republishes controls. DM chat shows a single-line preview and an
 accessible expandable, player-grouped list of passive labels. Unsupported clients/hosts keep working
 without summaries; no settings or Online/DM Link compatibility-version changes.
-Drawing commands carry map/level identity; the host assigns and enforces campaign/player ownership and publishes
+The browser separates Ink (Pen/Line) from Areas & effects (Freehand brush/Circle/Rectangle) in the left tool rail.
+Pen and Line use the host's pen width without a thickness slider; editing existing ink strokes preserves their
+saved width. Only Areas & effects exposes the effect-texture picker and related effect controls; each category
+remembers its last selected mode for the session. Drawing commands carry map/level identity; the host assigns and enforces
+campaign/player ownership and publishes
 the normal map overlays, including generated effect textures. Texture choices/defaults come from the host rather
 than a separate browser list. Measurements are shared session-only annotations, replayed to late joiners and cleared
 on map/level changes. Both features are advertised in `hello`, so older hosts keep their tools disabled.

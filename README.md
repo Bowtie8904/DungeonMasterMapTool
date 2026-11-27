@@ -958,8 +958,10 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   loot by default - and quantity, default 1). Custom loot, gear, consumables and class items use chest,
   backpack, potion and pendant icons respectively. Older custom items without artwork show the same
   category icons in Loot. Custom items have no action buttons and never appear in or merge with the compendium.
-- **Browser layout:** the map fills the viewport. The left icon rail has Navigate/select, Drawing and Measure;
-  tool options fly out over the map. The right vertical icon rail switches   between Chat, My actors and
+- **Browser layout:** the map fills the viewport. The left icon rail has Navigate/select, Ink, Areas & effects,
+  and Measure; tool options fly out over the map. Ink offers Pen and Line, while Areas & effects offers Freehand
+  brush, Circle and Rectangle with the effect-texture and style controls. Each drawing category remembers its last
+  selected mode for the session. The right vertical icon rail switches between Chat, My actors and
     Settings (at the bottom); the Compendium button opens a floating window instead. Open character sheets from My actors, not a separate navigation shortcut.
   Click the selected section again to collapse it to just its icons. Settings contains your audio
   controls, display options and logout, grouped into **Audio** (enable sound, master/music/ambient volume,
@@ -984,7 +986,7 @@ The browser's simplified-lighting option still uses flat shapes for performance.
 - **Active effects overlay:** below the left tools, a subtle fixed-width list shows each of your actors' active
   effects, grouped by character name, with 40%-opaque row backgrounds. Each row has the effect name and a remove (x) button; click a name to expand the
   full source (for example the whole Patron's Fury feature) and click again to collapse.
-- **Map controls:** right-click without dragging returns to Select without closing the Drawing/Measure flyout.
+- **Map controls:** right-click without dragging returns to Select without closing the Ink, Areas & effects or Measure flyout.
   **Ping (P)** in the left toolbar arms a target cursor without a flyout. Left-click once to ping and return to
   Select. In Select, hold left-click still for 600 ms to ping; dragging cancels the hold. Player and DM pings
   are visible to everyone. Pings are unavailable while paused or connected to an older host without this capability.
@@ -1000,12 +1002,14 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   measurement pickers start with the campaign DM color. Tool overrides do not change account colors, and selecting
   an existing drawing still shows its saved color. The browser Connected players overlay shows a matching dot
   to the left of each player and the DM.
-- **Player drawings:** Drawing offers compact Pen, freehand brush, line, circle and rectangle buttons and a dropdown
-  of all DM effect textures. Default opacity is 100%. Changing the texture while Select is active returns to your
-  previously chosen drawing mode without closing the flyout. Pen and line are plain ink, just like the desktop tools. Drawings are ordinary effects
-  saved with the map, with campaign/player ownership. Only their creator and the DM can edit them; older and
-  DM-created effects remain DM-owned. In Navigate, select your effect and drag to move it, drag its corner handle
-  to resize, or use Delete/the trash button. Open Drawing with an effect selected to edit its style.
+- **Player drawings:** Ink offers Pen and Line, both using the host's pen width without a thickness slider.
+  Areas & effects offers freehand brush, circle and rectangle buttons and a dropdown of all DM effect textures.
+  Default opacity is 100%. Changing the texture while Select is active returns to your previously chosen
+  Areas & effects mode without closing the flyout. Pen and line are plain ink, just like the desktop tools.
+  Drawings are ordinary effects saved with the map, with campaign/player ownership. Only their creator and the DM
+  can edit them; older and DM-created effects remain DM-owned. In Navigate, select your effect and drag to move it,
+  drag its corner handle to resize, or use Delete/the trash button. Open the appropriate drawing tool with an
+  effect selected to edit its style; existing ink strokes keep their saved width.
   Pen/brush have a true-size cursor outline; freehand strokes have no bounding box while being drawn.
   Brush Border outlines the painted area in both browser and DM views, including textured effects, without lines at stroke crossings.
   The color picker updates drawing color live, including textured effects; selected effects receive live edits

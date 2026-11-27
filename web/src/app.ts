@@ -25,7 +25,7 @@ import { openCopycat } from './daggerheart/copycat-view';
 import { openSplendorAction } from './daggerheart/splendor-view';
 import { setDisabledCopycatSources } from './daggerheart/copycat';
 import type { CharacterSheet } from './daggerheart/data';
-import { MapTool } from './tools';
+import type { DrawMode } from './tools';
 import { MapView, MoveCommit } from './render';
 import { el } from './login';
 import { OnlineAudio } from './audio';
@@ -65,7 +65,7 @@ export class App {
   private sectionTitle = el('h2', {}, 'Chat');
   private sections = new Map<string, HTMLElement>();
   private sectionButtons = new Map<string, HTMLButtonElement>();
-  private toolButtons = new Map<MapTool, HTMLButtonElement>();
+  private toolButtons = new Map<string, HTMLButtonElement>();
   private flyout = el('aside', { class: 'tool-flyout hidden', id: 'tool-flyout' });
   private drawingOptions = el('div', { class: 'tool-options' });
   private measuringOptions = el('div', { class: 'tool-options hidden' });
@@ -89,6 +89,8 @@ export class App {
   private borderInput = el('input', { type: 'checkbox' });
   private emitsInput = el('input', { type: 'checkbox' });
   private aboveInput = el('input', { type: 'checkbox', checked: true });
+  private lastInkMode: DrawMode = 'pen';
+  private lastEffectMode: DrawMode = 'brush';
   private selectionHint = el('p', { class: 'tool-hint' }, 'Select controlled tokens, drawings or measurements by clicking or dragging a box.');
   private deleteButton = iconButton('delete', 'Delete selected drawing or measurement', () => this.view.deleteSelection());
   private audioGesture = () => {
@@ -606,32 +608,45 @@ export class App {
   private buildTools(): HTMLElement {
     const rail = el('nav', { class: 'tool-rail' });
     rail.setAttribute('aria-label', 'Map tools');
-    for (const [id, label] of [['navigate', 'Navigate / select'], ['ping', 'Ping (P)'], ['draw', 'Drawing'], ['measure', 'Measure']] as const) {
-      const button = iconButton(id, label, () => {
+    for (const [id, label] of [['navigate', 'Navigate / select'], ['ping', 'Ping (P)'], ['ink', 'Ink'],
+      ['effects', 'Areas & effects'], ['measure', 'Measure']] as const) {
+      if (id === 'ink' || id === 'measure') rail.append(el('div', { class: 'tool-divider', role: 'separator' }));
+      const button = iconButton(id === 'ink' ? 'pen' : id === 'effects' ? 'draw' : id, label, () => {
         if (id === 'ping') {
           this.view.setTool('ping');
           this.toolButtons.forEach((b, key) => b.setAttribute('aria-pressed', String(key === id)));
           this.closeTools();
           return;
         }
-        if (id !== 'navigate' && this.view.tool === id && !this.flyout.classList.contains('hidden')) {
+        if (id === 'navigate') {
+          this.view.setTool('navigate');
+          this.selectTool();
+          this.closeTools();
+          return;
+        }
+        const active = id === 'ink' || id === 'effects'
+          ? this.view.tool === 'draw' && this.drawingCategory(this.view.drawMode) === id
+          : this.view.tool === id;
+        if (active && !this.flyout.classList.contains('hidden')) {
           this.closeTools(); return;
+        }
+        if (id === 'ink' || id === 'effects') {
+          this.activateDrawingMode(id === 'ink' ? this.lastInkMode : this.lastEffectMode);
+          return;
         }
         this.view.setTool(id);
         this.toolButtons.forEach((b, key) => {
           b.setAttribute('aria-pressed', String(key === id));
-          if (id !== 'navigate' && (key === 'draw' || key === 'measure')) b.setAttribute('aria-expanded', String(key === id));
+          if (key === 'ink' || key === 'effects' || key === 'measure') b.setAttribute('aria-expanded', String(key === id));
         });
-        if (id !== 'navigate') {
-          this.flyout.classList.remove('hidden');
-          this.drawingOptions.classList.toggle('hidden', id !== 'draw');
-          this.measuringOptions.classList.toggle('hidden', id !== 'measure');
-          this.toolTitle.textContent = id === 'measure' ? 'Measure' : 'Drawing';
-        }
+        this.flyout.classList.remove('hidden');
+        this.drawingOptions.classList.add('hidden');
+        this.measuringOptions.classList.remove('hidden');
+        this.toolTitle.textContent = 'Measure';
       });
       button.setAttribute('aria-pressed', String(id === 'navigate'));
       if (id !== 'navigate') button.disabled = true;
-      if (id === 'draw' || id === 'measure') {
+      if (id === 'ink' || id === 'effects' || id === 'measure') {
         button.setAttribute('aria-controls', 'tool-flyout');
         button.setAttribute('aria-expanded', 'false');
       }
@@ -641,18 +656,19 @@ export class App {
     this.quickAccessButton.disabled = true;
     this.quickAccessButton.setAttribute('aria-expanded', 'false');
     rail.append(this.quickAccessButton);
-    const modes = el('div', { class: 'mode-buttons' });
-    for (const [id, icon, label] of [['pen', 'pen', 'Pen'], ['brush', 'draw', 'Freehand brush'], ['line', 'line', 'Line'],
-      ['circle', 'circle', 'Circle'], ['rect', 'rect', 'Rectangle']] as const) {
-      const button = iconButton(icon, label, () => {
-        this.view.setTool('draw');
-        this.toolButtons.forEach((b, key) => b.setAttribute('aria-pressed', String(key === 'draw')));
-        this.view.drawMode = id;
-        modes.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
-        this.updateDrawingMode(id);
-      });
-      button.setAttribute('aria-pressed', String(id === 'pen')); modes.append(button);
-    }
+    const makeDrawingModes = (category: 'ink' | 'effects', modes: readonly [DrawMode, string, string][]) => {
+      const buttons = el('div', { class: 'mode-buttons' });
+      for (const [mode, icon, label] of modes) {
+        const button = iconButton(icon, label, () => this.activateDrawingMode(mode));
+        button.dataset.drawMode = mode;
+        button.setAttribute('aria-pressed', String(mode === (category === 'ink' ? this.lastInkMode : this.lastEffectMode)));
+        buttons.append(button);
+      }
+      return buttons;
+    };
+    const inkModes = makeDrawingModes('ink', [['pen', 'pen', 'Pen'], ['line', 'line', 'Line']]);
+    const effectModes = makeDrawingModes('effects', [['brush', 'draw', 'Freehand brush'], ['circle', 'circle', 'Circle'],
+      ['rect', 'rect', 'Rectangle']]);
     const field = (name: string, control: HTMLElement) => {
       if (control instanceof HTMLInputElement || control instanceof HTMLSelectElement) return el('label', { class: 'tool-field' }, name, control);
       control.setAttribute('role', 'group');
@@ -695,18 +711,21 @@ export class App {
       this.emitsInput.checked = texture?.emits ?? false;
       this.aboveInput.checked = texture?.above ?? true;
       this.readStyle(); this.view.editStyle();
-      if (this.view.tool === 'navigate' && !this.toolButtons.get('draw')!.disabled) {
-        this.view.setTool('draw');
-        this.toolButtons.forEach((b, key) => b.setAttribute('aria-pressed', String(key === 'draw')));
-        this.updateDrawingMode(this.view.drawMode);
-      }
+      if (this.view.tool !== 'draw' || this.drawingCategory(this.view.drawMode) !== 'effects')
+        this.activateDrawingMode(this.lastEffectMode);
     });
     this.deleteButton.disabled = true;
-    this.drawingOptions.append(field('Drawing tool', modes), field('Effect texture', this.textureSelect),
-      field('Color', this.colorInput), field('Size / thickness', this.sizeInput), sizeValue,
-      field('Opacity', this.alphaInput), el('label', { class: 'setting-check' }, this.borderInput, ' Border'),
+    const inkOptions = el('div', { class: 'drawing-group' }, field('Ink tool', inkModes));
+    inkOptions.dataset.drawingCategory = 'ink';
+    const sizeOptions = el('div', { class: 'drawing-size' }, field('Size / thickness', this.sizeInput), sizeValue);
+    const effectsOptions = el('div', { class: 'drawing-group hidden' }, field('Shape', effectModes),
+      field('Effect texture', this.textureSelect), sizeOptions,
+      el('label', { class: 'setting-check' }, this.borderInput, ' Border'),
       el('label', { class: 'setting-check' }, this.emitsInput, ' Emits light'),
       el('label', { class: 'setting-check' }, this.aboveInput, ' Above tokens'));
+    effectsOptions.dataset.drawingCategory = 'effects';
+    this.drawingOptions.append(inkOptions, effectsOptions, field('Color', this.colorInput),
+      field('Opacity', this.alphaInput));
     const measureModes = el('div', { class: 'mode-buttons' });
     const measureHint = el('p', { class: 'tool-hint' }, 'Drag to measure a distance in grid tiles.');
     for (const [id, icon, label] of [['distance', 'measure', 'Distance ruler'], ['radius', 'radius', 'Circle radius'],
@@ -767,16 +786,42 @@ export class App {
     }, () => this.renderEffectsOverlay());
   }
 
+  private drawingCategory(mode: DrawMode): 'ink' | 'effects' {
+    return mode === 'pen' || mode === 'line' ? 'ink' : 'effects';
+  }
+
+  private activateDrawingMode(mode: DrawMode): void {
+    const category = this.drawingCategory(mode);
+    if (category === 'ink') this.lastInkMode = mode;
+    else this.lastEffectMode = mode;
+    this.view.setTool('draw');
+    this.view.drawMode = mode;
+    this.toolButtons.forEach((button, id) => {
+      button.setAttribute('aria-pressed', String(id === category));
+      if (id === 'ink' || id === 'effects' || id === 'measure')
+        button.setAttribute('aria-expanded', String(id === category));
+    });
+    this.flyout.classList.remove('hidden');
+    this.drawingOptions.classList.remove('hidden');
+    this.measuringOptions.classList.add('hidden');
+    this.toolTitle.textContent = category === 'ink' ? 'Ink' : 'Areas & effects';
+    this.drawingOptions.querySelectorAll<HTMLElement>('[data-drawing-category]')
+      .forEach(group => group.classList.toggle('hidden', group.dataset.drawingCategory !== category));
+    this.drawingOptions.querySelectorAll<HTMLButtonElement>('[data-draw-mode]')
+      .forEach(button => button.setAttribute('aria-pressed', String(button.dataset.drawMode === mode)));
+    this.updateDrawingMode(mode);
+  }
+
   private updateDrawingMode(mode: string): void {
     const ink = mode === 'pen' || mode === 'line';
-    for (const input of [this.textureSelect, this.borderInput, this.emitsInput, this.aboveInput]) input.disabled = ink;
-    this.sizeInput.disabled = mode === 'pen';
+    this.sizeInput.disabled = ink;
+    this.sizeInput.closest('.drawing-size')?.classList.toggle('hidden', ink);
   }
 
   private closeTools(): void {
     this.flyout.classList.add('hidden');
     this.toolButtons.forEach((button, id) => {
-      if (id === 'draw' || id === 'measure') button.setAttribute('aria-expanded', 'false');
+      if (id === 'ink' || id === 'effects' || id === 'measure') button.setAttribute('aria-expanded', 'false');
     });
   }
 
@@ -796,7 +841,10 @@ export class App {
   }
 
   private selectTool(): void {
-    this.toolButtons.forEach((b, id) => b.setAttribute('aria-pressed', String(id === 'navigate')));
+    this.toolButtons.forEach((b, id) => {
+      b.setAttribute('aria-pressed', String(id === 'navigate'));
+      if (id === 'ink' || id === 'effects' || id === 'measure') b.setAttribute('aria-expanded', 'false');
+    });
   }
 
   private sendDrawing(edit: DrawingEdit, undo = false): void {
@@ -853,7 +901,7 @@ export class App {
     }
     this.deleteButton.disabled = !shape && !measurement;
     this.selectionHint.textContent = count ? `${count} owned object${count === 1 ? '' : 's'} selected. Drag to move; arrows move tokens by half a tile.${this.view.canRotateTokens ? ' Drag a token handle to rotate.' : ''} Delete removes drawings and measurements, not tokens.`
-      : shape ? 'Your drawing selected. Drag to move; corner handle to resize. Open Drawing to change style.'
+      : shape ? 'Your drawing selected. Drag to move; corner handle to resize. Open Areas & effects to change style.'
       : measurement ? 'Your measurement selected. Drag to move or delete.' : 'Select your controlled tokens, drawings or measurements.';
     if (shape) {
       const pending = [...this.pendingDrawings.values()].reverse().find(p => p.inverse.id === shape.id);
@@ -1058,7 +1106,8 @@ export class App {
         this.view.canControlPortals = msg.portalControls === true;
         this.view.canPing = msg.mapPings === true;
         this.toolButtons.get('ping')!.disabled = !this.view.canPing;
-        this.toolButtons.get('draw')!.disabled = !msg.drawingTools;
+        this.toolButtons.get('ink')!.disabled = !msg.drawingTools;
+        this.toolButtons.get('effects')!.disabled = !msg.drawingTools;
         this.toolButtons.get('measure')!.disabled = !msg.measurementTools;
         if (this.view.tool === 'draw' && !msg.drawingTools || this.view.tool === 'measure' && !msg.measurementTools
           || this.view.tool === 'ping' && !this.view.canPing) {

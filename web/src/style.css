@@ -46,6 +46,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, canvas:focus-vi
 .left-tools { position: absolute; top: 20px; left: 20px; width: 58px; }
 .tool-rail, .section-rail { display: flex; flex-direction: column; gap: 7px; padding: 8px; background: #171b21f2; border: 1px solid var(--border); }
 .tool-rail { border-radius: 9px; }
+.tool-divider { height: 1px; margin: 2px 3px; background: var(--border); }
 .tool-rail .rail-quick-access { position: relative; margin-top: 7px; }
 .tool-rail .rail-quick-access::before { content: ''; position: absolute; left: 4px; right: 4px; top: -8px; border-top: 1px solid var(--border); }
 .tool-rail .rail-quick-access[aria-expanded='true'] { background: #d3d9df; color: #14181e; border-color: #e3e8ef; }
@@ -56,6 +57,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, canvas:focus-vi
 .panel-heading h2 { margin: 0; font-size: 15px; }
 .panel-heading .icon-button { border: 0; background: transparent; width: 28px; height: 28px; padding: 4px; }
 .tool-options { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.drawing-group { display: flex; flex-direction: column; gap: 14px; }
+.drawing-size { display: flex; flex-direction: column; gap: 7px; }
 .tool-field { display: flex; flex-direction: column; gap: 7px; color: var(--muted); font-size: 12px; }
 .tool-field input[type='range'], .tool-field input[type='color'], .tool-field select { width: 100%; min-width: 0; }
 .tool-field input[type='color'] { height: 30px; background: var(--panel); border: 1px solid var(--border); }

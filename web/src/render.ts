@@ -307,7 +307,7 @@ export class MapView {
     this.onDrawing('update', shape.id, { ...shape, color: this.style.color, alpha: this.style.alpha,
       texture: ink ? 'none' : this.style.texture, border: !ink && this.style.border,
       emits: !ink && this.style.emits, above: ink || this.style.above,
-      strokeWidth: shape.type === 'pen' ? shape.strokeWidth : this.style.size * this.state!.grid.pixelsPerCell });
+      strokeWidth: ink ? shape.strokeWidth : this.style.size * this.state!.grid.pixelsPerCell });
   }
 
   refreshSelection(): void {
@@ -624,7 +624,7 @@ export class MapView {
         const shape: Overlay = { id: drawingId(), ownerId: this.playerId, ownerCampaignId: this.campaignId,
           type: this.drawMode, x: w.x, y: w.y, width: 0, height: 0, radius: 0,
           points: ['pen', 'brush', 'line'].includes(this.drawMode) ? [w.x, w.y] : [],
-          strokeWidth: (this.drawMode === 'pen' ? s.penWidthCells ?? 0.06 : this.style.size) * s.grid.pixelsPerCell,
+          strokeWidth: (ink ? s.penWidthCells ?? 0.06 : this.style.size) * s.grid.pixelsPerCell,
           color: this.style.color, alpha: this.style.alpha, texture: ink ? 'none' : this.style.texture,
           border: !ink && this.style.border, emits: !ink && this.style.emits, above: ink || this.style.above };
         if (this.drawMode === 'line') shape.points.push(w.x, w.y);

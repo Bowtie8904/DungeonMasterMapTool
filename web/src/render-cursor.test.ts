@@ -389,6 +389,49 @@ describe('map interaction cursors', () => {
     expect(view.onMeasurement).toHaveBeenLastCalledWith(expect.objectContaining({ color: '#ff9100' }), false);
   });
 
+  it.each([
+    { penWidthCells: 0.2, inkWidth: 10 },
+    { penWidthCells: undefined, inkWidth: 3 },
+  ])('creates pen and line at the same host pen width, independently of brush size: $penWidthCells', ({ penWidthCells, inkWidth }) => {
+    current.penWidthCells = penWidthCells;
+    view.style.size = 4;
+    const drawings = vi.fn();
+    view.onDrawing = drawings;
+    view.setTool('draw');
+
+    for (const mode of ['pen', 'line', 'brush'] as const) {
+      view.drawMode = mode;
+      canvas.pointer('pointerdown', 700, 700);
+      canvas.pointer('pointermove', 750, 750);
+      canvas.pointer('pointerup', 750, 750);
+    }
+
+    expect(drawings.mock.calls.map(([, , drawing]) => [drawing.type, drawing.strokeWidth])).toEqual([
+      ['pen', inkWidth], ['line', inkWidth], ['brush', 200],
+    ]);
+  });
+
+  it.each([
+    { type: 'pen', width: 19 },
+    { type: 'line', width: 19 },
+    { type: 'brush', width: 400 },
+  ])('updates $type styles with the correct stroke width', ({ type, width }) => {
+    current.overlays = [{ ...shape, id: 'existing', type, strokeWidth: 19, points: [200, 200, 300, 200] }];
+    view.setState(current);
+    const drawings = vi.fn();
+    view.onDrawing = drawings;
+    canvas.pointer('pointerdown', 250, 200);
+    canvas.pointer('pointerup', 250, 200);
+    expect(Reflect.get(view, 'selectedDrawing')).toBe('existing');
+
+    view.style.color = '#123456';
+    view.style.alpha = 0.5;
+    view.style.size = 8;
+    view.editStyle();
+    expect(drawings).toHaveBeenCalledWith('update', 'existing',
+      expect.objectContaining({ type, strokeWidth: width, color: '#123456', alpha: 0.5 }));
+  });
+
   it('places one tool ping at world coordinates and restores Select and its cursor', () => {
     const ping = vi.fn(), select = vi.fn();
     view.canPing = true; view.onPing = ping; view.onSelectTool = select;
