@@ -834,24 +834,41 @@ describe('map interaction cursors', () => {
     expect(view['portalAt'](100, 20)?.id).toBe('portal');
   });
 
-  it('draws fog-enabled badges after fog and keeps the original layering when fog is disabled', () => {
+  it('draws weather beneath fog and fog-enabled badges after fog', () => {
     const calls: string[] = [];
     view.fog.configure({ originX: 0, originY: 0, cellSize: 10, cols: 8, rows: 8 });
-    view.weatherEnabled = false;
+    current.weather.type = 'RAIN';
+    view.weatherEnabled = true;
     current.images = [];
-    Object.assign(view['ctx'], { setTransform: vi.fn(), fillRect: vi.fn(), save: vi.fn(), restore: vi.fn() });
+    let transform: number[] = [];
+    const doorTransforms: number[][] = [];
+    Object.assign(view['ctx'], { setTransform: vi.fn((...a: number[]) => { transform = a; }), fillRect: vi.fn(), save: vi.fn(), restore: vi.fn() });
     for (const name of ['drawFloorOverlays', 'drawTokens', 'drawLighting', 'drawOverlays', 'drawTexts',
       'drawPings', 'drawToolAnnotations']) {
       vi.spyOn(view, name as never).mockImplementation(() => {});
     }
+    view['cam'] = { x: 30, y: 40, scale: 2 };
+    vi.spyOn(view, 'drawWeather' as never).mockImplementation(() => {
+      calls.push('weather');
+      view['ctx'].setTransform(view['dpr'], 0, 0, view['dpr'], 0, 0);
+    });
     vi.spyOn(view, 'drawFog' as never).mockImplementation(() => { calls.push('fog'); });
-    vi.spyOn(view, 'drawDoors' as never).mockImplementation(() => { calls.push('doors'); });
+    vi.spyOn(view, 'drawDoors' as never).mockImplementation(() => { calls.push('doors'); doorTransforms.push(transform); });
     view['draw'](current);
-    expect(calls).toEqual(['fog', 'doors']);
+    expect(calls).toEqual(['weather', 'fog', 'doors']);
+    const dpr = view['dpr'];
+    expect(doorTransforms.at(-1)).toEqual([dpr * 2, 0, 0, dpr * 2, dpr * 30, dpr * 40]);
+    calls.length = 0;
+    Object.assign(view['ctx'], { drawImage: vi.fn() });
+    view['sceneCache'] = document.createElement('canvas');
+    view['sceneCacheValid'] = true;
+    view['draw'](current, true, false);
+    expect(calls).toEqual(['weather', 'fog', 'doors']);
+    expect(doorTransforms.at(-1)).toEqual([dpr * 2, 0, 0, dpr * 2, dpr * 30, dpr * 40]);
     calls.length = 0;
     current.view = { gridOpacity: 0.08, fogEnabled: false };
     view['draw'](current);
-    expect(calls).toEqual(['doors', 'fog']);
+    expect(calls).toEqual(['doors', 'weather', 'fog']);
   });
 
   it('does not render token names in the player map', () => {

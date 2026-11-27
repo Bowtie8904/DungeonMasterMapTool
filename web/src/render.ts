@@ -1178,6 +1178,7 @@ export class MapView {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.drawImage(this.sceneCache, 0, 0);
       this.drawWeather(ctx, s);
+      this.drawWeatherForeground(ctx, s);
       return;
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1200,10 +1201,6 @@ export class MapView {
       }
     }
     this.drawTexts(ctx, s);
-    this.drawFog(ctx, s);
-    if (s.view?.fogEnabled !== false && this.fog.grid) this.drawDoors(ctx, s);
-    this.drawPings(ctx, s);
-    this.drawToolAnnotations(ctx, s);
 
     const seconds = this.serverNow() / 1000 + (s.weather.seed || 0);
     const kind = weatherKind(s.weather.type);
@@ -1224,6 +1221,16 @@ export class MapView {
       this.sceneCacheValid = false;
     }
     this.drawWeather(ctx, s, seconds);
+    this.drawWeatherForeground(ctx, s);
+  }
+
+  private drawWeatherForeground(ctx: CanvasRenderingContext2D, s: GameState): void {
+    // Weather leaves the context in screen space; door badges draw in world space.
+    this.world(ctx);
+    this.drawFog(ctx, s);
+    if (s.view?.fogEnabled !== false && this.fog.grid) this.drawDoors(ctx, s);
+    this.drawPings(ctx, s);
+    this.drawToolAnnotations(ctx, s);
   }
 
   private drawWeather(ctx: CanvasRenderingContext2D, s: GameState, seconds = this.serverNow() / 1000 + (s.weather.seed || 0)): void {
