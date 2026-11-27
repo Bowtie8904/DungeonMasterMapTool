@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { chooseChannelCard, chooseFeatureEffects, chooseRollModification } from './sorcerer-view';
-import { emptyCharacter } from './data';
+import { emptyCharacter, type CharacterSheet } from './data';
 import type { RollMessage } from '../protocol';
 import type { CompendiumFile } from './compendium';
 import { openRollDialog, renderSheetView, type RollRequest } from './view';
@@ -76,6 +76,206 @@ function setup() {
 const roll: RollMessage = { id: 1, ts: 1, fromId: 'player', from: 'Player', source: 'damage,magicdamage',
   expression: '2d8+1d4+3', rolls: [2, 6, 4], total: 15 };
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+
+describe('Automatic Duality dice', () => {
+  const cards: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+  const consumables: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/consumables.json', import.meta.url), 'utf8'));
+
+  function addRunic(c: CharacterSheet): void {
+    const entry = cards.entries.find(item => item.name === 'Runic Adrenaline')!;
+    c.loadout.push({ name: entry.name, domain: entry.domain!, type: 'Ability', level: entry.level!,
+      recall: entry.recall!, text: entry.text!, automation: structuredClone(entry.automation) });
+  }
+
+  function addConsumableEffect(c: CharacterSheet, name: string): void {
+    const entry = consumables.entries.find(item => item.name === name)!;
+    const effect = entry.automation!.actions![0].steps![0].effect!;
+    c.effects.push({ ...structuredClone(effect), id: name });
+  }
+
+  function open(c: CharacterSheet, targets = ['action', 'trait:Agility']) {
+    const body = setup();
+    const requests: RollRequest[] = [];
+    openRollDialog(body as unknown as HTMLElement, c, 'Agility', [{ label: 'Agility', expression: '3' }],
+      rollBonus(c, targets, undefined, false), request => { requests.push(request); return false; }, () => {}, targets,
+      undefined, undefined, undefined, false, undefined, undefined, undefined, undefined, 0,
+      undefined, undefined, undefined, undefined, false, undefined, undefined, () => true);
+    const dialog = body.querySelector('.dh-rolldlg')!;
+    const button = (text: string) => dialog.querySelectorAll('button').find(item => item.text() === text)!;
+    return { dialog, requests, button };
+  }
+
+  it('removes both die selectors while retaining the roll mode and standard d6 dice', () => {
+    const { dialog, requests, button } = open(emptyCharacter('Hero'));
+    expect(dialog.querySelectorAll('select').map(item => item.ariaLabel)).not.toContain('Advantage die');
+    expect(dialog.querySelectorAll('select').map(item => item.ariaLabel)).not.toContain('Disadvantage die');
+    expect(dialog.querySelectorAll('label').some(item => item.text().startsWith('Own advantage die'))).toBe(false);
+    button('Advantage (+d6)').click();
+    button('Roll to chat').click();
+    button('Disadvantage (-d6)').click();
+    button('Roll to chat').click();
+    button('Normal').click();
+    button('Roll to chat').click();
+    expect(requests.map(request => request.expression)).toEqual(['2d12+1d6+3', '2d12-1d6+3', '2d12+3']);
+    expect(requests[0].contributions).toContainEqual({ label: 'Advantage', expression: '1d6' });
+    expect(requests[1].contributions).toContainEqual({ label: 'Disadvantage', expression: '-1d6' });
+  });
+
+  it.each([
+    ['action', ['action', 'trait:Agility']],
+    ['attack', ['action', 'attack', 'trait:Agility']],
+    ['spellcast', ['action', 'spellcast', 'trait:Agility']],
+    ['companion', ['action', 'companion', 'trait:Agility']],
+    ['reaction', ['reaction', 'trait:Agility']],
+  ])('automatically applies marked-HP Runic Adrenaline on a %s roll', (_name, targets) => {
+    const c = emptyCharacter('Hero');
+    c.hp.on = 1;
+    addRunic(c);
+    const { dialog, requests, button } = open(c, targets);
+    const passive = dialog.querySelectorAll('label').find(item => item.text().includes('Runic Adrenaline'))!
+      .querySelectorAll('input')[0];
+    expect(passive.checked).toBe(true);
+    expect(passive.disabled).toBe(true);
+    button('Advantage (+d8)').click();
+    button('Roll to chat').click();
+    expect(requests[0].expression).toBe('2d12+1d8+3');
+    expect(requests[0].contributions).toContainEqual({ label: 'Advantage', expression: '1d8' });
+  });
+
+  it('recomputes the passive on reaction changes and ignores unmarked or vaulted Runic Adrenaline', () => {
+    const c = emptyCharacter('Hero');
+    c.hp.on = 1;
+    addRunic(c);
+    const active = open(c);
+    active.button('Reaction roll').click();
+    active.button('Advantage (+d8)').click();
+    active.button('Roll to chat').click();
+    expect(active.requests[0]).toMatchObject({ source: expect.stringContaining('reaction'), expression: '2d12+1d8+3' });
+    c.hp.on = 0;
+    const unmarked = open(c);
+    unmarked.button('Advantage (+d6)').click();
+    unmarked.button('Roll to chat').click();
+    expect(unmarked.requests[0].expression).toBe('2d12+1d6+3');
+    c.hp.on = 1;
+    c.vault.push(...c.loadout.splice(0));
+    const vaulted = open(c);
+    vaulted.button('Advantage (+d6)').click();
+    vaulted.button('Roll to chat').click();
+    expect(vaulted.requests[0].expression).toBe('2d12+1d6+3');
+  });
+
+  it('refreshes an older saved Runic Adrenaline card before rolling', () => {
+    const c = emptyCharacter('Hero');
+    c.hp.on = 1;
+    addRunic(c);
+    const old = c.loadout[0].automation!.conditionalRollOptions![0];
+    old.roll = 'action';
+    delete old.required;
+    updateCharacterAutomation(c, [cards]);
+    const { dialog, requests, button } = open(c, ['reaction', 'trait:Agility']);
+    const passive = dialog.querySelectorAll('label').find(item => item.text().includes('Runic Adrenaline'))!
+      .querySelectorAll('input')[0];
+    expect(passive.checked).toBe(true);
+    expect(passive.disabled).toBe(true);
+    button('Advantage (+d8)').click();
+    button('Roll to chat').click();
+    expect(requests[0].expression).toBe('2d12+1d8+3');
+  });
+
+  it('blocks stale dialogs when a required die override appears or disappears', () => {
+    const c = emptyCharacter('Hero');
+    addRunic(c);
+    const beforeMarking = open(c);
+    beforeMarking.button('Advantage (+d6)').click();
+    c.hp.on = 1;
+    beforeMarking.button('Roll to chat').click();
+    expect(beforeMarking.requests).toHaveLength(0);
+    expect(beforeMarking.dialog.text()).toContain('A required bonus changed. Reopen this roll dialog.');
+
+    const beforeHealing = open(c);
+    beforeHealing.button('Advantage (+d8)').click();
+    c.hp.on = 0;
+    beforeHealing.button('Roll to chat').click();
+    expect(beforeHealing.requests).toHaveLength(0);
+    expect(beforeHealing.dialog.text()).toContain('A selected bonus changed. Reopen this roll dialog.');
+  });
+
+  it('uses the active Lightheaded disadvantage die without changing advantage', () => {
+    const c = emptyCharacter('Hero');
+    addConsumableEffect(c, 'Phantom Fern Shoots');
+    const active = open(c);
+    active.button('Advantage (+d6)').click();
+    active.button('Roll to chat').click();
+    active.button('Disadvantage (-d8)').click();
+    active.button('Roll to chat').click();
+    expect(active.requests.map(request => request.expression)).toEqual(['2d12+1d6+3', '2d12-1d8+3']);
+    expect(active.requests[1].contributions).toContainEqual({ label: 'Disadvantage', expression: '-1d8' });
+    c.effects = [];
+    const removed = open(c);
+    removed.button('Disadvantage (-d6)').click();
+    removed.button('Roll to chat').click();
+    expect(removed.requests[0].expression).toBe('2d12-1d6+3');
+  });
+
+  it('keeps helper dice separate from the automatically sized own advantage die', () => {
+    const c = emptyCharacter('Ally');
+    c.hp.on = 1;
+    addRunic(c);
+    c.effects.push({ id: 'help-1', name: 'Help from Helper', kind: 'buff', until: 'manual',
+      helpAlly: { die: 10 }, rollOptions: [{ id: 'help', label: 'Help an Ally', roll: 'action',
+        advantage: 'advantage', helpAllyDie: 10, hostOwned: true, defaultOn: true, excludeRolls: ['reaction', 'damage'] }] });
+    const { dialog, requests, button } = open(c);
+    expect(dialog.text()).toContain('Fixed d10 helper die');
+    const own = dialog.querySelectorAll('input').find(item => item.ariaLabel === 'Also roll your own advantage die')!;
+    own.checked = true;
+    own.listeners.get('change')?.();
+    expect(button('Advantage (help + d8)')).toBeDefined();
+    button('Roll to chat').click();
+    expect(requests[0]).toMatchObject({ expression: '2d12+1d8+3', helpAdvantage: true,
+      hostOptions: [{ key: 'effect:help-1', id: 'help', helpAllyDie: 10 }] });
+    expect(requests[0].contributions).toContainEqual({ label: 'Advantage', expression: '1d8' });
+    button('Reaction roll').click();
+    expect(dialog.text()).not.toContain('Fixed d10 helper die');
+    button('Advantage (+d8)').click();
+    button('Roll to chat').click();
+    expect(requests[1]).toMatchObject({ expression: '2d12+1d8+3', source: expect.stringContaining('reaction') });
+    expect(requests[1].helpAdvantage).toBeUndefined();
+    expect(c.effects).toHaveLength(1);
+  });
+
+  it('uses the largest explicit override, including a replacement smaller than d6', () => {
+    const c = emptyCharacter('Hero');
+    c.features.push({ name: 'Custom die', source: 'Custom', text: '', automation: {
+      rollOptions: [{ id: 'die', label: 'Custom die', roll: 'action', advantageDie: 4, required: true }],
+    } });
+    const small = open(c);
+    small.button('Advantage (+d4)').click();
+    small.button('Roll to chat').click();
+    expect(small.requests[0].expression).toBe('2d12+1d4+3');
+    c.hp.on = 1;
+    addRunic(c);
+    const both = open(c);
+    both.button('Advantage (+d8)').click();
+    both.button('Roll to chat').click();
+    expect(both.requests[0].expression).toBe('2d12+1d8+3');
+  });
+
+  it('keeps unrelated situational feature die choices available', () => {
+    const c = emptyCharacter('Hero');
+    addConsumableEffect(c, 'Hero’s Powder');
+    const { dialog, requests, button } = open(c);
+    const size = dialog.querySelectorAll('select').find(item => item.ariaLabel.includes('Hero’s Powder') && item.ariaLabel.includes('die size'))!;
+    expect(size).toBeDefined();
+    size.value = '8';
+    size.listeners.get('change')?.();
+    const option = dialog.querySelectorAll('label').find(item => item.text().includes('Hero’s Powder'))!
+      .querySelectorAll('input')[0];
+    option.checked = true;
+    option.listeners.get('change')?.();
+    button('Roll to chat').click();
+    expect(requests[0].expression).toBe('2d12+3+1d8');
+  });
+});
 
 describe('Grouped class features', () => {
   const catalog: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/classes.json', import.meta.url), 'utf8'));
@@ -259,7 +459,7 @@ describe('Sorcerer selection dialogs', () => {
       const dialog = body.querySelector('.dh-rolldlg')!;
       expect(dialog.querySelectorAll('select').some(e => e.ariaLabel.includes('Help an Ally die size'))).toBe(false);
       expect(dialog.text()).toContain('Fixed d6 helper die');
-      expect(dialog.querySelectorAll('label').find(e => e.text().startsWith('Own advantage die'))!.hidden).toBe(true);
+      expect(dialog.querySelectorAll('select').some(e => e.ariaLabel === 'Advantage die' || e.ariaLabel === 'Disadvantage die')).toBe(false);
       expect(dialog.querySelectorAll('input').find(e => e.ariaLabel === 'Also roll your own advantage die')!.checked).toBe(false);
       dialog.querySelectorAll('button').find(e => e.text() === 'Roll to chat')!.click();
       await settle();

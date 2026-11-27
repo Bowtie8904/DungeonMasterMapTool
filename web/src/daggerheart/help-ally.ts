@@ -4,7 +4,6 @@ import type { AdvantageDie, CharacterSheet } from './data';
 import { actionBlocker, activeFeatures, activeWeapons, costText, type ActionDef, type Automation } from './engine';
 import { activeCardSources } from './copycat';
 
-export const ADVANTAGE_DICE: AdvantageDie[] = [4, 6, 8, 10, 12, 20, 100];
 export interface HelpAllyRequest { die?: AdvantageDie; description?: string }
 export interface HelpAllyChoice { key: string; action: ActionDef; automation: Automation; name: string }
 

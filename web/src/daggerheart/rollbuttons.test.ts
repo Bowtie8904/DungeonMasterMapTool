@@ -5,6 +5,7 @@ import { emptyCharacter, type CharacterSheet } from './data';
 import type { ChatMessage, RollMessage } from '../protocol';
 import { applyRest, rollTriggerSection } from './engine';
 import { SheetBus, type WeaponDamageAction } from './view';
+import type { CompendiumFile } from './compendium';
 import { renderLogEntry } from '../chat';
 
 class FakeElement {
@@ -986,6 +987,81 @@ describe('cross-player roll buttons', () => {
     expect(request?.source?.split(',')).toContain('reaction');
     expect(request?.source?.split(',')).not.toContain('action');
   });
+  it('automatically sizes trigger-added reroll dice from the rolling character', () => {
+    const cards: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+    const consumables: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/consumables.json', import.meta.url), 'utf8'));
+    const runic = cards.entries.find(entry => entry.name === 'Runic Adrenaline')!;
+    const lightheaded = consumables.entries.find(entry => entry.name === 'Phantom Fern Shoots')!
+      .automation!.actions![0].steps![0].effect!;
+    const c = character('Bob', undefined);
+    c.loadout.push({ name: runic.name, domain: runic.domain!, type: 'Ability', level: runic.level!,
+      recall: runic.recall!, text: runic.text!, automation: structuredClone(runic.automation) });
+    c.hp.on = 1;
+    c.effects.push({ ...structuredClone(lightheaded), id: 'lightheaded' });
+    const advantage = { key: 'feat:Retry', source: 'Retry', automation: {},
+      trigger: { id: 'adv', label: 'Retry', on: 'duality', reroll: 'duality' as const, advantage: true } };
+    const disadvantage = { key: 'weapon:Rebounding', source: 'Rebounding', automation: {},
+      trigger: { id: 'dis', label: 'Retry', on: 'attack', reroll: 'duality' as const, disadvantage: true } };
+    for (const source of ['action,trait:Agility', 'reaction,trait:Agility']) {
+      const request = rerollRequest({ ...original, source }, advantage, undefined, c)!;
+      expect(request.expression).toBe('2d12+2+1d8');
+      expect(request.contributions?.at(-1)).toEqual({ label: 'Advantage - Retry', expression: '1d8' });
+    }
+    const penalty = rerollRequest(original, disadvantage, undefined, c)!;
+    expect(penalty.expression).toBe('2d12+2-1d8');
+    expect(penalty.contributions?.at(-1)).toEqual({ label: 'Disadvantage - Rebounding', expression: '-1d8' });
+    c.hp.on = 0;
+    c.effects = [];
+    expect(rerollRequest(original, advantage, undefined, c)?.expression).toBe('2d12+2+1d6');
+    expect(rerollRequest(original, disadvantage, undefined, c)?.expression).toBe('2d12+2-1d6');
+    c.hp.on = 1;
+    c.vault.push(...c.loadout.splice(0));
+    expect(rerollRequest(original, advantage, undefined, c)?.expression).toBe('2d12+2+1d6');
+  });
+
+  it('uses the rolling sheet after paying a chat feature to size a reroll die', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const cards: CompendiumFile = JSON.parse(readFileSync(new URL('../../../dmmap-daggerheart/domain-cards.json', import.meta.url), 'utf8'));
+    const runic = cards.entries.find(entry => entry.name === 'Runic Adrenaline')!;
+    const c = character('Bob', { name: 'Retry', automation: { rollTriggers: [
+      { id: 'adv', label: 'Retry with advantage', on: 'action', reroll: 'duality', advantage: true, cost: { hp: 1 } },
+    ] } });
+    c.features[0].source = 'Class feature - Warlock';
+    c.loadout.push({ name: runic.name, domain: runic.domain!, type: 'Ability', level: runic.level!,
+      recall: runic.recall!, text: runic.text!, automation: structuredClone(runic.automation) });
+    const { host, sent } = hostFor({ 'actor-b': c });
+    const sheet = (await host.sheet('actor-b'))!;
+    const action = vi.fn(async () => { c.hp.on += 1; });
+    const save = Object.assign(() => {}, { flush: async () => {}, action });
+    const box = rollButtons(original, { ...host, playerId: original.fromId,
+      sheet: async id => id === 'actor-b' ? { ...sheet, save } : undefined }) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await box.queryAll('button').find(button => button.text.startsWith('Retry with advantage'))!.click();
+    expect(action).toHaveBeenCalledOnce();
+    expect(c.hp.on).toBe(1);
+    expect(host.toast).not.toHaveBeenCalled();
+    expect(sent[0]).toMatchObject({ expression: '2d12+2+1d8',
+      contributions: expect.arrayContaining([{ label: 'Advantage - Retry', expression: '1d8' }]) });
+  });
+
+  it('does not pay for an added-die reroll if the rolling sheet is unavailable', async () => {
+    vi.stubGlobal('document', { createElement: (tag: string) => new FakeElement(tag) });
+    const c = character('Helper', { name: 'Retry', automation: { rollTriggers: [
+      { id: 'adv', label: 'Retry with advantage', on: 'action', audience: 'ally', reroll: 'duality', advantage: true },
+    ] } });
+    const { host, sent } = hostFor({ 'actor-a': c });
+    const sheet = (await host.sheet('actor-a'))!;
+    const action = vi.fn(async () => {});
+    const save = Object.assign(() => {}, { flush: async () => {}, action });
+    const box = rollButtons(original, { ...host, playerId: 'player-a',
+      sheet: async id => id === 'actor-a' ? { ...sheet, save } : undefined }) as unknown as FakeElement;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await box.queryAll('button').find(button => button.text === 'Retry with advantage')!.click();
+    expect(action).not.toHaveBeenCalled();
+    expect(sent).toHaveLength(0);
+    expect(host.toast).toHaveBeenCalledWith("The rolling character's sheet is unavailable. Ask its player to make the reroll.");
+  });
+
   it('does not reuse consumed help dice or spend the helper Experience again on a reroll', () => {
     const message = { ...original, source: 'action,option:effect:help-1:help',
       helpAlly: { highest: 8, helpers: 1, sourceKeys: ['effect:help-1'], labels: ['Help from Helper', 'Help from Helper - Tactician: Teamwork'] },

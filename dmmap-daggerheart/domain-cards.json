@@ -6943,12 +6943,13 @@
      {
       "id": "advantage",
       "label": "Runic Adrenaline: d8 advantage (HP marked)",
-      "roll": "action",
+      "roll": "duality",
       "condition": {
        "markedHp": 1
       },
       "advantageDie": 8,
-      "defaultOn": true
+      "defaultOn": true,
+      "required": true
      }
     ],
     "conditionalRollTriggers": [

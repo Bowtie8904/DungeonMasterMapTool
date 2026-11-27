@@ -12,7 +12,7 @@ import {
 import {
   ActionDef, ActiveEffect, Automation, RollBonus, StatSource, activeFeatures, activeWeapons, actionBlocker, actionCost, addEffect, asksSpellcastRoll, consumeBonus, costText,
   availableRollOptions, commitRollOptions, configuredRollOption, criticalBonus, damageContributions, damageRollFormula, derivedStats, deathrunProficiency, evalValue, experienceModifier, resourceDefinitions, rollBonus, rollExperienceRefund, rollOptionQuantityMax,
-  damagePool, effectCounterMax, effectCounterText, effectiveAdvantage, maximizeDamageDie, maximizableDamageDice, poolDice, rollLocal, rollOptionDice, rollOptionLabel, optionRowParts, actionButtonText, actionTextVars, blockedTitle, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, setTrackSlots, sheetActions, signedDice, statBreakdown, syncDerived, traitContributions, traitTotal, usesLeft, usesMax,
+  damagePool, effectCounterMax, effectCounterText, effectiveAdvantage, maximizeDamageDie, maximizableDamageDice, poolDice, rollAdvantageDie, rollDisadvantageDie, rollLocal, rollOptionDice, rollOptionLabel, optionRowParts, actionButtonText, actionTextVars, blockedTitle, rollTargets, routeDeathAction, runActionDetailed, selectedRollBonus, selectionBlocker, setTrackSlots, sheetActions, signedDice, statBreakdown, syncDerived, traitContributions, traitTotal, usesLeft, usesMax,
 } from './engine';
 import { comboDie, criticalMeleeBonus, refocus, shiftStance } from './brawler';
 import { chooseStance } from './brawler-view';
@@ -41,7 +41,7 @@ import { MAX_LEVEL, replaceAncestry, shortSubclass } from './rules';
 import { chooseAncestryFeature } from './ancestry-choice';
 import { openTestingEditor } from './testing-view';
 import { openRestDialog } from './rest-view';
-import { ADVANTAGE_DICE, openHelpAlly, type HelpAllyChoice, type HelpAllyRequest } from './help-ally';
+import { openHelpAlly, type HelpAllyChoice, type HelpAllyRequest } from './help-ally';
 import { openDamageDialog } from './damage-view';
 import { canMakeDeathMove, hpHealingFloor, type DeathMove, type DeathMoveExtras, type DeathOptions } from './death';
 import { openDeathDialog, openScarsDialog } from './death-view';
@@ -2566,14 +2566,6 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     return b;
   });
   const adv = el('div', { class: 'dh-adv', role: 'group', ariaLabel: 'Roll with' }, ...advButtons);
-  const advantageDie = el('select', { ariaLabel: 'Advantage die' }, ...ADVANTAGE_DICE.map(size => el('option', { value: String(size) }, `d${size}`)));
-  const disadvantageDie = el('select', { ariaLabel: 'Disadvantage die' }, ...ADVANTAGE_DICE.map(size => el('option', { value: String(size) }, `d${size}`)));
-  advantageDie.value = '6';
-  const advantageDieControl = el('label', {}, 'Own advantage die', advantageDie);
-  disadvantageDie.value = String(c.effects.find(effect => effect.disadvantageDie)?.disadvantageDie ?? 6);
-  let manualAdvantageDie = false;
-  advantageDie.addEventListener('change', () => { manualAdvantageDie = true; update(); });
-  disadvantageDie.addEventListener('change', () => update());
   const ownAdvantage = el('input', { type: 'checkbox', ariaLabel: 'Also roll your own advantage die' });
   ownAdvantage.addEventListener('change', () => { suggest(true); update(); });
   const ownAdvantageRow = el('label', { class: 'dh-roll-option' }, ownAdvantage, 'Also roll your own advantage die (another source of advantage)');
@@ -2652,6 +2644,10 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
         && !supportsZeroKeptDice?.()) return 'Update the host to maximize a die in this damage pool.';
     const active = availableRollOptions(c, currentTargets(), weapon ?? actionWeapon, outcome);
     if (selected().some((s) => !active.some((a) => a.key === s.key && a.option.id === s.option.id && a.active === s.active))) return 'A selected bonus changed. Reopen this roll dialog.';
+    if (active.some(a => a.option.required && hostSupportsOption(a.key)
+        && (a.active || !actionBlocker(c, a.key, a.automation, a.option))
+        && !selected().some(s => s.key === a.key && s.option.id === a.option.id)))
+      return 'A required bonus changed. Reopen this roll dialog.';
     if (pendingAction) {
       const changed = pendingAction.blocker?.();
       if (changed) return changed;
@@ -2704,10 +2700,10 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     const currentSelections = options.filter((_, i) => checked.has(i));
     const hasHelp = currentSelections.some(s => s.option.helpAllyDie);
     ownAdvantageRow.hidden = !hasHelp;
-    advantageDieControl.hidden = hasHelp && !ownAdvantage.checked;
-    if (!manualAdvantageDie) advantageDie.value = String(Math.max(6, ...currentSelections.map(s => s.option.advantageDie ?? 6)));
-    advButtons[0].textContent = hasHelp ? 'Advantage (help)' : `Advantage (+d${advantageDie.value})`;
-    advButtons[2].textContent = `Disadvantage (-d${disadvantageDie.value})`;
+    const advantageDie = rollAdvantageDie(currentSelections);
+    advButtons[0].textContent = hasHelp ? ownAdvantage.checked ? `Advantage (help + d${advantageDie})` : 'Advantage (help)'
+      : `Advantage (+d${advantageDie})`;
+    advButtons[2].textContent = `Disadvantage (-d${rollDisadvantageDie(c)})`;
     const continuing = !!runEffect() && options.some((s, i) => checked.has(i) && s.option.deathrun);
     for (const [i, check] of checks) if (!options[i].option.deathrun && continuing) {
       check.checked = false; checked.delete(i); check.disabled = true;
@@ -2826,6 +2822,8 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
     const actualAdvantage = effectiveAdvantage(requestedAdvantage, selected());
     const helpers = selected().filter(s => s.option.helpAllyDie);
     const rolledAdvantage = helpers.length && actualAdvantage === 1 && !ownAdvantage.checked ? 0 : actualAdvantage;
+    const advantageDie = rollAdvantageDie(selected());
+    const disadvantageDie = rollDisadvantageDie(c);
     const ignored = selected().filter((s) => s.option.ignoreDisadvantage);
     const weaponRules = weapon ? weaponDamageRules(c, weapon) : undefined;
     const ruleEffect = weaponRules ? c.effects.find(effect => effect.name === weaponRules.label || effect.damage?.label === weaponRules.label) : undefined;
@@ -2859,14 +2857,14 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
         ...(selected().some(s => s.option.linkedDamageTrait) ? [`linkedDamage:${selected().reduce((n, s) => n + (s.option.linkedDamageTrait ? (s.option.linkedDamageMultiplier ?? 2) * traitTotal(c, s.option.linkedDamageTrait) : 0), 0)}`] : [])].join(','),
       ...(helpers.length ? { helpAdvantage: actualAdvantage === 1 } : {}),
       expression: dualityExpression(total, rolledAdvantage, selected().some((s) => s.option.hopeDie === 20) ? 20 : 12,
-        selected().some((s) => s.option.fearDie === 20) ? 20 : 12, Number(advantageDie.value) as import('./data').AdvantageDie, Number(disadvantageDie.value) as import('./data').AdvantageDie)
+        selected().some((s) => s.option.fearDie === 20) ? 20 : 12, advantageDie, disadvantageDie)
         + b.dice.map(signedDice).join(''),
       kind: 'duality',
       contributions: [
         { label: 'Hope die', expression: selected().some((s) => s.option.hopeDie === 20) ? '1d20' : '1d12' },
         { label: 'Fear die', expression: selected().some((s) => s.option.fearDie === 20) ? '1d20' : '1d12' },
         ...(rolledAdvantage === 0 ? [] : [{ label: rolledAdvantage === 1 ? 'Advantage' : 'Disadvantage',
-          expression: rolledAdvantage === 1 ? `1d${advantageDie.value}` : `-1d${disadvantageDie.value}` }]),
+          expression: rolledAdvantage === 1 ? `1d${advantageDie}` : `-1d${disadvantageDie}` }]),
         ...(requestedAdvantage !== actualAdvantage ? [{ label: 'Disadvantage ignored', expression: '0',
           notes: ignored.map((s) => ({ label: rollOptionLabel(s), impact: 'Disadvantage die not rolled' })) }] : []),
         ...currentTrait(),
@@ -2931,6 +2929,10 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
       });
       checked.clear();
       values.clear();
+      traitChoices.clear();
+      dieChoices.clear();
+      dieSizeChoices.clear();
+      checks.clear();
       bonus = rollBonus(c, currentTargets(), actionWeapon, false);
       options = currentOptions();
       optionFieldset.replaceChildren(el('legend', {}, 'Optional bonuses (select all that apply)'), ...choices());
@@ -2953,7 +2955,6 @@ export function openRollDialog(host: HTMLElement, c: CharacterSheet, label: stri
       applied,
       ...(weapon ? [el('label', { class: 'dh-roll-option' }, crit, el('span', {}, 'Critical damage (adds the maximum of the damage dice)'))] : [
         el('div', { class: 'muted' }, 'Duality roll: Hope d12 + Fear d12 + modifier'),
-        el('div', { class: 'row' }, advantageDieControl, el('label', {}, 'Disadvantage die', disadvantageDie)),
         ownAdvantageRow,
         el('div', { class: 'dh-adv-row' }, el('span', {}, 'Roll with'), adv),
         ...(canChooseReaction ? [el('div', { class: 'dh-adv-row' }, el('span', {}, 'Roll type'),

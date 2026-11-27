@@ -852,7 +852,13 @@ overrides: Epic Poetry d10, active Household Friend Companion d8, and marked-HP 
 The host derives the strongest applicable override from saved active features, heritage, loadout,
 weapons, armor and inventory; selected Help features retain their costs and Spellcast restrictions.
 Passive overrides also apply to free-Hope alternatives. Vaulted cards and empty items do not apply.
-Phantom Fern Shoots' Lightheaded effect sets `disadvantageDie:8`.
+Character action, attack, spellcast and reaction dialogs retain their Advantage / Normal / Disadvantage
+controls but have no die-size dropdowns. Own dice default to d6; marked-HP Runic Adrenaline automatically
+uses d8 on action and reaction rolls, and Phantom Fern Shoots' Lightheaded effect sets `disadvantageDie:8`.
+Trigger-added dice on full-Duality rerolls use the rolling character's current applicable override. If that
+character's sheet is unavailable, the reroll is blocked before the feature's cost is paid.
+Other feature-specific die choices, such as Hero's Powder, are unchanged. If a mandatory option changes while
+the dialog is open, reopen the dialog before rolling.
 The recipient's immutable, manually dismissible help effect exposes a default-on action option
 (`helpAllyDie`, `hostOwned`), excluding reaction/damage. The die is snapshotted in the buff and shown as
 read-only, not recomputed from either character at roll time. Legacy request die/description fields

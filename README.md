@@ -149,7 +149,7 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   the entire weapon damage result, including bonuses. Each breakdown row shows its original result;
   one Smite row shows the additional damage from doubling all of them.
   Signature Move uses a d20 Hope die and linked success recovery. Runic Adrenaline
-  offers a d8 advantage die with marked HP and its paid d8 after the trait roll. Never Upstaged and Sigil
+  automatically uses a d8 advantage die with marked HP and offers its paid d8 after the trait roll. Never Upstaged and Sigil
   spend their complete pools; Not Good Enough rerolls damage 1s/2s from an action on the damage result.
 - **Blade and Midnight roll actions:** Whirlwind, Glancing Blow (half Proficiency rounded up),
   and successful-Spellcast Eclipse offer chat buttons. Versatile Fighter offers a highest-trait
@@ -448,6 +448,8 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   The sheet opens as a draggable window over the map (Character, Domain Cards, Equipment, Loot,
   Background tabs) and can be popped out to its own browser window. Trait, Hope-feature and Experience rolls open
   a duality roll popup (advantage, Experience, difficulty) and appear in the chat with Hope/Fear dice and outcome.
+  Choose Advantage, Normal or Disadvantage; the die size is determined automatically (normally d6) from the
+  applicable features and effects, including on reaction rolls. Feature-specific bonus-die choices remain available.
   All six traits stack vertically in a persistent left sidebar, visible on every tab. Experiences are in Background.
   The Character tab places class/subclass features in the left column and heritage features in the right;
   these columns stack when the sheet is narrow. Evasion, Armor, Thresholds, HP and Stress remain in a compact main-area row.
@@ -593,8 +595,8 @@ The browser's simplified-lighting option still uses flat shapes for performance.
   the largest die, including with free-Hope help; the die stays fixed even if the helper's features change.
   **Helper** armor gives
   both participants +1 Evasion on the first Hope-paid help each scene. **Tactician** lets the recipient
-  spend 1 Hope on one of the helper's Experiences. **Lightheaded** from Phantom Fern Shoots defaults the
-  separate, editable disadvantage die to d8. Unsupported older hosts show an update hint.
+  spend 1 Hope on one of the helper's Experiences. **Lightheaded** from Phantom Fern Shoots changes the
+  separate disadvantage die to d8 automatically. Unsupported older hosts show an update hint.
 - **Beastbound Ranger companions:** the **Companion** tab appears between Character and Domain Cards.
   The Character Mancer creates your animal; existing and multiclass Beastbound characters use **Create companion**
   to open a focused companion wizard, including earned training. Track name, animal, Experiences, Evasion,

@@ -178,7 +178,9 @@ describe('domain-card cost and limit corrections', () => {
     load(c, 'runic-adrenaline');
     expect(availableRollOptions(c, ['action', 'trait:Strength'])).toHaveLength(0);
     c.hp.on = 1;
-    expect(availableRollOptions(c, ['action', 'trait:Strength'])[0].option.advantageDie).toBe(8);
+    expect(availableRollOptions(c, ['action', 'trait:Strength'])[0].option)
+      .toMatchObject({ advantageDie: 8, required: true, roll: 'duality' });
+    expect(availableRollOptions(c, ['reaction', 'trait:Strength'])[0].option.advantageDie).toBe(8);
     const triggers = availableRollTriggers(c, { source: 'action,trait:Strength', hope: 3, fear: 6, total: 9 });
     expect(triggers).toHaveLength(1);
     expect(triggers[0].trigger).toMatchObject({ addDice: '1d8', cost: { hp: 1 } });

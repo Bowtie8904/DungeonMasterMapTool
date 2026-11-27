@@ -102,7 +102,8 @@ describe('community catalog automation', () => {
     vi.stubGlobal('document', { body, createElement: (tag: string) => new DialogElement(tag), addEventListener: () => undefined, removeEventListener: () => undefined });
     const send = vi.fn((_request: RollRequest) => sent);
     openRollDialog(body as unknown as HTMLElement, c, 'Action', [], rollBonus(c, ['action']), send, () => undefined, ['action']);
-    const checkbox = body.find(element => element.tag === 'input' && element.type === 'checkbox');
+    const checkbox = body.find(element => element.tag === 'fieldset')
+      .find(element => element.tag === 'input' && element.type === 'checkbox');
     checkbox.checked = true;
     checkbox.fire('change');
     const go = body.find(element => element.tag === 'button' && element.text === 'Roll to chat');

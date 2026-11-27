@@ -450,7 +450,7 @@
     },
     {
      "name": "Kick",
-     "text": "When you succeed on an attack against a target within Melee range, you can **mark aStress** to kick yourself off them, dealing an extra **2d6** damage and knocking back either yourself or the target to Very Close range.",
+     "text": "When you succeed on an attack against a target within Melee range, you can **mark a Stress** to kick yourself off them, dealing an extra **2d6** damage and knocking back either yourself or the target to Very Close range.",
      "automation": {
       "rollOptions": [
        {

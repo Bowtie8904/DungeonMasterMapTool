@@ -2,6 +2,7 @@
 // Pure functions over the CharacterSheet so they can be unit-tested without a DOM.
 
 import { Advantage, CharacterSheet, Feature, Weapon, TraitName, TRAIT_ORDER, signed, tierOf } from './data';
+import type { AdvantageDie } from './data';
 import type { RollContribution } from '../protocol';
 import type { MitigationOption } from './damage';
 import { hpHealingFloor, syncDeathState } from './death';
@@ -337,7 +338,7 @@ export interface RollOption extends ActionDef {
   fearDie?: 20;
   input?: { label: string; default: number; min: number; max: number; source?: 'attackFear' };
   quantity?: { resource: string; label: string; max?: number };
-  /** Preselected and cannot be unticked while it can be paid (Painful). */
+  /** Preselected and cannot be unticked while it applies and can be paid. */
   required?: boolean;
   /** Attack option: that attack's damage uses this die size for the weapon's dice (Devastating). */
   damageDie?: number;
@@ -368,7 +369,7 @@ export interface RollTrigger extends ActionDef {
   repeatable?: boolean;
   magicAction?: boolean;
   damageDice?: 'reroll' | 'double';
-  /** Rerolls (`reroll: 'duality'`) with an added -d6 disadvantage die (Rebounding). */
+  /** Rerolls (`reroll: 'duality'`) with an added disadvantage die (Rebounding). */
   disadvantage?: boolean;
   choices?: Array<{ id: string; label: string; texts?: ActionTexts; addDice?: string; steps?: Step[] }>;
   dualityDieBonus?: { die: 'hope' | 'fear'; value: number };
@@ -1363,6 +1364,18 @@ export function suggestedAdvantage(selected: AvailableRollOption[]): Advantage {
   const balance = selected.filter(s => s.option.advantage === 'advantage').length
     - selected.filter(s => s.option.advantage === 'disadvantage').length;
   return balance === 0 ? 0 : balance > 0 ? 1 : -1;
+}
+
+export function rollAdvantageDie(selected: AvailableRollOption[]): AdvantageDie {
+  const die = selected.reduce<AdvantageDie | undefined>((current, { option }) => {
+    const candidate = option.helpAllyDie ? undefined : option.advantageDie;
+    return candidate !== undefined && (current === undefined || candidate > current) ? candidate : current;
+  }, undefined);
+  return die ?? 6;
+}
+
+export function rollDisadvantageDie(c: CharacterSheet): AdvantageDie {
+  return c.effects.find(effect => effect.disadvantageDie !== undefined)?.disadvantageDie ?? 6;
 }
 
 export function effectiveAdvantage(requested: Advantage, selected: AvailableRollOption[]): Advantage {

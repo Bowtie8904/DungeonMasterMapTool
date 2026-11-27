@@ -2550,6 +2550,12 @@ history. Explicit Save exposes a persistence completion future for subsequent ma
 
 ## 3.41 Online Play: DM-hosted browser clients (in progress)
 
+### Automatic advantage and disadvantage dice
+- Remove the advantage- and disadvantage-die size dropdowns from character Duality roll dialogs. Keep the existing Advantage / Normal / Disadvantage controls and situational roll choices; the buttons and roll breakdown show the automatically determined die. Unrelated feature-specific die choices remain available.
+- Default each own advantage or disadvantage die to d6. Apply active, applicable roll-option die overrides automatically; marked-HP Runic Adrenaline is a mandatory passive d8 override for both action and reaction rolls, and Lightheaded changes the disadvantage die to d8 while its effect is active. When several explicit own-advantage overrides apply, use the largest; helper dice remain separately snapshotted and are never changed by the recipient's features.
+- If an applicable mandatory roll option changes while the dialog is open, prevent a stale roll and ask the player to reopen it. Existing saved sheets receive the updated rules through the normal compendium refresh.
+- Trigger-added advantage or disadvantage dice on full-Duality rerolls use the rolling character's applicable current passive die override or effect. If that character's sheet is unavailable, show an actionable error before paying instead of guessing its die. Preserve the existing roll/feature choices, helper-die consumption, and legacy request and history formats. This changes neither settings nor Online Play or DM Link compatibility versions.
+
 ### Help an Ally
 - Add a standard **Help an Ally** action directly below the sheet's Short/Long rest controls. A themed dialog selects an active, saved player character other than the helper and any Help feature to use. Do not offer a die selector or a description text field. Spend 1 Hope on the host, atomically with the recipient's removable, persisted buff and public report.
 - Give the Help feature dropdown enough width to show the standard option, while allowing it to shrink on narrow screens.

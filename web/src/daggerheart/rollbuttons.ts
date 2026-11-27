@@ -9,7 +9,7 @@ import { openDeathRecovery } from './death-view';
 import type { ChatMessage, RollMessage, RollSource } from '../protocol';
 import type { CharacterSheet } from './data';
 import { formatText } from './texts';
-import { actionBlocker, actionButtonText, actionTextVars, activeFeatures, automationSources, availableRollTriggers, costText, evalValue, resourceDefinitions, rollTriggerSection, runAction, usesLeft } from './engine';
+import { actionBlocker, actionButtonText, actionTextVars, activeFeatures, activeWeapons, automationSources, availableRollOptions, availableRollTriggers, costText, evalValue, resourceDefinitions, rollAdvantageDie, rollDisadvantageDie, rollTriggerSection, runAction, usesLeft } from './engine';
 import { activeCardSources } from './copycat';
 import { rollSourceFor } from './roll-source';
 import type { Automation, AvailableRollTrigger, RollActionSection, RollContext } from './engine';
@@ -178,7 +178,7 @@ export function attackDamageContext(m: Pick<RollMessage, 'source'>): { profile?:
 }
 
 /** Request repeating the roll (optionally with advantage) or rolling only the Hope Die again. */
-export function rerollRequest(m: RollMessage, t: AvailableRollTrigger, original?: RollRequest): RollRequest | null {
+export function rerollRequest(m: RollMessage, t: AvailableRollTrigger, original?: RollRequest, roller?: CharacterSheet): RollRequest | null {
   const label = `${m.label ?? 'Roll'} - ${t.trigger.texts?.roll ? formatText(t.trigger.texts.roll, triggerVars(t)) : t.trigger.label}`.slice(0, 80);
   const base = { ref: newRef(), actorId: m.actorId, weapon: m.weapon, rollSource: m.rollSource ?? original?.rollSource };
   if (t.trigger.reroll === 'hope') return { ...base, label, expression: m.expression.startsWith('1d20+') ? '1d20' : '1d12',
@@ -204,11 +204,18 @@ export function rerollRequest(m: RollMessage, t: AvailableRollTrigger, original?
   const advantage = t.trigger.advantage;
   const disadvantage = !advantage && t.trigger.disadvantage;
   const tags = (m.source ?? '').split(',').filter(tag => tag && !m.helpAlly?.sourceKeys.some(key => tag.startsWith(`option:${key}:`)));
+  const targets = tags.includes('action') || tags.includes('reaction') ? tags : ['action', ...tags];
+  const weapon = roller && advantage ? activeWeapons(roller).find(candidate => candidate.name === m.weapon) : undefined;
+  const selected = roller && advantage ? availableRollOptions(roller, targets, weapon).filter(option =>
+    (option.option.required || tags.includes(`option:${option.key}:${option.option.id}`))
+      && !actionBlocker(roller, option.key, option.automation, option.option)) : [];
+  const advantageDie = rollAdvantageDie(selected);
+  const disadvantageDie = roller ? rollDisadvantageDie(roller) : 6;
   return {
     ...original, ...base, label, source: (tags.includes('reroll') || !tags.length ? tags : [...tags, 'reroll']).join(','),
-    expression: original.expression + (advantage ? '+1d6' : disadvantage ? '-1d6' : ''),
-    contributions: [...(original.contributions ?? []), ...(advantage ? [{ label: `Advantage - ${t.source}`.slice(0, 120), expression: '1d6' }]
-      : disadvantage ? [{ label: `Disadvantage - ${t.source}`.slice(0, 120), expression: '-1d6' }] : [])],
+    expression: original.expression + (advantage ? `+1d${advantageDie}` : disadvantage ? `-1d${disadvantageDie}` : ''),
+    contributions: [...(original.contributions ?? []), ...(advantage ? [{ label: `Advantage - ${t.source}`.slice(0, 120), expression: `1d${advantageDie}` }]
+      : disadvantage ? [{ label: `Disadvantage - ${t.source}`.slice(0, 120), expression: `-1d${disadvantageDie}` }] : [])],
   };
 }
 
@@ -751,6 +758,9 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
             return;
           }
           try {
+            if (t.trigger.reroll === 'duality' && !t.trigger.hostRollAction
+                && (t.trigger.advantage || t.trigger.disadvantage) && !rolledActor)
+              throw new Error("The rolling character's sheet is unavailable. Ask its player to make the reroll.");
             let targetActorId: string | undefined;
             if (t.trigger.target === 'actor' || t.trigger.target === 'anyActor') {
               const targets = (host.targetActors?.() ?? []).filter(actor => !actor.disabled
@@ -768,7 +778,7 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
               roll: { id: m.id, ts: m.ts },
             });
             if (t.trigger.reroll && !t.trigger.hostRollAction) {
-              const request = rerollRequest(m, t);
+              const request = rerollRequest(m, t, undefined, rolledActor?.sheet.character);
               if (!request) throw new Error('The original roll is no longer available to repeat.');
               if (!host.send(request)) throw new Error('Not connected. The reroll was not sent.');
             }
