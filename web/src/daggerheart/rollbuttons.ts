@@ -226,7 +226,8 @@ function benefitButtons(m: ChatMessage | RollMessage, host: RollButtonHost): HTM
           if ((benefit.sourceOnly || benefit.cost || benefit.steps.some(step => step.effect?.requiresSourceEffect))
               && !host.supportsBloodAutomation?.()) continue;
           if ((benefit.transferStress || benefit.steps.some(step => step.effect?.rest)) && !host.supportsDomainCardAutomation?.()) continue;
-          const button = el('button', { type: 'button', class: 'small' }, `${actionButtonText(benefit.texts?.chatButton, benefit.label, { source: sheet.character.name, label: benefit.label, actor: sheet.character.name }, '')} · ${sheet.character.name}`);
+          const button = el('button', { type: 'button', class: 'small' },
+            actionButtonText(benefit.texts?.chatButton, benefit.label, { source: sheet.character.name, label: benefit.label, actor: sheet.character.name }, ''));
           const blocker = actionBlocker(sheet.character, '', {}, { id: benefit.id, label: benefit.label, cost: benefit.cost });
           button.disabled = pending || !!blocker;
           if (blocker) button.title = blocker;
@@ -351,7 +352,7 @@ function restButtons(m: ChatMessage, host: RollButtonHost): HTMLElement | null {
           if (die.used) return;
           const resource = die.resource === 'hp' ? 'HP' : die.resource === 'stress' ? 'Stress' : die.resource === 'armor' ? 'Armor' : undefined;
           const button = el('button', { type: 'button', class: 'small' },
-            `${feature.name}: reroll ${resource ?? `die ${index + 1}`} ${die.expression} · ${sheet.character.name}`);
+            `${feature.name}: reroll ${resource ?? `die ${index + 1}`} ${die.expression}`);
           button.disabled = claiming;
           button.addEventListener('click', async () => {
             if (claiming) return;
@@ -430,7 +431,8 @@ function incomingReactionButtons(m: ChatMessage, host: RollButtonHost): HTMLElem
       if (!sheet) continue;
       for (const t of availableRollTriggers(sheet.character, { source: 'incomingDamage', hope: 0, fear: 0, total: 0, kind: 'damage' })) {
         if (t.trigger.audience !== 'ally' || !t.trigger.actionRoll) continue;
-        const button = el('button', { type: 'button', class: 'small' }, `${actionButtonText(t.trigger.texts?.chatButton, t.trigger.label, triggerVars(t), '')} · ${sheet.character.name}`);
+        const button = el('button', { type: 'button', class: 'small' },
+          actionButtonText(t.trigger.texts?.chatButton, t.trigger.label, triggerVars(t), ''));
         const blocked = actionBlocker(sheet.character, t.key, t.automation, t.trigger);
         button.disabled = !!blocked;
         button.title = blocked ?? 'Use when this ally is within Close range and you can see the attacker.';
@@ -617,7 +619,7 @@ export function rollButtons(m: RollMessage | ChatMessage, host: RollButtonHost):
         const cost = costText(t.trigger.cost, c);
         const section = rollTriggerSection(t, m.source ?? '');
         const b = el('button', { class: SECTION_BUTTON_CLASS[section], type: 'button' },
-          `${actionButtonText(t.trigger.texts?.chatButton, t.trigger.label, { ...triggerVars(t), actor: c.name }, cost)}${featureActorId !== actorId ? ` · ${c.name}` : ''}`);
+          actionButtonText(t.trigger.texts?.chatButton, t.trigger.label, { ...triggerVars(t), actor: c.name }, cost));
         const blocked = actionBlocker(c, t.key, t.automation, t.trigger);
         const unsupported = t.trigger.splendorAction && !host.supportsSplendorAutomation?.()
           ? 'Update the host to use Splendor automation.'

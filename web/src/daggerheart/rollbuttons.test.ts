@@ -217,7 +217,7 @@ describe('cross-player roll buttons', () => {
     const own = rollButtons({ ...message, actorId: 'caster' }, supported) as unknown as FakeElement;
     const ordinary = rollButtons({ ...message, incomingDamage: undefined }, supported);
     await new Promise(resolve => setTimeout(resolve, 0));
-    expect(ally.text).toContain('Hideous Retribution reaction');
+    expect(ally.queryAll('button')[0].text).toBe('Hideous Retribution reaction');
     expect(own.text).not.toContain('Hideous Retribution');
     expect(ordinary).toBeNull();
     await ally.queryAll('button')[0].click();
@@ -262,6 +262,7 @@ describe('cross-player roll buttons', () => {
     const reaction = rollButtons({ ...original, source: 'reaction' }, supported) as unknown as FakeElement;
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(ally.text).toContain('Reassurance');
+    expect(ally.queryAll('button').map(button => button.text)).toEqual(['Reassurance']);
     expect(own.text).not.toContain('Reassurance');
     expect(reaction.text).not.toContain('Reassurance');
     await ally.queryAll('button').find(button => button.text.includes('Reassurance'))!.click();
@@ -788,7 +789,7 @@ describe('cross-player roll buttons', () => {
     const card = render('ally-player');
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(card.className).toContain('action-report');
-    expect(card.queryAll('button').map(button => button.text)).toEqual([`${label} · Ally`]);
+    expect(card.queryAll('button').map(button => button.text)).toEqual([label]);
     expect(render('bard-player').queryAll('button')).toHaveLength(0);
     await card.queryAll('button')[0].click();
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ actorId: 'a', benefitId: id, roll: { id: 7, ts: 100 } });
@@ -807,7 +808,7 @@ describe('cross-player roll buttons', () => {
     const card = renderLogEntry({ kind: 'chat', m: message }, 'ally-player', undefined, undefined,
       m => rollButtons(m, { ...host, playerId: 'ally-player', supportsPartyFeatures: () => true, sessionId: () => 'session' })) as unknown as FakeElement;
     await new Promise(resolve => setTimeout(resolve, 0));
-    expect(card.queryAll('button').map(button => button.text)).toEqual(['Clear 1 HP · Ally']);
+    expect(card.queryAll('button').map(button => button.text)).toEqual(['Clear 1 HP']);
   });
 
   it('renders paid Bloodbath benefits on the roll and rejects unsupported-host controls', async () => {
@@ -847,7 +848,7 @@ describe('cross-player roll buttons', () => {
       ] } }, { ...host, playerId: 'caster-player', supportsPartyFeatures: () => true, supportsBloodAutomation: () => true,
       sessionId: () => 'session' }) as unknown as FakeElement;
     await new Promise(resolve => setTimeout(resolve, 0));
-    expect(box.queryAll('button').map(button => button.text)).toEqual(['Target died: recover 2 HP · Caster']);
+    expect(box.queryAll('button').map(button => button.text)).toEqual(['Target died: recover 2 HP']);
   });
 
   it('offers performance claims to eligible allies once per player, not once per actor or option', async () => {
@@ -1111,7 +1112,7 @@ describe('cross-player roll buttons', () => {
     }, host as never) as unknown as FakeElement;
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(box.queryAll('button')).toHaveLength(2);
-    expect(box.queryAll('button')[1].text).toBe('Oasis: reroll Stress 1d4+1 · Dune');
+    expect(box.queryAll('button')[1].text).toBe('Oasis: reroll Stress 1d4+1');
     await box.queryAll('button')[1].click();
     expect(JSON.parse(fetch.mock.calls[0][1]!.body as string)).toEqual({
       actorId: 'actor-a', key: 'feat:Oasis', actionId: 'reroll', roll: { id: 33, ts: 1200 }, restDie: 1,
@@ -1281,7 +1282,7 @@ describe('cross-player roll buttons', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     const buttons = box.queryAll('button');
     expect(buttons).toHaveLength(1);
-    expect(buttons[0].text).toContain('Alice');
+    expect(buttons[0].text).toBe('Change Fear into Hope');
     await buttons[0].click();
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(JSON.parse(String(fetch.mock.calls[0][1]?.body))).toEqual({
