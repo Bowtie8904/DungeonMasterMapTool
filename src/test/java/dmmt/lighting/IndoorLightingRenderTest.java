@@ -247,14 +247,14 @@ class IndoorLightingRenderTest {
             CanvasMapRenderer.setLightFlickerEnabled(false);
             double steady = ambient(renderer, project, true).getPixelReader().getColor(100, 100).getBrightness();
             assertTrue(steady > unlit + 0.5);
-            assertTrue(coreOpacity(renderer, project, 100, 100) > 0.05, "Indoor bright cores remain visible at Day");
+            assertTrue(coreBrightness(renderer, project, 100, 100) > 0.05, "Indoor bright cores remain visible at Day");
             CanvasMapRenderer.setLightFlickerEnabled(true);
             double flicker = ambient(renderer, project, true).getPixelReader().getColor(100, 100).getBrightness();
             assertTrue(flicker < steady - 0.01);
             PerformanceMode.setEnabled(true);
             engine.update(project);
             assertTrue(ambient(renderer, project, true).getPixelReader().getColor(100, 100).getBrightness() > 0.99);
-            assertEquals(0, coreOpacity(renderer, project, 100, 100));
+            assertEquals(0, coreBrightness(renderer, project, 100, 100));
             PerformanceMode.setEnabled(false);
             engine.update(project);
             light.setX(100);
@@ -265,7 +265,7 @@ class IndoorLightingRenderTest {
             for (String preset : new String[]{"DAY", "DAWN", "DUSK"}) {
                 project.getLighting().setTimeOfDayPreset(preset);
                 assertEquals(unlit, ambient(renderer, project, true).getPixelReader().getColor(100, 100).getBrightness(), 0.01);
-                assertEquals(0, coreOpacity(renderer, project, 20, 20));
+                assertEquals(0, coreBrightness(renderer, project, 20, 20));
             }
             project.getLighting().setTimeOfDayPreset("NIGHT");
             assertTrue(ambient(renderer, project, true).getPixelReader().getColor(100, 100).getBrightness() > unlit);
@@ -332,12 +332,13 @@ class IndoorLightingRenderTest {
         return canvas.snapshot(null, null);
     }
 
-    private static double coreOpacity(CanvasMapRenderer renderer, DmProject project, int x, int y) {
+    private static double coreBrightness(CanvasMapRenderer renderer, DmProject project, int x, int y) {
         Canvas canvas = new Canvas(200, 200);
         renderer.renderBrightCore(canvas.getGraphicsContext2D(), project, 200, 200, camera(), true);
         SnapshotParameters parameters = new SnapshotParameters();
         parameters.setFill(Color.TRANSPARENT);
-        return canvas.snapshot(parameters, null).getPixelReader().getColor(x, y).getOpacity();
+        Color color = canvas.snapshot(parameters, null).getPixelReader().getColor(x, y);
+        return Math.max(color.getRed(), Math.max(color.getGreen(), color.getBlue())) * color.getOpacity();
     }
 
     private static void runFx(Runnable action) throws Exception {

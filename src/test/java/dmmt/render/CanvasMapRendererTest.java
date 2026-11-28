@@ -327,6 +327,43 @@ class CanvasMapRendererTest {
     }
 
     @Test
+    void brightCoreAddsLikeBrowserLighterCompositing() throws Exception {
+        FutureTask<Void> task = new FutureTask<>(() -> {
+            DmProject project = DmProject.builder().build();
+            project.getLighting().setTimeOfDayPreset("NIGHT");
+            project.getLighting().setBrightCore(0.15);
+            project.getFog().setEnabled(false);
+            for (String id : new String[]{"a", "b"}) {
+                project.getLighting().getLights().add(DmProject.LightSource.builder().id(id)
+                        .x(64).y(48).range(200).intensity(1).color("#ffffff")
+                        .flicker(DmProject.Flicker.builder().enabled(false).build()).build());
+            }
+            LightingEngine engine = new LightingEngine();
+            engine.update(project);
+            CanvasMapRenderer renderer = new CanvasMapRenderer(engine);
+            var camera = DmProject.CameraState.builder().x(64).y(48).zoom(1).build();
+            for (double base : new double[]{0.2, 0.6}) {
+                Canvas under = new Canvas(128, 96);
+                under.getGraphicsContext2D().setFill(Color.gray(base));
+                under.getGraphicsContext2D().fillRect(0, 0, 128, 96);
+                Canvas core = new Canvas(128, 96);
+                core.setBlendMode(BlendMode.ADD);
+                renderer.renderBrightCore(core.getGraphicsContext2D(), project, 128, 96, camera, true);
+                StackPane stack = new StackPane(under, core);
+                new Scene(stack, 128, 96);
+                var pixels = stack.snapshot(null, null).getPixelReader();
+                // Browser 'lighter': base + sum of colour * peak per overlapping core.
+                assertEquals(base + 2 * 0.15, pixels.getColor(64, 48).getRed(), 0.02,
+                        "Overlapping cores add their full strength over a " + base + " base");
+                assertEquals(base, pixels.getColor(2, 2).getRed(), 0.01, "Outside the cores the map is unchanged");
+            }
+            return null;
+        });
+        Platform.runLater(task);
+        task.get(20, TimeUnit.SECONDS);
+    }
+
+    @Test
     void inactiveDmLayersHideAndRestoreWithoutChangingResolution() throws Exception {
         FutureTask<Void> task = new FutureTask<>(() -> {
             DmProject project = DmProject.builder().build();

@@ -20,6 +20,7 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.image.Image;
 import javafx.scene.image.PixelFormat;
 import javafx.scene.image.WritableImage;
+import javafx.scene.effect.BlendMode;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.CycleMethod;
 import javafx.scene.paint.ImagePattern;
@@ -2245,7 +2246,13 @@ public class CanvasMapRenderer {
             gc.getCanvas().setVisible(cache.hasContent);
             return;
         }
+        // JavaFX's node-level ADD only adds exactly for opaque pixels; translucent pixels are composited
+        // (0.8 + 15% white gives 0.83 instead of the browser's 0.95). So the layer is opaque black (adds nothing)
+        // and each core adds its premultiplied RGB, matching the browser's 'lighter' compositing.
         gc.clearRect(0, 0, width, height);
+        gc.setFill(Color.BLACK);
+        gc.fillRect(0, 0, width, height);
+        gc.setGlobalBlendMode(BlendMode.ADD);
         boolean drawn = false;
         for (DmProject.LightSource light : project.effectiveLights()) {
             if (!light.isEnabled() || !lightingEngine.getIndoorLighting().lightActive(preset, light.getX(), light.getY())
@@ -2268,13 +2275,17 @@ public class CanvasMapRenderer {
                 continue;
             }
             int rgb = parseRgb(light.getColor());
-            Color color = Color.rgb((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
             RadialGradient gradient = new RadialGradient(0, 0, cx, cy, radius, false, CycleMethod.NO_CYCLE,
-                    new Stop(0, Color.color(color.getRed(), color.getGreen(), color.getBlue(), peak)),
-                    new Stop(1, Color.color(color.getRed(), color.getGreen(), color.getBlue(), 0)));
+                    new Stop(0, Color.color(((rgb >> 16) & 0xFF) / 255.0 * peak, ((rgb >> 8) & 0xFF) / 255.0 * peak,
+                            (rgb & 0xFF) / 255.0 * peak)),
+                    new Stop(1, Color.BLACK));
             gc.setFill(gradient);
             gc.fillOval(cx - radius, cy - radius, radius * 2, radius * 2);
             drawn = true;
+        }
+        gc.setGlobalBlendMode(BlendMode.SRC_OVER);
+        if (!drawn) {
+            gc.clearRect(0, 0, width, height);
         }
         gc.getCanvas().setVisible(drawn);
         cache.hasContent = drawn;
