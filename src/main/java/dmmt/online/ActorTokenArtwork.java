@@ -62,7 +62,10 @@ public final class ActorTokenArtwork {
         return png.toByteArray();
     }
 
-    /** Baked actor artwork includes its mandatory border; do not draw a second one. */
+    /**
+     * Keeps actor token definitions in line with the campaign: the label follows the character name and baked actor
+     * artwork includes its mandatory border, so no second one is drawn. Returns whether anything changed.
+     */
     public static boolean synchronize(DmProject project, Campaign campaign, CampaignStore store) {
         boolean changed = false;
         var resized = new java.util.HashSet<String>();
@@ -76,21 +79,26 @@ public final class ActorTokenArtwork {
         }
         for (var token : project.getTokens()) {
             var actor = OnlineStateBuilder.actorOf(token, campaign);
-            if (actor == null || actor.getArtwork() == null) continue;
-            String image = store.artworkPath(campaign.getId(), actor.getArtwork()).toUri().toString();
+            if (actor == null) continue;
             var definition = project.getTokenDefinitions().get(token.getDefinitionId());
-            var art = actor.getTokenArtwork();
-            double size = art == null ? 1 : art.getSizeTiles();
-            boolean updateSize = resized.contains(token.getDefinitionId());
             if (definition == null) {
+                if (actor.getArtwork() == null) continue;
                 definition = DmProject.TokenDefinition.builder().id(token.getDefinitionId()).name(actor.getName()).build();
                 project.getTokenDefinitions().put(token.getDefinitionId(), definition);
             }
+            if (actor.getName() != null && !actor.getName().equals(definition.getName())) {
+                changed = true;
+                definition.setName(actor.getName());
+            }
+            if (actor.getArtwork() == null) continue;
+            String image = store.artworkPath(campaign.getId(), actor.getArtwork()).toUri().toString();
+            var art = actor.getTokenArtwork();
+            double size = art == null ? 1 : art.getSizeTiles();
+            boolean updateSize = resized.contains(token.getDefinitionId());
             if (updateSize || !matchesArtwork(definition.getImage(), actor.getArtwork())) {
                 changed = true;
                 definition.setImage(image);
             }
-            definition.setName(actor.getName());
             if (art != null) {
                 definition.setShape(DmProject.TokenShape.CIRCLE);
                 definition.setBorder(false);

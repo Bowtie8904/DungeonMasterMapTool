@@ -239,6 +239,7 @@ public final class OnlineSessionController implements OnlineSessionServer.Host {
             ObjectNode sheet = stored == null ? null : (ObjectNode) MAPPER.readTree(stored);
             if (sheet != null) OnlineSessionServer.setSheetName(sheet, name);
             store.renameActor(edited, actor, name, sheet);
+            campaignChanged(edited);
         }
     }
 

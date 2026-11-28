@@ -111,6 +111,23 @@ class ActorTokenArtworkTest {
     }
 
     @Test
+    void renamedActorUpdatesTheTokenLabelWithoutArtwork() {
+        var store = new CampaignStore(temp);
+        var campaign = Campaign.builder().id("campaign").build();
+        var actor = Campaign.Actor.builder().id("actor").name("Old").build();
+        campaign.getActors().add(actor);
+        var map = DmProject.builder().build();
+        map.getTokenDefinitions().put("actor:actor", DmProject.TokenDefinition.builder().id("actor:actor").name("Old").build());
+        map.getTokens().add(DmProject.TokenInstance.builder().id("token").definitionId("actor:actor")
+                .actorId(actor.getId()).campaignId(campaign.getId()).build());
+        assertFalse(ActorTokenArtwork.synchronize(map, campaign, store));
+        actor.setName("New");
+        assertTrue(ActorTokenArtwork.synchronize(map, campaign, store));
+        assertEquals("New", map.getTokenDefinitions().get("actor:actor").getName());
+        assertFalse(map.getTokens().get(0).isNameVisible());
+    }
+
+    @Test
     void reloadedCampaignUpdatesAStoredMapAndPublishesTheSameFinishedArtworkAsTheActorList() throws Exception {
         var store = new CampaignStore(temp);
         var campaign = store.create("Artwork");

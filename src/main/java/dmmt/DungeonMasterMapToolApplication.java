@@ -11754,7 +11754,7 @@ public class DungeonMasterMapToolApplication extends Application {
         project.getTokenDefinitions().put(definitionId, definition);
         DmProject.TokenInstance token = DmProject.TokenInstance.builder().id(UUID.randomUUID().toString())
                 .definitionId(definitionId).x(snapToken(worldX, false)).y(snapToken(worldY, false))
-                .sizeTiles(definition.getSizeTiles()).nameVisible(true)
+                .sizeTiles(definition.getSizeTiles())
                 .actorId(actor.getId()).campaignId(campaign.getId()).build();
         try {
             onlineController.inheritActorConditions(campaign, token);
