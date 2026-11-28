@@ -374,17 +374,17 @@ public class DmProject {
         private List<LightSource> lights = new ArrayList<>();
         /**
          * Strength of the light colour tint over lit areas on this map (0 to the {@code lighting.tint.max}
-         * tuning setting); matches {@code CanvasMapRenderer.DEFAULT_LIGHT_TINT} until changed with the slider.
+         * tuning setting); defaults to the configured {@code lighting.tint.default} for new maps.
          */
         @Builder.Default
-        private double lightTint = 0.05;
+        private double lightTint = Tuning.defaultLightTint();
         /**
          * Strength of each light's additive bright-core highlight on this map (0 to the
-         * {@code lighting.brightCore.max} tuning setting); matches {@code CanvasMapRenderer.DEFAULT_BRIGHT_CORE}
-         * until changed with the slider.
+         * {@code lighting.brightCore.max} tuning setting); defaults to the configured
+         * {@code lighting.brightCore.default} for new maps.
          */
         @Builder.Default
-        private double brightCore = 0.15;
+        private double brightCore = Tuning.defaultBrightCore();
         /**
          * Per time-of-day ambient brightness adjustment for this map, keyed by preset name
          * (e.g. "NIGHT"). Missing entries mean 0 (preset default).

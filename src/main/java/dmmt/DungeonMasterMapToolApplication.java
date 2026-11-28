@@ -601,11 +601,11 @@ public class DungeonMasterMapToolApplication extends Application {
     private Slider lightTintSlider;
     private Label lightTintValue;
     /** Last committed light tint of the current map; the "before" value for undo. */
-    private double lightTintCommitted = CanvasMapRenderer.DEFAULT_LIGHT_TINT;
+    private double lightTintCommitted = CanvasMapRenderer.defaultLightTint();
     private Slider brightCoreSlider;
     private Label brightCoreValue;
     /** Last committed bright core strength of the current map; the "before" value for undo. */
-    private double brightCoreCommitted = CanvasMapRenderer.DEFAULT_BRIGHT_CORE;
+    private double brightCoreCommitted = CanvasMapRenderer.defaultBrightCore();
     private ToggleButton freezePlayerButton;
     private final Map<TimeOfDayPreset, ToggleButton> timeButtons = new EnumMap<>(TimeOfDayPreset.class);
     private final Map<EditorTool, ToggleButton> toolButtons = new EnumMap<>(EditorTool.class);
@@ -2544,7 +2544,7 @@ public class DungeonMasterMapToolApplication extends Application {
      * of the project file) so different maps can use different strengths; the renderer picks it up on the next frame.
      */
     private HBox lightTintSlider() {
-        double initial = CanvasMapRenderer.DEFAULT_LIGHT_TINT;
+        double initial = CanvasMapRenderer.defaultLightTint();
         Slider slider = new Slider(CanvasMapRenderer.MIN_LIGHT_TINT, CanvasMapRenderer.maxLightTint(), initial);
         slider.setMajorTickUnit(0.01);
         slider.setMinorTickCount(0);
@@ -2575,7 +2575,7 @@ public class DungeonMasterMapToolApplication extends Application {
         });
         slider.setOnMouseClicked(e -> {
             if (e.getClickCount() == 2) {
-                slider.setValue(CanvasMapRenderer.DEFAULT_LIGHT_TINT);
+                slider.setValue(CanvasMapRenderer.defaultLightTint());
                 commitLightTint();
             }
         });
@@ -2592,7 +2592,7 @@ public class DungeonMasterMapToolApplication extends Application {
      * {@code lighting.brightCore} of the project file); the renderer picks it up on the next frame.
      */
     private HBox brightCoreSlider() {
-        double initial = CanvasMapRenderer.DEFAULT_BRIGHT_CORE;
+        double initial = CanvasMapRenderer.defaultBrightCore();
         Slider slider = new Slider(CanvasMapRenderer.MIN_BRIGHT_CORE, CanvasMapRenderer.maxBrightCore(), initial);
         slider.setMajorTickUnit(0.01);
         slider.setMinorTickCount(0);
@@ -2623,7 +2623,7 @@ public class DungeonMasterMapToolApplication extends Application {
         });
         slider.setOnMouseClicked(e -> {
             if (e.getClickCount() == 2) {
-                slider.setValue(CanvasMapRenderer.DEFAULT_BRIGHT_CORE);
+                slider.setValue(CanvasMapRenderer.defaultBrightCore());
                 commitBrightCore();
             }
         });

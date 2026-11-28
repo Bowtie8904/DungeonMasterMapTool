@@ -1411,6 +1411,14 @@ different values. Values above this are clamped.
 
 *Keywords:* light tint limit, colour strength, slider range
 
+### `lighting.tint.default`
+**Default:** `0.02` · **Range:** 0 to 1 · **Applies:** live
+
+Default light tint strength for new maps and when double-clicking the light tint slider to reset it. Existing maps
+keep their saved value. If this exceeds `lighting.tint.max`, the effective default is capped at the slider maximum.
+
+*Keywords:* light tint default, new map lighting, reset tint
+
 ### `lighting.brightCore.max`
 **Default:** `0.5` · **Range:** 0 to 1 · **Applies:** restart
 
@@ -1418,6 +1426,14 @@ Upper limit of the bright core slider; this strength itself is saved per map (no
 different values. Values above this are clamped.
 
 *Keywords:* bright core limit, hot spot strength, glow strength, slider range
+
+### `lighting.brightCore.default`
+**Default:** `0.15` · **Range:** 0 to 1 · **Applies:** live
+
+Default bright core strength for new maps and when double-clicking the bright core slider to reset it. Existing maps
+keep their saved value. If this exceeds `lighting.brightCore.max`, the effective default is capped at the slider maximum.
+
+*Keywords:* bright core default, new map lighting, reset bright core
 
 ### `lighting.brightCore.radius`
 **Default:** `0.3` · **Range:** 0.05 to 1 · **Applies:** live

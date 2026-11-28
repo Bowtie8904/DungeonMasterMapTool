@@ -22,6 +22,22 @@ class AppSettingsTest {
     }
 
     @Test
+    void lightingDefaultsCanBeResetToBuiltInValues() {
+        var settings = new AppSettings(dir.resolve("lighting.ini"));
+        assertEquals(0.02, Tuning.LIGHT_TINT_DEFAULT.get());
+        assertEquals(0.15, Tuning.BRIGHT_CORE_DEFAULT.get());
+        settings.applyEdit("lighting.tint.default", "0.12");
+        settings.applyEdit("lighting.brightCore.default", "0.25");
+        new AppSettings(settings.getFile());
+        assertEquals(0.12, Tuning.LIGHT_TINT_DEFAULT.get());
+        assertEquals(0.25, Tuning.BRIGHT_CORE_DEFAULT.get());
+        settings.applyEdit("lighting.tint.default", null);
+        settings.applyEdit("lighting.brightCore.default", null);
+        assertEquals(0.02, Tuning.LIGHT_TINT_DEFAULT.get());
+        assertEquals(0.15, Tuning.BRIGHT_CORE_DEFAULT.get());
+    }
+
+    @Test
     void actorSightRangeIsEditableLiveAndPersists() {
         var settings = new AppSettings(dir.resolve("sight.ini"));
         var info = AppSettings.editableSettings().stream()

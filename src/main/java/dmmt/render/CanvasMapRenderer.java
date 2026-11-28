@@ -119,7 +119,8 @@ public class CanvasMapRenderer {
         viewportZoomChanged = changed;
     }
     public static final double MIN_LIGHT_TINT = 0.0;
-    public static final double DEFAULT_LIGHT_TINT = 0.05;
+    /** Built-in light tint default; use {@link #defaultLightTint()} for the configured current default. */
+    public static final double DEFAULT_LIGHT_TINT = 0.02;
 
     /** Frame rate of light flicker; the flicker clock advances in steps of 1/fps so it never runs faster than this. */
     private static volatile int animationFps = 30;
@@ -161,17 +162,28 @@ public class CanvasMapRenderer {
         return Tuning.LIGHT_TINT_MAX.get();
     }
 
+    /** Configured light tint default, constrained by the current slider maximum. */
+    public static double defaultLightTint() {
+        return Tuning.defaultLightTint();
+    }
+
     /** Clamps a light tint value (e.g. loaded from a project file) to the valid [MIN_LIGHT_TINT, maxLightTint()] range. */
     public static double clampLightTint(double value) {
         return Math.max(MIN_LIGHT_TINT, Math.min(maxLightTint(), value));
     }
 
     public static final double MIN_BRIGHT_CORE = 0.0;
-    public static final double DEFAULT_BRIGHT_CORE = 0.15;
+    /** Built-in bright core default; use {@link #defaultBrightCore()} for the configured current default. */
+    public static final double DEFAULT_BRIGHT_CORE = 0.10;
 
     /** Highest bright core strength (setting lighting.brightCore.max). */
     public static double maxBrightCore() {
         return Tuning.BRIGHT_CORE_MAX.get();
+    }
+
+    /** Configured bright core default, constrained by the current slider maximum. */
+    public static double defaultBrightCore() {
+        return Tuning.defaultBrightCore();
     }
 
     /** Clamps a bright core value (e.g. loaded from a project file) to the valid [MIN_BRIGHT_CORE, maxBrightCore()] range. */

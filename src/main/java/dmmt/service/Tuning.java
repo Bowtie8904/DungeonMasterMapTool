@@ -456,8 +456,12 @@ public final class Tuning {
             "Calculate daylight and lightning transmission through open exterior doors/windows. Always off in performance mode.");
     public static final Setting<Double> LIGHT_TINT_MAX = decimal(LIGHTS, "lighting.tint.max", 0.3, 0, 1, true,
             "Upper limit of the light tint slider.");
+    public static final Setting<Double> LIGHT_TINT_DEFAULT = decimal(LIGHTS, "lighting.tint.default", 0.02, 0, 1, false,
+            "Default light tint strength for new maps and when resetting the slider.");
     public static final Setting<Double> BRIGHT_CORE_MAX = decimal(LIGHTS, "lighting.brightCore.max", 0.5, 0, 1, true,
             "Upper limit of the light bright core slider.");
+    public static final Setting<Double> BRIGHT_CORE_DEFAULT = decimal(LIGHTS, "lighting.brightCore.default", 0.15, 0, 1, false,
+            "Default bright core strength for new maps and when resetting the slider.");
     public static final Setting<Double> BRIGHT_CORE_RADIUS = decimal(LIGHTS, "lighting.brightCore.radius", 0.3, 0.05, 1, false,
             "Radius of each light's bright core highlight, as a fraction of the light's own range.");
     public static final Setting<Double> DM_DARKNESS_FACTOR = decimal(LIGHTS, "lighting.dmDarknessFactor", 0.65, 0, 1, false,
@@ -468,6 +472,14 @@ public final class Tuning {
             "Pixel budget of one light map: on large screens the divisor is raised until the light map has at most this many pixels.");
     public static final Setting<Integer> SHADOW_RAYS = integer(LIGHTS, "lighting.shadowRays", 96, 8, 1024, true,
             "Rays per light for line of sight and shadows; more gives rounder light circles.");
+
+    public static double defaultLightTint() {
+        return Math.min(LIGHT_TINT_DEFAULT.get(), LIGHT_TINT_MAX.get());
+    }
+
+    public static double defaultBrightCore() {
+        return Math.min(BRIGHT_CORE_DEFAULT.get(), BRIGHT_CORE_MAX.get());
+    }
 
     /** Values of one light preset button. */
     public record LightPresetSettings(Setting<Double> rangeTiles, Setting<String> color, Setting<Double> flicker,

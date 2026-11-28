@@ -42,6 +42,36 @@ class CanvasMapRendererTest {
     }
 
     @Test
+    void builtInLightingDefaultsApplyToNewProjects() {
+        DmProject project = DmProject.builder().build();
+
+        assertEquals(0.02, project.getLighting().getLightTint(), 1e-9);
+        assertEquals(0.15, project.getLighting().getBrightCore(), 1e-9);
+        assertEquals(0.02, CanvasMapRenderer.defaultLightTint(), 1e-9);
+        assertEquals(0.15, CanvasMapRenderer.defaultBrightCore(), 1e-9);
+        assertEquals(0.02, CanvasMapRenderer.DEFAULT_LIGHT_TINT, 1e-9);
+        assertEquals(0.15, CanvasMapRenderer.DEFAULT_BRIGHT_CORE, 1e-9);
+    }
+
+    @Test
+    void configuredLightingDefaultsApplyToNewProjectsAndRespectSliderMaximums() {
+        Tuning.apply(key -> switch (key) {
+            case "lighting.tint.default" -> "0.24";
+            case "lighting.tint.max" -> "0.2";
+            case "lighting.brightCore.default" -> "0.4";
+            case "lighting.brightCore.max" -> "0.35";
+            default -> null;
+        });
+
+        DmProject project = DmProject.builder().build();
+
+        assertEquals(0.2, project.getLighting().getLightTint(), 1e-9);
+        assertEquals(0.35, project.getLighting().getBrightCore(), 1e-9);
+        assertEquals(0.2, CanvasMapRenderer.defaultLightTint(), 1e-9);
+        assertEquals(0.35, CanvasMapRenderer.defaultBrightCore(), 1e-9);
+    }
+
+    @Test
     void movingActorIncrementalFogMatchesFreshRenderer() throws Exception {
         FutureTask<Void> task = new FutureTask<>(() -> {
             double oldSoftness = CanvasMapRenderer.getFogSoftness();
