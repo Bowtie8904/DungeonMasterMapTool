@@ -1443,6 +1443,8 @@ player ambient darkness. Overlapping browser lights blend into one capped tint i
 
 The lighting (darkness and light circles) is computed at 1/N of the screen resolution and smoothed when scaled up.
 `1` gives the sharpest shadow edges but is much slower; higher values are faster and softer.
+Online Play browser clients use the host's light-map resolution and pixel budget (performance-mode defaults in
+low-resource mode), so their light blending matches the desktop view.
 
 *Keywords:* light quality, shadow resolution, lighting performance, light map, blur
 

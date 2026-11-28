@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lightActive, lightFalloff, rasterLightTint, rasterShapeGlow, TintEnvironment, TintLight } from './lighting';
+import { LIGHT_FALLOFF_STOPS, lightActive, lightFalloff, lightMapScaleFor, rasterLightTint, rasterShapeGlow, TintEnvironment, TintLight } from './lighting';
 import { Overlay } from './protocol';
 import { Grid } from './vision';
 
@@ -155,5 +155,17 @@ describe('desktop light tint parity', () => {
     const dim = { ...light(), range: 4 / 3 };
     expect(rasterLightTint(grid, [dim], night, 0.08, 1)[7])
       .toBe(Math.round(0.08 * Math.sqrt(0.9) * lightFalloff(0.75) * 255));
+  });
+
+  it('sizes the ambient light map like the desktop light map', () => {
+    expect(lightMapScaleFor(400, 300)).toBe(4);
+    const scale = lightMapScaleFor(1920, 1080);
+    expect(Math.ceil(1920 / scale) * Math.ceil(1080 / scale)).toBeLessThanOrEqual(20000);
+    expect(Math.ceil(1920 / (scale - 1)) * Math.ceil(1080 / (scale - 1))).toBeGreaterThan(20000);
+    expect(lightMapScaleFor(400, 300, true)).toBe(8);
+    expect(lightMapScaleFor(400, 300, false, 2, 100000)).toBe(2);
+    expect(lightMapScaleFor(400, 300, true, 2, 100000)).toBe(8);
+    expect(LIGHT_FALLOFF_STOPS[0]).toBe(0);
+    expect(LIGHT_FALLOFF_STOPS[LIGHT_FALLOFF_STOPS.length - 1]).toBe(1);
   });
 });

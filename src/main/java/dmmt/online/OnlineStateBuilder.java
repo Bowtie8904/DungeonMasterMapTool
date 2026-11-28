@@ -135,6 +135,8 @@ public final class OnlineStateBuilder {
         lighting.put("lightTint", dmmt.render.CanvasMapRenderer.clampLightTint(project.getLighting().getLightTint()));
         lighting.put("tintDarknessFactor", dmmt.service.Tuning.DM_DARKNESS_FACTOR.get());
         lighting.put("brightCoreRadius", dmmt.service.Tuning.BRIGHT_CORE_RADIUS.get());
+        lighting.put("lightMapScale", dmmt.service.Tuning.LIGHT_MAP_SCALE.get());
+        lighting.put("lightMapMaxPixels", dmmt.service.Tuning.LIGHT_MAP_MAX_PIXELS.get());
         lighting.put("flicker", dmmt.render.CanvasMapRenderer.flickerOn(project));
         lighting.putArray("tint").add(preset.red()).add(preset.green()).add(preset.blue());
         state.putObject("view").put("gridOpacity", dmmt.service.Tuning.GRID_OPACITY.get());

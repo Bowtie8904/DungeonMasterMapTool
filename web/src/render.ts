@@ -3,7 +3,7 @@ import { flickerAmount } from './flicker';
 import { FogState } from './fogstate';
 import { TokenMotion } from './motion';
 import { stopAtObstacle } from './movement';
-import { lightActive, rasterLightTint, rasterShapeGlow, TintEnvironment, TintScratch } from './lighting';
+import { LIGHT_FALLOFF_STOPS, lightActive, lightFalloff, lightMapScaleFor, rasterLightTint, rasterShapeGlow, TintEnvironment, TintScratch } from './lighting';
 import { Door, GameState, IndoorData, Measurement, Overlay, TextBoxState, Token } from './protocol';
 import { DrawMode, DrawingStyle, MapTool, drawingBounds, drawingHit, drawingId, measurementBounds, measurementHit, measurementLabel, measurementPath, ownsDrawing, resizeDrawing, translateDrawing } from './tools';
 import { chooseLevel, PyramidInfo, tileUrl, visibleTiles } from './pyramid';
@@ -114,8 +114,10 @@ export class MapView {
   onExplored: () => void = () => {};
 
   private ctx: CanvasRenderingContext2D;
+  /** Low-resolution ambient light map, upscaled with smoothing like the desktop light map. */
   private light: HTMLCanvasElement = document.createElement('canvas');
-  private tmp: HTMLCanvasElement = document.createElement('canvas');
+  /** Additive accumulation of light punches at light-map resolution. */
+  private lightAccum: HTMLCanvasElement = document.createElement('canvas');
   private lightTint: HTMLCanvasElement = document.createElement('canvas');
   private fx: HTMLCanvasElement = document.createElement('canvas');
   private fxMask: HTMLCanvasElement = document.createElement('canvas');
@@ -463,9 +465,7 @@ export class MapView {
     this.height = this.canvas.clientHeight;
     this.canvas.width = Math.max(1, Math.round(this.width * this.dpr));
     this.canvas.height = Math.max(1, Math.round(this.height * this.dpr));
-    this.light.width = this.canvas.width;
-    this.light.height = this.canvas.height;
-    for (const c of [this.tmp, this.fx, this.fxMask]) {
+    for (const c of [this.fx, this.fxMask]) {
       c.width = this.canvas.width;
       c.height = this.canvas.height;
     }
@@ -1113,9 +1113,10 @@ export class MapView {
     this.draw(s, useSceneCache, cacheScene);
   }
 
-  private world(ctx: CanvasRenderingContext2D): void {
-    const k = this.dpr * this.cam.scale;
-    ctx.setTransform(k, 0, 0, k, this.dpr * this.cam.x, this.dpr * this.cam.y);
+  /** World transform; {@code pixelSize} is the size of one target pixel in device pixels (light maps use > 1). */
+  private world(ctx: CanvasRenderingContext2D, pixelSize = 1): void {
+    const k = this.dpr * this.cam.scale / pixelSize;
+    ctx.setTransform(k, 0, 0, k, this.dpr * this.cam.x / pixelSize, this.dpr * this.cam.y / pixelSize);
   }
 
   private polyPath(ctx: CanvasRenderingContext2D, p: Polygon): void {
@@ -1418,7 +1419,7 @@ export class MapView {
    * Paints a lightning layer with the given alpha: fully outside and in every room when the storm also renders
    * indoors, otherwise only outdoors and through open exterior doors/windows (the cached daylight footprint).
    */
-  private fillExposure(c: CanvasRenderingContext2D, s: GameState, alpha: number, color: string): void {
+  private fillExposure(c: CanvasRenderingContext2D, s: GameState, alpha: number, color: string, pixelSize = 1): void {
     const ind = s.indoor;
     c.save();
     c.globalAlpha = Math.max(0, Math.min(1, alpha));
@@ -1431,12 +1432,12 @@ export class MapView {
     }
     const zones = this.indoorZones(ind);
     c.save();
-    this.world(c);
+    this.world(c, pixelSize);
     c.clip(zones.outside, 'evenodd');
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.fillRect(0, 0, c.canvas.width, c.canvas.height);
     c.restore();
-    this.world(c);
+    this.world(c, pixelSize);
     c.imageSmoothingEnabled = true;
     c.drawImage(this.exposureImage(ind, color), ind.originX, ind.originY, ind.cols * ind.cellSize, ind.rows * ind.cellSize);
     c.restore();
@@ -2028,22 +2029,35 @@ export class MapView {
       afterAmbient();
       return;
     }
+    // Like the desktop light map: a coarse buffer that is upscaled with smoothing, which softens shadow and
+    // window edges into gradients and keeps the per-frame fill cost independent of the screen resolution.
+    const mapScale = lightMapScaleFor(this.width, this.height, this.lowResourceMode,
+      s.lighting.lightMapScale, s.lighting.lightMapMaxPixels);
+    const px = mapScale * this.dpr;
+    const bw = Math.max(1, Math.ceil(this.canvas.width / px));
+    const bh = Math.max(1, Math.ceil(this.canvas.height / px));
+    for (const c of [this.light, this.lightAccum]) {
+      if (c.width !== bw || c.height !== bh) {
+        c.width = bw;
+        c.height = bh;
+      }
+    }
     const g = this.light.getContext('2d')!;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.globalCompositeOperation = 'source-over';
-    g.clearRect(0, 0, this.light.width, this.light.height);
+    g.clearRect(0, 0, bw, bh);
     // Multiply tint like the desktop ambient layer: 1 - dark + dark * presetTint per channel.
     const ch = (t: number): number => Math.round(255 * Math.max(0, Math.min(1, 1 - darkness + darkness * t)));
     g.fillStyle = `rgb(${ch(tint[0])},${ch(tint[1])},${ch(tint[2])})`;
-    g.fillRect(0, 0, this.light.width, this.light.height);
+    g.fillRect(0, 0, bw, bh);
     let insideMask: HTMLCanvasElement | null = null;
     if (ind && indoorMaps) {
       insideMask = indoorMaps.inside;
-      this.world(g);
+      this.world(g, px);
       g.imageSmoothingEnabled = true;
       g.drawImage(indoorMaps.ambient, ind.originX, ind.originY, ind.cols * ind.cellSize, ind.rows * ind.cellSize);
     }
-    const t2 = this.tmp.getContext('2d')!;
+    const t2 = this.lightAccum.getContext('2d')!;
     const drawPunches = (c: CanvasRenderingContext2D): void => {
       for (const l of lights) {
         const f = this.flickerOf(s, l);
@@ -2061,28 +2075,24 @@ export class MapView {
         this.punchShapeLight(c, o, range, strength);
       }
     };
-    g.globalCompositeOperation = 'destination-out';
+    // Accumulate light additively (alpha sums and clamps at 1) like the desktop lit buffer, so overlapping
+    // lights blend smoothly instead of compounding multiplicatively.
+    t2.setTransform(1, 0, 0, 1, 0, 0);
+    t2.globalCompositeOperation = 'source-over';
+    t2.clearRect(0, 0, bw, bh);
+    t2.globalCompositeOperation = 'lighter';
+    this.world(t2, px);
+    drawPunches(t2);
     if (insideMask && ind) {
       // Lights only work inside rooms while the preset itself is not night.
-      t2.setTransform(1, 0, 0, 1, 0, 0);
-      t2.globalCompositeOperation = 'source-over';
-      t2.clearRect(0, 0, this.tmp.width, this.tmp.height);
-      this.world(t2);
-      drawPunches(t2);
-      t2.setTransform(1, 0, 0, 1, 0, 0);
       t2.globalCompositeOperation = 'destination-in';
       t2.imageSmoothingEnabled = false;
-      const k = this.dpr * this.cam.scale;
-      t2.drawImage(insideMask, this.dpr * this.cam.x + ind.originX * k, this.dpr * this.cam.y + ind.originY * k,
-        ind.cols * ind.cellSize * k, ind.rows * ind.cellSize * k);
-      t2.globalCompositeOperation = 'source-over';
-      g.setTransform(1, 0, 0, 1, 0, 0);
-      g.drawImage(this.tmp, 0, 0);
-      this.world(g);
-    } else {
-      this.world(g);
-      drawPunches(g);
+      t2.drawImage(insideMask, ind.originX, ind.originY, ind.cols * ind.cellSize, ind.rows * ind.cellSize);
     }
+    t2.globalCompositeOperation = 'source-over';
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalCompositeOperation = 'destination-out';
+    g.drawImage(this.lightAccum, 0, 0);
     g.globalCompositeOperation = 'source-over';
 
     // Lightning lifts the ambient darkness where it is exposed (outdoors, and indoors through open apertures).
@@ -2092,7 +2102,7 @@ export class MapView {
       if (lift > 0) {
         g.setTransform(1, 0, 0, 1, 0, 0);
         g.globalCompositeOperation = 'destination-out';
-        this.fillExposure(g, s, lift, '#000000');
+        this.fillExposure(g, s, lift, '#000000', px);
         g.globalCompositeOperation = 'source-over';
       }
     }
@@ -2130,17 +2140,18 @@ export class MapView {
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = 'multiply';
-    ctx.drawImage(this.light, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(this.light, 0, 0, bw * px, bh * px);
     ctx.restore();
 
     // Like the desktop effects layer, non-emitting effects sit above the ambient darkness but below the glow.
     afterAmbient();
 
     if (!showLights || tintStrength <= 0) return;
-    let scale = 4;
-    while (Math.ceil(this.light.width / scale) * Math.ceil(this.light.height / scale) > 20000) scale++;
-    const cols = Math.max(1, Math.ceil(this.light.width / scale));
-    const rows = Math.max(1, Math.ceil(this.light.height / scale));
+    // The desktop glow shares the light-map grid.
+    const scale = px;
+    const cols = bw;
+    const rows = bh;
     const now = performance.now();
     const tintKey = `${this.cam.x},${this.cam.y},${this.cam.scale},${this.dpr},${scale},${cols},${rows}`;
     const reuse = this.motionActive() && this.tintKey === tintKey && now - this.tintTime < HEAVY_MOVE_INTERVAL_MS;
@@ -2219,9 +2230,9 @@ export class MapView {
       g.clip();
     }
     const grad = g.createRadialGradient(x, y, 0, x, y, range);
-    grad.addColorStop(0, `rgba(0,0,0,${strength})`);
-    grad.addColorStop(0.65, `rgba(0,0,0,${strength * 0.7})`);
-    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    for (const stop of LIGHT_FALLOFF_STOPS) {
+      grad.addColorStop(stop, `rgba(0,0,0,${strength * lightFalloff(stop)})`);
+    }
     g.fillStyle = grad;
     g.beginPath();
     g.arc(x, y, range, 0, Math.PI * 2);

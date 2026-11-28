@@ -130,6 +130,9 @@ export interface Lighting {
   lightTint?: number;
   /** DM darkness scaling for colour tint only; player ambient darkness is unchanged. */
   tintDarknessFactor?: number;
+  /** Host light-map divisor and pixel budget, so browser light blending matches the desktop. */
+  lightMapScale?: number;
+  lightMapMaxPixels?: number;
   /** Whether lights may flicker (global setting, off in performance mode). */
   flicker?: boolean;
   /** Time-of-day multiply tint, each channel 0..1. */

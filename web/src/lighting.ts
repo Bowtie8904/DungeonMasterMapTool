@@ -100,6 +100,23 @@ export function lightFalloff(distance: number): number {
   return window * window / (1 + 8 * u * u);
 }
 
+/** Radial-gradient stops that approximate {@link lightFalloff} closely (linear interpolation between stops). */
+export const LIGHT_FALLOFF_STOPS: readonly number[] = [0, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1];
+
+/**
+ * Desktop {@code CanvasMapRenderer.lightMapScaleFor}: screen pixels per light-map pixel, at least the host's
+ * {@code lighting.lightMapScale} and within its {@code lighting.lightMapMaxPixels} budget (performance-mode defaults
+ * in low-resource mode).
+ */
+export function lightMapScaleFor(width: number, height: number, lowResource = false,
+                                 hostScale = 4, hostBudget = 20000): number {
+  const base = Math.max(1, Math.round(lowResource ? Math.max(hostScale, 8) : hostScale));
+  const budget = Math.max(1000, lowResource ? Math.min(hostBudget, 5000) : hostBudget);
+  let scale = Math.max(base, Math.ceil(Math.sqrt(Math.max(1, width * height) / budget)));
+  while (Math.max(1, Math.ceil(width / scale)) * Math.max(1, Math.ceil(height / scale)) > budget) scale++;
+  return scale;
+}
+
 export interface TintScratch {
   size: number;
   total: Float32Array;
